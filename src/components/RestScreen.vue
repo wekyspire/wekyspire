@@ -63,7 +63,7 @@
           <p>🔮 魏启值: {{ player.mana }}/{{ player.maxMana }}</p>
           <p>⚡ 行动力: {{ player.actionPoints }}/{{ player.maxActionPoints }}</p>
           <p>⚔️ 攻击: {{ player.attack }}</p>
-          <p>🔮 集中: {{ player.magic }}</p>
+          <p>🔮 灵能: {{ player.magic }}</p>
           <p>🛡️ 防御: {{ player.defense }}</p>
           <p>💰 金钱: {{ player.money }}</p>
           <p>🏅 等阶: {{ getPlayerTierLabel(player.tier) }}</p>

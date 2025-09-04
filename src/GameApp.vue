@@ -317,7 +317,10 @@ export default {
         
         // 技能奖励相关
         isSkillRewardVisible: false,
-        skillRewards: []
+        skillRewards: [],
+        
+        // 能力管理器实例
+        abilityManager: new AbilityManager()
       }
     },
   mounted() {
@@ -594,7 +597,7 @@ export default {
     calculateRewards() {
       // 计算战斗奖励
       this.rewards.money = Math.floor(Math.random() * 20) + 10;
-      this.rewards.skill = true;
+      this.rewards.skill = this.battleCount % 3 === 1;
       
       // 奇数次战斗后获得能力奖励
       this.rewards.ability = this.battleCount % 2 === 1;
@@ -613,8 +616,10 @@ export default {
       
       // 显示能力奖励面板
       this.isAbilityRewardVisible = true;
-      // 生成随机能力
-      this.abilityRewards = AbilityManager.getRandomAbilities(3);
+      // 生成随机能力，根据战斗次数计算abundance值
+      let abundance = Math.min(1.0, Math.min(this.battleCount * 0.05, 0.5));
+      if(this.enemy.isBoss) abundance += 0.5;
+      this.abilityRewards = this.abilityManager.getRandomAbilities(3, abundance);
       // 标记能力奖励已显示
       this.abilityRewardClaimed = true;
     },

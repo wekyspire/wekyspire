@@ -7,6 +7,7 @@
   >
     {{ effectIcon }}
     {{ effectName }}
+    <strong v-if="stack !== 0" :style="{color: this.getStackColor()}">{{ stack }}</strong>
   </span>
 </template>
 
@@ -19,6 +20,10 @@ export default {
     effectName: {
       type: String,
       required: true
+    },
+    stack: {
+      type: Number,
+      default: 0
     }
   },
   data() {
@@ -51,6 +56,12 @@ export default {
     }
   },
   methods: {
+    getStackColor() {
+      if(this.stack == 0) return this.effectColor;
+      if(this.stack > 0) return 'green';
+      if(this.stack < 0) return 'red'; 
+      return 'gray'; 
+    },
     showTooltip(event) {
       // 获取效果名称和描述
       const effectInfo = effectDescriptions[this.effectName] || {};

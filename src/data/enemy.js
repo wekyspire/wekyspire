@@ -11,6 +11,7 @@ class Enemy {
     this.effects = {}; // 效果列表
     this.subtitle = ""; // Boss subtitle
     this.description = '一个面目狰狞的敌人！'; // 敌人描述
+    this.isBoss = false;
   }
   
   // 初始化方法

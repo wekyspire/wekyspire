@@ -163,8 +163,8 @@ export default {
 }
 
 .skill-card.tier-0 {
-  background-color: #e3f2fd;
-  border: 1px solid #2196f3;
+  background-color: #ffffff;
+  border: 1px solid #000000;
 }
 
 .skill-card.tier-1 {

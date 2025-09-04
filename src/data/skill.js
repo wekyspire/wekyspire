@@ -10,6 +10,7 @@ class Skill {
     this.maxUses = maxUses || 1; // 回合最大施放次数
     this.remainingUses = this.maxUses; // 回合剩余施放次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
+    this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称
   }
 
   // 重置回合剩余施放次数

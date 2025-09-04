@@ -10,7 +10,9 @@
       >
         <div class="ability-tier">{{ getTierLabel(ability.tier) }}</div>
         <div class="ability-name">{{ ability.name }}</div>
-        <div class="ability-description">{{ ability.description }}</div>
+        <div class="ability-description">
+          <ColoredText :text="ability.description" />
+        </div>
       </div>
     </div>
     <button @click="closePanel">放弃</button>
@@ -18,8 +20,13 @@
 </template>
 
 <script>
+import ColoredText from './ColoredText.vue';
+
 export default {
   name: 'AbilityRewardPanel',
+  components: {
+    ColoredText
+  },
   props: {
     abilities: {
       type: Array,

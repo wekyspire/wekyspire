@@ -1,9 +1,10 @@
 // 能力抽象类
 class Ability {
-  constructor(name, description, tier) {
+  constructor(name, description, tier, spawnWeight = 1) {
     this.name = name; // 能力名称
     this.description = description; // 能力描述
     this.tier = tier || 1; // 能力等阶，默认为1
+    this.spawnWeight = spawnWeight; // 能力生成权重，默认为1
   }
 
   // 应用能力效果
@@ -15,7 +16,7 @@ class Ability {
 // 突破能力
 class Breakthrough extends Ability {
   constructor() {
-    super('突破', '提升玩家等阶到下一等阶，获得10魏启上限，能获得和使用更高级的技能，并且行动力上限增1。', 5);
+    super('突破', '提升到下一/named{等阶}，恢复并获得1/named{魏启}上限，/named{行动力}增1。', 5, 0.2);
   }
 
   apply(player) {
@@ -26,7 +27,8 @@ class Breakthrough extends Ability {
     }
     
     // 增加魏启上限
-    player.maxMana += 10;
+    player.maxMana += 1;
+    player.mana = player.maxMana; // 恢复所有魏启
     
     // 增加行动力上限
     player.maxActionPoints += 1;
@@ -39,7 +41,7 @@ class Breakthrough extends Ability {
 // 强化能力
 class Strengthen extends Ability {
   constructor() {
-    super('强化', '玩家攻击力、防御力、灵能各增1。', 3);
+    super('全面强化', '/named{攻击}、/named{防御}、/named{灵能}各增1。', 3, 0.8);
   }
 
   apply(player) {
@@ -52,27 +54,61 @@ class Strengthen extends Ability {
 // 成长能力
 class Growth extends Ability {
   constructor() {
-    super('成长', '攻击力增1，生命值增20。', 2);
+    super('成长', '/named{攻击}增2，/named{生命}上限增15。', 2, 1.0);
   }
 
   apply(player) {
-    player.baseAttack += 1;
-    player.maxHp += 20;
-    player.hp += 20; // 同时恢复增加的生命值
+    player.baseAttack += 2;
+    player.maxHp += 15;
+    player.hp += 15; // 同时恢复增加的生命值
   }
 }
 
-// 修炼能力
-class Cultivation extends Ability {
+// 锻炼
+class Exercise extends Ability {
   constructor() {
-    super('修炼', '灵能增1，获得7魏启上限，恢复所有魏启。', 4);
+    super('锻炼', '/named{生命}上限增7。', 1, 1.0);
+  }
+
+  apply(player) {
+    player.maxHp += 7;
+    player.hp += 7; // 同时恢复增加的生命值
+  }
+}
+
+// 冥想
+class MindExercise extends Ability {
+  constructor() {
+    super('冥想', '获得1/named{灵能}。', 2, 1.0);
   }
 
   apply(player) {
     player.baseMagic += 1;
-    player.maxMana += 7;
+  }
+}
+
+// 力量训练
+class PowerExercise extends Ability {
+  constructor() {
+    super('力量训练', '/named{攻击}增1。', 1, 1.0);
+  }
+
+  apply(player) {
+    player.baseAttack += 1;
+  }
+}
+
+// 修炼
+class Cultivation extends Ability {
+  constructor() {
+    super('修炼', '/named{灵能}增1，获得1魏启上限，恢复所有/named{魏启}。', 3, 0.5);
+  }
+
+  apply(player) {
+    player.baseMagic += 1;
+    player.maxMana += 1;
     player.mana = player.maxMana; // 恢复所有魏启
   }
 }
 
-export { Ability, Breakthrough, Strengthen, Growth, Cultivation };
+export { Ability, Breakthrough, Strengthen, Growth, Cultivation, MindExercise, PowerExercise, Exercise}

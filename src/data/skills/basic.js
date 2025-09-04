@@ -4,7 +4,7 @@ import { launchAttack } from '../../GameApp.vue';
 // 拳打脚踢技能
 export class PunchKick extends Skill {
   constructor() {
-    super('拳打脚踢', 'normal', 0, '造成【1+攻击力】伤害', 0, Infinity, '拳打脚踢');
+    super('拳打脚踢', 'normal', 0, '造成【1+/named{攻击}】伤害', 0, Infinity, '拳打脚踢');
     this.baseDamage = 1;
   }
 
@@ -53,7 +53,7 @@ export class Roll extends Skill {
 // 睡觉技能
 export class Sleep extends Skill {
   constructor() {
-    super('睡觉', 'normal', 0, '恢复【10】生命值，每场战斗仅能用1次', 0, 1, '睡觉');
+    super('睡觉', 'normal', 0, '恢复/green{10}/named{生命值}，每场战斗仅能用1次', 0, 1, '睡觉');
     this.used = false; // 每场战斗只能使用一次
     this.heal = 10;
   }
@@ -80,14 +80,14 @@ export class Sleep extends Skill {
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `恢复${this.heal}点生命值，每场战斗仅能用1次`;
+    return `恢复/green{${this.heal}}点生命值，每场战斗仅能用1次`;
   }
 }
 
 // 功夫技能
 export class KungFu extends Skill {
   constructor() {
-    super('功夫', 'normal', 1, '造成【2+1.5*攻击力】伤害', 0, Infinity, '拳打脚踢');
+    super('功夫', 'normal', 1, '造成【2+1.5x/named{攻击}】伤害', 0, Infinity, '拳打脚踢');
     this.baseDamage = 2;
     this.multiplier = 1.5;
   }

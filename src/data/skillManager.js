@@ -1,5 +1,5 @@
 import { PunchKick, Roll, Sleep, KungFu } from './skills/basic.js';
-import { Fireball } from './skills/example.js';
+import { Fireshot,Fireball, LargeFireball } from './skills/example.js';
 
 // 技能管理器类
 class SkillManager {
@@ -12,7 +12,9 @@ class SkillManager {
     this.registerSkill('打滚', Roll);
     this.registerSkill('睡觉', Sleep);
     this.registerSkill('功夫', KungFu);
+    this.registerSkill('火弹术', Fireshot);
     this.registerSkill('火球术', Fireball);
+    this.registerSkill('大火球术', LargeFireball);
   }
   
   // 注册技能

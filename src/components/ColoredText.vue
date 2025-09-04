@@ -4,12 +4,17 @@
       <span v-if="part.type === 'text'" :style="part.style">{{ part.content }}</span>
       <span v-else-if="part.type === 'color'" :class="part.color">{{ part.content }}</span>
       <EffectIcon v-else-if="part.type === 'effect'" :effect-name="part.effectName" />
+      <span v-else-if="part.type === 'named'" class="named-entity">
+        {{part.icon}}
+        <span :style="{ color: part.color }">{{ part.content }}</span>
+      </span>
     </template>
   </span>
 </template>
 
 <script>
 import EffectIcon from './EffectIcon.vue';
+import namedEntities from '../data/namedEntities.js';
 
 export default {
   name: 'ColoredText',
@@ -24,105 +29,96 @@ export default {
   },
   computed: {
     parsedText() {
-      // 解析文本中的颜色标记和效果标记
+      // 解析文本中的颜色标记、效果标记和命名实体标记
       // 例如："造成/red{10}点伤害" -> [{ type: 'text', content: '造成' }, { type: 'color', color: 'red', content: '10' }, { type: 'text', content: '点伤害' }]
       // 例如："获得2层/effect{防御}效果" -> [{ type: 'text', content: '获得2层' }, { type: 'effect', effectName: '防御' }, { type: 'text', content: '效果' }]
+      // 例如："恢复/named{魏启}值" -> [{ type: 'text', content: '恢复' }, { type: 'named', content: '魏启', icon: 'mana', color: 'blue' }, { type: 'text', content: '值' }]
       const colorRegex = /\/(\w+)\{([^}]+)\}/g;
       const effectRegex = /\/effect\{([^}]+)\}/g;
+      const namedRegex = /\/named\{([^}]+)\}/g;
       const parts = [];
       let lastIndex = 0;
-      let match;
       
-      // 先处理效果标记
-      const effectMatches = [];
-      let effectMatch;
-      while ((effectMatch = effectRegex.exec(this.text)) !== null) {
-        effectMatches.push({
-          index: effectMatch.index,
-          lastIndex: effectRegex.lastIndex,
-          effectName: effectMatch[1]
+      // 收集所有标记
+      const allMatches = [];
+      
+      // 收集颜色标记
+      let match;
+      while ((match = colorRegex.exec(this.text)) !== null) {
+        // 仅处理颜色
+        if (match[1] === 'effect') {
+          continue;
+        }
+        if (match[1] === 'named') {
+          continue;
+        }
+        allMatches.push({
+          index: match.index,
+          lastIndex: colorRegex.lastIndex,
+          type: 'color',
+          color: match[1],
+          content: match[2]
         });
       }
       
       // 重置正则表达式的lastIndex
-      colorRegex.lastIndex = 0;
+      effectRegex.lastIndex = 0;
       
-      // 处理颜色标记和效果标记
-      let i = 0;
-      let j = 0;
+      // 收集效果标记
+      while ((match = effectRegex.exec(this.text)) !== null) {
+        allMatches.push({
+          index: match.index,
+          lastIndex: effectRegex.lastIndex,
+          type: 'effect',
+          effectName: match[1]
+        });
+      }
       
-      while (i < this.text.length || j < effectMatches.length) {
-        let nextColorMatch = null;
-        let nextEffectMatch = null;
+      // 重置正则表达式的lastIndex
+      namedRegex.lastIndex = 0;
+      
+      // 收集命名实体标记
+      while ((match = namedRegex.exec(this.text)) !== null) {
+        const entityName = match[1];
+        const entity = namedEntities[entityName];
         
-        // 获取下一个颜色标记
-        if (colorRegex.lastIndex < this.text.length) {
-          nextColorMatch = colorRegex.exec(this.text);
-          if (!nextColorMatch) {
-            colorRegex.lastIndex = this.text.length;
-          }
-        }
-        
-        // 获取下一个效果标记
-        if (j < effectMatches.length) {
-          nextEffectMatch = effectMatches[j];
-        }
-        
-        // 确定下一个要处理的标记
-        let nextMatch = null;
-        let matchType = null;
-        
-        if (nextColorMatch && nextEffectMatch) {
-          if (nextColorMatch.index < nextEffectMatch.index) {
-            nextMatch = nextColorMatch;
-            matchType = 'color';
-          } else {
-            nextMatch = nextEffectMatch;
-            matchType = 'effect';
-          }
-        } else if (nextColorMatch) {
-          nextMatch = nextColorMatch;
-          matchType = 'color';
-        } else if (nextEffectMatch) {
-          nextMatch = nextEffectMatch;
-          matchType = 'effect';
-        }
+        allMatches.push({
+          index: match.index,
+          lastIndex: namedRegex.lastIndex,
+          type: 'named',
+          content: entityName,
+          icon: entity ? entity.icon : null,
+          color: entity ? entity.color : null
+        });
+      }
+      
+      // 按索引排序
+      allMatches.sort((a, b) => a.index - b.index);
+      
+      // 处理所有标记
+      for (let i = 0; i < allMatches.length; i++) {
+        const currentMatch = allMatches[i];
         
         // 添加匹配前的文本
-        if (nextMatch && nextMatch.index > lastIndex) {
+        if (currentMatch.index > lastIndex) {
           parts.push({
             type: 'text',
-            content: this.text.slice(lastIndex, nextMatch.index)
-          });
-        } else if (!nextMatch && lastIndex < this.text.length) {
-          parts.push({
-            type: 'text',
-            content: this.text.slice(lastIndex)
+            content: this.text.slice(lastIndex, currentMatch.index)
           });
         }
         
-        // 处理匹配到的标记
-        if (nextMatch) {
-          if (matchType === 'color') {
-            // 添加颜色标记部分
-            parts.push({
-              type: 'color',
-              color: nextMatch[1],
-              content: nextMatch[2]
-            });
-            lastIndex = colorRegex.lastIndex;
-          } else if (matchType === 'effect') {
-            // 添加效果标记部分
-            parts.push({
-              type: 'effect',
-              effectName: nextMatch.effectName
-            });
-            lastIndex = nextMatch.lastIndex;
-            j++;
-          }
-        } else {
-          break;
-        }
+        // 添加当前标记
+        parts.push(currentMatch);
+        console.log(currentMatch);
+        lastIndex = currentMatch.lastIndex;
+      }
+      
+      // 添加最后剩余的文本
+      if (lastIndex < this.text.length) {
+        parts.push({
+          type: 'text',
+          content: this.text.slice(lastIndex)
+        });
       }
       
       return parts;
@@ -147,5 +143,17 @@ export default {
 
 .purple {
   color: #ff44ff;
+}
+
+.named-entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: bold;
+}
+
+.named-entity-icon {
+  width: 16px;
+  height: 16px;
 }
 </style>

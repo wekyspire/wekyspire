@@ -28,15 +28,13 @@
       <!-- 敌人伤害文本容器 -->
       <div class="damage-text-container" ref="enemyDamageTextContainer"></div>
       <div class="effects">
-        <div 
-          v-for="(value, key) in enemy.effects" 
-          :key="key" 
-          class="effect-icon"
-          :style="{ color: getEffectColor(key) }"
-          @mouseenter="showTooltip($event, key)"
-          @mouseleave="hideTooltip"
-        >
-          {{ getEffectIcon(key) }}<strong :style="{ color: getEffectStackColor(key, value) }">{{ value }}</strong>
+        <div v-for="(value, key) in enemy.effects">
+          <EffectIcon
+            v-if="value !== 0" 
+            :key="key" 
+            :effect-name="key"
+            :stack="value"
+          />
         </div>
       </div>
     </div>
@@ -99,16 +97,12 @@
         </div>
       </div>
       <div class="effects">
-        <div 
+        <EffectIcon
           v-for="(value, key) in player.effects" 
           :key="key" 
-          class="effect-icon"
-          :style="{ color: getEffectColor(key) }"
-          @mouseenter="showTooltip($event, key)"
-          @mouseleave="hideTooltip"
-        >
-          {{ getEffectIcon(key) }}<strong :style="{ color: getEffectStackColor(key, value) }">{{ value }}</strong>
-        </div>
+          :effect-name="key"
+          :stack="value"
+        />
       </div>
     </div>
     
@@ -167,13 +161,15 @@
 <script>
 import ColoredText from './ColoredText.vue';
 import SkillCard from './SkillCard.vue';
+import EffectIcon from './EffectIcon.vue';
 import effectDescriptions from '../data/effectDescription.js';
 
 export default {
   name: 'BattleScreen',
   components: {
     ColoredText,
-    SkillCard
+    SkillCard,
+    EffectIcon
   },
   props: {
     player: {
@@ -283,6 +279,10 @@ export default {
           }
         }, 1000);
       }, 1000);
+    },
+
+    getEffectColor(effectName) {
+      return effectDescriptions[effectName]?.color || '#000000';
     },
     
     // 显示效果变化文本
@@ -424,44 +424,7 @@ export default {
         return '🟡';
       }
     },
-    // 获取效果图标
-    getEffectIcon(effectName) {
-      return effectDescriptions[effectName]?.icon || '❓';
-    },
-    // 获取效果颜色
-    getEffectColor(effectName) {
-      return effectDescriptions[effectName]?.color || '#000000';
-    },
-    // 获取效果层数颜色
-    getEffectStackColor(effectName, stack) {
-      if(stack == 0) return effectDescriptions[effectName]?.color || '#000000';
-      if(stack < 0) return '#ff2222';
-      return '#44ff44';
-    },
-    // 获取效果描述
-    getEffectDescription(effectName) {
-      return effectDescriptions[effectName]?.description || '未知效果';
-    },
-    // 显示效果描述浮动窗口
-    showTooltip(event, effectName) {
-      this.tooltip.show = true;
-      // 获取效果名称和描述
-      const effectInfo = effectDescriptions[effectName] || {};
-      const effectDisplayName = effectInfo.name || effectName;
-      const effectDescription = effectInfo.description || '未知效果';
-      const effectColor = effectInfo.color || '#000000';
-      
-      // 设置tooltip内容，包含效果名称和描述
-      this.tooltip.text = effectDescription;
-      this.tooltip.name = effectDisplayName;
-      this.tooltip.color = effectColor;
-      this.tooltip.x = event.clientX;
-      this.tooltip.y = event.clientY;
-    },
-    // 隐藏效果描述浮动窗口
-    hideTooltip() {
-      this.tooltip.show = false;
-    },
+
     
     // 播放结算动画
     playSettlementAnimation() {
