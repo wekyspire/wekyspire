@@ -84,6 +84,8 @@ export function launchAttack (attacker, target, damage) {
   }
   // 处理受到伤害时的效果
   finalDamage = processDamageTakenEffects(target, finalDamage);
+  // 固定防御减免
+  finalDamage = Math.max(finalDamage - target.defense, 0);
   const passThoughDamage = finalDamage;
   let hpDamage = 0;
   
@@ -105,7 +107,7 @@ export function launchAttack (attacker, target, damage) {
   
   // 检查目标是否死亡
   if (target.hp <= 0) {
-    eventBus.emit('add-battle-log', `/${target.name} 被击败了！`);
+    eventBus.emit('add-battle-log', `${target.name} 被击败了！`);
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
   
@@ -466,7 +468,7 @@ export default {
       
       // 检查敌人是否死亡（技能可能造成了伤害）
       if (this.enemy.hp <= 0) {
-        this.battleLogs.push(`/${this.enemy.name} 被击败了！`);
+        this.battleLogs.push(`${this.enemy.name} 被击败了！`);
         this.endBattle(true);
         return;
       }
@@ -497,10 +499,8 @@ export default {
         return;
       }
     
-      this.enemy.act(this.player, this.battleLogs);
-
-      // 添加延迟以便播放动画
-      setTimeout(() => {
+      // 等待敌人行动完成（包括所有攻击动画）
+      this.enemy.act(this.player, this.battleLogs).then(() => {
         // 应用伤害
         const isPlayerDead = this.player.hp <= 0;
         
@@ -516,7 +516,7 @@ export default {
         eventBus.emit('enemy-action-end');
         // 触发敌人回合结束事件，通知BattleScreen组件
         eventBus.emit('enemy-turn-end');
-      }, 1200); // 2秒延迟，让玩家有时间看到敌人的行动
+      });
     },
     
     endPlayerTurn() {

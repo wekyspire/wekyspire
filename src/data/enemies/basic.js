@@ -4,12 +4,13 @@ import Enemy from '../enemy.js';
 // 史莱姆敌人
 export class Slime extends Enemy {
   constructor(battleIntensity) {
-    const hp = 15 + 5 * battleIntensity;
-    const attack = 1 + battleIntensity;
+    const hp = 15 + 3 * battleIntensity;
+    const attack = 1 + Math.floor(battleIntensity * 0.2);
     super('史莱姆', hp, attack, 1, battleIntensity + 1);
     this.isBoss = false; // 标记为普通敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
+    this.description = "一只史莱姆，可爱捏。";
   }
 
   // 计算伤害
@@ -50,19 +51,23 @@ export class Slime extends Enemy {
     
     // 执行行动
     action();
+    
+    // 返回Promise以适配新的act方法
+    return Promise.resolve();
   }
 }
 
 // 瑞米敌人
 export class Remi extends Enemy {
   constructor(battleIntensity) {
-    const hp = 20 + 5 * battleIntensity;
-    const attack = 1 + battleIntensity;
+    const hp = 20 + 1 * battleIntensity;
+    const attack = 1 + Math.floor(battleIntensity * 0.45);
     super('魔化瑞米', hp, attack, 1, battleIntensity + 1);
     this.isBoss = false; // 标记为普通敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.moneyStolen = false;
+    this.description = "一只并不友善的瑞米。";
   }
 
   // 计算伤害
@@ -123,5 +128,8 @@ export class Remi extends Enemy {
     
     // 执行行动
     action();
+    
+    // 返回Promise以适配新的act方法
+    return Promise.resolve();
   }
 }

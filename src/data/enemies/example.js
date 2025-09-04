@@ -10,6 +10,7 @@ class FireSlime extends Enemy {
     super('火史莱姆', 30, 8, 2, 1, battleIntensity);
     this.isBoss = false; // 标记为普通敌人
     this.burnDamage = 3; // 燃烧伤害
+    this.description = "一只史莱姆，但它为什么在冒火？";
   }
   
   calculateDamage(attack, player) {
@@ -31,6 +32,9 @@ class FireSlime extends Enemy {
       launchAttack(this, player, damage);
       player.addEffect('燃烧', 4);
     }
+    
+    // 返回Promise以适配新的act方法
+    return Promise.resolve();
   }
 }
 

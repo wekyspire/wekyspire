@@ -244,6 +244,7 @@ export function processDamageTakenEffects(target, damage) {
   if (target.effects['闪避'] > 0) {
     finalDamage = 0;
     eventBus.emit('add-battle-log', `${target.name}通过闪避效果完全回避了攻击！`);
+    target.effects['闪避'] -= 1;
   }
   
   return finalDamage;
@@ -276,6 +277,15 @@ export function processDamageDealtEffects(target, damage) {
     }
     eventBus.emit('add-battle-log', `${target.name}通过执着效果获得了${stacks}层集中！`);
   }
+
+  // 处理灼烧效果，受到攻击后有15%概率获得1层燃烧
+  if (target.effects['灼烧'] > 0) {
+    // 15%概率获得1层燃烧 
+    if (Math.random() < 0.15) {
+      target.addEffect('燃烧', target.effects['灼烧']);
+      eventBus.emit('add-battle-log', `${target.name}被灼烧，获得了${target.effects['灼烧']}层燃烧！`);
+    }
+  }
 }
 
 /**
@@ -297,16 +307,13 @@ export function processPostAttackEffects(attacker, target, damage) {
     }
   }
   
-  // 处理灼烧效果
-  if (target.effects['灼烧'] > 0) {
+  // 处理高燃弹药效果
+  if (attacker.effects['高燃弹药'] > 0) {
+    const burnLevel = (attacker.effects['高燃弹药'] || 0);
     // 15%概率让敌人获得1层燃烧
     if (Math.random() < 0.15) {
-      if (target.effects['燃烧']) {
-        target.effects['燃烧'] += 1;
-      } else {
-        target.effects['燃烧'] = 1;
-      }
-      eventBus.emit('add-battle-log', `${target.name}受到灼烧效果影响，获得了1层燃烧！`);
+      target.addEffect('燃烧', Math.floor(burnLevel));
+      eventBus.emit('add-battle-log', `${target.name}被灼热的攻击烫伤，获得了${Math.floor(burnLevel)}层燃烧！`);
     }
   }
   

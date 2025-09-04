@@ -2,7 +2,23 @@
   <div class="battle-screen">
     <!-- 敌人面板 -->
     <div class="enemy-panel" ref="enemyPanel">
-      <h2 style="color: red;">敌人：{{ enemy.name }}</h2>
+      <div class="enemy-header">
+        <div>
+          <h2 style="color: red; display: inline-block;">敌人：{{ enemy.name }}</h2>
+          <span v-if="enemy.isBoss" class="enemy-subtitle"> - {{ enemy.subtitle }}</span>
+        </div>
+        <div class="enemy-info-button" @mouseenter="showEnemyInfo" @mouseleave="hideEnemyInfo">?</div>
+      </div>
+      <div class="enemy-stats">
+        <div class="stat">
+          <span class="stat-label">⚔️ 攻击力:</span>
+          <span class="stat-value">{{ enemy.attack }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">🛡️ 防御力:</span>
+          <span class="stat-value">{{ enemy.defense }}</span>
+        </div>
+      </div>
       <div class="health-bar">
         <span>生命值: {{ enemy.hp }}/{{ enemy.maxHp }}</span>
         <div class="bar">
@@ -20,7 +36,7 @@
           @mouseenter="showTooltip($event, key)"
           @mouseleave="hideTooltip"
         >
-          {{ getEffectIcon(key) }}<strong>{{ value }}</strong>
+          {{ getEffectIcon(key) }}<strong :style="{ color: getEffectStackColor(key, value) }">{{ value }}</strong>
         </div>
       </div>
     </div>
@@ -91,7 +107,7 @@
           @mouseenter="showTooltip($event, key)"
           @mouseleave="hideTooltip"
         >
-          {{ getEffectIcon(key) }}<strong>{{ value }}</strong>
+          {{ getEffectIcon(key) }}<strong :style="{ color: getEffectStackColor(key, value) }">{{ value }}</strong>
         </div>
       </div>
     </div>
@@ -117,6 +133,33 @@
     >
       <div class="tooltip-name" :style="{ color: tooltip.color }">{{ tooltip.name }}</div>
       <div class="tooltip-description">{{ tooltip.text }}</div>
+    </div>
+    
+    <!-- 敌人信息悬浮框 -->
+    <div 
+      v-if="enemyInfo.show" 
+      class="enemy-info-tooltip" 
+      :style="{ left: enemyInfo.x + 'px', top: enemyInfo.y + 'px' }"
+    >
+      <div class="enemy-info-content">
+        <h3>{{ enemy.name }}</h3>
+        <p v-if="enemy.subtitle">{{ enemy.subtitle }}</p>
+        <p>{{ enemy.description }}</p>
+        <div class="enemy-info-stats">
+          <div class="stat">
+            <span class="stat-label">⚔️ 攻击力:</span>
+            <span class="stat-value">{{ enemy.attack }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">🛡️ 防御力:</span>
+            <span class="stat-value">{{ enemy.defense }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">🔮 灵能强度:</span>
+            <span class="stat-value">{{ enemy.magic }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -158,6 +201,12 @@ export default {
         x: 0,
         y: 0
       },
+      // 用于控制敌人信息浮动窗口
+      enemyInfo: {
+        show: false,
+        x: 0,
+        y: 0
+      },
       // 用于控制操作面板是否可交互
       isPlayerTurn: true
     };
@@ -168,9 +217,24 @@ export default {
       this.$nextTick(() => {
         const battleLog = this.$refs.battleLog;
         if (battleLog) {
-          battleLog.scrollTop = battleLog.scrollHeight;
+          // 确保在DOM更新完成后再执行滚动操作
+          setTimeout(() => {
+            battleLog.scrollTop = battleLog.scrollHeight;
+          }, 0);
         }
       });
+    },
+    
+    // 显示敌人信息
+    showEnemyInfo(event) {
+      this.enemyInfo.show = true;
+      this.enemyInfo.x = event.clientX;
+      this.enemyInfo.y = event.clientY;
+    },
+    
+    // 隐藏敌人信息
+    hideEnemyInfo() {
+      this.enemyInfo.show = false;
     },
     
     // 显示伤害文本
@@ -240,10 +304,11 @@ export default {
       const effectColor = this.getEffectColor(effectName);
       
       // 根据层数变化设置文本内容和样式
+      const stackColor = stacks > 0 ? '#00ff00' : '#ff0000'; // 正数为绿色，负数为红色
       if (stacks > 0) {
-        effectText.innerHTML = `获得 <span style="color: ${effectColor}">${effectName}</span> x${stacks}`;
+        effectText.innerHTML = `获得 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${stacks}</span>`;
       } else {
-        effectText.innerHTML = `<span style="color: #cccccc;">失去 <span style="color: ${effectColor}">${effectName}</span> x${Math.abs(stacks)}</span>`;
+        effectText.innerHTML = `<span style="color: #cccccc;">失去 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${Math.abs(stacks)}</span></span>`;
       }
       
       // 设置样式
@@ -367,6 +432,12 @@ export default {
     getEffectColor(effectName) {
       return effectDescriptions[effectName]?.color || '#000000';
     },
+    // 获取效果层数颜色
+    getEffectStackColor(effectName, stack) {
+      if(stack == 0) return effectDescriptions[effectName]?.color || '#000000';
+      if(stack < 0) return '#ff2222';
+      return '#44ff44';
+    },
     // 获取效果描述
     getEffectDescription(effectName) {
       return effectDescriptions[effectName]?.description || '未知效果';
@@ -411,8 +482,11 @@ export default {
     },
   },
   watch: {
-    battleLogs() {
-      this.scrollToBottom();
+    battleLogs: {
+      handler() {
+        this.scrollToBottom();
+      },
+      deep: true
     },
     // 监听玩家生命值变化
     'player.hp'(newHp, oldHp) {
@@ -481,7 +555,33 @@ export default {
   margin: 10px 0;
 }
 
-.player-stats {
+.enemy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.enemy-subtitle {
+  color: #666;
+  font-size: 0.9em;
+  margin-left: 5px;
+}
+
+.enemy-info-button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #ccc;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.enemy-stats {
   display: flex;
   justify-content: space-between;
   margin-bottom: 10px;
@@ -489,9 +589,19 @@ export default {
   border-bottom: 1px solid #eee;
 }
 
+.player-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  flex-wrap: wrap;
+}
+
 .stat {
   display: flex;
   align-items: center;
+  margin-right: 15px;
 }
 
 .stat-label {
@@ -828,6 +938,42 @@ export default {
   max-width: 300px;
   word-wrap: break-word;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 敌人信息悬浮框 */
+.enemy-info-tooltip {
+  position: fixed;
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  z-index: 1000;
+  min-width: 250px;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.enemy-info-content h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #ff6666;
+}
+
+.enemy-info-content p {
+  margin: 5px 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.enemy-info-stats {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #555;
+}
+
+.enemy-info-stats .stat {
+  margin-right: 20px;
+  margin-bottom: 5px;
 }
 
 /* 结算动画 */

@@ -9,6 +9,8 @@ class Enemy {
     this.baseDefense = defense; // 基础防御力
     this.baseMagic = magic; // 基础灵能强度
     this.effects = {}; // 效果列表
+    this.subtitle = ""; // Boss subtitle
+    this.description = '一个面目狰狞的敌人！'; // 敌人描述
   }
   
   // 初始化方法
@@ -44,7 +46,7 @@ class Enemy {
     
     // 触发效果变化事件
     import('../eventBus.js').then(eventBus => {
-      eventBus.default.emit('effectChange', 'enemy', effectName, stacks, this.effects[effectName] - stacks);
+      eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, stacks: stacks, previousStacks: this.effects[effectName] - stacks});
     });
   }
 
@@ -58,7 +60,7 @@ class Enemy {
       
       // 触发效果变化事件
       import('../eventBus.js').then(eventBus => {
-        eventBus.default.emit('effectChange', 'enemy', effectName, -stacks, this.effects[effectName] + stacks);
+        eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, stacks: -stacks, previousStacks: this.effects[effectName] + stacks});
       });
     }
   }

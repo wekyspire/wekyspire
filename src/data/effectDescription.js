@@ -139,7 +139,7 @@ const effectDescriptions = {
   // 敌人受伤时触发的效果
   '灼烧': {
     name: '灼烧',
-    description: '敌人受伤后，敌人有15%概率获得1层燃烧。',
+    description: '受伤后，有15%概率获得1层燃烧。',
     icon: '🔥',
     color: '#FF4500' // 橙红色
   },
@@ -170,6 +170,20 @@ const effectDescriptions = {
     description: '受到伤害后，增加层数层集中。',
     icon: '❤️',
     color: '#DC143C' // 深红
+  },
+
+  // 特殊效果（boss等）
+  '高燃弹药': {
+    name: '高燃弹药',
+    description: '这些古老的弹药竟如此易燃！每次攻击后，15%概率赋予1层燃烧。',
+    icon: '🔥',
+    color: '#FF4500' // 橙红色
+  },
+  '机枪升温': {
+    name: '机枪升温',
+    description: '下次扫射时的次数将继续提升。',
+    icon: '🔫',
+    color: '#FF8C00' // 深橙色
   }
 };
 
