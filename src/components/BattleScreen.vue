@@ -97,12 +97,14 @@
         </div>
       </div>
       <div class="effects">
-        <EffectIcon
-          v-for="(value, key) in player.effects" 
-          :key="key" 
-          :effect-name="key"
-          :stack="value"
-        />
+        <div v-for="(value, key) in player.effects">
+          <EffectIcon
+            v-if="value !== 0" 
+            :key="key" 
+            :effect-name="key"
+            :stack="value"
+          />
+        </div>
       </div>
     </div>
     

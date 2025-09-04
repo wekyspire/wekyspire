@@ -1,5 +1,9 @@
 import { PunchKick, Roll, Sleep, KungFu } from './skills/basic.js';
+import { CarelessPunchKick, AmateurDefense, OverCarefulDefense,
+  PrepareExercise, CarelessBravery, HoldOn } from './skills/basic.js';
 import { Fireshot,Fireball, LargeFireball } from './skills/example.js';
+
+import { PurifyWeky, StrongPurifyWeky, VeryWeakRecovery, WeakRecovery } from './skills/cMinus.js';
 
 // 技能管理器类
 class SkillManager {
@@ -8,17 +12,29 @@ class SkillManager {
     this.skillRegistry = new Map(); // 新增技能注册表
     
     // 初始化时注册预定义技能
-    this.registerSkill('拳打脚踢', PunchKick);
-    this.registerSkill('打滚', Roll);
-    this.registerSkill('睡觉', Sleep);
-    this.registerSkill('功夫', KungFu);
-    this.registerSkill('火弹术', Fireshot);
-    this.registerSkill('火球术', Fireball);
-    this.registerSkill('大火球术', LargeFireball);
+    this.registerSkill(PunchKick);
+    this.registerSkill(Roll);
+    this.registerSkill(Sleep);
+    this.registerSkill(KungFu);
+    this.registerSkill(Fireshot);
+    this.registerSkill(Fireball);
+    this.registerSkill(LargeFireball);
+    this.registerSkill(CarelessPunchKick);
+    this.registerSkill(AmateurDefense);
+    this.registerSkill(OverCarefulDefense);
+    this.registerSkill(PrepareExercise);
+    this.registerSkill(CarelessBravery);
+    this.registerSkill(HoldOn);
+
+    this.registerSkill(PurifyWeky);
+    this.registerSkill(StrongPurifyWeky);
+    this.registerSkill(VeryWeakRecovery);
+    this.registerSkill(WeakRecovery);
   }
   
   // 注册技能
-  registerSkill(skillName, SkillClass) {
+  registerSkill(SkillClass) {
+    const skillName = (new SkillClass()).name;
     this.skillRegistry.set(skillName, SkillClass);
   }
   
@@ -80,45 +96,94 @@ class SkillManager {
   }
   
   // 获取随机技能
-  static getRandomSkills(count, playerSkills = []) {
+  static getRandomSkills(count, playerSkills = [], playerTier = 0) {
     const instance = this.getInstance();
     const allSkills = Array.from(instance.skillRegistry.entries()).map(([name, SkillClass]) => {
-      // 创建临时实例以获取技能系列名称
+      // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
       return {
         name: name,
-        series: tempSkill.skillSeriesName
+        series: tempSkill.skillSeriesName,
+        tier: tempSkill.tier,
+        spawnWeight: tempSkill.spawnWeight
       };
     });
     
     // 获取玩家已有的技能系列
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
     
-    // 过滤掉玩家已有的技能和同系列的技能
+    // 过滤掉玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
     const availableSkills = allSkills.filter(skill => 
       !playerSkills.some(playerSkill => playerSkill.name === skill.name) &&
-      !playerSkillSeries.includes(skill.series)
+      !playerSkillSeries.includes(skill.series) &&
+      skill.tier <= playerTier
     );
+    
+    // 计算每个技能的出现权重
+    const weightedSkills = availableSkills.map(skill => {
+      const tierDifference = playerTier - skill.tier;
+      let modifyFactor = 1;
+      
+      if (tierDifference <= 0) {
+        modifyFactor = 0.04;
+      } if (tierDifference <= 1) {
+        modifyFactor = 0.08;
+      } else if (tierDifference === 2) {
+        modifyFactor = 0.14;
+      } else if (tierDifference === 3) {
+        modifyFactor = 0.28;
+      } else if (tierDifference === 4) {
+        modifyFactor = 0.55;
+      } else if (tierDifference === 5) {
+        modifyFactor = 0.90;
+      } else if (tierDifference > 7) {
+        modifyFactor = 0.15;
+      }  else if (tierDifference > 6) {
+        modifyFactor = 0.40;
+      } else if (tierDifference > 5) {
+        modifyFactor = 0.70;
+      }
+      
+      return {
+        ...skill,
+        weight: skill.spawnWeight * modifyFactor
+      };
+    });
     
     const selectedSkills = [];
     
     // 确保不会选择超过可用技能数量的技能
-    const actualCount = Math.min(count, availableSkills.length);
+    const actualCount = Math.min(count, weightedSkills.length);
     
-    // 随机选择技能
+    // 带权不放回抽选
     for (let i = 0; i < actualCount; i++) {
-      const randomIndex = Math.floor(Math.random() * availableSkills.length);
-      const skillInfo = availableSkills[randomIndex];
-      // console.log('Creating skill with name:', skillInfo.name);
+      // 计算总权重
+      const totalWeight = weightedSkills.reduce((sum, skill) => sum + skill.weight, 0);
+      
+      // 生成随机数
+      const random = Math.random() * totalWeight;
+      
+      // 选择技能
+      let currentWeight = 0;
+      let selectedIndex = 0;
+      
+      for (let j = 0; j < weightedSkills.length; j++) {
+        currentWeight += weightedSkills[j].weight;
+        if (random <= currentWeight) {
+          selectedIndex = j;
+          break;
+        }
+      }
+      
+      // 获取选中的技能
+      const skillInfo = weightedSkills[selectedIndex];
       const skill = this.createSkill(skillInfo.name);
-      // console.log('Created skill object:', skill);
       selectedSkills.push(skill);
       
-      // 从可用技能中移除已选择的技能
-      availableSkills.splice(randomIndex, 1);
+      // 从可选技能中移除已选择的技能
+      weightedSkills.splice(selectedIndex, 1);
     }
     
-    // console.log('Selected skills:', selectedSkills);
     return selectedSkills;
   }
 }

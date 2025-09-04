@@ -54,11 +54,11 @@ class Strengthen extends Ability {
 // 成长能力
 class Growth extends Ability {
   constructor() {
-    super('成长', '/named{攻击}增2，/named{生命}上限增15。', 2, 1.0);
+    super('成长', '/named{攻击}增1，/named{生命}上限增15。', 3, 1.0);
   }
 
   apply(player) {
-    player.baseAttack += 2;
+    player.baseAttack += 1;
     player.maxHp += 15;
     player.hp += 15; // 同时恢复增加的生命值
   }
@@ -90,11 +90,13 @@ class MindExercise extends Ability {
 // 力量训练
 class PowerExercise extends Ability {
   constructor() {
-    super('力量训练', '/named{攻击}增1。', 1, 1.0);
+    super('力量训练', '/named{攻击}增1，最大/named{生命}减5。', 1, 1.0);
   }
 
   apply(player) {
     player.baseAttack += 1;
+    player.maxHp = Math.max(1, player.maxHp - 5);
+    player.hp = Math.min(player.maxHp, player.hp);
   }
 }
 
@@ -112,3 +114,42 @@ class Cultivation extends Ability {
 }
 
 export { Ability, Breakthrough, Strengthen, Growth, Cultivation, MindExercise, PowerExercise, Exercise}
+
+export class BitterCultivation extends Ability {
+  constructor() {
+    super('苦修', '/named{灵能}增2，/named{攻击}减1。', 2, 1);
+  }
+  apply(player) {
+    player.baseMagic += 2;
+    player.baseAttack = Math.max(0, player.baseAttack - 1);
+  }
+}
+
+export class BitterBodyCultivation extends Ability {
+  constructor() {
+    super('爆发训练', '/named{攻击}增1，/named{防御}减1。', 1, 1);
+  }
+  apply(player) {
+    player.baseAttack += 1;
+    player.baseDefense = Math.max(0, player.baseDefense - 1);
+  }
+}
+
+export class DefenseCultivation extends Ability {
+  constructor() {
+    super('防御训练', '/named{防御}增1。', 2, 1);
+  }
+  apply(player) {
+    player.baseDefense += 1;
+  }
+}
+
+export class SpecialDefenseCultivation extends Ability {
+  constructor() {
+    super('特化防御训练', '/named{防御}增2，/named{攻击}减1。', 1, 1);
+  }
+  apply(player) {
+    player.baseDefense += 2;
+    player.baseAttack = Math.max(0, player.baseAttack - 1);
+  }
+}

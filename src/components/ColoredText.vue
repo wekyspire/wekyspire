@@ -109,7 +109,6 @@ export default {
         
         // 添加当前标记
         parts.push(currentMatch);
-        console.log(currentMatch);
         lastIndex = currentMatch.lastIndex;
       }
       

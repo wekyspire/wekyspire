@@ -1,6 +1,6 @@
 // 技能抽象类
 class Skill {
-  constructor(name, type, tier, baseDescription, manaCost, maxUses, skillSeriesName) {
+  constructor(name, type, tier, baseDescription, manaCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
     this.type = type; // 技能类型：'normal' 或 'magic'
     this.tier = tier; // 技能等阶
@@ -11,6 +11,7 @@ class Skill {
     this.remainingUses = this.maxUses; // 回合剩余施放次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
     this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称
+    this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
   }
 
   // 重置回合剩余施放次数

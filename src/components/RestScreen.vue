@@ -40,10 +40,11 @@
             v-for="(item, index) in shopItems" 
             :key="index" 
             class="shop-item"
+            :class="getItemTierClass(item.tier)"
           >
             <h3>{{ item.name }}</h3>
-            <p>{{ item.description }}</p>
-            <p>价格: {{ item.price }}金钱</p>
+            <p><ColoredText :text="item.description" /></p>
+            <p :style="{ color: item.price > player.money ? 'red' : 'orange' }">💰 {{ item.price }}</p>
             <button 
               :disabled="player.money < item.price"
               @click="buyItem(item)"
@@ -74,8 +75,13 @@
 </template>
 
 <script>
+import ColoredText from './ColoredText.vue';
+
 export default {
   name: 'RestScreen',
+  components: {
+    ColoredText
+  },
   props: {
     player: {
       type: Object,
@@ -110,8 +116,18 @@ export default {
     showShop() {
       this.currentPanel = 'shop'
     },
-    buyItem(item) {
-      this.$emit('buy-item', item)
+    buyItem(purchasedItem) {
+      // 直接调用商品实例的purchase方法
+      purchasedItem.purchase(this.$parent.player);
+      
+      // 更新玩家金钱
+      this.$parent.player.money -= purchasedItem.price;
+      
+      // 添加日志
+      this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
+      
+      // 重新生成商店物品
+      this.$forceUpdate();
     },
     endRest() {
       this.$emit('end-rest')
@@ -139,6 +155,17 @@ export default {
         '7': 'tier-7',
         '8': 'tier-8',
         '9': 'tier-9'
+      };
+      return tierClasses[tier] || '';
+    },
+    // 获取商品等阶样式类
+    getItemTierClass(tier) {
+      const tierClasses = {
+        '1': 'item-tier-1',
+        '2': 'item-tier-2',
+        '3': 'item-tier-3',
+        '4': 'item-tier-4',
+        '5': 'item-tier-5'
       };
       return tierClasses[tier] || '';
     }
@@ -172,7 +199,7 @@ export default {
 
 .shop-item {
   border: 1px solid #eee;
-  padding: 15px;
+  padding: 5px;
   width: 200px;
 }
 
@@ -256,6 +283,45 @@ button {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 商品等阶样式 */
+.item-tier-1 {
+  border: 1px solid #4caf50;
+  background-color: #e8f5e9;
+}
+
+.item-tier-2 {
+  border: 1px solid #2196f3;
+  background-color: #e3f2fd;
+}
+
+.item-tier-3 {
+  border: 1px solid #9c27b0;
+  background-color: #f3e5f5;
+}
+
+.item-tier-4 {
+  border: 1px solid #ff9800;
+  background-color: #fff3e0;
+}
+
+.item-tier-5 {
+  border: 2px solid #f44336;
+  background-color: #ffebee;
+  position: relative;
+}
+
+.item-tier-5::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 1px solid #d32f2f;
+  border-radius: 4px;
+  z-index: -1;
 }
 
 .reward-buttons {

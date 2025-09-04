@@ -1,4 +1,4 @@
-import { Breakthrough, Strengthen, Growth, Cultivation, Exercise, MindExercise, PowerExercise } from './ability.js';
+import { Breakthrough, Strengthen, Growth, Cultivation, Exercise, MindExercise, PowerExercise, BitterCultivation, BitterBodyCultivation, SpecialDefenseCultivation, DefenseCultivation } from './ability.js';
 
 // 能力管理器类
 class AbilityManager {
@@ -12,6 +12,10 @@ class AbilityManager {
     this.registerAbility(Exercise);
     this.registerAbility(MindExercise);
     this.registerAbility(PowerExercise);
+    this.registerAbility(BitterCultivation);
+    this.registerAbility(BitterBodyCultivation);
+    this.registerAbility(DefenseCultivation);
+    this.registerAbility(SpecialDefenseCultivation);
   }
   
   // 注册能力

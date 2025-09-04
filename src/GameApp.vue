@@ -67,6 +67,7 @@ import DialogScreen from './components/DialogScreen.vue'
 import EnemyFactory from './data/enemyFactory.js'
 import SkillManager from './data/skillManager.js'
 import AbilityManager from './data/abilityManager.js'
+import ItemManager from './data/itemManager.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects, processDamageTakenEffects, processDamageDealtEffects, processPostAttackEffects } from './utils/effectProcessor.js'
 import AbilityRewardPanel from './components/AbilityRewardPanel.vue'
 import SkillRewardPanel from './components/SkillRewardPanel.vue'
@@ -117,6 +118,13 @@ export function launchAttack (attacker, target, damage) {
   return {dead: false, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
 }
 
+
+// 造成伤害的结算逻辑（由skill和enemy调用），和发动攻击不同，跳过攻击方攻击发动结算。
+// @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
+export function dealDamage (attacker, target, damage) {
+  return launchAttack(null, target, damage);
+}
+
 // 任意获得护盾的结算逻辑
 export function gainShield (caster, target, shield) {
   target.shield += shield;
@@ -160,8 +168,8 @@ export default {
           maxHp: 40,
           mana: 0,
           maxMana: 0,
-          actionPoints: 4,
-          maxActionPoints: 4,
+          actionPoints: 3,
+          maxActionPoints: 3,
           baseAttack: 3,
           baseMagic: 3,
           baseDefense: 0,
@@ -191,7 +199,7 @@ export default {
             return this.baseMagic + (this.effects['集中'] || 0);
           },
           get defense() {
-            return this.baseDefense + (this.effects['防御'] || 0);
+            return this.baseDefense + (this.effects['坚固'] || 0);
           },
           
           // 添加效果方法
@@ -301,12 +309,7 @@ export default {
         skillRewardClaimed: false,
         abilityRewardClaimed: false,
         
-        // 商店物品
-        shopItems: [
-          { name: '恢复生命', description: '恢复40生命值', price: 13 },
-          { name: '恢复魏启', description: '恢复40魏启值', price: 13 },
-          { name: '技能位', description: '增加技能数上限', price: 80 }
-        ],
+
         
         // 战斗场次数
         battleCount: 0,
@@ -320,7 +323,9 @@ export default {
         skillRewards: [],
         
         // 能力管理器实例
-        abilityManager: new AbilityManager()
+        abilityManager: new AbilityManager(),
+        // 商品管理器实例
+        itemManager: new ItemManager()
       }
     },
   mounted() {
@@ -339,6 +344,14 @@ export default {
     if(this.eventBus) {
       this.eventBus.off('add-battle-log');
       this.eventBus.off('update-skill-descriptions');
+    }
+  },
+  computed: {
+    shopItems() {
+      // 使用商品管理器生成商店商品实例
+      const items = this.itemManager.getRandomItems(3, this.player.tier);
+      // 直接返回商品实例，不需要转换格式
+      return items;
     }
   },
   methods: {
@@ -375,8 +388,9 @@ export default {
       this.generateEnemy();
 
       // 战斗开始前看看有没有对话
-      if (dialogues.shouldTriggerEventBeforeBattle(this.battleCount, this.player, this.enemy)) {
-        this.dialogSequence = dialogues.getEventBeforeBattle(this.battleCount, this.player, this.enemy);
+      const sequence = dialogues.getEventBeforeBattle(this.battleCount, this.player, this.enemy);
+      if(sequence) {
+        this.dialogSequence = sequence;
         this.dialogIndex = 0;
         this.currentDialog = this.dialogSequence[this.dialogIndex];
         this.isDialogVisible = true;
@@ -574,8 +588,9 @@ export default {
         
         if (isVictory) {
           // 看看要不要冒对话事件
-          if (dialogues.shouldTriggerEventAfterBattle(this.battleCount, this.player, this.enemy)) {
-            this.dialogSequence = dialogues.getEventAfterBattle(this.battleCount, this.player, this.enemy);
+          const sequence = dialogues.getEventAfterBattle(this.battleCount, this.player, this.enemy);
+          if (sequence) {
+            this.dialogSequence = sequence;
             this.dialogIndex = 0;
             this.currentDialog = this.dialogSequence[this.dialogIndex];
             this.isDialogVisible = true;
@@ -648,7 +663,7 @@ export default {
       this.isSkillRewardVisible = true;
       // 生成随机技能，排除玩家已有的技能和同系列的技能
       console.log('Generating skill rewards...');
-      this.skillRewards = SkillManager.getRandomSkills(3, this.player.skills);
+      this.skillRewards = SkillManager.getRandomSkills(3, this.player.skills, this.player.tier);
       console.log('Generated skill rewards:', this.skillRewards);
       // 标记技能奖励已显示
       this.skillRewardClaimed = true;
@@ -692,21 +707,9 @@ export default {
       this.rewards.skill = false;
     },
     
+    // buyItem方法已移至RestScreen.vue组件中实现
     buyItem(item) {
-      if (this.player.money >= item.price) {
-        this.player.money -= item.price;
-        this.battleLogs.push(`购买了 ${item.name}`);
-        
-        // 根据物品类型执行不同操作
-        if (item.name === '恢复生命') {
-          this.player.hp = Math.min(this.player.maxHp, this.player.hp + 40);
-        } else if (item.name === '恢复魏启') {
-          this.player.mana = this.player.maxMana;
-        } else if (item.name === '技能位') {
-          // 增加技能数上限的逻辑
-          this.player.maxNumSkills++;
-        }
-      }
+      // 此方法已废弃
     },
     
     endRest() {

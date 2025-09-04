@@ -4,7 +4,7 @@ import { launchAttack } from '../../GameApp.vue';
 // 示例技能：火弹术
 export class Fireshot extends Skill {
   constructor() {
-    super('火弹术', 'magic', 1, '造成【2+2x/named{灵能}】伤害', 1, 2, '火弹术');
+    super('火弹术', 'magic', 1, '造成【2+2x/named{灵能}】伤害', 1, 2, '火弹术', 1);
     this.baseDamage = 2;
     this.upgradeTo = "火球术";
   }
@@ -34,7 +34,7 @@ export class Fireshot extends Skill {
 // 示例技能：火球术
 export class Fireball extends Skill {
   constructor() {
-    super('火球术', 'magic', 2, '造成【3+3x/named{灵能}】伤害', 1, 1, '火球术');
+    super('火球术', 'magic', 2, '造成【3+3x/named{灵能}】伤害', 1, 1, '火球术', 1);
     this.baseDamage = 3;
   }
 
@@ -63,7 +63,7 @@ export class Fireball extends Skill {
 // 示例技能：大火球术
 export class LargeFireball extends Skill {
   constructor() {
-    super('大火球术', 'magic', 5, '造成【5+6x/named{灵能}】伤害', 2, 1, '大火球术');
+    super('大火球术', 'magic', 5, '造成【5+6x/named{灵能}】伤害', 2, 1, '大火球术', 1);
     this.baseDamage = 5;
   }
 

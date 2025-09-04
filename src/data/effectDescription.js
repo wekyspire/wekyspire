@@ -51,6 +51,12 @@ const effectDescriptions = {
     icon: '🔥',
     color: '#FF5555' // 橙红
   },
+  '聚气': {
+    name: '聚气',
+    description: '回合结束时，获得层数点魏启，层数清零。',
+    icon: '💧',
+    color: '#00BFFF' // 深天蓝
+  },
   
   // 回合结束时触发的效果
   '中毒': {

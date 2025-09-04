@@ -9,6 +9,13 @@ import eventBus from '../eventBus.js';
  * @param {Object} target - 目标对象（玩家或敌人）
  */
 export function processStartOfTurnEffects(target) {
+  // 吸收效果
+  if (target.effects['吸收'] > 0) {
+    target.mana += target.effects['吸收'];
+    eventBus.emit('add-battle-log', `${target.name}\effect{吸收}了${target.effects['吸收']}点魏启！`);
+    delete target.effects['吸收'];
+  }
+
   // 处理燃烧效果
   if (target.effects['燃烧'] > 0) {
     const damage = target.effects['燃烧'];
@@ -19,6 +26,13 @@ export function processStartOfTurnEffects(target) {
     eventBus.emit('add-battle-log', `${target.name}被烧伤了，受到${damage}伤害！`);
     target.hp -= damage;
     if (target.hp < 0) target.hp = 0;
+  }
+  
+  // 聚气效果
+  if (target.effects['聚气'] > 0) {
+    target.mana += target.effects['聚气'];
+    eventBus.emit('add-battle-log', `${target.name}通过\effect{聚气}恢复了${target.effects['聚气']}点魏启！`);
+    delete target.effects['聚气'];
   }
   
   // 最后再处理眩晕效果
