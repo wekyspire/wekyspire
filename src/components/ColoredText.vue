@@ -4,22 +4,21 @@
       <span v-if="part.type === 'text'" :style="part.style">{{ part.content }}</span>
       <span v-else-if="part.type === 'color'" :class="part.color">{{ part.content }}</span>
       <EffectIcon v-else-if="part.type === 'effect'" :effect-name="part.effectName" />
-      <span v-else-if="part.type === 'named'" class="named-entity">
-        {{part.icon}}
-        <span :style="{ color: part.color }">{{ part.content }}</span>
-      </span>
+      <NamedEntity v-else-if="part.type === 'named'" :entity-name="part.content" />
     </template>
   </span>
 </template>
 
 <script>
 import EffectIcon from './EffectIcon.vue';
+import NamedEntity from './NamedEntity.vue';
 import namedEntities from '../data/namedEntities.js';
 
 export default {
   name: 'ColoredText',
   components: {
-    EffectIcon
+    EffectIcon,
+    NamedEntity
   },
   props: {
     text: {
@@ -144,15 +143,5 @@ export default {
   color: #ff44ff;
 }
 
-.named-entity {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: bold;
-}
 
-.named-entity-icon {
-  width: 16px;
-  height: 16px;
-}
 </style>

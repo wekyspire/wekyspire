@@ -21,6 +21,7 @@
       :player="player"
       :rewards="rewards"
       :shop-items="shopItems"
+      :should-prompt-tier="this.enemy && this.enemy.isBoss"
       @claim-money="claimMoney"
       @show-skill-rewards="showSkillRewards"
       @show-ability-rewards="showAbilityRewards"
@@ -118,6 +119,14 @@ export function launchAttack (attacker, target, damage) {
   return {dead: false, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
 }
 
+export function upgradePlayerTier (player) {
+  const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
+  if (tierUpgrades[player.tier] !== undefined) {
+    player.tier = tierUpgrades[player.tier];
+    return true;
+  }
+  return false;
+}
 
 // 造成伤害的结算逻辑（由skill和enemy调用），和发动攻击不同，跳过攻击方攻击发动结算。
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
@@ -405,8 +414,8 @@ export default {
       });
       
       
-      // 恢复技能使用次数
-      this.player.skillManager.resetAllSkillUses();
+      // 进行技能冷却
+      this.player.skillManager.coldDownAllAllSkills();
       
       // 更新技能描述
       this.updateSkillDescriptions();
@@ -428,9 +437,8 @@ export default {
         return;
       }
       
-      // 重置行动力和技能使用次数
+      // 重置行动力
       this.player.actionPoints = this.player.maxActionPoints;
-      this.player.skillManager.resetAllSkillUses();
       
       // 更新技能描述
       this.updateSkillDescriptions();
@@ -628,13 +636,16 @@ export default {
       if (this.abilityRewardClaimed) {
         return;
       }
-      
       // 显示能力奖励面板
       this.isAbilityRewardVisible = true;
       // 生成随机能力，根据战斗次数计算abundance值
       let abundance = Math.min(1.0, Math.min(this.battleCount * 0.05, 0.5));
       if(this.enemy.isBoss) abundance += 0.5;
       this.abilityRewards = this.abilityManager.getRandomAbilities(3, abundance);
+      // 如果是boss战，直接提升灵御等阶。
+      if(this.enemy.isBoss) {
+        upgradePlayerTier(this.player);
+      }
       // 标记能力奖励已显示
       this.abilityRewardClaimed = true;
     },

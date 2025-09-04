@@ -3,8 +3,9 @@ import { launchAttack, dealDamage, gainShield } from '../../GameApp.vue';
 
 export class PurifyWeky extends Skill {
   constructor() {
-    super('纯化', 'normal', 1, '获得【2】/effect{聚气}', 1, 1);
+    super('纯化', 'normal', 1, '获得【2】/effect{聚气}', 1, 3);
     this.stack = 2;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能
@@ -27,8 +28,9 @@ export class PurifyWeky extends Skill {
 
 export class StrongPurifyWeky extends Skill {
   constructor() {
-    super('超纯化', 'normal', 4, '获得【2+/named{灵能}】/effect{聚气}', 2, 1);
+    super('超纯化', 'normal', 4, '获得【2+/named{灵能}】/effect{聚气}', 2, 3);
     this.stack = 2;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能
@@ -54,8 +56,9 @@ export class StrongPurifyWeky extends Skill {
 // 恢复I 技能
 export class VeryWeakRecovery extends Skill {
   constructor() {
-    super('恢复I', '木', 1, '获得【3+/named{灵能}】/effect{再生}', 1, 1);
+    super('恢复I', '木', 1, '获得【3+/named{灵能}】/effect{再生}', 1, 3);
     this.stack = 3;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能
@@ -80,8 +83,9 @@ export class VeryWeakRecovery extends Skill {
 // 恢复II 技能
 export class WeakRecovery extends Skill {
   constructor() {
-    super('恢复II', '木', 3, '获得【7+/named{灵能}】/effect{再生}', 2, 1);
+    super('恢复II', '木', 3, '获得【7+/named{灵能}】/effect{再生}', 2, 2);
     this.stack = 7;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能

@@ -61,9 +61,9 @@ class SkillManager {
     return this.skills;
   }
   
-  // 重置所有技能的使用次数
-  resetAllSkillUses() {
-    this.skills.forEach(skill => skill.resetUses());
+  // 冷却所有技能依次
+  coldDownAllAllSkills() {
+    this.skills.forEach(skill => skill.coldDown());
   }
 
   // 更新技能状态（确保Vue响应性）

@@ -6,6 +6,7 @@
         v-for="(skill, index) in skills" 
         :key="index"
         :skill="skill"
+        :preview-mode="true"
         @skill-card-clicked="selectSkill"
       />
     </div>

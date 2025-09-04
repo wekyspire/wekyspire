@@ -26,7 +26,7 @@
             class="reward-button ability-reward" 
             @click="showAbilityRewards"
           >
-            能力奖励
+            {{abilityRewardButtonName()}}
           </button>
         </div>
         <button @click="showShop">结束奖励阶段</button>
@@ -94,6 +94,10 @@ export default {
     shopItems: {
       type: Array,
       default: () => []
+    },
+    shouldPromptTier: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -115,6 +119,10 @@ export default {
     },
     showShop() {
       this.currentPanel = 'shop'
+    },
+    abilityRewardButtonName () {
+      if(this.shouldPromptTier) return "突破！";
+      return "能力奖励";
     },
     buyItem(purchasedItem) {
       // 直接调用商品实例的purchase方法

@@ -12,9 +12,14 @@
     <div class="skill-description">
       <ColoredText :text="skill.description" />
     </div>
-    <div class="skill-uses" v-if="skill.remainingUses !== undefined && skill.maxUses !== undefined && (1 !== skill.maxUses || skill.maxUses === Infinity)">
+    <div class="skill-uses">
+      <ColoredText v-if="skill.coldDownTurns != 0 && skill.remainingUses != skill.maxUses" :text="`/named{重整} ${skill.remainingColdDownTurns}/${skill.coldDownTurns}`"></ColoredText>
+      <ColoredText v-else-if="skill.coldDownTurns != 0" :text="`/named{重整} ${skill.coldDownTurns} 回合`"></ColoredText>
+      <ColoredText v-else-if="skill.remainingUses != Infinity" :text="`/named{消耗}`"></ColoredText>
+      <br />
       <strong v-if="skill.maxUses === Infinity">无限</strong>
-      <span v-else>({{ skill.remainingUses }}/{{ skill.maxUses }})</span>
+      <span v-else-if="previewMode">(装填 {{ skill.maxUses }}/{{ skill.maxUses }})</span>
+      <span v-else>(装填 {{ skill.remainingUses }}/{{ skill.maxUses }})</span>
     </div>
   </div>
 </template>
@@ -39,6 +44,10 @@ export default {
     playerMana: {
       type: Number,
       default: Infinity
+    },
+    previewMode: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {

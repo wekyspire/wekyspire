@@ -7,20 +7,34 @@ class Skill {
     this.baseDescription = baseDescription; // 技能描述
     this.description = baseDescription;
     this.manaCost = manaCost || 0; // 魏启消耗
-    this.maxUses = maxUses || 1; // 回合最大施放次数
-    this.remainingUses = this.maxUses; // 回合剩余施放次数
+    this.maxUses = maxUses || 1; // 最大充能次数，inf代表无需充能，可以随便用
+    this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
     this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
+    this.coldDownTurns = 0; // 技能冷却时间, 以回合为单位。如果为0则表示无法自动冷却。
+    this.remainingColdDownTurns = 0; // 回合剩余冷却时间
   }
 
-  // 重置回合剩余施放次数
-  resetUses() {
-    this.remainingUses = this.maxUses;
+  // 回合开始时或被手动调用时，推进冷却流程
+  coldDown() {
+    if(this.coldDown !== 0) {
+      if(this.remainingUses !== this.maxUses) {
+        this.remainingColdDownTurns --;
+        if(this.remainingColdDownTurns <= 0) {
+          this.remainingColdDownTurns = this.coldDownTurns;
+          this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
+        }
+      } else {
+        this.coldDownTurns = this.remainingColdDownTurns;
+      }
+    }
   }
 
   // 战斗开始时调用，用于初始化技能
   onBattleStart() {
+    this.remainingUses = this.maxUses;
+    this.remainingColdDown = this.coldDown;
     // 默认实现，子类可以重写
   }
 
