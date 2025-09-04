@@ -57,6 +57,7 @@ export class Sleep extends Skill {
   constructor() {
     super('睡觉', 'normal', 0, '恢复/green{7}/named{生命}', 0, 1, '睡觉', 1);
     this.heal = 7;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能
@@ -74,11 +75,12 @@ export class Sleep extends Skill {
   }
 }
 
-// 睡觉技能
+// 睡大觉技能
 export class LargeSleep extends Skill {
   constructor() {
     super('睡大觉', 'normal', 1, '恢复/green{22}/named{生命}，/effect{眩晕}', 0, 1);
     this.heal = 22;
+    this.coldDownTurns = 2;
   }
 
   // 使用技能

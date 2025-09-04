@@ -18,7 +18,8 @@ class Skill {
 
   // 回合开始时或被手动调用时，推进冷却流程
   coldDown() {
-    if(this.coldDown !== 0) {
+    console.log(this);
+    if(this.coldDownTurns !== 0) {
       if(this.remainingUses !== this.maxUses) {
         this.remainingColdDownTurns --;
         if(this.remainingColdDownTurns <= 0) {
@@ -26,7 +27,7 @@ class Skill {
           this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
         }
       } else {
-        this.coldDownTurns = this.remainingColdDownTurns;
+        this.remainingColdDownTurns = this.coldDownTurns;
       }
     }
   }
@@ -34,7 +35,7 @@ class Skill {
   // 战斗开始时调用，用于初始化技能
   onBattleStart() {
     this.remainingUses = this.maxUses;
-    this.remainingColdDown = this.coldDown;
+    this.remainingColdDown = this.coldDownTurns;
     // 默认实现，子类可以重写
   }
 

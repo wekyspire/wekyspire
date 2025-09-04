@@ -15,28 +15,55 @@
 </template>
 
 <script>
+import eventBus from '../eventBus.js';
+
 export default {
   name: 'DialogScreen',
-  props: {
-    isVisible: {
-      type: Boolean,
-      default: false
-    },
-    currentDialog: {
-      type: Object,
-      default: () => ({
+  data() {
+    return {
+      isVisible: false,
+      currentDialog: {
         character: '',
         text: '',
         avatar: ''
-      })
-    }
+      },
+      dialogSequence: [],
+      dialogIndex: 0
+    };
+  },
+  mounted() {
+    // 监听display-dialog事件
+    eventBus.on('display-dialog', (dialogSequence) => {
+      this.dialogSequence = dialogSequence;
+      this.dialogIndex = 0;
+      this.currentDialog = this.dialogSequence[this.dialogIndex];
+      this.isVisible = true;
+    });
+  },
+  beforeUnmount() {
+    // 移除事件监听
+    eventBus.off('display-dialog');
   },
   methods: {
     nextDialog() {
-      this.$emit('next-dialog')
+      // 检查是否还有更多对话
+      if (this.dialogIndex < this.dialogSequence.length - 1) {
+        // 显示下一个对话
+        this.dialogIndex++;
+        this.currentDialog = this.dialogSequence[this.dialogIndex];
+      } else {
+        // 对话结束，隐藏对话框
+        this.isVisible = false;
+        this.dialogSequence = [];
+        this.dialogIndex = 0;
+        
+        // 发射对话结束事件
+        eventBus.emit('dialog-ended');
+      }
+      this.$emit('next-dialog');
     }
   }
-}
+};
 </script>
 
 <style scoped>

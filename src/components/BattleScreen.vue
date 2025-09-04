@@ -112,7 +112,7 @@
     <div class="action-panel" :class="{ 'disabled': !isPlayerTurn }">
       <div class="skills">
         <SkillCard
-          v-for="(skill, index) in player.skills" 
+          v-for="(skill, index) in player.skillSlots.filter(skill => skill !== null)" 
           :key="index"
           :skill="skill"
           :disabled="!canUseSkill(skill) || !isPlayerTurn"

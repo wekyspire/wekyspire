@@ -39,8 +39,16 @@
     <SkillRewardPanel
       v-if="isSkillRewardVisible"
       :skills="skillRewards"
-      @select-skill="claimSkill"
+      @select-skill="onSelectSkillForSlot"
       @close="closeSkillRewards"
+    />
+    
+    <SkillSlotSelectionPanel
+      v-if="isSkillSlotSelectionVisible"
+      :skill="selectedSkillForSlot"
+      :skill-slots="player.skillSlots"
+      @select-slot="installSkillToSlot"
+      @close="closeSkillSlotSelection"
     />
     
     <!-- 结束界面 -->
@@ -51,11 +59,7 @@
     />
     
     <!-- 对话界面 -->
-    <DialogScreen 
-      :is-visible="isDialogVisible" 
-      :current-dialog="currentDialog"
-      @next-dialog="nextDialog"
-    />
+    <DialogScreen />
   </div>
 </template>
 
@@ -72,6 +76,7 @@ import ItemManager from './data/itemManager.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects, processDamageTakenEffects, processDamageDealtEffects, processPostAttackEffects } from './utils/effectProcessor.js'
 import AbilityRewardPanel from './components/AbilityRewardPanel.vue'
 import SkillRewardPanel from './components/SkillRewardPanel.vue'
+import SkillSlotSelectionPanel from './components/SkillSlotSelectionPanel.vue'
 import eventBus from './eventBus.js'
 import * as dialogues from './data/dialogues.js'
 
@@ -155,15 +160,13 @@ export default {
     EndScreen,
     DialogScreen,
     AbilityRewardPanel,
-    SkillRewardPanel
+    SkillRewardPanel,
+    SkillSlotSelectionPanel
   },
   data() {
       return {
         gameState: 'start', // 'start', 'battle', 'rest', 'end'
-        isDialogVisible: false,
-        currentDialog: {},
-        dialogSequence: [], // 存储当前对话序列
-        dialogIndex: 0, // 当前对话索引
+        // 移除了对话相关数据属性，现在通过事件总线处理
         isVictory: false,
         
         // 回合控制
@@ -185,13 +188,15 @@ export default {
           money: 0,
           tier: 0, // 等阶
           maxNumSkills: 5, // 玩家技能数上限
+          skillSlots: [], // 技能槽
           skills: [],
           effects: {}, // 合并effects到player对象中
           skillManager: SkillManager.getInstance(),
           
           // 初始化时添加回调函数
           init() {
-            // 初始化逻辑（如果需要）
+            // 初始化技能槽
+            this.skillSlots = Array(5).fill(null);
           },
           // 应用治疗
           applyHeal(heal) {
@@ -328,8 +333,12 @@ export default {
         abilityRewards: [],
         
         // 技能奖励相关
-        isSkillRewardVisible: false,
-        skillRewards: [],
+    isSkillRewardVisible: false,
+    skillRewards: [],
+    
+    // 技能槽选择相关
+    isSkillSlotSelectionVisible: false,
+    selectedSkillForSlot: null,
         
         // 能力管理器实例
         abilityManager: new AbilityManager(),
@@ -345,14 +354,25 @@ export default {
     this.eventBus.on('add-battle-log', (value) => {
       this.battleLogs.push(value);
     });
+    // 有时，外部会更新技能描述并发射更新事件，需要监听此事件并更新UI
     this.eventBus.on('update-skill-descriptions', () => {
-      this.updateSkillDescriptions();
+        this.updateSkillDescriptions();
+    });
+    // 注册对话对事件总线的监听
+    dialogues.registerListeners(eventBus);
+    // 监听对话结束事件
+    this.eventBus.on('dialog-ended', () => {
+      // 如果是开场事件，开始战斗
+      if (this.gameState === 'battle' && this.battleCount === 0) {
+        this.startBattle();
+      }
     });
   },
   beforeUnmount() {
     if(this.eventBus) {
       this.eventBus.off('add-battle-log');
       this.eventBus.off('update-skill-descriptions');
+      dialogues.unregisterListeners(eventBus);
     }
   },
   computed: {
@@ -376,15 +396,12 @@ export default {
     
     startGame() {
       // 触发开场事件
-      this.dialogSequence = dialogues.getOpeningDialog();
-      this.dialogIndex = 0;
-      this.currentDialog = this.dialogSequence[this.dialogIndex];
-      this.isDialogVisible = true;
+      eventBus.emit('before-game-start');
       
-      // 为玩家添加初始技能
+      // 为玩家添加初始技能到第一个技能槽
       const initialSkill = this.player.skillManager.constructor.createSkill('拳打脚踢');
       this.player.skillManager.addSkill(initialSkill);
-      this.player.skills.push(initialSkill);
+      this.player.skillSlots[0] = initialSkill;
       
       this.gameState = 'battle';
       // 注意：不在这里调用startBattle()，而是在对话结束后调用
@@ -396,14 +413,15 @@ export default {
       // 生成敌人
       this.generateEnemy();
 
-      // 战斗开始前看看有没有对话
-      const sequence = dialogues.getEventBeforeBattle(this.battleCount, this.player, this.enemy);
-      if(sequence) {
-        this.dialogSequence = sequence;
-        this.dialogIndex = 0;
-        this.currentDialog = this.dialogSequence[this.dialogIndex];
-        this.isDialogVisible = true;
-      }
+      // 战前事件
+      eventBus.emit('before-battle', {
+        battleCount: this.battleCount,
+        player: this.player,
+        enemy: this.enemy
+      });
+      
+      // 从技能槽复制技能到战斗技能数组
+      this.player.skills = this.player.skillSlots.filter(skill => skill !== null);
       
       // 重置玩家回合
       this.player.actionPoints = this.player.maxActionPoints;
@@ -412,11 +430,7 @@ export default {
       this.player.skills.forEach(skill => {
         skill.onBattleStart();
       });
-      
-      
-      // 进行技能冷却
-      this.player.skillManager.coldDownAllAllSkills();
-      
+
       // 更新技能描述
       this.updateSkillDescriptions();
       
@@ -429,6 +443,18 @@ export default {
     },
     
     startPlayerTurn() {
+      
+      // 重置行动力
+      this.player.actionPoints = this.player.maxActionPoints;
+      
+      // 进行技能冷却
+      this.player.skills.forEach(skill => {
+        skill.coldDown();
+      });
+
+      // 更新技能描述
+      this.updateSkillDescriptions();
+
       // 回合开始时结算效果
       const isStunned = processStartOfTurnEffects(this.player);
       if (isStunned) {
@@ -436,12 +462,6 @@ export default {
         this.endPlayerTurn();
         return;
       }
-      
-      // 重置行动力
-      this.player.actionPoints = this.player.maxActionPoints;
-      
-      // 更新技能描述
-      this.updateSkillDescriptions();
       
       // 强制刷新操作面板渲染
       this.$forceUpdate();
@@ -526,13 +546,16 @@ export default {
     
       // 等待敌人行动完成（包括所有攻击动画）
       this.enemy.act(this.player, this.battleLogs).then(() => {
-        // 应用伤害
+        // 看看玩家是不是逝了
         const isPlayerDead = this.player.hp <= 0;
         
         if (isPlayerDead) {
           this.endBattle(false);
           return;
         }
+
+        // 结算敌人回合结束效果
+        processEndOfTurnEffects(this.enemy);
         
         // 敌人行动结束后开始新回合
         this.startNextTurn();
@@ -582,6 +605,8 @@ export default {
       this.player.effects = {};
       // 清空玩家身上的护盾
       this.player.shield = 0;
+      // 清空战斗技能数组
+      this.player.skills = [];
 
       // 锁定操作面板
       eventBus.emit('enemy-turn-start');
@@ -594,15 +619,15 @@ export default {
         // 解锁操作面板
         eventBus.emit('enemy-turn-end');
         
+        // 战斗结束事件
+        eventBus.emit('after-battle', {
+          battleCount : this.battleCount,
+          player: this.player,
+          enemy: this.enemy,
+          isVictory: isVictory
+        });
+        
         if (isVictory) {
-          // 看看要不要冒对话事件
-          const sequence = dialogues.getEventAfterBattle(this.battleCount, this.player, this.enemy);
-          if (sequence) {
-            this.dialogSequence = sequence;
-            this.dialogIndex = 0;
-            this.currentDialog = this.dialogSequence[this.dialogIndex];
-            this.isDialogVisible = true;
-          }
           // 计算奖励
           this.calculateRewards();
           // 重置奖励领取标志
@@ -620,7 +645,7 @@ export default {
     calculateRewards() {
       // 计算战斗奖励
       this.rewards.money = Math.floor(Math.random() * 20) + 10;
-      this.rewards.skill = this.battleCount % 3 === 1;
+      this.rewards.skill = this.battleCount == 1 || this.battleCount % 2 === 0;
       
       // 奇数次战斗后获得能力奖励
       this.rewards.ability = this.battleCount % 2 === 1;
@@ -656,6 +681,8 @@ export default {
       this.rewards.ability = false;
       this.isAbilityRewardVisible = false;
       this.battleLogs.push(`获得了能力：${ability.name}`);
+      // 发射玩家领取能力奖励事件
+      eventBus.emit('player-claim-ability', { ability: ability });
     },
     
     closeAbilityRewards() {
@@ -680,36 +707,45 @@ export default {
       this.skillRewardClaimed = true;
     },
     
-    claimSkill(skill) {
-      // 领取技能奖励
-      if (!skill || !skill.name) {
-        console.error('Invalid skill object or missing name:', skill);
-        return;
-      }
-      
-      // 检查技能是否已存在
-      const existingSkill = this.player.skills.find(s => s.name === skill.name);
-      if (existingSkill) {
-        console.warn('Skill already exists:', skill.name);
+    // 当玩家在技能奖励面板选择技能时调用
+    onSelectSkillForSlot(skill) {
+      this.selectedSkillForSlot = skill;
+      this.isSkillRewardVisible = false;
+      this.isSkillSlotSelectionVisible = true;
+    },
+    
+    // 安装技能到指定技能槽
+    installSkillToSlot(slotIndex, skill) {
+      // 检查技能是否已存在于技能槽中
+      const existingSkillIndex = this.player.skillSlots.findIndex(s => s && s.name === skill.name);
+      if (existingSkillIndex !== -1) {
+        console.warn('Skill already exists in skill slot:', skill.name);
         // 可以选择不添加重复技能
         // return;
       }
       
-      // 检查是否超过技能数上限
-      if (this.player.skills.length >= this.player.maxNumSkills) {
-        // 如果超过上限，需要移除一个技能
-        console.warn(`技能数已达到上限 ${this.player.maxNumSkills}，需要移除一个技能`);
-        // 这里应该打开一个面板让用户选择要移除的技能
-        // 暂时先移除第一个技能作为示例
-        this.player.skills.shift();
+      // 移除旧技能（如果存在）
+      const oldSkill = this.player.skillSlots[slotIndex];
+      if (oldSkill) {
+        this.player.skillManager.removeSkill(oldSkill.name);
       }
       
+      // 安装新技能
       const newSkill = SkillManager.createSkill(skill.name);
       this.player.skillManager.addSkill(newSkill);
-      this.player.skills.push(newSkill);
+      this.player.skillSlots[slotIndex] = newSkill;
+      
       this.rewards.skill = false;
-      this.isSkillRewardVisible = false;
+      this.isSkillSlotSelectionVisible = false;
       this.battleLogs.push(`获得了技能：${skill.name}`);
+      // 发射玩家领取技能奖励事件
+      eventBus.emit('player-claim-skill', { skill: skill, slotIndex: slotIndex });
+    },
+    
+    // 关闭技能槽选择面板
+    closeSkillSlotSelection() {
+      this.isSkillSlotSelectionVisible = false;
+      this.selectedSkillForSlot = null;
     },
     
     closeSkillRewards() {
@@ -752,24 +788,6 @@ export default {
       // 注意：不在这里添加初始技能，而是在startGame方法中添加
     },
     
-    nextDialog() {
-      // 检查是否还有更多对话
-      if (this.dialogIndex < this.dialogSequence.length - 1) {
-        // 显示下一个对话
-        this.dialogIndex++;
-        this.currentDialog = this.dialogSequence[this.dialogIndex];
-      } else {
-        // 对话结束，隐藏对话框
-        this.isDialogVisible = false;
-        this.dialogSequence = [];
-        this.dialogIndex = 0;
-        
-        // 如果是开场事件，开始战斗
-        if (this.gameState === 'battle' && this.battleCount === 0) {
-          this.startBattle();
-        }
-      }
-    }
   }
 }
 </script>

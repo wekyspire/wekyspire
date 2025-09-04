@@ -1,4 +1,4 @@
-import { Slime } from './enemies/basic.js';
+import { BuzzlingBugs, Slime } from './enemies/basic.js';
 import { Remi } from './enemies/basic.js';
 import { MEFM3 } from './enemies/boss.js';
 import { FireSlime } from './enemies/example.js'; // 示例敌人
@@ -12,7 +12,8 @@ class EnemyFactory {
     this.registerEnemy('slime', Slime);
     this.registerEnemy('remi', Remi);
     this.registerEnemy('mefm3', MEFM3);
-    this.registerEnemy('fireSlime', FireSlime); // 注册示例敌人
+    this.registerEnemy('fireSlime', FireSlime);
+    this.registerEnemy('buzzlingBugs', BuzzlingBugs);
   }
   
   // 注册敌人

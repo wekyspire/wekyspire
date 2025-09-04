@@ -5,7 +5,7 @@ import { launchAttack } from '../../GameApp.vue';
 export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
     const hp = 70 + 5 * battleIntensity;
-    const attack = Math.round((5 + battleIntensity) * 0.3);
+    const attack = Math.round((2 + battleIntensity) * 0.5);
     super('MEFM-3', hp, attack, 2, 0);
     this.isBoss = true; // 标记为Boss敌人
     this.battleIntensity = battleIntensity;
