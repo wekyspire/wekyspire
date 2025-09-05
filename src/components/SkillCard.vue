@@ -166,58 +166,63 @@ export default {
 }
 
 /* 不同等阶的技能卡片样式 */
-.skill-card.tier--1 {
-  background-color: #ffebee;
-  border: 1px solid #f44336;
-}
-
-.skill-card.tier-0 {
+/* D */
+.skill-card.tier-0 { 
   background-color: #ffffff;
   border: 1px solid #000000;
 }
-
+/* C- */
 .skill-card.tier-1 {
-  background-color: #f3e5f5;
-  border: 1px solid #9c27b0;
+  background-color: #ffffff;
+  border: 1px solid #41db39;
 }
 
+/* C+ */
 .skill-card.tier-2 {
-  background-color: #fff3e0;
-  border: 1px solid #ff9800;
+  background-color: #daffbc;
+  border: 1px solid #41db39;
 }
 
+/* B- */
 .skill-card.tier-3 {
-  background-color: #ffebee;
-  border: 1px solid #f44336;
+  background-color: #ffffff;
+  border: 1px solid #759eff;
 }
 
+/* B */
 .skill-card.tier-4 {
-  background-color: #e8f5e9;
-  border: 1px solid #4caf50;
+  background-color: #bfebff;
+  border: 1px solid #759eff;
 }
 
+/* B+ */
 .skill-card.tier-5 {
-  background-color: #fff8e1;
-  border: 1px solid #ffc107;
+  background-color: #ffffff;
+  border: 1px solid #d072ff;
 }
 
+
+/* A- */
 .skill-card.tier-6 {
-  background-color: #e1f5fe;
-  border: 1px solid #03a9f4;
+  background-color: #f4daff;
+  border: 1px solid #d072ff;
 }
 
+/* A */
 .skill-card.tier-7 {
-  background-color: #fce4ec;
-  border: 1px solid #e91e63;
+  background-color: #ffffff;
+  border: 1px solid #ff9059;
 }
 
+/* A+ */
 .skill-card.tier-8 {
-  background-color: #f1f8e9;
-  border: 1px solid #8bc34a;
+  background-color: #ffe4d0;
+  border: 1px solid #ff9059;
 }
 
+/* S */
 .skill-card.tier-9 {
-  background-color: #fff3e0;
-  border: 1px solid #ff9800;
+  background-color: #ffc0c0;
+  border: 1px solid #ff0000;
 }
 </style>

@@ -1,3 +1,5 @@
+import { upgradePlayerTier } from "../GameApp.vue";
+
 // 能力抽象类
 class Ability {
   constructor(name, description, tier, spawnWeight = 1) {
@@ -16,25 +18,11 @@ class Ability {
 // 突破能力
 class Breakthrough extends Ability {
   constructor() {
-    super('突破', '提升到下一/named{等阶}，恢复并获得1/named{魏启}上限，/named{行动力}增1。', 5, 0.2);
+    super('额外突破', '再/named{突破}一次！', 5, 0.2);
   }
 
   apply(player) {
-    // 提升玩家等阶
-    const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
-    if (tierUpgrades[player.tier] !== undefined) {
-      player.tier = tierUpgrades[player.tier];
-    }
-    
-    // 增加魏启上限
-    player.maxMana += 1;
-    player.mana = player.maxMana; // 恢复所有魏启
-    
-    // 增加行动力上限
-    player.maxActionPoints += 1;
-    
-    // 恢复行动力
-    player.actionPoints = player.maxActionPoints;
+    upgradePlayerTier(player);
   }
 }
 

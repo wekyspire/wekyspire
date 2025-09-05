@@ -1,16 +1,17 @@
 // dialogues.js - 对话事件管理
 import eventBus from '../eventBus.js';
+import { getPlayerTierFromTierIndex } from '../GameApp.vue';
 
 // 开场对话序列
 const openingDialog = [
   {
     character: '瑞米',
-    text: '你好呀，小灵御。',
+    text: '你好呀，小/named{灵御}。',
     avatar: new URL('../assets/remi.png', import.meta.url).href
   },
   {
     character: '瑞米',
-    text: '我负责接引你，看到你的技能了吗？快打败那只史莱姆练练手吧！',
+    text: '我负责接引你，看到你的/named{技能}了吗？快打败那只史莱姆练练手吧！',
     avatar: new URL('../assets/remi.png', import.meta.url).href
   }
 ];
@@ -172,6 +173,79 @@ function getEventBeforeBattle(battleCount, player, enemy) {
   return null;
 }
 
+function getTierUpgradedDialog(player) {
+  if(player.tier == getPlayerTierFromTierIndex(1).tier) {
+    // 第一次升级，瑞米提供关于升级的提示和教程
+    return [
+      {
+        character: '瑞米',
+        text: '哇！你刚刚进行了一次/named{突破}！',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: '你可能注意到了，现在你的/named{等阶}已经是普通灵御了。',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: '通过突破，你可以提升你的灵御等阶，而灵御等阶级则是获得更多更强大技能的前提条件。',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: '你现在获得了1点/named{魏启}储量，以此，你能够学习和发动/red{非常强大}的，以/named{灵能}促动的技能！',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: '除此之外，突破还有其它的好处：你现在拥有更多/named{行动力}了！',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: '努力升级吧！',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      }
+    ];
+  }
+  return null;
+}
+
+function getSkillUseDialog(player, skill, result) {
+  if(!result) return;
+  if(skill.name == '瑞米召唤术') {
+    return [
+      {
+        character: '瑞米',
+        text: `嗯？`,
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: `找我有事吗？`,
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: `什么？让我帮你战斗？？`,
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: `啊啊啊！不要啊！`,
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
+        text: `我什么都干不了呀！放过我吧！`,
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      }
+    ];
+  }
+  return null;
+}
+
 
 // 初始化函数，在游戏开始时调用一次，注册eventBus监听
 function registerListeners() {
@@ -218,6 +292,26 @@ function registerListeners() {
       }
     }
   });
+
+  // 监听玩家升级事件
+  eventBus.on('player-tier-upgraded', (player) => {
+    // 触发升级对话
+    const sequence = getTierUpgradedDialog(player);
+    if (sequence) {
+      // 发射调用对话界面显示对话的事件
+      eventBus.emit('display-dialog', sequence);
+    }
+  });
+
+  // 监听玩家使用技能事件
+  eventBus.on('after-skill-use', (params) => {
+    const {player, skill, result} = params;
+    const sequence = getSkillUseDialog(player, skill, result);
+    if(sequence) {
+      // 发射调用对话界面显示对话的事件
+      eventBus.emit('display-dialog', sequence);
+    }
+  });
 }
 
 // 获取可多次充能技能教程对话
@@ -225,12 +319,12 @@ function getMultiUseSkillTutorial() {
   return [
     {
       character: '瑞米',
-      text: '哎呀，我看到你获得了一个可以多次使用的技能呢！',
+      text: '哎呀，我看到你获得了一个可以多次使用的/named{技能}呢！',
       avatar: new URL('../assets/remi.png', import.meta.url).href
     },
     {
       character: '瑞米',
-      text: '这类技能在战斗中有次数限制，但每次战斗开始时都会重新充能哦！',
+      text: '这类技能在战斗中有次数限制，但一般每次战斗开始时都会重新补满哦！',
       avatar: new URL('../assets/remi.png', import.meta.url).href
     },
     {
@@ -246,6 +340,8 @@ function unregisterListeners (eventBus) {
   eventBus.off('after-battle');
   eventBus.off('before-game-start');
   eventBus.off('player-claim-skill');
+  eventBus.off('player-tier-upgraded');
+  eventBus.off('after-skill-use');
 }
 
 // 导出注册函数

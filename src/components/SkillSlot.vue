@@ -2,6 +2,8 @@
   <div 
     :class="['skill-slot', { 'empty': !skill, 'filled': skill }]"
     @click="onClick"
+    @mouseenter="showPreview = true"
+    @mouseleave="showPreview = false"
   >
     <div v-if="skill" class="skill-slot-content">
       <div class="skill-name">{{ skill.name }}</div>
@@ -10,12 +12,22 @@
     <div v-else class="empty-slot">
       空技能槽
     </div>
+    
+    <!-- 技能预览弹窗 -->
+    <div v-if="showPreview && skill" class="skill-preview">
+      <SkillCard :skill="skill" :preview-mode="true" />
+    </div>
   </div>
 </template>
 
 <script>
+import SkillCard from './SkillCard.vue';
+
 export default {
   name: 'SkillSlot',
+  components: {
+    SkillCard
+  },
   props: {
     skill: {
       type: Object,
@@ -25,6 +37,11 @@ export default {
       type: Number,
       required: true
     }
+  },
+  data() {
+    return {
+      showPreview: false
+    };
   },
   methods: {
     onClick() {
@@ -63,6 +80,7 @@ export default {
   cursor: pointer;
   transition: all 0.3s ease;
   background-color: #f9f9f9;
+  position: relative; /* 添加定位上下文 */
 }
 
 .skill-slot:hover {
@@ -93,5 +111,17 @@ export default {
 .empty-slot {
   color: #999;
   font-style: italic;
+}
+
+.skill-preview {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 950; /* 确保在技能槽选择面板上方，但在对话界面下方 */
+  margin-top: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  border-radius: 8px;
+  overflow: hidden;
 }
 </style>

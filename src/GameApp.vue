@@ -30,21 +30,21 @@
     />
     
     <AbilityRewardPanel
-      v-if="isAbilityRewardVisible"
+      :is-visible="isAbilityRewardVisible"
       :abilities="abilityRewards"
       @select-ability="claimAbility"
       @close="closeAbilityRewards"
     />
     
     <SkillRewardPanel
-      v-if="isSkillRewardVisible"
+      :is-visible="isSkillRewardVisible"
       :skills="skillRewards"
       @select-skill="onSelectSkillForSlot"
       @close="closeSkillRewards"
     />
     
     <SkillSlotSelectionPanel
-      v-if="isSkillSlotSelectionVisible"
+      :is-visible="isSkillSlotSelectionVisible"
       :skill="selectedSkillForSlot"
       :skill-slots="player.skillSlots"
       @select-slot="installSkillToSlot"
@@ -79,6 +79,11 @@ import SkillRewardPanel from './components/SkillRewardPanel.vue'
 import SkillSlotSelectionPanel from './components/SkillSlotSelectionPanel.vue'
 import eventBus from './eventBus.js'
 import * as dialogues from './data/dialogues.js'
+
+// 从任意地方增添battleLog
+export function addBattleLog (log) {
+  eventBus.emit('add-battle-log', log);
+}
 
 // 任意攻击的结算逻辑（由skill和enemy调用）
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
@@ -128,9 +133,27 @@ export function upgradePlayerTier (player) {
   const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
   if (tierUpgrades[player.tier] !== undefined) {
     player.tier = tierUpgrades[player.tier];
+    player.maxActionPoints += 1;
+    player.maxMana += 1;
+    player.hp = player.maxHp;
+    player.mana = player.maxMana;
+    eventBus.emit('player-tier-upgraded', player);
     return true;
   }
   return false;
+}
+
+export function getPlayerTierFromTierIndex(tierIndex) {
+  const tiers = [
+    {tier: 0, name: '见习灵御'},
+    {tier: 2, name: '普通灵御'},
+    {tier: 3, name: '准高级灵御'},
+    {tier: 5, name: '高级灵御'},
+    {tier: 7, name: '准大师灵御'},
+    {tier: 8, name: '大师灵御'},
+    {tier: 9, name: '传奇灵御'}
+  ];
+  return tiers[tierIndex];
 }
 
 // 造成伤害的结算逻辑（由skill和enemy调用），和发动攻击不同，跳过攻击方攻击发动结算。
@@ -183,14 +206,14 @@ export default {
           actionPoints: 3,
           maxActionPoints: 3,
           baseAttack: 3,
-          baseMagic: 3,
+          baseMagic: 1,
           baseDefense: 0,
           money: 0,
           tier: 0, // 等阶
-          maxNumSkills: 5, // 玩家技能数上限
-          skillSlots: [], // 技能槽
-          skills: [],
+          skillSlots: [], // 技能槽，玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills。
+          skills: [], // skills仅在战斗时有效，用于存储当前战斗中玩家拥有的技能。在战斗开始前由skillSlots生成，在战斗结束后清空。
           effects: {}, // 合并effects到player对象中
+          // SkillManager仅用于创建技能和保留技能模板，玩家拥有的技能保存在skillSlots内。
           skillManager: SkillManager.getInstance(),
           
           // 初始化时添加回调函数
@@ -218,95 +241,35 @@ export default {
           
           // 添加效果方法
           addEffect(effectName, stacks = 1) {
+            if(stacks == 0) return ;
             const previousStacks = this.effects[effectName] || 0;
             if (this.effects[effectName]) {
               this.effects[effectName] += stacks;
             } else {
               this.effects[effectName] = stacks;
             }
+            if(this.effects[effectName] == 0) {
+              delete this.effects[effectName];
+            }
             // 触发效果变化事件
             eventBus.emit('effectChange', {
               target: 'player',
               effectName: effectName,
-              stacks: stacks,
+              deltaStacks: stacks,
+              currStacks: this.effects[effectName] || 0,
               previosStacks: previousStacks
             });
           },
           
           // 移除效果方法
           removeEffect(effectName, stacks = 1) {
-            const previousStacks = this.effects[effectName] || 0;
-            if (this.effects[effectName]) {
-              this.effects[effectName] -= stacks;
-              if (this.effects[effectName] <= 0) {
-                delete this.effects[effectName];
-              }
-              
-              // 触发效果变化事件
-              eventBus.emit('effectChange', {
-                target: 'player',
-                effectName: effectName,
-                stacks: -stacks,
-                previosStacks: previousStacks
-              });
-            }
+            this.addEffect(effectName, -stacks);
           }
         },
         
         // 敌人数据
         enemy: {
-          name: '',
-          hp: 0,
-          maxHp: 0,
-          baseAttack: 0,
-          baseMagic: 0,
-          baseDefense: 0,
-          effects: {}, // 保留敌人的effects对象
-          
-          // 初始化方法
-          init() {
-            // 敌人的初始化逻辑（如果需要）
-          },
-          
-          // 计算属性
-          get attack() {
-            return this.baseAttack + (this.effects['力量'] || 0);
-          },
-          get magic() {
-            return this.baseMagic + (this.effects['集中'] || 0);
-          },
-          get defense() {
-            return this.baseDefense + (this.effects['防御'] || 0);
-          },
-          
-          // 添加效果方法
-          addEffect(effectName, stacks = 1) {
-            if (this.effects[effectName]) {
-              this.effects[effectName] += stacks;
-            } else {
-              this.effects[effectName] = stacks;
-            }
-            
-            // 触发效果变化事件
-            eventBus.emit('effectChange', {
-              target: 'enemy', effectName: effectName, stacks:stacks, previousStacks: this.effects[effectName] - stacks
-            });
-          },
-          
-          // 移除效果方法
-          removeEffect(effectName, stacks = 1) {
-            if (this.effects[effectName]) {
-              this.effects[effectName] -= stacks;
-              if (this.effects[effectName] <= 0) {
-                delete this.effects[effectName];
-              }
-              
-              // 触发效果变化事件
-              eventBus.emit('effectChange', {
-                target:'enemy', effectName: effectName, stacks: -stacks, previousStacks: this.effects[effectName] + stacks
-              });
-            }
-          }
+          // 初始为空，因为敌人数据在战斗开始时才会被设置（Enemy类）
         },
         
         // 战斗日志
@@ -400,7 +363,6 @@ export default {
       
       // 为玩家添加初始技能到第一个技能槽
       const initialSkill = this.player.skillManager.constructor.createSkill('拳打脚踢');
-      this.player.skillManager.addSkill(initialSkill);
       this.player.skillSlots[0] = initialSkill;
       
       this.gameState = 'battle';
@@ -422,7 +384,11 @@ export default {
       
       // 从技能槽复制技能到战斗技能数组
       this.player.skills = this.player.skillSlots.filter(skill => skill !== null);
-      
+      // 赋值skill的inBattleIndex
+      this.player.skills.forEach((skill, index) => {
+        skill.inBattleIndex = index;
+      });
+
       // 重置玩家回合
       this.player.actionPoints = this.player.maxActionPoints;
       
@@ -502,8 +468,6 @@ export default {
       processSkillActivationEffects(this.player);
       
       // 执行技能效果
-      // console.log(this.player);
-      // console.log(skill);
       const result = skill.use(this.player, this.enemy);
       
       // 消耗行动力和魏启
@@ -520,9 +484,12 @@ export default {
       
       // 更新技能描述（因为玩家状态可能已改变）
       this.updateSkillDescriptions();
-      
+
       // 强制刷新操作面板渲染
       this.$forceUpdate();
+
+      // 发射事件
+      eventBus.emit('after-skill-use', {player: this.player, skill: skill, result: result});
     },
     
     enemyTurn() {
@@ -645,10 +612,10 @@ export default {
     calculateRewards() {
       // 计算战斗奖励
       this.rewards.money = Math.floor(Math.random() * 20) + 10;
-      this.rewards.skill = this.battleCount == 1 || this.battleCount % 2 === 0;
+      this.rewards.skill = true;
       
-      // 奇数次战斗后获得能力奖励
-      this.rewards.ability = this.battleCount % 2 === 1;
+      // boss / 奇数次战斗后获得能力奖励
+      this.rewards.ability = (this.battleCount % 2 === 1 || this.enemy.isBoss);
     },
     
     claimMoney() {
@@ -726,13 +693,10 @@ export default {
       
       // 移除旧技能（如果存在）
       const oldSkill = this.player.skillSlots[slotIndex];
-      if (oldSkill) {
-        this.player.skillManager.removeSkill(oldSkill.name);
-      }
+      // 啥都不用干，扔了就是。
       
       // 安装新技能
       const newSkill = SkillManager.createSkill(skill.name);
-      this.player.skillManager.addSkill(newSkill);
       this.player.skillSlots[slotIndex] = newSkill;
       
       this.rewards.skill = false;

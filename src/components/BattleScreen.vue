@@ -288,13 +288,11 @@ export default {
     },
     
     // 显示效果变化文本
-    showEffectChangeText(target, effectName, stacks, previousStacks) {
-      // 添加调试日志
-      console.log('Effect change:', { target, effectName, stacks, previousStacks });
+    showEffectChangeText(target, effectName, deltaStacks) {
       
       // 检查参数是否有效
-      if (!effectName || isNaN(stacks)) {
-        console.error('Invalid effect parameters:', { target, effectName, stacks, previousStacks });
+      if (!effectName || isNaN(deltaStacks)) {
+        console.error('Invalid effect parameters:', { target, effectName, deltaStacks });
         return;
       }
       
@@ -306,11 +304,11 @@ export default {
       const effectColor = this.getEffectColor(effectName);
       
       // 根据层数变化设置文本内容和样式
-      const stackColor = stacks > 0 ? '#00ff00' : '#ff0000'; // 正数为绿色，负数为红色
-      if (stacks > 0) {
-        effectText.innerHTML = `获得 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${stacks}</span>`;
+      const stackColor = deltaStacks > 0 ? '#00ff00' : '#ff0000'; // 正数为绿色，负数为红色
+      if (deltaStacks > 0) {
+        effectText.innerHTML = `获得 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${deltaStacks}</span>`;
       } else {
-        effectText.innerHTML = `<span style="color: #cccccc;">失去 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${Math.abs(stacks)}</span></span>`;
+        effectText.innerHTML = `<span style="color: #cccccc;">失去 <span style="color: ${effectColor}">${effectName}</span> <span style="color: ${stackColor}">x${Math.abs(deltaStacks)}</span></span>`;
       }
       
       // 设置样式
@@ -479,7 +477,7 @@ export default {
     import('../eventBus.js').then(eventBus => {
       this.eventBus = eventBus.default;
       this.eventBus.on('effectChange', (params) => {
-        this.showEffectChangeText(params.target, params.effectName, params.stacks, params.previousStacks); 
+        this.showEffectChangeText(params.target, params.effectName, params.deltaStacks); 
       });
       // 监听敌人行动结束事件
       this.eventBus.on('enemy-action-end', this.playSettlementAnimation);
@@ -828,67 +826,11 @@ export default {
   background-color: rgba(255, 255, 255, 0.8);
 }
 
-/* 不同等阶的技能卡片样式 */
-.skill-card.tier--1 {
-  background-color: #ffebee;
-  border: 1px solid #f44336;
-}
-
-.skill-card.tier-0 {
-  background-color: #e3f2fd;
-  border: 1px solid #2196f3;
-}
-
-.skill-card.tier-1 {
-  background-color: #f3e5f5;
-  border: 1px solid #9c27b0;
-}
-
-.skill-card.tier-2 {
-  background-color: #fff3e0;
-  border: 1px solid #ff9800;
-}
-
-.skill-card.tier-3 {
-  background-color: #ffebee;
-  border: 1px solid #f44336;
-}
-
-.skill-card.tier-4 {
-  background-color: #e8f5e9;
-  border: 1px solid #4caf50;
-}
-
 /* 效果图标 */
 .effect-icon {
   display: inline-block;
   font-size: 16px;
   cursor: help;
-}
-
-.skill-card.tier-5 {
-  background-color: #fff8e1;
-  border: 1px solid #ffc107;
-}
-
-.skill-card.tier-6 {
-  background-color: #e1f5fe;
-  border: 1px solid #03a9f4;
-}
-
-.skill-card.tier-7 {
-  background-color: #fce4ec;
-  border: 1px solid #e91e63;
-}
-
-.skill-card.tier-8 {
-  background-color: #f1f8e9;
-  border: 1px solid #8bc34a;
-}
-
-.skill-card.tier-9 {
-  background-color: #fff3e0;
-  border: 1px solid #ff9800;
 }
 
 /* 效果描述浮动窗口 */

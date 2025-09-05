@@ -38,11 +38,23 @@
   - `slotIndex`：技能安装的槽位索引
 - **用途**：通知其他组件玩家获得了新技能。
 
+### 6. `player-tier-upgraded`
+- **触发时机**：玩家升级后，在 `upgradePlayerTier` 方法中触发。
+- **参数**：
+  - `player`：升级后的玩家状态
+
+### 7. `after-skill-use`
+- **触发时机**：玩家使用技能后，在 `useSkill` 方法中触发。
+- **参数**：
+  - `player`：玩家状态
+  - `skill`：使用的技能
+  - `result`：技能使用结果（成功/失败）
+
 ## 事件监听
 
 这些事件在 `dialogues.js` 中被监听，用于触发相应的对话序列。
 
-### 新增事件监听
+### dialogues.js
 
 #### `player-claim-skill`
 - **监听目的**：在玩家第一次获得可多次充能技能时触发瑞米的教程对话。

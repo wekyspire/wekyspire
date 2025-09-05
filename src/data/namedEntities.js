@@ -38,7 +38,7 @@ const namedEntities = {
   '等阶': {
     icon: '🏅',
     color: 'yellow',
-    description: '等阶代表角色的实力等级，影响可使用的技能和商品。'
+    description: '等阶代表灵御的实力等级，影响可使用的技能。'
   },
   '重整': {
     icon: '🔄',
@@ -49,6 +49,26 @@ const namedEntities = {
     icon: '🔧',
     color: 'red',
     description: '此技能在战斗中不会自动冷却。'
+  },
+  '冷却': {
+    icon: '⏳',
+    color: 'aqua',
+    description: '让技能重整进度条推进一次。'
+  },
+  '最近': {
+    icon: '📍',
+    color: 'brown',
+    description: '往左走或往右走距离最近的技能。如果距离一样，优先选择左侧。'
+  },
+  '灵御': {
+    icon: '🌟',
+    color: 'gold',
+    description: '灵御是强大的修行者，能掌控魏启之力作战。'
+  },
+  '技能': {
+    icon: '🔮',
+    color: 'purple',
+    description: '技能是灵御的武器，能施展各种强大的攻击和防御。'
   }
 };
 

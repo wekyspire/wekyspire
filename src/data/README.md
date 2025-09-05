@@ -16,13 +16,11 @@
 ### 技能
 
 1. 创建新技能：继承`Skill`类并实现具体逻辑
-2. 使用技能管理器：
+2. 使用技能管理器，在技能管理器中注册技能，则此技能会在游戏中出现：
    ```javascript
    import SkillManager from './skillManager.js';
-   
-   const skillManager = new SkillManager();
-   const skill = SkillManager.createSkill('拳打脚踢');
-   skillManager.addSkill(skill);
+   const skillManager = SkillManager.getInstance();
+   skillManager.registerSkill(PunchAndKick);
    ```
 
 ### 效果

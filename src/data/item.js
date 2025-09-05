@@ -51,7 +51,7 @@ class SkillSlot extends Item {
   }
 
   purchase(player) {
-    player.maxNumSkills += 1;
+    player.skillSlots.push(null);
     super.purchase(player); // 减少库存
   }
 }

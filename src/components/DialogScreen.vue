@@ -7,7 +7,7 @@
       </div>
       <div class="dialog-content">
         <h3>{{ currentDialog.character }}</h3>
-        <p>{{ currentDialog.text }}</p>
+        <p><ColoredText :text="currentDialog.text" /></p>
         <button @click="nextDialog">继续</button>
       </div>
     </div>
@@ -16,9 +16,13 @@
 
 <script>
 import eventBus from '../eventBus.js';
+import ColoredText from './ColoredText.vue';
 
 export default {
   name: 'DialogScreen',
+  components: {
+    ColoredText
+  },
   data() {
     return {
       isVisible: false,

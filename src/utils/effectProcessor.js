@@ -323,9 +323,9 @@ export function processPostAttackEffects(attacker, target, damage) {
   
   // 处理高燃弹药效果
   if (attacker.effects['高燃弹药'] > 0) {
-    const burnLevel = (attacker.effects['高燃弹药'] || 0);
-    // 15%概率让敌人获得1层燃烧
-    if (Math.random() < 0.15) {
+    const burnLevel = (attacker.effects['高燃弹药'] * 2 || 0);
+    // 100%概率让敌人获得2层燃烧
+    if (Math.random() < 1) {
       target.addEffect('燃烧', Math.floor(burnLevel));
       eventBus.emit('add-battle-log', `${target.name}被灼热的攻击烫伤，获得了${Math.floor(burnLevel)}层燃烧！`);
     }

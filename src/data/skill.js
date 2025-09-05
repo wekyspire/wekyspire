@@ -4,6 +4,7 @@ class Skill {
     this.name = name; // 技能名称
     this.type = type; // 技能类型：'normal' 或 'magic'
     this.tier = tier; // 技能等阶
+    this.inBattleIndex = -1; // 在战斗中，此技能在玩家skill数组中的下标。不在战斗中则无意义。
     this.baseDescription = baseDescription; // 技能描述
     this.description = baseDescription;
     this.manaCost = manaCost || 0; // 魏启消耗
@@ -16,9 +17,14 @@ class Skill {
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
   }
 
+  canColdDown() {
+    if(this.coldDownTurns === 0) return false;
+    if(this.remainingUses == this.maxUses) return false;
+    return true;
+  }
+
   // 回合开始时或被手动调用时，推进冷却流程
   coldDown() {
-    console.log(this);
     if(this.coldDownTurns !== 0) {
       if(this.remainingUses !== this.maxUses) {
         this.remainingColdDownTurns --;

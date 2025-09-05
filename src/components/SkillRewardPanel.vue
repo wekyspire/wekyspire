@@ -1,16 +1,18 @@
 <template>
-  <div class="skill-reward-panel">
-    <h2>技能奖励</h2>
-    <div class="skill-cards">
-      <SkillCard
-        v-for="(skill, index) in skills" 
-        :key="index"
-        :skill="skill"
-        :preview-mode="true"
-        @skill-card-clicked="selectSkill"
-      />
+  <div class="skill-reward-overlay" v-if="isVisible">
+    <div class="skill-reward-panel">
+      <h2>技能奖励</h2>
+      <div class="skill-cards">
+        <SkillCard
+          v-for="(skill, index) in skills" 
+          :key="index"
+          :skill="skill"
+          :preview-mode="true"
+          @skill-card-clicked="selectSkill"
+        />
+      </div>
+      <button @click="closePanel">放弃</button>
     </div>
-    <button @click="closePanel">放弃</button>
   </div>
 </template>
 
@@ -26,6 +28,10 @@ export default {
     skills: {
       type: Array,
       default: () => []
+    },
+    isVisible: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {
@@ -40,11 +46,26 @@ export default {
 </script>
 
 <style scoped>
+.skill-reward-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 900; /* 确保在对话界面之下 */
+}
+
 .skill-reward-panel {
   border: 1px solid #ccc;
   padding: 20px;
-  margin: 20px 0;
   background-color: #f9f9f9;
+  max-width: 80%;
+  max-height: 80%;
+  overflow-y: auto;
 }
 
 .skill-cards {
@@ -52,6 +73,7 @@ export default {
   flex-wrap: wrap;
   gap: 20px;
   margin: 20px 0;
+  justify-content: center;
 }
 
 .skill-card {

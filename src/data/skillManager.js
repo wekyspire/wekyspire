@@ -1,9 +1,14 @@
-import { PunchKick, Roll, Sleep, KungFu } from './skills/basic.js';
+import { PunchKick, RollPunch, Roll, Sleep, KungFu, FastThinking } from './skills/basic.js';
 import { CarelessPunchKick, AmateurDefense, OverCarefulDefense,
   PrepareExercise, CarelessBravery, HoldOn } from './skills/basic.js';
 import { Fireshot,Fireball, LargeFireball } from './skills/example.js';
 
-import { PurifyWeky, StrongPurifyWeky, VeryWeakRecovery, WeakRecovery } from './skills/cMinus.js';
+import { ChargePunch, FireControlI, FloatingI, PurifyWeky,
+   RockFormationI,
+   SpeedThinking,
+   StrengthenI, StrongPurifyWeky, SummonRemi, 
+  TransformSword, 
+  VeryWeakRecovery, WeakenI, WeakRecovery } from './skills/cMinus.js';
 
 // 技能管理器类
 class SkillManager {
@@ -13,6 +18,7 @@ class SkillManager {
     
     // 初始化时注册预定义技能
     this.registerSkill(PunchKick);
+    this.registerSkill(RollPunch);
     this.registerSkill(Roll);
     this.registerSkill(Sleep);
     this.registerSkill(KungFu);
@@ -26,55 +32,27 @@ class SkillManager {
     this.registerSkill(CarelessBravery);
     this.registerSkill(HoldOn);
 
+    this.registerSkill(FastThinking);
+
     this.registerSkill(PurifyWeky);
     this.registerSkill(StrongPurifyWeky);
     this.registerSkill(VeryWeakRecovery);
     this.registerSkill(WeakRecovery);
+    this.registerSkill(ChargePunch);
+    this.registerSkill(StrengthenI);
+    this.registerSkill(WeakenI);
+    this.registerSkill(FireControlI);
+    this.registerSkill(SummonRemi);
+    this.registerSkill(TransformSword);
+    this.registerSkill(FloatingI);
+    this.registerSkill(RockFormationI);
+    this.registerSkill(SpeedThinking);
   }
   
   // 注册技能
   registerSkill(SkillClass) {
     const skillName = (new SkillClass()).name;
     this.skillRegistry.set(skillName, SkillClass);
-  }
-  
-  // 添加技能
-  addSkill(skill) {
-    this.skills.push(skill);
-  }
-  
-  // 移除技能
-  removeSkill(skillName) {
-    const index = this.skills.findIndex(skill => skill.name === skillName);
-    if (index !== -1) {
-      this.skills.splice(index, 1);
-    }
-  }
-  
-  // 获取技能
-  getSkill(skillName) {
-    return this.skills.find(skill => skill.name === skillName);
-  }
-  
-  // 获取所有技能
-  getAllSkills() {
-    return this.skills;
-  }
-  
-  // 冷却所有技能依次
-  coldDownAllAllSkills() {
-    this.skills.forEach(skill => skill.coldDown());
-  }
-
-  // 更新技能状态（确保Vue响应性）
-  updateSkill(skill) {
-    const index = this.skills.findIndex(s => s.name === skill.name);
-    if (index !== -1) {
-      // 创建新对象以确保Vue响应性，同时保持原型链
-      const newSkill = Object.create(Object.getPrototypeOf(skill));
-      Object.assign(newSkill, skill);
-      this.skills.splice(index, 1, newSkill);
-    }
   }
   
   // 创建技能实例
@@ -124,30 +102,28 @@ class SkillManager {
       const tierDifference = playerTier - skill.tier;
       let modifyFactor = 1;
       
-      if (tierDifference <= 0) {
-        modifyFactor = 0.04;
-      } if (tierDifference <= 1) {
-        modifyFactor = 0.08;
-      } else if (tierDifference === 2) {
-        modifyFactor = 0.14;
-      } else if (tierDifference === 3) {
-        modifyFactor = 0.28;
-      } else if (tierDifference === 4) {
-        modifyFactor = 0.55;
-      } else if (tierDifference === 5) {
-        modifyFactor = 0.90;
-      } else if (tierDifference > 7) {
+      if (skill.tier >= 8) modifyFactor *= 0.7;
+      if (skill.tier >= 5) modifyFactor *= 0.8;
+      if (tierDifference > 7) {
         modifyFactor = 0.15;
       }  else if (tierDifference > 6) {
         modifyFactor = 0.40;
       } else if (tierDifference > 5) {
         modifyFactor = 0.70;
       }
+      // 增加当前等阶的技能出现权重
+      if(tierDifference < 1) modifyFactor *= 1.2;
       
       return {
         ...skill,
         weight: skill.spawnWeight * modifyFactor
       };
+    });
+    // 减少已获得技能的出现权重（x0.3）
+    weightedSkills.forEach(skill => {
+      if (playerSkills.some(playerSkill => playerSkill.name === skill.name)) {
+        skill.weight *= 0.3;
+      }
     });
     
     const selectedSkills = [];

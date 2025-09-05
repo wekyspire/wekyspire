@@ -1,21 +1,23 @@
 <template>
-  <div class="ability-reward-panel">
-    <h2>能力奖励</h2>
-    <div class="ability-cards">
-      <div 
-        v-for="(ability, index) in abilities" 
-        :key="index"
-        :class="['ability-card', 'tier-' + ability.tier]"
-        @click="selectAbility(ability)"
-      >
-        <div class="ability-tier">{{ getTierLabel(ability.tier) }}</div>
-        <div class="ability-name">{{ ability.name }}</div>
-        <div class="ability-description">
-          <ColoredText :text="ability.description" />
+  <div class="ability-reward-overlay" v-if="isVisible">
+    <div class="ability-reward-panel">
+      <h2>能力奖励</h2>
+      <div class="ability-cards">
+        <div 
+          v-for="(ability, index) in abilities" 
+          :key="index"
+          :class="['ability-card', 'tier-' + ability.tier]"
+          @click="selectAbility(ability)"
+        >
+          <div class="ability-tier">{{ getTierLabel(ability.tier) }}</div>
+          <div class="ability-name">{{ ability.name }}</div>
+          <div class="ability-description">
+            <ColoredText :text="ability.description" />
+          </div>
         </div>
       </div>
+      <button @click="closePanel">放弃</button>
     </div>
-    <button @click="closePanel">放弃</button>
   </div>
 </template>
 
@@ -31,6 +33,10 @@ export default {
     abilities: {
       type: Array,
       default: () => []
+    },
+    isVisible: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {
@@ -55,11 +61,26 @@ export default {
 </script>
 
 <style scoped>
+.ability-reward-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 900; /* 确保在对话界面之下 */
+}
+
 .ability-reward-panel {
   border: 1px solid #ccc;
   padding: 20px;
-  margin: 20px 0;
   background-color: #f9f9f9;
+  max-width: 80%;
+  max-height: 80%;
+  overflow-y: auto;
 }
 
 .ability-cards {
@@ -67,6 +88,7 @@ export default {
   flex-wrap: wrap;
   gap: 20px;
   margin: 20px 0;
+  justify-content: center;
 }
 
 .ability-card {

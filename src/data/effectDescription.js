@@ -181,7 +181,7 @@ const effectDescriptions = {
   // 特殊效果（boss等）
   '高燃弹药': {
     name: '高燃弹药',
-    description: '这些古老的弹药竟如此易燃！每次攻击后，15%概率赋予1层燃烧。',
+    description: '这些古老的弹药竟如此易燃！每次攻击后，赋予2层燃烧。',
     icon: '🔥',
     color: '#FF4500' // 橙红色
   },

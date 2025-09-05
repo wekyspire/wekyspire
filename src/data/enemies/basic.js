@@ -145,7 +145,7 @@ export class BuzzlingBugs extends Enemy {
     this.actionIndex = 0;
     this.description = "一群烦恼的嗡嗡虫，你很难够到它们。";
 
-    this.addEffect('闪避', 5);
+    this.addEffect('闪避', 2);
   }
 
   // 计算伤害

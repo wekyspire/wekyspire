@@ -28,6 +28,35 @@ export class PunchKick extends Skill {
   }
 }
 
+// 王八拳技能
+export class RollPunch extends Skill {
+  constructor() {
+    super('王八拳', 'normal', 0, '造成【1】伤害5次', 0, 1);
+    this.baseDamage = 1;
+    this.coldDownTurns = 1;
+  }
+
+  // 使用技能
+  use(player, enemy) {
+    if (super.use()) {
+      const damage = this.baseDamage + player.attack;
+      for(let i = 0; i < 5; i++) {
+        launchAttack(player, enemy, damage);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    if (player) {
+      return `造成${this.baseDamage}点伤害5次`;
+    }
+    return this.description;
+  }
+}
+
 // 打滚技能
 export class Roll extends Skill {
   constructor() {
@@ -219,6 +248,7 @@ export class CarelessBravery extends Skill {
 
   // 战斗开始时调用，重置used属性
   onBattleStart() {
+    super.onBattleStart()
     this.used = false;
   }
 
@@ -282,6 +312,63 @@ export class KungFu extends Skill {
     if (player) {
       const damage = this.baseDamage + Math.floor(this.multiplier * player.attack);
       return `造成${damage}点伤害`;
+    }
+    return this.description;
+  }
+}
+
+// 快速思考技能
+export class FastThinking extends Skill {
+  constructor() {
+    super('快速思考', 'normal', 1, '/named{冷却}1次/named{最近}可冷却技能', 0, Infinity, '思考', 1);
+    this.coldDownCount = 1;
+  }
+
+  canUse(player) {
+    return super.canUse(player) && this.canColdDown();
+  }
+
+  findSkillToColdDown (player) {
+    let coldDownSkill = null;
+    let minDistance = Infinity;
+    player.skills.forEach(skill => {
+      if (skill.coldDownCount > 0) {
+        const distance = Math.abs(skill.inBattleIndex - this.inBattleIndex);
+        if (distance < minDistance) {
+          minDistance = distance;
+          coldDownSkill = skill;
+        }
+      }
+    });
+    return coldDownSkill;
+  }
+
+  canUse(player) {
+    if(super.canUse(player)) {
+      if(this.findSkillToColdDown(player)) return true;
+      return false;
+    }
+    return false;
+  }
+
+  // 使用技能
+  use(player, enemy) {
+    if (super.use()) {
+      // 找到最近可以冷却的技能，如果距离一样，先冷却左边的
+      let coldDownSkill = this.findSkillToColdDown(player);
+      if (coldDownSkill) {
+        coldDownSkill.coldDown();
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    if (player) {
+      return `/named{冷却}${this.coldDownCount}次/named{最近}可冷却技能`;
     }
     return this.description;
   }

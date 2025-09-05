@@ -39,31 +39,30 @@ class Enemy {
 
   // 添加效果
   addEffect(effectName, stacks = 1) {
+    if(stacks == 0) return ;
+    const previousStacks = this.effects[effectName] || 0;
+
     if (this.effects[effectName]) {
       this.effects[effectName] += stacks;
     } else {
       this.effects[effectName] = stacks;
     }
+
+    const currStacks = this.effects[effectName];
+
+    if (this.effects[effectName] == 0) {
+      delete this.effects[effectName];
+    }
     
     // 触发效果变化事件
     import('../eventBus.js').then(eventBus => {
-      eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, stacks: stacks, previousStacks: this.effects[effectName] - stacks});
+      eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, deltaStacks: stacks, currStacks: currStacks, previousStacks: previousStacks});
     });
   }
 
   // 移除效果
   removeEffect(effectName, stacks = 1) {
-    if (this.effects[effectName]) {
-      this.effects[effectName] -= stacks;
-      if (this.effects[effectName] <= 0) {
-        delete this.effects[effectName];
-      }
-      
-      // 触发效果变化事件
-      import('../eventBus.js').then(eventBus => {
-        eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, stacks: -stacks, previousStacks: this.effects[effectName] + stacks});
-      });
-    }
+    this.addEffect(effectName, -stacks);
   }
 }
 
