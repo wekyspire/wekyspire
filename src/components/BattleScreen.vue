@@ -109,18 +109,18 @@
     </div>
     
     <!-- 操作面板 -->
-    <div class="action-panel" :class="{ 'disabled': !isPlayerTurn }">
+    <div class="action-panel" :class="{ 'disabled': !isPlayerTurn || isControlDisabled }">
       <div class="skills">
         <SkillCard
           v-for="(skill, index) in player.skillSlots.filter(skill => skill !== null)" 
           :key="index"
           :skill="skill"
-          :disabled="!canUseSkill(skill) || !isPlayerTurn"
+          :disabled="!canUseSkill(skill) || !isPlayerTurn || isControlDisabled"
           :player-mana="player.mana"
           @skill-card-clicked="useSkill"
         />
       </div>
-      <button @click="endTurn" :disabled="!isPlayerTurn">结束回合</button>
+      <button @click="endTurn" :disabled="!isPlayerTurn || isControlDisabled">结束回合</button>
     </div>
     <div 
       v-if="tooltip.show" 
@@ -185,6 +185,10 @@ export default {
     battleLogs: {
       type: Array,
       default: () => []
+    },
+    isControlDisabled: {
+      type: Boolean,
+      default: false
     }
   },
   data() {

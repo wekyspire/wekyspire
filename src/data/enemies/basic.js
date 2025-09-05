@@ -7,10 +7,9 @@ export class Slime extends Enemy {
     const hp = 13 + Math.floor(2.5 * battleIntensity);
     const attack = 1 + Math.floor(battleIntensity * 0.35);
     super('史莱姆', hp, attack, 1, battleIntensity + 1);
-    this.isBoss = false; // 标记为普通敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
-    this.description = "一只史莱姆，可爱捏。";
+    this.description = "一只史莱姆，很可爱捏。";
   }
 
   // 计算伤害
@@ -63,7 +62,6 @@ export class Remi extends Enemy {
     const hp = 11 + 2 * battleIntensity;
     const attack = 1 + Math.floor(battleIntensity * 0.5);
     super('魔化瑞米', hp, attack, 1, battleIntensity + 1);
-    this.isBoss = false; // 标记为普通敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.moneyStolen = false;
@@ -140,7 +138,6 @@ export class BuzzlingBugs extends Enemy {
     const hp = 5 + Math.floor(battleIntensity);
     const attack = 1 + Math.floor(battleIntensity * 0.25);
     super('嗡嗡虫群', hp, attack, 1, battleIntensity + 1);
-    this.isBoss = false; // 标记为普通敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = "一群烦恼的嗡嗡虫，你很难够到它们。";

@@ -110,20 +110,17 @@ export default {
   font-weight: bold;
   font-size: 16px;
   margin-bottom: 8px;
-  user-select: none;
 }
 
 .skill-description {
   font-size: 14px;
   margin-bottom: 8px;
   text-align: center;
-  user-select: none;
 }
 
 .skill-uses {
   font-size: 12px;
   color: #666;
-  user-select: none;
 }
 
 .skill-tier {

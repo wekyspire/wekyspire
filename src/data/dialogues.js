@@ -217,6 +217,11 @@ function getTierUpgradedDialog(player) {
       },
       {
         character: '瑞米',
+        text: '嘿嘿，我再多送你一点/named{魏启}上限吧，激励一下你。',
+        avatar: new URL('../assets/remi.png', import.meta.url).href
+      },
+      {
+        character: '瑞米',
         text: '努力升级吧！',
         avatar: new URL('../assets/remi.png', import.meta.url).href
       }

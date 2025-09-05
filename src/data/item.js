@@ -23,12 +23,14 @@ class Item {
 // 恢复生命商品
 class RestoreHealth extends Item {
   constructor() {
-    super('恢复生命', '恢复/green{30}/named{生命}', 13, 1, 1.0, true); // 常驻商品
+    super('恢复生命', '恢复/green{10}/named{生命}', 13, 1, 1.0, true); // 常驻商品
   }
 
   purchase(player) {
     player.hp = Math.min(player.maxHp, player.hp + 40);
     super.purchase(player); // 减少库存
+    // 修改单价（买一次贵10元）
+    this.price += 10;
   }
 }
 

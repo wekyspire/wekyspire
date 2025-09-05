@@ -5,14 +5,16 @@ import { launchAttack, dealDamage, gainShield } from '../../GameApp.vue';
 export class PunchKick extends Skill {
   constructor() {
     super('拳打脚踢', 'normal', 0, '造成【1+/named{攻击}】伤害', 0, Infinity, '拳打脚踢', 1);
-    this.baseDamage = 1;
+  }
+
+  get damage () {
+    return 1 + 2 * this.power;
   }
 
   // 使用技能
   use(player, enemy) {
     if (super.use()) {
-      const damage = this.baseDamage + player.attack;
-      launchAttack(player, enemy, damage);
+      launchAttack(player, enemy, this.damage + player.attack);
       return true;
     }
     return false;
@@ -21,7 +23,7 @@ export class PunchKick extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      const damage = this.baseDamage + player.attack;
+      const damage = this.damage + player.attack;
       return `造成${damage}点伤害`;
     }
     return this.description;
@@ -32,16 +34,18 @@ export class PunchKick extends Skill {
 export class RollPunch extends Skill {
   constructor() {
     super('王八拳', 'normal', 0, '造成【1】伤害5次', 0, 1);
-    this.baseDamage = 1;
     this.coldDownTurns = 1;
+  }
+
+  get damage() {
+    return 1 + this.power;
   }
 
   // 使用技能
   use(player, enemy) {
     if (super.use()) {
-      const damage = this.baseDamage;
       for(let i = 0; i < 5; i++) {
-        launchAttack(player, enemy, damage);
+        launchAttack(player, enemy, this.getDamage());
       }
       return true;
     }
@@ -51,7 +55,7 @@ export class RollPunch extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `造成${this.baseDamage}点伤害5次`;
+      return `造成${this.damage}点伤害5次`;
     }
     return this.description;
   }
@@ -61,9 +65,12 @@ export class RollPunch extends Skill {
 export class Roll extends Skill {
   constructor() {
     super('打滚', 'normal', 0, '获得1层/effect{闪避}', 0, 1, '打滚', 1);
-    this.stacks = 1;
     this.maxUses = 2;
     this.coldDownTurns = 1;
+  }
+
+  get stacks() {
+    return this.stacks + this.power;
   }
 
   // 使用技能
@@ -133,7 +140,7 @@ export class PrepareExercise extends Skill {
   constructor() {
     super('活动筋骨', 'normal', 0, '获得1层/effect{力量}', 0, 1);
     this.stacks = 1;
-    this.maxUses = 4;
+    this.coldDownTurns = 3;
   }
 
   // 使用技能
@@ -268,13 +275,13 @@ export class CarelessBravery extends Skill {
 // 强撑
 export class HoldOn extends Skill {
   constructor() {
-    super('强撑', 'normal', 1, '获得4层/effect{坚固}，1层/effect{崩溃}', 0, 1);
+    super('强撑', 'normal', 1, '获得4层/effect{坚固}，2层/effect{崩溃}', 0, 1);
   }
   // 使用技能
   use(player, enemy) {
     if (!this.used && super.use()) {
       player.addEffect('坚固', 4);
-      player.addEffect('崩溃', 1);
+      player.addEffect('崩溃', 2);
       return true;
     }
     return false;
@@ -283,7 +290,7 @@ export class HoldOn extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `获得4层/effect{坚固}，1层/effect{崩溃}`;
+      return `获得4层/effect{坚固}，2层/effect{崩溃}`;
     }
     return this.description;
   }
@@ -324,15 +331,11 @@ export class FastThinking extends Skill {
     this.coldDownTurns = 1;
   }
 
-  canUse(player) {
-    return super.canUse(player) && this.canColdDown();
-  }
-
   findSkillToColdDown (player) {
     let coldDownSkill = null;
     let minDistance = Infinity;
     player.skills.forEach(skill => {
-      if (skill.coldDownTurns > 0) {
+      if (skill.canColdDown()) {
         const distance = Math.abs(skill.inBattleIndex - this.inBattleIndex);
         if (distance < minDistance) {
           minDistance = distance;
@@ -345,7 +348,7 @@ export class FastThinking extends Skill {
 
   canUse(player) {
     if(super.canUse(player)) {
-      if(this.findSkillToColdDown(player)) return true;
+      if(this.findSkillToColdDown(player) !== null) return true;
       return false;
     }
     return false;

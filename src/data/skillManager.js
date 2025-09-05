@@ -5,12 +5,15 @@ import {
 import { Fireshot,Fireball, LargeFireball, KaradiaBurst, GigaFlameBlast } from './skills/blast.js';
 import {VeryWeakRecovery, WeakRecovery, Recovery} from './skills/heal.js';
 
-import { ChargePunch, FireControlI, FloatingI, PurifyWeky,
+import { ChargePunch, FloatingI, PurifyWeky,
    RockFormationI,
    SpeedThinking,
    StrengthenI, StrongPurifyWeky, SummonRemi, 
   TransformSword, 
   WeakenI } from './skills/cMinus.js';
+
+import {FireControlI} from "./skills/firecontrol";
+
 import skillSlot from "../components/SkillSlot.vue";
 
 // 技能管理器类

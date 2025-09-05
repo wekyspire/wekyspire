@@ -12,6 +12,7 @@
       :player="player"
       :enemy="enemy"
       :battle-logs="battleLogs"
+      :is-control-disabled="controlDisableCount > 0"
       @use-skill="useSkill"
       @end-turn="endPlayerTurn"
     />
@@ -194,6 +195,9 @@ export default {
         
         // 回合控制
         isEnemyTurn: false,
+
+        // 控制是否冻结玩家的控制面板，防止玩家操作
+        controlDisableCount: 0,
         
         // 玩家数据
         player: {
@@ -490,6 +494,9 @@ export default {
     useSkill(skill) {
       // 使用技能逻辑
       this.battleLogs.push(`你使用了 /blue{${skill.name}}！`);
+
+      // 先冻结玩家操作面板
+      this.controlDisableCount += 1;
       
       // 技能发动时结算效果
       processSkillActivationEffects(this.player);
@@ -501,12 +508,11 @@ export default {
       this.player.actionPoints -= 1;
       this.player.mana -= skill.manaCost;
       skill.remainingUses -= 1;
-      
+
       // 检查敌人是否死亡（技能可能造成了伤害）
       if (this.enemy.hp <= 0) {
         this.battleLogs.push(`${this.enemy.name} 被击败了！`);
         this.endBattle(true);
-        return;
       }
       
       // 更新技能描述（因为玩家状态可能已改变）
@@ -514,6 +520,9 @@ export default {
 
       // 强制刷新操作面板渲染
       this.$forceUpdate();
+
+      // 解冻玩家控制面板
+      this.controlDisableCount -= 1;
 
       // 发射事件
       eventBus.emit('after-skill-use', {player: this.player, skill: skill, result: result});
@@ -796,5 +805,6 @@ export default {
   text-align: center;
   color: #2c3e50;
   margin-top: 60px;
+  user-select: none;
 }
 </style>

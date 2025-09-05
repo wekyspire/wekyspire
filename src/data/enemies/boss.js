@@ -7,7 +7,7 @@ export class MEFM3 extends Enemy {
     const hp = 70 + 7 * battleIntensity;
     const attack = Math.round((2 + battleIntensity) * 0.5);
     super('MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0);
-    this.isBoss = true; // 标记为Boss敌人
+    this.type = 'boss'; // 标记为Boss敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.prepared = false;

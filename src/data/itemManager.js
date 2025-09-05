@@ -13,7 +13,10 @@ class ItemManager {
   // 注册商品
   registerItem(ItemClass) {
     const item = new ItemClass();
-    this.items.push({ name: item.name, ItemClass, price: item.price, tier: item.tier, spawnWeight: item.spawnWeight, alwaysPresent: item.alwaysPresent, stock: item.stock });
+    this.items.push({
+      name: item.name, ItemClass, price: item.price, tier: item.tier,
+      spawnWeight: item.spawnWeight, alwaysPresent: item.alwaysPresent, stock: item.stock
+    });
   }
   
   // 获取所有商品
@@ -29,14 +32,6 @@ class ItemManager {
     }
     throw new Error(`Unknown item: ${itemName}`);
   }
-  
-  // 移除reduceStock方法，库存管理由商品实例自行处理
-  // reduceStock(itemName) {
-  //   const item = this.items.find(i => i.name === itemName);
-  //   if (item && item.stock !== Infinity) {
-  //     item.stock = Math.max(0, item.stock - 1);
-  //   }
-  // }
   
   // 根据玩家等阶和权重随机获取商品实例
   getRandomItems(count = 3, playerTier = 0) {

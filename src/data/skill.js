@@ -16,6 +16,7 @@ class Skill {
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
     this.coldDownTurns = 0; // 技能冷却时间, 以回合为单位。如果为0则表示无法自动冷却。
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
+    this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
   }
 
   canColdDown() {
