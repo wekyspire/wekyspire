@@ -440,8 +440,8 @@ export default {
       // 根据战斗场次数生成敌人
       const battleIntensity = this.battleCount;
       
-      // 简单实现：在第5、10、15场战斗时生成Boss
-      if (this.battleCount === 5 || this.battleCount === 10 || this.battleCount === 15) {
+      // 简单实现：在第7、15场战斗时生成Boss
+      if (this.battleCount === 7 || this.battleCount === 15) {
         this.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, true);
       } else {
         // 普通敌人
@@ -601,6 +601,10 @@ export default {
           this.skillRewardClaimed = false;
           this.abilityRewardClaimed = false;
           this.gameState = 'rest';
+          // 特殊：第二场战斗结束时，直接提升玩家等阶
+          if(this.battleCount == 2) {
+            upgradePlayerTier(this.player);
+          }
         } else {
           // 玩家失败
           this.isVictory = false;

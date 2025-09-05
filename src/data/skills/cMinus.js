@@ -133,7 +133,7 @@ export class ChargePunch extends Skill {
     if (super.use()) {
       if(this.mode == 'idle'){
         this.mode = 'charge';
-        this.chargedDamage = this.getChargeDamage();
+        this.chargedDamage = this.getChargeDamage(player);
       } else if(this.mode == 'charge'){
         this.mode = 'idle';
         launchAttack(player, enemy, this.chargedDamage);
@@ -147,7 +147,7 @@ export class ChargePunch extends Skill {
   regenerateDescription(player) {
     if (player) {
       if(this.mode == 'idle'){
-        return `蓄力，准备造成${this.getChargeDamage()}伤害`;
+        return `蓄力，准备造成${this.getChargeDamage(player)}伤害`;
       } else if(this.mode == 'charge'){
         return `造成${this.chargedDamage}伤害`;
       }
@@ -177,7 +177,7 @@ export class StrengthenI extends Skill {
     return false;
   }
   
-  getDescription(player) {
+  regenerateDescription(player) {
     return `获得${this.getStacks(player)}层/effect{力量}和/effect{坚固}`;
   }
 }
@@ -202,7 +202,7 @@ export class WeakenI extends Skill {
     return false;
   }
   
-  getDescription(player) {
+  regenerateDescription(player) {
     return `敌人失去${this.getStacks(player)}层/effect{力量}和/effect{坚固}`;
   }
 }
@@ -226,7 +226,7 @@ export class FireControlI extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     return `敌人获得${this.getStacks(player)}层/effect{燃烧}`;
   }
 }
@@ -247,7 +247,7 @@ export class SummonRemi extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     if(this.used) return '这技能他妈的卵用没有！';
     return '召唤瑞米，它会听从你的指令！';
   }
@@ -262,7 +262,7 @@ export class TransformSword extends Skill {
   }
   
   canUse(player) {
-    return super.canUse() && !this.used;
+    return super.canUse(player) && !this.used;
   }
 
   use(player, enemy) {
@@ -274,7 +274,7 @@ export class TransformSword extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     return `获得${this.stacks}/effect{力量}，战斗中只能使用一次`;
   }
 }
@@ -295,7 +295,7 @@ export class FloatingI extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     return `浮空，获得${this.stacks}层/effect{闪避}`;
   }
 }
@@ -316,7 +316,7 @@ export class RockFormationI extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     return `形成岩石掩体，获得${this.stacks}层/effect{格挡}`;
   }
 }
@@ -340,7 +340,7 @@ export class SpeedThinking extends Skill {
     return false;
   }
 
-  getDescription(player) {
+  regenerateDescription(player) {
     return `冷却所有可冷却的技能一次`;
   }
 }

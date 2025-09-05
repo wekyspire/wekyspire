@@ -232,13 +232,13 @@ export class OverCarefulDefense extends Skill {
 // 匹夫之勇
 export class CarelessBravery extends Skill {
   constructor() {
-    super('匹夫之勇', 'normal', 0, '获得4层/effect{力量}，-3层/effect{坚固}，每场战斗只能用一次', 0, 1);
+    super('匹夫之勇', 'normal', 0, '获得3层/effect{力量}，-3层/effect{坚固}，每场战斗只能用一次', 0, 1);
     this.used = false;
   }
   // 使用技能
   use(player, enemy) {
     if (!this.used && super.use()) {
-      player.addEffect('力量', 4);
+      player.addEffect('力量', 3);
       player.addEffect('坚固', -3);
       this.used = true;
       return true;
@@ -259,7 +259,7 @@ export class CarelessBravery extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `获得4层/effect{力量}，-3层/effect{坚固}，每场战斗只能用一次`;
+      return `获得3层/effect{力量}，-3层/effect{坚固}，每场战斗只能用一次`;
     }
     return this.description;
   }

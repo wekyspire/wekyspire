@@ -4,9 +4,9 @@ import { launchAttack } from '../../GameApp.vue';
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
-    const hp = 70 + 5 * battleIntensity;
+    const hp = 70 + 7 * battleIntensity;
     const attack = Math.round((2 + battleIntensity) * 0.5);
-    super('MEFM-3', hp, attack, 2, 0);
+    super('MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0);
     this.isBoss = true; // 标记为Boss敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -39,7 +39,7 @@ export class MEFM3 extends Enemy {
       () => {
         return new Promise((resolve) => {
           battleLogs.push(`${this.name} 使用射流机枪扫射！`);
-          const times = 1 + (this.effects['机枪升温'] || 0);
+          const times = 2 + (this.effects['机枪升温'] || 0);
           const damage = 1 + this.attack;
           // 逐个执行攻击，并在每次攻击之间添加延时
           let i = 0;

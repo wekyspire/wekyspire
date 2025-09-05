@@ -179,7 +179,7 @@ function getTierUpgradedDialog(player) {
     return [
       {
         character: '瑞米',
-        text: '哇！你刚刚进行了一次/named{突破}！',
+        text: '哇！恭喜你！你通过战斗证明自己的实力，进行了一次/named{突破}！',
         avatar: new URL('../assets/remi.png', import.meta.url).href
       },
       {

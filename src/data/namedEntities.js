@@ -69,6 +69,11 @@ const namedEntities = {
     icon: '🔮',
     color: 'purple',
     description: '技能是灵御的武器，能施展各种强大的攻击和防御。'
+  },
+  '突破': {
+    icon: '🌟',
+    color: 'gold',
+    description: '提升灵御等阶，获得行动力、魏启容量，并恢复状态。'
   }
 };
 
