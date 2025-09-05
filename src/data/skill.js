@@ -2,16 +2,17 @@
 class Skill {
   constructor(name, type, tier, baseDescription, manaCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
-    this.type = type; // 技能类型：'normal' 或 'magic'
+    this.type = type; // 技能类型：'普通'（非魔法）, '木', '火', '光', '水', '通用'（通用类魔法）, '特殊'，'诅咒'（负面技能卡）
     this.tier = tier; // 技能等阶
     this.inBattleIndex = -1; // 在战斗中，此技能在玩家skill数组中的下标。不在战斗中则无意义。
     this.baseDescription = baseDescription; // 技能描述
     this.description = baseDescription;
+    this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.manaCost = manaCost || 0; // 魏启消耗
     this.maxUses = maxUses || 1; // 最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
-    this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称
+    this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称。如果有多个升级方向，则为数组。
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
     this.coldDownTurns = 0; // 技能冷却时间, 以回合为单位。如果为0则表示无法自动冷却。
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间

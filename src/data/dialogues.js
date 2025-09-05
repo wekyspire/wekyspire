@@ -74,7 +74,8 @@ function getOpeningDialog() {
 
 // 获取事件对话（战斗后）
 // 参数: battleCount(战斗场次数), player(玩家状态), enemy(下一张战斗面对的敌人)
-function getEventAfterBattle(battleCount, player, enemy) {
+function getEventAfterBattle(battleCount, player, enemy, isVictory) {
+  if(!isVictory) return null;
   // 检查是否是Boss战
   if (enemy && enemy.isBoss) {
     // 面对Boss时触发特别对话
@@ -92,7 +93,7 @@ function getEventAfterBattle(battleCount, player, enemy) {
 }
 
 // Boss战前的特别对话
-const preBossBattleEvents = [
+const preBossBattleEventsRemi = [
   [
     {
       character: '瑞米',
@@ -124,6 +125,16 @@ const preBossBattleEvents = [
   ]
 ];
 
+const preBossBattleEventsBoss = {
+  'MEFM-3': [
+    {
+      character: 'MEFM-3',
+      text: '发现入侵者。开始清理。',
+      avatar: new URL('../assets/enemies/mefm3.png', import.meta.url).href
+    }
+  ]
+};
+
 let metEnemyRemi = false;
 
 // 标记玩家是否已经获得过可多次充能的技能
@@ -136,8 +147,10 @@ function getEventBeforeBattle(battleCount, player, enemy) {
   // 检查是否是Boss战
   if (enemy && enemy.isBoss) {
     // 面对Boss时触发特别对话
-    const bossEventIndex = Math.floor(Math.random() * preBossBattleEvents.length);
-    return preBossBattleEvents[bossEventIndex];
+    const bossEventIndex = Math.floor(Math.random() * preBossBattleEventsRemi.length);
+    const remiEvents = preBossBattleEventsRemi[bossEventIndex];
+    const bossEvents = preBossBattleEventsBoss[enemy.name];
+    return remiEvents.concat(bossEvents);
   }
 
   // 特判事件
@@ -259,8 +272,8 @@ function registerListeners() {
     }
   });
   eventBus.on('after-battle', (params) => {
-    const {battleCount, player, enemy} = params;
-    const sequence = getEventAfterBattle(battleCount, player, enemy);
+    const {battleCount, player, enemy, isVictory} = params;
+    const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
     if(sequence) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);

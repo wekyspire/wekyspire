@@ -53,61 +53,6 @@ export class StrongPurifyWeky extends Skill {
   }
 }
 
-// 恢复I 技能
-export class VeryWeakRecovery extends Skill {
-  constructor() {
-    super('恢复I', '木', 1, '获得【3+/named{灵能}】/effect{再生}', 1, 3);
-    this.stack = 3;
-    this.coldDownTurns = 2;
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use()) {
-      player.addEffect('再生', this.stack + player.magic);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    if (player) {
-      const stack = this.stack + player.magic;
-      return `获得${stack}/effect{再生}`;
-    }
-    return this.description;
-  }
-}
-
-// 恢复II 技能
-export class WeakRecovery extends Skill {
-  constructor() {
-    super('恢复II', '木', 3, '获得【7+/named{灵能}】/effect{再生}', 2, 2);
-    this.stack = 7;
-    this.coldDownTurns = 2;
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    if (super.use()) {
-      const stack = this.stack + player.magic;
-      player.addEffect('再生', this.stack);
-      return true;
-    }
-    return false;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    if (player) {
-      const stack = this.stack + player.magic;
-      return `获得${stack}/effect{再生}`;
-    }
-    return this.description;
-  }
-}
-
 // 蓄力一击技能
 export class ChargePunch extends Skill {
   constructor() {
@@ -204,30 +149,6 @@ export class WeakenI extends Skill {
   
   regenerateDescription(player) {
     return `敌人失去${this.getStacks(player)}层/effect{力量}和/effect{坚固}`;
-  }
-}
-
-// 控火术：灼烧
-export class FireControlI extends Skill {
-  constructor() {
-    super('控火术:灼烧', 'magic', 3, '敌人获得【2+/named{灵能}】层/effect{燃烧}', 1, 1, "控火术:灼烧");
-  }
-  
-  getStacks(player) {
-    return 2 + player.magic;
-  }
-  
-  use(player, enemy) {
-    if (super.use()) {
-      const stacks = this.getStacks(player);
-      enemy.addEffect('燃烧', stacks);
-      return true;
-    }
-    return false;
-  }
-
-  regenerateDescription(player) {
-    return `敌人获得${this.getStacks(player)}层/effect{燃烧}`;
   }
 }
 

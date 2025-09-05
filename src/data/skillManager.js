@@ -1,14 +1,17 @@
 import { PunchKick, RollPunch, Roll, Sleep, KungFu, FastThinking } from './skills/basic.js';
-import { CarelessPunchKick, AmateurDefense, OverCarefulDefense,
+import {
+  CarelessPunchKick, AmateurDefense, OverCarefulDefense,
   PrepareExercise, CarelessBravery, HoldOn } from './skills/basic.js';
-import { Fireshot,Fireball, LargeFireball } from './skills/example.js';
+import { Fireshot,Fireball, LargeFireball, KaradiaBurst, GigaFlameBlast } from './skills/blast.js';
+import {VeryWeakRecovery, WeakRecovery, Recovery} from './skills/heal.js';
 
 import { ChargePunch, FireControlI, FloatingI, PurifyWeky,
    RockFormationI,
    SpeedThinking,
    StrengthenI, StrongPurifyWeky, SummonRemi, 
   TransformSword, 
-  VeryWeakRecovery, WeakenI, WeakRecovery } from './skills/cMinus.js';
+  WeakenI } from './skills/cMinus.js';
+import skillSlot from "../components/SkillSlot.vue";
 
 // 技能管理器类
 class SkillManager {
@@ -22,9 +25,6 @@ class SkillManager {
     this.registerSkill(Roll);
     this.registerSkill(Sleep);
     this.registerSkill(KungFu);
-    this.registerSkill(Fireshot);
-    this.registerSkill(Fireball);
-    this.registerSkill(LargeFireball);
     this.registerSkill(CarelessPunchKick);
     this.registerSkill(AmateurDefense);
     this.registerSkill(OverCarefulDefense);
@@ -32,13 +32,21 @@ class SkillManager {
     this.registerSkill(CarelessBravery);
     this.registerSkill(HoldOn);
 
+    this.registerSkill(Fireshot);
+    this.registerSkill(Fireball);
+    this.registerSkill(LargeFireball);
+    this.registerSkill(KaradiaBurst);
+    this.registerSkill(GigaFlameBlast);
+
+    this.registerSkill(VeryWeakRecovery);
+    this.registerSkill(WeakRecovery);
+    this.registerSkill(Recovery);
+
+    this.registerSkill(ChargePunch);
     this.registerSkill(FastThinking);
 
     this.registerSkill(PurifyWeky);
     this.registerSkill(StrongPurifyWeky);
-    this.registerSkill(VeryWeakRecovery);
-    this.registerSkill(WeakRecovery);
-    this.registerSkill(ChargePunch);
     this.registerSkill(StrengthenI);
     this.registerSkill(WeakenI);
     this.registerSkill(FireControlI);
@@ -74,7 +82,7 @@ class SkillManager {
   }
   
   // 获取随机技能
-  static getRandomSkills(count, playerSkills = [], playerTier = 0) {
+  static getRandomSkills(count, playerSkillSlots = [], playerTier = 0) {
     const instance = this.getInstance();
     const allSkills = Array.from(instance.skillRegistry.entries()).map(([name, SkillClass]) => {
       // 创建临时实例以获取技能系列名称和等阶
@@ -86,6 +94,10 @@ class SkillManager {
         spawnWeight: tempSkill.spawnWeight
       };
     });
+
+    const playerNonEmptySkillSlots = playerSkillSlots.filter(skill => skill !== null);
+    const playerSkills = playerNonEmptySkillSlots.map(slot => slot);
+    console.log(playerSkills);
     
     // 获取玩家已有的技能系列
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
@@ -119,10 +131,10 @@ class SkillManager {
         weight: skill.spawnWeight * modifyFactor
       };
     });
-    // 减少已获得技能的出现权重（x0.3）
+    // 减少已获得技能的出现权重（x0.2）
     weightedSkills.forEach(skill => {
       if (playerSkills.some(playerSkill => playerSkill.name === skill.name)) {
-        skill.weight *= 0.3;
+        skill.weight *= 0.2;
       }
     });
     

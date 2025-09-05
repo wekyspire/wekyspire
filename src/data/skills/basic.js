@@ -39,7 +39,7 @@ export class RollPunch extends Skill {
   // 使用技能
   use(player, enemy) {
     if (super.use()) {
-      const damage = this.baseDamage + player.attack;
+      const damage = this.baseDamage;
       for(let i = 0; i < 5; i++) {
         launchAttack(player, enemy, damage);
       }
@@ -321,7 +321,7 @@ export class KungFu extends Skill {
 export class FastThinking extends Skill {
   constructor() {
     super('快速思考', 'normal', 1, '/named{冷却}1次/named{最近}可冷却技能', 0, Infinity, '思考', 1);
-    this.coldDownCount = 1;
+    this.coldDownTurns = 1;
   }
 
   canUse(player) {
@@ -332,7 +332,7 @@ export class FastThinking extends Skill {
     let coldDownSkill = null;
     let minDistance = Infinity;
     player.skills.forEach(skill => {
-      if (skill.coldDownCount > 0) {
+      if (skill.coldDownTurns > 0) {
         const distance = Math.abs(skill.inBattleIndex - this.inBattleIndex);
         if (distance < minDistance) {
           minDistance = distance;
@@ -368,7 +368,7 @@ export class FastThinking extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `/named{冷却}${this.coldDownCount}次/named{最近}可冷却技能`;
+      return `/named{冷却}${this.coldDownTurns}次/named{最近}可冷却技能`;
     }
     return this.description;
   }

@@ -238,6 +238,29 @@ export default {
           get defense() {
             return this.baseDefense + (this.effects['坚固'] || 0);
           },
+
+          // 随机移除stacks层效果
+          removeEffects(stacks) {
+            const effectNames = Object.keys(this.effects);
+            for (let i = 0; i < stacks; i++) {
+              if (effectNames.length === 0) break;
+              const randomIndex = Math.floor(Math.random() * effectNames.length);
+              const effectName = effectNames[randomIndex];
+              this.removeEffect(effectName, 1);
+              // 如果效果层数为0，移除效果名称
+              if (!this.effects[effectName]) {
+                effectNames.splice(randomIndex, 1);
+              }
+            }
+          },
+
+          // 随机移除负面效果
+          // mode: 'random' 随机移除, 'highest-stack' 优先层数最高的
+          // 'highest-stack-kind' 种类移除，优先层数最高种类
+          // 'ramdom-kind' 种类移除，随机种类
+          removeNegativeEffets(count, mode = 'random') {
+            // TODO
+          },
           
           // 添加效果方法
           addEffect(effectName, stacks = 1) {
@@ -264,6 +287,10 @@ export default {
           // 移除效果方法
           removeEffect(effectName, stacks = 1) {
             this.addEffect(effectName, -stacks);
+          },
+
+          clearNegativeEffects () {
+            // TODO
           }
         },
         
@@ -601,8 +628,9 @@ export default {
           this.skillRewardClaimed = false;
           this.abilityRewardClaimed = false;
           this.gameState = 'rest';
-          // 特殊：第二场战斗结束时，直接提升玩家等阶
+          // 特殊：第二场战斗结束时，直接提升玩家等阶，并附赠一点法力
           if(this.battleCount == 2) {
+            this.player.maxMana += 1;
             upgradePlayerTier(this.player);
           }
         } else {
@@ -672,7 +700,7 @@ export default {
       this.isSkillRewardVisible = true;
       // 生成随机技能，排除玩家已有的技能和同系列的技能
       console.log('Generating skill rewards...');
-      this.skillRewards = SkillManager.getRandomSkills(3, this.player.skills, this.player.tier);
+      this.skillRewards = SkillManager.getRandomSkills(3, this.player.skillSlots, this.player.tier);
       console.log('Generated skill rewards:', this.skillRewards);
       // 标记技能奖励已显示
       this.skillRewardClaimed = true;

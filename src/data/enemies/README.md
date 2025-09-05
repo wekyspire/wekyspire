@@ -39,7 +39,7 @@ export { FireSlime };
 在enemyFactory.js中注册：
 
 ```javascript
-import { FireSlime } from './enemies/example.js';
+import { FireSlime } from './enemies/blast.js';
 
 // 在构造函数中
 this.registerEnemy('fireSlime', FireSlime);
