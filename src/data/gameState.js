@@ -65,7 +65,10 @@ export const gameState = reactive({
   abilityManager: new AbilityManager(),
   
   // 商品管理器实例
-  itemManager: new ItemManager()
+  itemManager: new ItemManager(),
+  
+  // 当前商店内商品
+  shopItems: []
 });
 
 // 重置游戏状态

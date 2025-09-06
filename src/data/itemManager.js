@@ -8,6 +8,7 @@ class ItemManager {
     this.registerItem(RestoreHealth);
     this.registerItem(RestoreMana);
     this.registerItem(SkillSlot);
+    this.isItemsInitialized = false;
   }
   
   // 注册商品

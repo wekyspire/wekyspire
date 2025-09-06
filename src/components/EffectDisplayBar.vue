@@ -6,6 +6,7 @@
           v-if="value !== 0" 
           :effect-name="key"
           :stack="value"
+          :preview-mode="false"
           @mouseenter="showTooltip($event, key)"
           @mouseleave="hideTooltip()"
         />

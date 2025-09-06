@@ -97,7 +97,9 @@ export default {
     },
 
     onSkillCardClicked(skill) {
-      useSkill(skill);
+      if(this.canUseSkill(skill)) {
+        useSkill(skill);
+      }
     },
 
     onEndTurnButtonClicked() {

@@ -35,7 +35,7 @@
       <!-- 商店面板 -->
     <ShopPanel
       v-if="currentPanel === 'shop'"
-      :shop-items="shopItems"
+      :shop-items="gameState.shopItems"
       :game-state="gameState"
       @item-purchased="onItemPurchased"
       @refresh-shop="$forceUpdate"

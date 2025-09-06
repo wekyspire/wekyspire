@@ -4,6 +4,7 @@
     :style="{ color: effectColor }"
     @mouseenter="showTooltip"
     @mouseleave="hideTooltip"
+    :class="{ 'scale-animation': isScaling }"
   >
     {{ effectIcon }}
     {{ effectName }}
@@ -24,6 +25,10 @@ export default {
     stack: {
       type: Number,
       default: 0
+    },
+    previewMode: {
+      type: Boolean,
+      default: true
     }
   },
   data() {
@@ -35,8 +40,16 @@ export default {
         color: '',
         x: 0,
         y: 0
-      }
+      },
+      isScaling: false
     };
+  },
+  watch: {
+    stack(newVal, oldVal) {
+      if(newVal !== oldVal && !this.previewMode) {
+        this.playScaleAnimation();
+      }
+    }
   },
   computed: {
     effectInfo() {
@@ -56,6 +69,12 @@ export default {
     }
   },
   methods: {
+    playScaleAnimation() {
+      this.isScaling = true;
+      setTimeout(() => {
+        this.isScaling = false;
+      }, 500);
+    },
     getStackColor() {
       if(this.stack == 0) return this.effectColor;
       if(this.stack > 0) return 'green';
@@ -110,6 +129,12 @@ export default {
       }
     }
   },
+  mounted() {
+    // 如果初始stack不为0，播放动画
+    if(this.stack !== 0 && !this.previewMode) {
+      this.playScaleAnimation();
+    }
+  },
   beforeUnmount() {
     // 组件销毁前移除tooltip
     this.removeTooltip();
@@ -123,6 +148,17 @@ export default {
   font-size: 16px;
   cursor: help;
   margin: 0 2px;
+  transition: transform 0.5s ease;
+}
+
+.effect-icon.scale-animation {
+  animation: scaleEffect 0.5s ease;
+}
+
+@keyframes scaleEffect {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
 }
 </style>
 

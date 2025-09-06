@@ -354,6 +354,8 @@ export default {
 
 <style scoped>
 .hurt-animation-wrapper {
+  width: fit-content;
+  height: fit-content;
   position: relative;
   transition: transform 0.1s ease;
   /* 受伤特效的默认变量 */

@@ -17,7 +17,6 @@
     <!-- 休整界面 -->
     <RestScreen 
       v-if="gameState.gameStage === 'rest'"
-      :shop-items="shopItems"
       @claim-money="claimMoney"
       @show-skill-rewards="showSkillRewards"
       @show-ability-rewards="showAbilityRewards"
@@ -107,23 +106,19 @@ export default {
       dialogues.unregisterListeners(eventBus);
     }
   },
-  computed: {
-    shopItems() {
-      // 使用商品管理器生成商店商品实例
-      const items = gameState.itemManager.getShopItems();
-      // 直接返回商品实例，不需要转换格式
-      return items;
-    }
-  },
   methods: {
     
     startGame() {
       // 触发开场事件
       eventBus.emit('before-game-start');
       
-      // 为玩家添加初始技能到第一个技能槽
-      const initialSkill = gameState.player.skillManager.constructor.createSkill('拳打脚踢');
-      gameState.player.skillSlots[0] = initialSkill;
+      // 为玩家添加初始技能到技能槽
+      const initialSkill1 = gameState.player.skillManager.constructor.createSkill('拳打脚踢');
+      gameState.player.skillSlots[0] = initialSkill1;
+      const initialSkill2 = gameState.player.skillManager.constructor.createSkill('活动筋骨');
+      gameState.player.skillSlots[1] = initialSkill2;
+      const initialSkill3 = gameState.player.skillManager.constructor.createSkill('活动筋骨');
+      gameState.player.skillSlots[2] = initialSkill3;
       
       gameState.gameStage = 'battle';
       // 注意：不在这里调用startBattle()，而是在对话结束后调用
