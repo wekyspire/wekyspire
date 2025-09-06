@@ -18,7 +18,7 @@ export default {
       container.innerHTML = '';
       
       // 默认生成区域为整个容器
-      const rect = spawnRect || { x: 0, y: 0, width: 100, height: 100 };
+      const rect = spawnRect || { xUV: 0, yUV: 0, widthUV: 1, heightUV: 1 };
       
       for (let i = 0; i < count; i++) {
         const particle = document.createElement('div');
@@ -30,14 +30,15 @@ export default {
         particle.style.backgroundColor = color;
         
         // 在指定矩形区域内随机生成初始位置
-        // 使用padding确保粒子不会生成在边缘
-        const padding = 5; // 5%的内边距
-        const spawnX = rect.x + padding + Math.random() * (rect.width - padding * 2);
-        const spawnY = rect.y + padding + Math.random() * (rect.height - padding * 2);
-        
+        const spawnX = rect.xUV + Math.random() * rect.widthUV;
+        const spawnY = rect.yUV + Math.random() * rect.heightUV;
+        const spawnXPercentage = spawnX * 100;
+        const spawnYPercentage = spawnY * 100;
+
         // 设置初始位置
-        particle.style.left = `${spawnX}%`;
-        particle.style.top = `${spawnY}%`;
+        particle.style.left = `${spawnXPercentage}%`;
+        particle.style.top = `${spawnYPercentage}%`;
+        console.log(spawnXPercentage, spawnYPercentage)
         
         // 随机运动方向和距离，确保粒子向四周逸散
         const angle = Math.random() * Math.PI * 2; // 随机角度
@@ -67,7 +68,8 @@ export default {
 }
 </script>
 
-<style scoped>
+// 不能使用 style : scoped，否则会导致.particle无法应用到particle DOM元素上，导致显示失败。
+<style>
 .particle-container {
   position: absolute;
   top: 0;
@@ -76,6 +78,7 @@ export default {
   height: 100%;
   pointer-events: none;
   overflow: visible;
+  /* 移除z-index设置，由父组件控制 */
 }
 
 .particle {

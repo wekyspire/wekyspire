@@ -76,21 +76,6 @@ export default {
   justify-content: center;
 }
 
-.skill-card {
-  border: 1px solid #eee;
-  padding: 15px;
-  width: 200px;
-  cursor: pointer;
-  background-color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: transform 0.2s;
-}
-
-.skill-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
 .skill-name {
   font-weight: bold;
   font-size: 1.2em;

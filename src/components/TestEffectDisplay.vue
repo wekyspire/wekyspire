@@ -179,21 +179,6 @@ export default {
   margin-bottom: 30px;
 }
 
-.skill-card {
-  width: 200px;
-  min-height: 100px;
-  padding: 15px;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  background-color: white;
-  border: 1px solid #eee;
-  margin-bottom: 15px;
-}
-
 .skill-name {
   font-weight: bold;
   font-size: 16px;

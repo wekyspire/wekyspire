@@ -1,27 +1,31 @@
 <template>
   <div 
-    :class="['skill-card', 'tier-' + skill.tier, { disabled: disabled }]"
-    @click="onClick"
+    class="skill-card"
   >
-    <div class="mana-cost" v-if="skill.manaCost > 0">
-      <span class="mana-icon">🔮</span>
-      <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
+    <!-- 粒子效果放在最前面，但使用负z-index让它在内容下方 -->
+    <ParticleEffect ref="particleEffect" class="particle-layer" />
+    
+    <div :class="['skill-card-panel', 'tier-' + skill.tier, { disabled: disabled }]"
+     @click="onClick">
+      <div class="mana-cost" v-if="skill.manaCost > 0">
+        <span class="mana-icon">🔮</span>
+        <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
+      </div>
+      <div class="skill-tier">{{ getTierLabel(skill.tier) }}</div>
+      <div class="skill-name">{{ skill.name }}</div>
+      <div class="skill-description">
+        <ColoredText :text="skill.description" />
+      </div>
+      <div class="skill-uses">
+        <ColoredText v-if="skill.coldDownTurns != 0 && skill.remainingUses != skill.maxUses && !previewMode" :text="`/named{重整} ${skill.remainingColdDownTurns}/${skill.coldDownTurns}`"></ColoredText>
+        <ColoredText v-else-if="skill.coldDownTurns != 0" :text="`/named{重整} ${skill.coldDownTurns} 回合`"></ColoredText>
+        <ColoredText v-else-if="skill.remainingUses != Infinity" :text="`/named{消耗}`"></ColoredText>
+        <br />
+        <strong v-if="skill.maxUses === Infinity">无限</strong>
+        <span v-else-if="previewMode">(装填 {{ skill.maxUses }}/{{ skill.maxUses }})</span>
+        <span v-else>(装填 {{ skill.remainingUses }}/{{ skill.maxUses }})</span>
+      </div>
     </div>
-    <div class="skill-tier">{{ getTierLabel(skill.tier) }}</div>
-    <div class="skill-name">{{ skill.name }}</div>
-    <div class="skill-description">
-      <ColoredText :text="skill.description" />
-    </div>
-    <div class="skill-uses">
-      <ColoredText v-if="skill.coldDownTurns != 0 && skill.remainingUses != skill.maxUses && !previewMode" :text="`/named{重整} ${skill.remainingColdDownTurns}/${skill.coldDownTurns}`"></ColoredText>
-      <ColoredText v-else-if="skill.coldDownTurns != 0" :text="`/named{重整} ${skill.coldDownTurns} 回合`"></ColoredText>
-      <ColoredText v-else-if="skill.remainingUses != Infinity" :text="`/named{消耗}`"></ColoredText>
-      <br />
-      <strong v-if="skill.maxUses === Infinity">无限</strong>
-      <span v-else-if="previewMode">(装填 {{ skill.maxUses }}/{{ skill.maxUses }})</span>
-      <span v-else>(装填 {{ skill.remainingUses }}/{{ skill.maxUses }})</span>
-    </div>
-    <ParticleEffect ref="particleEffect" />
   </div>
 </template>
 
@@ -130,13 +134,11 @@ export default {
         const rect = card.getBoundingClientRect();
         const containerRect = card.parentElement.getBoundingClientRect();
         
-        // 计算相对位置百分比，增加5%的内边距确保粒子在卡片内可见
-        const padding = 5;
         const spawnRect = {
-          x: ((rect.left - containerRect.left + rect.width * 0.1) / containerRect.width) * 100,
-          y: ((rect.top - containerRect.top + rect.height * 0.1) / containerRect.height) * 100,
-          width: (rect.width * 0.8 / containerRect.width) * 100,
-          height: (rect.height * 0.8 / containerRect.height) * 100
+          xUV: 0,
+          yUV: 0,
+          widthUV: 1,
+          heightUV: 1
         };
         
         // 触发粒子特效
@@ -150,7 +152,19 @@ export default {
 </script>
 
 <style scoped>
-.skill-card {
+.particle-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.skill-card-panel {
+  position: relative;
+  z-index: 1;
   width: 150px;
   min-height: 100px;
   padding: 15px;
@@ -162,17 +176,16 @@ export default {
   align-items: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: all 0.3s ease;
-  position: relative;
   background-color: white;
   border: 1px solid #eee;
 }
 
-.skill-card:hover {
+.skill-card-panel:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.skill-card.disabled {
+.skill-card-panel.disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -235,63 +248,76 @@ export default {
   color: #f44336;
 }
 
+
+.skill-card {
+  /* width: 150px; */
+  min-height: 100px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  /* transition: all 0.3s ease; */
+  position: relative;
+}
+
 /* 不同等阶的技能卡片样式 */
 /* D */
-.skill-card.tier-0 { 
+.skill-card-panel.tier-0 { 
   background-color: #ffffff;
   border: 1px solid #000000;
 }
 /* C- */
-.skill-card.tier-1 {
+.skill-card-panel.tier-1 {
   background-color: #ffffff;
   border: 1px solid #41db39;
 }
 
 /* C+ */
-.skill-card.tier-2 {
+.skill-card-panel.tier-2 {
   background-color: #daffbc;
   border: 1px solid #41db39;
 }
 
 /* B- */
-.skill-card.tier-3 {
+.skill-card-panel.tier-3 {
   background-color: #ffffff;
   border: 1px solid #759eff;
 }
 
 /* B */
-.skill-card.tier-4 {
+.skill-card-panel.tier-4 {
   background-color: #bfebff;
   border: 1px solid #759eff;
 }
 
 /* B+ */
-.skill-card.tier-5 {
+.skill-card-panel.tier-5 {
   background-color: #ffffff;
   border: 1px solid #d072ff;
 }
 
 
 /* A- */
-.skill-card.tier-6 {
+.skill-card-panel.tier-6 {
   background-color: #f4daff;
   border: 1px solid #d072ff;
 }
 
 /* A */
-.skill-card.tier-7 {
+.skill-card-panel.tier-7 {
   background-color: #ffffff;
   border: 1px solid #ff9059;
 }
 
 /* A+ */
-.skill-card.tier-8 {
+.skill-card-panel.tier-8 {
   background-color: #ffe4d0;
   border: 1px solid #ff9059;
 }
 
 /* S */
-.skill-card.tier-9 {
+.skill-card-panel.tier-9 {
   background-color: #ffc0c0;
   border: 1px solid #ff0000;
 }
