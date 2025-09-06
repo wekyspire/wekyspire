@@ -1,5 +1,5 @@
 import Skill from '../skill.js';
-import { launchAttack, dealDamage, gainShield } from '../../GameApp.vue';
+import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 
 // 拳打脚踢技能
 export class PunchKick extends Skill {
@@ -45,7 +45,7 @@ export class RollPunch extends Skill {
   use(player, enemy) {
     if (super.use()) {
       for(let i = 0; i < 5; i++) {
-        launchAttack(player, enemy, this.getDamage());
+        launchAttack(player, enemy, this.damage);
       }
       return true;
     }

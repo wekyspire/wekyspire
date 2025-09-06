@@ -1,4 +1,4 @@
-import { upgradePlayerTier } from "../GameApp.vue";
+import { upgradePlayerTier } from "./player.js";
 
 // 能力抽象类
 class Ability {

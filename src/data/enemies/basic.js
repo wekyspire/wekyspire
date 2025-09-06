@@ -1,4 +1,4 @@
-import { launchAttack, gainShield } from '../../GameApp.vue';
+import { launchAttack, gainShield } from '../battleUtils.js';
 import Enemy from '../enemy.js';
 
 // 史莱姆敌人

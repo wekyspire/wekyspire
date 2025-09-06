@@ -1,7 +1,7 @@
 // 示例敌人：火史莱姆
 // 继承自Enemy类，实现构造函数和act方法
 
-import { launchAttack } from '../../GameApp.vue';
+import { launchAttack } from '../battleUtils.js';
 import Enemy from '../enemy.js';
 
 class FireSlime extends Enemy {

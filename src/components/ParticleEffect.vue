@@ -38,7 +38,7 @@ export default {
         // 设置初始位置
         particle.style.left = `${spawnXPercentage}%`;
         particle.style.top = `${spawnYPercentage}%`;
-        console.log(spawnXPercentage, spawnYPercentage)
+        // console.log(spawnXPercentage, spawnYPercentage)
         
         // 随机运动方向和距离，确保粒子向四周逸散
         const angle = Math.random() * Math.PI * 2; // 随机角度
@@ -68,8 +68,8 @@ export default {
 }
 </script>
 
-// 不能使用 style : scoped，否则会导致.particle无法应用到particle DOM元素上，导致显示失败。
 <style>
+/* 不能使用 style : scoped，否则会导致.particle无法应用到particle DOM元素上，导致显示失败。 */
 .particle-container {
   position: absolute;
   top: 0;

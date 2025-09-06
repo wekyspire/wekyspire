@@ -1,5 +1,5 @@
 import Enemy from '../enemy.js';
-import { launchAttack } from '../../GameApp.vue';
+import { launchAttack } from '../battleUtils.js';
 
 // 雪狼 精英敌人
 export class BigWolf extends Enemy {

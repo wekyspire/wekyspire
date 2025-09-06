@@ -62,12 +62,6 @@ export default {
       if (log.includes('效果')) return '✨';
       if (log.includes('回合')) return '⏰';
       return '📝';
-    },
-    addLog(message) {
-      this.$emit('add-log', message);
-    },
-    clearLogs() {
-      this.$emit('clear-logs');
     }
   }
 };

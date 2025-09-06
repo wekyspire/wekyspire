@@ -1,5 +1,5 @@
 import Enemy from '../enemy.js';
-import { launchAttack } from '../../GameApp.vue';
+import { launchAttack } from '../battleUtils.js';
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {

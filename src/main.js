@@ -5,6 +5,7 @@ import GameApp from './GameApp.vue'
 import TestEffectDisplay from './components/TestEffectDisplay.vue'
 import NamedEntityTest from './components/NamedEntityTest.vue'
 import './assets/main.css'
+import './assets/common.css'
 
 // 创建路由
 const routes = [

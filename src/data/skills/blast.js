@@ -1,5 +1,5 @@
 import Skill from '../skill.js';
-import { launchAttack } from '../../GameApp.vue';
+import { launchAttack } from '../battleUtils.js';
 
 // 示例技能：火弹术(C-)
 export class Fireshot extends Skill {

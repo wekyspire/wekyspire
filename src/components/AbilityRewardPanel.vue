@@ -9,7 +9,7 @@
           :class="['ability-card', 'tier-' + ability.tier]"
           @click="selectAbility(ability)"
         >
-          <div class="ability-tier">{{ getTierLabel(ability.tier) }}</div>
+          <div class="ability-tier">{{ getSkillTierLabel(ability.tier) }}</div>
           <div class="ability-name">{{ ability.name }}</div>
           <div class="ability-description">
             <ColoredText :text="ability.description" />
@@ -23,6 +23,7 @@
 
 <script>
 import ColoredText from './ColoredText.vue';
+import { getSkillTierLabel } from '../utils/tierUtils.js';
 
 export default {
   name: 'AbilityRewardPanel',
@@ -40,22 +41,14 @@ export default {
     }
   },
   methods: {
+    getSkillTierLabel,
     selectAbility(ability) {
       this.$emit('select-ability', ability);
     },
     closePanel() {
       this.$emit('close');
     },
-    getTierLabel(tier) {
-      const tierLabels = {
-        1: 'D',
-        2: 'C',
-        3: 'B',
-        4: 'A',
-        5: 'S'
-      };
-      return tierLabels[tier] || '';
-    }
+
   }
 }
 </script>

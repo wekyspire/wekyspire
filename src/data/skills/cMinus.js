@@ -1,5 +1,5 @@
 import Skill from '../skill.js';
-import { launchAttack, dealDamage, gainShield, addBattleLog } from '../../GameApp.vue';
+import { launchAttack, dealDamage, gainShield, addBattleLog } from '../battleUtils.js';
 
 export class PurifyWeky extends Skill {
   constructor() {

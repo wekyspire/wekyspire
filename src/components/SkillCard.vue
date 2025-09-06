@@ -11,7 +11,7 @@
         <span class="mana-icon">🔮</span>
         <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
       </div>
-      <div class="skill-tier">{{ getTierLabel(skill.tier) }}</div>
+      <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
       <div class="skill-name">{{ skill.name }}</div>
       <div class="skill-description">
         <ColoredText :text="skill.description" />
@@ -32,6 +32,7 @@
 <script>
 import ColoredText from './ColoredText.vue';
 import ParticleEffect from './ParticleEffect.vue';
+import { getSkillTierLabel } from '../utils/tierUtils.js';
 
 export default {
   name: 'SkillCard',
@@ -58,6 +59,7 @@ export default {
     }
   },
   methods: {
+    getSkillTierLabel,
     onClick() {
       if (!this.disabled) {
         // 播放技能激活动画
@@ -68,22 +70,6 @@ export default {
           this.$emit('skill-card-clicked', this.skill);
         }, 300);
       }
-    },
-    getTierLabel(tier) {
-      const tierLabels = {
-        '-1': 'S',
-        '0': 'D',
-        '1': 'C-',
-        '2': 'C+',
-        '3': 'B-',
-        '4': 'B',
-        '5': 'B+',
-        '6': 'A-',
-        '7': 'A',
-        '8': 'A+',
-        '9': 'S'
-      };
-      return tierLabels[tier] || '';
     },
     // 播放技能激活动画
     playActivationAnimation() {

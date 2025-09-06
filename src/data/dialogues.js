@@ -1,6 +1,6 @@
 // dialogues.js - 对话事件管理
 import eventBus from '../eventBus.js';
-import { getPlayerTierFromTierIndex } from '../GameApp.vue';
+import { getPlayerTierFromTierIndex } from './player.js';
 
 // 开场对话序列
 const openingDialog = [

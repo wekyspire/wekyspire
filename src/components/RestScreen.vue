@@ -8,21 +8,21 @@
         <h2>战斗奖励</h2>
         <div class="reward-buttons">
           <button 
-            v-if="!moneyClaimed && rewards.money > 0" 
+            v-if="!moneyClaimed && gameState.rewards.money > 0" 
             class="reward-button money-reward" 
             @click="claimMoney"
           >
-            金钱: +{{ rewards.money }}
+            金钱: +{{ gameState.rewards.money }}
           </button>
           <button 
-            v-if="rewards.skill" 
+            v-if="gameState.rewards.skill" 
             class="reward-button skill-reward" 
             @click="showSkillRewards"
           >
             技能奖励
           </button>
           <button 
-            v-if="rewards.ability" 
+            v-if="gameState.rewards.ability" 
             class="reward-button ability-reward" 
             @click="showAbilityRewards"
           >
@@ -33,75 +33,66 @@
       </div>
       
       <!-- 商店面板 -->
-      <div v-if="currentPanel === 'shop'" class="shop-panel">
-        <h2>商店</h2>
-        <div class="shop-items">
-          <div 
-            v-for="(item, index) in shopItems" 
-            :key="index" 
-            class="shop-item"
-            :class="getItemTierClass(item.tier)"
-          >
-            <h3>{{ item.name }}</h3>
-            <p><ColoredText :text="item.description" /></p>
-            <p :style="{ color: item.price > player.money ? 'red' : 'orange' }">💰 {{ item.price }}</p>
-            <button 
-              :disabled="player.money < item.price"
-              @click="buyItem(item)"
-            >
-              购买
-            </button>
-          </div>
-        </div>
-        <button @click="endRest">离开商店</button>
-      </div>
+    <ShopPanel
+      v-if="currentPanel === 'shop'"
+      :shop-items="shopItems"
+      :game-state="gameState"
+      @item-purchased="onItemPurchased"
+      @refresh-shop="$forceUpdate"
+      @end-rest="endRest"
+    />
       
       <!-- 玩家状态面板 -->
-      <div class="player-panel" :class="getPlayerTierClass(player.tier)">
-        <h2>玩家状态</h2>
-        <div class="player-stats">
-          <p>❤️ 生命值: {{ player.hp }}/{{ player.maxHp }}</p>
-          <p>🔮 魏启值: {{ player.mana }}/{{ player.maxMana }}</p>
-          <p>⚡ 行动力: {{ player.actionPoints }}/{{ player.maxActionPoints }}</p>
-          <p>⚔️ 攻击: {{ player.attack }}</p>
-          <p>🔮 灵能: {{ player.magic }}</p>
-          <p>🛡️ 防御: {{ player.defense }}</p>
-          <p>💰 金钱: {{ player.money }}</p>
-          <p>🏅 等阶: {{ getPlayerTierLabel(player.tier) }}</p>
-        </div>
-      </div>
+      <PlayerStatusPanel :player="gameState.player" />
     </div>
+    
+    <AbilityRewardPanel
+      :is-visible="gameState.isAbilityRewardVisible"
+      :abilities="gameState.abilityRewards"
+      @select-ability="$emit('select-ability', $event)"
+      @close="$emit('close-ability-rewards')"
+    />
+    
+    <SkillRewardPanel
+      :is-visible="gameState.isSkillRewardVisible"
+      :skills="gameState.skillRewards"
+      @select-skill="$emit('select-skill', $event)"
+      @close="$emit('close-skill-rewards')"
+    />
+    
+    <SkillSlotSelectionPanel
+      :is-visible="gameState.isSkillSlotSelectionVisible"
+      :skill="gameState.selectedSkillForSlot"
+      :skill-slots="gameState.player.skillSlots"
+      @select-slot="$emit('select-slot', $event)"
+      @close="$emit('close-skill-slot-selection')"
+    />
   </div>
 </template>
 
 <script>
 import ColoredText from './ColoredText.vue';
+import AbilityRewardPanel from './AbilityRewardPanel.vue';
+import SkillRewardPanel from './SkillRewardPanel.vue';
+import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
+import ShopPanel from './ShopPanel.vue';
+import PlayerStatusPanel from './PlayerStatusPanel.vue';
+import { gameState } from '../data/gameState.js';
+import { getPlayerTierLabel, getPlayerTierClass, getItemTierClass } from '../utils/tierUtils.js';
 
 export default {
   name: 'RestScreen',
   components: {
-    ColoredText
-  },
-  props: {
-    player: {
-      type: Object,
-      required: true
-    },
-    rewards: {
-      type: Object,
-      default: () => ({})
-    },
-    shopItems: {
-      type: Array,
-      default: () => []
-    },
-    shouldPromptTier: {
-      type: Boolean,
-      default: false
-    }
+    ColoredText,
+    AbilityRewardPanel,
+    SkillRewardPanel,
+    SkillSlotSelectionPanel,
+    ShopPanel,
+    PlayerStatusPanel
   },
   data() {
     return {
+      gameState: gameState,
       currentPanel: 'rewards', // 'rewards' or 'shop'
       moneyClaimed: false
     }
@@ -121,7 +112,7 @@ export default {
       this.currentPanel = 'shop'
     },
     abilityRewardButtonName () {
-      if(this.shouldPromptTier) return "突破！";
+      if(this.gameState.enemy && this.gameState.enemy.isBoss) return "突破！";
       return "能力奖励";
     },
     buyItem(purchasedItem) {
@@ -137,46 +128,14 @@ export default {
       // 重新生成商店物品
       this.$forceUpdate();
     },
+    onItemPurchased(purchasedItem) {
+      // 添加日志
+      this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
+    },
     endRest() {
       this.$emit('end-rest')
     },
-    // 获取玩家等阶标签
-    getPlayerTierLabel(tier) {
-      const tierLabels = {
-        '0': '见习灵御',
-        '2': '普通灵御',
-        '3': '中级灵御',
-        '5': '高级灵御',
-        '7': '准大师灵御',
-        '8': '大师灵御',
-        '9': '传奇灵御'
-      };
-      return tierLabels[tier] || '';
-    },
-    // 获取玩家等阶样式类
-    getPlayerTierClass(tier) {
-      const tierClasses = {
-        '0': 'tier-0',
-        '2': 'tier-2',
-        '3': 'tier-3',
-        '5': 'tier-5',
-        '7': 'tier-7',
-        '8': 'tier-8',
-        '9': 'tier-9'
-      };
-      return tierClasses[tier] || '';
-    },
-    // 获取商品等阶样式类
-    getItemTierClass(tier) {
-      const tierClasses = {
-        '1': 'item-tier-1',
-        '2': 'item-tier-2',
-        '3': 'item-tier-3',
-        '4': 'item-tier-4',
-        '5': 'item-tier-5'
-      };
-      return tierClasses[tier] || '';
-    }
+
   }
 }
 </script>
@@ -191,146 +150,17 @@ export default {
   gap: 20px;
 }
 
-.rewards-panel, .shop-panel {
+.rewards-panel {
   border: 1px solid #ccc;
   padding: 20px;
   margin: 20px 0;
   flex: 3;
 }
 
-.shop-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin: 20px 0;
-}
 
-.shop-item {
-  border: 1px solid #eee;
-  padding: 5px;
-  width: 200px;
-}
 
-.player-panel {
-  border: 1px solid #ccc;
-  padding: 20px;
-  margin: 20px 0;
-  flex: 1;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
+/* 按钮样式已移至 src/assets/common.css */
 
-/* 等阶样式 */
-.player-panel.tier-0 {
-  background-color: #000000;
-  color: white;
-  border-color: #333333;
-}
-
-.player-panel.tier-2 {
-  background-color: #4caf50;
-  color: white;
-  border-color: #388e3c;
-}
-
-.player-panel.tier-3 {
-  background-color: #2196f3;
-  color: white;
-  border-color: #1976d2;
-}
-
-.player-panel.tier-5 {
-  background-color: #9c27b0;
-  color: white;
-  border-color: #7b1fa2;
-}
-
-.player-panel.tier-7 {
-  background-color: #ff9800;
-  color: white;
-  border-color: #f57c00;
-}
-
-.player-panel.tier-8 {
-  background-color: #f44336;
-  color: white;
-  border-color: #d32f2f;
-}
-
-.player-panel.tier-9 {
-  background-color: #ff5722;
-  color: white;
-  border: 2px solid #d84315;
-  position: relative;
-}
-
-.player-panel.tier-9::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid #ff9800;
-  border-radius: 8px;
-  z-index: -1;
-}
-
-.player-stats p {
-  margin: 10px 0;
-  font-weight: bold;
-}
-
-button {
-  padding: 10px 15px;
-  margin: 5px;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 商品等阶样式 */
-.item-tier-1 {
-  border: 1px solid #4caf50;
-  background-color: #e8f5e9;
-}
-
-.item-tier-2 {
-  border: 1px solid #2196f3;
-  background-color: #e3f2fd;
-}
-
-.item-tier-3 {
-  border: 1px solid #9c27b0;
-  background-color: #f3e5f5;
-}
-
-.item-tier-4 {
-  border: 1px solid #ff9800;
-  background-color: #fff3e0;
-}
-
-.item-tier-5 {
-  border: 2px solid #f44336;
-  background-color: #ffebee;
-  position: relative;
-}
-
-.item-tier-5::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 1px solid #d32f2f;
-  border-radius: 4px;
-  z-index: -1;
-}
 
 .reward-buttons {
   display: flex;
