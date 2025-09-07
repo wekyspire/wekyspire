@@ -5,8 +5,10 @@
       'hurt-shake': isShaking,
       'hurt-effect': isHurt,
       'evade-effect': isEvading,
-      'dead-wrapper': isDead }"
-    :style="[shakeStyle, hurtStyle]"
+      'dead-wrapper': isDead,
+      'shielded-wrapper': isShielded
+      }"
+    :style="[shakeStyle, hurtStyle, zIndexStyle]"
   >
     <slot></slot>
     <!-- 治疗效果覆盖层 -->
@@ -31,6 +33,10 @@ export default {
     unit: {
       type: Object,
       default: null
+    },
+    zIndex: {
+      type: Number,
+      default: 1
     }
   },
   data() {
@@ -40,12 +46,16 @@ export default {
       isEvading: false,
       isHealing: false,
       isDead: false,
+      isShieldBroke: false,
       shakeIntensity: 0,
       hurtIntensity: 0,
       particles: []
     };
   },
   computed: {
+    isShielded() {
+      return this.unit.shield > 0;
+    },
     shakeStyle() {
       if (!this.isShaking) return {};
       
@@ -75,6 +85,12 @@ export default {
         '--hurt-border-width': `${borderWidth}px`,
         '--hurt-opacity': Math.max(Math.min(intensity, 1), 0.2)
       };
+    },
+
+    zIndexStyle() {
+      return {
+        zIndex: this.zIndex
+      }
     }
   },
   mounted() {
@@ -156,7 +172,10 @@ export default {
       
       // 如果hp受到伤害，则创建粒子效果（流血）
       if(damage > 0) {
-        this.createParticles(damage);
+        this.createParticles(damage, 0);
+      } else {
+        // 否然，如果是盾伤害，创建蓝色粒子效果
+        this.createParticles(damage, 140);
       }
       // 创建伤害文本
       this.createDamageText(passThoughDamage);
@@ -260,7 +279,7 @@ export default {
       eventBus.emit('spawn-particles', [particle]);
     },
     
-    createParticles(damage) {
+    createParticles(damage, hueShift = 0) {
       // 获取父元素尺寸（相对坐标）
       const wrapperWidth = this.$el.offsetWidth;
       const wrapperHeight = this.$el.offsetHeight;
@@ -304,7 +323,7 @@ export default {
         const size = (1 + Math.random() * 4) * Math.min(20, Math.max(2, damage / 4));
         
         // 随机颜色，主要是红色和橙色，少量黄色
-        const hue = Math.random() * 60; // 0-60范围，红色到黄色
+        const hue = hueShift + Math.random() * 45; // 0-45范围，红色到黄色
         const saturation = 80 + Math.random() * 20; // 80-100%饱和度
         const lightness = 40 + Math.random() * 20; // 40-60%亮度
         
@@ -438,12 +457,9 @@ export default {
   100% { opacity: 0; }
 }
 
-.damage-text {
-  z-index: 2;
-  position: absolute;
-  font-family: Arial, sans-serif;
-  text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
-  will-change: transform, opacity;
-  user-select: none;
+/* 有盾的时候，增加一个花哨的蓝色边框（盾牌） */
+.shielded-wrapper {
+  border: 5px solid #1E90FF;
+  border-radius: 8px;
 }
 </style>

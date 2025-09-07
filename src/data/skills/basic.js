@@ -275,12 +275,12 @@ export class CarelessBravery extends Skill {
 // 强撑
 export class HoldOn extends Skill {
   constructor() {
-    super('强撑', 'normal', 1, '获得4层/effect{坚固}，2层/effect{崩溃}', 0, 1);
+    super('强撑', 'normal', 1, '获得7层/effect{坚固}，2层/effect{崩溃}', 0, 1);
   }
   // 使用技能
   use(player, enemy) {
     if (!this.used && super.use()) {
-      player.addEffect('坚固', 4);
+      player.addEffect('坚固', 7);
       player.addEffect('崩溃', 2);
       return true;
     }
@@ -290,7 +290,7 @@ export class HoldOn extends Skill {
   // 重新生成技能描述
   regenerateDescription(player) {
     if (player) {
-      return `获得4层/effect{坚固}，2层/effect{崩溃}`;
+      return `获得7层/effect{坚固}，2层/effect{崩溃}`;
     }
     return this.description;
   }

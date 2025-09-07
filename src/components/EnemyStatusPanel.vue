@@ -24,25 +24,14 @@
       </div>
     </div>
     
-    <div class="health-bar-container">
-      <div class="shield-display" :class="{ 'scale-animation': shieldChanged }">
-        🛡️ {{ enemy.shield }}
-      </div>
-      <div class="health-bar">
-        <span>生命值: {{ enemy.hp }}/{{ enemy.maxHp }}</span>
-        <div class="bar">
-          <div class="fill" :style="{ width: (enemy.hp / enemy.maxHp * 100) + '%' }"></div>
-        </div>
-      </div>
-    </div>
+    <HealthBar :unit="enemy" class="enemy" />
     
-    <!-- 敌人伤害文本容器 -->
-    <div class="damage-text-container" ref="enemyDamageTextContainer"></div>
+
     
     <!-- 效果显示栏 -->
     <EffectDisplayBar 
       :effects="enemy.effects"
-      :target="'enemy'"
+      :target="enemy"
       @show-tooltip="$emit('show-tooltip', $event)"
       @hide-tooltip="$emit('hide-tooltip')"
     />
@@ -80,12 +69,14 @@
 <script>
 import EffectDisplayBar from './EffectDisplayBar.vue';
 import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
+import HealthBar from './HealthBar.vue';
 
 export default {
   name: 'EnemyStatusPanel',
   components: {
     EffectDisplayBar,
-    HurtAnimationWrapper
+    HurtAnimationWrapper,
+    HealthBar
   },
   props: {
     enemy: {
@@ -99,63 +90,44 @@ export default {
         show: false,
         x: 0,
         y: 0
-      },
-      shieldChanged: false
+      }
     };
   },
   watch: {
-    // 监听护盾值变化，播放缩放动画
-    'enemy.shield'(newShield, oldShield) {
-      if (newShield !== oldShield) {
-        this.playShieldChangeAnimation();
-      }
-    }
+
   },
   methods: {
     showEnemyInfo(event) {
-      const rect = event.target.getBoundingClientRect();
-      this.enemyInfo = {
-        show: true,
-        x: rect.left + 20,
-        y: rect.top - 10
-      };
+      // 获取相对于HurtAnimationWrapper的位置
+      const wrapper = this.$el.closest('.hurt-animation-wrapper');
+      if (wrapper) {
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const buttonRect = event.target.getBoundingClientRect();
+        
+        // 计算相对于wrapper的位置
+        const relativeX = buttonRect.left - wrapperRect.left + 30;
+        const relativeY = buttonRect.top - wrapperRect.top - 10;
+        
+        this.enemyInfo = {
+          show: true,
+          x: relativeX,
+          y: relativeY
+        };
+      } else {
+        // 如果没有找到wrapper，使用绝对定位作为fallback
+        this.enemyInfo = {
+          show: true,
+          x: event.clientX + 20,
+          y: event.clientY - 10
+        };
+      }
     },
     
     hideEnemyInfo() {
       this.enemyInfo.show = false;
     },
     
-    // 播放护盾变化动画
-    playShieldChangeAnimation() {
-      this.shieldChanged = true;
-      setTimeout(() => {
-        this.shieldChanged = false;
-      }, 300);
-    },
-    
-    createDamageText(damage, type = 'damage') {
-      const container = this.$refs.enemyDamageTextContainer;
-      if (!container) return;
 
-      const damageText = document.createElement('div');
-      damageText.className = `damage-text ${type}`;
-      damageText.textContent = type === 'heal' ? `+${damage}` : `-${damage}`;
-      
-      // 随机位置
-      const randomX = Math.random() * 40 - 20;
-      const randomY = Math.random() * 20 - 10;
-      damageText.style.left = `calc(50% + ${randomX}px)`;
-      damageText.style.top = `calc(50% + ${randomY}px)`;
-      
-      container.appendChild(damageText);
-      
-      // 动画结束后移除
-      setTimeout(() => {
-        if (damageText.parentNode) {
-          damageText.parentNode.removeChild(damageText);
-        }
-      }, 1000);
-    }
   }
 };
 </script>
@@ -295,7 +267,7 @@ export default {
 
 /* 敌人信息悬浮框 */
 .enemy-info-tooltip {
-  position: fixed;
+  position: absolute;
   background-color: rgba(0, 0, 0, 0.9);
   color: white;
   padding: 15px;
@@ -304,6 +276,8 @@ export default {
   min-width: 250px;
   max-width: 400px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  left: v-bind('enemyInfo.x + "px"');
+  top: v-bind('enemyInfo.y + "px"');
 }
 
 .enemy-info-content h3 {

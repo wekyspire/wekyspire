@@ -1,3 +1,4 @@
+import eventBus from "../eventBus";
 // 敌人抽象类
 class Enemy {
   constructor(name, hp, attack, defense, magic) {
@@ -63,14 +64,12 @@ class Enemy {
     const currStacks = this.effects[effectName];
     
     // 触发效果变化事件
-    import('../eventBus.js').then(eventBus => {
-      eventBus.default.emit('effect-change', {
-        target: 'enemy', 
-        effectName: effectName, 
-        deltaStacks: stacks, 
-        currStacks: currStacks, 
-        previousStacks: previousStacks
-      });
+    eventBus.emit('effect-change', {
+      target: this, 
+      effectName: effectName, 
+      deltaStacks: stacks, 
+      currStacks: currStacks, 
+      previousStacks: previousStacks
     });
   }
 

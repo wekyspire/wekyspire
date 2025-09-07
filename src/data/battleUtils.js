@@ -1,7 +1,7 @@
 // battleUtil.js - 提供战斗中的攻击结算、治疗结算等修改战斗状态相关助手函数，以供技能、敌人和效果结算逻辑调用
 
 import eventBus from '../eventBus.js';
-import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects } from './effectProcessor.js';
+import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects } from './effectProcessor.js';
 
 // 从任意地方增添battleLog
 export function addBattleLog (log) {
@@ -53,6 +53,9 @@ export function launchAttack (attacker, target, damage) {
     eventBus.emit('add-battle-log', `${target.name} 被击败了！`);
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
+
+  // 发射攻击完成事件，用于结算攻击特效等
+  processAttackFinishEffects(attacker, target, hpDamage, passThoughDamage);
   
   // 结算完成，发射受伤事件，用于通知UI播放动画、dialogue播放等
   eventBus.emit('unit-hurt', {target: target, passThoughDamage: passThoughDamage, hpDamage: hpDamage});
@@ -63,7 +66,7 @@ export function launchAttack (attacker, target, damage) {
   return {dead: false, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
 }
 
-// 造成伤害的结算逻辑（由skill和enemy调用），和发动攻击不同，跳过攻击方攻击发动结算。
+// 造成伤害的结算逻辑（由skill和enemy调用），和发动攻击不同，跳过攻击方攻击相关结算。
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
 export function dealDamage (source, target, damage, penetrateDefense = false) {
   let finalDamage = damage;
@@ -113,6 +116,13 @@ export function gainShield (caster, target, shield) {
   } else {
     eventBus.emit('add-battle-log', `${target.name}从${caster.name}获得了${shield}点护盾！`);
   }
+  // 发送事件通知UI更新
+  eventBus.emit('unit-shield-change', {target: target, deltaShield: shield});
   // 更新技能描述（因为玩家状态可能已改变）
+  eventBus.emit('update-skill-descriptions');
+}
+
+// 手动更新所有技能描述
+export function updateSkillDescriptions() {
   eventBus.emit('update-skill-descriptions');
 }

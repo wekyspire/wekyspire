@@ -145,7 +145,7 @@ const effectDescriptions = {
   // 敌人受伤时触发的效果
   '灼烧': {
     name: '灼烧',
-    description: '受伤后，有15%概率获得1层燃烧。',
+    description: '受伤后，有50%概率获得1层燃烧。',
     icon: '🔥',
     color: '#FF4500' // 橙红色
   },
@@ -181,7 +181,7 @@ const effectDescriptions = {
   // 特殊效果（boss等）
   '高燃弹药': {
     name: '高燃弹药',
-    description: '这些古老的弹药竟如此易燃！每次攻击后，赋予2层燃烧。',
+    description: '这些古老的弹药竟如此易燃！攻击造成伤害则赋予2层燃烧。',
     icon: '🔥',
     color: '#FF4500' // 橙红色
   },

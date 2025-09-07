@@ -5,7 +5,7 @@
     <div :class="['skill-card-panel', 'tier-' + skill.tier, { disabled: disabled }]"
      @click="onClick">
       <div class="mana-cost" v-if="skill.manaCost > 0">
-        <span class="mana-icon">🔮</span>
+        <span class="mana-icon">💧</span>
         <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
       </div>
       <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
@@ -30,6 +30,7 @@
 import ColoredText from './ColoredText.vue';
 import { getSkillTierLabel } from '../utils/tierUtils.js';
 import eventBus from '../eventBus.js';
+import gameState from '../data/gameState.js';
 
 export default {
   name: 'SkillCard',
@@ -59,8 +60,28 @@ export default {
       return this.skill.getDescription();
     }
   },
+  mounted() {
+    if(!this.previewMode) {
+      // 初始化时注册事件监听器
+      this.onUpdateSkillDescription();
+      eventBus.on('update-skill-descriptions', this.onUpdateSkillDescription);
+    }
+  },
+  beforeUnmount() {
+    // 组件卸载时移除事件监听器
+    if(!this.previewMode) {
+      eventBus.off('update-skill-descriptions', this.onUpdateSkillDescription);
+    }
+  },
   methods: {
     getSkillTierLabel,
+    onUpdateSkillDescription() {
+      // 监听update-skill-descriptions事件
+      if(this.skill) {
+        this.skill.description = 
+          this.skill.regenerateDescription(gameState.player);
+      }
+    },
     onClick() {
       if (!this.disabled) {
         // 播放技能激活动画

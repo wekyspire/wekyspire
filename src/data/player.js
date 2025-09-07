@@ -117,7 +117,7 @@ export class Player {
     }
     // 触发效果变化事件
     eventBus.emit('effect-change', {
-      target: 'player',
+      target: this,
       effectName: effectName,
       deltaStacks: stacks,
       currStacks: this.effects[effectName] || 0,

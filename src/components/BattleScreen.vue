@@ -5,6 +5,7 @@
       <!-- 敌人状态面板 -->
       <EnemyStatusPanel 
         :enemy="enemy"
+        :z-index="2"
         ref="enemyStatusPanel"
       />
 

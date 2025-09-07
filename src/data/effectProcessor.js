@@ -294,10 +294,10 @@ export function processDamageDealtEffects(target, damage) {
     eventBus.emit('add-battle-log', `${target.name}通过执着效果获得了${stacks}层集中！`);
   }
 
-  // 处理灼烧效果，受到攻击后有15%概率获得1层燃烧
+  // 处理灼烧效果，受到攻击后有50%概率获得1层燃烧
   if (target.effects['灼烧'] > 0) {
-    // 15%概率获得1层燃烧 
-    if (Math.random() < 0.15) {
+    // 50%概率获得1层燃烧 
+    if (Math.random() < 0.5) {
       target.addEffect('燃烧', target.effects['灼烧']);
       eventBus.emit('add-battle-log', `${target.name}被灼烧，获得了${target.effects['灼烧']}层燃烧！`);
     }
@@ -322,9 +322,12 @@ export function processPostAttackEffects(attacker, target, damage) {
       eventBus.emit('add-battle-log', `${attacker.name}的攻击触发了超频效果，伤害翻倍！`);
     }
   }
-  
+  return finalDamage;
+}
+
+export function processAttackFinishEffects(attacker, target, hpDamage, passthroughDamage) {
   // 处理高燃弹药效果
-  if (attacker.effects['高燃弹药'] > 0) {
+  if (attacker.effects['高燃弹药'] > 0 && passthroughDamage > 0) {
     const burnLevel = (attacker.effects['高燃弹药'] * 2 || 0);
     // 100%概率让敌人获得2层燃烧
     if (Math.random() < 1) {
@@ -332,6 +335,4 @@ export function processPostAttackEffects(attacker, target, damage) {
       eventBus.emit('add-battle-log', `${target.name}被灼热的攻击烫伤，获得了${Math.floor(burnLevel)}层燃烧！`);
     }
   }
-  
-  return finalDamage;
 }

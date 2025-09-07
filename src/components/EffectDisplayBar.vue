@@ -31,8 +31,8 @@ export default {
       default: () => ({})
     },
     target: {
-      type: String,
-      default: 'player'
+      type: Object,
+      default: null
     }
   },
   data() {
@@ -65,14 +65,14 @@ export default {
     },
     
     // 处理effect-change事件
-    handleEffectChange({ target, effectName, deltaStacks, currStacks, previosStacks }) {
+    handleEffectChange({ 
+      target, effectName, 
+      deltaStacks, currStacks, previousStacks }) {
       // 只处理当前目标的效果变化
       if (target !== this.target) return;
       
       // 检查效果是否消失（从有到无）
-      
-      console.log(this.target, effectName, previosStacks, currStacks);
-      if (previosStacks > 0 && currStacks === 0) {
+      if (previousStacks > 0 && currStacks === 0) {
         this.playEffectExpiredAnimation(effectName);
       }
       

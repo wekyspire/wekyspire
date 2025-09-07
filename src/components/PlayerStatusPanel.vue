@@ -4,17 +4,7 @@
     :style="restScreen ? { backgroundColor: getPlayerTierColor(player.tier), color: getPlayerTierTextColor(player.tier) } : {}">
       <PlayerBasicStats :player="player" />
     
-    <div class="health-bar-container">
-      <div class="shield-display" :class="{ 'scale-animation': shieldChanged }">
-        🛡️ {{ player.shield }}
-      </div>
-      <div class="health-bar" ref="playerHealthBar">
-        <span>生命值: {{ player.hp }}/{{ player.maxHp }}</span>
-        <div class="bar">
-          <div class="fill" :style="{ width: (player.hp / player.maxHp * 100) + '%' }"></div>
-        </div>
-      </div>
-    </div>
+    <HealthBar :unit="player" ref="playerHealthBar" />
     
     <div class="action-points-bar" v-if="!restScreen">
       <div class="action-points-container">
@@ -33,7 +23,7 @@
     <EffectDisplayBar 
       v-if="!restScreen"
       :effects="player.effects"
-      :target="'player'"
+      :target="player"
       @show-tooltip="$emit('show-tooltip', $event)"
       @hide-tooltip="$emit('hide-tooltip')"
     /></div>
@@ -45,6 +35,7 @@ import EffectDisplayBar from './EffectDisplayBar.vue';
 import { getPlayerTierLabel, getPlayerTierColor } from '../utils/tierUtils.js';
 import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
 import PlayerBasicStats from './PlayerBasicStats.vue';
+import HealthBar from './HealthBar.vue';
 import eventBus from '../eventBus.js';
 
 export default {
@@ -52,7 +43,8 @@ export default {
   components: {
     EffectDisplayBar,
     HurtAnimationWrapper,
-    PlayerBasicStats
+    PlayerBasicStats,
+    HealthBar
   },
   props: {
     player: {
@@ -66,7 +58,6 @@ export default {
   },
   data() {
     return {
-      shieldChanged: false
     };
   },
   methods: {
@@ -110,13 +101,6 @@ export default {
       this.spawnGoldenParticles();
     },
     
-    // 播放护盾变化动画
-    playShieldChangeAnimation() {
-      this.shieldChanged = true;
-      setTimeout(() => {
-        this.shieldChanged = false;
-      }, 300);
-    },
     spawnGoldenParticles() {
     // 生成金色粒子
       const panelRect = this.$el.getBoundingClientRect();
@@ -160,12 +144,7 @@ export default {
         this.playLevelUpAnimation();
       }
     },
-    // 监听护盾值变化，播放缩放动画
-    'player.shield'(newShield, oldShield) {
-      if (newShield !== oldShield) {
-        this.playShieldChangeAnimation();
-      }
-    }
+
   }
 };
 </script>

@@ -14,8 +14,6 @@ import { ChargePunch, FloatingI, PurifyWeky,
 
 import {FireControlI} from "./skills/firecontrol";
 
-import skillSlot from "../components/SkillSlot.vue";
-
 // 技能管理器类
 class SkillManager {
   constructor() {
