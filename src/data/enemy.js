@@ -1,7 +1,7 @@
 import eventBus from "../eventBus";
 // 敌人抽象类
 class Enemy {
-  constructor(name, hp, attack, defense, magic) {
+  constructor(name, hp, attack, defense, magic, avatarUrl = '') {
     this.name = name; // 敌人名称
     this.hp = hp; // 当前生命值
     this.maxHp = hp; // 最大生命值
@@ -13,6 +13,7 @@ class Enemy {
     this.subtitle = ""; // Boss subtitle
     this.description = '一个面目狰狞的敌人！'; // 敌人描述
     this.type = 'normal'; // normal / special / boss
+    this.avatarUrl = avatarUrl; // 敌人头像URL
   }
 
   get isBoss () {

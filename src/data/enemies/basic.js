@@ -6,7 +6,7 @@ export class Slime extends Enemy {
   constructor(battleIntensity) {
     const hp = 27 + Math.floor(6 * battleIntensity);
     const attack = 3 + Math.floor(battleIntensity * 0.6);
-    super('史莱姆', hp, attack, 1, battleIntensity + 1);
+    super('史莱姆', hp, attack, 1, battleIntensity + 1, '/src/assets/enemies/slime.png');
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = "一只史莱姆，很可爱捏。";
@@ -61,7 +61,7 @@ export class Remi extends Enemy {
   constructor(battleIntensity) {
     const hp = 23 + 5 * battleIntensity;
     const attack = 6 + Math.floor(battleIntensity * 0.8);
-    super('魔化瑞米', hp, attack, 1, battleIntensity + 1);
+    super('魔化瑞米', hp, attack, 1, battleIntensity + 1, '/src/assets/enemies/slime.png');
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.moneyStolen = false;
@@ -137,7 +137,7 @@ export class BuzzlingBugs extends Enemy {
   constructor(battleIntensity) {
     const hp = 5 + Math.floor(2 * battleIntensity);
     const attack = 1 + Math.floor(battleIntensity * 0.5);
-    super('嗡嗡虫群', hp, attack, 1, battleIntensity + 1);
+    super('嗡嗡虫群', hp, attack, 1, battleIntensity + 1, '/src/assets/enemies/slime.png');
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = "一群烦恼的嗡嗡虫，你很难够到它们。";

@@ -1,41 +1,44 @@
 <template>
   <HurtAnimationWrapper :unit="enemy" ref="hurtAnimation">
     <div class="enemy-status-panel" ref="enemyPanel">
-      <div class="enemy-header">
-        <div>
-          <h2 style="color: red; display: inline-block;">敌人：{{ enemy.name }}</h2>
-          <span v-if="enemy.isBoss" class="enemy-subtitle"> - {{ enemy.subtitle }}</span>
+      <div class="enemy-avatar">
+          <img v-if="enemy.avatarUrl" :src="enemy.avatarUrl" :alt="enemy.name" class="avatar-image" />
+          <div v-else class="avatar-placeholder"></div>
+      </div>
+      <div class="enemy-details">
+        <div class="enemy-header">
+          <div>
+            <h2 style="color: red; display: inline-block;">敌人：{{ enemy.name }}</h2>
+            <span v-if="enemy.isBoss" class="enemy-subtitle"> - {{ enemy.subtitle }}</span>
+          </div>
+          <div class="enemy-info-button" @mouseenter="showEnemyInfo" @mouseleave="hideEnemyInfo">?</div>
         </div>
-        <div class="enemy-info-button" @mouseenter="showEnemyInfo" @mouseleave="hideEnemyInfo">?</div>
+      
+      <div class="enemy-stats">
+        <div class="stat">
+          <span class="stat-label">⚔️ 攻击:</span>
+          <span class="stat-value">{{ enemy.attack }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">🛡️ 防御:</span>
+          <span class="stat-value">{{ enemy.defense }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">🔮 灵能:</span>
+          <span class="stat-value">{{ enemy.magic }}</span>
+        </div>
       </div>
-    
-    <div class="enemy-stats">
-      <div class="stat">
-        <span class="stat-label">⚔️ 攻击:</span>
-        <span class="stat-value">{{ enemy.attack }}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">🛡️ 防御:</span>
-        <span class="stat-value">{{ enemy.defense }}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">🔮 灵能:</span>
-        <span class="stat-value">{{ enemy.magic }}</span>
-      </div>
+      
+      <HealthBar :unit="enemy" class="enemy" />
+      
+      <!-- 效果显示栏 -->
+      <EffectDisplayBar 
+        :effects="enemy.effects"
+        :target="enemy"
+        @show-tooltip="$emit('show-tooltip', $event)"
+        @hide-tooltip="$emit('hide-tooltip')"
+      />
     </div>
-    
-    <HealthBar :unit="enemy" class="enemy" />
-    
-
-    
-    <!-- 效果显示栏 -->
-    <EffectDisplayBar 
-      :effects="enemy.effects"
-      :target="enemy"
-      @show-tooltip="$emit('show-tooltip', $event)"
-      @hide-tooltip="$emit('hide-tooltip')"
-    />
-    
     <!-- 敌人信息悬浮框 -->
     <div 
       v-if="enemyInfo.show" 
@@ -134,19 +137,43 @@ export default {
 
 <style scoped>
 .enemy-status-panel {
-  flex: 1;
+  display: flex;
+  align-items: center;
   border: 1px solid #ccc;
-  padding: 15px;
   border-radius: 8px;
   background-color: #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   z-index: 1;
 }
 
+.enemy-details {
+  padding: 10px;
+  height: 230px;
+  width: 350px;
+}
+
 .enemy-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.enemy-avatar {
+  width: 200px;
+  height: 250px;
+}
+
+.avatar-image {
+  object-fit:cover;
+  width: inherit;
+  height: inherit;
+}
+
+.avatar-placeholder {
+  object-fit:cover;
+  width: inherit;
+  height: inherit;
+  background-color: #000;
 }
 
 .enemy-info-button {
@@ -161,6 +188,7 @@ export default {
   justify-content: center;
   font-weight: bold;
   color: #666;
+  flex-shrink: 0;
 }
 
 .enemy-info-button:hover {

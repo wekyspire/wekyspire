@@ -151,13 +151,14 @@ export default {
 
 <style scoped>
 .player-status-panel {
-  flex: 1;
+  /* flex: 0.1; */
   border: 1px solid #ccc;
   padding: 15px;
   border-radius: 8px;
   background-color: #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: background-color 0.3s ease;
+  height: 220px;
 }
 
 .player-status-panel.rest-mode {
