@@ -9,8 +9,14 @@ export function upgradePlayerTier (player) {
   const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
   if (tierUpgrades[player.tier] !== undefined) {
     player.tier = tierUpgrades[player.tier];
-    player.maxActionPoints += 1;
     player.maxMana += 1;
+    if(player.tier == 2) {
+      // 特殊：第一次升级时多获得一点魏启
+      player.maxMana += 1;
+    }
+    if(player.tier <= 5) {
+      player.maxActionPoints += 1;
+    }
     player.hp = player.maxHp;
     player.mana = player.maxMana;
     eventBus.emit('player-tier-upgraded', player);
@@ -35,6 +41,7 @@ export function getPlayerTierFromTierIndex(tierIndex) {
 // 玩家数据类
 export class Player {
   constructor() {
+    this.type = 'player';
     this.name = "你";
     this.hp = 40;
     this.shield = 0;
@@ -43,7 +50,7 @@ export class Player {
     this.maxMana = 0;
     this.actionPoints = 3;
     this.maxActionPoints = 3;
-    this.baseAttack = 3;
+    this.baseAttack = 2;
     this.baseMagic = 1;
     this.baseDefense = 0;
     this.money = 0;

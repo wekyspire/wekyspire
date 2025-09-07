@@ -1,7 +1,7 @@
 // 命名实体数据
 const namedEntities = {
   '魏启': {
-    icon: '🔮',
+    icon: '💧',
     color: 'purple',
     description: '魏启是这个世界的基础能量，驱动着所有灵能技艺的施展。'
   },

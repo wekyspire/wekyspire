@@ -43,7 +43,7 @@ export default {
   methods: {
     getSkillTierLabel,
     selectAbility(ability) {
-      this.$emit('select-ability', ability);
+      this.$emit('selected-ability-reward', ability);
     },
     closePanel() {
       this.$emit('close');

@@ -2,9 +2,6 @@
   <div 
     class="skill-card"
   >
-    <!-- 粒子效果放在最前面，但使用负z-index让它在内容下方 -->
-    <ParticleEffect ref="particleEffect" class="particle-layer" />
-    
     <div :class="['skill-card-panel', 'tier-' + skill.tier, { disabled: disabled }]"
      @click="onClick">
       <div class="mana-cost" v-if="skill.manaCost > 0">
@@ -14,7 +11,7 @@
       <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
       <div class="skill-name">{{ skill.name }}</div>
       <div class="skill-description">
-        <ColoredText :text="skill.description" />
+        <ColoredText :text="skillDescription" />
       </div>
       <div class="skill-uses">
         <ColoredText v-if="skill.coldDownTurns != 0 && skill.remainingUses != skill.maxUses && !previewMode" :text="`/named{重整} ${skill.remainingColdDownTurns}/${skill.coldDownTurns}`"></ColoredText>
@@ -31,14 +28,13 @@
 
 <script>
 import ColoredText from './ColoredText.vue';
-import ParticleEffect from './ParticleEffect.vue';
 import { getSkillTierLabel } from '../utils/tierUtils.js';
+import eventBus from '../eventBus.js';
 
 export default {
   name: 'SkillCard',
   components: {
-    ColoredText,
-    ParticleEffect
+    ColoredText
   },
   props: {
     skill: {
@@ -58,6 +54,11 @@ export default {
       default: false
     }
   },
+  computed: {
+    skillDescription() {
+      return this.skill.getDescription();
+    }
+  },
   methods: {
     getSkillTierLabel,
     onClick() {
@@ -65,10 +66,7 @@ export default {
         // 播放技能激活动画
         this.playActivationAnimation();
         
-        // 延迟触发事件，以匹配动画时间
-        setTimeout(() => {
-          this.$emit('skill-card-clicked', this.skill);
-        }, 300);
+        this.$emit('skill-card-clicked', this.skill);
       }
     },
     // 播放技能激活动画
@@ -87,7 +85,7 @@ export default {
       card.style.animationDuration = `${0.25 / intensity}s`;
       
       // 播放粒子特效
-      this.playParticleEffect(tier);
+      this.playParticleEffect(tier, card);
       
       // 动画结束后清理
       setTimeout(() => {
@@ -96,42 +94,87 @@ export default {
       }, 500 / intensity);
     },
     // 播放粒子特效
-    playParticleEffect(tier) {
+    playParticleEffect(tier, card) {
       // 根据tier确定粒子参数
       const tierSettings = {
         '-1': { count: 5, size: 3, color: '#ff0000' },   // S
-        '0': { count: 100, size: 3, color: '#000000' },     // D
-        '1': { count: 8, size: 4, color: '#41db39' },     // C-
-        '2': { count: 10, size: 5, color: '#41db39' },    // C+
-        '3': { count: 12, size: 6, color: '#759eff' },    // B-
-        '4': { count: 15, size: 7, color: '#759eff' },    // B
-        '5': { count: 18, size: 8, color: '#d072ff' },    // B+
-        '6': { count: 20, size: 9, color: '#d072ff' },    // A-
-        '7': { count: 25, size: 10, color: '#ff9059' },   // A
-        '8': { count: 30, size: 11, color: '#ff9059' },   // A+
-        '9': { count: 35, size: 12, color: '#ff0000' }    // S
+        '0': { count: 15, size: 3, color: '#000000' },     // D
+        '1': { count: 20, size: 4, color: '#41db39' },     // C-
+        '2': { count: 30, size: 5, color: '#41db39' },    // C+
+        '3': { count: 40, size: 6, color: '#759eff' },    // B-
+        '4': { count: 50, size: 7, color: '#759eff' },    // B
+        '5': { count: 60, size: 8, color: '#d072ff' },    // B+
+        '6': { count: 60, size: 9, color: '#d072ff' },    // A-
+        '7': { count: 60, size: 10, color: '#ff9059' },   // A
+        '8': { count: 60, size: 11, color: '#ff9059' },   // A+
+        '9': { count: 60, size: 12, color: '#ff0000' }    // S
       };
       
       const settings = tierSettings[tier] || tierSettings['0'];
       
-      // 获取卡片位置和尺寸
-      const card = this.$el;
-      if (card) {
-        const rect = card.getBoundingClientRect();
-        const containerRect = card.parentElement.getBoundingClientRect();
+      // 创建粒子数组
+      const particles = [];
+      
+      // 获取卡片的绝对位置
+      const cardRect = card.getBoundingClientRect();
+      
+      // 生成粒子
+      for (let i = 0; i < settings.count; i++) {
+        // 随机运动方向和距离，确保粒子向四周逸散
+        const distance = 30 + Math.random() * 70; // 随机距离(30-100px)
+        const velocity = 10 + Math.random() * 20; // 随机速度
         
-        const spawnRect = {
-          xUV: 0,
-          yUV: 0,
-          widthUV: 1,
-          heightUV: 1
+        // 计算卡牌边缘的随机起始位置（相对坐标）
+        const edge = Math.floor(Math.random() * 4); // 0:上, 1:右, 2:下, 3:左
+        let startX, startY;
+        
+        switch (edge) {
+          case 0: // 上边缘
+            startX = Math.random() * cardRect.width; // 使用实际卡片宽度
+            startY = 0;
+            break;
+          case 1: // 右边缘
+            startX = cardRect.width;
+            startY = Math.random() * cardRect.height; // 使用实际卡片高度
+            break;
+          case 2: // 下边缘
+            startX = Math.random() * cardRect.width;
+            startY = cardRect.height;
+            break;
+          case 3: // 左边缘
+            startX = 0;
+            startY = Math.random() * cardRect.height;
+            break;
+        }
+
+        // 计算飞离卡牌的方向
+        const deltaCenterX = startX - cardRect.width / 2;
+        const deltaCenterY = startY - cardRect.height / 2;
+        const angle = Math.random() * 0.2 + Math.atan2(deltaCenterY, deltaCenterX); // 随机角度
+        
+        // 将相对坐标转换为绝对坐标
+        const absoluteX = cardRect.left + startX;
+        const absoluteY = cardRect.top + startY;
+        
+        const particle = {
+          x: absoluteX, // 绝对位置
+          y: absoluteY, // 绝对位置
+          vx: Math.cos(angle) * velocity,
+          vy: Math.sin(angle) * velocity,
+          life: 1000, // 生命周期1秒
+          color: settings.color,
+          size: settings.size,
+          opacity: 1,
+          opacityFade: true,
+          gravity: 0, // 可以根据需要添加重力
+          zIndex: 0 // 刚好能被skill card panel遮住
         };
         
-        // 触发粒子特效
-        if (this.$refs.particleEffect) {
-          this.$refs.particleEffect.play(settings.count, settings.size, settings.color, 1000, spawnRect);
-        }
+        particles.push(particle);
       }
+      
+      // 通过事件总线触发粒子特效
+      eventBus.emit('spawn-particles', particles);
     }
   }
 }

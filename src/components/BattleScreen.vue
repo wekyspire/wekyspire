@@ -106,8 +106,6 @@ export default {
       endPlayerTurn();
     },
 
-
-
     // 创建伤害文本动画（供外部调用）
     createDamageText(target, damage, type = 'damage') {
       if (target === 'player') {

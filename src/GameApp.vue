@@ -28,6 +28,10 @@
     
     <!-- 对话界面 -->
     <DialogScreen />
+    
+    <!-- 粒子效果管理器 -->
+    <ParticleEffectManager />
+    
   </div>
 </template>
 
@@ -37,6 +41,7 @@ import BattleScreen from './components/BattleScreen.vue'
 import RestScreen from './components/RestScreen.vue'
 import EndScreen from './components/EndScreen.vue'
 import DialogScreen from './components/DialogScreen.vue'
+import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import SkillManager from './data/skillManager.js'
 
 import eventBus from './eventBus.js'
@@ -52,7 +57,7 @@ export default {
     RestScreen,
     EndScreen,
     DialogScreen,
-
+    ParticleEffectManager
   },
   computed: {
     isPlayerTurn() {
@@ -100,7 +105,7 @@ export default {
       gameState.player.skillSlots[0] = initialSkill1;
       const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
       gameState.player.skillSlots[1] = initialSkill2;
-      const initialSkill3 = SkillManager.getInstance().createSkill('活动筋骨');
+      const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
       gameState.player.skillSlots[2] = initialSkill3;
       
       gameState.gameStage = 'battle';
@@ -114,8 +119,7 @@ export default {
       resetGameState();
       
       // 注意：不在这里添加初始技能，而是在startGame方法中添加
-    },
-    
+    }
   }
 }
 </script>

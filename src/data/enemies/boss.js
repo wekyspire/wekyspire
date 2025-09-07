@@ -4,8 +4,8 @@ import { launchAttack } from '../battleUtils.js';
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
-    const hp = 70 + 7 * battleIntensity;
-    const attack = Math.round((2 + battleIntensity) * 0.5);
+    const hp = 90 + 11 * battleIntensity;
+    const attack = Math.round((3 + battleIntensity) * 0.5);
     super('MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0);
     this.type = 'boss'; // 标记为Boss敌人
     this.battleIntensity = battleIntensity;

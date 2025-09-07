@@ -15,7 +15,7 @@ export function spawnRewards() {
 
   // 突破奖励
   const haveBreakthroughReward = (
-    true || gameState.enemy.isBoss
+    gameState.battleCount == 2 || gameState.enemy.isBoss
   );
   gameState.rewards.breakthrough = haveBreakthroughReward;
 
@@ -30,7 +30,7 @@ export function spawnRewards() {
   );
   if(haveAbilityReward) {
     gameState.rewards.abilities = AbilityManager.getInstance().getRandomAbilities(
-      1, gameState.player.tier
+      3, gameState.player.tier
     );
   } else {
     gameState.rewards.abilities = [];
@@ -42,7 +42,10 @@ export function spawnRewards() {
 // 领取金钱奖励
 export function claimMoney() {
   gameState.player.money += gameState.rewards.money;
+  const amount = gameState.rewards.money;
   gameState.rewards.money = 0;
+  // 发射事件
+  eventBus.emit('money-claimed', amount);
 }
 
 // 领取技能奖励
@@ -60,7 +63,7 @@ export function claimAbilityReward(ability, clearRewards) {
   // 领取能力奖励
   ability.apply(gameState.player);
   if(clearRewards) {
-    gameState.rewards.ability = [];
+    gameState.rewards.abilities = [];
   }
   // 发射玩家领取能力奖励事件
   eventBus.emit('player-claim-ability', { ability: ability });

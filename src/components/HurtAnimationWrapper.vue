@@ -1,17 +1,19 @@
 <template>
   <div 
     class="hurt-animation-wrapper" 
-    :class="{ 'hurt-shake': isShaking, 'hurt-effect': isHurt }"
+    :class="{ 'hurt-shake': isShaking, 'hurt-effect': isHurt, 'dead-wrapper': isDead }"
     :style="[shakeStyle, hurtStyle]"
   >
     <slot></slot>
-    <!-- 粒子溅射效果容器 -->
-    <div class="particle-container" ref="particleContainer"></div>
     <!-- 治疗效果覆盖层 -->
     <div 
       v-if="isHealing" 
       class="heal-overlay" 
-      :style="healStyle"
+    ></div>
+    <!-- 死亡爆炸效果覆盖层 -->
+    <div 
+      v-if="isDead" 
+      class="dead-overlay" 
     ></div>
   </div>
 </template>
@@ -32,6 +34,7 @@ export default {
       isShaking: false,
       isHurt: false,
       isHealing: false,
+      isDead: false,
       shakeIntensity: 0,
       hurtIntensity: 0,
       particles: []
@@ -67,21 +70,18 @@ export default {
         '--hurt-border-width': `${borderWidth}px`,
         '--hurt-opacity': Math.max(Math.min(intensity, 1), 0.2)
       };
-    },
-    
-    healStyle() {
-      if (!this.isHealing) return {};
-      
-      return {};
     }
   },
   mounted() {
     // 监听受伤事件
     eventBus.on('unit-hurt', this.handleUnitHurt);
+    // 监听battle-victory事件
+    eventBus.on('battle-victory', this.handleBattleVictory);
   },
   beforeUnmount() {
     // 移除事件监听
     eventBus.off('unit-hurt', this.handleUnitHurt);
+    eventBus.off('battle-victory', this.handleBattleVictory);
   },
   methods: {
     handleUnitHurt({ target, passThoughDamage, hpDamage }) {
@@ -163,25 +163,41 @@ export default {
         this.hurtIntensity = 0;
       }, 200);
     },
+    handleBattleVictory() {
+      // 当胜利时，如果unit不是玩家，播放敌人死亡动画
+      if(this.unit.type !== 'player') {
+        // 持续生成大量粒子
+        for(let i = 0; i < 7; i++) {
+          setTimeout(() => {
+            this.createParticles(20);
+          }, i * 200);
+        }
+        // 最后播放爆炸动画：面板短暂剧烈震动
+        setTimeout(() => {
+          this.isShaking = true;
+          this.shakeIntensity = 20;
+        }, 900);
+        // 面板发生闪烁，变成红色后变成纯白
+        setTimeout(() => {
+          this.isDead = true;
+        }, 1400);
+        // 爆炸时一次性生成大量粒子
+        setTimeout(() => {
+          this.createParticles(100);
+        }, 1400);
+      }
+    },
     
     createDamageText(damage) {
-      const container = this.$refs.particleContainer;
-      if (!container) return;
-      
       // 获取父元素尺寸
       const wrapper = this.$el;
       const wrapperRect = wrapper.getBoundingClientRect();
       const wrapperWidth = wrapperRect.width;
       const wrapperHeight = wrapperRect.height;
       
-      // 创建伤害文本元素
-      const damageText = document.createElement('div');
-      damageText.className = 'damage-text';
-      
       // 设置文本内容和样式
       const isHealing = damage < 0;
       const text = isHealing ? `+${Math.abs(damage)}` : `-${damage}`;
-      damageText.textContent = text;
       
       // 根据伤害/治疗设置颜色
       const color = isHealing ? '#00ff00' : '#ff0000';
@@ -191,94 +207,62 @@ export default {
       const fontSize = Math.min(96, Math.max(24, 12 + damageValue / 4));
       
       // 设置初始位置（中心区域随机位置）
-      const centerX = wrapperWidth / 2;
-      const centerY = wrapperHeight / 2;
+      const centerX = wrapperRect.left + wrapperWidth / 2;
+      const centerY = wrapperRect.top + wrapperHeight / 2;
       const startX = centerX + (Math.random() - 0.5) * wrapperWidth * 0.3;
       const startY = centerY + (Math.random() - 0.5) * wrapperHeight * 0.3;
       
-      damageText.style.color = color;
-      damageText.style.fontSize = `${fontSize}px`;
-      damageText.style.fontWeight = 'bold';
-      damageText.style.position = 'absolute';
-      damageText.style.left = `${startX}px`;
-      damageText.style.top = `${startY}px`;
-      damageText.style.transform = 'translate(-50%, -50%)';
-      damageText.style.pointerEvents = 'none';
-      damageText.style.zIndex = '20';
-      damageText.style.opacity = '1';
-      damageText.style.transition = 'opacity 0.3s';
-      
-      container.appendChild(damageText);
-      
       // 动画参数
-      const duration = isHealing ? 1000 + damageValue * 5 : 800 + damageValue * 3;
-      const gravity = isHealing ? 0 : 0.0002; // 治疗文本不受重力影响
-      let velocityX = (Math.random() - 0.5) * 0.005;
-      let velocityY = isHealing ? -0.008 : -0.005 - Math.random() * 0.003;
+      const duration = Math.min(
+        3000,
+        isHealing ? (1000 -damageValue * 50) : (800 + damageValue * 30)
+      );
+      const gravity = isHealing ? 0 : 1000; // 治疗文本不受重力影响
+      let velocityX = (Math.random() - 0.5) * 200;
+      let velocityY = -200 - Math.random() * 200;
       
-      let startTime = null;
-      let lastPosX = startX;
-      let lastPosY = startY;
-      
-      const animate = (timestamp) => {
-        if (!startTime) startTime = timestamp;
-        const elapsed = timestamp - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // 更新速度（受重力影响）
-        velocityY += gravity;
-        
-        // 计算新位置
-        const newX = lastPosX + velocityX * elapsed;
-        const newY = lastPosY + velocityY * elapsed;
-        
-        // 更新位置
-        damageText.style.left = `${newX}px`;
-        damageText.style.top = `${newY}px`;
-        
-        // 淡出效果
-        if (progress > 0.7) {
-          damageText.style.opacity = `${1 - (progress - 0.7) / 0.3}`;
-        }
-        
-        lastPosX = newX;
-        lastPosY = newY;
-        
-        // 继续动画或移除元素
-        if (progress < 1) {
-          requestAnimationFrame(animate);
-        } else {
-          if (damageText.parentNode) {
-            damageText.parentNode.removeChild(damageText);
-          }
+      // 创建文本粒子配置
+      const particle = {
+        x: startX,
+        y: startY,
+        vx: velocityX,
+        vy: velocityY,
+        gravity: gravity,
+        life: duration,
+        size: fontSize,
+        text: text,
+        extraStyles: {
+          color: color,
+          // textShadow: '0 0 3px rgba(0, 0, 0, 0.5)',
+          // fontFamily: 'Arial, sans-serif',
+          userSelect: 'none',
+          pointerEvents: 'none',
+          fontSize: `${fontSize}px`,
+          fontWeight: 'bold',
+          zIndex: '20'
         }
       };
       
-      requestAnimationFrame(animate);
+      // 通过事件总线发送粒子生成请求
+      eventBus.emit('spawn-particles', [particle]);
     },
     
     createParticles(damage) {
-      const container = this.$refs.particleContainer;
-      if (!container) return;
-      
-      // 获取父元素尺寸
-      const wrapper = this.$el;
-      const wrapperRect = wrapper.getBoundingClientRect();
-      const wrapperWidth = wrapperRect.width;
-      const wrapperHeight = wrapperRect.height;
+      // 获取父元素尺寸（相对坐标）
+      const wrapperWidth = this.$el.offsetWidth;
+      const wrapperHeight = this.$el.offsetHeight;
       
       // 根据伤害大小确定粒子数量
       const particleCount = Math.min(Math.max(Math.floor(damage / 5), 20), 80);
       
+      const particles = [];
+      
       for (let i = 0; i < particleCount; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'particle';
-        
         // 随机选择从哪个边界出发（0:上, 1:右, 2:下, 3:左）
         const edge = Math.floor(Math.random() * 4);
         let startX, startY;
         
-        // 根据选择的边界设置初始位置
+        // 根据选择的边界设置初始位置（相对坐标）
         switch (edge) {
           case 0: // 上边界
             startX = Math.random() * wrapperWidth;
@@ -303,7 +287,7 @@ export default {
         const centerY = wrapperHeight / 2;
         const angle = Math.atan2(startY - centerY, startX - centerX);
         
-        const speed = 2 + Math.random() * 3; // 增加速度
+        const speed = (8 + Math.random() * 12) * Math.max(1, Math.min(damage / 10, 8)); // 增加速度
         const size = (1 + Math.random() * 4) * Math.min(20, Math.max(2, damage / 4));
         
         // 随机颜色，主要是红色和橙色，少量黄色
@@ -311,42 +295,28 @@ export default {
         const saturation = 80 + Math.random() * 20; // 80-100%饱和度
         const lightness = 40 + Math.random() * 20; // 40-60%亮度
         
-        particle.style.width = `${size}px`;
-        particle.style.height = `${size}px`;
-        particle.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-        particle.style.borderRadius = `${Math.random() * 50}%`; // 随机圆角，使粒子形状多样化
-        particle.style.left = `${startX}px`;
-        particle.style.top = `${startY}px`;
+        // 获取组件在屏幕上的绝对位置
+        const wrapperRect = this.$el.getBoundingClientRect();
+        const absoluteX = wrapperRect.left + startX;
+        const absoluteY = wrapperRect.top + startY;
         
-        container.appendChild(particle);
-        
-        // 粒子动画 - 向外飞散
-        const distance = (50 + Math.random() * 100) * Math.min(3, Math.max(1, damage / 50)); // 增加飞散距离
-        const animation = particle.animate(
-          [
-            {
-              transform: 'translate(-50%, -50%) scale(1)',
-              opacity: 1
-            },
-            {
-              transform: `translate(${Math.cos(angle) * distance * speed - 50}%, ${Math.sin(angle) * distance * speed - 50}%) scale(0)`,
-              opacity: 0
-            }
-          ],
-          {
-            duration: (1300 + Math.random() * 1200) * Math.min(3, Math.max(1, damage / 100)), // 持续时间
-            easing: 'cubic-bezier(0, .9, .57, 1)',
-            fill: 'forwards'
-          }
-        );
-        
-        // 动画结束后移除粒子
-        animation.onfinish = () => {
-          if (particle.parentNode) {
-            particle.parentNode.removeChild(particle);
-          }
-        };
+        particles.push({
+          x: absoluteX,
+          y: absoluteY,
+          vx: Math.cos(angle) * speed ,
+          vy: Math.sin(angle) * speed ,
+          size: size,
+          color: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+          life: (500 + Math.random() * 500) * Math.min(3, Math.max(1, damage / 100)),
+          shape: 'circle',
+          opacityFade: true,
+          drag: 0.1,
+          zIndex: 0
+        });
       }
+      
+      // 通过事件总线发送粒子生成请求
+      eventBus.emit('spawn-particles', particles);
     }
   }
 };
@@ -390,6 +360,19 @@ export default {
   animation: heal-fadeout 0.6s forwards;
 }
 
+.dead-overlay {
+  /* 死亡时的特效覆盖层 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: white;
+  pointer-events: none;
+  z-index: 11;
+  animation: dead-flash 0.6s forwards;
+}
+
 @keyframes shake {
   0% { transform: translate(0, 0) rotate(0); }
   10% { transform: translate(-2px, -1px) rotate(-0.5deg); }
@@ -409,26 +392,31 @@ export default {
   100% { opacity: 0; }
 }
 
-.particle-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  /* */
-  overflow: visible;
+@keyframes dead-flash {
+  0% { opacity: 0.3; background-color: red;}
+  10% { opacity: 0; }
+  20% { opacity: 0.6; background-color: red;}
+  30% { opacity: 0; }
+  40% { opacity: 1; background-color: black;}
+  50% { opacity: 0; }
+  60% { opacity: 1; background-color: red;}
+  70% { opacity: 0.5;}
+  100% { opacity: 1; background-color: white;}
 }
 
-.particle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border-radius: 50%;
-  pointer-events: none;
+/* 死亡时让元素看起来消失 */
+.dead-wrapper {
+  animation: dead-disappear 0.6s forwards;
+}
+
+@keyframes dead-disappear {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .damage-text {
+  z-index: 2;
   position: absolute;
   font-family: Arial, sans-serif;
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);

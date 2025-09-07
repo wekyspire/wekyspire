@@ -7,7 +7,7 @@ import Enemy from '../enemy.js';
 class FireSlime extends Enemy {
   constructor(battleIntensity) {
     // 调用父类构造函数，传入基础属性
-    super('火史莱姆', 13, 8, 1, 1, battleIntensity);
+    super('火史莱姆', 13 + Math.floor(5 * battleIntensity), 6 + Math.floor(battleIntensity * 0.6), 1, 1, battleIntensity);
     this.burnDamage = 3; // 燃烧伤害
     this.description = "一只史莱姆，但它为什么在冒火？";
   }

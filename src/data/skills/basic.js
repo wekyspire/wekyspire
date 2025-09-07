@@ -66,11 +66,10 @@ export class Roll extends Skill {
   constructor() {
     super('打滚', 'normal', 0, '获得1层/effect{闪避}', 0, 1, '打滚', 1);
     this.maxUses = 2;
-    this.coldDownTurns = 1;
   }
 
   get stacks() {
-    return this.stacks + this.power;
+    return 1 + this.power;
   }
 
   // 使用技能

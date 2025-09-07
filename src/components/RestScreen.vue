@@ -10,14 +10,14 @@
           <button 
             v-if="!moneyClaimed && gameState.rewards.money > 0" 
             class="reward-button money-reward" 
-            @click="claimMoney"
+            @click="onMoneyRewardButtonClicked"
           >
             金钱: +{{ gameState.rewards.money }}
           </button>
           <button 
             v-if="gameState.rewards.breakthrough" 
             class="reward-button breakthrough-reward" 
-            @click="okBreakthroughRewardButtonClicked"
+            @click="onBreakthroughRewardButtonClicked"
           >
             突破！
           </button>
@@ -31,7 +31,7 @@
           <button 
             v-if="gameState.rewards.abilities.length > 0" 
             class="reward-button ability-reward" 
-            @click="showAbilityRewards"
+            @click="onAbilityRewardButtonClicked"
           >
             新能力
           </button>
@@ -56,8 +56,8 @@
     <AbilityRewardPanel
       :is-visible="abilityRewardPanelVisible"
       :abilities="gameState.rewards.abilities"
-      @select-ability="$emit('select-ability', $event)"
-      @close="$emit('close-ability-rewards')"
+      @selected-ability-reward="onAbilityRewardSelected"
+      @close="closeAbilityRewardPanel"
     />
     
     <SkillRewardPanel
@@ -85,7 +85,7 @@ import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
 import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import { gameState } from '../data/gameState.js';
-import { claimSkillReward, endRestStage } from '../data/rest.js';
+import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage } from '../data/rest.js';
 import { upgradePlayerTier } from '../data/player.js';
 
 export default {
@@ -112,8 +112,8 @@ export default {
     }
   },
   methods: {
-    claimMoney() {
-      this.$emit('claim-money')
+    onMoneyRewardButtonClicked() {
+      claimMoney();
       this.moneyClaimed = true
     },
     onBreakthroughRewardButtonClicked() {
@@ -129,10 +129,15 @@ export default {
     closeSkillRewardPanel() {
       this.skillRewardPanelVisible = false;
     },
+    closeAbilityRewardPanel() {
+      this.abilityRewardPanelVisible = false;
+    },
     onSkillRewardSelected(currentSkill) {
-      // 打开SkillSlotSelectionPanel
-      this.skillSlotSelectionPanelVisible = true;
       this.claimingSkill = currentSkill;
+      // 稍等片刻后打开SkillSlotSelectionPanel，让动画放完
+      setTimeout(() => {
+        this.skillSlotSelectionPanelVisible = true;
+      }, 300);
     },
     closeSkillSlotSelectionPanel() {
       this.skillSlotSelectionPanelVisible = false;
@@ -144,16 +149,16 @@ export default {
       this.closeSkillSlotSelectionPanel();
       this.closeSkillRewardPanel();
     },
+    onAbilityRewardSelected(ability) {
+      claimAbilityReward(ability, true);
+      this.closeAbilityRewardPanel();
+    },
     showShopPanel() {
       this.currentPanel = 'shop'
     },
     closeShopPanel() {
       // 结束休整阶段，开始下一场战斗
       endRestStage();
-    },
-    abilityRewardButtonName () {
-      if(this.gameState.enemy && this.gameState.enemy.isBoss) return "突破！";
-      return "能力奖励";
     },
     buyItem(purchasedItem) {
       // 直接调用商品实例的purchase方法
@@ -186,7 +191,9 @@ export default {
 
 .rewards-panel {
   border: 1px solid #ccc;
-  padding: 20px;
+  padding: 15px;
+  border-radius: 8px;
+  background-color: #fff;
   flex: 3;
 }
 

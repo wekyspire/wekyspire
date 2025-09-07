@@ -135,7 +135,7 @@ export function enemyTurn() {
   gameState.isEnemyTurn = true;
   gameState.battleLogs.push(`/red{${gameState.enemy.name}} 的回合！`);
   
-  // 触发敌人回合开始事件，通知BattleScreen组件
+  // 触发敌人回合开始事件
   eventBus.emit('enemy-turn-start');
   
   // 回合开始时结算效果
@@ -216,10 +216,13 @@ export function endBattle(isVictory) {
   gameState.player.skills = [];
 
   // 锁定操作面板
-  eventBus.emit('enemy-turn-start');
+  gameState.isEnemyTurn = true;
   
   // 弹出胜利信息
   gameState.battleLogs.push(isVictory ? "/green{你胜利了！}" : "/red{你失败了！}");
+
+  // 发送胜利事件
+  if(isVictory) eventBus.emit('battle-victory');
 
   // 添加延迟，让玩家体验到胜利或失败的感觉
   setTimeout(() => {
@@ -241,15 +244,10 @@ export function endBattle(isVictory) {
       gameState.skillRewardClaimed = false;
       gameState.abilityRewardClaimed = false;
       gameState.gameStage = 'rest';
-      // 特殊：第二场战斗结束时，直接提升玩家等阶，并附赠一点法力
-      if(gameState.battleCount == 2) {
-        gameState.player.maxMana += 1;
-        upgradePlayerTier(gameState.player);
-      }
     } else {
       // 玩家失败
       gameState.isVictory = false;
       gameState.gameStage = 'end';
     }
-  }, 1500); // 1.5秒延迟
+  }, 3000); // 3秒延迟
 }

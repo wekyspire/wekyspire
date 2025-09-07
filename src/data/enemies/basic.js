@@ -4,8 +4,8 @@ import Enemy from '../enemy.js';
 // 史莱姆敌人
 export class Slime extends Enemy {
   constructor(battleIntensity) {
-    const hp = 13 + Math.floor(2.5 * battleIntensity);
-    const attack = 1 + Math.floor(battleIntensity * 0.35);
+    const hp = 27 + Math.floor(6 * battleIntensity);
+    const attack = 1 + Math.floor(battleIntensity * 0.6);
     super('史莱姆', hp, attack, 1, battleIntensity + 1);
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -59,8 +59,8 @@ export class Slime extends Enemy {
 // 瑞米敌人
 export class Remi extends Enemy {
   constructor(battleIntensity) {
-    const hp = 11 + 2 * battleIntensity;
-    const attack = 1 + Math.floor(battleIntensity * 0.5);
+    const hp = 23 + 5 * battleIntensity;
+    const attack = 1 + Math.floor(battleIntensity * 0.8);
     super('魔化瑞米', hp, attack, 1, battleIntensity + 1);
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -135,8 +135,8 @@ export class Remi extends Enemy {
 // 嗡嗡虫敌人
 export class BuzzlingBugs extends Enemy {
   constructor(battleIntensity) {
-    const hp = 5 + Math.floor(battleIntensity);
-    const attack = 1 + Math.floor(battleIntensity * 0.25);
+    const hp = 5 + Math.floor(2 * battleIntensity);
+    const attack = 1 + Math.floor(battleIntensity * 0.5);
     super('嗡嗡虫群', hp, attack, 1, battleIntensity + 1);
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;

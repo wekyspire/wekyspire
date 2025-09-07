@@ -11,15 +11,15 @@
     
     <div class="enemy-stats">
       <div class="stat">
-        <span class="stat-label">⚔️ 攻击力:</span>
+        <span class="stat-label">⚔️ 攻击:</span>
         <span class="stat-value">{{ enemy.attack }}</span>
       </div>
       <div class="stat">
-        <span class="stat-label">🛡️ 防御力:</span>
+        <span class="stat-label">🛡️ 防御:</span>
         <span class="stat-value">{{ enemy.defense }}</span>
       </div>
       <div class="stat">
-        <span class="stat-label">🔮 灵能强度:</span>
+        <span class="stat-label">🔮 灵能:</span>
         <span class="stat-value">{{ enemy.magic }}</span>
       </div>
     </div>
@@ -146,13 +146,13 @@ export default {
   border-radius: 8px;
   background-color: #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 1;
 }
 
 .enemy-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
 }
 
 .enemy-info-button {

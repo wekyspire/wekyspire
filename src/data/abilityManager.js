@@ -56,23 +56,12 @@ class AbilityManager {
     
     // 根据abundance、spawnWeight和tier计算每个能力的权重
     const weightedAbilities = allAbilities.map(ability => {
-      // 权重计算公式：基础权重 * (tier的影响) * (spawnWeight的影响) * (abundance的影响)
       
-      // 1. tier影响：tier越高，分母越大（指数增长确保高tier有显著优势）
-      const tierFactor = Math.pow(1.5, ability.tier - 1);
-      
-      // 2. spawnWeight影响：spawnWeight越小，分母越大（使用反比关系反映稀有度）
-      // 添加一个小常数避免除零错误
-      const rarityFactor = 1.0 / (ability.spawnWeight + 0.1);
-      
-      // 3. abundance影响：直接放大整体权重，并特别增强高tier和低spawnWeight的奖励
-      // - 基础影响：直接乘以abundance
-      // - 增强影响：对高tier、低spawnWeight的奖励进行额外增强
-      const baseAbundanceFactor = abundance;
-      const enhancedAbundanceFactor = 1 + (ability.tier - 1) * 0.2 * abundance * rarityFactor;
-      
-      // 最终权重计算
-      const weight = baseAbundanceFactor * enhancedAbundanceFactor / (tierFactor * rarityFactor);
+      let offset = Math.max(1, abundance * 5);
+      const tierFactor = Math.pow(0.8, ability.tier - offset);
+      const rarityFactor = ability.spawnWeight;
+
+      const weight = tierFactor * rarityFactor;
       
       return { ...ability, weight };
     });
