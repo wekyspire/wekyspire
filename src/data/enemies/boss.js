@@ -6,7 +6,10 @@ export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
     const hp = 90 + 11 * battleIntensity;
     const attack = Math.round((3 + battleIntensity) * 0.5);
-    super('MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0);
+    super(
+      'MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0,
+      new URL('../assets/enemies/slime.png', import.meta.url).href
+    );
     this.type = 'boss'; // 标记为Boss敌人
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
