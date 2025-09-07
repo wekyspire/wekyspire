@@ -5,7 +5,7 @@ import Enemy from '../enemy.js';
 export class Slime extends Enemy {
   constructor(battleIntensity) {
     const hp = 27 + Math.floor(6 * battleIntensity);
-    const attack = 1 + Math.floor(battleIntensity * 0.6);
+    const attack = 3 + Math.floor(battleIntensity * 0.6);
     super('史莱姆', hp, attack, 1, battleIntensity + 1);
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -26,8 +26,8 @@ export class Slime extends Enemy {
     
     const actions = [
       () => {
-        // 攻击，造成【3+攻击力】伤害
-        const damage = this.calculateDamage(1 + this.attack, player);
+        // 攻击，造成【攻击力】伤害
+        const damage = this.calculateDamage(this.attack, player);
         battleLogs.push(`${this.name} 冲撞！`);
         launchAttack(this, player, damage);
       },
@@ -60,7 +60,7 @@ export class Slime extends Enemy {
 export class Remi extends Enemy {
   constructor(battleIntensity) {
     const hp = 23 + 5 * battleIntensity;
-    const attack = 1 + Math.floor(battleIntensity * 0.8);
+    const attack = 6 + Math.floor(battleIntensity * 0.8);
     super('魔化瑞米', hp, attack, 1, battleIntensity + 1);
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -76,15 +76,15 @@ export class Remi extends Enemy {
   // 执行行动
   act(player, battleLogs) {
     // 魔化瑞米行动序列：
-    // 1. 攻击，造成【2 + 攻击力】伤害。
+    // 1. 攻击，造成【攻击力】伤害。
     // 2. 获得1层闪避。
     // 3. 吃你的钱包，造成【3】伤害，玩家失去10金钱。
     // 4. 获得1层闪避。
     
     const actions = [
       () => {
-        // 攻击，造成【2 + 攻击力】伤害
-        const damage = this.calculateDamage(2 + this.attack, player);
+        // 攻击，造成【攻击力】伤害
+        const damage = this.calculateDamage(this.attack, player);
         battleLogs.push(`${this.name} 抓挠！`);
         launchAttack(this, player, damage);
       },

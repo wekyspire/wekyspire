@@ -69,6 +69,9 @@ export function generateEnemy() {
 export function startPlayerTurn() {
   // 确保这是玩家回合
   gameState.isEnemyTurn = false;
+
+  // 摧毁护盾
+  gameState.player.shield = 0;
   
   // 重置行动力
   gameState.player.actionPoints = gameState.player.maxActionPoints;
@@ -135,6 +138,9 @@ export function enemyTurn() {
   gameState.isEnemyTurn = true;
   gameState.battleLogs.push(`/red{${gameState.enemy.name}} 的回合！`);
   
+  // 摧毁护盾
+  gameState.enemy.shield = 0;
+
   // 触发敌人回合开始事件
   eventBus.emit('enemy-turn-start');
   
