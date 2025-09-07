@@ -24,10 +24,15 @@
       </div>
     </div>
     
-    <div class="health-bar">
-      <span>生命值: {{ enemy.hp }}/{{ enemy.maxHp }}</span>
-      <div class="bar">
-        <div class="fill" :style="{ width: (enemy.hp / enemy.maxHp * 100) + '%' }"></div>
+    <div class="health-bar-container">
+      <div class="shield-display" :class="{ 'scale-animation': shieldChanged }">
+        🛡️ {{ enemy.shield }}
+      </div>
+      <div class="health-bar">
+        <span>生命值: {{ enemy.hp }}/{{ enemy.maxHp }}</span>
+        <div class="bar">
+          <div class="fill" :style="{ width: (enemy.hp / enemy.maxHp * 100) + '%' }"></div>
+        </div>
       </div>
     </div>
     
@@ -94,8 +99,17 @@ export default {
         show: false,
         x: 0,
         y: 0
-      }
+      },
+      shieldChanged: false
     };
+  },
+  watch: {
+    // 监听护盾值变化，播放缩放动画
+    'enemy.shield'(newShield, oldShield) {
+      if (newShield !== oldShield) {
+        this.playShieldChangeAnimation();
+      }
+    }
   },
   methods: {
     showEnemyInfo(event) {
@@ -109,6 +123,14 @@ export default {
     
     hideEnemyInfo() {
       this.enemyInfo.show = false;
+    },
+    
+    // 播放护盾变化动画
+    playShieldChangeAnimation() {
+      this.shieldChanged = true;
+      setTimeout(() => {
+        this.shieldChanged = false;
+      }, 300);
     },
     
     createDamageText(damage, type = 'damage') {
@@ -196,7 +218,36 @@ export default {
   margin-right: 5px;
 }
 
+.health-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.shield-display {
+  font-size: 16px;
+  font-weight: bold;
+  color: #1E90FF;
+  padding: 4px 8px;
+  background-color: rgba(30, 144, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid #1E90FF;
+  transition: transform 0.3s ease;
+}
+
+.shield-display.scale-animation {
+  animation: shield-pulse 0.3s ease;
+}
+
+@keyframes shield-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
 .health-bar {
+  flex: 1;
   margin-bottom: 10px;
 }
 

@@ -115,11 +115,8 @@ export class Player {
     } else {
       this.effects[effectName] = stacks;
     }
-    if(this.effects[effectName] == 0) {
-      delete this.effects[effectName];
-    }
     // 触发效果变化事件
-    eventBus.emit('effectChange', {
+    eventBus.emit('effect-change', {
       target: 'player',
       effectName: effectName,
       deltaStacks: stacks,

@@ -1,4 +1,4 @@
-import { Breakthrough, Strengthen, Growth, Cultivation, Exercise, MindExercise, PowerExercise, BitterCultivation, BitterBodyCultivation, SpecialDefenseCultivation, DefenseCultivation } from './ability.js';
+import { Breakthrough, Strengthen, Growth, Cultivation, Exercise, MindExercise, PowerExercise, BitterCultivation, BitterBodyCultivation, SpecialDefenseCultivation, DefenseCultivation, ExpertExercise, WellRest, NapRest } from './ability.js';
 
 // 能力管理器类
 class AbilityManager {
@@ -9,9 +9,12 @@ class AbilityManager {
     this.registerAbility(Strengthen);
     this.registerAbility(Growth);
     this.registerAbility(Cultivation);
+    this.registerAbility(NapRest);
+    this.registerAbility(WellRest);
     this.registerAbility(Exercise);
     this.registerAbility(MindExercise);
     this.registerAbility(PowerExercise);
+    this.registerAbility(ExpertExercise);
     this.registerAbility(BitterCultivation);
     this.registerAbility(BitterBodyCultivation);
     this.registerAbility(DefenseCultivation);
@@ -57,8 +60,8 @@ class AbilityManager {
     // 根据abundance、spawnWeight和tier计算每个能力的权重
     const weightedAbilities = allAbilities.map(ability => {
       
-      let offset = Math.max(1, abundance * 5);
-      const tierFactor = Math.pow(0.8, ability.tier - offset);
+      let offset = Math.max(1, abundance * 2);
+      const tierFactor = Math.pow(0.6, Math.max(ability.tier - offset, 0));
       const rarityFactor = ability.spawnWeight;
 
       const weight = tierFactor * rarityFactor;

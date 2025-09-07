@@ -61,14 +61,16 @@ class Enemy {
     }
 
     const currStacks = this.effects[effectName];
-
-    if (this.effects[effectName] == 0) {
-      delete this.effects[effectName];
-    }
     
     // 触发效果变化事件
     import('../eventBus.js').then(eventBus => {
-      eventBus.default.emit('effectChange', {target: 'enemy', effectName: effectName, deltaStacks: stacks, currStacks: currStacks, previousStacks: previousStacks});
+      eventBus.default.emit('effect-change', {
+        target: 'enemy', 
+        effectName: effectName, 
+        deltaStacks: stacks, 
+        currStacks: currStacks, 
+        previousStacks: previousStacks
+      });
     });
   }
 

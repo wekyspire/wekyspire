@@ -55,8 +55,8 @@ export default {
         particle.lastUpdateTime = performance.now();
         
         // 设置默认值
-        particle.x = particle.x || 0;
-        particle.y = particle.y || 0;
+        particle.x = particle.x || particle.absoluteX || 0;
+        particle.y = particle.y || particle.absoluteY || 0;
         particle.vx = particle.vx || 0;
         particle.vy = particle.vy || 0;
         particle.life = particle.life || 1000; // 默认生命周期1秒

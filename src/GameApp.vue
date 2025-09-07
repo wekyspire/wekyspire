@@ -107,6 +107,8 @@ export default {
       gameState.player.skillSlots[1] = initialSkill2;
       const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
       gameState.player.skillSlots[2] = initialSkill3;
+      const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
+      gameState.player.skillSlots[3] = initialSkill4;
       
       gameState.gameStage = 'battle';
       // 注意：不在这里调用startBattle()，而是在对话结束后调用

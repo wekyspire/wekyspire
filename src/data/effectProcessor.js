@@ -3,6 +3,7 @@
 
 import effectDescriptions from '../data/effectDescription.js';
 import eventBus from '../eventBus.js';
+import { dealDamage } from './battleUtils.js';
 
 /**
  * 处理回合开始时触发的效果
@@ -24,7 +25,7 @@ export function processStartOfTurnEffects(target) {
       delete target.effects['燃烧'];
     }
     eventBus.emit('add-battle-log', `${target.name}被烧伤了，受到${damage}伤害！`);
-    target.hp -= damage;
+    dealDamage(null, target, damage);
     if (target.hp < 0) target.hp = 0;
   }
   
@@ -238,28 +239,37 @@ export function processSkillActivationEffects(target) {
 /**
  * 处理受到攻击时触发的效果
  * @param {Object} target - 目标对象（玩家或敌人）
- * @param {number} damage - 伤害值
+ * @param {number} damage - 攻击伤害值
  * @returns {number} 处理后的伤害值
  */
-export function processDamageTakenEffects(target, damage) {
+export function processAttackTakenEffects(target, damage) {
   let finalDamage = damage;
   
   // 处理格挡效果
   if (target.effects['格挡'] > 0) {
     finalDamage = Math.floor(finalDamage / 2);
-    target.effects['格挡'] -= 1;
-    if (target.effects['格挡'] <= 0) {
-      delete target.effects['格挡'];
-    }
+    target.addEffect('格挡', -1);
     eventBus.emit('add-battle-log', `${target.name}通过格挡效果将伤害减半！`);
   }
   
   // 处理闪避效果
   if (target.effects['闪避'] > 0) {
     finalDamage = 0;
+    target.addEffect('闪避', -1);
     eventBus.emit('add-battle-log', `${target.name}通过闪避效果完全回避了攻击！`);
-    target.effects['闪避'] -= 1;
   }
+  
+  return finalDamage;
+}
+
+/**
+ * 处理受到伤害时触发的效果
+ * @param {Object} target - 目标对象（玩家或敌人）
+ * @param {number} damage - 伤害值
+ * @returns {number} 处理后的伤害值
+ */
+export function processDamageTakenEffects(target, damage) {
+  let finalDamage = damage;
   
   return finalDamage;
 }
@@ -273,22 +283,14 @@ export function processDamageDealtEffects(target, damage) {
   // 处理暴怒效果
   if (target.effects['暴怒'] > 0) {
     const stacks = target.effects['暴怒'];
-    if (target.effects['力量']) {
-      target.effects['力量'] += stacks;
-    } else {
-      target.effects['力量'] = stacks;
-    }
+    target.addEffect('力量', stacks);
     eventBus.emit('add-battle-log', `${target.name}通过暴怒效果获得了${stacks}层力量！`);
   }
   
   // 处理执着效果
   if (target.effects['执着'] > 0) {
     const stacks = target.effects['执着'];
-    if (target.effects['集中']) {
-      target.effects['集中'] += stacks;
-    } else {
-      target.effects['集中'] = stacks;
-    }
+    target.addEffect('集中', stacks);
     eventBus.emit('add-battle-log', `${target.name}通过执着效果获得了${stacks}层集中！`);
   }
 

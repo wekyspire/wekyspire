@@ -61,6 +61,15 @@ const ITEM_TIER_COLORS = {
   '5': '#f44336'  // 红色
 };
 
+// 能力等阶颜色映射
+const ABILITY_TIER_COLORS = {
+  '1': '#4caf50', // 绿色
+  '2': '#2196f3', // 蓝色
+  '3': '#9c27b0', // 紫色
+  '4': '#ff9800', // 橙色
+  '5': '#f44336'  // 红色
+};
+
 // 玩家等阶样式类映射
 const PLAYER_TIER_CLASSES = {
   '0': 'tier-0',

@@ -28,8 +28,8 @@ class FireSlime extends Enemy {
       // 燃烧攻击：造成伤害并附加燃烧效果
       const damage = this.calculateDamage(this.magic, player);
       battleLogs.push(`${this.name} 使用了燃烧攻击！`);
-      launchAttack(this, player, damage);
-      player.addEffect('燃烧', 4);
+      const result = launchAttack(this, player, damage);
+      if(result.passThoughDamage > 0) player.addEffect('燃烧', 4);
     }
     
     // 返回Promise以适配新的act方法

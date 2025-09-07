@@ -4,10 +4,15 @@
     :style="restScreen ? { backgroundColor: getPlayerTierColor(player.tier), color: getPlayerTierTextColor(player.tier) } : {}">
       <PlayerBasicStats :player="player" />
     
-    <div class="health-bar" ref="playerHealthBar">
-      <span>生命值: {{ player.hp }}/{{ player.maxHp }}</span>
-      <div class="bar">
-        <div class="fill" :style="{ width: (player.hp / player.maxHp * 100) + '%' }"></div>
+    <div class="health-bar-container">
+      <div class="shield-display" :class="{ 'scale-animation': shieldChanged }">
+        🛡️ {{ player.shield }}
+      </div>
+      <div class="health-bar" ref="playerHealthBar">
+        <span>生命值: {{ player.hp }}/{{ player.maxHp }}</span>
+        <div class="bar">
+          <div class="fill" :style="{ width: (player.hp / player.maxHp * 100) + '%' }"></div>
+        </div>
       </div>
     </div>
     
@@ -22,9 +27,7 @@
         <span>{{ player.actionPoints }}/{{ player.maxActionPoints }}</span>
       </div>
     </div>
-    
-    <!-- 玩家伤害文本容器 -->
-    <div class="damage-text-container" ref="playerDamageTextContainer"></div>
+  
     
     <!-- 效果显示栏 -->
     <EffectDisplayBar 
@@ -61,6 +64,11 @@ export default {
       default: false
     }
   },
+  data() {
+    return {
+      shieldChanged: false
+    };
+  },
   methods: {
     getPlayerTierLabel,
     getPlayerTierColor,
@@ -70,29 +78,6 @@ export default {
       return 'black';
     },
     
-    createDamageText(damage, type = 'damage') {
-      const container = this.$refs.playerDamageTextContainer;
-      if (!container) return;
-
-      const damageText = document.createElement('div');
-      damageText.className = `damage-text ${type}`;
-      damageText.textContent = type === 'heal' ? `+${damage}` : `-${damage}`;
-      
-      // 随机位置
-      const randomX = Math.random() * 40 - 20;
-      const randomY = Math.random() * 20 - 10;
-      damageText.style.left = `calc(50% + ${randomX}px)`;
-      damageText.style.top = `calc(50% + ${randomY}px)`;
-      
-      container.appendChild(damageText);
-      
-      // 动画结束后移除
-      setTimeout(() => {
-        if (damageText.parentNode) {
-          damageText.parentNode.removeChild(damageText);
-        }
-      }, 1000);
-    },
     
     // 播放升级动画
     playLevelUpAnimation() {
@@ -125,8 +110,15 @@ export default {
       this.spawnGoldenParticles();
     },
     
-    // 生成金色粒子
+    // 播放护盾变化动画
+    playShieldChangeAnimation() {
+      this.shieldChanged = true;
+      setTimeout(() => {
+        this.shieldChanged = false;
+      }, 300);
+    },
     spawnGoldenParticles() {
+    // 生成金色粒子
       const panelRect = this.$el.getBoundingClientRect();
       const particles = [];
       const particleCount = 50;
@@ -167,6 +159,12 @@ export default {
       if (newTier !== oldTier && this.restScreen) {
         this.playLevelUpAnimation();
       }
+    },
+    // 监听护盾值变化，播放缩放动画
+    'player.shield'(newShield, oldShield) {
+      if (newShield !== oldShield) {
+        this.playShieldChangeAnimation();
+      }
     }
   }
 };
@@ -187,11 +185,36 @@ export default {
   border: 2px solid #666;
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
+.health-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
 
+.shield-display {
+  font-size: 16px;
+  font-weight: bold;
+  color: #1E90FF;
+  padding: 4px 8px;
+  background-color: rgba(30, 144, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid #1E90FF;
+  transition: transform 0.3s ease;
+}
 
+.shield-display.scale-animation {
+  animation: shield-pulse 0.3s ease;
+}
+
+@keyframes shield-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
 
 .health-bar {
-  margin-bottom: 10px;
+  flex: 1;
 }
 
 .bar {
@@ -231,30 +254,4 @@ export default {
   background-color: #ccc;
 }
 
-.damage-text-container {
-  position: relative;
-  height: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.damage-text {
-  position: absolute;
-  font-weight: bold;
-  font-size: 24px;
-  pointer-events: none;
-  z-index: 1000;
-  animation: damageFloat 1s ease-out forwards;
-}
-
-@keyframes damageFloat {
-  0% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-50px);
-  }
-}
 </style>

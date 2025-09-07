@@ -1,7 +1,11 @@
 <template>
   <div 
     class="hurt-animation-wrapper" 
-    :class="{ 'hurt-shake': isShaking, 'hurt-effect': isHurt, 'dead-wrapper': isDead }"
+    :class="{ 
+      'hurt-shake': isShaking,
+      'hurt-effect': isHurt,
+      'evade-effect': isEvading,
+      'dead-wrapper': isDead }"
     :style="[shakeStyle, hurtStyle]"
   >
     <slot></slot>
@@ -33,6 +37,7 @@ export default {
     return {
       isShaking: false,
       isHurt: false,
+      isEvading: false,
       isHealing: false,
       isDead: false,
       shakeIntensity: 0,
@@ -89,7 +94,7 @@ export default {
       // 优先使用props中的unit属性
       if (this.unit && this.unit === target) {
         // 触发震颤和粒子效果
-        this.triggerHurtAnimation(hpDamage);
+        this.triggerHurtAnimation(hpDamage, passThoughDamage);
         return;
       }
       
@@ -100,28 +105,34 @@ export default {
         // 检查是否是EnemyStatusPanel并且受伤的是enemy
         if (parentComponent.$options.name === 'EnemyStatusPanel' && parentComponent.enemy === target) {
           // 触发震颤和粒子效果
-          this.triggerHurtAnimation(hpDamage);
+          this.triggerHurtAnimation(hpDamage, passThoughDamage);
           return;
         }
         
         // 检查是否是PlayerStatusPanel并且受伤的是player
         if (parentComponent.$options.name === 'PlayerStatusPanel' && parentComponent.player === target) {
           // 触发震颤和粒子效果
-          this.triggerHurtAnimation(hpDamage);
+          this.triggerHurtAnimation(hpDamage, passThoughDamage);
           return;
         }
       }
     },
     
-    triggerHurtAnimation(damage) {
-      // 如果无伤害，则啥都不干
-      if(damage === 0) return ;
+    triggerHurtAnimation(hpDamage, passThoughDamage) {
+      const damage = hpDamage;
+      // 如果无伤害，且无穿透伤害，则认定为闪避，播放闪避动画并结束
+      if(damage === 0 && passThoughDamage === 0) {
+        this.isEvading = true;
+        // 在0.7秒后停止闪避特效
+        setTimeout(() => {
+          this.isEvading = false;
+        }, 700);
+        // 不执行其他动画效果
+        return;
+      }
       
       // 如果是负数伤害（治疗）
       if (damage < 0) {
-        // 设置治疗特效强度
-        this.isHealing = true;
-        
         // 触发治疗动画
         this.isHealing = true;
         // 创建治疗文本
@@ -143,13 +154,15 @@ export default {
       this.hurtIntensity = damage;
       this.isHurt = true;
       
-      // 创建粒子效果
-      this.createParticles(damage);
+      // 如果hp受到伤害，则创建粒子效果（流血）
+      if(damage > 0) {
+        this.createParticles(damage);
+      }
       // 创建伤害文本
-      this.createDamageText(damage);
+      this.createDamageText(passThoughDamage);
       
       // 根据伤害强度计算震颤持续时间
-      const duration = Math.min(200 + damage * 2, 600); // 持续时间在200ms到600ms之间
+      const duration = Math.min(200 + passThoughDamage * 2, 600); // 持续时间在200ms到600ms之间
       
       // 在一定时间后停止震颤
       setTimeout(() => {
@@ -345,6 +358,16 @@ export default {
   border: var(--hurt-border-width) solid rgba(255, 0, 0, var(--hurt-opacity));
   filter: drop-shadow(0 0 5px rgba(255, 0, 0, calc(var(--hurt-opacity) * 0.5)));
   transition: border 0.2s ease, filter 0.2s ease;
+}
+
+.evade-effect {
+  animation: evade-swing 0.3s ease-in-out;
+}
+
+@keyframes evade-swing {
+  0% { transform: rotate(0deg); }
+  50% { transform: translate(20px) rotate(3deg); }
+  100% { transform: translate(0px) rotate(0deg); }
 }
 
 .heal-overlay {
