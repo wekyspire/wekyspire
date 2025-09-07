@@ -7,7 +7,7 @@
   >
     <div v-if="skill" class="skill-slot-content">
       <div class="skill-name">{{ skill.name }}</div>
-      <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
+      <div class="skill-tier">{{ getSkillTierLabelText(skill.tier) }}</div>
     </div>
     <div v-else class="empty-slot">
       空技能槽
@@ -48,7 +48,9 @@ export default {
     onClick() {
       this.$emit('slot-clicked', this.index);
     },
-
+    getSkillTierLabelText(tier) {
+      return getSkillTierLabel(tier);
+    }
   }
 }
 </script>

@@ -17,21 +17,8 @@
     <!-- 休整界面 -->
     <RestScreen 
       v-if="gameState.gameStage === 'rest'"
-      @claim-money="claimMoney"
-      @show-skill-rewards="showSkillRewards"
-      @show-ability-rewards="showAbilityRewards"
-      @buy-item="buyItem"
-      @end-rest="endRest"
-      @select-ability="claimAbility"
-      @close-ability-rewards="closeAbilityRewards"
-      @select-skill="onSelectSkillForSlot"
-      @close-skill-rewards="closeSkillRewards"
-      @select-slot="installSkillToSlot"
-      @close-skill-slot-selection="closeSkillSlotSelection"
     />
-    
 
-    
     <!-- 结束界面 -->
     <EndScreen 
       v-if="gameState.gameStage === 'end'" 
@@ -51,15 +38,11 @@ import RestScreen from './components/RestScreen.vue'
 import EndScreen from './components/EndScreen.vue'
 import DialogScreen from './components/DialogScreen.vue'
 import SkillManager from './data/skillManager.js'
-import AbilityManager from './data/abilityManager.js'
-import ItemManager from './data/itemManager.js'
 
 import eventBus from './eventBus.js'
 import * as dialogues from './data/dialogues.js'
-import { Player, PlayerManager, upgradePlayerTier, getPlayerTierFromTierIndex } from './data/player.js'
 import { gameState, resetGameState } from './data/gameState.js';
 import { startBattle } from './data/battle.js'
-import { calculateRewards, claimMoney, showAbilityRewards, claimAbility, closeAbilityRewards, showSkillRewards, onSelectSkillForSlot, installSkillToSlot, closeSkillSlotSelection, closeSkillRewards, endRest } from './data/rest.js'
 
 export default {
   name: 'App',
@@ -113,11 +96,11 @@ export default {
       eventBus.emit('before-game-start');
       
       // 为玩家添加初始技能到技能槽
-      const initialSkill1 = gameState.player.skillManager.constructor.createSkill('拳打脚踢');
+      const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
       gameState.player.skillSlots[0] = initialSkill1;
-      const initialSkill2 = gameState.player.skillManager.constructor.createSkill('活动筋骨');
+      const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
       gameState.player.skillSlots[1] = initialSkill2;
-      const initialSkill3 = gameState.player.skillManager.constructor.createSkill('活动筋骨');
+      const initialSkill3 = SkillManager.getInstance().createSkill('活动筋骨');
       gameState.player.skillSlots[2] = initialSkill3;
       
       gameState.gameStage = 'battle';

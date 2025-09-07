@@ -31,7 +31,7 @@
       </div>
     </div>
     
-    <div class="action-points-bar">
+    <div class="action-points-bar" v-if="!restScreen">
       <div class="action-points-container">
         <span>行动点数:</span>
         <div 
@@ -71,6 +71,10 @@ export default {
     player: {
       type: Object,
       required: true
+    },
+    restScreen: {
+      type: Boolean,
+      default: false
     }
   },
   methods: {

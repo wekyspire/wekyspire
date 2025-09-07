@@ -6,6 +6,7 @@ import eventBus from '../eventBus.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects, processDamageDealtEffects } from './effectProcessor.js'
 import { upgradePlayerTier } from './player.js'
 import gameState from './gameState.js'
+import { spawnRewards } from './rest.js'
 
 // 开始战斗
 export function startBattle() {
@@ -40,8 +41,10 @@ export function startBattle() {
   // 添加战斗日志
   gameState.battleLogs = [`战斗 #${gameState.battleCount} 开始！`, `遭遇了 ${gameState.enemy.name}！`];
   
-  // 开始游戏主循环
+  // 切换游戏状态到战斗状态
   gameState.gameStage = 'battle';
+
+  // 开始玩家游戏回合
   startPlayerTurn(gameState);
 }
 
@@ -233,7 +236,7 @@ export function endBattle(isVictory) {
     
     if (isVictory) {
       // 计算奖励
-      calculateRewards(gameState);
+      spawnRewards();
       // 重置奖励领取标志
       gameState.skillRewardClaimed = false;
       gameState.abilityRewardClaimed = false;
@@ -249,14 +252,4 @@ export function endBattle(isVictory) {
       gameState.gameStage = 'end';
     }
   }, 1500); // 1.5秒延迟
-}
-
-// 计算战斗奖励
-export function calculateRewards() {
-  // 计算战斗奖励
-  gameState.rewards.money = Math.floor(Math.random() * 20) + 10;
-  gameState.rewards.skill = true;
-  
-  // boss / 奇数次战斗后获得能力奖励
-  gameState.rewards.ability = (gameState.battleCount % 2 === 1 || gameState.enemy.isBoss);
 }

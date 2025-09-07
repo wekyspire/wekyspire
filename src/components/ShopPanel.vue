@@ -19,7 +19,7 @@
         </button>
       </div>
     </div>
-    <button @click="endRest">离开商店</button>
+    <button @click="$emit('close')">离开</button>
   </div>
 </template>
 
@@ -56,10 +56,7 @@ export default {
       
       // 重新生成商店物品
       this.$emit('refresh-shop');
-    },
-    endRest() {
-      this.$emit('end-rest');
-    },
+    }
 
   }
 }

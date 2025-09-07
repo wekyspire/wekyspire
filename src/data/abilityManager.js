@@ -38,6 +38,14 @@ class AbilityManager {
     throw new Error(`Unknown ability: ${abilityName}`);
   }
   
+  // 单例
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new AbilityManager();
+    }
+    return this.instance;
+  }
+
   // 随机获取能力
   getRandomAbilities(count = 3, abundance = 1.0) {
     const allAbilities = this.abilities.map(a => ({

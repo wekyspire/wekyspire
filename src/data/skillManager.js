@@ -67,9 +67,9 @@ class SkillManager {
   }
   
   // 创建技能实例
-  static createSkill(skillName) {
+  createSkill(skillName) {
     // 使用注册表创建技能实例
-    const SkillClass = this.getInstance().skillRegistry.get(skillName);
+    const SkillClass = this.skillRegistry.get(skillName);
     if (SkillClass) {
       return new SkillClass();
     }
@@ -85,9 +85,8 @@ class SkillManager {
   }
   
   // 获取随机技能
-  static getRandomSkills(count, playerSkillSlots = [], playerTier = 0) {
-    const instance = this.getInstance();
-    const allSkills = Array.from(instance.skillRegistry.entries()).map(([name, SkillClass]) => {
+  getRandomSkills(count, playerSkillSlots = [], playerTier = 0) {
+    const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
       // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
       return {

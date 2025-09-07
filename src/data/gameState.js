@@ -37,38 +37,17 @@ export const gameState = reactive({
   
   // 奖励数据
   rewards: {
+    breakthrough: false,
     money: 0,
-    skill: false,
-    ability: false
+    skills: [],
+    abilities: []
   },
   
-  // 奖励领取标志
-  skillRewardClaimed: false,
-  abilityRewardClaimed: false,
-  
-  // 战斗场次数
-  battleCount: 0,
-  
-  // 能力奖励相关
-  isAbilityRewardVisible: false,
-  abilityRewards: [],
-  
-  // 技能奖励相关
-  isSkillRewardVisible: false,
-  skillRewards: [],
-  
-  // 技能槽选择相关
-  isSkillSlotSelectionVisible: false,
-  selectedSkillForSlot: null,
-  
-  // 能力管理器实例
-  abilityManager: new AbilityManager(),
-  
-  // 商品管理器实例
-  itemManager: new ItemManager(),
-  
   // 当前商店内商品
-  shopItems: []
+  shopItems: [],
+
+  // 战斗场次数
+  battleCount: 0
 });
 
 // 重置游戏状态

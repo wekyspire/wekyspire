@@ -8,16 +8,18 @@
           :key="index"
           :skill="skill"
           :preview-mode="true"
-          @skill-card-clicked="selectSkill"
+          @skill-card-clicked="onSkillCardClicked"
         />
       </div>
-      <button @click="closePanel">放弃</button>
+      <button @click="closePanel">返回</button>
     </div>
   </div>
 </template>
 
 <script>
 import SkillCard from './SkillCard.vue';
+import eventBus from '../eventBus';
+import gameState from '../data/gameState';
 
 export default {
   name: 'SkillRewardPanel',
@@ -35,8 +37,8 @@ export default {
     }
   },
   methods: {
-    selectSkill(skill) {
-      this.$emit('select-skill', skill);
+    onSkillCardClicked(skill) {
+      this.$emit('selected-skill-reward', skill);
     },
     closePanel() {
       this.$emit('close');
@@ -65,7 +67,7 @@ export default {
   background-color: #f9f9f9;
   max-width: 80%;
   max-height: 80%;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .skill-cards {

@@ -2,7 +2,11 @@
   <div class="skill-slot-selection-overlay" v-if="isVisible">
     <div class="skill-slot-selection-panel">
       <h2>选择技能槽</h2>
-      <p>选择一个技能槽来安装新技能：{{ skill ? skill.name : '无' }}</p>
+      <SkillCard
+      :skill="skill"
+      :preview-mode="true"
+      />
+      <p>选择一个技能槽来安装新技能</p>
       <div class="skill-slots">
         <SkillSlot
           v-for="(slot, index) in skillSlots"
@@ -19,11 +23,13 @@
 
 <script>
 import SkillSlot from './SkillSlot.vue';
+import SkillCard from './SkillCard.vue';
 
 export default {
   name: 'SkillSlotSelectionPanel',
   components: {
-    SkillSlot
+    SkillSlot,
+    SkillCard
   },
   props: {
     skill: {
@@ -41,7 +47,7 @@ export default {
   },
   methods: {
     selectSlot(index) {
-      this.$emit('select-slot', index, this.skill);
+      this.$emit('select-slot', index);
     },
     closePanel() {
       this.$emit('close');

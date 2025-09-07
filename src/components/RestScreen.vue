@@ -15,57 +15,64 @@
             金钱: +{{ gameState.rewards.money }}
           </button>
           <button 
-            v-if="gameState.rewards.skill" 
-            class="reward-button skill-reward" 
-            @click="showSkillRewards"
+            v-if="gameState.rewards.breakthrough" 
+            class="reward-button breakthrough-reward" 
+            @click="okBreakthroughRewardButtonClicked"
           >
-            技能奖励
+            突破！
           </button>
           <button 
-            v-if="gameState.rewards.ability" 
+            v-if="gameState.rewards.skills.length > 0" 
+            class="reward-button skill-reward" 
+            @click="onSkillRewardButtonClicked"
+          >
+            新技能
+          </button>
+          <button 
+            v-if="gameState.rewards.abilities.length > 0" 
             class="reward-button ability-reward" 
             @click="showAbilityRewards"
           >
-            {{abilityRewardButtonName()}}
+            新能力
           </button>
         </div>
-        <button @click="showShop">结束奖励阶段</button>
+        <button @click="showShopPanel">继续</button>
       </div>
       
       <!-- 商店面板 -->
-    <ShopPanel
-      v-if="currentPanel === 'shop'"
-      :shop-items="gameState.shopItems"
-      :game-state="gameState"
-      @item-purchased="onItemPurchased"
-      @refresh-shop="$forceUpdate"
-      @end-rest="endRest"
-    />
+      <ShopPanel
+        v-if="currentPanel === 'shop'"
+        :shop-items="gameState.shopItems"
+        :game-state="gameState"
+        @item-purchased="onItemPurchased"
+        @refresh-shop="$forceUpdate"
+        @close="closeShopPanel"
+      />
       
       <!-- 玩家状态面板 -->
-      <PlayerStatusPanel :player="gameState.player" />
+      <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
     </div>
     
     <AbilityRewardPanel
-      :is-visible="gameState.isAbilityRewardVisible"
-      :abilities="gameState.abilityRewards"
+      :is-visible="abilityRewardPanelVisible"
+      :abilities="gameState.rewards.abilities"
       @select-ability="$emit('select-ability', $event)"
       @close="$emit('close-ability-rewards')"
     />
     
     <SkillRewardPanel
-      :is-visible="gameState.isSkillRewardVisible"
-      :skills="gameState.skillRewards"
-      @select-skill="$emit('select-skill', $event)"
-      @close="$emit('close-skill-rewards')"
+      :is-visible="skillRewardPanelVisible"
+      :skills="gameState.rewards.skills"
+      @close="closeSkillRewardPanel"
+      @selected-skill-reward="onSkillRewardSelected"
     />
     
     <SkillSlotSelectionPanel
-      :is-visible="gameState.isSkillSlotSelectionVisible"
-      :skill="gameState.selectedSkillForSlot"
+      :is-visible="skillSlotSelectionPanelVisible"
       :skill-slots="gameState.player.skillSlots"
-      @select-slot="$emit('select-slot', $event)"
-      @close="$emit('close-skill-slot-selection')"
+      :skill="claimingSkill"
+      @select-slot="onSkillSlotSelected"
+      @close="closeSkillSlotSelectionPanel"
     />
   </div>
 </template>
@@ -78,7 +85,8 @@ import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
 import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import { gameState } from '../data/gameState.js';
-import { getPlayerTierLabel, getPlayerTierClass, getItemTierClass } from '../utils/tierUtils.js';
+import { claimSkillReward, endRestStage } from '../data/rest.js';
+import { upgradePlayerTier } from '../data/player.js';
 
 export default {
   name: 'RestScreen',
@@ -94,7 +102,13 @@ export default {
     return {
       gameState: gameState,
       currentPanel: 'rewards', // 'rewards' or 'shop'
-      moneyClaimed: false
+      moneyClaimed: false,
+      skillRewardsSpawned: false,
+      abilityRewardsSpawned: false,
+      skillRewardPanelVisible: false,
+      abilityRewardPanelVisible: false,
+      skillSlotSelectionPanelVisible: false,
+      claimingSkill: null
     }
   },
   methods: {
@@ -102,14 +116,40 @@ export default {
       this.$emit('claim-money')
       this.moneyClaimed = true
     },
-    showSkillRewards() {
-      this.$emit('show-skill-rewards')
+    onBreakthroughRewardButtonClicked() {
+      gameState.rewards.breakthrough = false;
+      upgradePlayerTier(gameState.player);
     },
-    showAbilityRewards() {
-      this.$emit('show-ability-rewards')
+    onSkillRewardButtonClicked() {
+      this.skillRewardPanelVisible = true;
     },
-    showShop() {
+    onAbilityRewardButtonClicked() {
+      this.abilityRewardPanelVisible = true;
+    },
+    closeSkillRewardPanel() {
+      this.skillRewardPanelVisible = false;
+    },
+    onSkillRewardSelected(currentSkill) {
+      // 打开SkillSlotSelectionPanel
+      this.skillSlotSelectionPanelVisible = true;
+      this.claimingSkill = currentSkill;
+    },
+    closeSkillSlotSelectionPanel() {
+      this.skillSlotSelectionPanelVisible = false;
+    },
+    onSkillSlotSelected(slotIndex) {
+      claimSkillReward(this.claimingSkill, slotIndex, true);
+      
+      // 关闭面板
+      this.closeSkillSlotSelectionPanel();
+      this.closeSkillRewardPanel();
+    },
+    showShopPanel() {
       this.currentPanel = 'shop'
+    },
+    closeShopPanel() {
+      // 结束休整阶段，开始下一场战斗
+      endRestStage();
     },
     abilityRewardButtonName () {
       if(this.gameState.enemy && this.gameState.enemy.isBoss) return "突破！";
@@ -118,9 +158,6 @@ export default {
     buyItem(purchasedItem) {
       // 直接调用商品实例的purchase方法
       purchasedItem.purchase(this.$parent.player);
-      
-      // 更新玩家金钱
-      this.$parent.player.money -= purchasedItem.price;
       
       // 添加日志
       this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
@@ -131,10 +168,7 @@ export default {
     onItemPurchased(purchasedItem) {
       // 添加日志
       this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
-    },
-    endRest() {
-      this.$emit('end-rest')
-    },
+    }
 
   }
 }
@@ -153,14 +187,8 @@ export default {
 .rewards-panel {
   border: 1px solid #ccc;
   padding: 20px;
-  margin: 20px 0;
   flex: 3;
 }
-
-
-
-/* 按钮样式已移至 src/assets/common.css */
-
 
 .reward-buttons {
   display: flex;
@@ -185,6 +213,16 @@ export default {
   color: white;
 }
 
+.breakthrough-reward {
+  border-color: #f5a623;
+  background-color: #a70a24;
+}
+
+.breakthrough-reward:hover {
+  background-color: #ff2d2d;
+  color: white;
+}
+
 .money-reward {
   border-color: #f5a623;
   background-color: #2c3e50;
@@ -197,7 +235,7 @@ export default {
 
 .skill-reward {
   border-color: #7ed321;
-  background-color: #2c3e50;
+  background-color: #138f34;
 }
 
 .skill-reward:hover {
@@ -207,11 +245,11 @@ export default {
 
 .ability-reward {
   border-color: #bd10e0;
-  background-color: #2c3e50;
+  background-color: #5b4791;
 }
 
 .ability-reward:hover {
-  background-color: #bd10e0;
+  background-color: #df3fff;
   color: white;
 }
 </style>

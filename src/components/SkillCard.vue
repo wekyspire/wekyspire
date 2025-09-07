@@ -152,7 +152,7 @@ export default {
   position: relative;
   z-index: 1;
   width: 150px;
-  min-height: 100px;
+  height: 220px;
   padding: 15px;
   border-radius: 8px;
   cursor: pointer;

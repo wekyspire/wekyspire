@@ -58,6 +58,7 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+  min-height: 25px;
 }
 
 /* 效果图标 */
