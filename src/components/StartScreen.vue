@@ -1,6 +1,6 @@
 <template>
   <div class="start-screen">
-    <h1>魏启乱斗</h1>
+    <h1>魏启尖塔</h1>
     <button @click="startGame">开始游戏</button>
     
     <div class="changelog-container">
@@ -46,6 +46,7 @@ export default {
             {
               title: '新增',
               items: [
+                '更名为魏启尖塔',
                 '重做交互体验，增加受击、获得和失去反馈、以及粒子特效。',
                 '重构大量代码，提高代码质量和可维护性，方便后续扩展'
               ]
