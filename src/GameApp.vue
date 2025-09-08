@@ -29,6 +29,9 @@
     <!-- 对话界面 -->
     <DialogScreen />
     
+    <!-- Boss登场特效界面 -->
+    <BossShowupAnimation />
+    
     <!-- 粒子效果管理器 -->
     <ParticleEffectManager />
     
@@ -41,6 +44,7 @@ import BattleScreen from './components/BattleScreen.vue'
 import RestScreen from './components/RestScreen.vue'
 import EndScreen from './components/EndScreen.vue'
 import DialogScreen from './components/DialogScreen.vue'
+import BossShowupAnimation from './components/BossShowupAnimation.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import SkillManager from './data/skillManager.js'
 
@@ -57,6 +61,7 @@ export default {
     RestScreen,
     EndScreen,
     DialogScreen,
+    BossShowupAnimation,
     ParticleEffectManager
   },
   computed: {

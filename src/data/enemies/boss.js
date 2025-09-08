@@ -1,5 +1,6 @@
 import Enemy from '../enemy.js';
 import { launchAttack } from '../battleUtils.js';
+import eventBus from '../../eventBus.js';
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
@@ -17,6 +18,7 @@ export class MEFM3 extends Enemy {
     this.hpThresholdReached = false;
     this.subtitle = "嗡鸣的古代机械";
     this.description = "冷冰冰的钢铁包不住炙热的心，现在——它要燃起来了！\n 第一次生命值低于50%时，眩晕1回合。";
+    this.coverImageUrl = new URL('../assets/enemies/slime.png', import.meta.url).href;
   }
 
   // 执行行动
