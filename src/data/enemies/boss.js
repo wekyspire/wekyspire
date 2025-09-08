@@ -86,13 +86,14 @@ export class MEFM3 extends Enemy {
           battleLogs.push(`${this.name} 启动能量耦合，泄露的魏启在空气中扭曲，它周遭的温度又升高了。`);
           this.addEffect('机枪升温', 1);
           this.inTurnAction ++;
-        } else if(this.inTurnAction == 2) {
+        } else if(this.inTurnAction == 1) {
           battleLogs.push(`${this.name} 启动了装甲强化。`);
           this.addEffect('格挡', 2);
           this.inTurnAction ++;
-        } else if(this.inTurnAction == 3) {
+        } else if(this.inTurnAction == 2) {
           this.addEffect('护盾', 6);
           advanceAction = 1;
+          this.inTurnAction = 0;
         }
       }
     ];
