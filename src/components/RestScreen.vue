@@ -1,16 +1,17 @@
 <template>
   <div class="rest-screen">
-    <h1>休整阶段</h1>
+    <h1 class="rest-title">好好休息！</h1>
     
     <div class="content-wrapper">
       <!-- 奖励面板 -->
       <div v-if="currentPanel === 'rewards'" class="rewards-panel">
         <h2>战斗奖励</h2>
-        <div class="reward-buttons">
+        <transition-group name="reward-button-fade" tag="div" class="reward-buttons">
           <button 
             v-if="!moneyClaimed && gameState.rewards.money > 0" 
             class="reward-button money-reward" 
             @click="onMoneyRewardButtonClicked"
+            key="money"
           >
             金钱: +{{ gameState.rewards.money }}
           </button>
@@ -18,6 +19,7 @@
             v-if="gameState.rewards.breakthrough" 
             class="reward-button breakthrough-reward" 
             @click="onBreakthroughRewardButtonClicked"
+            key="breakthrough"
           >
             突破！
           </button>
@@ -25,6 +27,7 @@
             v-if="gameState.rewards.skills.length > 0" 
             class="reward-button skill-reward" 
             @click="onSkillRewardButtonClicked"
+            key="skill"
           >
             新技能
           </button>
@@ -32,10 +35,11 @@
             v-if="gameState.rewards.abilities.length > 0" 
             class="reward-button ability-reward" 
             @click="onAbilityRewardButtonClicked"
+            key="ability"
           >
             新能力
           </button>
-        </div>
+        </transition-group>
         <button @click="showShopPanel">继续</button>
       </div>
       
@@ -258,5 +262,26 @@ export default {
 .ability-reward:hover {
   background-color: #df3fff;
   color: white;
+}
+
+.rest-title {
+  font-size: 2em;
+  margin-bottom: 20px;
+  color: #eef7ff;
+}
+
+/* 奖励按钮淡出动画 */
+.reward-button-fade-enter-active, .reward-button-fade-leave-active {
+  transition: all 0.15s ease;
+}
+
+.reward-button-fade-enter-from, .reward-button-fade-leave-to {
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+.reward-button-fade-enter-to, .reward-button-fade-leave-from {
+  transform: scale(1);
+  opacity: 1;
 }
 </style>

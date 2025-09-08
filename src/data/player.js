@@ -50,7 +50,7 @@ export class Player {
     this.maxMana = 0;
     this.actionPoints = 3;
     this.maxActionPoints = 3;
-    this.baseAttack = 2;
+    this.baseAttack = 0;
     this.baseMagic = 1;
     this.baseDefense = 0;
     this.money = 0;
@@ -73,6 +73,10 @@ export class Player {
   // 计算属性
   get attack() {
     return this.baseAttack + (this.effects['力量'] || 0);
+  }
+
+  get agility() {
+    return (this.effects['敏捷'] || 0)
   }
   
   get magic() {
@@ -132,6 +136,12 @@ export class Player {
 
   clearNegativeEffects () {
     // TODO
+  }
+
+  consumeMana (amount) {
+    this.mana -= amount;
+    this.mana = Math.max(this.mana, 0);
+    this.mana = Math.min(this.mana, this.maxMana);
   }
 }
 

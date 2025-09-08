@@ -8,6 +8,13 @@ import eventBus from '../eventBus.js'
 import gameState from './gameState.js'
 import { generateEnemy, startBattle } from './battle.js'
 
+export function spawnSkillRewards() {
+  // 技能奖励
+  gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
+    3, gameState.player.skillSlots, gameState.player.tier
+  );
+}
+
 // 计算奖励
 export function spawnRewards() {
   // 计算战斗奖励
@@ -18,12 +25,9 @@ export function spawnRewards() {
     gameState.battleCount == 2 || gameState.enemy.isBoss
   );
   gameState.rewards.breakthrough = haveBreakthroughReward;
-
-  // 技能奖励
-  gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.skillSlots, gameState.player.tier
-  );
   
+  if(!haveBreakthroughReward) spawnSkillRewards();
+
   // boss / 奇数次战斗后获得能力奖励
   const haveAbilityReward = (
     gameState.battleCount % 2 === 1 || gameState.enemy.isBoss

@@ -105,15 +105,6 @@ export default {
 
     onEndTurnButtonClicked() {
       endPlayerTurn();
-    },
-
-    // 创建伤害文本动画（供外部调用）
-    createDamageText(target, damage, type = 'damage') {
-      if (target === 'player') {
-        this.$refs.playerStatusPanel?.createDamageText(damage, type);
-      } else if (target === 'enemy') {
-        this.$refs.enemyStatusPanel?.createDamageText(damage, type);
-      }
     }
   }
 };
@@ -123,7 +114,7 @@ export default {
 .battle-screen {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   padding: 20px;
   box-sizing: border-box;
 }

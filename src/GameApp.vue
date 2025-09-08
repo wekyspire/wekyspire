@@ -35,6 +35,7 @@
     <!-- 粒子效果管理器 -->
     <ParticleEffectManager />
     
+
   </div>
 </template>
 
@@ -71,7 +72,7 @@ export default {
   },
   data() {
     return {
-      gameState:gameState
+      gameState: gameState
     }
   },
   mounted() {
@@ -91,6 +92,8 @@ export default {
         startBattle();
       }
     });
+    
+
   },
   beforeUnmount() {
     if(this.eventBus) {
@@ -126,7 +129,9 @@ export default {
       resetGameState();
       
       // 注意：不在这里添加初始技能，而是在startGame方法中添加
-    }
+    },
+    
+
   }
 }
 </script>
@@ -137,8 +142,15 @@ export default {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: #2c3e50;
+  color: #eef7ff;
   margin-top: 60px;
   user-select: none;
+  position: relative;
+  height:100vh;
 }
+
+div {
+  color: #424242;
+}
+
 </style>

@@ -11,7 +11,7 @@ export function addBattleLog (log) {
 // 任意攻击的结算逻辑（由skill、enemy和effect结算调用）
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
 export function launchAttack (attacker, target, damage) {
-  
+
   // 攻击者对攻击的后处理
   let finalDamage = damage;
   if (attacker) {
@@ -51,6 +51,8 @@ export function launchAttack (attacker, target, damage) {
   // 检查目标是否死亡
   if (target.hp <= 0) {
     eventBus.emit('add-battle-log', `${target.name} 被击败了！`);
+    // 发射事件，用于结算死亡
+    eventBus.emit('unit-dead-event', target);
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
 

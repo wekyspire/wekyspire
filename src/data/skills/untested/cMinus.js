@@ -152,28 +152,6 @@ export class WeakenI extends Skill {
   }
 }
 
-// 瑞米召唤术
-export class SummonRemi extends Skill {
-  constructor() {
-    super('瑞米召唤术', 'magic', 3, '召唤瑞米，它会听从你的指令！', 1, 1, "瑞米");
-    this.used = false;
-  }
-  
-  use(player, enemy) {
-    if (super.use()) {
-      addBattleLog('你召唤了...瑞米！');
-      this.used = true;
-      return true;
-    }
-    return false;
-  }
-
-  regenerateDescription(player) {
-    if(this.used) return '这技能他妈的卵用没有！';
-    return '召唤瑞米，它会听从你的指令！';
-  }
-}
-
 // 化形为剑 
 export class TransformSword extends Skill {
   constructor() {

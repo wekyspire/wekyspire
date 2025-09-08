@@ -1,9 +1,8 @@
 import { BuzzlingBugs, Slime } from './enemies/basic.js';
 import { Remi } from './enemies/basic.js';
 import { MEFM3 } from './enemies/boss.js';
-import { FireSlime } from './enemies/example.js';
+import { FireSlime } from './enemies/slimes.js';
 import {BigWolf} from "./enemies/special";
-import enemy from "./enemy"; // 示例敌人
 
 // 敌人工厂类
 class EnemyFactory {

@@ -105,31 +105,44 @@ export function useSkill(skill) {
   // 先冻结玩家操作面板
   gameState.controlDisableCount += 1;
   
+  // 支付行动力、使用次数和魏启
+  skill.consumeUses(gameState.player);
+  
   // 技能发动时结算效果
   processSkillActivationEffects(gameState.player);
   
-  // 执行技能效果
-  const result = skill.use(gameState.player, gameState.enemy);
-  
-  // 消耗行动力和魏启
-  gameState.player.actionPoints -= 1;
-  gameState.player.mana -= skill.manaCost;
-  skill.remainingUses -= 1;
-
-  // 检查敌人是否死亡（技能可能造成了伤害）
-  if (gameState.enemy.hp <= 0) {
-    gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
-    endBattle(gameState, true);
-  }
-
-  // 强制刷新操作面板渲染
-  // 注意：在Vue组件中可能需要不同的处理方式
-
-  // 解冻玩家控制面板
-  gameState.controlDisableCount -= 1;
-
-  // 发射事件
-  eventBus.emit('after-skill-use', {player: gameState.player, skill: skill, result: result});
+  const promise = new Promise((resolve) => {
+    // 执行技能效果
+    let stage = 0;
+    const executeSkill = () => {
+      const result = skill.use(gameState.player, gameState.enemy, stage);
+      // 检查敌人是否死亡（技能可能造成了伤害）
+      if (gameState.enemy.hp <= 0) {
+        gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
+        endBattle(true);
+        resolve(result);
+        gameState.controlDisableCount -= 1;
+      } else if(result !== true && result !== false) {
+        // 此技能发动需要连续反复调用
+        stage ++;
+        setTimeout(executeSkill, 400);
+      } else {
+        // 技能完成使用，发射事件
+        if(result !== null) {
+          eventBus.emit('after-skill-use', 
+            {player: gameState.player, skill: skill, result: result});
+        }
+        // 最后提醒UI
+        eventBus.emit('update-skill-descriptions');
+        // 解冻玩家控制面板
+        gameState.controlDisableCount -= 1;
+        // 设置结果
+        resolve(result);
+      }
+    }
+    executeSkill();
+  });
+  return promise;
 }
 
 // 敌人回合
@@ -157,26 +170,38 @@ export function enemyTurn() {
   }
 
   // 等待敌人行动完成（包括所有攻击动画）
-  gameState.enemy.act(gameState.player, gameState.battleLogs).then(() => {
-    // 看看玩家是不是逝了
-    const isPlayerDead = gameState.player.hp <= 0;
-    
-    if (isPlayerDead) {
-      endBattle(gameState, false);
-      return;
+  const waitForEnemy = () => {
+    const enemyActResult = gameState.enemy.act(gameState.player, gameState.battleLogs);
+    if(enemyActResult.promise === null || enemyActResult.promise === undefined) {
+      enemyActResult.promise = Promise.resolve();
     }
-
-    // 结算敌人回合结束效果
-    processEndOfTurnEffects(gameState.enemy);
-    
-    // 敌人行动结束后开始新回合
-    startNextTurn(gameState);
-    
-    // 触发敌人行动结束事件，通知BattleScreen组件
-    eventBus.emit('enemy-action-end');
-    // 触发敌人回合结束事件，通知BattleScreen组件
-    eventBus.emit('enemy-turn-end');
-  });
+    enemyActResult.promise.then(() => {
+        setTimeout(()=> {
+        // 看看玩家是不是逝了
+        const isPlayerDead = gameState.player.hp <= 0;
+        
+        if (isPlayerDead) {
+          endBattle(false);
+          return;
+        }
+        if(enemyActResult.endTurn === false) {
+          // 继续wait
+          waitForEnemy();
+        } else {
+          // 触发敌人行动结束事件，通知BattleScreen组件
+          eventBus.emit('enemy-action-end');
+          // 结算敌人回合结束效果
+          processEndOfTurnEffects(gameState.enemy);
+          // 触发敌人回合结束事件，通知BattleScreen组件
+          eventBus.emit('enemy-turn-end');
+          // 敌人行动结束后开始新回合
+          startNextTurn(gameState);
+          return;
+        }
+      }, enemyActResult.latency || 800);
+    });
+  };
+  setTimeout(waitForEnemy, 800);
 }
 
 // 结束玩家回合
@@ -186,7 +211,7 @@ export function endPlayerTurn() {
   
   // 检查玩家是否死亡
   if (gameState.player.hp <= 0) {
-    endBattle(gameState, false);
+    endBattle(false);
     return;
   }
   
@@ -198,12 +223,12 @@ export function endPlayerTurn() {
 export function startNextTurn(gameState) {
   // 检查游戏是否结束
   if (gameState.player.hp <= 0) {
-    endBattle(gameState, false);
+    endBattle(false);
     return;
   }
   
   if (gameState.enemy.hp <= 0) {
-    endBattle(gameState, true);
+    endBattle(true);
     return;
   }
   

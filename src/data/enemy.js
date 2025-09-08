@@ -1,14 +1,14 @@
 import eventBus from "../eventBus";
 // 敌人抽象类
 class Enemy {
-  constructor(name, hp, attack, defense, magic, avatarUrl = '') {
+  constructor(name, hp, attack, defense, avatarUrl = '') {
     this.name = name; // 敌人名称
     this.hp = hp; // 当前生命值
     this.maxHp = hp; // 最大生命值
     this.shield = 0; // 当前护盾
     this.baseAttack = attack; // 基础攻击力
     this.baseDefense = defense; // 基础防御力
-    this.baseMagic = magic; // 基础灵能强度
+    this.baseMagic = 0; // 基础灵能强度
     this.effects = {}; // 效果列表
     this.subtitle = ""; // Boss subtitle
     this.description = '一个面目狰狞的敌人！'; // 敌人描述
@@ -47,8 +47,18 @@ class Enemy {
   }
 
   // 执行行动
+  // @reutrn 
+  // {
+  //  endTurn: 表示是否结束此回合，否然act会被继续调用，默认为true
+  //  latency: 操作间隔，默认为800ms,
+  //  promise: 敌人自定义行动延时和异步操作，如果非空，则会被上层应用等待，默认为null
+  // }
   act(player, battleLogs) {
     // 子类需要实现具体逻辑
+    return {
+      endTurn: true,
+      latency: 800
+    }
   }
 
   // 添加效果
