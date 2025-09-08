@@ -154,6 +154,15 @@ export default {
        const player = new Player();
        // 确保skillSlots正确初始化
        player.skillSlots = Array(5).fill(null);
+       // 给很高数值
+       player.hp = 1000;
+       player.maxHp = 1000;
+       player.mana = 10;
+       player.maxMana = 10;
+       player.baseMagic = 10;
+       player.baseDefense = 1;
+       player.money = 1000000;
+       player.tier = 9;
        return player;
      },
     // 重启战斗

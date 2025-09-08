@@ -2,31 +2,22 @@
   <HurtAnimationWrapper :unit="player" ref="hurtAnimation">
     <div class="player-status-panel" :class="{ 'rest-mode': restScreen }" 
     :style="restScreen ? { backgroundColor: getPlayerTierColor(player.tier), color: getPlayerTierTextColor(player.tier) } : {}">
-      <PlayerBasicStats :player="player" />
+      <PlayerBasicStats :player="player" :show-mana="restScreen" />
     
-    <HealthBar :unit="player" ref="playerHealthBar" />
-    
-    <div class="action-points-bar" v-if="!restScreen">
-      <div class="action-points-container">
-        <span>行动:</span>
-        <div 
-          v-for="n in player.maxActionPoints" 
-          :key="n" 
-          :class="['action-point', { 'used': n > player.actionPoints }]"
-        ></div>
-        <span>{{ player.actionPoints }}/{{ player.maxActionPoints }}</span>
-      </div>
+      <!-- 魏启条 -->
+      <ManaBar :player="player" v-if="!restScreen" />
+
+      <!-- 效果显示栏 -->
+      <EffectDisplayBar 
+        v-if="!restScreen"
+        :effects="player.effects"
+        :target="player"
+        @show-tooltip="$emit('show-tooltip', $event)"
+        @hide-tooltip="$emit('hide-tooltip')"
+      />
+
+      <HealthBar :unit="player" ref="playerHealthBar" />
     </div>
-  
-    
-    <!-- 效果显示栏 -->
-    <EffectDisplayBar 
-      v-if="!restScreen"
-      :effects="player.effects"
-      :target="player"
-      @show-tooltip="$emit('show-tooltip', $event)"
-      @hide-tooltip="$emit('hide-tooltip')"
-    /></div>
   </HurtAnimationWrapper>
 </template>
 
@@ -36,6 +27,7 @@ import { getPlayerTierLabel, getPlayerTierColor } from '../utils/tierUtils.js';
 import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
 import PlayerBasicStats from './PlayerBasicStats.vue';
 import HealthBar from './HealthBar.vue';
+import ManaBar from './ManaBar.vue';
 import eventBus from '../eventBus.js';
 
 export default {
@@ -44,7 +36,8 @@ export default {
     EffectDisplayBar,
     HurtAnimationWrapper,
     PlayerBasicStats,
-    HealthBar
+    HealthBar,
+    ManaBar
   },
   props: {
     player: {
@@ -211,28 +204,6 @@ export default {
   height: 100%;
   background-color: #4caf50;
   transition: width 0.3s ease;
-}
-
-.action-points-bar {
-  margin-bottom: 10px;
-}
-
-.action-points-container {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.action-point {
-  width: 20px;
-  height: 20px;
-  background-color: #2196f3;
-  border-radius: 50%;
-  transition: background-color 0.3s;
-}
-
-.action-point.used {
-  background-color: #ccc;
 }
 
 </style>

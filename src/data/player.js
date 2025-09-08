@@ -14,9 +14,6 @@ export function upgradePlayerTier (player) {
       // 特殊：第一次升级时多获得一点魏启
       player.maxMana += 1;
     }
-    if(player.tier <= 5) {
-      player.maxActionPoints += 1;
-    }
     player.hp = player.maxHp;
     player.mana = player.maxMana;
     eventBus.emit('player-tier-upgraded', player);
@@ -48,8 +45,6 @@ export class Player {
     this.maxHp = 40;
     this.mana = 0;
     this.maxMana = 0;
-    this.actionPoints = 3;
-    this.maxActionPoints = 3;
     this.baseAttack = 0;
     this.baseMagic = 1;
     this.baseDefense = 0;

@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="game-app">
     <!-- 开始游戏界面 -->
     <StartScreen 
       v-if="gameState.gameStage === 'start'" 
@@ -32,10 +32,11 @@
     <!-- Boss登场特效界面 -->
     <BossShowupAnimation />
     
+    <!-- 过场动画界面 -->
+    <CutsceneScreen :game-state="gameState" />
+    
     <!-- 粒子效果管理器 -->
     <ParticleEffectManager />
-    
-
   </div>
 </template>
 
@@ -46,6 +47,7 @@ import RestScreen from './components/RestScreen.vue'
 import EndScreen from './components/EndScreen.vue'
 import DialogScreen from './components/DialogScreen.vue'
 import BossShowupAnimation from './components/BossShowupAnimation.vue'
+import CutsceneScreen from './components/CutsceneScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import SkillManager from './data/skillManager.js'
 
@@ -63,6 +65,7 @@ export default {
     EndScreen,
     DialogScreen,
     BossShowupAnimation,
+    CutsceneScreen,
     ParticleEffectManager
   },
   computed: {
@@ -81,7 +84,12 @@ export default {
     this.eventBus = eventBus;
     // 监听add-battle-log
     this.eventBus.on('add-battle-log', (value) => {
-      gameState.battleLogs.push(value);
+      // 兼容旧的字符串格式和新的对象格式
+      if (typeof value === 'string') {
+        gameState.battleLogs.push(value);
+      } else {
+        gameState.battleLogs.push(value);
+      }
     });
     // 注册对话对事件总线的监听
     dialogues.registerListeners(eventBus);
@@ -93,6 +101,7 @@ export default {
       }
     });
     
+
 
   },
   beforeUnmount() {
@@ -137,20 +146,20 @@ export default {
 </script>
 
 <style>
-#app {
+#game-app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #eef7ff;
-  margin-top: 60px;
+  /* margin-top: 60px; */
   user-select: none;
   position: relative;
   height:100vh;
 }
 
-div {
-  color: #424242;
+#game-app div {
+  color: #222222;
 }
 
 </style>

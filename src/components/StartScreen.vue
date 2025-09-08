@@ -62,14 +62,14 @@ export default {
             {
               title: '新增',
               items: [
-                '更名为魏启尖塔',
-                '重做交互体验，增加受击、获得和失去反馈、以及粒子特效。',
-                '重构大量代码，提高代码质量和可维护性，方便后续扩展'
+                'Boss开场动画、Cutscene播放',
               ]
             },
             {
               title: '改进',
               items: [
+                '技能框架重构，更高效更简洁好玩',
+                '移除攻击力、行动点，强化魏启交互',
                 '调整了配色，更暗黑！'
               ]
             },
@@ -152,16 +152,18 @@ button {
   font-size: 20px;
   font-weight: bold;
   user-select: none;
+  color:white;
 }
 
 .changelog-content {
   width: 0;
   overflow: hidden;
-  background: rgb(90, 90, 90);
+  background: rgb(150, 150, 150);
   margin-right: 10px;
   transition: width 0.3s ease;
   white-space: nowrap;
   text-align: left;
+  /* color: white!important; */
 }
 
 .changelog-content.expanded {

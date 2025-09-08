@@ -283,11 +283,14 @@ export class HoldOn extends Skill {
   constructor() {
     super('强撑', 'normal', 1, 0, 1);
   }
+  get stacks() {
+    return 7 + 2 * this.power;
+  }
   // 使用技能
   use(player, enemy, stage) {
     if (super.use()) {
       if(stage == 0) {
-        player.addEffect('坚固', stacks);
+        player.addEffect('坚固', this.stacks);
         return {};
       } else {
         player.addEffect('崩溃', 2);
@@ -297,16 +300,10 @@ export class HoldOn extends Skill {
     return false;
   }
 
-  get stacks() {
-    return 7 + 2 * this.power;
-  }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    if (player) {
-      return `获得${stacks}层/effect{坚固}，2层/effect{崩溃}`;
-    }
-    return this.description;
+    return `获得${this.stacks}层/effect{坚固}，2层/effect{崩溃}`;
   }
 }
 
@@ -359,9 +356,6 @@ export class FastThinking extends Skill {
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    if (player) {
-      return `/named{冷却}1次/named{最近}可冷却技能`;
-    }
-    return this.description;
+    return `/named{冷却}1次/named{最近}可冷却技能`;
   }
 }

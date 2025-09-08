@@ -1,83 +1,85 @@
 <template>
   <div class="rest-screen">
-    <h1 class="rest-title">好好休息！</h1>
-    
-    <div class="content-wrapper">
-      <!-- 奖励面板 -->
-      <div v-if="currentPanel === 'rewards'" class="rewards-panel">
-        <h2>战斗奖励</h2>
-        <transition-group name="reward-button-fade" tag="div" class="reward-buttons">
-          <button 
-            v-if="!moneyClaimed && gameState.rewards.money > 0" 
-            class="reward-button money-reward" 
-            @click="onMoneyRewardButtonClicked"
-            key="money"
-          >
-            金钱: +{{ gameState.rewards.money }}
-          </button>
-          <button 
-            v-if="gameState.rewards.breakthrough" 
-            class="reward-button breakthrough-reward" 
-            @click="onBreakthroughRewardButtonClicked"
-            key="breakthrough"
-          >
-            突破！
-          </button>
-          <button 
-            v-if="gameState.rewards.skills.length > 0" 
-            class="reward-button skill-reward" 
-            @click="onSkillRewardButtonClicked"
-            key="skill"
-          >
-            新技能
-          </button>
-          <button 
-            v-if="gameState.rewards.abilities.length > 0" 
-            class="reward-button ability-reward" 
-            @click="onAbilityRewardButtonClicked"
-            key="ability"
-          >
-            新能力
-          </button>
-        </transition-group>
-        <button @click="showShopPanel">继续</button>
+    <div class="rest-screen-content">
+      <h1 class="rest-title">好好休息！</h1>
+      
+      <div class="content-wrapper">
+        <!-- 奖励面板 -->
+        <div v-if="currentPanel === 'rewards'" class="rewards-panel">
+          <h2>战斗奖励</h2>
+          <transition-group name="reward-button-fade" tag="div" class="reward-buttons">
+            <button 
+              v-if="!moneyClaimed && gameState.rewards.money > 0" 
+              class="reward-button money-reward" 
+              @click="onMoneyRewardButtonClicked"
+              key="money"
+            >
+              金钱: +{{ gameState.rewards.money }}
+            </button>
+            <button 
+              v-if="gameState.rewards.breakthrough" 
+              class="reward-button breakthrough-reward" 
+              @click="onBreakthroughRewardButtonClicked"
+              key="breakthrough"
+            >
+              突破！
+            </button>
+            <button 
+              v-if="gameState.rewards.skills.length > 0" 
+              class="reward-button skill-reward" 
+              @click="onSkillRewardButtonClicked"
+              key="skill"
+            >
+              新技能
+            </button>
+            <button 
+              v-if="gameState.rewards.abilities.length > 0" 
+              class="reward-button ability-reward" 
+              @click="onAbilityRewardButtonClicked"
+              key="ability"
+            >
+              新能力
+            </button>
+          </transition-group>
+          <button @click="showShopPanel">继续</button>
+        </div>
+        
+        <!-- 商店面板 -->
+        <ShopPanel
+          v-if="currentPanel === 'shop'"
+          :shop-items="gameState.shopItems"
+          :game-state="gameState"
+          @item-purchased="onItemPurchased"
+          @refresh-shop="$forceUpdate"
+          @close="closeShopPanel"
+        />
+        
+        <!-- 玩家状态面板 -->
+        <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
       </div>
       
-      <!-- 商店面板 -->
-      <ShopPanel
-        v-if="currentPanel === 'shop'"
-        :shop-items="gameState.shopItems"
-        :game-state="gameState"
-        @item-purchased="onItemPurchased"
-        @refresh-shop="$forceUpdate"
-        @close="closeShopPanel"
+      <AbilityRewardPanel
+        :is-visible="abilityRewardPanelVisible"
+        :abilities="gameState.rewards.abilities"
+        @selected-ability-reward="onAbilityRewardSelected"
+        @close="closeAbilityRewardPanel"
       />
       
-      <!-- 玩家状态面板 -->
-      <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
+      <SkillRewardPanel
+        :is-visible="skillRewardPanelVisible"
+        :skills="gameState.rewards.skills"
+        @close="closeSkillRewardPanel"
+        @selected-skill-reward="onSkillRewardSelected"
+      />
+      
+      <SkillSlotSelectionPanel
+        :is-visible="skillSlotSelectionPanelVisible"
+        :skill-slots="gameState.player.skillSlots"
+        :skill="claimingSkill"
+        @select-slot="onSkillSlotSelected"
+        @close="closeSkillSlotSelectionPanel"
+      />
     </div>
-    
-    <AbilityRewardPanel
-      :is-visible="abilityRewardPanelVisible"
-      :abilities="gameState.rewards.abilities"
-      @selected-ability-reward="onAbilityRewardSelected"
-      @close="closeAbilityRewardPanel"
-    />
-    
-    <SkillRewardPanel
-      :is-visible="skillRewardPanelVisible"
-      :skills="gameState.rewards.skills"
-      @close="closeSkillRewardPanel"
-      @selected-skill-reward="onSkillRewardSelected"
-    />
-    
-    <SkillSlotSelectionPanel
-      :is-visible="skillSlotSelectionPanelVisible"
-      :skill-slots="gameState.player.skillSlots"
-      :skill="claimingSkill"
-      @select-slot="onSkillSlotSelected"
-      @close="closeSkillSlotSelectionPanel"
-    />
   </div>
 </template>
 
@@ -185,7 +187,16 @@ export default {
 
 <style scoped>
 .rest-screen {
+  height: 100%;
+  width: 100%;
   padding: 20px;
+  background-image: url('../assets/images/shop_background.png');
+  background-size: cover;
+}
+.rest-screen-content {
+  margin: 0 auto;
+  max-width: 1200px;
+  height:100vh;
 }
 
 .content-wrapper {

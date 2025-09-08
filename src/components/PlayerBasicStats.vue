@@ -4,10 +4,7 @@
       <span class="stat-label">💰 金钱:</span>
       <span class="stat-value">{{ player.money }}</span>
     </div>
-    <div class="stat">
-      <span class="stat-label">💧 魏启:</span>
-      <span class="stat-value">{{ player.mana }}/{{ player.maxMana }}</span>
-    </div>
+
     <div class="stat">
       <span class="stat-label">🔮 灵能:</span>
       <span class="stat-value">{{ player.magic }}</span>
@@ -33,6 +30,10 @@ export default {
     player: {
       type: Object,
       required: true
+    },
+    showMana: {
+      type: Boolean,
+      default: true
     }
   },
   data() {
@@ -42,7 +43,7 @@ export default {
         defense: this.player.defense,
         money: this.player.money,
         tier: this.player.tier,
-        mana: this.player.mana,
+
         magic: this.player.magic
       }
     };
@@ -92,16 +93,6 @@ export default {
           }
         }
         
-        // 检查魏启变化
-        if (newPlayer.mana !== this.previousPlayer.mana) {
-          const diff = newPlayer.mana - this.previousPlayer.mana;
-          const manaStat = this.$el.querySelector('.stat:nth-child(2)');
-          if (manaStat && diff !== 0) {
-            const text = diff > 0 ? `+${diff}💧` : `${diff}💧`;
-            this.spawnTextParticle(text, manaStat, diff > 0 ? '#2196f3' : '#f44336');
-          }
-        }
-        
         // 检查攻击力变化
         if (newPlayer.attack !== this.previousPlayer.attack) {
           const diff = newPlayer.attack - this.previousPlayer.attack;
@@ -147,7 +138,7 @@ export default {
           defense: newPlayer.defense,
           money: newPlayer.money,
           tier: newPlayer.tier,
-          mana: newPlayer.mana,
+
           magic: newPlayer.magic
         };
       },

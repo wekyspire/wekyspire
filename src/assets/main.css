@@ -5,14 +5,14 @@ body {
   font-family: 'Microsoft YaHei', Arial, sans-serif;
   background-color: rgb(54, 59, 62);
 }
-
+/* 
 #app {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
   box-sizing: border-box;
-}
+} */
 
 /* 按钮样式 */
 button {

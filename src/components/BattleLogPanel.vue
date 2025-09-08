@@ -7,7 +7,7 @@
       class="log-entry"
     >
       <span class="log-icon">{{ getLogIcon(log) }}</span>
-      <ColoredText :text="log" />
+      <ColoredText :text="typeof log === 'string' ? log : log.log" />
     </div>
   </div>
 </template>
@@ -24,6 +24,10 @@ export default {
     logs: {
       type: Array,
       default: () => []
+    },
+    enemy: {
+      type: Object,
+      default: () => null
     }
   },
   watch: {
@@ -44,23 +48,45 @@ export default {
       }
     },
     getLogClass(log) {
-      return 'other-log';
-      // TODO
-      // if (log.includes('你')) {
-      //   return 'player-log';
-      // } else if (log.includes('敌人') || log.includes(enemy?.name || '敌人')) {
-      //   return 'enemy-log';
-      // } else {
-      // }
+      // 处理旧的字符串格式和新的对象格式
+      if (typeof log === 'string') {
+        // 旧的字符串格式，使用简单的文本匹配
+        if (log.includes('你')) {
+          return 'player-log';
+        } else if (log.includes('敌人') || (this.enemy && log.includes(this.enemy.name || '敌人'))) {
+          return 'enemy-log';
+        } else {
+          return 'other-log';
+        }
+      } else {
+        // 新的对象格式，使用type属性
+        switch (log.type) {
+          case 'player_action':
+            return 'player-log';
+          case 'enemy_action':
+          case 'damage':
+          case 'death':
+            return 'enemy-log';
+          case 'system':
+          case 'heal':
+          case 'effect':
+            return 'other-log';
+          default:
+            return 'other-log';
+        }
+      }
     },
     getLogIcon(log) {
-      if (log.includes('攻击')) return '⚔️';
-      if (log.includes('防御')) return '🛡️';
-      if (log.includes('生命')) return '❤️';
-      if (log.includes('魏启')) return '🔮';
-      if (log.includes('技能')) return '🎯';
-      if (log.includes('效果')) return '✨';
-      if (log.includes('回合')) return '⏰';
+      // 获取实际的日志文本内容
+      const logText = typeof log === 'string' ? log : log.log;
+      
+      if (logText.includes('攻击')) return '⚔️';
+      if (logText.includes('防御')) return '🛡️';
+      if (logText.includes('生命')) return '❤️';
+      if (logText.includes('魏启')) return '🔮';
+      if (logText.includes('技能')) return '🎯';
+      if (logText.includes('效果')) return '✨';
+      if (logText.includes('回合')) return '⏰';
       return '📝';
     }
   }

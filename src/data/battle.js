@@ -4,6 +4,7 @@ import EnemyFactory from './enemyFactory.js'
 import SkillManager from './skillManager.js'
 import eventBus from '../eventBus.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects, processDamageDealtEffects } from './effectProcessor.js'
+import { addBattleLog, addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { upgradePlayerTier } from './player.js'
 import gameState from './gameState.js'
 import { spawnRewards } from './rest.js'
@@ -30,16 +31,14 @@ export function startBattle() {
     skill.inBattleIndex = index;
   });
 
-  // 重置玩家回合
-  gameState.player.actionPoints = gameState.player.maxActionPoints;
-  
   // 调用技能的onBattleStart方法
   gameState.player.skills.forEach(skill => {
     skill.onBattleStart();
   });
   
   // 添加战斗日志
-  gameState.battleLogs = [`战斗 #${gameState.battleCount} 开始！`, `遭遇了 ${gameState.enemy.name}！`];
+  addSystemLog(`战斗 #${gameState.battleCount} 开始！`);
+  addSystemLog(`遭遇了 ${gameState.enemy.name}！`);
   
   // 切换游戏状态到战斗状态
   gameState.gameStage = 'battle';
@@ -73,9 +72,6 @@ export function startPlayerTurn() {
   // 摧毁护盾
   gameState.player.shield = 0;
   
-  // 重置行动力
-  gameState.player.actionPoints = gameState.player.maxActionPoints;
-  
   // 进行技能冷却
   gameState.player.skills.forEach(skill => {
     skill.coldDown();
@@ -85,7 +81,7 @@ export function startPlayerTurn() {
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.player);
   if (isStunned) {
-    gameState.battleLogs.push('你被眩晕，跳过回合！');
+    addSystemLog('你被眩晕，跳过回合！');
     endPlayerTurn(gameState);
     return;
   }
@@ -100,7 +96,7 @@ export function startPlayerTurn() {
 // 使用技能
 export function useSkill(skill) {
   // 使用技能逻辑
-  gameState.battleLogs.push(`你使用了 /blue{${skill.name}}！`);
+  addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 先冻结玩家操作面板
   gameState.controlDisableCount += 1;
@@ -118,7 +114,7 @@ export function useSkill(skill) {
       const result = skill.use(gameState.player, gameState.enemy, stage);
       // 检查敌人是否死亡（技能可能造成了伤害）
       if (gameState.enemy.hp <= 0) {
-        gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
+        addDeathLog(`${gameState.enemy.name} 被击败了！`);
         endBattle(true);
         resolve(result);
         gameState.controlDisableCount -= 1;
@@ -149,7 +145,7 @@ export function useSkill(skill) {
 export function enemyTurn() {
   // 敌人行动逻辑
   gameState.isEnemyTurn = true;
-  gameState.battleLogs.push(`/red{${gameState.enemy.name}} 的回合！`);
+  addEnemyActionLog(`/red{${gameState.enemy.name}} 的回合！`);
   
   // 摧毁护盾
   gameState.enemy.shield = 0;
@@ -160,7 +156,7 @@ export function enemyTurn() {
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.enemy);
   if (isStunned) {
-    gameState.battleLogs.push('敌人被眩晕，跳过回合！');
+    addSystemLog('敌人被眩晕，跳过回合！');
     setTimeout(() => {
       // 触发敌人回合结束事件，通知BattleScreen组件
       eventBus.emit('enemy-turn-end');
@@ -232,7 +228,7 @@ export function startNextTurn(gameState) {
     return;
   }
   
-  gameState.battleLogs.push(`你的回合！`);
+  addSystemLog(`你的回合！`);
   // 开始新回合
   startPlayerTurn(gameState);
 }
@@ -250,7 +246,11 @@ export function endBattle(isVictory) {
   gameState.isEnemyTurn = true;
   
   // 弹出胜利信息
-  gameState.battleLogs.push(isVictory ? "/green{你胜利了！}" : "/red{你失败了！}");
+  if (isVictory) {
+    addSystemLog("/green{你胜利了！}");
+  } else {
+    addSystemLog("/red{你失败了！}");
+  }
 
   // 发送胜利事件
   if(isVictory) eventBus.emit('battle-victory');

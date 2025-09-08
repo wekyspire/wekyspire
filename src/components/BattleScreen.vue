@@ -19,6 +19,7 @@
     <!-- 战斗日志面板 -->
     <BattleLogPanel 
       :logs="battleLogs" 
+      :enemy="enemy"
     />
     
     <!-- 操作面板 -->
@@ -112,6 +113,9 @@ export default {
 
 <style scoped>
 .battle-screen {
+  margin: 0 auto;
+  max-width: 1200px;
+  height:100vh;
   display: flex;
   flex-direction: column;
   height: 100%;

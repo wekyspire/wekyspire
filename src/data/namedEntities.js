@@ -5,11 +5,6 @@ const namedEntities = {
     color: 'purple',
     description: '魏启是这个世界的基础能量，驱动着所有灵能技艺的施展。'
   },
-  '行动力': {
-    icon: '⚡',
-    color: '#00aa00',
-    description: '行动力是战斗中的资源，用于发动技能和进行攻击。'
-  },
   '生命': {
     icon: '❤️',
     color: 'red',

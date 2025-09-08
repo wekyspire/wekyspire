@@ -2,10 +2,12 @@
 
 import eventBus from '../eventBus.js';
 import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects } from './effectProcessor.js';
+import { addBattleLog as addBattleLogUtil, addDamageLog, addDeathLog, addEffectLog, addHealLog, addBattleLogOld } from './battleLogUtils.js';
 
 // 从任意地方增添battleLog
 export function addBattleLog (log) {
-  eventBus.emit('add-battle-log', log);
+  // 使用新的助手函数
+  addBattleLogOld(log);
 }
 
 // 任意攻击的结算逻辑（由skill、enemy和effect结算调用）
@@ -35,22 +37,22 @@ export function launchAttack (attacker, target, damage) {
     target.hp = Math.max(target.hp - finalDamage, 0);
     if(finalDamage > 0) {
       if(attacker) {
-        eventBus.emit('add-battle-log', `${attacker.name} 攻击了 ${target.name}，造成 /red{${finalDamage}} 点伤害！`);
+        addDamageLog(`${attacker.name} 攻击了 ${target.name}，造成 /red{${finalDamage}} 点伤害！`);
       } else {
-        eventBus.emit('add-battle-log', `你受到${finalDamage}点伤害！`);
+        addDamageLog(`你受到${finalDamage}点伤害！`);
       }
     } else {
-      if(attacker) eventBus.emit('add-battle-log', `${attacker.name} 攻击了 ${target.name}，被护盾拦下了！`);
-      else eventBus.emit('add-battle-log', `你的护盾挡下伤害！`);
+      if(attacker) addBattleLog(`${attacker.name} 攻击了 ${target.name}，被护盾拦下了！`);
+      else addBattleLog(`你的护盾挡下伤害！`);
     }
   } else {
-    if(attacker) eventBus.emit('add-battle-log', `${attacker.name} 攻击了 ${target.name}，但不起作用！`);
-    else eventBus.emit('add-battle-log', `你被攻击，但没有作用！`);
+    if(attacker) addBattleLog(`${attacker.name} 攻击了 ${target.name}，但不起作用！`);
+    else addBattleLog(`你被攻击，但没有作用！`);
   }
   
   // 检查目标是否死亡
   if (target.hp <= 0) {
-    eventBus.emit('add-battle-log', `${target.name} 被击败了！`);
+    addDeathLog(`${target.name} 被击败了！`);
     // 发射事件，用于结算死亡
     eventBus.emit('unit-dead-event', target);
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
@@ -87,17 +89,17 @@ export function dealDamage (source, target, damage, penetrateDefense = false) {
     hpDamage = finalDamage;
     target.hp = Math.max(target.hp - finalDamage, 0);
     if(finalDamage > 0) {
-      eventBus.emit('add-battle-log', `你${source ? `从${source.name}受到` : '受到'}${finalDamage}点伤害！`);
+      addDamageLog(`你${source ? `从${source.name}受到` : '受到'}${finalDamage}点伤害！`);
     } else {
-      eventBus.emit('add-battle-log', `你的护盾挡下${source ? `自${source.name}` : ''}的伤害。`);
+      addBattleLog(`你的护盾挡下${source ? `自${source.name}` : ''}的伤害。`);
     }
   } else {
-    eventBus.emit('add-battle-log', `你${source ? `从${source.name}受到` : '受到'}伤害，但不起作用！`);
+    addBattleLog(`你${source ? `从${source.name}受到` : '受到'}伤害，但不起作用！`);
   }
   
   // 检查目标是否死亡
   if (target.hp <= 0) {
-    eventBus.emit('add-battle-log', `${target.name} 被击败了！`);
+    addDeathLog(`${target.name} 被击败了！`);
     return {dead: true, passThoughDamage: passThoughDamage, hpDamage: hpDamage};
   }
   
@@ -114,9 +116,9 @@ export function dealDamage (source, target, damage, penetrateDefense = false) {
 export function gainShield (caster, target, shield) {
   target.shield += shield;
   if(caster === target) {
-    eventBus.emit('add-battle-log', `${target.name}获得了${shield}点护盾！`);
+    addHealLog(`${target.name}获得了${shield}点护盾！`);
   } else {
-    eventBus.emit('add-battle-log', `${target.name}从${caster.name}获得了${shield}点护盾！`);
+    addHealLog(`${target.name}从${caster.name}获得了${shield}点护盾！`);
   }
   // 发送事件通知UI更新
   eventBus.emit('unit-shield-change', {target: target, deltaShield: shield});

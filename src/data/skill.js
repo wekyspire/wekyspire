@@ -62,7 +62,6 @@ class Skill {
   }
 
   consumeUses (player) {
-    player.actionPoints --;
     player.consumeMana(this.manaCost);
     this.remainingUses --;
   }
@@ -80,8 +79,8 @@ class Skill {
 
   // 判断技能是否可用
   canUse(player) {
-    // 默认实现：检查行动力和魏启是否足够
-    return player.actionPoints > 0 && player.mana >= this.manaCost && this.remainingUses > 0;
+    // 默认实现：检查魏启是否足够
+    return player.mana >= this.manaCost && this.remainingUses > 0;
   }
 
   // 升级技能，子类可以重写此方法

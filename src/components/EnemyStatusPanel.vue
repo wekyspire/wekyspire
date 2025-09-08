@@ -24,9 +24,6 @@
           <span class="stat-value">{{ enemy.defense }}</span>
         </div>
       </div>
-      
-      <HealthBar :unit="enemy" class="enemy" />
-      
       <!-- 效果显示栏 -->
       <EffectDisplayBar 
         :effects="enemy.effects"
@@ -34,6 +31,8 @@
         @show-tooltip="$emit('show-tooltip', $event)"
         @hide-tooltip="$emit('hide-tooltip')"
       />
+      <HealthBar :unit="enemy" class="enemy" />
+      
     </div>
     <!-- 敌人信息悬浮框 -->
     <div 
