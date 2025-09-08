@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import App from './App.vue'
 import GameApp from './GameApp.vue'
+import DebugApp from './DebugApp.vue'
 import TestEffectDisplay from './components/TestEffectDisplay.vue'
 import NamedEntityTest from './components/NamedEntityTest.vue'
 import './assets/main.css'
@@ -10,6 +11,7 @@ import './assets/common.css'
 // 创建路由
 const routes = [
   { path: '/', component: GameApp },
+  { path: '/debug', component: DebugApp },
   { path: '/test', component: TestEffectDisplay },
   { path: '/named-test', component: NamedEntityTest }
 ]

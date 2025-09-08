@@ -119,7 +119,7 @@ export function useSkill(skill) {
   // 检查敌人是否死亡（技能可能造成了伤害）
   if (gameState.enemy.hp <= 0) {
     gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
-    endBattle(gameState, true);
+    endBattle(true);
   }
 
   // 强制刷新操作面板渲染
@@ -157,26 +157,38 @@ export function enemyTurn() {
   }
 
   // 等待敌人行动完成（包括所有攻击动画）
-  gameState.enemy.act(gameState.player, gameState.battleLogs).then(() => {
-    // 看看玩家是不是逝了
-    const isPlayerDead = gameState.player.hp <= 0;
-    
-    if (isPlayerDead) {
-      endBattle(gameState, false);
-      return;
+  const waitForEnemy = () => {
+    const enemyActResult = gameState.enemy.act(gameState.player, gameState.battleLogs);
+    if(enemyActResult.promise === null || enemyActResult.promise === undefined) {
+      enemyActResult.promise = Promise.resolve();
     }
-
-    // 结算敌人回合结束效果
-    processEndOfTurnEffects(gameState.enemy);
-    
-    // 敌人行动结束后开始新回合
-    startNextTurn(gameState);
-    
-    // 触发敌人行动结束事件，通知BattleScreen组件
-    eventBus.emit('enemy-action-end');
-    // 触发敌人回合结束事件，通知BattleScreen组件
-    eventBus.emit('enemy-turn-end');
-  });
+    enemyActResult.promise.then(() => {
+        setTimeout(()=> {
+        // 看看玩家是不是逝了
+        const isPlayerDead = gameState.player.hp <= 0;
+        
+        if (isPlayerDead) {
+          endBattle(false);
+          return;
+        }
+        if(enemyActResult.endTurn === false) {
+          // 继续wait
+          waitForEnemy();
+        } else {
+          // 触发敌人行动结束事件，通知BattleScreen组件
+          eventBus.emit('enemy-action-end');
+          // 结算敌人回合结束效果
+          processEndOfTurnEffects(gameState.enemy);
+          // 触发敌人回合结束事件，通知BattleScreen组件
+          eventBus.emit('enemy-turn-end');
+          // 敌人行动结束后开始新回合
+          startNextTurn(gameState);
+          return;
+        }
+      }, enemyActResult.latency || 800);
+    });
+  };
+  setTimeout(waitForEnemy, 800);
 }
 
 // 结束玩家回合
@@ -186,7 +198,7 @@ export function endPlayerTurn() {
   
   // 检查玩家是否死亡
   if (gameState.player.hp <= 0) {
-    endBattle(gameState, false);
+    endBattle(false);
     return;
   }
   
@@ -198,12 +210,12 @@ export function endPlayerTurn() {
 export function startNextTurn(gameState) {
   // 检查游戏是否结束
   if (gameState.player.hp <= 0) {
-    endBattle(gameState, false);
+    endBattle(false);
     return;
   }
   
   if (gameState.enemy.hp <= 0) {
-    endBattle(gameState, true);
+    endBattle(true);
     return;
   }
   

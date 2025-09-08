@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: './wekyspire/',
+  base: 'https://hineven.github.io/wekyspire/',
   plugins: [vue({
     template: {
       compilerOptions: {

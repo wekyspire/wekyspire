@@ -26,6 +26,17 @@ const SKILL_TIER_MAP = {
   '9': 'S级'
 };
 
+// 能力等阶映射
+const ABILITY_TIER_MAP = {
+  '-1': '特殊',
+  '1': '平庸',
+  '2': '优良',
+  '3': '上佳',
+  '4': '极品',
+  '5': '传奇'
+};
+
+
 // 玩家等阶颜色映射
 const PLAYER_TIER_COLORS = {
   '0': '#DDDDDD', // 见习灵御 - 灰色
@@ -100,6 +111,11 @@ export function getSkillTierLabel(tier) {
   return SKILL_TIER_MAP[tier] || '';
 }
 
+// 根据能力等阶获取标签
+export function getAbilityTierLabel(tier) {
+  return ABILITY_TIER_MAP[tier] || '';
+}
+
 // 根据玩家等阶获取颜色
 export function getPlayerTierColor(tier) {
   return PLAYER_TIER_COLORS[tier] || '#000000';
@@ -108,6 +124,11 @@ export function getPlayerTierColor(tier) {
 // 根据技能等阶获取颜色
 export function getSkillTierColor(tier) {
   return SKILL_TIER_COLORS[tier] || '#000000';
+}
+
+// 根据能力等阶获取颜色
+export function getAbilityTierColor(tier) {
+  return ABILITY_TIER_COLORS[tier] || '';
 }
 
 // 根据商品等阶获取颜色

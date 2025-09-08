@@ -7,7 +7,7 @@ export class Slime extends Enemy {
     const hp = 27 + Math.floor(6 * battleIntensity);
     const attack = 3 + Math.floor(battleIntensity * 0.6);
     super('史莱姆', hp, attack, 1, battleIntensity + 1, 
-      new URL('../assets/enemies/slime.png', import.meta.url).href
+      new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
@@ -28,14 +28,14 @@ export class Slime extends Enemy {
     
     const actions = [
       () => {
+        battleLogs.push(`${this.name} 冲撞！`);
         // 攻击，造成【攻击力】伤害
         const damage = this.calculateDamage(this.attack, player);
-        battleLogs.push(`${this.name} 冲撞！`);
         launchAttack(this, player, damage);
       },
       () => {
-        // 攻击，造成【2 * 攻击力】伤害
         battleLogs.push(`${this.name} 强力冲撞！`);
+        // 攻击，造成【2 * 攻击力】伤害
         const damage = this.calculateDamage(2 * this.attack, player);
         launchAttack(this, player, damage);
       },
@@ -52,9 +52,9 @@ export class Slime extends Enemy {
     
     // 执行行动
     action();
-    
-    // 返回Promise以适配新的act方法
-    return Promise.resolve();
+    return {
+      endTurn: true
+    }
   }
 }
 
@@ -64,12 +64,13 @@ export class Remi extends Enemy {
     const hp = 23 + 5 * battleIntensity;
     const attack = 6 + Math.floor(battleIntensity * 0.8);
     super('魔化瑞米', hp, attack, 1, battleIntensity + 1, 
-      new URL('../assets/enemies/slime.png', import.meta.url).href
+      new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.moneyStolen = false;
     this.description = "一只并不友善的瑞米。";
+    this.inTurnAction = 0;
   }
 
   // 计算伤害
@@ -85,6 +86,8 @@ export class Remi extends Enemy {
     // 3. 吃你的钱包，造成【3】伤害，玩家失去10金钱。
     // 4. 获得1层闪避。
     
+    let advanceAction = 1;
+
     const actions = [
       () => {
         // 攻击，造成【攻击力】伤害
@@ -100,15 +103,21 @@ export class Remi extends Enemy {
       () => {
         // 吃你的钱包，造成【3】伤害，玩家失去10金钱
         if (!this.moneyStolen) {
-          battleLogs.push(`${this.name} 开始搞事！`);
-          this.moneyStolen = true;
-          const damage = this.calculateDamage(3, player);
-          const attackResult = launchAttack(this, player, damage);
-          if(attackResult.hpDamage > 0) {
-            player.money = Math.max(0, player.money - 10);
-            battleLogs.push(`${this.name} 偷偷吃掉了你的钱包，你失去了10金钱！`);
+          if(this.inTurnAction == 0) {
+            battleLogs.push(`${this.name} 开始搞事！`);
+            this.inTurnAction = 1;
+            advanceAction = 0;
           } else {
-            battleLogs.push(`${this.name} 尝试吃你的钱包，但被挡住了！`);
+            this.moneyStolen = true;
+            const damage = this.calculateDamage(3, player);
+            const attackResult = launchAttack(this, player, damage);
+            if(attackResult.hpDamage > 0) {
+              player.money = Math.max(0, player.money - 10);
+              battleLogs.push(`${this.name} 偷偷吃掉了你的钱包，你失去了10金钱！`);
+            } else {
+              battleLogs.push(`${this.name} 尝试吃你的钱包，但被挡住了！`);
+            }
+            this.inTurnAction = 0;
           }
         } else {
           // 如果已经偷过钱包，则执行普通攻击
@@ -126,13 +135,14 @@ export class Remi extends Enemy {
     ];
     
     const action = actions[this.actionIndex % actions.length];
-    this.actionIndex++;
     
     // 执行行动
     action();
+    this.actionIndex += advanceAction;
     
-    // 返回Promise以适配新的act方法
-    return Promise.resolve();
+    return {
+      endTurn: advanceAction === 0 ? false : true
+    }
   }
 }
 
@@ -142,11 +152,12 @@ export class BuzzlingBugs extends Enemy {
     const hp = 5 + Math.floor(2 * battleIntensity);
     const attack = 1 + Math.floor(battleIntensity * 0.5);
     super('嗡嗡虫群', hp, attack, 1, battleIntensity + 1, 
-      new URL('../assets/enemies/slime.png', import.meta.url).href
+      new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = "一群烦恼的嗡嗡虫，你很难够到它们。";
+    this.inTurnAction = 0;
 
     this.addEffect('闪避', 2);
   }
@@ -158,6 +169,7 @@ export class BuzzlingBugs extends Enemy {
 
   // 执行行动
   act(player, battleLogs) {
+    let advanceAction = 0;
     // 嗡嗡虫群行动序列：
     // 1. 高飞，获得 4 层闪避。
     // 2. 攻击，造成4 x 攻击力伤害。
@@ -166,35 +178,34 @@ export class BuzzlingBugs extends Enemy {
         // 高飞，获得 4 层闪避。
         this.addEffect('闪避', 4);
         battleLogs.push(`${this.name} 高高飞起，你很难碰到他们！`);
-      return Promise.resolve();
+        advanceAction = 1;
+        return {};
       },
       () => {
-        return new Promise((resolve) => {
-          // 攻击，造成4 x 攻击力伤害。
-          const damage = this.calculateDamage(this.attack, player);
+        // 攻击，造成4 x 攻击力伤害。
+        const damage = this.calculateDamage(this.attack, player);
+        if(this.inTurnAction == 0) {
           battleLogs.push(`${this.name} 集结成群，向下俯冲！`);
-          const times = 4;
-          // 逐个执行攻击，并在每次攻击之间添加延时
-          let i = 0;
-          const executeAttack = () => {
-            if (i < times) {
-              launchAttack(this, player, damage);
-              i++;
-              // 添加延时后再执行下一次攻击
-              setTimeout(executeAttack, 500);
-            } else {
-              // 所有攻击执行完毕
-              resolve();
-            }
-          };
-        executeAttack();
-        });
+          this.inTurnAction ++;
+        } else {
+          this.inTurnAction ++;
+          launchAttack(this, player, damage);
+          if(this.inTurnAction >= 5) {
+            this.inTurnAction = 0;
+            advanceAction = 1;
+          }
+        }
+        return {};
       }
     ];
 
     const action = actions[this.actionIndex % actions.length];
-    this.actionIndex++;
+    action();
+    this.actionIndex += advanceAction;
     
-    return action();
+    return {
+      endTurn: advanceAction === 0 ? false : true,
+      latency: 400
+    };
   }
 }

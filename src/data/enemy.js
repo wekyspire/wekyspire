@@ -47,8 +47,18 @@ class Enemy {
   }
 
   // 执行行动
+  // @reutrn 
+  // {
+  //  endTurn: 表示是否结束此回合，否然act会被继续调用，默认为true
+  //  latency: 操作间隔，默认为800ms,
+  //  promise: 敌人自定义行动延时和异步操作，如果非空，则会被上层应用等待，默认为null
+  // }
   act(player, battleLogs) {
     // 子类需要实现具体逻辑
+    return {
+      endTurn: true,
+      latency: 800
+    }
   }
 
   // 添加效果
