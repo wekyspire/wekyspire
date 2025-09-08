@@ -137,11 +137,15 @@ export default {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: #2c3e50;
+  color: #eef7ff;
   margin-top: 60px;
   user-select: none;
   position: relative;
+  height:100vh;
 }
 
+div {
+  color: #424242;
+}
 
 </style>

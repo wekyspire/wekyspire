@@ -18,7 +18,13 @@ export default {
 <style>
 #debug-app {
   height: 100vh;
-  width: 100vw;
   overflow: hidden;
+  display: flex;
+}
+
+#debug-app > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 </style>

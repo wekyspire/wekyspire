@@ -23,10 +23,6 @@
           <span class="stat-label">🛡️ 防御:</span>
           <span class="stat-value">{{ enemy.defense }}</span>
         </div>
-        <div class="stat">
-          <span class="stat-label">🔮 灵能:</span>
-          <span class="stat-value">{{ enemy.magic }}</span>
-        </div>
       </div>
       
       <HealthBar :unit="enemy" class="enemy" />
@@ -57,10 +53,6 @@
           <div class="stat">
             <span class="stat-label">🛡️ 防御力:</span>
             <span class="stat-value">{{ enemy.defense }}</span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">🔮 灵能强度:</span>
-            <span class="stat-value">{{ enemy.magic }}</span>
           </div>
         </div>
       </div>
@@ -147,9 +139,10 @@ export default {
 }
 
 .enemy-details {
-  padding: 10px;
+  padding-right: 20px;
+  padding-left: 20px;
+  min-width: 300px;
   height: 230px;
-  width: 350px;
 }
 
 .enemy-header {
@@ -159,7 +152,7 @@ export default {
 }
 
 .enemy-avatar {
-  width: 200px;
+  width: 350px;
   height: 250px;
 }
 

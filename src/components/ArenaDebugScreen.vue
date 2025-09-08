@@ -79,10 +79,10 @@
         <div class="config-item">
           <label>敌人类型:</label>
           <select v-model="selectedEnemyType">
-            <option value="Slime">史莱姆</option>
-            <option value="Remi">瑞米</option>
-            <option value="BigWolf">雪狼</option>
-            <option value="MEFM3">MEFM-3</option>
+            <option value="史莱姆">史莱姆</option>
+            <option value="魔化瑞米">瑞米</option>
+            <option value="雪狼">雪狼</option>
+            <option value="MEFM-3">MEFM-3</option>
           </select>
         </div>
         <div class="config-item">
@@ -132,7 +132,7 @@ export default {
       enemy: {},
       battleLogs: [],
       isControlDisabled: false,
-      selectedEnemyType: 'Slime',
+      selectedEnemyType: '史莱姆',
       battleIntensity: 1,
       selectedSkills: Array(5).fill(''),
       availableSkills: []
@@ -234,10 +234,18 @@ export default {
 .arena-debug-screen {
   display: flex;
   height: 100vh;
+  width: 100%;
 }
 
 .battle-area {
   flex: 3;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.battle-area > div {
+  flex: 1;
   height: 100%;
 }
 
@@ -247,6 +255,12 @@ export default {
   padding: 20px;
   overflow-y: auto;
   border-left: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+}
+
+.cheat-menu > div {
+  flex: 1 1 auto;
 }
 
 .cheat-menu-header {

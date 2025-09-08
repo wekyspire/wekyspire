@@ -1,13 +1,13 @@
 import Enemy from '../enemy.js';
-import { launchAttack } from '../battleUtils.js';
+import { gainShield, launchAttack } from '../battleUtils.js';
 
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
-    const hp = 80 + 11 * battleIntensity;
+    const hp = 50 + 8 * battleIntensity;
     const attack = Math.round((3 + battleIntensity) * 0.5);
     super(
-      'MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0,
+      'MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5),
       new URL('../assets/enemies/slime.png', import.meta.url).href
     );
     this.type = 'boss'; // 标记为Boss敌人
@@ -91,7 +91,7 @@ export class MEFM3 extends Enemy {
           this.addEffect('格挡', 2);
           this.inTurnAction ++;
         } else if(this.inTurnAction == 2) {
-          this.addEffect('护盾', 6);
+          gainShield(this, this, 6);
           advanceAction = 1;
           this.inTurnAction = 0;
         }

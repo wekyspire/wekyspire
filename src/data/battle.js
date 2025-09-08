@@ -105,31 +105,44 @@ export function useSkill(skill) {
   // 先冻结玩家操作面板
   gameState.controlDisableCount += 1;
   
+  // 支付行动力、使用次数和魏启
+  skill.consumeUses(gameState.player);
+  
   // 技能发动时结算效果
   processSkillActivationEffects(gameState.player);
   
-  // 执行技能效果
-  const result = skill.use(gameState.player, gameState.enemy);
-  
-  // 消耗行动力和魏启
-  gameState.player.actionPoints -= 1;
-  gameState.player.mana -= skill.manaCost;
-  skill.remainingUses -= 1;
-
-  // 检查敌人是否死亡（技能可能造成了伤害）
-  if (gameState.enemy.hp <= 0) {
-    gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
-    endBattle(true);
-  }
-
-  // 强制刷新操作面板渲染
-  // 注意：在Vue组件中可能需要不同的处理方式
-
-  // 解冻玩家控制面板
-  gameState.controlDisableCount -= 1;
-
-  // 发射事件
-  eventBus.emit('after-skill-use', {player: gameState.player, skill: skill, result: result});
+  const promise = new Promise((resolve) => {
+    // 执行技能效果
+    let stage = 0;
+    const executeSkill = () => {
+      const result = skill.use(gameState.player, gameState.enemy, stage);
+      // 检查敌人是否死亡（技能可能造成了伤害）
+      if (gameState.enemy.hp <= 0) {
+        gameState.battleLogs.push(`${gameState.enemy.name} 被击败了！`);
+        endBattle(true);
+        resolve(result);
+        gameState.controlDisableCount -= 1;
+      } else if(result !== true && result !== false) {
+        // 此技能发动需要连续反复调用
+        stage ++;
+        setTimeout(executeSkill, 400);
+      } else {
+        // 技能完成使用，发射事件
+        if(result !== null) {
+          eventBus.emit('after-skill-use', 
+            {player: gameState.player, skill: skill, result: result});
+        }
+        // 最后提醒UI
+        eventBus.emit('update-skill-descriptions');
+        // 解冻玩家控制面板
+        gameState.controlDisableCount -= 1;
+        // 设置结果
+        resolve(result);
+      }
+    }
+    executeSkill();
+  });
+  return promise;
 }
 
 // 敌人回合

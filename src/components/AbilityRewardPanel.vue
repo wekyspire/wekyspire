@@ -1,24 +1,37 @@
 <template>
-  <div class="ability-reward-overlay" v-if="isVisible">
-    <div class="ability-reward-panel">
-      <h2>能力奖励</h2>
-      <div class="ability-cards">
-        <div 
-          v-for="(ability, index) in abilities" 
-          :key="index"
-          :class="['ability-card', 'tier-' + ability.tier]"
-          @click="selectAbility(ability)"
-        >
-          <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
-          <div class="ability-name">{{ ability.name }}</div>
-          <div class="ability-description">
-            <ColoredText :text="ability.description" />
+  <transition name="overlay-fade">
+    <div class="ability-reward-overlay" v-if="isVisible">
+      <!-- 选中效果覆盖层 -->
+      <transition name="selection-overlay-fade">
+        <div class="selection-overlay" v-if="showSelectionEffect"></div>
+      </transition>
+      
+      <transition name="panel-scale">
+        <div class="ability-reward-panel" v-if="isVisible">
+          <h2>选择一项奖励</h2>
+          <div class="ability-cards">
+            <div 
+              v-for="(ability, index) in abilities" 
+              :key="index"
+              :class="[
+                'ability-card', 
+                'tier-' + ability.tier,
+                { 'selected-glow': selectedAbility === ability && showSelectionEffect }
+              ]"
+              @click="selectAbility(ability)"
+            >
+              <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
+              <div class="ability-name">{{ ability.name }}</div>
+              <div class="ability-description">
+                <ColoredText :text="ability.description" />
+              </div>
+            </div>
           </div>
+          <button @click="closePanel">返回</button>
         </div>
-      </div>
-      <button @click="closePanel">放弃</button>
+      </transition>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
@@ -40,10 +53,23 @@ export default {
       default: false
     }
   },
+  data() {
+    return {
+      selectedAbility: null,
+      showSelectionEffect: false
+    };
+  },
   methods: {
     getAbilityTierLabel,
     selectAbility(ability) {
-      this.$emit('selected-ability-reward', ability);
+      // 设置选中的能力
+      this.selectedAbility = ability;
+      this.showSelectionEffect = true;
+      
+      // 等待动画完成后发出事件
+      setTimeout(() => {
+        this.$emit('selected-ability-reward', ability);
+      }, 2000); // 动画持续时间
     },
     closePanel() {
       this.$emit('close');
@@ -153,5 +179,81 @@ button {
   padding: 10px 15px;
   margin: 5px;
   cursor: pointer;
+}
+
+/* 选中效果覆盖层 */
+.selection-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 901; /* 高于主覆盖层 */
+}
+
+/* 选中效果覆盖层淡入淡出动画 */
+.selection-overlay-fade-enter-active, .selection-overlay-fade-leave-active {
+  transition: opacity 1.5s;
+}
+
+.selection-overlay-fade-enter-from, .selection-overlay-fade-leave-to {
+  opacity: 0;
+}
+
+.selection-overlay-fade-enter-to, .selection-overlay-fade-leave-from {
+  opacity: 1;
+}
+
+/* 选中能力卡发光效果 */
+.selected-glow {
+  position: relative;
+  z-index: 902; /* 高于选中效果覆盖层 */
+}
+
+.selected-glow.tier-1 {
+  box-shadow: 0 0 20px 10px #4caf50;
+}
+
+.selected-glow.tier-2 {
+  box-shadow: 0 0 20px 10px #2196f3;
+}
+
+.selected-glow.tier-3 {
+  box-shadow: 0 0 20px 10px #9c27b0;
+}
+
+.selected-glow.tier-4 {
+  box-shadow: 0 0 20px 10px #ff9800;
+}
+
+.selected-glow.tier-5 {
+  box-shadow: 0 0 20px 10px #f44336;
+}
+
+/* 覆盖层淡入淡出动画 */
+.overlay-fade-enter-active, .overlay-fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.overlay-fade-enter-from, .overlay-fade-leave-to {
+  opacity: 0;
+}
+
+.overlay-fade-enter-to, .overlay-fade-leave-from {
+  opacity: 1;
+}
+
+/* 面板缩放动画 */
+.panel-scale-enter-active, .panel-scale-leave-active {
+  transition: transform 0.3s;
+}
+
+.panel-scale-enter-from, .panel-scale-leave-to {
+  transform: scale(0.9);
+}
+
+.panel-scale-enter-to, .panel-scale-leave-from {
+  transform: scale(1);
 }
 </style>

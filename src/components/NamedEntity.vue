@@ -142,5 +142,6 @@ export default {
 
 .named-entity-tooltip .tooltip-description {
   font-size: 14px;
+  color: white;
 }
 </style>

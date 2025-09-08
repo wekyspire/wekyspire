@@ -313,7 +313,10 @@ export function processDamageDealtEffects(target, damage) {
  */
 export function processPostAttackEffects(attacker, target, damage) {
   let finalDamage = damage;
+  // 力量效果
+  finalDamage += (attacker.effects['力量'] || 0);
   
+
   // 处理超频效果
   if (attacker.effects['超频'] > 0) {
     // 10%概率双倍伤害

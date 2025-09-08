@@ -1,7 +1,22 @@
 <template>
   <div class="start-screen">
-    <h1>魏启尖塔</h1>
-    <button @click="startGame">开始游戏</button>
+    <h1 class="game-title">魏启尖塔</h1>
+    <button @click="startGame">无限模式</button>
+    <button 
+      class="story-mode-button"
+      disabled
+      @mouseenter="showStoryTooltip = true" 
+      @mouseleave="showStoryTooltip = false"
+      style="visibility:hidden;"
+    >
+      故事模式
+      <div 
+        v-if="showStoryTooltip"
+        class="tooltip"
+      >
+        正在筹备中！
+      </div>
+    </button>
     
     <div class="changelog-container">
       <div 
@@ -39,6 +54,7 @@ export default {
   data() {
     return {
       showChangelog: false,
+      showStoryTooltip: false,
       changelogData: [
         {
           version: '2025.9.8 [Alpha 0.2]',
@@ -54,15 +70,14 @@ export default {
             {
               title: '改进',
               items: [
-                '增强数值平衡，提升了前期难度，削弱锻体流'
+                '调整了配色，更暗黑！'
               ]
             },
             {
               title: '已知问题',
               items: [
                 '商店不工作',
-                '部分结算错误',
-                'MEFM-3能量耦合卡住'
+                '部分结算错误'
               ]
             }
           ]
@@ -94,6 +109,24 @@ button {
   margin-top: 20px;
 }
 
+.story-mode-button {
+  position: relative;
+}
+
+.story-mode-button .tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 100;
+  font-size: 14px;
+}
+
 .changelog-container {
   position: absolute;
   right: 20px;
@@ -109,7 +142,7 @@ button {
 .toggle-icon {
   width: 30px;
   height: 30px;
-  background: #f0f0f0;
+  background: #6a6a6a;
   border: 1px solid #ccc;
   border-radius: 4px;
   display: flex;
@@ -124,9 +157,7 @@ button {
 .changelog-content {
   width: 0;
   overflow: hidden;
-  background: white;
-  /* border: 1px solid #ccc; */
-  /* border-radius: 4px; */
+  background: rgb(90, 90, 90);
   margin-right: 10px;
   transition: width 0.3s ease;
   white-space: nowrap;
@@ -161,5 +192,11 @@ button {
 .changelog-content li {
   margin: 2px 0;
   font-size: 0.9em;
+}
+
+.game-title {
+  font-size: 4em;
+  margin-bottom: 20px;
+  color: #eef7ff;
 }
 </style>

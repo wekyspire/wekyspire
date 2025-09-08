@@ -39,7 +39,7 @@ const ABILITY_TIER_MAP = {
 
 // 玩家等阶颜色映射
 const PLAYER_TIER_COLORS = {
-  '0': '#DDDDDD', // 见习灵御 - 灰色
+  '0': '#FFFFFF', // 见习灵御 - 白色
   '2': '#66FF66', // 普通灵御 - 绿色
   '3': '#88BBFF', // 中级灵御 - 蓝色
   '5': '#AA44EE', // 高级灵御 - 紫色

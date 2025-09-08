@@ -10,7 +10,7 @@ class FireSlime extends Enemy {
     super('火史莱姆', 
       13 + Math.floor(5 * battleIntensity),
        6 + Math.floor(battleIntensity * 0.6),
-        1, 1, 
+        1, 
       new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.burnDamage = 3; // 燃烧伤害

@@ -159,6 +159,7 @@ export default {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   transition: background-color 0.3s ease;
   height: 220px;
+  max-width: 350px;
 }
 
 .player-status-panel.rest-mode {

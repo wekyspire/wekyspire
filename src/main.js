@@ -7,6 +7,7 @@ import TestEffectDisplay from './components/TestEffectDisplay.vue'
 import NamedEntityTest from './components/NamedEntityTest.vue'
 import './assets/main.css'
 import './assets/common.css'
+import SkillManager from './data/skillManager.js'
 
 // 创建路由
 const routes = [
@@ -27,5 +28,11 @@ const app = createApp(App)
 // 使用路由
 app.use(router)
 
-// 挂载应用
-app.mount('#app')
+// 加载所有技能
+SkillManager.loadAllSkills().then(skillManager => {
+  // 将skillManager实例添加到全局属性中，以便在应用中使用
+  app.config.globalProperties.$skillManager = skillManager;
+  
+  // 挂载应用
+  app.mount('#app');
+});

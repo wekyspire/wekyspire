@@ -9,16 +9,12 @@
       <span class="stat-value">{{ player.mana }}/{{ player.maxMana }}</span>
     </div>
     <div class="stat">
-      <span class="stat-label">⚔️ 攻击:</span>
-      <span class="stat-value">{{ player.attack }}</span>
+      <span class="stat-label">🔮 灵能:</span>
+      <span class="stat-value">{{ player.magic }}</span>
     </div>
     <div class="stat">
       <span class="stat-label">🛡️ 防御:</span>
       <span class="stat-value">{{ player.defense }}</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">🔮 灵能:</span>
-      <span class="stat-value">{{ player.magic }}</span>
     </div>
     <div class="stat">
       <span class="stat-label">🏅 等阶:</span>

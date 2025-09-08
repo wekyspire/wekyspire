@@ -11,7 +11,7 @@ export function addBattleLog (log) {
 // 任意攻击的结算逻辑（由skill、enemy和effect结算调用）
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}
 export function launchAttack (attacker, target, damage) {
-  
+
   // 攻击者对攻击的后处理
   let finalDamage = damage;
   if (attacker) {

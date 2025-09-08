@@ -1,18 +1,4 @@
-import { PunchKick, RollPunch, Roll, Sleep, KungFu, FastThinking } from './skills/basic.js';
-import {
-  CarelessPunchKick, AmateurDefense, OverCarefulDefense,
-  PrepareExercise, CarelessBravery, HoldOn } from './skills/basic.js';
-import { Fireshot,Fireball, LargeFireball, KaradiaBurst, GigaFlameBlast } from './skills/blast.js';
-import {VeryWeakRecovery, WeakRecovery, Recovery} from './skills/heal.js';
-
-import { ChargePunch, FloatingI, PurifyWeky,
-   RockFormationI,
-   SpeedThinking,
-   StrengthenI, StrongPurifyWeky, SummonRemi, 
-  TransformSword, 
-  WeakenI } from './skills/cMinus.js';
-
-import {FireControlI} from "./skills/firecontrol";
+import Skill from './skill.js';
 
 // 技能管理器类
 class SkillManager {
@@ -20,48 +6,44 @@ class SkillManager {
     this.skills = [];
     this.skillRegistry = new Map(); // 新增技能注册表
     
-    // 初始化时注册预定义技能
-    this.registerSkill(PunchKick);
-    this.registerSkill(RollPunch);
-    this.registerSkill(Roll);
-    this.registerSkill(Sleep);
-    this.registerSkill(KungFu);
-    this.registerSkill(CarelessPunchKick);
-    this.registerSkill(AmateurDefense);
-    this.registerSkill(OverCarefulDefense);
-    this.registerSkill(PrepareExercise);
-    this.registerSkill(CarelessBravery);
-    this.registerSkill(HoldOn);
-
-    this.registerSkill(Fireshot);
-    this.registerSkill(Fireball);
-    this.registerSkill(LargeFireball);
-    this.registerSkill(KaradiaBurst);
-    this.registerSkill(GigaFlameBlast);
-
-    this.registerSkill(VeryWeakRecovery);
-    this.registerSkill(WeakRecovery);
-    this.registerSkill(Recovery);
-
-    this.registerSkill(ChargePunch);
-    this.registerSkill(FastThinking);
-
-    this.registerSkill(PurifyWeky);
-    this.registerSkill(StrongPurifyWeky);
-    this.registerSkill(StrengthenI);
-    this.registerSkill(WeakenI);
-    this.registerSkill(FireControlI);
-    this.registerSkill(SummonRemi);
-    this.registerSkill(TransformSword);
-    this.registerSkill(FloatingI);
-    this.registerSkill(RockFormationI);
-    this.registerSkill(SpeedThinking);
   }
-  
+
+
   // 注册技能
   registerSkill(SkillClass) {
     const skillName = (new SkillClass()).name;
     this.skillRegistry.set(skillName, SkillClass);
+  }
+
+  static async loadAllSkills() {
+    
+    const skillManager = SkillManager.getInstance();
+
+    // 动态导入所有技能文件
+    const skillModules = [
+      await import('./skills/basic.js'),
+      // await import('./skills/blast.js'),
+      // await import('./skills/heal.js'),
+      // await import('./skills/remi.js'),
+      // await import('./skills/cMinus.js'),
+      // await import('./skills/firecontrol.js'),
+      // await import('./skills/lumi.js')
+    ];
+    
+    // 遍历所有模块并注册其中的技能
+    for (const module of skillModules) {
+      // 遍历模块中的所有导出
+      for (const [key, SkillClass] of Object.entries(module)) {
+        // 检查是否为Skill类的子类
+        if (typeof SkillClass === 'function' && SkillClass !== Skill && SkillClass.prototype instanceof Skill) {
+          try {
+            skillManager.registerSkill(SkillClass);
+          } catch (error) {
+            console.error(`Failed to register skill: ${key}`, error);
+          }
+        }
+      }
+    }
   }
   
   // 创建技能实例
@@ -69,7 +51,9 @@ class SkillManager {
     // 使用注册表创建技能实例
     const SkillClass = this.skillRegistry.get(skillName);
     if (SkillClass) {
-      return new SkillClass();
+      const obj = new SkillClass();
+      obj.description = obj.regenerateDescription();
+      return obj;
     }
     throw new Error(`Unknown skill: ${skillName}`);
   }
