@@ -1,8 +1,8 @@
-name: Deploy to GitHub Pages
+name: Build Master and Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ master, nightly ]
+    branches: [ master ]
 
 permissions:
   contents: write
@@ -26,13 +26,8 @@ jobs:
       - name: Set deploy path
         id: deploy_path
         run: |
-          if [ "${{ github.ref_name }}" == "master" ]; then
-            echo "subdir=." >> $GITHUB_OUTPUT
-            echo "base=/project_name/" >> $GITHUB_ENV
-          else
-            echo "subdir=nightly" >> $GITHUB_OUTPUT
-            echo "base=/project_name/nightly/" >> $GITHUB_ENV
-          fi
+          echo "subdir=nightly" >> $GITHUB_OUTPUT
+          echo "base=/project_name/" >> $GITHUB_ENV
 
       # 👇 设置前端 base 路径
       - name: Set Vite base path
@@ -55,14 +50,6 @@ jobs:
       - name: Prepare combined deploy directory
         run: |
           mkdir -p deploy_dir
-          # 拷贝现有内容（除了当前要更新的目录）
-          if [ -d "staging/nightly" ] && [ "${{ github.ref_name }}" != "nightly" ]; then
-            cp -r staging/nightly deploy_dir/
-          fi
-          if [ -f "staging/index.html" ] && [ "${{ github.ref_name }}" == "nightly" ]; then
-            cp -r staging/* deploy_dir/ 2>/dev/null || true
-            rm -rf deploy_dir/nightly
-          fi
           # 拷贝当前构建
           mkdir -p deploy_dir/${{ steps.deploy_path.outputs.subdir }}
           cp -r dist/* deploy_dir/${{ steps.deploy_path.outputs.subdir }}/
