@@ -11,6 +11,9 @@ export const gameState = reactive({
   // 游戏阶段: 'start', 'battle', 'rest', 'end'
   gameStage: 'start',
   
+  // 是否开启了瑞米进行游戏
+  isRemiPresent: false,
+
   // 游戏结果状态
   isVictory: false,
   

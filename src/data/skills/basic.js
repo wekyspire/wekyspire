@@ -5,11 +5,12 @@ import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 export class PunchKick extends Skill {
   
   constructor() {
-    super('拳打脚踢', 'normal', 0, 0, Infinity, '拳打脚踢', 1);
+    super('拳打脚踢', 'normal', 0, 0, 3, '拳打脚踢', 1);
+    this.coldDownTurns = 1;
   }
   
   get damage () {
-    return Math.max(3 + this.power, 3);
+    return Math.max(5 + this.power, 3);
   }
 
   // 使用技能
@@ -310,7 +311,7 @@ export class HoldOn extends Skill {
 // 快速思考技能
 export class FastThinking extends Skill {
   constructor() {
-    super('快速思考', 'normal', 1, 0, Infinity, '思考', 1);
+    super('快速思考', 'normal', 1, 0, 3, '思考', 1);
   }
 
   get coldDownTurns() {
