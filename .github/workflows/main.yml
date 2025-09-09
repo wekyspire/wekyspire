@@ -31,7 +31,7 @@ jobs:
       # 👇 设置前端 base 路径
       - name: Set Vite base path
         run: |
-          echo "VITE_BASE=${{ env.base }}/wekyspire" >> .env.production
+          echo "VITE_BASE=${{ env.base }}" >> .env.production
 
       - name: Build
         run: npm run build
