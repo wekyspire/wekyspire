@@ -151,4 +151,5 @@ export default {
   gap: 15px;
   margin-bottom: 15px;
 }
+
 </style>
