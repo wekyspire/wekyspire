@@ -23,14 +23,17 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      # 👇 动态计算部署 base 路径
-      - name: 🔧 Set VITE_BASE for GitHub Pages
+      # 👇 动态计算完整的部署 URL
+      - name: 🔧 Set VITE_BASE (Full URL)
         run: |
-          # 格式: /<repo>/
+          OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          VITE_BASE="/$REPO_NAME/"
+
+          # 构造完整 URL: https://<owner>.github.io/<repo>/
+          VITE_BASE="https://$OWNER.github.io/$REPO_NAME/"
+
           echo "VITE_BASE=$VITE_BASE" >> .env.production
-          echo "Using base path: $VITE_BASE"
+          echo "Deploy base URL: $VITE_BASE"
 
       - name: 🛠️ Build project
         run: npm run build
