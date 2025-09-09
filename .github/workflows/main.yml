@@ -23,20 +23,19 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      # 👇 动态计算完整的部署 URL
+      # 👇 设置完整部署 URL 并注入到环境变量
       - name: 🔧 Set VITE_BASE (Full URL)
         run: |
           OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-
-          # 构造完整 URL: https://<owner>.github.io/<repo>/
           VITE_BASE="https://$OWNER.github.io/$REPO_NAME/"
-
-          echo "VITE_BASE=$VITE_BASE" >> .env.production
+          echo "VITE_BASE=$VITE_BASE" >> $GITHUB_ENV
           echo "Deploy base URL: $VITE_BASE"
 
       - name: 🛠️ Build project
         run: npm run build
+        env:
+          VITE_BASE: ${{ env.VITE_BASE }}  # 👈 显式传入，确保 vite.config.js 能读取
 
       - name: 🚀 Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
