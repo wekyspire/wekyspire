@@ -26,7 +26,7 @@ jobs:
       - name: Set deploy path
         id: deploy_path
         run: |
-          echo "subdir=nightly" >> $GITHUB_OUTPUT
+          echo "subdir= " >> $GITHUB_OUTPUT
           echo "base=/project_name/" >> $GITHUB_ENV
 
       # 👇 设置前端 base 路径
