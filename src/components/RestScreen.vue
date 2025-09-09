@@ -1,7 +1,5 @@
 <template>
-  <div class="rest-screen" :style="{
-    backgroundImage: 'url(' + (gameState.isRemiPresent ? 'src/assets/images/shop-background.png' : '') + ')',
-  }">
+  <div class="rest-screen" :class="{'remi-present-rest-screen': gameState.isRemiPresent}">
     <div class="rest-screen-content">
       <h1 class="rest-title">{{ gameState.isRemiPresent ? '好好休息！' : '休整阶段'}}</h1>
       
@@ -193,6 +191,11 @@ export default {
   width: 100%;
   background-size: cover;
 }
+
+.remi-present-rest-screen {
+  background-image: url('@assets/images/shop-background.png');
+}
+
 .rest-screen-content {
   margin: 0 auto;
   padding: 20px;

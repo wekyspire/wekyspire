@@ -143,7 +143,7 @@ export default {
   justify-content: center;
   height: 100vh;
   position: relative;
-  background: url('src/assets/images/start-screen.png') no-repeat center center fixed;
+  background: url('@assets/images/start-screen.png') no-repeat center center fixed;
   background-position: bottom;
   background-color:#0b0b12;
   background-size: cover;
