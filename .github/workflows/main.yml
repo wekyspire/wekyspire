@@ -26,7 +26,6 @@ jobs:
       - name: Set deploy path
         id: deploy_path
         run: |
-          echo "subdir= " >> $GITHUB_OUTPUT
           echo "base=/project_name/" >> $GITHUB_ENV
 
       # 👇 设置前端 base 路径
@@ -51,8 +50,8 @@ jobs:
         run: |
           mkdir -p deploy_dir
           # 拷贝当前构建
-          mkdir -p deploy_dir/${{ steps.deploy_path.outputs.subdir }}
-          cp -r dist/* deploy_dir/${{ steps.deploy_path.outputs.subdir }}/
+          mkdir -p deploy_dir/
+          cp -r dist/* deploy_dir/
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
