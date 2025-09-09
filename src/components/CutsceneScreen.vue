@@ -1,9 +1,13 @@
 <template>
-  <div class="cutscene-overlay" v-if="isVisible">
-    <div class="cutscene-screen">
-      <img :src="currentImage" :alt="currentImage" class="cutscene-image" />
+  <transition name="fade">
+    <div class="cutscene-overlay" v-if="isVisible">
+      <div class="cutscene-screen">
+        <transition name="image-fade" mode="out-in">
+          <img :src="currentImage" :alt="currentImage" class="cutscene-image" v-if="showImage" :key="currentImage" />
+        </transition>
+      </div>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
@@ -22,21 +26,49 @@ export default {
     return {
       isVisible: false,
       currentImage: '',
+      cutsceneImageIndex: 0,
+      cutsceneEvent: null,
       fadeTimeout: null,
-      previousStage: ''
+      previousStage: '',
+      showImage: true
     };
   },
   mounted() {
     // 监听display-cutscene事件
-    eventBus.on('display-cutscene', (imagePath) => {
-      this.currentImage = imagePath;
+    eventBus.on('display-cutscene', (cutsceneEvent) => {
+      if(this.cutsceneEvent) {
+        console.error('CutsceneScreen: 尝试显示新的cutscene事件时，当前已存在一个cutscene事件');
+        return ;
+      }
+      this.cutsceneEvent = cutsceneEvent;
+      this.currentImage = '';
+      this.cutsceneImageIndex = 0;
       this.isVisible = true;
-      
-      // 3秒后自动关闭过场动画
-      this.fadeTimeout = setTimeout(() => {
-        this.isVisible = false;
-        eventBus.emit('cutscene-ended');
-      }, 3000);
+    
+      setTimeout(()=>{
+        this.currentImage = this.cutsceneEvent.images[this.cutsceneImageIndex];
+        this.showImage = true;
+        const interval = setInterval(()=>{
+          this.showImage = false;
+          setTimeout(() => {
+            this.cutsceneImageIndex++;
+            if(this.cutsceneImageIndex < this.cutsceneEvent.images.length){
+              this.currentImage = this.cutsceneEvent.images[this.cutsceneImageIndex];
+            } else {
+              this.cutsceneImageIndex = 0;
+              this.currentImage = '';
+              clearInterval(interval);
+              setTimeout(()=> {
+                this.cutsceneEvent?.onEnd?.();
+                this.cutsceneEvent = null;
+                this.isVisible = false;
+              }, 1000);
+              return;
+            }
+            this.showImage = true;
+          }, 500);
+        }, this.cutsceneEvent.interval || 3000);
+      }, 1000);
     });
     
     // 监听游戏阶段变化
@@ -45,41 +77,9 @@ export default {
   beforeUnmount() {
     // 移除事件监听
     eventBus.off('display-cutscene');
-    
     // 清除定时器
     if (this.fadeTimeout) {
       clearTimeout(this.fadeTimeout);
-    }
-  },
-  watch: {
-    'gameState.gameStage'(newStage, oldStage) {
-      // 当游戏阶段发生变化时，显示过场动画
-      if (oldStage !== newStage) {
-        // 设置过场图片路径（根据阶段变化）
-        let imagePath = '';
-        if (oldStage === 'start' && newStage === 'battle') {
-          imagePath = '/src/assets/images/start_to_battle.svg';
-        } else if (oldStage === 'battle' && newStage === 'rest') {
-          imagePath = '/src/assets/images/battle_to_rest.svg';
-        } else if (oldStage === 'rest' && newStage === 'battle') {
-          imagePath = '/src/assets/images/rest_to_battle.svg';
-        } else if (oldStage === 'battle' && newStage === 'end') {
-          imagePath = '/src/assets/images/battle_to_end.svg';
-        } else {
-          // 默认图片或不显示过场动画
-          return;
-        }
-        
-        // 显示过场动画
-        this.currentImage = imagePath;
-        this.isVisible = true;
-        
-        // 3秒后自动关闭过场动画
-        this.fadeTimeout = setTimeout(() => {
-          this.isVisible = false;
-          eventBus.emit('cutscene-ended');
-        }, 3000);
-      }
     }
   }
 };
@@ -97,15 +97,20 @@ export default {
   justify-content: center;
   align-items: center;
   z-index: 900; /* 低于DialogScreen的1000 */
-  opacity: 0;
-  animation: fadeInOut 3s ease-in-out;
 }
 
-@keyframes fadeInOut {
-  0% { opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { opacity: 0; }
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 1s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.image-fade-enter-active, .image-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.image-fade-enter-from, .image-fade-leave-to {
+  opacity: 0;
 }
 
 .cutscene-screen {

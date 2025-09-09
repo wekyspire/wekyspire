@@ -2,8 +2,7 @@
   <div id="game-app">
     <!-- 开始游戏界面 -->
     <StartScreen 
-      v-if="gameState.gameStage === 'start'" 
-      @start-game="startGame"
+      v-if="gameState.gameStage === 'start'"
     />
     
     <!-- 战斗界面 -->
@@ -37,6 +36,9 @@
     
     <!-- 粒子效果管理器 -->
     <ParticleEffectManager />
+    
+    <!-- 消息弹出框界面 -->
+    <MessagePopupScreen />
   </div>
 </template>
 
@@ -49,6 +51,7 @@ import DialogScreen from './components/DialogScreen.vue'
 import BossShowupAnimation from './components/BossShowupAnimation.vue'
 import CutsceneScreen from './components/CutsceneScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
+import MessagePopupScreen from './components/MessagePopupScreen.vue'
 import SkillManager from './data/skillManager.js'
 
 import eventBus from './eventBus.js'
@@ -66,7 +69,8 @@ export default {
     DialogScreen,
     BossShowupAnimation,
     CutsceneScreen,
-    ParticleEffectManager
+    ParticleEffectManager,
+    MessagePopupScreen
   },
   computed: {
     isPlayerTurn() {
@@ -84,30 +88,25 @@ export default {
     this.eventBus = eventBus;
     // 监听add-battle-log
     this.eventBus.on('add-battle-log', (value) => {
-      // 兼容旧的字符串格式和新的对象格式
-      if (typeof value === 'string') {
-        gameState.battleLogs.push(value);
-      } else {
-        gameState.battleLogs.push(value);
-      }
+        // 兼容旧的字符串格式和新的对象格式
+        if (typeof value === 'string') {
+            gameState.battleLogs.push(value);
+        } else {
+            gameState.battleLogs.push(value);
+        }
     });
     // 注册对话对事件总线的监听
     dialogues.registerListeners(eventBus);
-    // 监听对话结束事件
-    this.eventBus.on('dialog-ended', () => {
-      // 如果是开场事件，开始战斗
-      if (gameState.gameStage === 'battle' && gameState.battleCount === 0) {
-        startBattle();
-      }
+    // 监听start-game
+    this.eventBus.on('start-game', () => {
+        this.startGame();
     });
-    
 
-
-  },
+    },
   beforeUnmount() {
     if(this.eventBus) {
       this.eventBus.off('add-battle-log');
-      this.eventBus.off('dialog-ended');
+      this.eventBus.off('start-game');
       dialogues.unregisterListeners(eventBus);
     }
   },
@@ -128,19 +127,15 @@ export default {
       gameState.player.skillSlots[3] = initialSkill4;
       
       gameState.gameStage = 'battle';
-      // 注意：不在这里调用startBattle()，而是在对话结束后调用
+
+      // 开始第一场战斗
+      startBattle();
     },
-    
-    // 休整阶段的逻辑已移至rest.js文件中
-    
     restartGame() {
       // 重置游戏状态
       resetGameState();
-      
-      // 注意：不在这里添加初始技能，而是在startGame方法中添加
-    },
-    
 
+    },
   }
 }
 </script>
