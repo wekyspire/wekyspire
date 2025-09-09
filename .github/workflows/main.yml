@@ -1,4 +1,4 @@
-name: Build Master and Deploy to GitHub Pages
+name: Deploy Vite App to GitHub Pages
 
 on:
   push:
@@ -11,53 +11,37 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: 🧱 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: Install
+      - name: 📦 Install dependencies
         run: npm ci
 
-      # 👇 设置部署子路径
-      - name: Set deploy path
-        id: deploy_path
+      # 👇 设置完整部署 URL 并注入到环境变量
+      - name: 🔧 Set VITE_BASE (Full URL)
         run: |
-          echo "subdir=nightly" >> $GITHUB_OUTPUT
-          echo "base=/project_name/" >> $GITHUB_ENV
+          OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          VITE_BASE="https://$OWNER.github.io/$REPO_NAME/"
+          echo "VITE_BASE=$VITE_BASE" >> $GITHUB_ENV
+          echo "Deploy base URL: $VITE_BASE"
 
-      # 👇 设置前端 base 路径
-      - name: Set Vite base path
-        run: |
-          echo "VITE_BASE=${{ env.base }}" >> .env.production
-
-      - name: Build
+      - name: 🛠️ Build project
         run: npm run build
+        env:
+          VITE_BASE: ${{ env.VITE_BASE }}  # 👈 显式传入，确保 vite.config.js 能读取
 
-      # 👇 拉取现有 gh-pages 内容
-      - name: Fetch existing gh-pages
-        uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          path: staging
-          sparse-checkout: |
-            /*
-          sparse-checkout-cone-mode: false
-
-      - name: Prepare combined deploy directory
-        run: |
-          mkdir -p deploy_dir
-          # 拷贝当前构建
-          mkdir -p deploy_dir/${{ steps.deploy_path.outputs.subdir }}
-          cp -r dist/* deploy_dir/${{ steps.deploy_path.outputs.subdir }}/
-
-      - name: Deploy
+      - name: 🚀 Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./deploy_dir
+          publish_dir: ./dist
           publish_branch: gh-pages
-          # 不使用 force_orphan，保留历史结构
+          force_orphan: true
+          commit_message: '🚀 Deploy Vite app from ${{ github.sha }}'
