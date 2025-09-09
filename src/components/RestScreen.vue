@@ -1,7 +1,9 @@
 <template>
-  <div class="rest-screen">
+  <div class="rest-screen" :style="{
+    backgroundImage: 'url(' + (gameState.isRemiPresent ? 'src/assets/images/shop-background.png' : '') + ')',
+  }">
     <div class="rest-screen-content">
-      <h1 class="rest-title">好好休息！</h1>
+      <h1 class="rest-title">{{ gameState.isRemiPresent ? '好好休息！' : '休整阶段'}}</h1>
       
       <div class="content-wrapper">
         <!-- 奖励面板 -->
@@ -189,14 +191,12 @@ export default {
 .rest-screen {
   height: 100%;
   width: 100%;
-  padding: 20px;
-  background-image: url('../assets/images/shop_background.png');
   background-size: cover;
 }
 .rest-screen-content {
   margin: 0 auto;
+  padding: 20px;
   max-width: 1200px;
-  height:100vh;
 }
 
 .content-wrapper {

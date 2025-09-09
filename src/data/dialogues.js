@@ -1,5 +1,6 @@
 // dialogues.js - 对话事件管理
 import eventBus from '../eventBus.js';
+import gameState from './gameState.js';
 import { getPlayerTierFromTierIndex } from './player.js';
 
 // 开场对话序列
@@ -271,7 +272,7 @@ function registerListeners() {
   eventBus.on('before-battle', (params) => {
     const {battleCount, player, enemy} = params;
     const sequence = getEventBeforeBattle(battleCount, player, enemy);
-    if(sequence) {
+    if(sequence && gameState.isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
@@ -279,14 +280,14 @@ function registerListeners() {
   eventBus.on('after-battle', (params) => {
     const {battleCount, player, enemy, isVictory} = params;
     const sequence = getEventAfterBattle(battleCount, player, enemy, isVictory);
-    if(sequence) {
+    if(sequence && gameState.isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
   });
   eventBus.on('before-game-start', () => {
     const openingDialog = getOpeningDialog();
-    if(openingDialog) {
+    if(openingDialog && gameState.isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', openingDialog);
     }
@@ -295,7 +296,7 @@ function registerListeners() {
   // 监听玩家获得技能事件
   eventBus.on('player-claim-skill', (params) => {
     // 检查是否已经触发过教程
-    if (!playerLearnedMultiUseSkill) {
+    if (!playerLearnedMultiUseSkill && gameState.isRemiPresent) {
       const { skill } = params;
       // 检查技能是否是可多次充能的（maxUses > 1 或者是无限的）
       if ((skill.maxUses !== undefined && skill.maxUses > 1) || skill.isInfiniteUse) {
@@ -315,7 +316,7 @@ function registerListeners() {
   eventBus.on('player-tier-upgraded', (player) => {
     // 触发升级对话
     const sequence = getTierUpgradedDialog(player);
-    if (sequence) {
+    if (sequence && gameState.isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
@@ -325,7 +326,7 @@ function registerListeners() {
   eventBus.on('after-skill-use', (params) => {
     const {player, skill, result} = params;
     const sequence = getSkillUseDialog(player, skill, result);
-    if(sequence) {
+    if(sequence && gameState.isRemiPresent) {
       // 发射调用对话界面显示对话的事件
       eventBus.emit('display-dialog', sequence);
     }
