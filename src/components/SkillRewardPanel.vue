@@ -1,23 +1,19 @@
 <template>
-  <transition name="overlay-fade">
-    <div class="skill-reward-overlay" v-if="isVisible">
-      <transition name="panel-scale">
-        <div class="skill-reward-panel" v-if="isVisible">
-          <h2>选择一项奖励</h2>
-          <div class="skill-cards">
-            <SkillCard
-              v-for="(skill, index) in skills" 
-              :key="index"
-              :skill="skill"
-              :preview-mode="true"
-              @skill-card-clicked="onSkillCardClicked"
-            />
-          </div>
-          <button @click="closePanel">返回</button>
-        </div>
-      </transition>
+  <transition-group name="slide" tag="div" class="skill-reward-panel-wrapper">
+    <div class="skill-reward-panel" v-if="isVisible" key="panel">
+      <h2>选择一个技能！</h2>
+      <div class="skill-cards">
+        <SkillCard
+          v-for="(skill, index) in skills" 
+          :key="'skill-' + index"
+          :skill="skill"
+          :preview-mode="true"
+          @skill-card-clicked="onSkillCardClicked"
+        />
+      </div>
+      <button @click="closePanel">放弃</button>
     </div>
-  </transition>
+  </transition-group>
 </template>
 
 <script>
@@ -52,26 +48,20 @@ export default {
 </script>
 
 <style scoped>
-.skill-reward-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 900; /* 确保在对话界面之下 */
+.skill-reward-panel {
+  border: 1px solid #4caf50; /* 绿色边框 */
+  padding: 20px;
+  background: linear-gradient(135deg, #e8f5e9, #c8e6c9); /* 绿色渐变背景 */
+  max-width: 80%;
+  margin: 20px auto;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+  border-radius: 8px;
 }
 
-.skill-reward-panel {
-  border: 1px solid #ccc;
-  padding: 20px;
-  background-color: #f9f9f9;
-  max-width: 80%;
-  max-height: 80%;
-  overflow-y: visible;
+.skill-reward-panel h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #2e7d32; /* 深绿色文字 */
 }
 
 .skill-cards {
@@ -103,31 +93,39 @@ button {
   padding: 10px 15px;
   margin: 5px;
   cursor: pointer;
+  background-color: #4caf50; /* 绿色按钮 */
+  color: white;
+  border: none;
+  border-radius: 4px;
 }
 
-/* 覆盖层淡入淡出动画 */
-.overlay-fade-enter-active, .overlay-fade-leave-active {
-  transition: opacity 0.3s;
+button:hover:not(:disabled) {
+  background-color: #43a047; /* 深一点的绿色 */
 }
 
-.overlay-fade-enter-from, .overlay-fade-leave-to {
+/* 滑动进入和退出动画 */
+.slide-enter-active, .slide-leave-active {
+  transition: all 0.5s ease;
+}
+
+.slide-enter-from {
+  transform: translateY(100%);
   opacity: 0;
 }
 
-.overlay-fade-enter-to, .overlay-fade-leave-from {
+.slide-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.slide-enter-to, .slide-leave-from {
+  transform: translateY(0);
   opacity: 1;
 }
 
-/* 面板缩放动画 */
-.panel-scale-enter-active, .panel-scale-leave-active {
-  transition: transform 0.3s;
-}
-
-.panel-scale-enter-from, .panel-scale-leave-to {
-  transform: scale(0.9);
-}
-
-.panel-scale-enter-to, .panel-scale-leave-from {
-  transform: scale(1);
+/* 为transition-group添加样式 */
+.skill-reward-panel-wrapper {
+  display: flex;
+  justify-content: center;
 }
 </style>

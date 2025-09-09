@@ -36,6 +36,15 @@ const ABILITY_TIER_MAP = {
   '5': '传奇'
 };
 
+// 商品等阶映射
+const ITEM_TIER_MAP = {
+  '1': '普通',
+  '2': '精良',
+  '3': '稀有',
+  '4': '史诗',
+  '5': '传说'
+};
+
 
 // 玩家等阶颜色映射
 const PLAYER_TIER_COLORS = {
@@ -114,6 +123,11 @@ export function getSkillTierLabel(tier) {
 // 根据能力等阶获取标签
 export function getAbilityTierLabel(tier) {
   return ABILITY_TIER_MAP[tier] || '';
+}
+
+// 根据商品等阶获取标签
+export function getItemTierLabel(tier) {
+  return ITEM_TIER_MAP[tier] || '';
 }
 
 // 根据玩家等阶获取颜色

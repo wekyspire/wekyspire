@@ -93,8 +93,9 @@ export default {
   },
   methods: {
     onStartGameButtonClicked() {
+      const debugMode = true;
       if(this.isGameStarting) return ;
-      if(this.isRemiPresent) {
+      if(!debugMode && this.isRemiPresent) {
         // 瑞米还没开发好
         eventBus.emit('pop-message', {
           id: 'remi-not-ready',

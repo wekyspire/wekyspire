@@ -26,4 +26,5 @@ export default defineConfig(({mode}) => {
       host: 'localhost',
       port: 5177
     }
-}; })
+  }
+})
