@@ -5,8 +5,7 @@ import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 export class PunchKick extends Skill {
   
   constructor() {
-    super('拳打脚踢', 'normal', 0, 0, Infinity, '拳打脚踢', 1);
-    // this.coldDownTurns = 1;
+    super('拳打脚踢', 'normal', 0, 0, 1, Infinity, '拳打脚踢', 1);
   }
   
   get damage () {
@@ -59,7 +58,7 @@ export class RollPunch extends Skill {
 // 打滚技能
 export class Roll extends Skill {
   constructor() {
-    super('打滚', 'normal', 0, 0, 1, '打滚', 1);
+    super('打滚', 'normal', 0, 0, 1, 1, '打滚', 1);
     this.maxUses = 2;
   }
 
@@ -89,7 +88,7 @@ export class Roll extends Skill {
 // 睡觉技能
 export class Sleep extends Skill {
   constructor() {
-    super('睡觉', 'normal', 0, 0, 1, '睡觉', 1);
+    super('睡觉', 'normal', 0, 0, 1, 1, '睡觉', 1);
     this.baseHeal = 7;
     this.coldDownTurns = 2;
   }
@@ -116,7 +115,7 @@ export class Sleep extends Skill {
 // 睡大觉技能
 export class LargeSleep extends Skill {
   constructor() {
-    super('睡大觉', 'normal', 1, 0, 1);
+    super('睡大觉', 'normal', 1, 0, 1, 1);
     this.baseHeal = 22;
     this.coldDownTurns = 2;
   }
@@ -144,7 +143,7 @@ export class LargeSleep extends Skill {
 // 活动筋骨
 export class PrepareExercise extends Skill {
   constructor() {
-    super('活动筋骨', 'normal', 0, 0, 1);
+    super('活动筋骨', 'normal', 0, 0, 1, 1);
     this.stacks = 1;
   }
 
@@ -170,7 +169,7 @@ export class PrepareExercise extends Skill {
 // 莽撞攻击
 export class CarelessPunchKick extends Skill {
   constructor() {
-    super('莽撞攻击', 'normal', 0, 0, 1);
+    super('莽撞攻击', 'normal', 0, 0, 1, 1);
   }
 
   get coldDownTurns() {
@@ -223,7 +222,7 @@ export class AmateurDefense extends Skill {
 // 畏手畏脚
 export class OverCarefulDefense extends Skill {
   constructor() {
-    super('畏手畏脚', 'normal', 0, 0, 1);
+    super('畏手畏脚', 'normal', 0, 0, 1, 1);
   }
 
   get removeStacks() {
@@ -253,7 +252,7 @@ export class OverCarefulDefense extends Skill {
 // 匹夫之勇
 export class CarelessBravery extends Skill {
   constructor() {
-    super('匹夫之勇', 'normal', 0, 0, 1);
+    super('匹夫之勇', 'normal', 0, 0, 1, 1);
   }
   // 使用技能
   use(player, enemy, stage) {
@@ -282,7 +281,7 @@ export class CarelessBravery extends Skill {
 // 强撑
 export class HoldOn extends Skill {
   constructor() {
-    super('强撑', 'normal', 1, 0, 1);
+    super('强撑', 'normal', 1, 0, 1, 1);
   }
   get stacks() {
     return 7 + 2 * this.power;
@@ -311,7 +310,7 @@ export class HoldOn extends Skill {
 // 快速思考技能
 export class FastThinking extends Skill {
   constructor() {
-    super('快速思考', 'normal', 1, 0, 3, '思考', 1);
+    super('快速思考', 'normal', 1, 0, 1, 3, '思考', 1);
   }
 
   get coldDownTurns() {

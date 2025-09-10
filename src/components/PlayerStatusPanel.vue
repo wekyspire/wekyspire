@@ -6,6 +6,9 @@
     
       <!-- 魏启条 -->
       <ManaBar :player="player" v-if="!restScreen" />
+      
+      <!-- 行动点条 -->
+      <ActionPointsBar :player="player" v-if="!restScreen" />
 
       <!-- 效果显示栏 -->
       <EffectDisplayBar 
@@ -28,6 +31,7 @@ import HurtAnimationWrapper from './HurtAnimationWrapper.vue';
 import PlayerBasicStats from './PlayerBasicStats.vue';
 import HealthBar from './HealthBar.vue';
 import ManaBar from './ManaBar.vue';
+import ActionPointsBar from './ActionPointsBar.vue';
 import eventBus from '../eventBus.js';
 
 export default {
@@ -37,7 +41,8 @@ export default {
     HurtAnimationWrapper,
     PlayerBasicStats,
     HealthBar,
-    ManaBar
+    ManaBar,
+    ActionPointsBar
   },
   props: {
     player: {

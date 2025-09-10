@@ -47,6 +47,7 @@ import SkillCard from './SkillCard.vue';
 import effectDescriptions from '../data/effectDescription.js';
 import { useSkill, endPlayerTurn } from '../data/battle.js';
 import gameState from '../data/gameState.js';
+import eventBus from '../eventBus.js';
 
 export default {
   name: 'BattleScreen',
@@ -98,14 +99,73 @@ export default {
       return skill && skill.canUse(gameState.player) && skill.usesLeft !== 0;
     },
 
-    onSkillCardClicked(skill) {
+    onSkillCardClicked(skill, event) {
       if(this.canUseSkill(skill)) {
+        // 记录技能消耗的魏启和行动点
+        const manaCost = skill.manaCost;
+        const actionPointCost = skill.actionPointCost;
+        
+        // 获取鼠标点击位置
+        const mouseX = event.clientX;
+        const mouseY = event.clientY;
+        
+        // 使用技能
         useSkill(skill);
+        
+        // 生成粒子效果
+        this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },
 
     onEndTurnButtonClicked() {
       endPlayerTurn();
+    },
+    
+    /**
+     * 生成粒子效果
+     * @param {number} manaCost - 魏启消耗
+     * @param {number} actionPointCost - 行动点消耗
+     * @param {number} mouseX - 鼠标X坐标
+     * @param {number} mouseY - 鼠标Y坐标
+     */
+    generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY) {
+      // 生成粒子数组
+      const particles = [];
+      
+      // 生成魏启消耗的蓝色粒子
+      if (manaCost > 0) {
+        for (let i = 0; i < 2 + manaCost * 8; i++) {
+          particles.push({
+            x: mouseX,
+            y: mouseY,
+            vx: (Math.random() - 0.5) * 100, // 随机水平速度
+            vy: (Math.random() - 0.5) * 100 - 50, // 随机垂直速度，向上偏移
+            color: '#2196f3', // 蓝色
+            life: 2000, // 生命周期2秒
+            gravity: 400, // 重力
+            size: 3 + Math.random() * 2 // 随机大小
+          });
+        }
+      }
+      
+      // 生成行动点消耗的黄色粒子
+      if (actionPointCost > 0) {
+        for (let i = 0; i < 2 + actionPointCost * 8; i++) {
+          particles.push({
+            x: mouseX,
+            y: mouseY,
+            vx: (Math.random() - 0.5) * 100, // 随机水平速度
+            vy: (Math.random() - 0.5) * 100 - 50, // 随机垂直速度，向上偏移
+            color: '#FFD700', // 黄色
+            life: 2000, // 生命周期2秒
+            gravity: 400, // 重力
+            size: 3 + Math.random() * 2 // 随机大小
+          });
+        }
+      }
+      
+      // 发射粒子生成事件
+      eventBus.emit('spawn-particles', particles);
     }
   }
 };

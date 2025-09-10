@@ -1,15 +1,15 @@
 <template>
-  <div class="mana-bar">
-    <div class="mana-text">💧魏启 {{ player.mana }}/{{ player.maxMana }}</div>
-    <div class="mana-dots">
+  <div class="action-points-bar">
+    <div class="action-points-text">⚡行动点 {{ player.remainingActionPoints }}/{{ player.maxActionPoints }}</div>
+    <div class="action-points-dots">
       <BarPoint
-        v-for="(dot, index) in manaDots" 
+        v-for="(dot, index) in actionPointsDots" 
         :key="index" 
         :filled="dot.filled" 
         :highlighted="dot.highlighted"
-        color="#0068be"
-        highlight-color="#88d9ff"
-        lighten-color="#aaddff"
+        color="#c55c00"
+        highlight-color="#ffeb3b"
+        lighten-color="#ffff99"
       />
     </div>
   </div>
@@ -21,7 +21,7 @@ import eventBus from '../eventBus.js';
 import BarPoint from './BarPoint.vue';
 
 export default {
-  name: 'ManaBar',
+  name: 'ActionPointsBar',
   components: {
     BarPoint
   },
@@ -33,16 +33,16 @@ export default {
   },
   data() {
     return {
-      highlightedManaCost: 0
+      highlightedActionPointCost: 0
     };
   },
   computed: {
-    // 计算魏启圆点
-    manaDots() {
+    // 计算行动点圆点
+    actionPointsDots() {
       const dots = [];
-      for (let i = 0; i < this.player.maxMana; i++) {
-        const isFilled = i < this.player.mana;
-        const isHighlighted = isFilled && i >= this.player.mana - this.highlightedManaCost;
+      for (let i = 0; i < this.player.maxActionPoints; i++) {
+        const isFilled = i < this.player.remainingActionPoints;
+        const isHighlighted = isFilled && i >= this.player.remainingActionPoints - this.highlightedActionPointCost;
         dots.push({
           filled: isFilled,
           highlighted: isHighlighted
@@ -52,7 +52,7 @@ export default {
     }
   },
   mounted() {
-    // 监听技能悬停事件
+    // 监听技能卡片悬停事件
     eventBus.on('skill-card-hover-start', this.onSkillCardHoverStart);
     eventBus.on('skill-card-hover-end', this.onSkillCardHoverEnd);
   },
@@ -64,11 +64,11 @@ export default {
   methods: {
     onSkillCardHoverStart(skill) {
       if(skill.canUse(gameState.player)) {
-        this.highlightedManaCost = skill.manaCost;
+        this.highlightedActionPointCost = skill.actionPointCost;
       }
     },
     onSkillCardHoverEnd() {
-      this.highlightedManaCost = 0;
+      this.highlightedActionPointCost = 0;
     },
 
   }
@@ -76,18 +76,18 @@ export default {
 </script>
 
 <style scoped>
-.mana-bar {
+.action-points-bar {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
 }
 
-.mana-dots {
+.action-points-dots {
   display: flex;
   margin-right: 10px;
 }
 
-.mana-text {
+.action-points-text {
   font-size: 14px;
   font-weight: bold;
   width: 100px;

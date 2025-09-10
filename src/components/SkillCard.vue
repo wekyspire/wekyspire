@@ -3,7 +3,9 @@
     class="skill-card"
   >
     <div :class="['skill-card-panel', 'tier-' + skill.tier, { disabled: disabled }]"
-     @click="onClick">
+     @click="onClick"
+     @mouseenter="onMouseEnter"
+     @mouseleave="onMouseLeave">
       <div class="mana-cost" v-if="skill.manaCost > 0">
         <span class="mana-icon">💧</span>
         <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
@@ -82,13 +84,23 @@ export default {
           this.skill.regenerateDescription(gameState.player);
       }
     },
-    onClick() {
+    onClick(event) {
       if (!this.disabled) {
         // 播放技能激活动画
         this.playActivationAnimation();
         
-        this.$emit('skill-card-clicked', this.skill);
+        this.$emit('skill-card-clicked', this.skill, event);
       }
+    },
+    
+    onMouseEnter() {
+      // 发射鼠标进入事件
+      eventBus.emit('skill-card-hover-start', this.skill);
+    },
+    
+    onMouseLeave() {
+      // 发射鼠标离开事件
+      eventBus.emit('skill-card-hover-end');
     },
     // 播放技能激活动画
     playActivationAnimation() {
