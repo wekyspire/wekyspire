@@ -87,57 +87,6 @@ export default {
   margin-right: 10px;
 }
 
-.mana-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  margin-right: 3px;
-  border: 1px solid #ccc;
-  transition: opacity 0.8s ease-in-out;
-  opacity: 0;
-  animation: fadeInOut 0.8s ease-in-out forwards;
-}
-
-.mana-dot.filled {
-  background-color: #0068be; /* 蓝色 */
-  opacity: 1;
-}
-
-.mana-dot.empty {
-  background-color: #000; /* 黑色 */
-  opacity: 0.3;
-}
-
-.mana-dot.highlighted {
-  background-color: #88d9ff; /* 淡蓝色 */
-  box-shadow: 0 0 5px #b6f8ff;
-  animation: pulse 1s infinite, colorShift 2s infinite ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0% { opacity: 0; }
-  50% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes colorShift {
-  0% { background-color: #88d9ff; }
-  50% { background-color: #aaddff; }
-  100% { background-color: #88d9ff; }
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 5px #b6f8ff;
-  }
-  50% {
-    box-shadow: 0 0 15px #b6f8ff;
-  }
-  100% {
-    box-shadow: 0 0 5px #b6f8ff;
-  }
-}
-
 .mana-text {
   font-size: 14px;
   font-weight: bold;

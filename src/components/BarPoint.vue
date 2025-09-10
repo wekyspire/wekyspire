@@ -116,12 +116,13 @@ export default {
   border: 1px solid #ccc;
   transition: opacity 0.8s ease-in-out;
   opacity: 0;
-  animation: fadeInOut 0.8s ease-in-out forwards;
+  /* animation: fadeInOut 0.8s ease-in-out forwards; */
   background-color: v-bind(color);
 }
 
 .bar-point.filled {
   opacity: 1;
+  animation: inoutFilled 0.8s ease-in-out forwards;
 }
 
 .bar-point.empty {
@@ -131,13 +132,27 @@ export default {
 
 .bar-point.highlighted {
   box-shadow: 0 0 5px v-bind(highlightColor);
-  animation: pulse 1s infinite, colorShift 2s infinite ease-in-out;
+  animation: inoutHighLighted 0.3s ease-in forwards;
+  /* animation: inoutHighLighted 0.3s ease-out forwards; */
+  animation: pulse 1s infinite, colorShift 1s infinite ease-in-out;
 }
 
-@keyframes fadeInOut {
-  0% { opacity: 0; }
-  50% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes inoutFilled {
+  0% {
+    background-color: v-bind(highlightColor);
+  }
+  100% {
+    background-color: v-bind(color);
+  }
+}
+
+@keyframes inoutHighLighted {
+  0% {
+    background-color: v-bind(color);
+  }
+  100% {
+    background-color: v-bind(highlightColor);
+  }
 }
 
 @keyframes colorShift {

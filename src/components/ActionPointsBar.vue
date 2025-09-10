@@ -87,57 +87,6 @@ export default {
   margin-right: 10px;
 }
 
-.action-point-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  margin-right: 3px;
-  border: 1px solid #ccc;
-  transition: opacity 0.8s ease-in-out;
-  opacity: 0;
-  animation: fadeInOut 0.8s ease-in-out forwards;
-}
-
-.action-point-dot.filled {
-  background-color: #c55c00; /* 橙黄色 */
-  opacity: 1;
-}
-
-.action-point-dot.empty {
-  background-color: #000; /* 黑色 */
-  opacity: 0.3;
-}
-
-.action-point-dot.highlighted {
-  background-color: #ffeb3b; /* 亮黄色 */
-  box-shadow: 0 0 5px #ffeb3b;
-  animation: pulse 1s infinite, colorShift 2s infinite ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0% { opacity: 0; }
-  50% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-@keyframes colorShift {
-  0% { background-color: #ffeb3b; }
-  50% { background-color: #ffff99; }
-  100% { background-color: #ffeb3b; }
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 5px #ffeb3b;
-  }
-  50% {
-    box-shadow: 0 0 15px #ffeb3b;
-  }
-  100% {
-    box-shadow: 0 0 5px #ffeb3b;
-  }
-}
-
 .action-points-text {
   font-size: 14px;
   font-weight: bold;
