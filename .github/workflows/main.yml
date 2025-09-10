@@ -1,4 +1,4 @@
-name: Build Master and Deploy to GitHub Pages
+name: Deploy Vite App to GitHub Pages
 
 on:
   push:
@@ -6,58 +6,39 @@ on:
 
 permissions:
   contents: write
-
+  pages: write
+  id-token: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: 🧱 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: Install
+      - name: 📦 Install dependencies
         run: npm ci
 
-      # 👇 设置部署子路径
-      - name: Set deploy path
-        id: deploy_path
+      - name: 🔧 Build with Vite
         run: |
-          echo "subdir=nightly" >> $GITHUB_OUTPUT
-          echo "base=/project_name/" >> $GITHUB_ENV
+          echo "Build deploy base URL: $VITE_BASE"
+          npm run build
+        env:
+          VITE_BASE: ${{ steps.pages.outputs.base_path }}
 
-      # 👇 设置前端 base 路径
-      - name: Set Vite base path
-        run: |
-          echo "VITE_BASE=${{ env.base }}" >> .env.production
-
-      - name: Build
-        run: npm run build
-
-      # 👇 拉取现有 gh-pages 内容
-      - name: Fetch existing gh-pages
-        uses: actions/checkout@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          ref: gh-pages
-          path: staging
-          sparse-checkout: |
-            /*
-          sparse-checkout-cone-mode: false
-
-      - name: Prepare combined deploy directory
-        run: |
-          mkdir -p deploy_dir
-          # 拷贝当前构建
-          mkdir -p deploy_dir/${{ steps.deploy_path.outputs.subdir }}
-          cp -r dist/* deploy_dir/${{ steps.deploy_path.outputs.subdir }}/
-
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./deploy_dir
-          publish_branch: gh-pages
-          # 不使用 force_orphan，保留历史结构
+          path: './dist'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
