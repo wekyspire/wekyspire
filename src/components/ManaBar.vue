@@ -2,12 +2,15 @@
   <div class="mana-bar">
     <div class="mana-text">💧魏启 {{ player.mana }}/{{ player.maxMana }}</div>
     <div class="mana-dots">
-      <span 
+      <BarPoint
         v-for="(dot, index) in manaDots" 
         :key="index" 
-        class="mana-dot" 
-        :class="{ 'filled': dot.filled, 'empty': !dot.filled, 'highlighted': dot.highlighted }"
-      ></span>
+        :filled="dot.filled" 
+        :highlighted="dot.highlighted"
+        color="#0068be"
+        highlight-color="#88d9ff"
+        lighten-color="#aaddff"
+      />
     </div>
   </div>
 </template>
@@ -15,9 +18,13 @@
 <script>
 import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
+import BarPoint from './BarPoint.vue';
 
 export default {
   name: 'ManaBar',
+  components: {
+    BarPoint
+  },
   props: {
     player: {
       type: Object,
@@ -62,7 +69,8 @@ export default {
     },
     onSkillCardHoverEnd() {
       this.highlightedManaCost = 0;
-    }
+    },
+
   }
 };
 </script>
@@ -85,20 +93,37 @@ export default {
   border-radius: 50%;
   margin-right: 3px;
   border: 1px solid #ccc;
+  transition: opacity 0.8s ease-in-out;
+  opacity: 0;
+  animation: fadeInOut 0.8s ease-in-out forwards;
 }
 
 .mana-dot.filled {
   background-color: #0068be; /* 蓝色 */
+  opacity: 1;
 }
 
 .mana-dot.empty {
   background-color: #000; /* 黑色 */
+  opacity: 0.3;
 }
 
 .mana-dot.highlighted {
   background-color: #88d9ff; /* 淡蓝色 */
   box-shadow: 0 0 5px #b6f8ff;
-  animation: pulse 1s infinite;
+  animation: pulse 1s infinite, colorShift 2s infinite ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes colorShift {
+  0% { background-color: #88d9ff; }
+  50% { background-color: #aaddff; }
+  100% { background-color: #88d9ff; }
 }
 
 @keyframes pulse {
