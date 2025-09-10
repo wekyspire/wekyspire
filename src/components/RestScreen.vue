@@ -1,78 +1,54 @@
 <template>
-  <div class="rest-screen" :style="{
-    backgroundImage: 'url(' + (gameState.isRemiPresent ? 'src/assets/images/shop-background.png' : '') + ')',
-  }">
+  <div class="rest-screen" :class="{'remi-present-rest-screen': gameState.isRemiPresent}">
     <div class="rest-screen-content">
       <h1 class="rest-title">{{ gameState.isRemiPresent ? '好好休息！' : '休整阶段'}}</h1>
       
       <div class="content-wrapper">
-        <!-- 奖励面板 -->
-        <div v-if="currentPanel === 'rewards'" class="rewards-panel">
-          <h2>战斗奖励</h2>
-          <transition-group name="reward-button-fade" tag="div" class="reward-buttons">
-            <button 
-              v-if="!moneyClaimed && gameState.rewards.money > 0" 
-              class="reward-button money-reward" 
-              @click="onMoneyRewardButtonClicked"
-              key="money"
-            >
-              金钱: +{{ gameState.rewards.money }}
-            </button>
-            <button 
-              v-if="gameState.rewards.breakthrough" 
-              class="reward-button breakthrough-reward" 
-              @click="onBreakthroughRewardButtonClicked"
-              key="breakthrough"
-            >
-              突破！
-            </button>
-            <button 
-              v-if="gameState.rewards.skills.length > 0" 
-              class="reward-button skill-reward" 
-              @click="onSkillRewardButtonClicked"
-              key="skill"
-            >
-              新技能
-            </button>
-            <button 
-              v-if="gameState.rewards.abilities.length > 0" 
-              class="reward-button ability-reward" 
-              @click="onAbilityRewardButtonClicked"
-              key="ability"
-            >
-              新能力
-            </button>
-          </transition-group>
-          <button @click="showShopPanel">继续</button>
+        <!-- 左侧固定大小面板容器 -->
+        <div class="left-panel-container">
+          <!-- 金钱奖励面板 -->
+          <MoneyRewardPanel
+            :is-visible="currentRewardPanel === 'money'"
+            :amount="gameState.rewards.money"
+            @claimed="onMoneyRewardClaimed"
+          />
+          
+          <!-- 突破奖励面板 -->
+          <BreakthroughRewardPanel
+            :is-visible="currentRewardPanel === 'breakthrough'"
+            @claimed="onBreakthroughRewardClaimed"
+          />
+          
+          <!-- 技能奖励面板 -->
+          <SkillRewardPanel
+            :is-visible="currentRewardPanel === 'skill'"
+            :skills="gameState.rewards.skills"
+            @close="closeSkillRewardPanel"
+            @selected-skill-reward="onSkillRewardSelected"
+          />
+          
+          <!-- 能力奖励面板 -->
+          <AbilityRewardPanel
+            :is-visible="currentRewardPanel === 'ability'"
+            :abilities="gameState.rewards.abilities"
+            @selected-ability-reward="onAbilityRewardSelected"
+            @close="closeAbilityRewardPanel"
+          />
+          
+          <!-- 商店面板 -->
+          <ShopPanel
+        :is-visible="currentRewardPanel === 'shop'"
+        :shop-items="gameState.shopItems"
+        :game-state="gameState"
+        @item-purchased="onItemPurchased"
+        @refresh-shop="refreshShop"
+        @close="closeShopPanel"
+      />
         </div>
         
-        <!-- 商店面板 -->
-        <ShopPanel
-          v-if="currentPanel === 'shop'"
-          :shop-items="gameState.shopItems"
-          :game-state="gameState"
-          @item-purchased="onItemPurchased"
-          @refresh-shop="$forceUpdate"
-          @close="closeShopPanel"
-        />
-        
-        <!-- 玩家状态面板 -->
+        <!-- 右侧玩家状态面板 -->
         <PlayerStatusPanel :player="gameState.player" :restScreen="true"/>
       </div>
-      
-      <AbilityRewardPanel
-        :is-visible="abilityRewardPanelVisible"
-        :abilities="gameState.rewards.abilities"
-        @selected-ability-reward="onAbilityRewardSelected"
-        @close="closeAbilityRewardPanel"
-      />
-      
-      <SkillRewardPanel
-        :is-visible="skillRewardPanelVisible"
-        :skills="gameState.rewards.skills"
-        @close="closeSkillRewardPanel"
-        @selected-skill-reward="onSkillRewardSelected"
-      />
       
       <SkillSlotSelectionPanel
         :is-visible="skillSlotSelectionPanelVisible"
@@ -92,8 +68,10 @@ import SkillRewardPanel from './SkillRewardPanel.vue';
 import SkillSlotSelectionPanel from './SkillSlotSelectionPanel.vue';
 import ShopPanel from './ShopPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
+import MoneyRewardPanel from './MoneyRewardPanel.vue';
+import BreakthroughRewardPanel from './BreakthroughRewardPanel.vue';
 import { gameState } from '../data/gameState.js';
-import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage } from '../data/rest.js';
+import { claimAbilityReward, claimMoney, claimSkillReward, endRestStage, spawnRewards } from '../data/rest.js';
 import { upgradePlayerTier } from '../data/player.js';
 
 export default {
@@ -104,42 +82,82 @@ export default {
     SkillRewardPanel,
     SkillSlotSelectionPanel,
     ShopPanel,
-    PlayerStatusPanel
+    PlayerStatusPanel,
+    MoneyRewardPanel,
+    BreakthroughRewardPanel
   },
   data() {
     return {
       gameState: gameState,
-      currentPanel: 'rewards', // 'rewards' or 'shop'
-      moneyClaimed: false,
-      skillRewardsSpawned: false,
-      abilityRewardsSpawned: false,
-      skillRewardPanelVisible: false,
-      abilityRewardPanelVisible: false,
+      currentRewardPanel: '', // 'money', 'breakthrough', 'skill', 'ability', 'shop' or empty
       skillSlotSelectionPanelVisible: false,
-      claimingSkill: null
+      claimingSkill: null,
+      rewardPanels: [],
+      currentRewardIndex: 0
     }
   },
+  mounted() {
+    // 初始化奖励面板队列
+    this.initRewardPanels();
+    // 显示第一个奖励面板
+    this.showNextRewardPanel();
+  },
   methods: {
-    onMoneyRewardButtonClicked() {
-      claimMoney();
-      this.moneyClaimed = true
+    initRewardPanels() {
+      this.rewardPanels = [];
+      
+      // 按顺序添加奖励面板
+      if (gameState.rewards.money > 0) {
+        this.rewardPanels.push('money');
+      }
+      
+      if (gameState.rewards.breakthrough) {
+        this.rewardPanels.push('breakthrough');
+      }
+      
+      if (gameState.rewards.skills.length > 0) {
+        this.rewardPanels.push('skill');
+      }
+      
+      if (gameState.rewards.abilities.length > 0) {
+        this.rewardPanels.push('ability');
+      }
+      
+      // 总是添加商店面板
+      this.rewardPanels.push('shop'); 
     },
-    onBreakthroughRewardButtonClicked() {
-      gameState.rewards.breakthrough = false;
-      upgradePlayerTier(gameState.player);
+    
+    showNextRewardPanel() {
+      // 先隐藏当前面板
+      this.currentRewardPanel = 'none';
+      // 稍等片刻后，再显示下一面板
+      setTimeout(()=> {
+        if (this.currentRewardIndex < this.rewardPanels.length) {
+          this.currentRewardPanel = this.rewardPanels[this.currentRewardIndex];
+        } else {
+          // 所有奖励面板都已显示完毕
+          this.currentRewardPanel = '';
+        }
+      }, 500);
     },
-    onSkillRewardButtonClicked() {
-      this.skillRewardPanelVisible = true;
+    
+    onMoneyRewardClaimed() {
+      this.currentRewardIndex++;
+      this.showNextRewardPanel();
     },
-    onAbilityRewardButtonClicked() {
-      this.abilityRewardPanelVisible = true;
+    onBreakthroughRewardClaimed() {
+      this.currentRewardIndex++;
+      this.showNextRewardPanel();
     },
     closeSkillRewardPanel() {
-      this.skillRewardPanelVisible = false;
+      this.currentRewardIndex++;
+      this.showNextRewardPanel();
     },
     closeAbilityRewardPanel() {
-      this.abilityRewardPanelVisible = false;
+      this.currentRewardIndex++;
+      this.showNextRewardPanel();
     },
+
     onSkillRewardSelected(currentSkill) {
       this.claimingSkill = currentSkill;
       // 稍等片刻后打开SkillSlotSelectionPanel，让动画放完
@@ -151,18 +169,20 @@ export default {
       this.skillSlotSelectionPanelVisible = false;
     },
     onSkillSlotSelected(slotIndex) {
-      claimSkillReward(this.claimingSkill, slotIndex, true);
-      
+      claimSkillReward(this.claimingSkill, slotIndex,
+        // 不要当即清空奖励，这会导致控件变更
+        false
+      );
       // 关闭面板
       this.closeSkillSlotSelectionPanel();
       this.closeSkillRewardPanel();
     },
     onAbilityRewardSelected(ability) {
-      claimAbilityReward(ability, true);
+      claimAbilityReward(ability,
+        // 不要当即清空奖励，这会导致控件变更
+        false
+      );
       this.closeAbilityRewardPanel();
-    },
-    showShopPanel() {
-      this.currentPanel = 'shop'
     },
     closeShopPanel() {
       // 结束休整阶段，开始下一场战斗
@@ -180,7 +200,13 @@ export default {
     },
     onItemPurchased(purchasedItem) {
       // 添加日志
-      this.$parent.battleLogs.push(`购买了 ${purchasedItem.name}`);
+      this.gameState.battleLogs.push(`购买了 ${purchasedItem.name}`);
+    },
+    refreshShop() {
+      // 重新生成商店物品
+      spawnRewards();
+      // 强制更新组件以反映新的商店物品
+      this.$forceUpdate();
     }
 
   }
@@ -193,6 +219,11 @@ export default {
   width: 100%;
   background-size: cover;
 }
+
+.remi-present-rest-screen {
+  background-image: url('@assets/images/shop-background.png');
+}
+
 .rest-screen-content {
   margin: 0 auto;
   padding: 20px;
@@ -201,78 +232,10 @@ export default {
 
 .content-wrapper {
   display: flex;
+  flex-direction: row;
   gap: 20px;
-}
-
-.rewards-panel {
-  border: 1px solid #ccc;
-  padding: 15px;
-  border-radius: 8px;
-  background-color: #fff;
-  flex: 3;
-}
-
-.reward-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.reward-button {
-  padding: 15px;
-  text-align: center;
-  font-weight: bold;
-  border: 2px solid #4a90e2;
-  background-color: #2c3e50;
-  color: white;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.reward-button:hover {
-  background-color: #4a90e2;
-  color: white;
-}
-
-.breakthrough-reward {
-  border-color: #f5a623;
-  background-color: #a70a24;
-}
-
-.breakthrough-reward:hover {
-  background-color: #ff2d2d;
-  color: white;
-}
-
-.money-reward {
-  border-color: #f5a623;
-  background-color: #2c3e50;
-}
-
-.money-reward:hover {
-  background-color: #f5a623;
-  color: white;
-}
-
-.skill-reward {
-  border-color: #7ed321;
-  background-color: #138f34;
-}
-
-.skill-reward:hover {
-  background-color: #7ed321;
-  color: white;
-}
-
-.ability-reward {
-  border-color: #bd10e0;
-  background-color: #5b4791;
-}
-
-.ability-reward:hover {
-  background-color: #df3fff;
-  color: white;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .rest-title {
@@ -281,18 +244,10 @@ export default {
   color: #eef7ff;
 }
 
-/* 奖励按钮淡出动画 */
-.reward-button-fade-enter-active, .reward-button-fade-leave-active {
-  transition: all 0.15s ease;
-}
-
-.reward-button-fade-enter-from, .reward-button-fade-leave-to {
-  transform: scale(0.9);
-  opacity: 0;
-}
-
-.reward-button-fade-enter-to, .reward-button-fade-leave-from {
-  transform: scale(1);
-  opacity: 1;
+.left-panel-container {
+  width: 800px;
+  height: 220px;
+  position: relative;
+  flex-shrink: 0;
 }
 </style>

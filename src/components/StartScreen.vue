@@ -93,8 +93,9 @@ export default {
   },
   methods: {
     onStartGameButtonClicked() {
+      const debugMode = true;
       if(this.isGameStarting) return ;
-      if(this.isRemiPresent) {
+      if(!debugMode && this.isRemiPresent) {
         // 瑞米还没开发好
         eventBus.emit('pop-message', {
           id: 'remi-not-ready',
@@ -143,7 +144,7 @@ export default {
   justify-content: center;
   height: 100vh;
   position: relative;
-  background: url('src/assets/images/start-screen.png') no-repeat center center fixed;
+  background: url('@assets/images/start-screen.png') no-repeat center center fixed;
   background-position: bottom;
   background-color:#0b0b12;
   background-size: cover;

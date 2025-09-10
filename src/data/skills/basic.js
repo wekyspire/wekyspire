@@ -9,7 +9,7 @@ export class PunchKick extends Skill {
   }
   
   get damage () {
-    return Math.max(5 + this.power, 3);
+    return Math.max(20 + this.power, 3);
   }
 
   // 使用技能

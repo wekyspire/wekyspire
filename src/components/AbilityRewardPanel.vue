@@ -1,37 +1,33 @@
 <template>
-  <transition name="overlay-fade">
-    <div class="ability-reward-overlay" v-if="isVisible">
+  <transition-group name="slide" tag="div" class="ability-reward-panel-wrapper">
+    <div class="ability-reward-panel" v-if="isVisible" key="panel">
       <!-- 选中效果覆盖层 -->
       <transition name="selection-overlay-fade">
-        <div class="selection-overlay" v-if="showSelectionEffect"></div>
+        <div class="selection-overlay" v-if="showSelectionEffect" key="overlay"></div>
       </transition>
       
-      <transition name="panel-scale">
-        <div class="ability-reward-panel" v-if="isVisible">
-          <h2>选择一项奖励</h2>
-          <div class="ability-cards">
-            <div 
-              v-for="(ability, index) in abilities" 
-              :key="index"
-              :class="[
-                'ability-card', 
-                'tier-' + ability.tier,
-                { 'selected-glow': selectedAbility === ability && showSelectionEffect }
-              ]"
-              @click="selectAbility(ability)"
-            >
-              <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
-              <div class="ability-name">{{ ability.name }}</div>
-              <div class="ability-description">
-                <ColoredText :text="ability.description" />
-              </div>
-            </div>
+      <h2>选择一项能力！</h2>
+      <div class="ability-cards">
+        <div 
+          v-for="(ability, index) in abilities" 
+          :key="'ability-' + index"
+          :class="[
+            'ability-card', 
+            'tier-' + ability.tier,
+            { 'selected-glow': selectedAbility === ability && showSelectionEffect }
+          ]"
+          @click="selectAbility(ability)"
+        >
+          <div class="ability-tier">{{ getAbilityTierLabel(ability.tier) }}</div>
+          <div class="ability-name">{{ ability.name }}</div>
+          <div class="ability-description">
+            <ColoredText :text="ability.description" />
           </div>
-          <button @click="closePanel">返回</button>
         </div>
-      </transition>
+      </div>
+      <button @click="closePanel">放弃</button>
     </div>
-  </transition>
+  </transition-group>
 </template>
 
 <script>
@@ -80,26 +76,22 @@ export default {
 </script>
 
 <style scoped>
-.ability-reward-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 900; /* 确保在对话界面之下 */
+.ability-reward-panel {
+  border: 1px solid #9c27b0; /* 紫色边框 */
+  padding: 20px;
+  background: linear-gradient(135deg, #f3e5f5, #e1bee7); /* 紫色渐变背景 */
+  max-width: 80%;
+  margin: 20px auto;
+  box-shadow: 0 4px 8px rgba(156, 39, 176, 0.3);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
 }
 
-.ability-reward-panel {
-  border: 1px solid #ccc;
-  padding: 20px;
-  background-color: #f9f9f9;
-  max-width: 80%;
-  max-height: 80%;
-  overflow-y: auto;
+.ability-reward-panel h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #7b1fa2; /* 深紫色文字 */
 }
 
 .ability-cards {
@@ -179,6 +171,14 @@ button {
   padding: 10px 15px;
   margin: 5px;
   cursor: pointer;
+  background-color: #9c27b0; /* 紫色按钮 */
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+
+button:hover {
+  background-color: #7b1fa2; /* 深紫色 */
 }
 
 /* 选中效果覆盖层 */
@@ -231,29 +231,29 @@ button {
   box-shadow: 0 0 20px 10px #f44336;
 }
 
-/* 覆盖层淡入淡出动画 */
-.overlay-fade-enter-active, .overlay-fade-leave-active {
-  transition: opacity 0.3s;
+/* 滑动进入和退出动画 */
+.slide-enter-active, .slide-leave-active {
+  transition: all 0.5s ease;
 }
 
-.overlay-fade-enter-from, .overlay-fade-leave-to {
+.slide-enter-from {
+  transform: translateY(100%);
   opacity: 0;
 }
 
-.overlay-fade-enter-to, .overlay-fade-leave-from {
+.slide-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.slide-enter-to, .slide-leave-from {
+  transform: translateY(0);
   opacity: 1;
 }
 
-/* 面板缩放动画 */
-.panel-scale-enter-active, .panel-scale-leave-active {
-  transition: transform 0.3s;
-}
-
-.panel-scale-enter-from, .panel-scale-leave-to {
-  transform: scale(0.9);
-}
-
-.panel-scale-enter-to, .panel-scale-leave-from {
-  transform: scale(1);
+/* 为transition-group添加样式 */
+.ability-reward-panel-wrapper {
+  display: flex;
+  justify-content: center;
 }
 </style>

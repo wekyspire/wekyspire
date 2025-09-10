@@ -46,6 +46,10 @@ export function spawnRewards() {
   } else {
     gameState.rewards.abilities = [];
   }
+  // 生成商店物品
+  const itemManager = new ItemManager();
+  gameState.shopItems = itemManager.getRandomItems(3, gameState.player.tier);
+  
   // 发射事件
   eventBus.emit('rewards-spawned', gameState.rewards);
 }
