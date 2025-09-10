@@ -9,16 +9,13 @@ export class PunchKick extends Skill {
   }
   
   get damage () {
-    return Math.max(20 + this.power, 3);
+    return Math.max(4 + this.power, 3);
   }
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      launchAttack(player, enemy, this.damage);
-      return true;
-    }
-    return false;
+    launchAttack(player, enemy, this.damage);
+    return true;
   }
 
   // 重新生成技能描述
@@ -40,18 +37,16 @@ export class RollPunch extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if (super.use()) {
-      launchAttack(player, enemy, this.damage);
-      if(stage < 2) {
-        return {};
-      } else return true;
+    launchAttack(player, enemy, this.damage);
+    if(stage < 3) {
+      return false;
     }
-    return false;
+    return true;
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `造成${this.damage + (player?.attack ?? 0)}伤害3次`;
+    return `造成${this.damage + (player?.attack ?? 0)}伤害4次`;
   }
 }
 
@@ -59,7 +54,7 @@ export class RollPunch extends Skill {
 export class Roll extends Skill {
   constructor() {
     super('打滚', 'normal', 0, 0, 1, 1, '打滚', 1);
-    this.maxUses = 2;
+    this.maxUses = 1;
   }
 
   get stacks() {
@@ -72,11 +67,8 @@ export class Roll extends Skill {
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      player.addEffect('闪避', this.stacks);
-      return true;
-    }
-    return false;
+    player.addEffect('闪避', this.stacks);
+    return true;
   }
 
   // 重新生成技能描述
@@ -99,11 +91,8 @@ export class Sleep extends Skill {
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      player.applyHeal(this.heal);
-      return true;
-    }
-    return false;
+    player.applyHeal(this.heal);
+    return true;
   }
 
   // 重新生成技能描述
@@ -125,13 +114,14 @@ export class LargeSleep extends Skill {
   }
 
   // 使用技能
-  use(player, enemy) {
-    if (super.use()) {
+  use(player, enemy, stage) {
+    if(stage == 0) {
       player.applyHeal(this.baseHeal);
+      return false;
+    } else {
       player.addEffect('眩晕', 1);
       return true;
     }
-    return false;
   }
 
   // 重新生成技能描述
@@ -149,11 +139,8 @@ export class PrepareExercise extends Skill {
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      player.addEffect('力量', this.stack);
-      return true;
-    }
-    return false;
+    player.addEffect('力量', this.stacks);
+    return true;
   }
 
   get coldDownTurns() {
@@ -177,19 +164,23 @@ export class CarelessPunchKick extends Skill {
   }
 
   // 使用技能
-  use(player, enemy) {
-    if (super.use()) {
+  use(player, enemy, stage) {
+    if(stage == 0) {
       launchAttack(player, enemy, 10);
+      return false;
+    } else { 
       dealDamage(player, player, 3);
       return true;
     }
-    return false;
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    const damage = 10 + (player?.attack ?? 0);
-    return `造成${damage}点伤害，受3伤害`;
+    if(player) {
+      const damage = 10 + (player?.attack ?? 0);
+      return `造成${damage}点伤害，受3伤害`;
+    }
+    return `造成10点伤害，受3伤害`;
   }
 }
 
@@ -206,11 +197,8 @@ export class AmateurDefense extends Skill {
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      gainShield(player, player, this.shield);
-      return true;
-    }
-    return false;
+    gainShield(player, player, this.shield);
+    return true;
   }
 
   // 重新生成技能描述
@@ -231,16 +219,13 @@ export class OverCarefulDefense extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    if (!this.used && super.use()) {
-      if(stage == 0) {
-        player.addEffect('坚固', 2);
-        return {};
-      } else {
-        player.addEffect('力量', this.removeStacks);
-        return true;
-      }
+    if(stage == 0) {
+      player.addEffect('坚固', 2);
+      return false;
+    } else {
+      player.addEffect('力量', this.removeStacks);
+      return true;
     }
-    return false;
   }
 
   // 重新生成技能描述
@@ -256,16 +241,13 @@ export class CarelessBravery extends Skill {
   }
   // 使用技能
   use(player, enemy, stage) {
-    if (super.use()) {
-      if(stage == 0) {
-        player.addEffect('力量', this.stacks);
-        return {};
-      } else {
-        player.addEffect('坚固', -3);
-        return true;
-      }
+    if(stage == 0) {
+      player.addEffect('力量', this.stacks);
+      return false;
+    } else {
+      player.addEffect('坚固', -3);
+      return true;
     }
-    return false;
   }
 
   get stacks() {
@@ -288,18 +270,14 @@ export class HoldOn extends Skill {
   }
   // 使用技能
   use(player, enemy, stage) {
-    if (super.use()) {
-      if(stage == 0) {
-        player.addEffect('坚固', this.stacks);
-        return {};
-      } else {
-        player.addEffect('崩溃', 2);
-        return true;
-      }
+    if(stage == 0) {
+      player.addEffect('坚固', this.stacks);
+      return false;
+    } else {
+      player.addEffect('崩溃', 2);
+      return true;
     }
-    return false;
   }
-
 
   // 重新生成技能描述
   regenerateDescription(player) {
@@ -333,25 +311,21 @@ export class FastThinking extends Skill {
   }
 
   canUse(player) {
-    if(super.canUse(player)) {
+    if(this.canUse(player)) {
       if(this.findSkillToColdDown(player) !== null) return true;
-      return false;
     }
     return false;
   }
 
   // 使用技能
   use(player, enemy) {
-    if (super.use()) {
-      // 找到最近可以冷却的技能，如果距离一样，先冷却左边的
-      let coldDownSkill = this.findSkillToColdDown(player);
-      if (coldDownSkill) {
-        coldDownSkill.coldDown();
-        return true;
-      }
-      return false;
+    // 找到最近可以冷却的技能，如果距离一样，先冷却左边的
+    let coldDownSkill = this.findSkillToColdDown(player);
+    if (coldDownSkill) {
+      coldDownSkill.coldDown();
+      return true;
     }
-    return false;
+    return null;
   }
 
   // 重新生成技能描述

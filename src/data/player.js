@@ -14,6 +14,9 @@ export function upgradePlayerTier (player) {
       // 特殊：第一次升级时多获得一点魏启
       player.maxMana += 1;
     }
+    if(player.maxActionPoints < 8) {
+      player.maxActionPoints ++;
+    }
     player.hp = player.maxHp;
     player.mana = player.maxMana;
     eventBus.emit('player-tier-upgraded', player);

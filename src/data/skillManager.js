@@ -22,10 +22,10 @@ class SkillManager {
     // 动态导入所有技能文件
     const skillModules = [
       await import('./skills/basic.js'),
-      // await import('./skills/blast.js'),
-      // await import('./skills/heal.js'),
+      await import('./skills/blast.js'),
+      await import('./skills/heal.js'),
       // await import('./skills/remi.js'),
-      // await import('./skills/cMinus.js'),
+      await import('./skills/cMinus.js'),
       // await import('./skills/firecontrol.js'),
       // await import('./skills/lumi.js')
     ];

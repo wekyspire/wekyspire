@@ -121,13 +121,13 @@ export function useSkill(skill) {
         endBattle(true);
         resolve(result);
         gameState.controlDisableCount -= 1;
-      } else if(result !== true && result !== false) {
+      } else if(result !== true && result !== null) {
         // 此技能发动需要连续反复调用
         stage ++;
         setTimeout(executeSkill, 400);
       } else {
         // 技能完成使用，发射事件
-        if(result !== null) {
+        if(result !== null) { // null: canceled
           eventBus.emit('after-skill-use', 
             {player: gameState.player, skill: skill, result: result});
         }

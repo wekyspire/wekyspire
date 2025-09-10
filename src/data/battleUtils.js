@@ -15,7 +15,7 @@ export function addBattleLog (log) {
 export function launchAttack (attacker, target, damage) {
 
   // 攻击者对攻击的后处理
-  let finalDamage = damage;
+  let finalDamage = damage + attacker.attack;
   if (attacker) {
     finalDamage = processPostAttackEffects(attacker, target, damage);
   }

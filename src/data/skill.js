@@ -56,8 +56,8 @@ class Skill {
   // @param {Player} player: 玩家对象
   // @param {Enemy} enemy: 敌人对象
   // @param {Integer} stage: 此技能的使用阶段，默认为0，简单技能不需要考虑此参数。
-  // @return {boolean | object} bool: 是否成功使用技能
-  // 如果返回不是bool，表明此技能是一个多阶段使用的技能，此方法会被连续调用且stage递增
+  // @return {boolean | null} bool: 是否完成使用技能，null: 技能使用失败
+  // 如果返回false，表明此技能是一个多阶段使用的技能，此方法会被连续调用且stage递增，直到返回true或null
   use(player, enemy, stage) {
     return true;
   }

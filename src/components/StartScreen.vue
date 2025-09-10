@@ -93,7 +93,7 @@ export default {
   },
   methods: {
     onStartGameButtonClicked() {
-      const debugMode = true;
+      const debugMode = false;//true;
       if(this.isGameStarting) return ;
       if(!debugMode && this.isRemiPresent) {
         // 瑞米还没开发好
