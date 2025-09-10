@@ -1,11 +1,11 @@
 <template>
-  <div class="mana-bar">
-    <div class="mana-text">💧魏启 {{ player.mana }}/{{ player.maxMana }}</div>
-    <div class="mana-dots">
+  <div class="action-points-bar">
+    <div class="action-points-text">⚡行动点 {{ player.remainingActionPoints }}/{{ player.maxActionPoints }}</div>
+    <div class="action-points-dots">
       <span 
-        v-for="(dot, index) in manaDots" 
+        v-for="(dot, index) in actionPointsDots" 
         :key="index" 
-        class="mana-dot" 
+        class="action-point-dot" 
         :class="{ 'filled': dot.filled, 'empty': !dot.filled, 'highlighted': dot.highlighted }"
       ></span>
     </div>
@@ -17,7 +17,7 @@ import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
 
 export default {
-  name: 'ManaBar',
+  name: 'ActionPointsBar',
   props: {
     player: {
       type: Object,
@@ -26,16 +26,16 @@ export default {
   },
   data() {
     return {
-      highlightedManaCost: 0
+      highlightedActionPointCost: 0
     };
   },
   computed: {
-    // 计算魏启圆点
-    manaDots() {
+    // 计算行动点圆点
+    actionPointsDots() {
       const dots = [];
-      for (let i = 0; i < this.player.maxMana; i++) {
-        const isFilled = i < this.player.mana;
-        const isHighlighted = isFilled && i >= this.player.mana - this.highlightedManaCost;
+      for (let i = 0; i < this.player.maxActionPoints; i++) {
+        const isFilled = i < this.player.remainingActionPoints;
+        const isHighlighted = isFilled && i >= this.player.remainingActionPoints - this.highlightedActionPointCost;
         dots.push({
           filled: isFilled,
           highlighted: isHighlighted
@@ -45,7 +45,7 @@ export default {
     }
   },
   mounted() {
-    // 监听技能悬停事件
+    // 监听技能卡片悬停事件
     eventBus.on('skill-card-hover-start', this.onSkillCardHoverStart);
     eventBus.on('skill-card-hover-end', this.onSkillCardHoverEnd);
   },
@@ -57,29 +57,29 @@ export default {
   methods: {
     onSkillCardHoverStart(skill) {
       if(skill.canUse(gameState.player)) {
-        this.highlightedManaCost = skill.manaCost;
+        this.highlightedActionPointCost = skill.actionPointCost;
       }
     },
     onSkillCardHoverEnd() {
-      this.highlightedManaCost = 0;
+      this.highlightedActionPointCost = 0;
     }
   }
 };
 </script>
 
 <style scoped>
-.mana-bar {
+.action-points-bar {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
 }
 
-.mana-dots {
+.action-points-dots {
   display: flex;
   margin-right: 10px;
 }
 
-.mana-dot {
+.action-point-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -87,33 +87,33 @@ export default {
   border: 1px solid #ccc;
 }
 
-.mana-dot.filled {
-  background-color: #0068be; /* 蓝色 */
+.action-point-dot.filled {
+  background-color: #c55c00; /* 橙黄色 */
 }
 
-.mana-dot.empty {
+.action-point-dot.empty {
   background-color: #000; /* 黑色 */
 }
 
-.mana-dot.highlighted {
-  background-color: #88d9ff; /* 淡蓝色 */
-  box-shadow: 0 0 5px #b6f8ff;
+.action-point-dot.highlighted {
+  background-color: #ffeb3b; /* 亮黄色 */
+  box-shadow: 0 0 5px #ffeb3b;
   animation: pulse 1s infinite;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 5px #b6f8ff;
+    box-shadow: 0 0 5px #ffeb3b;
   }
   50% {
-    box-shadow: 0 0 15px #b6f8ff;
+    box-shadow: 0 0 15px #ffeb3b;
   }
   100% {
-    box-shadow: 0 0 5px #b6f8ff;
+    box-shadow: 0 0 5px #ffeb3b;
   }
 }
 
-.mana-text {
+.action-points-text {
   font-size: 14px;
   font-weight: bold;
   width: 100px;

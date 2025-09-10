@@ -48,6 +48,8 @@ export class Player {
     this.baseAttack = 0;
     this.baseMagic = 1;
     this.baseDefense = 0;
+    this.remainingActionPoints = 3;
+    this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
     this.tier = 0; // 等阶
     this.skillSlots = Array(5).fill(null); // 技能槽，玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills。
@@ -131,6 +133,11 @@ export class Player {
 
   clearNegativeEffects () {
     // TODO
+  }
+
+  consumeActionPoints (amount) {
+    this.remainingActionPoints -= amount;
+    this.remainingActionPoints = Math.max(this.remainingActionPoints, 0);
   }
 
   consumeMana (amount) {

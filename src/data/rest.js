@@ -15,6 +15,13 @@ export function spawnSkillRewards() {
   );
 }
 
+export function clearRewards() {
+  gameState.rewards.money = 0;
+  gameState.rewards.breakthrough = false;
+  gameState.rewards.skills = [];
+  gameState.rewards.abilities = [];
+}
+
 // 计算奖励
 export function spawnRewards() {
   // 计算战斗奖励

@@ -7,7 +7,7 @@ import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivat
 import { addBattleLog, addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
 import { upgradePlayerTier } from './player.js'
 import gameState from './gameState.js'
-import { spawnRewards } from './rest.js'
+import { clearRewards, spawnRewards } from './rest.js'
 
 // 开始战斗
 export function startBattle() {
@@ -68,6 +68,9 @@ export function generateEnemy() {
 export function startPlayerTurn() {
   // 确保这是玩家回合
   gameState.isEnemyTurn = false;
+
+  // 补充行动力
+  gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
 
   // 摧毁护盾
   gameState.player.shield = 0;
@@ -270,11 +273,10 @@ export function endBattle(isVictory) {
     
     if (isVictory) {
       // 计算奖励
+      clearRewards();
       spawnRewards();
-      // 重置奖励领取标志
-      gameState.skillRewardClaimed = false;
-      gameState.abilityRewardClaimed = false;
       gameState.gameStage = 'rest';
+      gameState.isVictory = true;
     } else {
       // 玩家失败
       gameState.isVictory = false;

@@ -1,6 +1,6 @@
 // 技能抽象类
 class Skill {
-  constructor(name, type, tier, manaCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
+  constructor(name, type, tier, manaCost, actionPointCost, maxUses, skillSeriesName = undefined, spawnWeight = undefined) {
     this.name = name; // 技能名称
     this.type = type; // 技能类型：'普通'（非魔法）, '木', '火', '光', '水', '通用'（通用类魔法）, '特殊'，'诅咒'（负面技能卡）
     this.tier = tier; // 技能等阶
@@ -9,6 +9,7 @@ class Skill {
     this.description = ''; // 生成的技能描述
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.manaCost = manaCost || 0; // 魏启消耗
+    this.actionPointCost = actionPointCost || 1; // 行动点消耗，默认为1
     this.maxUses = maxUses || 1; // 最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
@@ -62,6 +63,7 @@ class Skill {
   }
 
   consumeUses (player) {
+    player.consumeActionPoints(this.actionPointCost);
     player.consumeMana(this.manaCost);
     this.remainingUses --;
   }
@@ -79,8 +81,8 @@ class Skill {
 
   // 判断技能是否可用
   canUse(player) {
-    // 默认实现：检查魏启是否足够
-    return player.mana >= this.manaCost && this.remainingUses > 0;
+    // 默认实现：检查魏启和行动点是否足够
+    return player.mana >= this.manaCost && player.remainingActionPoints >= this.actionPointCost && this.remainingUses > 0;
   }
 
   // 升级技能，子类可以重写此方法
