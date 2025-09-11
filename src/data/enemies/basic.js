@@ -124,7 +124,6 @@ export class Remi extends Enemy {
           const damage = this.calculateDamage(6 + this.attack, player);
           battleLogs.push(`${this.name} 咬人！`);
           launchAttack(this, player, damage);
-          player.hp -= damage;
         }
       },
       () => {
