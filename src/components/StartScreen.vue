@@ -72,29 +72,26 @@ export default {
       snowParticlesInterval: null,
       changelogData: [
         {
-          version: '2025.9.9 [Alpha 0.3]',
+          version: '2025.9.11 [Alpha 0.3.1]',
           sections: [
             {
               title: '新增',
               items: [
-                '美术更新、Cutscene播放',
-                'Github Action自动部署，滚动更新'
+                '交互更新，增加音效系统'
               ]
             },
             {
               title: '改进',
               items: [
-                '技能框架重构，更简单直观',
-                '移除攻击力、行动点，强化魏启交互',
-                '调整了配色，更暗黑！',
-                '暂时关闭瑞米，正在开发'
+                '调整若干平衡',
               ]
             },
             {
               title: '已知问题',
               items: [
-                '商店依然不工作',
-                '部分结算错误'
+                '商店结算错误',
+                '部分结算错误',
+                '敌人头像错乱'
               ]
             }
           ]
