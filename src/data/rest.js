@@ -86,14 +86,8 @@ export function claimAbilityReward(ability, clearRewards) {
 
 // 结束休整阶段
 export function endRestStage() {
-  // 检查是否完成第15场战斗
-  if (gameState.battleCount >= 15) {
-    gameState.isVictory = true;
-    gameState.gameStage = 'end';
-  } else {
-    // 发射事件
-    eventBus.emit('rest-end');
-    // 开始下一场战斗
-    startBattle();
-  }
+  // 发射事件
+  eventBus.emit('rest-end');
+  // 开始下一场战斗
+  startBattle();  
 }

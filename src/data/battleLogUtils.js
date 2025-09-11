@@ -54,13 +54,6 @@ export function addDeathLog(log) {
   addBattleLog(log, BattleLogType.DEATH);
 }
 
-// 从battleUtil.js迁移的函数
-
-// 从任意地方增添battleLog
-export function addBattleLogOld(log) {
-  eventBus.emit('add-battle-log', log);
-}
-
 export default {
   BattleLogType,
   addBattleLog,
@@ -70,6 +63,5 @@ export default {
   addDamageLog,
   addHealLog,
   addEffectLog,
-  addDeathLog,
-  addBattleLogOld
+  addDeathLog
 };

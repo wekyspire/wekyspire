@@ -2,13 +2,7 @@
 
 import eventBus from '../eventBus.js';
 import { processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects } from './effectProcessor.js';
-import { addBattleLog as addBattleLogUtil, addDamageLog, addDeathLog, addEffectLog, addHealLog, addBattleLogOld } from './battleLogUtils.js';
-
-// 从任意地方增添battleLog
-export function addBattleLog (log) {
-  // 使用新的助手函数
-  addBattleLogOld(log);
-}
+import { addBattleLog, addDamageLog, addDeathLog, addEffectLog, addHealLog } from './battleLogUtils.js';
 
 // 任意攻击的结算逻辑（由skill、enemy和effect结算调用）
 // @return {dead: target是否死亡, passThoughDamage: 真实造成的对护盾和生命的伤害总和, hpDamage: 对生命造成的伤害}

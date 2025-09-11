@@ -1,5 +1,6 @@
 import Skill from '../skill.js';
-import { launchAttack, dealDamage, gainShield, addBattleLog } from '../battleUtils.js';
+import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
+import { addBattleLog } from '../battleLogUtils.js';
 
 export class PurifyWeky extends Skill {
   constructor() {

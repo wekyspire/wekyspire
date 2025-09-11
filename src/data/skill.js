@@ -4,6 +4,8 @@ class Skill {
     this.name = name; // 技能名称
     this.type = type; // 技能类型：'普通'（非魔法）, '木', '火', '光', '水', '通用'（通用类魔法）, '特殊'，'诅咒'（负面技能卡）
     this.tier = tier; // 技能等阶
+    // 随机生成一个唯一ID
+    this.uniqueID = Math.random().toString(36).substring(2, 10);
     this.inBattleIndex = -1; // 在战斗中，此技能在玩家skill数组中的下标。不在战斗中则无意义。
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
     this.description = ''; // 生成的技能描述

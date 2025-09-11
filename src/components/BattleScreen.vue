@@ -25,14 +25,16 @@
     <!-- 操作面板 -->
     <div class="action-panel" :class="{ 'disabled': !isPlayerTurn || isControlDisabled }">
       <div class="skills">
+        <transition-group name="card-movement">
         <SkillCard
-          v-for="(skill, index) in player.skillSlots.filter(skill => skill !== null)" 
-          :key="index"
+          v-for="(skill, index) in player.frontierSkills.filter(skill => skill !== null)" 
+          :key="skill.uniqueID"
           :skill="skill"
           :disabled="!canUseSkill(skill) || !isPlayerTurn || isControlDisabled"
           :player-mana="player.mana"
           @skill-card-clicked="onSkillCardClicked"
         />
+        </transition-group>
       </div>
       <button @click="onEndTurnButtonClicked" :disabled="!isPlayerTurn || isControlDisabled">结束回合</button>
     </div>
@@ -48,6 +50,7 @@ import effectDescriptions from '../data/effectDescription.js';
 import { useSkill, endPlayerTurn } from '../data/battle.js';
 import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
+import { Transition } from 'vue';
 
 export default {
   name: 'BattleScreen',
@@ -206,10 +209,21 @@ export default {
 }
 
 .skills {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 15px;
   margin-bottom: 15px;
+  position: relative;
 }
 
+.card-movement-enter-from,
+.card-movement-leave-to {
+  opacity: 0;
+  transform: translateY(-50px);
+}
+.card-movement-move,
+.card-movement-enter-active,
+.card-movement-leave-active {
+  transition: all 0.3s ease;
+}
 </style>
