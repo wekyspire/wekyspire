@@ -9,7 +9,7 @@ export class PunchKick extends Skill {
   }
   
   get damage () {
-    return Math.max(4 + this.power, 3);
+    return Math.max(4 + 2 * this.power, 3);
   }
 
   // 使用技能
@@ -70,21 +70,21 @@ export class SpeedyPunchKick extends Skill {
   canUse (player) {
     // 看看左边技能有没有充能
     const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
-    const leftHaveUses = leftSkill?.uses > 0;
+    const leftHaveUses = leftSkill?.remainingUses > 0;
     // 看看右边技能有没有充能
     const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
-    const rightHaveUses = rightSkill?.uses > 0;
-    return super.canUse() && (leftHaveUses || rightHaveUses);
+    const rightHaveUses = rightSkill?.remainingUses > 0;
+    return super.canUse(player) && (leftHaveUses || rightHaveUses);
   }
 
   // 使用技能
   use(player, enemy, stage) {
     // 看看左边技能有没有充能
     const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
-    const leftHaveUses = leftSkill?.uses > 0;
+    const leftHaveUses = leftSkill?.remainingUses > 0;
     // 看看右边技能有没有充能
     const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
-    const rightHaveUses = rightSkill?.uses > 0;
+    const rightHaveUses = rightSkill?.remainingUses > 0;
     if(leftHaveUses) {
       leftSkill.consumeUses();
     } else if(rightHaveUses) {
@@ -147,14 +147,14 @@ export class PowerPunchKick extends Skill {
         if(atkPassThroughDamage > 0) return false;
         return true;
     } else {
-        enemy.addEffect('易伤', 1);
+        enemy.addEffect('易伤', 2);
         return true;
     }
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return `造成${this.damage + (player?.attack ?? 0)}点伤害，赋予/effect{易伤}1`;
+    return `造成${this.damage + (player?.attack ?? 0)}点伤害，赋予/effect{易伤}2`;
   }
 }
 

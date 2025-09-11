@@ -15,7 +15,8 @@
         <span class="action-value">{{ skill.actionPointCost }}</span>
       </div>
       <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
-      <div class="skill-name">{{ skill.name }}</div>
+      <div class="skill-name" :style="{color: skillNameColor}">
+        {{ skill.name + (skill.power < 0 ? '（' + skill.power + '）' : '') + (skill.power > 0 ? '（+' + skill.power + '）' : '') }}</div>
       <div class="skill-description">
         <ColoredText :text="skillDescription" />
       </div>
@@ -64,6 +65,15 @@ export default {
   computed: {
     skillDescription() {
       return this.skill.getDescription();
+    },
+    skillNameColor() {
+      if(this.skill.power < 0) {
+        return 'red';
+      } else if(this.skill.power > 0) {
+        return 'green';
+      } else {
+        return 'black';
+      }
     }
   },
   mounted() {

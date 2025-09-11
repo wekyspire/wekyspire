@@ -160,6 +160,17 @@ export class Player {
     this.mana = Math.max(this.mana, 0);
     this.mana = Math.min(this.mana, this.maxMana);
   }
+
+  gainMana (amount) {
+    this.mana += amount;
+    this.mana = Math.max(this.mana, 0);
+    this.mana = Math.min(this.mana, this.maxMana);
+  }
+
+  gainActionPoint (amount) {
+    this.remainingActionPoints += amount;
+    this.remainingActionPoints = Math.min(this.remainingActionPoints, this.maxActionPoints);
+  }
 }
 
 // 导出玩家管理器

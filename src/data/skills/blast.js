@@ -1,7 +1,7 @@
 import Skill from '../skill.js';
 import { launchAttack } from '../battleUtils.js';
 
-// 示例技能：火弹术(C-)
+// 火弹术(C-)
 export class Fireshot extends Skill {
   constructor() {
     super('火弹术', 'magic', 1, 1, 1, 1, '火球术');

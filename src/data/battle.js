@@ -24,8 +24,10 @@ export function startBattle() {
     enemy: gameState.enemy
   });
   
-  // 从技能槽复制技能到战斗技能数组
-  gameState.player.skills = gameState.player.skillSlots.filter(skill => skill !== null);
+  // 从技能槽克隆技能到战斗技能数组
+  gameState.player.skills = gameState.player.skillSlots
+    .filter(skill => skill !== null)
+    .map(skill => cloneSkill(skill));
 
 
   // 初始化前台和后备技能列表
@@ -75,9 +77,6 @@ export function startPlayerTurn() {
 
   // 补充行动力
   gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
-
-  // 摧毁护盾
-  gameState.player.shield = 0;
   
   // 进行技能冷却
   gameState.player.skills.forEach(skill => {
@@ -158,9 +157,6 @@ export function enemyTurn() {
   // 敌人行动逻辑
   gameState.isEnemyTurn = true;
   addEnemyActionLog(`/red{${gameState.enemy.name}} 的回合！`);
-  
-  // 摧毁护盾
-  gameState.enemy.shield = 0;
 
   // 触发敌人回合开始事件
   eventBus.emit('enemy-turn-start');
@@ -339,4 +335,51 @@ function handleSkillAfterUse(skill) {
       });
     }
   }
+}
+
+// 克隆技能对象
+function cloneSkill(skill) {
+  // 获取技能的原型
+  const skillPrototype = Object.getPrototypeOf(skill);
+  
+  // 创建一个新的技能实例
+  const clonedSkill = Object.create(skillPrototype);
+  
+  // 复制所有可枚举的属性
+  for (const key in skill) {
+    if (skill.hasOwnProperty(key)) {
+      const value = skill[key];
+      
+      // 对于基础数据类型，直接复制
+      if (value === null || 
+          typeof value === 'undefined' || 
+          typeof value === 'boolean' || 
+          typeof value === 'number' || 
+          typeof value === 'string' || 
+          typeof value === 'symbol' || 
+          value instanceof Date) {
+        clonedSkill[key] = value;
+      }
+      // 对于函数，保持引用（通常不需要克隆函数）
+      else if (typeof value === 'function') {
+        clonedSkill[key] = value;
+      }
+      // 对于数组，创建新数组并递归克隆元素
+      else if (Array.isArray(value)) {
+        clonedSkill[key] = value.map(item => 
+          typeof item === 'object' && item !== null ? cloneSkill(item) : item
+        );
+      }
+      // 对于对象，递归克隆
+      else if (typeof value === 'object') {
+        clonedSkill[key] = cloneSkill(value);
+      }
+      // 其他情况直接复制
+      else {
+        clonedSkill[key] = value;
+      }
+    }
+  }
+  
+  return clonedSkill;
 }

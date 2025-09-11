@@ -10,7 +10,7 @@ import { getNextPlayerTier } from './player.js'
 
 export function spawnSkillRewards() {
   // 技能奖励
-  const tier = gameState.player.tier;
+  let tier = gameState.player.tier;
   // 如果已经生成了突破奖励，那么生成技能奖励时奖励提升
   if(gameState.rewards.breakthrough) {
     tier = getNextPlayerTier(tier);

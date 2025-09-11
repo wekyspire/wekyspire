@@ -14,7 +14,9 @@ export function launchAttack (attacker, target, damage) {
     finalDamage = processPostAttackEffects(attacker, target, damage);
   }
   // 处理受到攻击时的效果
+  console.log(target.name, finalDamage);
   finalDamage = processAttackTakenEffects(target, finalDamage);
+  console.log(target.name, finalDamage);
   // 处理受到伤害时的效果
   finalDamage = processDamageTakenEffects(target, finalDamage);
   // 固定防御减免

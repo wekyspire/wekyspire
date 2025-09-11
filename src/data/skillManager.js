@@ -27,6 +27,9 @@ class SkillManager {
       // await import('./skills/remi.js'),
       await import('./skills/cMinus.js'),
       await import('./skills/punchKicks.js'),
+      await import('./skills/fireassist.js'),
+      await import('./skills/shielding.js'),
+      await import('./skills/concentration.js'),
       // await import('./skills/firecontrol.js'),
       // await import('./skills/lumi.js')
     ];

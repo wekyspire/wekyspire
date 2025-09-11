@@ -40,9 +40,13 @@ class Skill {
           this.remainingUses = Math.min(this.remainingUses + 1, this.maxUses);
         }
       } else {
-        this.remainingColdDownTurns = this.coldDownTurns;
+        this.resetColdDownProcess();
       }
     }
+  }
+
+  resetColdDownProcess() {
+    this.remainingColdDownTurns = this.coldDownTurns;
   }
 
   getInBattleIndex (player) {

@@ -1,5 +1,7 @@
 <template>
   <div class="battle-screen">
+    <!-- 战斗场次 -->
+    <h3 style="color: white;"> 第{{ level }}层 </h3>
     <!-- 顶部状态面板区域 -->
     <div class="status-panels">
       <!-- 敌人状态面板 -->
@@ -94,6 +96,9 @@ export default {
   computed: {
     isPlayerTurn() {
       return gameState.isPlayerTurn;
+    },
+    level() {
+      return gameState.battleCount;
     }
   },
   methods: {

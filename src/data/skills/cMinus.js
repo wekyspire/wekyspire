@@ -337,8 +337,8 @@ export class SpeedThinking extends Skill {
   use(player, enemy, stage) {
     if(stage < this.times) {
       for (const skill of player.frontierSkills) {
-        if (skill !== this && skill.canCoolDown()) {
-          skill.coolDown();
+        if (skill !== this && skill.canColdDown()) {
+          skill.coldDown();
         }
       }
       return false;
