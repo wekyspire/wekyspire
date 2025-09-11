@@ -34,6 +34,9 @@
     <!-- 过场动画界面 -->
     <CutsceneScreen :game-state="gameState" />
     
+    <!-- 音频控制界面 -->
+    <AudioControllerScreen />
+    
     <!-- 粒子效果管理器 -->
     <ParticleEffectManager />
     
@@ -50,6 +53,7 @@ import EndScreen from './components/EndScreen.vue'
 import DialogScreen from './components/DialogScreen.vue'
 import BossShowupAnimation from './components/BossShowupAnimation.vue'
 import CutsceneScreen from './components/CutsceneScreen.vue'
+import AudioControllerScreen from './components/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
 import SkillManager from './data/skillManager.js'
@@ -69,6 +73,7 @@ export default {
     DialogScreen,
     BossShowupAnimation,
     CutsceneScreen,
+    AudioControllerScreen,
     ParticleEffectManager,
     MessagePopupScreen
   },
@@ -101,7 +106,6 @@ export default {
     this.eventBus.on('start-game', () => {
         this.startGame();
     });
-
     },
   beforeUnmount() {
     if(this.eventBus) {

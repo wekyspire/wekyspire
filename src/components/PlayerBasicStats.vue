@@ -4,7 +4,6 @@
       <span class="stat-label">💰 金钱:</span>
       <span class="stat-value">{{ player.money }}</span>
     </div>
-
     <div class="stat">
       <span class="stat-label">🔮 灵能:</span>
       <span class="stat-value">{{ player.magic }}</span>
@@ -39,7 +38,6 @@ export default {
   data() {
     return {
       previousPlayer: {
-        attack: this.player.attack,
         defense: this.player.defense,
         money: this.player.money,
         tier: this.player.tier,
@@ -93,20 +91,10 @@ export default {
           }
         }
         
-        // 检查攻击力变化
-        if (newPlayer.attack !== this.previousPlayer.attack) {
-          const diff = newPlayer.attack - this.previousPlayer.attack;
-          const attackStat = this.$el.querySelector('.stat:nth-child(3)');
-          if (attackStat) {
-            const text = diff > 0 ? `+${diff}⚔️` : `${diff}⚔️`;
-            this.spawnTextParticle(text, attackStat, diff > 0 ? '#ff9800' : '#f44336');
-          }
-        }
-        
         // 检查防御力变化
         if (newPlayer.defense !== this.previousPlayer.defense) {
           const diff = newPlayer.defense - this.previousPlayer.defense;
-          const defenseStat = this.$el.querySelector('.stat:nth-child(4)');
+          const defenseStat = this.$el.querySelector('.stat:nth-child(3)');
           if (defenseStat) {
             const text = diff > 0 ? `+${diff}🛡️` : `${diff}🛡️`;
             this.spawnTextParticle(text, defenseStat, diff > 0 ? '#9c27b0' : '#f44336');
@@ -116,7 +104,7 @@ export default {
         // 检查灵能变化
         if (newPlayer.magic !== this.previousPlayer.magic) {
           const diff = newPlayer.magic - this.previousPlayer.magic;
-          const magicStat = this.$el.querySelector('.stat:nth-child(5)');
+          const magicStat = this.$el.querySelector('.stat:nth-child(2)');
           if (magicStat && diff !== 0) {
             const text = diff > 0 ? `+${diff}🔮` : `${diff}🔮`;
             this.spawnTextParticle(text, magicStat, diff > 0 ? '#2196f3' : '#f44336');
@@ -125,7 +113,7 @@ export default {
 
         // 检查等阶变化
         if (newPlayer.tier !== this.previousPlayer.tier) {
-          const tierStat = this.$el.querySelector('.stat:nth-child(6)');
+          const tierStat = this.$el.querySelector('.stat:nth-child(4)');
           if (tierStat) {
             const newTierLabel = this.getPlayerTierLabel(newPlayer.tier);
             this.spawnTextParticle(`🏅 ${newTierLabel}`, tierStat, '#ffd700');
@@ -134,7 +122,6 @@ export default {
         
         // 更新previousPlayer
         this.previousPlayer = {
-          attack: newPlayer.attack,
           defense: newPlayer.defense,
           money: newPlayer.money,
           tier: newPlayer.tier,

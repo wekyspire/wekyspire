@@ -65,6 +65,7 @@ export default {
         particle.customTrajectory = particle.customTrajectory || null; // 自定义轨迹函数
         particle.size = particle.size || 5; // 默认大小
         particle.opacity = particle.opacity !== undefined ? particle.opacity : 1; // 默认不透明度
+        particle.fadeIn = particle.fadeIn !== undefined ? particle.fadeIn : false; // 默认无fade in
         particle.opacityFade = particle.opacityFade !== undefined ? particle.opacityFade : true; // 默认fade
         particle.sizeFade = particle.sizeFade !== undefined ? particle.sizeFade : true; // 默认fade
         particle.rotation = particle.rotation || 0; // 默认旋转角度
@@ -144,7 +145,8 @@ export default {
       // 更新Opacity
       if (particle.opacityFade) {
         const elapsed = currentTime - particle.startTime;
-        particle.opacity = (particle.life - elapsed) / particle.life;
+        const t = (particle.life - elapsed) / particle.life;
+        particle.opacity = particle.fadeIn ? (Math.min(1 - t, t) * 2) : (1 - t);
       }
       
       // 更新其他属性（如大小、颜色、不透明度等）
