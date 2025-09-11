@@ -226,4 +226,18 @@ export default {
 .card-movement-leave-active {
   transition: all 0.3s ease;
 }
+
+.card-movement-leave-active {
+  position: absolute;
+}
+
+/* 移除之前的包装器样式，改用JavaScript动态设置位置 */
+.skills .skill-card {
+  position: relative;
+}
+.card-movement-leave-active {
+  left: 0;
+  top: 0;
+}
+
 </style>

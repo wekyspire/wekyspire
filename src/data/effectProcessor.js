@@ -201,23 +201,19 @@ export function processEndOfTurnEffects(target) {
     const stacks = target.effects['解体'];
     if (target.effects['集中']) {
       target.effects['集中'] -= stacks;
-      if (target.effects['集中'] <= 0) {
-        delete target.effects['集中'];
-      }
     }
     if (target.effects['力量']) {
       target.effects['力量'] -= stacks;
-      if (target.effects['力量'] <= 0) {
-        delete target.effects['力量'];
-      }
     }
     if (target.effects['坚固']) {
       target.effects['坚固'] -= stacks;
-      if (target.effects['坚固'] <= 0) {
-        delete target.effects['坚固'];
-      }
     }
     addEffectLog(`${target.name}受到解体效果影响，失去了${stacks}层集中、力量和坚固！`);
+  }
+
+  // 易伤效果
+  if (target.effects['易伤'] > 0) {
+    target.effects['易伤'] -= 1;
   }
 }
 
@@ -258,6 +254,11 @@ export function processAttackTakenEffects(target, damage) {
     finalDamage = 0;
     target.addEffect('闪避', -1);
     addEffectLog(`${target.name}通过闪避效果完全回避了攻击！`);
+  }
+
+  // 易伤，伤害乘以150%
+  if (target.effects['易伤'] > 0) {
+    finalDamage = Math.floor(finalDamage * 1.5);
   }
   
   return finalDamage;

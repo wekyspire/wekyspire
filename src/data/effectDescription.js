@@ -19,6 +19,12 @@ const effectDescriptions = {
     icon: '🔷',
     color: '#4682B4' // 钢蓝色
   },
+  '易伤': {
+    name: '易伤',
+    description: '受到150%伤害，回合结束时，层数减1',
+    icon: '💥',
+    color: '#FF4500' // 橙红色
+  },
 
   // 回合开始时触发的效果
   '吸收': {

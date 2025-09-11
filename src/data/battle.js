@@ -26,10 +26,7 @@ export function startBattle() {
   
   // 从技能槽复制技能到战斗技能数组
   gameState.player.skills = gameState.player.skillSlots.filter(skill => skill !== null);
-  // 赋值skill的inBattleIndex
-  gameState.player.skills.forEach((skill, index) => {
-    skill.inBattleIndex = index;
-  });
+
 
   // 初始化前台和后备技能列表
   gameState.player.backupSkills = [...gameState.player.skills];
@@ -114,7 +111,7 @@ export function useSkill(skill) {
   gameState.controlDisableCount += 1;
   
   // 支付行动力、使用次数和魏启
-  skill.consumeUses(gameState.player);
+  skill.consumeResources(gameState.player);
   
   // 技能发动时结算效果
   processSkillActivationEffects(gameState.player);

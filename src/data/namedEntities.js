@@ -69,6 +69,46 @@ const namedEntities = {
     icon: '🌟',
     color: 'gold',
     description: '提升灵御等阶，获得行动力、魏启容量，并恢复状态。'
+  },
+  '强化': {
+    icon: '🆙',
+    color: 'blue',
+    description: '提升技能等级，让其变得更强。'
+  },
+  '左邻': {
+    icon: '⬅️',
+    color: 'orange',
+    description: '左邻是当前技能的左侧技能。'
+  },
+  '右邻': {
+    icon: '➡️',
+    color: 'orange',
+    description: '右邻是当前技能的右侧技能。'
+  },
+  '前方': {
+    icon: '⬆️',
+    color: 'orange',
+    description: '前方是当前技能左侧技能集。'
+  },
+  '后方': {
+    icon: '⬇️',
+    color: 'orange',
+    description: '后方是当前技能右侧技能集。'
+  },
+  '前端': {
+    icon: '🔝',
+    color: 'orange',
+    description: '前端是目前可见的技能集。'
+  },
+  '后端': {
+    icon: '🔚',
+    color: 'orange',
+    description: '后端是目前不可见但你拥有的技能集。'
+  },
+  '相邻': {
+    icon: '🔗',
+    color: 'orange',
+    description: '相邻是当前技能的左侧和右侧技能。'
   }
 };
 

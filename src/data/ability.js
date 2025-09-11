@@ -122,7 +122,7 @@ class TurtoiseExercise extends Ability {
   }
 
   apply(player) {
-    // player.baseAttack += 1;
+    player.baseDefense += 1;
     player.maxHp = Math.max(1, player.maxHp - 12);
     player.hp = Math.min(player.maxHp, player.hp);
   }

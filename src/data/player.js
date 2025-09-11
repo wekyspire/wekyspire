@@ -5,10 +5,15 @@ import EnemyFactory from './enemyFactory.js'
 import AbilityManager from './abilityManager.js'
 import ItemManager from './itemManager.js'
 
-export function upgradePlayerTier (player) {
+export function getNextPlayerTier(playerTier) {
   const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
-  if (tierUpgrades[player.tier] !== undefined) {
-    player.tier = tierUpgrades[player.tier];
+  return tierUpgrades[playerTier];
+}
+
+export function upgradePlayerTier (player) {
+  const nextTier = getNextPlayerTier(player.tier);
+  if (nextTier !== undefined) {
+    player.tier = nextTier;
     player.maxMana += 1;
     if(player.tier == 2) {
       // 特殊：第一次升级时多获得一点魏启
@@ -88,6 +93,10 @@ export class Player {
   
   get defense() {
     return this.baseDefense + (this.effects['坚固'] || 0);
+  }
+
+  addBackupSkill (skill) {
+    this.backupSkills.push(skill);
   }
 
   // 随机移除stacks层效果

@@ -209,3 +209,61 @@ export class BuzzlingBugs extends Enemy {
     };
   }
 }
+
+// 黏黏史莱姆敌人
+import { SlimeCurse } from '../skills/curses.js';
+
+export class SlimySlime extends Enemy {
+  constructor(battleIntensity) {
+    const hp = 27 + Math.floor(6 * battleIntensity);
+    const attack = 3 + Math.floor(battleIntensity * 0.6);
+    super('黏黏史莱姆', hp, attack, 1, 
+      new URL('../../assets/enemies/slime.png', import.meta.url).href
+    );
+    this.battleIntensity = battleIntensity;
+    this.actionIndex = 0;
+    this.description = "一只充满了粘液的史莱姆。";
+  }
+
+  // 计算伤害
+  calculateDamage(attack, target) {
+    return Math.max(1, attack);
+  }
+
+  // 执行行动
+  act(player, battleLogs) {
+    // 史莱姆行动序列：
+    // 1. 诅咒，为玩家添加粘液后备技能。
+    // 2. 攻击，造成【1 + 攻击力】伤害。
+    // 3. 攻击，造成【2 * 攻击力】伤害。
+    
+    const actions = [
+      () => {
+        // 诅咒
+        player.addBackupSkill(new SlimeCurse());
+        battleLogs.push(`${this.name} 喷了你一脸，你的后备技能中多了一张/skill{粘液}！`);
+      },
+      () => {
+        battleLogs.push(`${this.name} 冲撞！`);
+        // 攻击，造成【攻击力】伤害
+        const damage = this.calculateDamage(this.attack, player);
+        launchAttack(this, player, damage);
+      },
+      () => {
+        battleLogs.push(`${this.name} 强力冲撞！`);
+        // 攻击，造成【2 * 攻击力】伤害
+        const damage = this.calculateDamage(2 * this.attack, player);
+        launchAttack(this, player, damage);
+      }
+    ];
+    
+    const action = actions[this.actionIndex % actions.length];
+    this.actionIndex++;
+    
+    // 执行行动
+    action();
+    return {
+      endTurn: true
+    }
+  }
+}

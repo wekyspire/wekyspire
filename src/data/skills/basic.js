@@ -1,29 +1,6 @@
 import Skill from '../skill.js';
 import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
 
-// 拳打脚踢技能
-export class PunchKick extends Skill {
-  
-  constructor() {
-    super('拳打脚踢', 'normal', 0, 0, 1, Infinity, '拳打脚踢', 1);
-  }
-  
-  get damage () {
-    return Math.max(4 + this.power, 3);
-  }
-
-  // 使用技能
-  use(player, enemy) {
-    launchAttack(player, enemy, this.damage);
-    return true;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `造成${this.damage + (player?.attack ?? 0)}点伤害`;
-  }
-}
-
 // 王八拳技能
 export class RollPunch extends Skill {
   constructor() {
@@ -153,37 +130,6 @@ export class PrepareExercise extends Skill {
   }
 }
 
-// 莽撞攻击
-export class CarelessPunchKick extends Skill {
-  constructor() {
-    super('莽撞攻击', 'normal', 0, 0, 1, 1);
-  }
-
-  get coldDownTurns() {
-    return Math.max(1 - this.power, 0);
-  }
-
-  // 使用技能
-  use(player, enemy, stage) {
-    if(stage == 0) {
-      launchAttack(player, enemy, 10);
-      return false;
-    } else { 
-      dealDamage(player, player, 3);
-      return true;
-    }
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    if(player) {
-      const damage = 10 + (player?.attack ?? 0);
-      return `造成${damage}点伤害，受3伤害`;
-    }
-    return `造成10点伤害，受3伤害`;
-  }
-}
-
 // 抱头防御
 export class AmateurDefense extends Skill {
   constructor() {
@@ -298,9 +244,9 @@ export class FastThinking extends Skill {
   findSkillToColdDown (player) {
     let coldDownSkill = null;
     let minDistance = Infinity;
-    player.skills.forEach(skill => {
+    player.frontierSkills.forEach(skill => {
       if (skill.canColdDown()) {
-        const distance = Math.abs(skill.inBattleIndex - this.inBattleIndex);
+        const distance = Math.abs(skill.getInBattleIndex(player) - this.getInBattleIndex(player));
         if (distance < minDistance) {
           minDistance = distance;
           coldDownSkill = skill;

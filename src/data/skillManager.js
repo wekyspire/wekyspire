@@ -26,6 +26,7 @@ class SkillManager {
       await import('./skills/heal.js'),
       // await import('./skills/remi.js'),
       await import('./skills/cMinus.js'),
+      await import('./skills/punchKicks.js'),
       // await import('./skills/firecontrol.js'),
       // await import('./skills/lumi.js')
     ];
@@ -67,7 +68,7 @@ class SkillManager {
   }
   
   // 获取随机技能
-  getRandomSkills(count, playerSkillSlots = [], playerTier = 0) {
+  getRandomSkills(count, playerSkillSlots = [], playerTier = 0, bestQuality = false) {
     const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
       // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
@@ -109,6 +110,10 @@ class SkillManager {
       }
       // 增加当前等阶的技能出现权重
       if(tierDifference < 1) modifyFactor *= 1.2;
+
+      // 高质量奖励中，贴近玩家等级上限技能概率大幅提升
+      if(bestQuality && tierDifference < 1) modifyFactor *= 5;
+      if(bestQuality && tierDifference < 2) modifyFactor *= 3;
       
       return {
         ...skill,

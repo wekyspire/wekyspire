@@ -134,7 +134,7 @@ export default {
     playParticleEffect(tier, card) {
       // 根据tier确定粒子参数
       const tierSettings = {
-        '-1': { count: 5, size: 3, color: '#ff0000' },   // S
+        '-1': { count: 5, size: 3, color: '#333333' },   // curses
         '0': { count: 15, size: 3, color: '#000000' },     // D
         '1': { count: 20, size: 4, color: '#41db39' },     // C-
         '2': { count: 30, size: 5, color: '#41db39' },    // C+

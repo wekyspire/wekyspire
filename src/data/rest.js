@@ -3,15 +3,20 @@
 import SkillManager from './skillManager.js'
 import AbilityManager from './abilityManager.js'
 import ItemManager from './itemManager.js'
-import { upgradePlayerTier } from './player.js'
 import eventBus from '../eventBus.js'
 import gameState from './gameState.js'
 import { generateEnemy, startBattle } from './battle.js'
+import { getNextPlayerTier } from './player.js'
 
 export function spawnSkillRewards() {
   // 技能奖励
+  const tier = gameState.player.tier;
+  // 如果已经生成了突破奖励，那么生成技能奖励时奖励提升
+  if(gameState.rewards.breakthrough) {
+    tier = getNextPlayerTier(tier);
+  }
   gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    3, gameState.player.skillSlots, gameState.player.tier
+    3, gameState.player.skillSlots, tier, true // 生成高质量奖励
   );
 }
 
@@ -33,7 +38,8 @@ export function spawnRewards() {
   );
   gameState.rewards.breakthrough = haveBreakthroughReward;
   
-  if(!haveBreakthroughReward) spawnSkillRewards();
+  // 总是生成技能奖励
+  spawnSkillRewards();
 
   // boss / 奇数次战斗后获得能力奖励
   const haveAbilityReward = (

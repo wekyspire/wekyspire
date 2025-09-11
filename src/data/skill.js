@@ -6,7 +6,6 @@ class Skill {
     this.tier = tier; // 技能等阶
     // 随机生成一个唯一ID
     this.uniqueID = Math.random().toString(36).substring(2, 10);
-    this.inBattleIndex = -1; // 在战斗中，此技能在玩家skill数组中的下标。不在战斗中则无意义。
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
     this.description = ''; // 生成的技能描述
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
@@ -46,6 +45,10 @@ class Skill {
     }
   }
 
+  getInBattleIndex (player) {
+    return player.frontierSkills.indexOf(this);
+  }
+
   // 战斗开始时调用，用于初始化技能
   onBattleStart() {
     this.remainingUses = this.maxUses;
@@ -64,10 +67,14 @@ class Skill {
     return true;
   }
 
-  consumeUses (player) {
+  consumeUses () {
+    this.remainingUses --;
+  }
+
+  consumeResources (player) {
     player.consumeActionPoints(this.actionPointCost);
     player.consumeMana(this.manaCost);
-    this.remainingUses --;
+    this.consumeUses()
   }
 
   // 获取技能描述
