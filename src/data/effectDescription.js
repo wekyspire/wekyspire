@@ -190,6 +190,12 @@ const effectDescriptions = {
     description: '下次扫射时的次数将继续提升',
     icon: '🔫',
     color: '#FF8C00' // 深橙色
+  },
+  '警戒': {
+    name: '警戒',
+    description: '回合开始时，不失去护盾，层数减1',
+    icon: '👀',
+    color: '#808080' // 灰色
   }
 };
 
