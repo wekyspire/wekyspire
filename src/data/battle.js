@@ -52,8 +52,8 @@ export function generateEnemy() {
   // 根据战斗场次数生成敌人
   const battleIntensity = gameState.battleCount;
   
-  // 简单实现：在第7、15场战斗时生成Boss
-  if (gameState.battleCount === 7 || gameState.battleCount === 15) {
+  // 简单实现：在第2 + 5xn (n = 1, 2, 3, ...）场战斗时生成Boss
+  if ((gameState.battleCount-2) % 5 === 0) {
     gameState.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, true);
   } else {
     // 普通敌人

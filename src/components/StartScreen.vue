@@ -1,19 +1,26 @@
 <template>
-  <div class="start-screen" :style="{ backgroundPositionY: backgroundYOffset - 300 + 'px' }">
+  <div class="start-screen">
     <transition name="fade">
     <div class="start-screen-contents" v-if="!isGameStarting">
-      <h1 class="game-title">魏启尖塔</h1>
-      <button class="infini-mode-button" @click="onStartGameButtonClicked" v-if="!isRemiPresent">无限模式</button>
-      <button class="story-mode-button"  @click="onStartGameButtonClicked" v-if="isRemiPresent">进入尖塔</button>
-      <input 
-        type="checkbox"
-        id="remi-checkbox"
-        v-model="isRemiPresent"
-      />
-      <label for="remi-checkbox" style="color: white;">
-        带上瑞米！
-      </label>
-      
+      <transition name="swing-fade" mode="out-in">
+        <h1 class="game-title infinite-mode" v-if="!isRemiPresent">魏启尖塔</h1>
+        <h1 class="game-title story-mode" v-else>魏启尖塔：故事</h1>
+      </transition>
+      <transition name="swing-fade" mode="out-in">
+        <button class="infini-mode-button" @click="onStartGameButtonClicked" v-if="!isRemiPresent">开始游戏</button>
+        <button class="story-mode-button"  @click="onStartGameButtonClicked" v-else>进入尖塔</button>
+      </transition>
+      <br />
+      <div style="padding: 20px;">
+        <input 
+          type="checkbox"
+          id="remi-checkbox"
+          v-model="isRemiPresent"
+        />
+        <label for="remi-checkbox" style="color: white;">
+          故事模式
+        </label>
+      </div>
       <div class="changelog-container">
         <div 
           class="changelog-toggle" 
@@ -42,7 +49,9 @@
         </div>
       </div>
     </div>
-  </transition>
+    </transition>
+    <div class="start-screen-background" :class="{'non-story-mode': !isRemiPresent, 'story-mode': isRemiPresent}"
+     :style="{ backgroundPositionY: backgroundYOffset - 300 + 'px'}"></div>
   </div>
 </template>
 
@@ -58,7 +67,9 @@ export default {
       showChangelog: false,
       isRemiPresent: false,
       isGameStarting: false,
+      snowParticlesEnabled: false,
       backgroundYOffset: 0,
+      snowParticlesInterval: null,
       changelogData: [
         {
           version: '2025.9.9 [Alpha 0.3]',
@@ -91,7 +102,48 @@ export default {
       ]
     }
   },
+  watch: {
+    isRemiPresent(newVal, oldVal) {
+      if(newVal !== oldVal) {
+        if(newVal === true) {
+          // Play intro music
+          eventBus.emit('play-sound', {
+            soundFile: new URL('../assets/sounds/story-mode-intro.mp3', import.meta.url),
+            soundTrack: 0
+          });
+          // 启动雪花粒子特效
+          this.setSnowParticles(true);
+        } else {
+          // Stop playing intro music
+          eventBus.emit('play-sound', {soundFile: null, soundTrack: 0});
+          // 关闭雪花粒子特效
+          this.setSnowParticles(false);
+        }
+      }
+    }
+  },
+  computed: {
+    gameTitle() {
+      return this.isRemiPresent ? "魏启尖塔" : "魏启尖塔：无限";
+    }
+  },
+  mounted() {
+    // 启动雪花粒子定时器
+    this.snowParticlesInterval = setInterval(()=>{
+      if(this.snowParticlesEnabled) {
+        this.spawnSnowParticles();
+      }
+    }, 100);
+  },
+  beforeUnmount() {
+    // 组件卸载时关闭雪花粒子定时器
+    clearInterval(this.snowParticlesInterval);
+    this.snowParticlesInterval = null;
+  },
   methods: {
+    setSnowParticles(enabled) {
+      this.snowParticlesEnabled = enabled;
+    },
     onStartGameButtonClicked() {
       const debugMode = false;//true;
       if(this.isGameStarting) return ;
@@ -99,13 +151,14 @@ export default {
         // 瑞米还没开发好
         eventBus.emit('pop-message', {
           id: 'remi-not-ready',
-          text: 'Hineven已经把瑞米带走了，所以你无法带上瑞米！（此功能未开发完善）'
+          text: '未完成开发'
         });
         return false;
       }
       gameState.isRemiPresent = this.isRemiPresent;
       if(this.isRemiPresent) {
         this.isGameStarting = true;
+        
         // 画面慢慢上移
         const offsInterval = setInterval(()=>{
           this.backgroundYOffset += 2;
@@ -131,6 +184,49 @@ export default {
         // 不搞些花里胡哨的，直接开始
         eventBus.emit('start-game');
       }
+    },
+    
+    /**
+     * 发射雪花粒子特效
+     */
+    spawnSnowParticles() {
+      
+      // 创建雪花粒子
+      const snowParticles = [];
+      const particleCount = 4; // 雪花数量
+      
+      for (let i = 0; i < particleCount; i++) {
+        // 从全屏幕随机位置发射
+        const centerX = Math.random() * window.innerWidth;
+        const centerY = Math.random() * window.innerHeight;
+        // 随机角度和速度
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 20 + Math.random() * 30; // 慢速飘荡
+        const distance = 50 + Math.random() * 100; // 发射距离
+        
+        snowParticles.push({
+          absoluteX: centerX,
+          absoluteY: centerY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: 3 + Math.random() * 4, // 雪花大小
+          color: '#ffffff', // 白色雪花
+          life: 3000 + Math.random() * 2000, // 生命周期3-5秒
+          gravity: 10, // 轻微重力
+          drag: 0.2, // 空气阻力
+          fadeIn: true,
+          opacityFade: true,
+          sizeFade: false,
+          zIndex: 999, // 最高层级
+          extraStyles: {
+            borderRadius: '50%',
+            boxShadow: '0 0 5px rgba(255, 255, 255, 0.8)'
+          }
+        });
+      }
+      
+      // 发射粒子
+      eventBus.emit('spawn-particles', snowParticles);
     }
   }
 }
@@ -144,10 +240,32 @@ export default {
   justify-content: center;
   height: 100vh;
   position: relative;
+}
+
+.start-screen-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: url('@assets/images/start-screen.png') no-repeat center center fixed;
   background-position: bottom;
   background-color:#0b0b12;
   background-size: cover;
+}
+
+.start-screen-background.non-story-mode {
+  filter: blur(30px) grayscale(80%) brightness(30%);
+  transition: filter 3s ease-in-out;
+}
+.start-screen-background.story-mode {
+  filter: blur(0px);
+  transition: filter 3s ease-in-out;
+}
+
+
+.start-screen-contents {
+  z-index: 1;
 }
 
 .fade-enter-active, .fade-leave-active {
@@ -157,11 +275,11 @@ export default {
   opacity: 0;
 }
 
-button {
+/* button {
   padding: 10px 20px;
   font-size: 18px;
   margin-top: 20px;
-}
+} */
 
 .infini-mode-button {
   background-color: #008CBA;
@@ -175,7 +293,7 @@ button {
 
 .changelog-container {
   position: absolute;
-  right: 20px;
+  right: 80px;
   top: 20px;
   display: flex;
 }
@@ -246,5 +364,22 @@ button {
   font-size: 4em;
   margin-bottom: 20px;
   color: #eef7ff;
+}
+
+.swing-fade-leave-active {
+  transition: opacity 1s ease, transform 1s ease;
+}
+.swing-fade-enter-active {
+  transition: opacity 1s ease, transform 1s ease;
+}
+
+.swing-fade-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.swing-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 </style>
