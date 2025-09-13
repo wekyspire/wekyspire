@@ -39,7 +39,7 @@ class Enemy {
   }
   
   get defense() {
-    return this.baseDefense + (this.effects['防御'] || 0);
+    return this.baseDefense + (this.effects['坚固'] || 0);
   }
   
   get magic() {

@@ -64,6 +64,7 @@ get coldDownTurns () {
 export class ChargeShield extends Skill {
   constructor() {
     super('冲锋盾', 'normal', 0, 0, 1, 1);
+    this.coldDownTurns = 1;
   }
 
   get damage () {

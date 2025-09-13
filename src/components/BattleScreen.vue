@@ -38,6 +38,7 @@
         />
         </transition-group>
       </div>
+      <button @click="onDropSkillButtonClicked" :disabled="!canDropSkill">⚡1 丢弃头部技能</button>
       <button @click="onEndTurnButtonClicked" :disabled="!isPlayerTurn || isControlDisabled">结束回合</button>
     </div>
   </div>
@@ -49,7 +50,7 @@ import EnemyStatusPanel from './EnemyStatusPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import SkillCard from './SkillCard.vue';
 import effectDescriptions from '../data/effectDescription.js';
-import { useSkill, endPlayerTurn } from '../data/battle.js';
+import { useSkill, endPlayerTurn, dropSkill } from '../data/battle.js';
 import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
 import { Transition } from 'vue';
@@ -99,6 +100,9 @@ export default {
     },
     level() {
       return gameState.battleCount;
+    },
+    canDropSkill() {
+      return (this.isPlayerTurn && !this.isControlDisabled && this.player.remainingActionPoints > 0);
     }
   },
   methods: {
@@ -127,6 +131,10 @@ export default {
 
     onEndTurnButtonClicked() {
       endPlayerTurn();
+    },
+
+    onDropSkillButtonClicked() {
+      dropSkill();
     },
     
     /**

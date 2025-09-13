@@ -72,27 +72,25 @@ export default {
       snowParticlesInterval: null,
       changelogData: [
         {
-          version: '2025.9.11 [Alpha 0.3.2]',
+          version: '2025.9.13 [Alpha 0.3.3]',
           sections: [
             {
               title: '新增',
               items: [
-                '交互更新，增加音效系统',
-                '增加牌堆设定'
+                '增加丢弃技能机制'
               ]
             },
             {
               title: '改进',
               items: [
-                '调整若干平衡',
-                '无限模式现在完全无限'
+                '修复敌人坚固不起作用的问题',
+                '改善卡牌平衡'
               ]
             },
             {
               title: '已知问题',
               items: [
                 '商店结算错误',
-                '部分结算错误',
                 '敌人头像错乱'
               ]
             }

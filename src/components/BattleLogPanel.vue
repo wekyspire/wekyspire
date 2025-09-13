@@ -77,16 +77,6 @@ export default {
       }
     },
     getLogIcon(log) {
-      // 获取实际的日志文本内容
-      const logText = typeof log === 'string' ? log : log.log;
-      
-      if (logText.includes('攻击')) return '⚔️';
-      if (logText.includes('防御')) return '🛡️';
-      if (logText.includes('生命')) return '❤️';
-      if (logText.includes('魏启')) return '🔮';
-      if (logText.includes('技能')) return '🎯';
-      if (logText.includes('效果')) return '✨';
-      if (logText.includes('回合')) return '⏰';
       return '📝';
     }
   }
