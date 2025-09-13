@@ -54,6 +54,11 @@ export function addDeathLog(log) {
   addBattleLog(log, BattleLogType.DEATH);
 }
 
+// 清空
+export function clearBattleLog() {
+  eventBus.emit('clear-battle-log');
+}
+
 export default {
   BattleLogType,
   addBattleLog,

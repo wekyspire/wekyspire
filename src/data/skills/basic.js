@@ -257,7 +257,7 @@ export class FastThinking extends Skill {
   }
 
   canUse(player) {
-    if(this.canUse(player)) {
+    if(super.canUse(player)) {
       if(this.findSkillToColdDown(player) !== null) return true;
     }
     return false;
