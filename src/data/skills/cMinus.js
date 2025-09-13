@@ -350,3 +350,26 @@ export class SpeedThinking extends Skill {
     return `/named{冷却}所有/named{前端}技能${this.times}次`;
   }
 }
+
+// 邪恶献祭 （B-）
+// 让右邻变为消耗，左邻补充一次充能
+export class EvilSacrifice extends Skill {
+  constructor() {
+    super('邪恶献祭', 'magic', 3, 0, 1, 1, "邪恶献祭");
+  }
+  use(player, enemy, stage) {
+    // 找到左边的技能
+    const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
+    if(leftSkill) {
+      leftSkill.remainingUses ++;
+    }
+    // 找到右边的技能
+    const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
+    if(rightSkill) {
+      rightSkill.coldDownTurns = 0;
+    }
+  }
+  regenerateDescription(player) {
+    return `/named{右邻}变为消耗，/named{左邻}补充一次充能`;
+  }
+}

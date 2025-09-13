@@ -70,6 +70,11 @@ const namedEntities = {
     color: 'gold',
     description: '提升灵御等阶，获得行动力、魏启容量，并恢复状态。'
   },
+  '行动力': {
+    icon: '⚡',
+    color: 'gold',
+    description: '行动力支付在战斗中使用技能的开销。'
+  },
   '强化': {
     icon: '🆙',
     color: 'blue',

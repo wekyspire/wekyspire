@@ -152,6 +152,23 @@ export function useSkill(skill) {
   return promise;
 }
 
+
+// 玩家放弃最左侧技能
+export function dropSkill() {
+  // 消耗1个行动力
+  gameState.player.consumeActionPoints(1);
+  // 从前台技能中移除最左侧技能
+  const droppedSkill = gameState.player.frontierSkills.shift();
+  if (droppedSkill) {
+    // 左侧技能进入后备技能
+    gameState.player.backupSkills.push(droppedSkill);
+    // 触发技能丢弃事件
+    eventBus.emit('skill-dropped', { skill: droppedSkill });
+    // 刷新操作面板
+    eventBus.emit('update-skill-descriptions');
+  }
+}
+
 // 敌人回合
 export function enemyTurn() {
   // 敌人行动逻辑

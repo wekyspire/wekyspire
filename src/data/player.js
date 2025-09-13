@@ -60,11 +60,11 @@ export class Player {
     this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
     this.tier = 0; // 等阶
-    this.skillSlots = Array(8).fill(null); // 技能槽，这是一个养成概念，和战斗无关。玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills，作为玩家在战场上的技能。
+    this.skillSlots = Array(9).fill(null); // 技能槽，这是一个养成概念，和战斗无关。玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills，作为玩家在战场上的技能。
     this.skills = []; // 场上技能。skills仅在战斗时有效，用于存储当前战斗中玩家拥有的技能。在战斗开始前由skillSlots生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
-    this.maxFrontierSkills = 4; // 最大前台技能数量
+    this.maxFrontierSkills = 5; // 最大前台技能数量
     this.effects = {}; // 效果列表，由一个 效果名称->效果层数 的词典组成。
     // SkillManager仅用于创建技能和保留技能模板，玩家拥有的技能保存在skillSlots内。
     this.skillManager = SkillManager.getInstance();
