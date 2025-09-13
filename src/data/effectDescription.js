@@ -19,6 +19,12 @@ const effectDescriptions = {
     icon: '🔷',
     color: '#4682B4' // 钢蓝色
   },
+  '易伤': {
+    name: '易伤',
+    description: '受到150%伤害，回合结束时，层数减1',
+    icon: '💥',
+    color: '#FF4500' // 橙红色
+  },
 
   // 回合开始时触发的效果
   '吸收': {
@@ -79,7 +85,7 @@ const effectDescriptions = {
   },
   '燃心': {
     name: '燃心',
-    description: '回合结束时，增加1层集中，层数减1',
+    description: '回合结束时，增加3x层数层集中和8x层数层燃烧',
     icon: '🔥',
     color: '#FF6347' // 番茄红
   },
@@ -175,7 +181,7 @@ const effectDescriptions = {
   // 特殊效果（boss等）
   '高燃弹药': {
     name: '高燃弹药',
-    description: '这些古老的弹药竟如此易燃！攻击造成伤害则赋予2层燃烧',
+    description: '攻击造成伤害则赋予2层燃烧',
     icon: '🔥',
     color: '#FF4500' // 橙红色
   },
@@ -184,6 +190,12 @@ const effectDescriptions = {
     description: '下次扫射时的次数将继续提升',
     icon: '🔫',
     color: '#FF8C00' // 深橙色
+  },
+  '警戒': {
+    name: '警戒',
+    description: '回合开始时，不失去护盾，层数减1',
+    icon: '👀',
+    color: '#808080' // 灰色
   }
 };
 

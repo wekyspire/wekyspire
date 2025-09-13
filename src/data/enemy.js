@@ -88,6 +88,11 @@ class Enemy {
   removeEffect(effectName, stacks = 1) {
     this.addEffect(effectName, -stacks);
   }
+
+  applyHeal (heal) {
+    this.hp += heal;
+    if (this.hp > this.maxHp) this.hp = this.maxHp;
+  }
 }
 
 export default Enemy;

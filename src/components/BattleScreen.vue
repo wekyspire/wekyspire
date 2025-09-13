@@ -1,5 +1,7 @@
 <template>
   <div class="battle-screen">
+    <!-- 战斗场次 -->
+    <h3 style="color: white;"> 第{{ level }}层 </h3>
     <!-- 顶部状态面板区域 -->
     <div class="status-panels">
       <!-- 敌人状态面板 -->
@@ -25,14 +27,16 @@
     <!-- 操作面板 -->
     <div class="action-panel" :class="{ 'disabled': !isPlayerTurn || isControlDisabled }">
       <div class="skills">
+        <transition-group name="card-movement">
         <SkillCard
-          v-for="(skill, index) in player.skillSlots.filter(skill => skill !== null)" 
-          :key="index"
+          v-for="(skill, index) in player.frontierSkills.filter(skill => skill !== null)" 
+          :key="skill.uniqueID"
           :skill="skill"
           :disabled="!canUseSkill(skill) || !isPlayerTurn || isControlDisabled"
           :player-mana="player.mana"
           @skill-card-clicked="onSkillCardClicked"
         />
+        </transition-group>
       </div>
       <button @click="onEndTurnButtonClicked" :disabled="!isPlayerTurn || isControlDisabled">结束回合</button>
     </div>
@@ -48,6 +52,7 @@ import effectDescriptions from '../data/effectDescription.js';
 import { useSkill, endPlayerTurn } from '../data/battle.js';
 import gameState from '../data/gameState.js';
 import eventBus from '../eventBus.js';
+import { Transition } from 'vue';
 
 export default {
   name: 'BattleScreen',
@@ -91,6 +96,9 @@ export default {
   computed: {
     isPlayerTurn() {
       return gameState.isPlayerTurn;
+    },
+    level() {
+      return gameState.battleCount;
     }
   },
   methods: {
@@ -206,10 +214,35 @@ export default {
 }
 
 .skills {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 15px;
   margin-bottom: 15px;
+  position: relative;
+}
+
+.card-movement-enter-from,
+.card-movement-leave-to {
+  opacity: 0;
+  transform: translateY(-50px);
+}
+.card-movement-move,
+.card-movement-enter-active,
+.card-movement-leave-active {
+  transition: all 0.3s ease;
+}
+
+.card-movement-leave-active {
+  position: absolute;
+}
+
+/* 移除之前的包装器样式，改用JavaScript动态设置位置 */
+.skills .skill-card {
+  position: relative;
+}
+.card-movement-leave-active {
+  left: 0;
+  top: 0;
 }
 
 </style>

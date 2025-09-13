@@ -1,5 +1,8 @@
+// 杂乱的c- - c+ 技能
+
 import Skill from '../skill.js';
-import { launchAttack, dealDamage, gainShield, addBattleLog } from '../battleUtils.js';
+import { launchAttack, dealDamage, gainShield } from '../battleUtils.js';
+import { addBattleLog } from '../battleLogUtils.js';
 
 export class PurifyWeky extends Skill {
   constructor() {
@@ -53,12 +56,43 @@ export class StrongPurifyWeky extends Skill {
 
 export class IntakeWeky extends Skill {
   constructor() {
-    super('萃取', 'normal', 2, 0, 3, 1, '纯化');
-    this.coldDownTurns = 4;
+    super('萃取', 'normal', 2, 0, 3, 1, '萃取');
+  }
+
+  get coldDownTurns() {
+    return Math.max(1, 4 - this.power);
   }
 
   get stack() {
-    return Math.max(1, 1 + this.power);
+    return 1;
+  }
+
+  // 使用技能
+  use(player, enemy) {
+    if (super.use(player, enemy)) {
+      player.addEffect('聚气', this.stack);
+      return true;
+    }
+    return false;
+  }
+
+  // 重新生成技能描述
+  regenerateDescription(player) {
+    return `获得${this.stack}/effect{聚气}`;
+  }
+}
+
+export class SuperIntakeWeky extends Skill {
+  constructor() {
+    super('超萃取', 'normal', 4, 0, 4, 1, '萃取');
+  }
+
+  get stack() {
+    return 2;
+  }
+
+  get coldDownTurns() {
+    return Math.max(1, 5 - this.power);
   }
 
   // 使用技能
@@ -161,6 +195,37 @@ export class StrengthenI extends Skill {
       return `获得${this.getStacks(player)}层/effect{力量}和/effect{坚固}`;
     }
     return `获得/named{灵能}层/effect{力量}和/effect{坚固}，不超过${this.baseMaxStacks}`;
+  }
+}
+
+// 锻造技能
+export class Forge extends Skill {
+  constructor() {
+    super('锻造', 'magic', 2, 1, 1, 1, "锻造");
+  }
+
+  get coldDownTurns () {
+    return 4 + Math.min(this.power, 0);
+  }
+  
+  use(player, enemy, stage) { 
+    // 找到左边的技能
+    const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
+    if(leftSkill) {
+      leftSkill.power += 1;
+    }
+    if(this.power > 0) {
+      const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
+      if(rightSkill) {
+        rightSkill.power += 1;
+      }
+    }
+    return true;
+  }
+  
+  regenerateDescription(player) {
+    if(this.power > 0) return `/named{强化}/named{左邻}和/named{右邻}技能`;
+    return `/named{强化}/named{左邻}技能`;
   }
 }
 
@@ -271,9 +336,9 @@ export class SpeedThinking extends Skill {
   }
   use(player, enemy, stage) {
     if(stage < this.times) {
-      for (const skill of player.skills) {
-        if (skill !== this && skill.canCoolDown()) {
-          skill.coolDown();
+      for (const skill of player.frontierSkills) {
+        if (skill !== this && skill.canColdDown()) {
+          skill.coldDown();
         }
       }
       return false;
@@ -282,6 +347,6 @@ export class SpeedThinking extends Skill {
   }
 
   regenerateDescription(player) {
-    return `/named{冷却}所有技能${this.times}次`;
+    return `/named{冷却}所有/named{前端}技能${this.times}次`;
   }
 }

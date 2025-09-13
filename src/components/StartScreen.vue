@@ -3,11 +3,11 @@
     <transition name="fade">
     <div class="start-screen-contents" v-if="!isGameStarting">
       <transition name="swing-fade" mode="out-in">
-        <h1 class="game-title infinite-mode" v-if="!isRemiPresent">魏启尖塔</h1>
-        <h1 class="game-title story-mode" v-else>魏启尖塔：故事</h1>
+        <div class="game-title infinite-mode" v-if="!isRemiPresent"><h1>魏启尖塔</h1></div>
+        <div class="game-title story-mode" v-else><h1>魏启尖塔</h1><span class="subtitle">故事</span></div>
       </transition>
       <transition name="swing-fade" mode="out-in">
-        <button class="infini-mode-button" @click="onStartGameButtonClicked" v-if="!isRemiPresent">开始游戏</button>
+        <button class="infini-mode-button" @click="onStartGameButtonClicked" v-if="!isRemiPresent">无限模式</button>
         <button class="story-mode-button"  @click="onStartGameButtonClicked" v-else>进入尖塔</button>
       </transition>
       <br />
@@ -72,18 +72,20 @@ export default {
       snowParticlesInterval: null,
       changelogData: [
         {
-          version: '2025.9.11 [Alpha 0.3.1]',
+          version: '2025.9.11 [Alpha 0.3.2]',
           sections: [
             {
               title: '新增',
               items: [
-                '交互更新，增加音效系统'
+                '交互更新，增加音效系统',
+                '增加牌堆设定'
               ]
             },
             {
               title: '改进',
               items: [
                 '调整若干平衡',
+                '无限模式现在完全无限'
               ]
             },
             {
@@ -260,7 +262,6 @@ export default {
   transition: filter 3s ease-in-out;
 }
 
-
 .start-screen-contents {
   z-index: 1;
 }
@@ -272,12 +273,6 @@ export default {
   opacity: 0;
 }
 
-/* button {
-  padding: 10px 20px;
-  font-size: 18px;
-  margin-top: 20px;
-} */
-
 .infini-mode-button {
   background-color: #008CBA;
   color: white;
@@ -285,6 +280,11 @@ export default {
 
 .story-mode-button {
   background-color: orange;
+  color: white;
+}
+
+.story-mode-button:hover {
+  background-color: #e8560d;
   color: white;
 }
 
@@ -358,9 +358,19 @@ export default {
 }
 
 .game-title {
-  font-size: 4em;
+  font-size: 2em;
   margin-bottom: 20px;
   color: #eef7ff;
+  display: flex;
+  flex-direction: row;
+}
+
+.subtitle {
+  margin: auto auto 50px 10px;
+  padding: 5px;
+  font-size: 0.5em;
+  background-color: orange;
+  border-radius: 10px;
 }
 
 .swing-fade-leave-active {

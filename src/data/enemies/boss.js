@@ -84,7 +84,7 @@ export class MEFM3 extends Enemy {
         } else {
           return new Promise((resolve) => {
             battleLogs.push(`${this.name} 的钩爪抓住了你，你的防御变得薄弱。`);
-            player.addEffect('防御', -2);
+            player.addEffect('坚固', -2);
             setTimeout(() =>{resolve();}, 1000);
           });
         }

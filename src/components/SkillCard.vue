@@ -10,8 +10,13 @@
         <span class="mana-icon">💧</span>
         <span class="mana-value" :class="{ 'insufficient-mana': playerMana < skill.manaCost }">{{ skill.manaCost }}</span>
       </div>
+      <div class="action-cost" v-if="skill.actionPointCost > 0">
+        <span class="action-icon">⚡</span>
+        <span class="action-value">{{ skill.actionPointCost }}</span>
+      </div>
       <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
-      <div class="skill-name">{{ skill.name }}</div>
+      <div class="skill-name" :style="{color: skillNameColor}">
+        {{ skill.name + (skill.power < 0 ? '（' + skill.power + '）' : '') + (skill.power > 0 ? '（+' + skill.power + '）' : '') }}</div>
       <div class="skill-description">
         <ColoredText :text="skillDescription" />
       </div>
@@ -60,6 +65,15 @@ export default {
   computed: {
     skillDescription() {
       return this.skill.getDescription();
+    },
+    skillNameColor() {
+      if(this.skill.power < 0) {
+        return 'red';
+      } else if(this.skill.power > 0) {
+        return 'green';
+      } else {
+        return 'black';
+      }
     }
   },
   mounted() {
@@ -130,7 +144,7 @@ export default {
     playParticleEffect(tier, card) {
       // 根据tier确定粒子参数
       const tierSettings = {
-        '-1': { count: 5, size: 3, color: '#ff0000' },   // S
+        '-1': { count: 5, size: 3, color: '#333333' },   // curses
         '0': { count: 15, size: 3, color: '#000000' },     // D
         '1': { count: 20, size: 4, color: '#41db39' },     // C-
         '2': { count: 30, size: 5, color: '#41db39' },    // C+
@@ -214,18 +228,7 @@ export default {
 </script>
 
 <style scoped>
-.particle-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  pointer-events: none;
-}
-
 .skill-card-panel {
-  position: relative;
   z-index: 1;
   width: 150px;
   height: 220px;
@@ -310,6 +313,28 @@ export default {
   color: #f44336;
 }
 
+.action-cost {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.action-icon {
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.action-value {
+  font-weight: bold;
+  color: #ff9800;
+  font-size: 16px;
+}
 
 .skill-card {
   /* width: 150px; */

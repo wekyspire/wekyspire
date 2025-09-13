@@ -5,10 +5,15 @@ import EnemyFactory from './enemyFactory.js'
 import AbilityManager from './abilityManager.js'
 import ItemManager from './itemManager.js'
 
-export function upgradePlayerTier (player) {
+export function getNextPlayerTier(playerTier) {
   const tierUpgrades = { 0: 2, 2: 3, 3: 5, 5: 7, 7: 8, 8: 9 };
-  if (tierUpgrades[player.tier] !== undefined) {
-    player.tier = tierUpgrades[player.tier];
+  return tierUpgrades[playerTier];
+}
+
+export function upgradePlayerTier (player) {
+  const nextTier = getNextPlayerTier(player.tier);
+  if (nextTier !== undefined) {
+    player.tier = nextTier;
     player.maxMana += 1;
     if(player.tier == 2) {
       // 特殊：第一次升级时多获得一点魏启
@@ -55,9 +60,12 @@ export class Player {
     this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
     this.tier = 0; // 等阶
-    this.skillSlots = Array(5).fill(null); // 技能槽，玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills。
-    this.skills = []; // skills仅在战斗时有效，用于存储当前战斗中玩家拥有的技能。在战斗开始前由skillSlots生成，在战斗结束后清空。
-    this.effects = {}; // 合并effects到player对象中
+    this.skillSlots = Array(8).fill(null); // 技能槽，这是一个养成概念，和战斗无关。玩家可以在技能槽内保存技能。战斗开始时，从技能槽中保存的技能创建skills，作为玩家在战场上的技能。
+    this.skills = []; // 场上技能。skills仅在战斗时有效，用于存储当前战斗中玩家拥有的技能。在战斗开始前由skillSlots生成，在战斗结束后清空。
+    this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
+    this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
+    this.maxFrontierSkills = 4; // 最大前台技能数量
+    this.effects = {}; // 效果列表，由一个 效果名称->效果层数 的词典组成。
     // SkillManager仅用于创建技能和保留技能模板，玩家拥有的技能保存在skillSlots内。
     this.skillManager = SkillManager.getInstance();
   }
@@ -85,6 +93,10 @@ export class Player {
   
   get defense() {
     return this.baseDefense + (this.effects['坚固'] || 0);
+  }
+
+  addBackupSkill (skill) {
+    this.backupSkills.push(skill);
   }
 
   // 随机移除stacks层效果
@@ -147,6 +159,17 @@ export class Player {
     this.mana -= amount;
     this.mana = Math.max(this.mana, 0);
     this.mana = Math.min(this.mana, this.maxMana);
+  }
+
+  gainMana (amount) {
+    this.mana += amount;
+    this.mana = Math.max(this.mana, 0);
+    this.mana = Math.min(this.mana, this.maxMana);
+  }
+
+  gainActionPoint (amount) {
+    this.remainingActionPoints += amount;
+    this.remainingActionPoints = Math.min(this.remainingActionPoints, this.maxActionPoints);
   }
 }
 

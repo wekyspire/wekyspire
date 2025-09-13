@@ -24,12 +24,18 @@ export function startBattle() {
     enemy: gameState.enemy
   });
   
-  // 从技能槽复制技能到战斗技能数组
-  gameState.player.skills = gameState.player.skillSlots.filter(skill => skill !== null);
-  // 赋值skill的inBattleIndex
-  gameState.player.skills.forEach((skill, index) => {
-    skill.inBattleIndex = index;
-  });
+  // 从技能槽克隆技能到战斗技能数组
+  gameState.player.skills = gameState.player.skillSlots
+    .filter(skill => skill !== null)
+    .map(skill => cloneSkill(skill));
+
+
+  // 初始化前台和后备技能列表
+  gameState.player.backupSkills = [...gameState.player.skills];
+  gameState.player.frontierSkills = [];
+  
+  // 填充前台技能
+  fillFrontierSkills(gameState.player);
 
   // 调用技能的onBattleStart方法
   gameState.player.skills.forEach(skill => {
@@ -53,7 +59,7 @@ export function generateEnemy() {
   const battleIntensity = gameState.battleCount;
   
   // 简单实现：在第2 + 5xn (n = 1, 2, 3, ...）场战斗时生成Boss
-  if ((gameState.battleCount-2) % 5 === 0) {
+  if (gameState.battleCount !== 2 && (gameState.battleCount - 2) % 5 === 0) {
     gameState.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, true);
   } else {
     // 普通敌人
@@ -71,15 +77,14 @@ export function startPlayerTurn() {
 
   // 补充行动力
   gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
-
-  // 摧毁护盾
-  gameState.player.shield = 0;
   
   // 进行技能冷却
   gameState.player.skills.forEach(skill => {
     skill.coldDown();
   });
 
+  // 填充前台技能
+  fillFrontierSkills(gameState.player);
 
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.player);
@@ -105,7 +110,7 @@ export function useSkill(skill) {
   gameState.controlDisableCount += 1;
   
   // 支付行动力、使用次数和魏启
-  skill.consumeUses(gameState.player);
+  skill.consumeResources(gameState.player);
   
   // 技能发动时结算效果
   processSkillActivationEffects(gameState.player);
@@ -130,6 +135,9 @@ export function useSkill(skill) {
         if(result !== null) { // null: canceled
           eventBus.emit('after-skill-use', 
             {player: gameState.player, skill: skill, result: result});
+          
+          // 处理技能使用后的逻辑
+          handleSkillAfterUse(skill);
         }
         // 最后提醒UI
         eventBus.emit('update-skill-descriptions');
@@ -149,9 +157,6 @@ export function enemyTurn() {
   // 敌人行动逻辑
   gameState.isEnemyTurn = true;
   addEnemyActionLog(`/red{${gameState.enemy.name}} 的回合！`);
-  
-  // 摧毁护盾
-  gameState.enemy.shield = 0;
 
   // 触发敌人回合开始事件
   eventBus.emit('enemy-turn-start');
@@ -283,4 +288,98 @@ export function endBattle(isVictory) {
       gameState.gameStage = 'end';
     }
   }, 3000); // 3秒延迟
+}
+
+
+function fillFrontierSkills(player) {
+  // 从后备技能列表头部取技能，直到前台技能数量达到最大值
+  while (player.frontierSkills.length < player.maxFrontierSkills && player.backupSkills.length > 0) {
+    const skill = player.backupSkills.shift();
+    player.frontierSkills.push(skill);
+  }
+  
+  // 触发技能列表更新事件
+  eventBus.emit('frontier-skills-updated', {
+    frontierSkills: player.frontierSkills,
+    backupSkills: player.backupSkills
+  });
+}
+
+// 处理技能使用后的逻辑
+function handleSkillAfterUse(skill) {
+  // 如果技能剩余使用次数为0
+  if (skill.remainingUses <= 0) {
+    // 查找技能在前台技能列表中的位置
+    const index = gameState.player.frontierSkills.findIndex(s => s === skill);
+    if (index !== -1) {
+      // 从前台技能列表中移除
+      gameState.player.frontierSkills.splice(index, 1);
+      
+      if (skill.coldDownTurns !== 0) {
+        // 如果是可充能技能，移动到后备技能列表尾部
+        gameState.player.backupSkills.push(skill);
+        addSystemLog(`/blue{${skill.name}} 进入后备。`);
+      } else {
+        // 如果是不可充能技能，直接从技能列表中移除
+        const skillsIndex = gameState.player.skills.findIndex(s => s === skill);
+        if (skillsIndex !== -1) {
+          gameState.player.skills.splice(skillsIndex, 1);
+        }
+        addSystemLog(`/blue{${skill.name}} 已耗尽。`);
+      }
+      
+      // 触发技能列表更新事件
+      eventBus.emit('frontier-skills-updated', {
+        frontierSkills: gameState.player.frontierSkills,
+        backupSkills: gameState.player.backupSkills
+      });
+    }
+  }
+}
+
+// 克隆技能对象
+function cloneSkill(skill) {
+  // 获取技能的原型
+  const skillPrototype = Object.getPrototypeOf(skill);
+  
+  // 创建一个新的技能实例
+  const clonedSkill = Object.create(skillPrototype);
+  
+  // 复制所有可枚举的属性
+  for (const key in skill) {
+    if (skill.hasOwnProperty(key)) {
+      const value = skill[key];
+      
+      // 对于基础数据类型，直接复制
+      if (value === null || 
+          typeof value === 'undefined' || 
+          typeof value === 'boolean' || 
+          typeof value === 'number' || 
+          typeof value === 'string' || 
+          typeof value === 'symbol' || 
+          value instanceof Date) {
+        clonedSkill[key] = value;
+      }
+      // 对于函数，保持引用（通常不需要克隆函数）
+      else if (typeof value === 'function') {
+        clonedSkill[key] = value;
+      }
+      // 对于数组，创建新数组并递归克隆元素
+      else if (Array.isArray(value)) {
+        clonedSkill[key] = value.map(item => 
+          typeof item === 'object' && item !== null ? cloneSkill(item) : item
+        );
+      }
+      // 对于对象，递归克隆
+      else if (typeof value === 'object') {
+        clonedSkill[key] = cloneSkill(value);
+      }
+      // 其他情况直接复制
+      else {
+        clonedSkill[key] = value;
+      }
+    }
+  }
+  
+  return clonedSkill;
 }

@@ -28,7 +28,7 @@ export const gameState = reactive({
   controlDisableCount: 0,
   
   // 玩家数据
-  player: new Player(),
+  player: reactive(new Player()),
   
   // 敌人数据
   enemy: {
@@ -75,13 +75,9 @@ export function resetGameState() {
   gameState.isSkillSlotSelectionVisible = false;
   gameState.selectedSkillForSlot = null;
   
-  // 重置玩家状态
-  gameState.player.hp = gameState.player.maxHp;
-  gameState.player.mana = 0;
-  gameState.player.actionPoints = gameState.player.maxActionPoints;
-  gameState.player.money = 0;
-  gameState.player.skills = [];
-  gameState.player.effects = {};
+  // 重置玩家状态 - 创建一个新的Player实例并重新赋值
+  const newPlayer = new Player();
+  Object.assign(gameState.player, newPlayer);
   gameState.player.skillManager = SkillManager.getInstance();
 }
 

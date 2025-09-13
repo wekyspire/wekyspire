@@ -11,38 +11,41 @@ import { addEffectLog, addBattleLog } from './battleLogUtils.js';
  * @param {Object} target - 目标对象（玩家或敌人）
  */
 export function processStartOfTurnEffects(target) {
+
+  // 摧毁护盾
+  if(target.effects['警戒'] > 0) {
+    target.addEffect('警戒', -1);
+  } else {
+    target.shield = 0;
+  }
+
   // 吸收效果
   if (target.effects['吸收'] > 0) {
     target.mana += target.effects['吸收'];
-    addEffectLog(`${target.name}\effect{吸收}了${target.effects['吸收']}点魏启！`);
+    addEffectLog(`${target.name}/effect{吸收}了${target.effects['吸收']}点魏启！`);
     delete target.effects['吸收'];
   }
 
   // 处理燃烧效果
   if (target.effects['燃烧'] > 0) {
     const damage = target.effects['燃烧'];
-    target.effects['燃烧'] -= 1;
-    if(target.effects['燃烧'] <= 0) {
-      delete target.effects['燃烧'];
-    }
+    target.addEffect('燃烧', -1);
     addEffectLog(`${target.name}被烧伤了，受到${damage}伤害！`);
     dealDamage(null, target, damage);
-    if (target.hp < 0) target.hp = 0;
   }
   
   // 聚气效果
   if (target.effects['聚气'] > 0) {
-    target.mana += target.effects['聚气'];
-    addEffectLog(`${target.name}通过\effect{聚气}恢复了${target.effects['聚气']}点魏启！`);
-    delete target.effects['聚气'];
+    if (typeof target.gainMana === 'function') {
+      target.gainMana(target.effects['聚气']);
+      addEffectLog(`${target.name}通过/effect{聚气}恢复了${target.effects['聚气']}点魏启！`);
+    }
+    target.addEffect('聚气', -target.effects['聚气']);
   }
   
   // 最后再处理眩晕效果
   if (target.effects['眩晕'] > 0) {
-    target.effects['眩晕'] -= 1;
-    if (target.effects['眩晕'] <= 0) {
-      delete target.effects['眩晕'];
-    }
+    target.addEffect('眩晕', -1);
     addEffectLog(`${target.name}处于眩晕状态，跳过回合！`);
     return true; // 返回true表示需要跳过回合
   }
@@ -57,167 +60,109 @@ export function processStartOfTurnEffects(target) {
 export function processEndOfTurnEffects(target) {
   // 处理吸收效果
   if (target.effects['吸收'] > 0) {
-    target.mana += target.effects['吸收'];
-    addEffectLog(`${target.name}通过吸收效果恢复了${target.effects['吸收']}点魏启！`);
+    if (typeof target.gainMana === 'function') {
+      target.gainMana(target.effects['吸收']);
+    }
+    addEffectLog(`${target.name}通过/effect{吸收}恢复了${target.effects['吸收']}点魏启！`);
   }
   
   // 处理漏气效果
   if (target.effects['漏气'] > 0) {
-    target.mana -= target.effects['漏气'];
-    if (target.mana < 0) target.mana = 0;
-    addEffectLog(`${target.name}因漏气效果失去了${target.effects['漏气']}点魏启！`);
+    if (typeof target.consumeMana === 'function') {
+      target.consumeMana(target.effects['漏气']);
+    }
+    addEffectLog(`${target.name}因/effect{漏气}失去了${target.effects['漏气']}点魏启！`);
   }
   
   // 处理中毒效果
   if (target.effects['中毒'] > 0) {
     const damage = target.effects['中毒'];
-    target.hp -= damage;
-    if (target.hp < 0) target.hp = 0;
-    target.effects['中毒'] -= 1;
-    if (target.effects['中毒'] <= 0) {
-      delete target.effects['中毒'];
-    }
-    addEffectLog(`${target.name}受到中毒效果影响，失去了${damage}点生命！`);
+    dealDamage(null, target, damage, false);
+    target.addEffect('中毒', -1);
+    addEffectLog(`${target.name}受到/effect{中毒}影响，受到${damage}伤害！`);
   }
   
   // 处理再生效果
   if (target.effects['再生'] > 0) {
     const heal = target.effects['再生'];
-    target.hp += heal;
-    if (target.hp > target.maxHp) target.hp = target.maxHp;
-    target.effects['再生'] -= 1;
-    if (target.effects['再生'] <= 0) {
-      delete target.effects['再生'];
-    }
-    addEffectLog(`${target.name}通过再生效果恢复了${heal}点生命！`);
+    target.applyHeal(heal);
+    target.addEffect('再生', -1);
+    addEffectLog(`${target.name}通过/effect{再生}恢复了${heal}点/named{生命}！`);
   }
   
   // 处理超然效果
   if (target.effects['超然'] > 0) {
     const stacks = target.effects['超然'];
-    if (target.effects['集中']) {
-      target.effects['集中'] += stacks;
-    } else {
-      target.effects['集中'] = stacks;
-    }
-    addEffectLog(`${target.name}通过超然效果获得了${stacks}层集中！`);
+    target.addEffect('集中', stacks);
+    addEffectLog(`${target.name}通过/effect{超然}获得了${stacks}层/effect{集中}！`);
   }
   
   // 处理侵蚀效果
   if (target.effects['侵蚀'] > 0) {
     const stacks = target.effects['侵蚀'];
-    if (target.effects['集中']) {
-      target.effects['集中'] -= stacks;
-      if (target.effects['集中'] <= 0) {
-        delete target.effects['集中'];
-      }
-    }
-    addEffectLog(`${target.name}受到侵蚀效果影响，失去了${stacks}层集中！`);
+    target.addEffect('集中', -stacks);
+    addEffectLog(`${target.name}受到/effect{侵蚀}影响，失去了${stacks}层/effect{集中}！`);
   }
   
   // 处理燃心效果
   if (target.effects['燃心'] > 0) {
-    if (target.effects['集中']) {
-      target.effects['集中'] += 1;
-    } else {
-      target.effects['集中'] = 1;
-    }
-    target.effects['燃心'] -= 1;
-    if (target.effects['燃心'] <= 0) {
-      delete target.effects['燃心'];
-    }
-    addEffectLog(`${target.name}通过燃心效果获得了1层集中！`);
+    const amount = 3 * target.effects['燃心'];
+    target.addEffect('集中', amount);
+    addEffectLog(`${target.name}通过/effect{燃心}获得了${amount}层/effect{集中}！`);
+    const burnAmount = 8 * target.effects['燃心'];
+    target.addEffect('燃烧', burnAmount);
+    addEffectLog(`${target.name}通过/effect{燃心}获得了${burnAmount}层/effect{燃烧}！`);
   }
   
   // 处理成长效果
   if (target.effects['成长'] > 0) {
     const stacks = target.effects['成长'];
-    if (target.effects['力量']) {
-      target.effects['力量'] += stacks;
-    } else {
-      target.effects['力量'] = stacks;
-    }
-    addEffectLog(`${target.name}通过成长效果获得了${stacks}层力量！`);
+    target.addEffect('力量', stacks);
+    addEffectLog(`${target.name}通过/effect{成长}获得了${stacks}层/effect{力量}！`);
   }
   
   // 处理衰败效果
   if (target.effects['衰败'] > 0) {
     const stacks = target.effects['衰败'];
-    if (target.effects['力量']) {
-      target.effects['力量'] -= stacks;
-      if (target.effects['力量'] <= 0) {
-        delete target.effects['力量'];
-      }
-    }
-    addEffectLog(`${target.name}受到衰败效果影响，失去了${stacks}层力量！`);
+    target.addEffect('力量', -stacks);
+    addEffectLog(`${target.name}受到/effect{衰败}影响，失去了${stacks}层/effect{力量}！`);
   }
   
   // 处理巩固效果
   if (target.effects['巩固'] > 0) {
     const stacks = target.effects['巩固'];
-    if (target.effects['坚固']) {
-      target.effects['坚固'] += stacks;
-    } else {
-      target.effects['坚固'] = stacks;
-    }
-    addEffectLog(`${target.name}通过巩固效果获得了${stacks}层坚固！`);
+    target.addEffect('坚固', stacks);
+    addEffectLog(`${target.name}通过/effect{巩固}获得了${stacks}层/effect{坚固}！`);
   }
   
   // 处理崩溃效果
   if (target.effects['崩溃'] > 0) {
     const stacks = target.effects['崩溃'];
-    if (target.effects['坚固']) {
-      target.effects['坚固'] -= stacks;
-      if (target.effects['坚固'] <= 0) {
-        delete target.effects['坚固'];
-      }
-    }
-    addEffectLog(`${target.name}受到崩溃效果影响，失去了${stacks}层坚固！`);
+    target.addEffect('坚固', -stacks);
+    addEffectLog(`${target.name}受到/effect{崩溃}影响，失去了${stacks}层/effect{坚固}！`);
   }
   
   // 处理魏宗圣体效果
   if (target.effects['魏宗圣体'] > 0) {
     const stacks = target.effects['魏宗圣体'];
-    if (target.effects['集中']) {
-      target.effects['集中'] += stacks;
-    } else {
-      target.effects['集中'] = stacks;
-    }
-    if (target.effects['力量']) {
-      target.effects['力量'] += stacks;
-    } else {
-      target.effects['力量'] = stacks;
-    }
-    if (target.effects['坚固']) {
-      target.effects['坚固'] += stacks;
-    } else {
-      target.effects['坚固'] = stacks;
-    }
-    addEffectLog(`${target.name}通过魏宗圣体效果获得了${stacks}层集中、力量和坚固！`);
+    target.addEffect('集中', stacks);
+    target.addEffect('力量', stacks);
+    target.addEffect('坚固', stacks);
+    addEffectLog(`${target.name}通过/effect{魏宗圣体}获得了${stacks}层/effect{集中}、/effect{力量}和/effect{坚固}！`);
   }
   
   // 处理解体效果
   if (target.effects['解体'] > 0) {
     const stacks = target.effects['解体'];
-    if (target.effects['集中']) {
-      target.effects['集中'] -= stacks;
-      if (target.effects['集中'] <= 0) {
-        delete target.effects['集中'];
-      }
-    }
-    if (target.effects['力量']) {
-      target.effects['力量'] -= stacks;
-      if (target.effects['力量'] <= 0) {
-        delete target.effects['力量'];
-      }
-    }
-    if (target.effects['坚固']) {
-      target.effects['坚固'] -= stacks;
-      if (target.effects['坚固'] <= 0) {
-        delete target.effects['坚固'];
-      }
-    }
-    addEffectLog(`${target.name}受到解体效果影响，失去了${stacks}层集中、力量和坚固！`);
+    target.addEffect('集中', -stacks);
+    target.addEffect('力量', -stacks);
+    target.addEffect('坚固', -stacks);
+    addEffectLog(`${target.name}受到/effect{解体}影响，失去了${stacks}层/effect{集中}、/effect{力量}和/effect{坚固}！`);
+  }
+
+  // 易伤效果
+  if (target.effects['易伤'] > 0) {
+    target.addEffect('易伤', -1);
   }
 }
 
@@ -228,12 +173,9 @@ export function processEndOfTurnEffects(target) {
 export function processSkillActivationEffects(target) {
   // 处理连发效果
   if (target.effects['连发'] > 0) {
-    target.actionPoints += 1;
-    target.effects['连发'] -= 1;
-    if (target.effects['连发'] <= 0) {
-      delete target.effects['连发'];
-    }
-    addEffectLog(`${target.name}通过连发效果获得了1点行动力！`);
+    target.gainActionPoint(1);
+    target.addEffect('连发', -1);
+    addEffectLog(`${target.name}通过/effect{连发}效果获得了1点/named{行动力}！`);
   }
 }
 
@@ -250,14 +192,19 @@ export function processAttackTakenEffects(target, damage) {
   if (target.effects['格挡'] > 0) {
     finalDamage = Math.floor(finalDamage / 2);
     target.addEffect('格挡', -1);
-    addEffectLog(`${target.name}通过格挡效果将伤害减半！`);
+    addEffectLog(`${target.name}通过/effect{格挡}效果将伤害减半！`);
   }
   
   // 处理闪避效果
   if (target.effects['闪避'] > 0) {
     finalDamage = 0;
     target.addEffect('闪避', -1);
-    addEffectLog(`${target.name}通过闪避效果完全回避了攻击！`);
+    addEffectLog(`${target.name}通过/effect{闪避}效果完全回避了攻击！`);
+  }
+
+  // 易伤，伤害乘以150%
+  if (target.effects['易伤'] > 0) {
+    finalDamage = Math.floor(finalDamage * 1.5);
   }
   
   return finalDamage;
@@ -285,14 +232,14 @@ export function processDamageDealtEffects(target, damage) {
   if (target.effects['暴怒'] > 0) {
     const stacks = target.effects['暴怒'];
     target.addEffect('力量', stacks);
-    addEffectLog(`${target.name}通过暴怒效果获得了${stacks}层力量！`);
+    addEffectLog(`${target.name}通过/effect{暴怒}效果获得了${stacks}层/effect{力量}！`);
   }
   
   // 处理执着效果
   if (target.effects['执着'] > 0) {
     const stacks = target.effects['执着'];
     target.addEffect('集中', stacks);
-    addEffectLog(`${target.name}通过执着效果获得了${stacks}层集中！`);
+    addEffectLog(`${target.name}通过/effect{执着}效果获得了${stacks}层/effect{集中}！`);
   }
 
   // 处理灼烧效果，受到攻击后有50%概率获得1层燃烧

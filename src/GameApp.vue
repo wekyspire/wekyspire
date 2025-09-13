@@ -150,15 +150,11 @@ export default {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: #eef7ff;
+  /* color: #eef7ff; */
   /* margin-top: 60px; */
   user-select: none;
   position: relative;
   height:100vh;
-}
-
-#game-app div {
-  color: #222222;
 }
 
 </style>

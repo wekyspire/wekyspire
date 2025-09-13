@@ -20,7 +20,8 @@ export default {
       isMuted: false,
       showToggleButton: true,
       // 音效轨道管理，同一轨道只能同时播放一个音效
-      soundTracks: new Map()
+      soundTracks: new Map(),
+      defaultVolume: 0.25
     };
   },
   mounted() {
@@ -37,8 +38,18 @@ export default {
     
     toggleAudio() {
       this.isMuted = !this.isMuted;
-      // 这里可以添加实际的音频静音逻辑
       console.log(`Audio ${this.isMuted ? 'muted' : 'unmuted'}`);
+      if(this.isMuted) {
+        // 把所有正在播放的audio声音改成0
+        this.soundTracks.forEach((sound) => {
+          if(sound) sound.volume = 0;
+        });
+      } else {
+        // 把所有正在播放的audio声音改成默认值
+        this.soundTracks.forEach((sound) => {
+          if(sound) sound.volume = this.defaultVolume;
+        });
+      }
     },
     
     playSound(payload) {
@@ -63,7 +74,7 @@ export default {
         // 创建并播放新音效
         try {
           const audio = new Audio(soundFile);
-          audio.volume = 0.2;
+          audio.volume = this.defaultVolume;
           audio.play();
           
           // 保存到轨道管理器

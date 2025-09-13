@@ -1,4 +1,4 @@
-import { BuzzlingBugs, Slime } from './enemies/basic.js';
+import { BuzzlingBugs, Slime, SlimySlime } from './enemies/basic.js';
 import { Remi } from './enemies/basic.js';
 import { MEFM3 } from './enemies/boss.js';
 import { FireSlime } from './enemies/slimes.js';
@@ -18,6 +18,7 @@ class EnemyFactory {
     this.registerEnemy(MEFM3);
     this.registerEnemy(FireSlime);
     this.registerEnemy(BuzzlingBugs);
+    this.registerEnemy(SlimySlime);
 
     this.registerEnemy(BigWolf);
   }

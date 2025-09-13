@@ -4,8 +4,8 @@ import Skill from '../skill.js';
 // 恢复I (C-)
 export class VeryWeakRecovery extends Skill {
   constructor() {
-    super('恢复I', '木', 1, 1, 1, 2, '恢复');
-    this.coldDownTurns = 1;
+    super('恢复I', '木', 1, 1, 1, 1, '恢复');
+    this.coldDownTurns = 3;
     this.upgradeTo = "恢复II";
   }
 
@@ -33,8 +33,8 @@ export class VeryWeakRecovery extends Skill {
 // 恢复II （B-）
 export class WeakRecovery extends Skill {
   constructor() {
-    super('恢复II', '木', 3, 1, 1, 3, '恢复');
-    this.coldDownTurns = 1;
+    super('恢复II', '木', 3, 1, 1, 1, '恢复');
+    this.coldDownTurns = 3;
     this.upgradeTo = "恢复III";
   }
 
@@ -62,8 +62,8 @@ export class WeakRecovery extends Skill {
 // 强力恢复 （B+）
 export class Recovery extends Skill {
   constructor() {
-    super('强力恢复', '木', 5, 1, 1, 3, '恢复');
-    this.coldDownTurns = 1;
+    super('强力恢复', '木', 5, 1, 1, 1, '恢复');
+    this.coldDownTurns = 3;
     this.upgradeTo = "强力恢复";
   }
 
