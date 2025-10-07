@@ -8,7 +8,7 @@ import {
   initializeBattleFlowListeners
 } from './data/battle.js'
 import {
-  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage
+  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage, dropCurrentReward
 } from './data/rest.js'
 
 function startGame() {
@@ -19,15 +19,16 @@ function startGame() {
   const initialSkill1 = SkillManager.getInstance().createSkill('拳打脚踢');
   const initialSkill2 = SkillManager.getInstance().createSkill('活动筋骨');
   const initialSkill3 = SkillManager.getInstance().createSkill('打滚');
-  const initialSkill4 = SkillManager.getInstance().createSkill('抱头防御');
-  const initialSkill5 = SkillManager.getInstance().createSkill('冲锋盾');
+  // const initialSkill4 = SkillManager.getInstance().createSkill('奉予烈焰');
+  const initialSkill4 = SkillManager.getInstance().createSkill('冲锋盾');
+  const initialSkill5 = SkillManager.getInstance().createSkill('敏捷打击');
 
   backendGameState.player.cultivatedSkills = [initialSkill1, initialSkill2, initialSkill3, initialSkill4, initialSkill5];
 
   // 升满级调试
-  // while(backendGameState.player.tier < 9) {
-  //   upgradePlayerTier(backendGameState.player);
-  // }
+  while(backendGameState.player.tier < 9) {
+    upgradePlayerTier(backendGameState.player);
+  }
 
   // 以事件驱动开始第一场战斗
   backendEventBus.emit(EventNames.Game.ENTER_BATTLE_STAGE);
@@ -104,6 +105,9 @@ export function initGameFlowListeners() {
   });
   backendEventBus.on(EventNames.Rest.FINISH, () => {
     backendEventBus.emit(EventNames.Rest.END);
+  });
+  backendEventBus.on(EventNames.Rest.DROP_REWARD, () => {
+    dropCurrentReward();
   });
 
   // 休整结束后继续下一场战斗

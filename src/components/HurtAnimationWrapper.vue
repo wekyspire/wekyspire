@@ -115,12 +115,15 @@ export default {
       this.isHurt = true;
 
       // 粒子与文本
+      const shieldDamage = passThroughDamage - hpDamage;
       if (hpDamage > 0) {
         this.createParticles(hpDamage, 0);
-      } else {
-        this.createParticles(Math.abs(hpDamage), 140);
+        this.createDamageText(hpDamage);
       }
-      this.createDamageText(passThroughDamage);
+      if(shieldDamage > 0) {
+        this.createParticles(shieldDamage, 140);
+        this.createDamageText(shieldDamage, true);
+      }
 
       const duration = Math.min(200 + passThroughDamage * 2, 600);
       this._setTimer(() => { this.isShaking = false; this.shakeIntensity = 0; }, duration);
@@ -153,7 +156,7 @@ export default {
       }
     },
 
-    createDamageText(damage) {
+    createDamageText(damage, isShieldDamage = false) {
       const wrapper = this.$el;
       const wrapperRect = wrapper.getBoundingClientRect();
       const wrapperWidth = wrapperRect.width;
@@ -161,7 +164,7 @@ export default {
 
       const isHealing = damage < 0;
       const text = isHealing ? `+${Math.abs(damage)}` : `-${damage}`;
-      const color = isHealing ? '#00ff00' : '#ff0000';
+      const color = isHealing ? '#00ff00' : (isShieldDamage ? '#666666' : '#ff0000');
       const damageValue = Math.abs(damage);
       const fontSize = Math.min(96, Math.max(24, 12 + damageValue / 4));
 

@@ -106,6 +106,10 @@ export class Player extends Unit {
 
     // 属性修正器管线（按顺序应用）
     this.modifiers = [];
+
+    // 咏唱位：当前激活的咏唱型技能
+    this.activatedSkills = [];
+    this.maxActivatedSkills = 1; // 默认一个咏唱位
   }
 
   // 计算属性
@@ -146,6 +150,10 @@ export class Player extends Unit {
     return current;
   }
 
+  canDropFirstSkill() {
+    return this.frontierSkills.length > 0 && this.remainingActionPoints > 0;
+  }
+
   addBackupSkill (skill) {
     this.backupSkills.push(skill);
   }
@@ -175,4 +183,7 @@ export class Player extends Unit {
   hasAbility (abilityName) {
     return this.abilities.some(ability => ability.name === abilityName);
   }
+
+  hasFreeActivatedSlot() { return this.activatedSkills.length < this.maxActivatedSkills; }
+  getFirstActivatedSkill() { return this.activatedSkills[0] || null; }
 }

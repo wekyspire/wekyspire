@@ -20,18 +20,20 @@ export const EventNames = {
     MONEY_CLAIMED: 'player-money-claimed',
     SKILL_USED: 'player-skill-used',
     SKILL_DROPPED: 'player-skill-dropped',
-    SKILL_REWARD_CLAIMED: 'player-skill-claimed'
+    SKILL_REWARD_CLAIMED: 'player-skill-claimed',
+    ACTIVATED_SKILLS_UPDATED: 'player-activated-skills-updated',
+    ACTIVATED_SKILL_ENABLED: 'player-activated-skill-enabled',
+    ACTIVATED_SKILL_DISABLED: 'player-activated-skill-disabled'
   },
   Battle: {
-    // Used to schedule battle phases, not intended to be listened
     BATTLE_START: 'battle-battle-start',
     PLAYER_TURN: 'battle-player-turn',
     PLAYER_USE_SKILL: 'battle-player-use-skill',
     PLAYER_DROP_SKILL: 'battle-player-drop-skill',
     PLAYER_END_TURN: 'player-end-turn',
     ENEMY_TURN: 'battle-enemy-turn',
-    // Except this one
-    BATTLE_VICTORY: 'battle-victory'
+    BATTLE_VICTORY: 'battle-victory',
+    PLAYER_STOP_ACTIVATED_SKILL: 'battle-player-stop-activated-skill'
   },
   Enemy: {
     TURN_START: 'enemy-turn-start',
@@ -48,7 +50,8 @@ export const EventNames = {
     PURCHASE_ITEM: 'rest-purchase-item',
     SHOP_REFRESHED: 'rest-shop-refreshed',
     FINISH: 'rest-finish',
-    END: 'rest-end'
+    END: 'rest-end',
+    DROP_REWARD: 'rest-drop-reward'
   },
   Shop: {
     ITEM_PURCHASED: 'item-purchased'

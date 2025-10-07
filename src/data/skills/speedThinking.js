@@ -5,8 +5,7 @@ import Skill from "../skill";
 // 快速思考技能
 export class FastThinking extends Skill {
   constructor() {
-    super('快速思考', 'normal', 1, 0, 1, 3, '快速思考', 1);
-    this.baseColdDownTurns = 1;
+    super('快速思考', 'normal', 1, 0, 1, Infinity, '快速思考', 1);
     this.upgradeTo = '超速思考';
   }
 
@@ -56,7 +55,7 @@ export class FastThinking extends Skill {
 // 冷却所有技能一次
 export class SpeedThinking extends Skill {
   constructor() {
-    super('超速思考', 'normal', 3, 0, 1, Infinity, "快速思考");
+    super('超速思考', 'normal', 3, 0, 1, 1, "快速思考");
     this.baseColdDownTurns = 1;
     this.upgradeTo = ['灵光一现', '肌肉记忆']
   }
@@ -119,7 +118,7 @@ export class SuddenSpeedThinking extends Skill {
 // 获得效果"肌肉记忆"x4
 export class MuscleMemory extends Skill {
   constructor() {
-    super('肌肉记忆', 'normal', 5, 0, 6, Infinity, "快速思考");
+    super('肌肉记忆', 'normal', 5, 0, 6, 1, "快速思考");
     this.baseColdDownTurns = 1;
   }
 

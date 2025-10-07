@@ -9,7 +9,7 @@
     <!-- 战斗界面 -->
     <BattleScreen 
       v-else-if="gameState.gameStage === 'battle'"
-      :player="gameState.player"
+      :player="gameState.player.getModifiedPlayer()"
       :enemy="gameState.enemy"
       :is-player-turn="!gameState.isEnemyTurn"
       :level="gameState.battleCount"

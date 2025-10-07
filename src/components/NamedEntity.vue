@@ -68,9 +68,7 @@ export default {
 <style scoped>
 .named-entity {
   display: inline-block;
-  font-size: 16px;
   cursor: help;
-  margin: 0 2px;
   font-weight: bold;
 }
 </style>

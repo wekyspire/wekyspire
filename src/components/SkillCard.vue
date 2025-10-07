@@ -1,12 +1,15 @@
 <template>
   <div 
-    :class="['skill-card', { disabled: disabled }]"
+    :class="['skill-card', { disabled: disabled, 'chant-mode': isChant }]"
     @click="onClick"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
     :style="skillCardStyle"
     ref="root"
   >
+    <!-- Overlay 动画层（冷却/升级等） -->
+    <SkillCardAnimationOverlay :skill="skill" :disabled="previewMode" />
+    <!-- 背景 -->
     <div class="skill-card-background-paper"></div>
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
 
@@ -20,15 +23,14 @@
 
     <div class="skill-tier">{{ getSkillTierLabel(skill.tier) }}</div>
 
-
     <div class="skill-card-panel">
       <!-- 名称/副标题子组件 -->
       <SkillMeta :skill="skill" :hovered="hovered" :background-color="skillBackgroundColor" />
       <div class="skill-description">
         <ColoredText :text="skillDescription" />
       </div>
-      <!-- 装填/冷却子组件 -->
-      <SkillUses :skill="skill" :preview-mode="previewMode" />
+      <!-- 卡牌特性/装填/冷却子组件 -->
+      <SkillFeaturesAndUses :skill="skill" :preview-mode="previewMode" />
     </div>
   </div>
 </template>
@@ -38,14 +40,15 @@ import ColoredText from './ColoredText.vue';
 import { getSkillTierColor, getSkillTierLabel } from '../utils/tierUtils.js';
 import frontendEventBus from '../frontendEventBus.js';
 import SkillCosts from './skillCard/SkillCosts.vue';
-import SkillUses from './skillCard/SkillUses.vue';
+import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../utils/colorUtils";
 import { registerCardEl, unregisterCardEl } from '../utils/cardDomRegistry.js';
+import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
 
 export default {
   name: 'SkillCard',
-  components: { ColoredText, SkillCosts, SkillUses, SkillMeta },
+  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta, SkillCardAnimationOverlay },
   props: {
     skill: { type: Object, required: true },
     player: { type: Object, default: null },
@@ -54,7 +57,7 @@ export default {
     previewMode: { type: Boolean, default: false },
     canClick: { type: Boolean, default: true },
     suppressActivationAnimationOnClick: { type: Boolean, default: false },
-    // 当父组件已手动注册 DOM（如 SkillsHand）时，关闭此项以避免重复注册
+    // 当父组件已手动注册 DOM时，关闭此项以避免重复注册
     autoRegisterInRegistry: { type: Boolean, default: true }
   },
   data() {
@@ -95,7 +98,8 @@ export default {
     },
     skillCardImageStyle() {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
-    }
+    },
+    isChant() { return this.skill?.cardMode === 'chant'; }
   },
   mounted() {
     // 仅在需要时由组件自身注册到全局卡片DOM注册表
@@ -208,6 +212,9 @@ export default {
   box-shadow: 0 0 4px rgba(0,0,0,0.4);
   z-index: 2;
 }
+
+.skill-card.chant-mode { box-shadow:0 0 0 2px #6a5af9, 0 0 8px rgba(106,90,249,0.6); }
+
 .upgrade-replace-tooltip {
   position: absolute;
   bottom: -6px;

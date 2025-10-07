@@ -107,9 +107,7 @@ export default {
 <style scoped>
 .effect-icon {
   display: inline-block;
-  font-size: 16px;
   cursor: help;
-  margin: 0 2px;
   font-weight: bold;
   will-change: transform;
 }

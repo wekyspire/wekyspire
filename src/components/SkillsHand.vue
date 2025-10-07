@@ -47,7 +47,10 @@ export default {
     // 进入手中的卡牌是否立刻出现
     instantAppear: { type: Boolean, default: false },
     // 是否监听全局的 card-appear-finished 事件（关闭则不等待该事件，直接显示）
-    listenCardAppearFinished: { type: Boolean, default: true }
+    // 新：当前容器的标识（与 orchestrator transfer.to 对应）
+    transferContainerKey: { type: String, default: 'skills-hand' },
+    // 新：是否等待通用 card-transfer-end (to == transferContainerKey) 后再显示
+    waitTransferEnd: { type: Boolean, default: true }
   },
   data() {
     return {
@@ -161,8 +164,8 @@ export default {
     }
   },
   mounted() {
-    if (this.listenCardAppearFinished) {
-      frontendEventBus.on('card-appear-finished', this.onCardAppearFinished);
+    if (this.waitTransferEnd) {
+      frontendEventBus.on('card-transfer-end', this.onCardTransferEnd);
     }
 
     this._ro = new ResizeObserver(entries => {
@@ -187,7 +190,8 @@ export default {
     });
   },
   beforeUnmount() {
-    frontendEventBus.off('card-appear-finished', this.onCardAppearFinished);
+    try { frontendEventBus.off('card-transfer-end', this.onCardTransferEnd); } catch (_) {}
+    try { frontendEventBus.off('card-appear-finished', this.onCardAppearFinished); } catch (_) {}
     if (this._ro) {
       try { this._ro.disconnect(); } catch (_) {}
       this._ro = null;
@@ -206,17 +210,12 @@ export default {
         const added = newIds.filter(id => !prevSet.has(id));
         this.prevIds = [...newIds];
         if (added.length === 0) return;
-        // 若未监听 card-appear-finished，则不等待该事件，直接显示
-        if (!this.listenCardAppearFinished) {
+        // 若不等待转移完成事件或禁用入场动画，直接显示
+        if (!this.waitTransferEnd || this.instantAppear) {
           added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
           return;
         }
-        // 若禁用入场动画，直接显示
-        if (this.instantAppear) {
-          added.forEach(id => { if (this.appearing[id]) delete this.appearing[id]; });
-          return;
-        }
-        // 标记为“入场中”，等待 orchestrator 的 card-appear-finished 清理；添加兜底定时器
+        // 标记为入场中，等待 card-transfer-end 或兜底
         added.forEach(id => { this.appearing[id] = true; });
         this.$nextTick(() => {
           added.forEach(id => this.scheduleAppearFallback(id));
@@ -225,7 +224,15 @@ export default {
     }
   },
   methods: {
-    onCardAppearFinished(payload = {}) {
+    // 通用转移动画完成事件：{ id, kind, type, from, to, token, phase: 'end' }
+    onCardTransferEnd(payload = {}) {
+      if (!payload || payload.phase !== 'end') return;
+      const { id, to } = payload;
+      if (to === this.transferContainerKey && id != null && this.appearing[id]) {
+        delete this.appearing[id];
+      }
+    },
+    onCardAppearFinished(payload = {}) { // legacy handler (保持兼容)
       console.log('收到 card-appear-finished 事件', payload);
       const id = payload?.id;
       if (id != null && this.appearing[id]) {
@@ -234,11 +241,13 @@ export default {
     },
     setCardRef(el, id) {
       if (el) {
+        if(this.cardRefs[id] === el) return;
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
         registerCardEl(id, dom);
       } else {
-        unregisterCardEl(id);
+        // 保证销毁的注册表项是本元素注册的DOM，避免因为时序导致的误删（A增加->B增加->A销毁->B注册表项被删）
+        unregisterCardEl(id, this.cardRefs[id]);
         delete this.cardRefs[id];
       }
     },

@@ -55,6 +55,7 @@ export class DoubleFireshot extends Skill {
   constructor() {
     super('双发火弹', 'fire', 1, 1, 3, 1);
     this.baseColdDownTurns = 3;
+    this.baseSlowStart = true;
   }
   get damage() {
     return 12 + this.power * 8;
@@ -74,7 +75,7 @@ export class DoubleFireshot extends Skill {
   }
   regenerateDescription(player) {
     if (player) {
-      return `造成${this.getDamage(player)}点伤害，重复一次`;
+      return `造成${this.getDamage(player) + player.attack}点伤害，重复一次`;
     }
     return `造成【${this.damage} + /named{灵能}】点伤害，重复一次`;
   }
@@ -108,7 +109,7 @@ export class SearingHeat extends Skill {
   }
   regenerateDescription(player) {
     if(player) {
-      return `造成${this.getDamage(player)}点伤害，获得${this.stacks}层/effect{燃烧}`;
+      return `造成${this.getDamage(player) + player.attack}点伤害，获得${this.stacks}层/effect{燃烧}`;
     }
     return `造成【${this.damage} + 2x/named{灵能}】点伤害，获得${this.stacks}层/effect{燃烧}`;
   }
@@ -177,8 +178,51 @@ export class Firework extends Skill {
   }
 }
 
+// 运焰（C-）
+// 失去4层燃烧，丢2张牌
+export class FireTransport extends Skill {
+  constructor() {
+    super('运焰', 'fire', 1, 0, 1, 1);
+    this.baseColdDownTurns = 3;
+  }
+
+  get stacks() {
+    return Math.max(4 + 2 * this.power, 1);
+  }
+
+  get cards() {
+    return Math.max(2 + this.power, 1);
+  }
+
+  use(player, enemy, stage) {
+    if (stage === 0) {
+      const burnEffect = player.effects['燃烧'] || 0;
+      player.removeEffect('燃烧', Math.min(this.stacks, burnEffect));
+      return false;
+    } else if (stage === 1) {
+      selectSkillCard(player, skill.uniqueID).then(
+        (selectedCard) => {
+          dropSkillCard(player, selectedCard.uniqueID);
+        }
+      );
+      return false;
+    } else {
+      selectSkillCard(player, skill.uniqueID).then(
+        (selectedCard) => {
+          dropSkillCard(player, selectedCard.uniqueID);
+        }
+      );
+      return true;
+    }
+  }
+  regenerateDescription(player) {
+    return `失去${this.stacks}层/effect{燃烧}，丢${this.cards}张牌`;
+  }
+}
+
+
 // 温暖拥抱（C-）
-// 受3伤害，将你一半燃烧赋予对手
+// 受3伤害，向敌人转移至多9层燃烧
 export class WarmHug extends Skill {
   constructor() {
     super('温暖拥抱', 'fire', 1, 0, 1, 2);
@@ -189,7 +233,7 @@ export class WarmHug extends Skill {
   }
   getStacks(player) {
     const stacks = player.effects['燃烧'] || 0;
-    const baseTransferStacks = Math.ceil(stacks / 2);
+    const baseTransferStacks = Math.min(stacks, 9);
     return Math.max(0, baseTransferStacks);
   }
 
@@ -220,14 +264,14 @@ export class WarmHug extends Skill {
 
   regenerateDescription(player) {
     if(player) {
-      return `${this.damageText}转移${this.getStacks(player)}层/effect{燃烧}给对手`;
+      return `${this.damageText}向敌人转移${this.getStacks(player)}层/effect{燃烧}`;
     }
-    return `${this.damageText}转移你一半燃烧给对手`;
+    return `${this.damageText}向敌人转移至多9层燃烧`;
   }
 }
 
 // 散火（C-）
-// 丢弃前方所有牌，并失去所有燃烧
+// 丢弃前方所有牌，每张失去3层燃烧
 export class DisperseFire extends Skill {
   constructor() {
     super('散火', 'fire', 1, 0, 1, 1);
@@ -239,38 +283,96 @@ export class DisperseFire extends Skill {
   }
 
   use(player, enemy, stage) {
-    if(stage === 0) {
-      while (player.frontierSkills.length > 0) {
-        const skill = player.frontierSkills[0];
-        if(skill === this) {
-          break;
-        }
-        dropSkillCard(player, skill.uniqueID);
+    while (player.frontierSkills.length > 0) {
+      const skill = player.frontierSkills[0];
+      if(skill === this) {
+        break;
       }
+      dropSkillCard(player, skill.uniqueID);
+      const toRemove = Math.min(player.effects['燃烧'], 3);
+      enqueueDelay(200);
+      player.removeEffect('燃烧', toRemove);
+    }
+    return true;
+
+  }
+  regenerateDescription(player) {
+    return `丢弃/named{前方}所有牌，每张移除3层/effect{燃烧}`;
+  }
+}
+
+// 火爆冲拳（C+）
+// 造成7 + 你燃烧层数点伤害
+export class FieryPunch extends Skill {
+  constructor() {
+    super('火爆冲拳', 'fire', 2, 0, 2, 1);
+    this.baseColdDownTurns = 2;
+  }
+  get baseDamage() {
+    return Math.max(7 + 5 * this.power, 1);
+  }
+  getDamage (player) {
+    const burnEffect = player.effects['燃烧'] || 0;
+    return this.baseDamage + burnEffect;
+  }
+  use(player, enemy, stage) {
+    launchAttack(player, enemy, this.getDamage(player));
+    return true;
+  }
+  regenerateDescription(player) {
+    if(player) {
+      return `造成${this.getDamage(player) + player.attack}点伤害`;
+    }
+    return `造成【${this.baseDamage} + /effect{燃烧}层数】点伤害`;
+  }
+}
+
+// 三发火弹
+// 造成【15 + 1x灵能】伤害三次
+export class TripleFireshot extends Skill {
+  constructor() {
+    super('三发火弹', 'fire', 2, 1, 5, 1);
+    this.baseColdDownTurns = 4;
+    this.baseSlowStart = true;
+  }
+  get damage() {
+    return 15 + this.power * 5;
+  }
+  getDamage (player) {
+    return this.damage + player.magic;
+  }
+  use(player, enemy, stage) {
+    if (stage === 0) {
+      launchAttack(player, enemy, this.getDamage(player));
+      return false;
+    } else if(stage === 1) {
+      enqueueDelay(500);
+      launchAttack(player, enemy, this.getDamage(player));
       return false;
     } else {
-      const burnEffect = player.effects['燃烧'];
-      if (burnEffect) {
-        player.removeEffect('燃烧', burnEffect);
-      }
+      enqueueDelay(500);
+      launchAttack(player, enemy, this.getDamage(player));
       return true;
     }
   }
   regenerateDescription(player) {
-    return `丢弃/named{前方}所有牌，失去所有/effect{燃烧}`;
+    if (player) {
+      return `造成${this.getDamage(player) + player.attack}点伤害3次`;
+    }
+    return `造成【${this.damage} + /named{灵能}】点伤害3次`;
   }
 }
 
 // 炽热诅咒（C+）
-// 烧掉最近的卡，赋予敌人【7+灵能】层燃烧
+// 烧掉最近的卡，赋予敌人【6+灵能】层燃烧
 export class ScorchingCurse extends Skill {
   constructor() {
     super('炽热诅咒', 'fire', 2, 1, 1, 1);
-    this.baseColdDownTurns = 3;
+    this.baseColdDownTurns = 4;
   }
 
   get stacks() {
-    return Math.max(7 + 2 * this.power, 1);
+    return Math.max(6 + 2 * this.power, 1);
   }
 
   getClosestSkill(player) {
@@ -312,17 +414,37 @@ export class ScorchingCurse extends Skill {
 }
 
 // 耐热（C+）
-// 获得5层火焰抗性
+// 咏唱：获得6层火焰抗性
 export class HeatResistance extends Skill {
   constructor() {
-    super('耐热', 'fire', 2, 2, 1, 1);
+    super('耐热', 'fire', 2, 0, 1, 1);
+    this.cardMode = 'chant';
+    this.modifier_ = (player) => {
+      const self = this;
+      return new Proxy(player, {
+        get(target, prop) {
+          if (prop === 'effects') {
+            const effects = {...target.effects};
+            effects['火焰抗性'] = (effects['火焰抗性'] || 0) + self.stacks;
+            return effects;
+          }
+          return target[prop];
+        }
+      });
+    };
   }
   get stacks() {
-    return Math.max(5 + 2 * this.power, 1);
+    return Math.max(6 + 3 * this.power, 1);
   }
   use(player, enemy, stage) {
-    player.addEffect('火焰抗性', this.stacks);
     return true;
+  }
+  onEnable(player) {
+    super.onEnable(player);
+    player.addModifier(this.modifier_);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
   }
   regenerateDescription(player) {
     return `获得${this.stacks}层/effect{火焰抗性}`;
@@ -375,25 +497,41 @@ export class HeatAbsorptionI extends Skill {
 }
 
 // 火焰伴身（B-）
-// 每3层燃烧转化为1点集中
+// 咏唱：每5层燃烧提供1点集中
 export class FireAssistance extends Skill {
   constructor() {
     super('火焰伴身', 'fire', 3, 1, 1, 1);
+    this.cardMode = 'chant';
+    this.modifier_ = (player) => {
+      const self = this;
+      return new Proxy(player, {
+        get(target, prop) {
+          if (prop === 'magic') {
+            const burnEffect = target.effects['燃烧'] || 0;
+            return Math.floor(burnEffect / self.conversionRate) + target.magic;
+          }
+          return target[prop];
+        }
+      });
+    };
   }
   get conversionRate() {
-    return Math.max(3 - this.power, 1);
+    return Math.max(5 - this.power, 4);
   }
   use(player, enemy, stage) {
-    const burnEffect = player.effects['燃烧'];
-    if (burnEffect) {
-      const convertableStacks = Math.ceil(burnEffect.stacks / this.conversionRate);
-      player.removeEffect('燃烧', burnEffect);
-      player.addEffect('集中', convertableStacks);
-    }
     return true;
   }
+  onEnable(player) {
+    super.onEnable(player);
+    this.baseActionPointCost = 0;
+    player.addModifier(this.modifier_);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
+    player.removeModifier(this.modifier_);
+  }
   regenerateDescription(player) {
-    return `每${this.conversionRate}层/effect{燃烧}转化为1层/effect{集中}`;
+    return `每${this.conversionRate}层/effect{燃烧}提供1层/effect{集中}`;
   }
 }
 
@@ -401,7 +539,7 @@ export class FireAssistance extends Skill {
 // 抽牌焚毁，赋予【3 + 灵能】层燃烧，重复
 export class GiveFire extends Skill {
   constructor() {
-    super('奉予烈焰', 'fire', 3, 1, 1, 2);
+    super('奉予烈焰', 'fire', 3, 1, 1, 1);
     this.baseColdDownTurns = 4;
   }
   get stacks() {
@@ -492,7 +630,7 @@ export class DualExtinction extends Skill {
     if(player) {
       return `获得并赋予${this.getStacks(player)}层/effect{燃烧}`;
     }
-    return `获得并赋予【${this.stacks} + 3*named{灵能}】层/effect{燃烧}`;
+    return `获得并赋予【${this.stacks} + 3*/named{灵能}】层/effect{燃烧}`;
   }
 }
 

@@ -14,7 +14,7 @@ export class FireControlI extends Skill {
     return Math.max(2 + this.power, 0);
   }
 
-  getStack(player) {
+  getStacks(player) {
     return this.stack + player.magic;
   }
 
@@ -70,7 +70,7 @@ export class FireControlII extends Skill {
 // 控火术：焚灭(A)
 export class FireControlIII extends Skill {
   constructor() {
-    super('控火术:焚灭', 'fire', 7, 3, 1, "控火术");
+    super('控火术:焚灭', 'fire', 7, 3, 1, 1, "控火术");
     this.baseColdDownTurns = 6;
     this.upgradeTo = "无上神焰";
   }

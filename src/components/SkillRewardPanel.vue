@@ -63,23 +63,6 @@ export default {
   justify-content: center;
 }
 
-.skill-name {
-  font-weight: bold;
-  font-size: 1.2em;
-  margin-bottom: 10px;
-  color: #333;
-}
-
-.skill-description {
-  color: #666;
-  margin-bottom: 10px;
-}
-
-.skill-tier {
-  font-style: italic;
-  color: #999;
-}
-
 button {
   padding: 10px 15px;
   margin: 5px;

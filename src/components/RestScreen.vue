@@ -122,10 +122,12 @@ export default {
   },
   methods: {
     onCloseSkillRewardPanel() {
-      // 后端控制阶段切换，此处不做处理
+      // 后端控制阶段切换，此处不做处理 -> 改为发出放弃当前奖励事件
+      backendEventBus.emit(EventNames.Rest.DROP_REWARD);
     },
     onCloseAbilityRewardPanel() {
-      // 后端控制阶段切换，此处不做处理
+      // 放弃当前能力奖励
+      backendEventBus.emit(EventNames.Rest.DROP_REWARD);
     },
 
     onSkillRewardSelected(currentSkill) {

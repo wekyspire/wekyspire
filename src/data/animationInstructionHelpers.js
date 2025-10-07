@@ -9,8 +9,8 @@ import frontendEventBus from '../frontendEventBus.js';
 
 // 内部：S 子集规则
 function isWritableProperty(target, key) {
-  // 查找自身及原型链的属性描述符，避免向仅 getter 的访问器属性赋值
-  let cur = target;
+  // 在原始对象及其原型链上查找属性描述符，避免向仅 getter 的访问器属性赋值
+  let cur = toRaw(target);
   let desc = undefined;
   while (cur) {
     desc = Object.getOwnPropertyDescriptor(cur, key);
@@ -19,7 +19,7 @@ function isWritableProperty(target, key) {
   }
   if (!desc) return true; // 未定义则可安全写入（会创建自有属性）
   if (typeof desc.get === 'function' && typeof desc.set !== 'function') return false; // getter-only
-  if (desc.writable === false) return false; // 数据属性非可写
+  if (Object.prototype.hasOwnProperty.call(desc, 'writable') && desc.writable === false) return false; // 数据属性非可写
   return true;
 }
 
@@ -27,30 +27,40 @@ function isSKey(key) {
   return typeof key !== 'string' || !key.endsWith('_');
 }
 
-// projectToS：将 backendGameState 投影为轻量快照，仅包含 S 字段
+// projectToS：将 backendGameState 投影为轻量快照，仅包含 S 字段，同时保留原型链
 function projectToS(value, seen = new WeakMap()) {
   if (value === null || typeof value !== 'object') return value;
   if (seen.has(value)) return seen.get(value);
 
-  if (Array.isArray(value)) {
-    const arr = new Array(value.length);
+  const raw = toRaw(value);
+
+  if (Array.isArray(raw)) {
+    // 维持为普通数组；若未来存在自定义 Array 子类，可按需设置原型
+    const arr = new Array(raw.length);
     seen.set(value, arr);
-    for (let i = 0; i < value.length; i++) {
-      arr[i] = projectToS(value[i], seen);
+    for (let i = 0; i < raw.length; i++) {
+      arr[i] = projectToS(raw[i], seen);
     }
     return arr;
   }
 
-  const out = {};
+  // 为对象创建与后端节点相同的原型
+  const proto = Object.getPrototypeOf(raw) || Object.prototype;
+  const out = Object.create(proto);
   seen.set(value, out);
 
-  for (const key of Object.keys(value)) {
+  // 仅复制 S 字段，且避免向 getter-only / 不可写属性赋值
+  for (const key of Object.keys(raw)) {
     if (!isSKey(key)) continue;
-    const raw = toRaw(value);
     const desc = Object.getOwnPropertyDescriptor(raw, key);
+    // 如果后端自身就是 getter-only，也不需要写入该字段
     if (desc && typeof desc.get === 'function' && typeof desc.set !== 'function') continue;
-    const v = value[key];
+    const v = raw[key];
     if (typeof v === 'function') continue;
+
+    // 跳过不可写字段（考虑到原型链上可能定义为 getter-only）
+    if (!isWritableProperty(out, key)) continue;
+
     out[key] = projectToS(v, seen);
   }
   return out;
@@ -67,16 +77,16 @@ function getIdKeyFromArray(arr) {
   return null;
 }
 
-function createInstanceFromBackendNode(bEl) {
-  if (bEl && typeof bEl === 'object') {
-    const proto = Object.getPrototypeOf(toRaw(bEl));
+function createInstanceFromSnapshotNode(node) {
+  if (node && typeof node === 'object') {
+    const proto = Object.getPrototypeOf(toRaw(node));
     return Object.create(proto || Object.prototype);
   }
   return {};
 }
 
-function reconcileArrayById(sArr, dArr, bArr) {
-  const idKey = getIdKeyFromArray(sArr) || getIdKeyFromArray(bArr);
+function reconcileArrayById(sArr, dArr) {
+  const idKey = getIdKeyFromArray(sArr);
   if (!idKey) return false;
   // Build id -> dest element map
   const dstMap = new Map();
@@ -84,34 +94,19 @@ function reconcileArrayById(sArr, dArr, bArr) {
     const el = dArr[i];
     if (el && typeof el === 'object' && idKey in el) dstMap.set(el[idKey], el);
   }
-  // Build id -> backend element map (to preserve prototypes correctly)
-  const bMap = new Map();
-  if (Array.isArray(bArr)) {
-    for (let i = 0; i < bArr.length; i++) {
-      const bel = bArr[i];
-      if (bel && typeof bel === 'object' && idKey in bel) bMap.set(bel[idKey], bel);
-    }
-  }
 
   const newArr = new Array(sArr.length);
   for (let i = 0; i < sArr.length; i++) {
     const sEl = sArr[i];
-    // Prefer backend node by id match; fallback to index
-    let bEl = undefined;
-    if (sEl && typeof sEl === 'object' && idKey in sEl) {
-      bEl = bMap.get(sEl[idKey]);
-    }
-    if (bEl === undefined && Array.isArray(bArr)) bEl = bArr[i];
-
     if (sEl && typeof sEl === 'object' && idKey in sEl) {
       const id = sEl[idKey];
       let target = dstMap.get(id);
-      if (!target) target = createInstanceFromBackendNode(bEl);
-      applyProjectionToDisplay(sEl, target, bEl);
+      if (!target) target = createInstanceFromSnapshotNode(sEl);
+      applyProjectionToDisplay(sEl, target);
       newArr[i] = target;
     } else if (sEl && typeof sEl === 'object') {
-      let target = bEl ? createInstanceFromBackendNode(bEl) : {};
-      applyProjectionToDisplay(sEl, target, bEl);
+      let target = createInstanceFromSnapshotNode(sEl);
+      applyProjectionToDisplay(sEl, target);
       newArr[i] = target;
     } else {
       newArr[i] = sEl;
@@ -121,24 +116,22 @@ function reconcileArrayById(sArr, dArr, bArr) {
   return true;
 }
 
-// 将 S 投影快照合并到显示层，仅写入/删除 S 字段，保留实例/方法
-export function applyProjectionToDisplay(src, dst, backendNode = undefined) {
+// 将 S 投影快照合并到显示层，仅写入/删除 S 字段，保留实例/方法（使用快照的原型）
+export function applyProjectionToDisplay(src, dst) {
   if (Array.isArray(src) && Array.isArray(dst)) {
-    const bArr = Array.isArray(backendNode) ? backendNode : undefined;
-    const done = reconcileArrayById(src, dst, bArr);
+    const done = reconcileArrayById(src, dst);
     if (done) return;
 
     const len = src.length;
     for (let i = 0; i < len; i++) {
       const sEl = src[i];
       const dEl = dst[i];
-      const bEl = bArr ? bArr[i] : undefined;
       if (sEl && typeof sEl === 'object') {
         if (dEl && typeof dEl === 'object') {
-          applyProjectionToDisplay(sEl, dEl, bEl);
+          applyProjectionToDisplay(sEl, dEl);
         } else {
-          const inst = createInstanceFromBackendNode(bEl);
-          applyProjectionToDisplay(sEl, inst, bEl);
+          const inst = createInstanceFromSnapshotNode(sEl);
+          applyProjectionToDisplay(sEl, inst);
           dst[i] = inst;
         }
       } else {
@@ -149,6 +142,7 @@ export function applyProjectionToDisplay(src, dst, backendNode = undefined) {
     return;
   }
 
+  // 删除 dst 中 S 字段但 src 不再包含的键
   for (const key of Object.keys(dst)) {
     if (!isSKey(key)) continue;
     const desc = Object.getOwnPropertyDescriptor(dst, key);
@@ -159,43 +153,36 @@ export function applyProjectionToDisplay(src, dst, backendNode = undefined) {
     }
   }
 
+  // 将 src 的键写入到 dst
   for (const key of Object.keys(src)) {
     if (!isWritableProperty(dst, key)) continue;
     const sVal = src[key];
     const dVal = dst[key];
-    const bVal = backendNode && typeof backendNode === 'object' ? backendNode[key] : undefined;
 
     if (Array.isArray(sVal)) {
       if (Array.isArray(dVal)) {
-        applyProjectionToDisplay(sVal, dVal, bVal);
+        applyProjectionToDisplay(sVal, dVal);
       } else {
         const arr = new Array(0);
         dst[key] = arr;
-        applyProjectionToDisplay(sVal, arr, bVal);
+        applyProjectionToDisplay(sVal, arr);
       }
       continue;
     }
 
     if (sVal && typeof sVal === 'object') {
+      const sProto = Object.getPrototypeOf(toRaw(sVal));
       if (dVal && typeof dVal === 'object' && !Array.isArray(dVal)) {
-        if (bVal && typeof bVal === 'object') {
-          try {
-            const backendProto = Object.getPrototypeOf(toRaw(bVal));
-            const dstProto = Object.getPrototypeOf(dVal);
-            if (backendProto && dstProto !== backendProto) {
-              Object.setPrototypeOf(dVal, backendProto);
-            }
-          } catch (_) {}
-        }
-        applyProjectionToDisplay(sVal, dVal, bVal);
+        try {
+          const dstProto = Object.getPrototypeOf(dVal);
+          if (sProto && dstProto !== sProto) {
+            Object.setPrototypeOf(dVal, sProto);
+          }
+        } catch (_) {}
+        applyProjectionToDisplay(sVal, dVal);
       } else {
-        let obj;
-        if (bVal && typeof bVal === 'object' && !Array.isArray(bVal)) {
-          obj = Object.create(Object.getPrototypeOf(toRaw(bVal)));
-        } else {
-          obj = {};
-        }
-        applyProjectionToDisplay(sVal, obj, bVal);
+        let obj = Object.create(sProto || Object.prototype);
+        applyProjectionToDisplay(sVal, obj);
         dst[key] = obj;
       }
       continue;
@@ -232,7 +219,7 @@ export function enqueueState({ snapshot, durationMs, waitTags } = {}) {
     durationMs: dur,
     start: () => {
       try {
-        applyProjectionToDisplay(snap, displayGameState, backendGameState);
+        applyProjectionToDisplay(snap, displayGameState);
       } catch (err) {
         console.error('[animationInstructionHelpers] applyProjectionToDisplay failed:', err);
       }

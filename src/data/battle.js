@@ -11,7 +11,7 @@ import {
   enqueueAnimateCardById,
   enqueueLockControl, enqueueClearCardAnimations, enqueueState, captureSnapshot
 } from './animationInstructionHelpers.js'
-import {burnSkillCard, drawSkillCard, dropSkillCard} from "./battleUtils";
+import {burnSkillCard, drawSkillCard, dropSkillCard, willSkillBurn} from "./battleUtils";
 
 // 开始战斗
 export function enterBattleStage() {
@@ -164,40 +164,102 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  // 为了增强“动画响应感”，此动画不等待前置动画结束即可立刻执行
-  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'}, {
-    tags: ['ui'], waitTags: []
-  });
-
-  // 增设一条idle动画指令作为barrier，确保animateCardByID动画完成后才开始播放卡牌发动带来的各种效果的动画
+  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'}, { tags: ['ui'], waitTags: [] });
   enqueueDelay(0);
 
-  // 资源结算（后端状态）
+  // 资源结算
   skill.consumeResources(gameState.player);
-  
-  // 触发技能发动前效果与技能主体
-  if(activateSkill(skill)) return ;
 
+  // 发动技能效果
+  if(activateSkill(skill)) return ;
   if(checkBattleVictory()) return ;
 
   backendEventBus.emit(EventNames.Player.SKILL_USED, { player: gameState.player, skill: skill });
-  handleSkillAfterUse(skill);
 
+  // 咏唱型技能特殊处理：进入咏唱位，不走普通后处理
+  if (skill.cardMode === 'chant') {
+    activateChantSkill(skill)
+  } else {
+    handleSkillAfterUse(skill);
+  }
   if(checkBattleVictory()) return ;
-
   enqueueDelay(0);
 }
 
+// 咏唱型技能：将技能放入咏唱位
+function activateChantSkill(skill) {
+  const player = gameState.player;
+  const idx = player.frontierSkills.indexOf(skill);
+  if (idx !== -1) player.frontierSkills.splice(idx, 1);
 
-// 玩家放弃最左侧技能
-export function dropLeftmostSkill() {
-  // 消耗1个行动力
-  gameState.player.consumeActionPoints(1);
-  // 从前台技能中移除最左侧技能
-  dropSkillCard(gameState.player, gameState.player.frontierSkills[0].uniqueID);
-  if(checkBattleVictory()) return ;
+  // 若需要替换现有咏唱
+  if (!player.hasFreeActivatedSlot() && player.activatedSkills.length) {
+    const replaced = player.activatedSkills[0];
+    if (replaced) {
+      const willBurnReplaced = willSkillBurn(replaced);
+      // 生命周期钩子在 burn 之前调用
+      try { replaced.onDisable(player, 'replaced'); } catch (_) {}
+      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill: replaced, reason: 'replaced' });
+      if (willBurnReplaced) {
+        burnSkillCard(player, replaced.uniqueID);
+      } else {
+        // 非焚毁：动画 drop + 从 activated 移除并进后备
+        enqueueAnimateCardById({
+          id: replaced.uniqueID,
+          kind: 'drop',
+          transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
+        });
+        // 修改状态
+        player.activatedSkills.shift();
+        player.backupSkills.push(replaced);
+      }
+    }
+  }
+  // 放入咏唱位
+  player.activatedSkills.push(skill);
+  try { skill.onEnable(player); } catch (_) {}
+  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_ENABLED, { skill, reason: 'use' });
+  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
+  enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+  // Transition animation
+  enqueueAnimateCardById({
+    id: skill.uniqueID,
+    steps: [ { toCard: true, scale: 1.0, duration: 400, ease: 'power2.inOut' } ],
+    options: { endMode: 'restore' },
+    transfer: { type: 'activate', from: 'skills-hand', to: 'activated-bar' }
+  }, { tags: ['ui'], waitTags: ['state'] });
 }
 
+// 手动停止咏唱技能：支付费用 + 再次 use + onDisable + 普通结算（drop/burn）
+function manualStopActivatedSkill(skill) {
+  const player = gameState.player;
+  addPlayerActionLog(`你停止了 /blue{${skill.name}} 的咏唱！`);
+  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToCenter' }, { tags: ['ui'], waitTags: [] });
+  enqueueDelay(0);
+  if (skill.canUse(player)) {
+    skill.consumeResources(player);
+    if (activateSkill(skill)) return;
+  }
+  if (checkBattleVictory()) return;
+  backendEventBus.emit(EventNames.Player.SKILL_USED, { player, skill, manualStop: true });
+  const willBurnCurrent = willSkillBurn(skill);
+  // 生命周期结束回调
+  try { skill.onDisable(player, 'manual'); } catch (_) {}
+  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill, reason: 'manual' });
+  if (willBurnCurrent) {
+    burnSkillCard(player, skill.uniqueID);
+  } else {
+    dropSkillCard(player, skill.uniqueID);
+  }
+  backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
+}
+
+// 监听手动停止事件
+backendEventBus.on(EventNames.Battle.PLAYER_STOP_ACTIVATED_SKILL, (uniqueID) => {
+  const skill = gameState.player.activatedSkills.find(s => s.uniqueID === uniqueID);
+  if (skill) manualStopActivatedSkill(skill);
+  else console.warn('未找到要停止的咏唱技能', uniqueID);
+});
 
 // 结束玩家回合
 function endPlayerTurn() {
@@ -261,13 +323,18 @@ function enemyTurn() {
 
 // 结束战斗
 function battleVictory(isVictory) {
-  // 清空玩家身上的所有效果
   gameState.player.effects = {};
-  // 清空玩家身上的护盾
   gameState.player.shield = 0;
-  // 清空战斗技能数组
+  // 结束前清理所有咏唱技能并触发停用
+  if (Array.isArray(gameState.player.activatedSkills) && gameState.player.activatedSkills.length) {
+    for (const s of [...gameState.player.activatedSkills]) {
+      try { s.onDisable(gameState.player, 'battleEnd'); } catch (_) {}
+      backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_DISABLED, { skill: s, reason: 'battleEnd' });
+    }
+    gameState.player.activatedSkills = [];
+    backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: [] });
+  }
   gameState.player.skills = [];
-  // 锁定操作面板
   gameState.isEnemyTurn = true;
   
   // 弹出胜利信息

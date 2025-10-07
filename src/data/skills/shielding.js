@@ -80,7 +80,7 @@ export class ChargeShield extends Skill {
   
   use(player, enemy, stage) {
     if(stage === 0) {
-      dealDamage(player, enemy, this.damage);
+      launchAttack(player, enemy, this.damage);
       enqueueDelay(500);
       return false;
     }
@@ -90,7 +90,7 @@ export class ChargeShield extends Skill {
   
   regenerateDescription(player) {
     if(player) {
-      return `造成${this.damage}伤害，获得${this.getShieldAmount(player)}/named{护盾}`;
+      return `造成${this.damage + player.attack}伤害，获得${this.getShieldAmount(player)}/named{护盾}`;
     }
     return `造成${this.damage}伤害，获得【2+/effect{力量}】/named{护盾}`;
   }

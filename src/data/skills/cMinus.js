@@ -102,12 +102,12 @@ export class FragileForge extends Skill {
     // 找到左边的技能
     const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
     if(leftSkill) {
-      leftSkill.power += 1;
+      leftSkill.powerUp();
     }
     if(this.power > 0) {
       const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
       if(rightSkill) {
-        rightSkill.power += 1;
+        rightSkill.powerUp();
       }
     }
     return true;
@@ -134,12 +134,12 @@ export class Forge extends Skill {
     // 找到左边的技能
     const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
     if(leftSkill) {
-      leftSkill.power += 1;
+      leftSkill.powerUp();
     }
     if(this.power > 0) {
       const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
       if(rightSkill) {
-        rightSkill.power += 1;
+        rightSkill.powerUp();
       }
     }
     return true;

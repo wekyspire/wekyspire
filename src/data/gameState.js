@@ -58,8 +58,6 @@ export function resetDisplayGameState() {
   // 保持玩家对象响应式：用 Object.assign 同步字段
   Object.assign(displayGameState, fresh);
   Object.assign(displayGameState.player, fresh.player);
-  // 重新连接管理器（如有需要）
-  displayGameState.player.skillManager = SkillManager.getInstance();
 }
 
 // 重置后端状态
@@ -67,7 +65,6 @@ export function resetBackendGameState() {
   const fresh = createGameState();
   Object.assign(backendGameState, fresh);
   Object.assign(backendGameState.player, fresh.player);
-  backendGameState.player.skillManager = SkillManager.getInstance();
 }
 
 // 同时重置两份状态

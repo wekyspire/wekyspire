@@ -125,16 +125,11 @@ export function gainShield (caster, target, shield) {
 // 统一的效果添加入口（通过动画队列事件）
 export function addEffect(target, effectName, stacks = 1) {
   if (stacks === 0) return;
-  const previousStacks = target.effects[effectName] || 0;
-
   if (target.effects[effectName]) {
     target.effects[effectName] += stacks;
   } else {
     target.effects[effectName] = stacks;
   }
-
-  const currStacks = target.effects[effectName] || 0;
-
 }
 
 // 统一的效果移除入口
@@ -179,7 +174,7 @@ export function drawSkillCard(player, number = 1) {
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
   ids.forEach((id) => {
     enqueueAnimateCardById(
-      {id: id, kind: 'appearFromDeck', options: {durationMs: 500, startScale: 0.6, fade: true}},
+      {id: id, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}},
       {waitTags: ['state', 'ui'], durationMs: 200}
     );
   });
@@ -197,7 +192,20 @@ export function dropSkillCard(player, skillID) {
     // 触发技能丢弃事件
     backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
   } else {
-    console.warn(`技能 ${skillID} 不在前台技能列表中，无法丢弃。`);
+    // 尝试从咏唱位丢弃
+    const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
+    if(activatedIndex !== -1) {
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'drop',
+        transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
+      });
+      const [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
+      player.backupSkills.push(droppedSkill);
+      backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+    } else {
+      console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位列表中，无法丢弃。`);
+    }
   }
 }
 
@@ -208,32 +216,48 @@ export function burnSkillCard(player, skillID) {
   }
   const frontierIndex = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
   const backupIndex = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
-  if(frontierIndex === -1 && backupIndex === -1) {
-    console.warn(`技能ID为 ${skillID} 的技能不在前台或后备技能列表中，无法焚烧。`);
+  const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
+  if(frontierIndex === -1 && backupIndex === -1 && activatedIndex === -1) {
+    console.warn(`技能ID为 ${skillID} 的技能不在前台/后备/咏唱位列表中，无法焚烧。`);
     return;
   }
-  // 播放动画
-  enqueueAnimateCardById( {id: skillID, kind: 'burn'});
+  // 判定来源容器，用于动画 transfer
+  let fromContainer = 'unknown';
+  if (activatedIndex !== -1) fromContainer = 'activated-bar';
+  else if (frontierIndex !== -1) fromContainer = 'skills-hand';
+  else if (backupIndex !== -1) fromContainer = 'deck';
+
+  // 动画（先播动画再修改逻辑，以便 orchestrator 拿到当前位置 DOM）
+  enqueueAnimateCardById( {id: skillID, kind: 'burn', transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }});
+
   let exhaustedSkill = null;
-  if (frontierIndex !== -1) {
+  if (activatedIndex !== -1) {
+    exhaustedSkill = player.activatedSkills.splice(activatedIndex, 1)[0];
+    // 从总技能数组移除
+    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+    player.burntSkills.push(exhaustedSkill);
+  } else if (frontierIndex !== -1) {
     exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];
-    // 从玩家技能列表中移除该技能
     const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
     if (skillListIndex !== -1) {
       const burnt = player.skills.splice(skillListIndex, 1);
-      console.log('焚烧技能：', burnt);
-      // 加入坟地
       player.burntSkills.push(burnt[0]);
     }
-  }
-  if (backupIndex !== -1) {
+  } else if (backupIndex !== -1) {
     exhaustedSkill = player.backupSkills.splice(backupIndex, 1)[0];
-    // 从玩家技能列表中移除该技能
     const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) {
-      player.skills.splice(skillListIndex, 1);
-    }
+    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+    player.burntSkills.push(exhaustedSkill);
   }
-  // 触发技能焚毁事件
   backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
+  enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+}
+
+export function willSkillBurn(skill) {
+  if (!skill) return false; // default safe
+  // 返回 true 表示应该焚毁（不可再返回后备）
+  // 与之前逻辑： (coldDownTurns !== 0 || maxUses === Infinity || remainingUses > 0) 则不 burn 相反
+  const canReturn = (skill.coldDownTurns !== 0) || (skill.maxUses === Infinity) || (skill.remainingUses > 0);
+  return !canReturn;
 }

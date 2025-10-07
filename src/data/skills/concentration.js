@@ -8,7 +8,8 @@ import { addBattleLog } from '../battleLogUtils.js';
 export class SmallThinking extends Skill {
   constructor() {
     super('思索', 'normal', 1, 0, 3);
-    this.baseColdDownTurns = 3;
+    this.baseColdDownTurns = 4;
+    this.baseSlowStart = true;
   }
 
   get coldDownTurns() {
@@ -31,7 +32,8 @@ export class SmallThinking extends Skill {
 export class DeepThinking extends Skill {
   constructor() {
     super('深思', 'normal', 3, 0, 4);
-    this.baseColdDownTurns = 4;
+    this.baseColdDownTurns = 5;
+    this.baseSlowStart = true;
   }
 
   get coldDownTurns() {
@@ -54,7 +56,8 @@ export class DeepThinking extends Skill {
 export class CarefulThinking extends Skill {
   constructor() {
     super('推敲', 'normal', 5, 0, 5);
-    this.baseColdDownTurns = 5;
+    this.baseColdDownTurns = 6;
+    this.baseSlowStart = true;
   }
 
   get coldDownTurns() {
@@ -77,6 +80,8 @@ export class CarefulThinking extends Skill {
 export class PureThinking extends Skill {
   constructor() {
     super('出神', 'normal', 7, 0, 7);
+    this.baseColdDownTurns = 7;
+    this.baseSlowStart = true;
   }
 
   // 使用技能
@@ -94,18 +99,22 @@ export class PureThinking extends Skill {
 // 顿悟（A）
 export class Epiphany extends Skill {
   constructor() {
-    super('顿悟', 'normal', 7, 0, 0, 1);
+    super('顿悟', 'normal', 7, 0, 7, 1);
+  }
+
+  get actionPointCost() {
+    return Math.max(super.actionPointCost - this.power, 1);
   }
 
   // 使用技能
   use(player, enemy, stage) {
-    player.addEffect('集中', 5);
+    player.addEffect('集中', 3);
     return true;
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return '获得5层/effect{集中}'
+    return '获得3层/effect{集中}'
   }
 }
 
@@ -187,16 +196,23 @@ export class Concentration extends Skill {
 export class FullConcentration extends Skill {
   constructor() {
     super('专注', 'normal', 4, 3, 1, 1);
+    this.cardMode = 'chant';
   }
   // 使用技能
   use(player, enemy, stage) {
-    player.addEffect('超然', 1);
     return true;
   }
-
+  onEnable(player) {
+    super.onEnable(player);
+    player.addEffect('超然', 1);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
+    player.removeEffect('超然', 1);
+  }
   // 重新生成技能描述
   regenerateDescription(player) {
-    return '获得1层/effect{超然}'
+    return '/effect{超然}'
   }
 }
 
@@ -204,17 +220,25 @@ export class FullConcentration extends Skill {
 export class MaximumConcentration extends Skill {
   constructor() {
     super('忘我', 'normal', 6, 5, 1, 1);
+    this.cardMode = 'chant';
   }
 
   // 使用技能
   use(player, enemy, stage) {
-    player.addEffect('超然', 2);
     return true;
+  }
+  onEnable(player) {
+    super.onEnable(player);
+    player.addEffect('超然', 2);
+  }
+  onDisable(player, reason) {
+    super.onDisable(player, reason);
+    player.removeEffect('超然', 2);
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return '获得2层/effect{超然}'
+    return '2层/effect{超然}'
   }
 }
 
@@ -226,12 +250,12 @@ export class Devotion extends Skill {
 
   // 使用技能
   use(player, enemy, stage) {
-    player.addEffect('超然', 5);
+    player.addEffect('超然', 2);
     return true;
   }
 
   // 重新生成技能描述
   regenerateDescription(player) {
-    return '获得5层/effect{超然}'
+    return '获得2层/effect{超然}'
   }
 }

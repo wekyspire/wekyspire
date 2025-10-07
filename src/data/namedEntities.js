@@ -38,7 +38,7 @@ const namedEntities = {
   '重整': {
     icon: '🔄',
     color: 'green',
-    description: '此技能需要在回合开始进行冷却。'
+    description: '此技能需要在回合结束进行冷却。'
   },
   '消耗': {
     icon: '🔧',
@@ -127,8 +127,13 @@ const namedEntities = {
   },
   '慢热': {
     icon: '🐢',
-    color: 'purple',
+    color: 'green',
     description: '慢热技能在战斗开始时没有充能，需要冷却后才能使用。'
+  },
+  '咏唱': {
+    icon: '🎵',
+    color: 'purple',
+    description: '咏唱技能是仅能在咏唱槽上持续发动的技能，咏唱时生效，需持续占用咏唱槽。'
   }
 };
 
