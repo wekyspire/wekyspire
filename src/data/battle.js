@@ -3,7 +3,7 @@
 import EnemyFactory from './enemyFactory.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { processStartOfTurnEffects, processEndOfTurnEffects, processSkillActivationEffects } from './effectProcessor.js'
-import { addSystemLog, addPlayerActionLog, addEnemyActionLog, addDeathLog } from './battleLogUtils.js'
+import { addSystemLog, addPlayerActionLog, addEnemyActionLog } from './battleLogUtils.js'
 import { backendGameState as gameState } from './gameState.js'
 import {
   enqueueDelay,
@@ -12,7 +12,8 @@ import {
   enqueueLockControl, enqueueClearCardAnimations, enqueueState, captureSnapshot
 } from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard, willSkillBurn} from "./battleUtils";
-
+import { enqueueCardDropToDeck } from './animationInstructionHelpers';
+import skill from "./skill";
 // 开始战斗
 export function enterBattleStage() {
   
@@ -55,13 +56,36 @@ function startBattle() {
   gameState.player.frontierSkills = [];
   gameState.player.burntSkills = [];
 
-  // 搞定后立刻锁定操作面板
-  enqueueLockControl();
+  // 打乱后备技能顺序
+  gameState.player.backupSkills.sort(() => Math.random() - 0.5);
 
   // 调用技能的onBattleStart方法
   gameState.player.skills.forEach(skill => {
     skill.onBattleStart();
   });
+
+  console.log(gameState.player.skills);
+
+  // 调用卡牌进入战斗事件
+  gameState.player.skills.forEach(skill => {
+    skill.onEnterBattle(gameState.player.getModifiedPlayer());
+  });
+
+  const modPlayer = gameState.player.getModifiedPlayer();
+
+  // 重置换卡行动力开销
+  gameState.player.currentShiftSkillActionPointCost = modPlayer.initialShiftSkillActionPointCost;
+
+  // 搞定后立刻锁定操作面板
+  enqueueLockControl();
+
+  // 初始化前台技能
+  const drawCount = Math.min(
+    modPlayer.initialDrawFrontierSkills, modPlayer.maxFrontierSkills,
+    modPlayer.backupSkills.length);
+  drawSkillCard(modPlayer, drawCount);
+
+  enqueueDelay(200); // 动画barrier，防止抽卡动画和后面的抽卡动画重叠播放
 
   // 开始玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
@@ -72,8 +96,13 @@ function startPlayerTurn() {
   // 确保这是玩家回合
   gameState.isEnemyTurn = false;
 
+  // 新增：玩家回合开始前事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PRE_PLAYER_TURN_START, {});
+
+  const modPlayer = gameState.player.getModifiedPlayer();
+
   // 补充行动力
-  gameState.player.remainingActionPoints = gameState.player.maxActionPoints;
+  gameState.player.remainingActionPoints = modPlayer.maxActionPoints;
 
   // 进行技能冷却
   gameState.player.frontierSkills.forEach(skill => {
@@ -84,20 +113,23 @@ function startPlayerTurn() {
   });
 
   // 回合开始时结算效果（使用修正后的玩家对象）
-  const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   const isStunned = processStartOfTurnEffects(modPlayer);
   if(checkBattleVictory()) return ;
+
+  // 新增：玩家回合开始事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PLAYER_TURN_START, {});
 
   // 解锁操作面板
   enqueueUnlockControl();
 
   // 填充前台技能
-  fillFrontierSkills(gameState.player);
+  fillFrontierSkills(modPlayer);
+  if(checkBattleVictory()) return ;
 
   if (isStunned) {
     addSystemLog('你被眩晕，跳过回合！');
-    // 触发玩家回合结束事件
-    backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN, {});
+    // 后端直接推进阶段，而不是发起“玩家操作事件”
+    endPlayerTurn();
     return ;
   }
 
@@ -130,8 +162,8 @@ export function generateEnemy() {
   // 根据战斗场次数生成敌人
   const battleIntensity = gameState.battleCount;
   
-  // 简单实现：在第2 + 6xn (n = 1, 2, 3, ...）场战斗时生成Boss
-  if (gameState.battleCount !== 2 && (gameState.battleCount - 2) % 6 === 0) {
+  // 简单实现：在第2 + 5xn (n = 1, 2, 3, ...）场战斗时生成Boss
+  if (gameState.battleCount !== 2 && (gameState.battleCount - 2) % 5 === 0) {
     gameState.enemy = EnemyFactory.generateRandomEnemy(battleIntensity, true);
   } else {
     // 普通敌人
@@ -164,7 +196,7 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToCenter'}, { tags: ['ui'], waitTags: [] });
+  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 }}, { tags: ['ui'], waitTags: [] });
   enqueueDelay(0);
 
   // 资源结算
@@ -204,11 +236,7 @@ function activateChantSkill(skill) {
         burnSkillCard(player, replaced.uniqueID);
       } else {
         // 非焚毁：动画 drop + 从 activated 移除并进后备
-        enqueueAnimateCardById({
-          id: replaced.uniqueID,
-          kind: 'drop',
-          transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
-        });
+        enqueueCardDropToDeck(replaced.uniqueID, { }, { });
         // 修改状态
         player.activatedSkills.shift();
         player.backupSkills.push(replaced);
@@ -234,7 +262,7 @@ function activateChantSkill(skill) {
 function manualStopActivatedSkill(skill) {
   const player = gameState.player;
   addPlayerActionLog(`你停止了 /blue{${skill.name}} 的咏唱！`);
-  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToCenter' }, { tags: ['ui'], waitTags: [] });
+  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 } }, { tags: ['ui'], waitTags: [] });
   enqueueDelay(0);
   if (skill.canUse(player)) {
     skill.consumeResources(player);
@@ -254,8 +282,8 @@ function manualStopActivatedSkill(skill) {
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
 }
 
-// 监听手动停止事件
-backendEventBus.on(EventNames.Battle.PLAYER_STOP_ACTIVATED_SKILL, (uniqueID) => {
+// 监听手动停止事件（前端操作）
+backendEventBus.on(EventNames.PlayerOperations.PLAYER_STOP_ACTIVATED_SKILL, (uniqueID) => {
   const skill = gameState.player.activatedSkills.find(s => s.uniqueID === uniqueID);
   if (skill) manualStopActivatedSkill(skill);
   else console.warn('未找到要停止的咏唱技能', uniqueID);
@@ -269,11 +297,18 @@ function endPlayerTurn() {
   }
   // 马上锁定，防止玩家反复点击结束回合
   enqueueLockControl();
+
+  // 新增：玩家回合结束（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.PLAYER_TURN_END, {});
+
   // 回合结束时结算效果（使用修正后的玩家）
   const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
   processEndOfTurnEffects(modPlayer);
 
   if(checkBattleVictory()) return ;
+
+  // 新增：玩家回合结束后的事件（用于区分顺序）
+  backendEventBus.emit(EventNames.Battle.POST_PLAYER_TURN_END, {});
 
   // 进入敌人回合
   backendEventBus.emit(EventNames.Battle.ENEMY_TURN, {})
@@ -288,8 +323,8 @@ function enemyTurn() {
 
   enqueueDelay(500);
 
-  // 触发敌人回合开始事件
-  backendEventBus.emit(EventNames.Enemy.TURN_START);
+  // 触发敌人回合开始事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_TURN_START);
 
   // 回合开始时结算效果
   const isStunned = processStartOfTurnEffects(gameState.enemy);
@@ -307,16 +342,16 @@ function enemyTurn() {
   if(checkBattleVictory()) return ;
   enqueueDelay(500);
 
-  // 触发敌人行动结束事件，通知BattleScreen组件
-  backendEventBus.emit(EventNames.Enemy.ACTION_END);
+  // 触发敌人行动结束事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_ACTION_END);
   // 结算敌人回合结束效果
   processEndOfTurnEffects(gameState.enemy);
 
   if(checkBattleVictory()) return ;
   enqueueDelay(500);
 
-  // 触发敌人回合结束事件，通知BattleScreen组件
-  backendEventBus.emit(EventNames.Enemy.TURN_END);
+  // 触发敌人回合结束事件（整合到 Battle 内）
+  backendEventBus.emit(EventNames.Battle.ENEMY_TURN_END);
   // 敌人行动结束后进入玩家回合
   backendEventBus.emit(EventNames.Battle.PLAYER_TURN, {});
 }
@@ -334,6 +369,11 @@ function battleVictory(isVictory) {
     gameState.player.activatedSkills = [];
     backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: [] });
   }
+  // 卡牌离场
+  gameState.player.skills.forEach(skill => {
+    try { skill.onLeaveBattle(gameState.player); } catch (_) {}
+  });
+
   gameState.player.skills = [];
   gameState.isEnemyTurn = true;
   
@@ -413,8 +453,8 @@ export function initializeBattleFlowListeners() {
   });
 
 
-  // 玩家使用技能
-  backendEventBus.on(EventNames.Battle.PLAYER_USE_SKILL, (uniqueID) => {
+  // 玩家使用技能（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_USE_SKILL, (uniqueID) => {
     const skill = gameState.player.frontierSkills.find(s => s.uniqueID === uniqueID);
     console.log('使用技能：', skill);
     if (skill) {
@@ -430,13 +470,27 @@ export function initializeBattleFlowListeners() {
     }
   });
 
-  // 玩家丢弃最左侧技能
-  backendEventBus.on(EventNames.Battle.PLAYER_DROP_SKILL, () => {
-    dropLeftmostSkill();
+  // 玩家丢弃最左侧技能（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_SHIFT_SKILL, () => {
+    const modPlayer = gameState.player.getModifiedPlayer ? gameState.player.getModifiedPlayer() : gameState.player;
+    if (modPlayer.frontierSkills.length === 0) {
+      console.warn('前台技能列表为空，无法丢弃技能。');
+      return ;
+    }
+    if(modPlayer.remainingActionPoints < modPlayer.currentShiftSkillActionPointCost) {
+      console.warn('行动力不足，无法丢弃技能。');
+      return ;
+    }
+    // 丢弃最左侧技能，抽一张卡
+    gameState.player.consumeActionPoints(modPlayer.currentShiftSkillActionPointCost);
+    // 增加开销
+    modPlayer.currentShiftSkillActionPointCost ++;
+    dropSkillCard(modPlayer, gameState.player.frontierSkills[0]?.uniqueID);
+    drawSkillCard(modPlayer);
   });
 
-  // 玩家结束回合
-  backendEventBus.on(EventNames.Battle.PLAYER_END_TURN, () => {
+  // 玩家结束回合（前端操作）
+  backendEventBus.on(EventNames.PlayerOperations.PLAYER_END_TURN, () => {
     endPlayerTurn();
   });
 

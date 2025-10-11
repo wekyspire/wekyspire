@@ -10,12 +10,11 @@ export function upgradePlayerTier (player) {
   const nextTier = getNextPlayerTier(player.tier);
   if (nextTier !== undefined) {
     player.tier = nextTier;
-    player.maxMana += 1;
     if (player.tier === 1) {
-      // 特殊：第一次升级时多获得一点魏启
-      player.maxMana += 1;
+      // 特殊：第一次升级时给5魏启上限
+      player.maxMana = 5;
     }
-    if (player.maxActionPoints < 8) {
+    if (player.maxActionPoints < 4) {
       player.maxActionPoints++;
     }
   }
@@ -76,9 +75,9 @@ export class Player extends Unit {
     super();
     this.type = 'player';
     this.name = "你";
-    this.hp = 40;
+    this.hp = 65;
     this.shield = 0;
-    this.maxHp = 40;
+    this.maxHp = 65;
     this.mana = 0;
     this.maxMana = 0;
     this.baseAttack = 0;
@@ -87,7 +86,7 @@ export class Player extends Unit {
     this.remainingActionPoints = 3;
     this.maxActionPoints = 3; // 行动点初始为3
     this.money = 0;
-    this.tier = 0; // 等阶
+    this.tier = 1; // 等阶，默认为见习灵御（故事模式才从旅人开始）
     // 技能养成：玩家拥有的总技能上限与顺序（替代 skillSlots）
     this.maxSkills = 20; // 玩家拥有的总技能上限
     this.cultivatedSkills = []; // 已培养技能（顺序即为战斗中的默认顺序）
@@ -97,19 +96,45 @@ export class Player extends Unit {
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.burntSkills = []; // 坟地技能列表，存放被焚毁的技能（战斗中完全消耗掉的技能）
     this.maxFrontierSkills = 10; // 最大前台技能数量
-    this.drawFrontierSkills = 4; // 每回合抽取前台技能数量
+    this.initialDrawFrontierSkills = 2; // 战斗开始时，额外抽取前台技能数量
+    this.drawFrontierSkills = 3; // 每回合抽取前台技能数量
     // effects 由 Unit 初始化
-    this.leino = ['normal']; // 灵脉列表，可以包含normal, fire, wind, wood, earth, water, thunder, light, dark
+    this.leinoFactors = {}; // 灵脉强度列表，影响卡牌出现概率，包含 fire, wind, wood, earth, water, thunder, light, dark
     this.abilities = []; // 玩家能力列表
 
     this.uniqueID = 'playeruniqueid'; // 玩家唯一ID（用于动画同步等）
 
     // 属性修正器管线（按顺序应用）
     this.modifiers = [];
+    this.modified = false;
+
+    this.initialShiftSkillActionPointCost = 0; // 每场战斗第一次换卡的行动点消耗
+    this.currentShiftSkillActionPointCost = this.initialShiftSkillActionPointCost; // 当前换卡行动点消耗，每丢一次消耗增1
 
     // 咏唱位：当前激活的咏唱型技能
     this.activatedSkills = [];
     this.maxActivatedSkills = 1; // 默认一个咏唱位
+    // 新增：临时覆盖技能容器（用于新发现/战斗中选牌的技能显示与动画 DOM 来源）
+    this.overlaySkills = [];
+  }
+
+  addLeino(type, value) {
+    if (this.leinoFactors[type]) {
+      this.leinoFactors[type] += value;
+    }
+    else {
+      this.leinoFactors[type] = value;
+    }
+  }
+  getLeinoWeight(type) {
+    return Math.max(this.leinoFactors[type] || 0, 0);
+  }
+  getAllLeinoWeight() {
+    return Object.values(this.leinoFactors).reduce((sum, val) => sum + val, 0);
+  }
+
+  canShiftSkill () {
+    return this.frontierSkills.length > 0 && this.remainingActionPoints >= this.currentShiftSkillActionPointCost;
   }
 
   // 计算属性
@@ -122,7 +147,7 @@ export class Player extends Unit {
   // 属性修正系统 API
   addModifier(modifierFn) {
     if (typeof modifierFn === 'function') this.modifiers.push(modifierFn);
-    else console.warn('尝试添加非法的属性修正器：应为 function(player)=>player');
+    else console.warn('尝试添加非法的属性修正器：', modifierFn, '应为 function(player)=>player');
   }
   removeModifier(modifierFn) {
     this.modifiers = this.modifiers.filter(m => m !== modifierFn);
@@ -131,12 +156,15 @@ export class Player extends Unit {
     this.modifiers = [];
   }
 
+  get maxDrawSkillCardCount() {
+    return (this.effects['滞气'] || 0) > 0 ? 0 : Infinity;
+  }
+
   // 获取顺序应用所有修正器后的“修正玩家对象”。
   // 注意：返回值通常是一个 Proxy，hp/effects 等数据链接保持为原对象引用；
   // 仅 attack/defense/magic 等只读计算属性会被覆盖为修正后的值。
   getModifiedPlayer() {
-    // 无修正器时，直接返回自身，避免不必要的包装
-    if (!this.modifiers || this.modifiers.length === 0) return this;
+    if(this.modified) return this; // 已经是修正过的，直接返回自己，避免重复应用
     let current = this;
     for (const mod of this.modifiers) {
       try {
@@ -146,6 +174,15 @@ export class Player extends Unit {
       } catch (e) {
         console.warn('应用属性修正器时发生错误，已跳过：', e);
       }
+    }
+    // 最后一个修正：将 modified 标记为 true
+    if (!current.modified) {
+      current = new Proxy(current, {
+        get(target, prop, receiver) {
+          if (prop === 'modified') return true;
+          return Reflect.get(target, prop, receiver);
+        }
+      });
     }
     return current;
   }

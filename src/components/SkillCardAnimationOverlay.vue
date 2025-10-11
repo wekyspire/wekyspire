@@ -1,8 +1,8 @@
 <template>
   <div class="skill-card-animation-overlay" v-if="visibleAny" :style="overlayRootStyle">
-    <!-- 冷却覆盖层（绿色淡入-旋转标识-淡出） -->
-    <div v-if="cooldownPulseKey" class="cooldown-overlay" :key="cooldownPulseKey">
-      <div class="cooldown-spinner" />
+    <!-- 冷却覆盖层（颜色/方向根据 deltaCooldown 动态变化） -->
+    <div v-if="cooldownPulseKey" class="cooldown-overlay" :key="cooldownPulseKey" :style="cooldownOverlayStyle">
+      <div class="cooldown-spinner" :style="cooldownSpinnerStyle" />
     </div>
     <!-- 升级闪光 -->
     <div v-if="upgradeFlash" class="upgrade-flash" />
@@ -17,14 +17,27 @@ export default {
   data() {
     return {
       cooldownPulseKey: 0,
-      cooldownPulseColor: '#30c060', // 仍保留变量，若未来需要不同色可用
+      // 颜色对：primary / secondary（用于线性渐变）
+      cooldownPrimary: '#33c26a',
+      cooldownSecondary: '#1d9f4e',
+      spinnerReverse: false,
       upgradeFlash: false,
       upgradeTimer: null
     };
   },
   computed: {
     visibleAny() { return !this.disabled && (this.cooldownPulseKey || this.upgradeFlash); },
-    overlayRootStyle() { return { pointerEvents: 'none' }; }
+    overlayRootStyle() { return { pointerEvents: 'none' }; },
+    cooldownOverlayStyle() {
+      return {
+        background: `linear-gradient(135deg, ${this.cooldownPrimary}, ${this.cooldownSecondary})`
+      };
+    },
+    cooldownSpinnerStyle() {
+      return {
+        animationDirection: this.spinnerReverse ? 'reverse' : 'normal'
+      };
+    }
   },
   watch: {
     disabled(val) { if (val) this.resetAll(); },
@@ -33,20 +46,56 @@ export default {
   mounted() { frontendEventBus.on('skill-card-overlay-effect', this.onOverlayEffect); },
   beforeUnmount() { frontendEventBus.off('skill-card-overlay-effect', this.onOverlayEffect); this.clearUpgradeTimer(); },
   methods: {
-    resetAll() { this.cooldownPulseKey = 0; this.upgradeFlash = false; this.clearUpgradeTimer(); },
+    resetAll() {
+      this.cooldownPulseKey = 0;
+      // 恢复默认绿色冷却动画
+      this.cooldownPrimary = '#33c26a';
+      this.cooldownSecondary = '#1d9f4e';
+      this.spinnerReverse = false;
+      this.upgradeFlash = false;
+      this.clearUpgradeTimer();
+    },
     onOverlayEffect(payload = {}) {
       try {
         const id = this.skill?.uniqueID;
         if (!id || payload.id !== id || this.disabled) return;
         const t = payload.type;
         if (t === 'cooldown-tick') {
-          if(payload.deltaCooldown > 0) return;  // 仅在正向冷却时触发
-          // 重新触发绿色覆盖动画
+          const delta = Number(payload.deltaCooldown);
+          if (!Number.isFinite(delta)) {
+            // 未提供或非法值：按普通正向冷却处理
+            this.applyCooldownVisual('green');
+          } else if (delta < 0) {
+            // 反向冷却：红色 + 反向旋转
+            this.applyCooldownVisual('red');
+          } else if (delta >= 2) {
+            // 跨多格冷却：鲜黄色
+            this.applyCooldownVisual('yellow');
+          } else {
+            // 正常正向冷却：绿色
+            this.applyCooldownVisual('green');
+          }
+          // 重新触发覆盖动画
           this.cooldownPulseKey = Date.now();
           return;
         }
         if (t === 'upgrade-flash') { this.triggerUpgradeFlash(payload.durationMs); }
       } catch (_) {}
+    },
+    applyCooldownVisual(mode) {
+      if (mode === 'red') {
+        this.cooldownPrimary = '#e53935';
+        this.cooldownSecondary = '#c62828';
+        this.spinnerReverse = true;
+      } else if (mode === 'yellow') {
+        this.cooldownPrimary = '#ffd400';
+        this.cooldownSecondary = '#ffb300';
+        this.spinnerReverse = false;
+      } else { // green default
+        this.cooldownPrimary = '#33c26a';
+        this.cooldownSecondary = '#1d9f4e';
+        this.spinnerReverse = false;
+      }
     },
     triggerUpgradeFlash(durationMs) {
       const d = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 1000;
@@ -64,11 +113,11 @@ export default {
 
 <style scoped>
 .skill-card-animation-overlay { position:absolute; inset:0; z-index:5; display:flex; justify-content:center; align-items:center; }
-/* 新：冷却覆盖动画 */
+/* 冷却覆盖动画（颜色由 :style 注入） */
 .cooldown-overlay {
   position:absolute; inset:0;
   border-radius:6px;
-  background:linear-gradient(135deg,#33c26a,#1d9f4e);
+  /* 背景颜色由 :style 注入 */
   opacity:0;
   display:flex; align-items:center; justify-content:center;
   animation: cooldownOverlayFlash 440ms ease-out forwards;
@@ -80,7 +129,7 @@ export default {
   70% { opacity:0.88; }
   100% { opacity:0; transform:scale(1.03); }
 }
-/* 中央旋转刷新标识（顺时针一圈） */
+/* 中央旋转刷新标识（顺/逆时针取决于 animation-direction） */
 .cooldown-spinner {
   width:34px; height:34px; position:relative;
   animation: cooldownSpin 440ms linear forwards;
@@ -91,8 +140,8 @@ export default {
 /* 半弧：用渐变 + mask 形成开口环 */
 .cooldown-spinner::before {
   background:conic-gradient(from 0deg, rgba(255,255,255,0.95) 0deg, rgba(255,255,255,0.95) 300deg, rgba(255,255,255,0) 300deg, rgba(255,255,255,0) 360deg);
-  -webkit-mask: radial-gradient(circle 55% at 50% 50%, transparent 52%, #000 53%);
-          mask: radial-gradient(circle 55% at 50% 50%, transparent 52%, #000 53%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 52%, #000 53%);
+          mask-image: radial-gradient(circle at 50% 50%, transparent 52%, #000 53%);
   filter: drop-shadow(0 0 4px rgba(255,255,255,.7));
 }
 /* 中心亮点 */

@@ -47,7 +47,7 @@ export default {
     // 进入手中的卡牌是否立刻出现
     instantAppear: { type: Boolean, default: false },
     // 是否监听全局的 card-appear-finished 事件（关闭则不等待该事件，直接显示）
-    // 新：当前容器的标识（与 orchestrator transfer.to 对应）
+    // legacy param，不再使用
     transferContainerKey: { type: String, default: 'skills-hand' },
     // 新：是否等待通用 card-transfer-end (to == transferContainerKey) 后再显示
     waitTransferEnd: { type: Boolean, default: true }
@@ -191,7 +191,6 @@ export default {
   },
   beforeUnmount() {
     try { frontendEventBus.off('card-transfer-end', this.onCardTransferEnd); } catch (_) {}
-    try { frontendEventBus.off('card-appear-finished', this.onCardAppearFinished); } catch (_) {}
     if (this._ro) {
       try { this._ro.disconnect(); } catch (_) {}
       this._ro = null;
@@ -232,22 +231,15 @@ export default {
         delete this.appearing[id];
       }
     },
-    onCardAppearFinished(payload = {}) { // legacy handler (保持兼容)
-      console.log('收到 card-appear-finished 事件', payload);
-      const id = payload?.id;
-      if (id != null && this.appearing[id]) {
-        delete this.appearing[id];
-      }
-    },
     setCardRef(el, id) {
       if (el) {
         if(this.cardRefs[id] === el) return;
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
-        registerCardEl(id, dom);
+        registerCardEl(id, dom, this.transferContainerKey);
       } else {
         // 保证销毁的注册表项是本元素注册的DOM，避免因为时序导致的误删（A增加->B增加->A销毁->B注册表项被删）
-        unregisterCardEl(id, this.cardRefs[id]);
+        unregisterCardEl(id, this.transferContainerKey);
         delete this.cardRefs[id];
       }
     },
@@ -269,7 +261,7 @@ export default {
         const actionPointCost = skill.actionPointCost;
         const mouseX = event.clientX;
         const mouseY = event.clientY;
-        backendEventBus.emit(EventNames.Battle.PLAYER_USE_SKILL, skill.uniqueID);
+        backendEventBus.emit(EventNames.PlayerOperations.PLAYER_USE_SKILL, skill.uniqueID);
         this.generateParticleEffects(manaCost, actionPointCost, mouseX, mouseY);
       }
     },

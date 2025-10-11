@@ -73,7 +73,7 @@ export default {
   beforeUnmount() {
     frontendEventBus.off('card-transfer-start', this.onTransferStart);
     frontendEventBus.off('card-transfer-end', this.onTransferEnd);
-    Object.keys(this.cardRefs).forEach(id => unregisterCardEl(id));
+    Object.keys(this.cardRefs).forEach(id => unregisterCardEl(id, 'activated-skills-bar'));
   },
   methods: {
     setCardRef(el, id) {
@@ -81,10 +81,10 @@ export default {
         if(this.cardRefs[id] === el) return ; // no change
         this.cardRefs[id] = el;
         const dom = el.$el ? el.$el : el;
-        registerCardEl(id, dom);
+        registerCardEl(id, dom, 'activated-skills-bar');
       } else {
         // 解绑，保证删除的注册表项是本组件注册的项，避免因为时许原因误删其他元素注册的项
-        unregisterCardEl(id, this.cardRefs[id]);
+        unregisterCardEl(id, 'activated-skills-bar');
         delete this.cardRefs[id];
       }
     },
@@ -131,7 +131,7 @@ export default {
       if (skill.cardMode === 'chant' && this.canInteract) this.stopChant(skill);
     },
     stopChant(skill) {
-      backendEventBus.emit(EventNames.Battle.PLAYER_STOP_ACTIVATED_SKILL, skill.uniqueID);
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_STOP_ACTIVATED_SKILL, skill.uniqueID);
     }
   }
 };

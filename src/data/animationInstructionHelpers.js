@@ -468,6 +468,36 @@ export function enqueueUnitDeath({ unitId } = {}) {
   });
 }
 
+// 组合步骤 helper：center -> hold -> deck（销毁）
+export function buildCenterThenDeckSteps({ centerHoldMs = 350, totalMs = 900 } = {}) {
+  const first = 350;
+  const rest = Math.max(300, totalMs - first - centerHoldMs);
+  return [
+    { toAnchor: 'center', scale: 1.2, duration: first, ease: 'power2.out', holdMs: centerHoldMs },
+    { toAnchor: 'deck', scale: 0.5, rotate: 20, duration: rest, ease: 'power2.in' }
+  ];
+}
+
+// 组合步骤 helper：飞到牌库并淡出（销毁）
+export function buildDropToDeckSteps({ durationMs = 400 } = {}) {
+  return [
+    { toAnchor: 'deck', scale: 0.5, rotate: 20, duration: durationMs, ease: 'power2.in' },
+    { opacity: 0, duration: 120 }
+  ];
+}
+
+// 封装：播放 center-then-deck 序列
+export function enqueueCardCenterThenDeck(id, { centerHoldMs, totalMs, transfer } = {}, instrOptions = {}) {
+  const steps = buildCenterThenDeckSteps({ centerHoldMs, totalMs });
+  return enqueueAnimateCardById({ id, steps, options: { endMode: 'destroy' }, transfer }, instrOptions);
+}
+
+// 封装：丢弃到牌库（飞入并淡出销毁）
+export function enqueueCardDropToDeck(id, { durationMs, transfer } = {}, instrOptions = {}) {
+  const steps = buildDropToDeckSteps({ durationMs });
+  return enqueueAnimateCardById({ id, steps, options: { endMode: 'destroy' }, transfer }, instrOptions);
+}
+
 export default {
   captureSnapshot,
   applyProjectionToDisplay,
@@ -487,4 +517,8 @@ export default {
   DEFAULT_STATE_CHANGE_DURATION,
   enqueueHurtAnimation,
   enqueueUnitDeath,
+  buildCenterThenDeckSteps,
+  buildDropToDeckSteps,
+  enqueueCardCenterThenDeck,
+  enqueueCardDropToDeck,
 };

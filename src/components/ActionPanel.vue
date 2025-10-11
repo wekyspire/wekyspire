@@ -39,7 +39,16 @@
       @close="showDeckOverlay = false; showBurntSkillsOverlay = false"
     />
 
-    <button @click="onDropSkillButtonClicked" :disabled="!canDropSkill">⚡1 丢弃头部技能</button>
+    <!-- 为换卡按钮添加 tooltip 交互 -->
+    <button
+      @mouseenter="onShiftTooltipEnter"
+      @mousemove="onShiftTooltipMove"
+      @mouseleave="onTooltipLeave"
+      @click="onShiftSkillButtonClicked"
+      :disabled="!canShiftSkill"
+    >
+      ⚡{{this.shiftSkillCost}} 换卡
+    </button>
     <button @click="onEndTurnButtonClicked" :disabled="!isPlayerTurn || isControlDisabled">结束回合</button>
   </div>
 </template>
@@ -70,9 +79,12 @@ export default {
     };
   },
   computed: {
-    canDropSkill() {
-      const canDropSkillV = backendGameState.player.canDropFirstSkill();
-      return (this.isPlayerTurn && !this.isControlDisabled && canDropSkillV);
+    shiftSkillCost() {
+      return backendGameState.player.getModifiedPlayer().currentShiftSkillActionPointCost;
+    },
+    canShiftSkill() {
+      const canShiftSkill = backendGameState.player.getModifiedPlayer().canShiftSkill();
+      return (this.isPlayerTurn && !this.isControlDisabled && canShiftSkill);
     },
     backupSkillsCount() {
       return (this.player?.backupSkills || []).length;
@@ -108,10 +120,12 @@ export default {
   },
   methods: {
     onEndTurnButtonClicked() {
-      backendEventBus.emit(EventNames.Battle.PLAYER_END_TURN);
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_END_TURN);
     },
-    onDropSkillButtonClicked() {
-      backendEventBus.emit(EventNames.Battle.PLAYER_DROP_SKILL);
+    onShiftSkillButtonClicked() {
+      // 点击时也隐藏提示
+      frontendEventBus.emit('tooltip:hide');
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_SHIFT_SKILL);
     },
     onDeckClick() {
       // 打开牌库覆盖面板，并隐藏悬浮tooltip
@@ -124,6 +138,21 @@ export default {
       // 打开烧毁技能覆盖面板
       this.showBurntSkillsOverlay = true;
       // 隐藏悬浮tooltip
+      frontendEventBus.emit('tooltip:hide');
+    },
+    // --- Tooltip handlers for 换卡 ---
+    onShiftTooltipEnter(e) {
+      frontendEventBus.emit('tooltip:show', {
+        name: '换卡',
+        text: '丢弃手牌中最左侧卡，然后抽一张卡。每场战斗中，使用后开销增1。',
+        x: e?.clientX ?? 0,
+        y: e?.clientY ?? 0
+      });
+    },
+    onShiftTooltipMove(e) {
+      frontendEventBus.emit('tooltip:move', { x: e?.clientX ?? 0, y: e?.clientY ?? 0 });
+    },
+    onTooltipLeave() {
       frontendEventBus.emit('tooltip:hide');
     }
   }

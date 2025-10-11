@@ -39,6 +39,10 @@ export default class Unit {
     removeEffectFromTarget(this, effectName, stacks);
   }
 
+  hasEffect(effectName) {
+    return (this.effects[effectName] || 0) !== 0;
+  }
+
   // 应用治疗（委托 battleUtils）
   applyHeal(heal) {
     applyHealToTarget(this, heal);

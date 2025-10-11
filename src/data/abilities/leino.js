@@ -10,7 +10,7 @@ export class FireLeino extends Ability {
   }
 
   apply(player) {
-    player.leino.push('fire');
+    player.addLeino('fire');
     // 增加一个钩子，来自燃烧的伤害减4
     backendEventBus.on(EventNames.Game.PRE_BATTLE, this.fireResistAddHook = () => {
       player.addEffect('火焰抗性', 4);
@@ -27,14 +27,11 @@ export class FireLeino extends Ability {
 
   get spawnWeight() {
     // 只有当玩家还没有火灵脉时，才有生成权重
-    if (!backendGameState.player.leino.includes('fire')) {
+    if (!backendGameState.player.getLeinoWeight('fire') === 0) {
       // 玩家灵脉数量越少，生成权重越高
       let weight = super.spawnWeight;
-      if(backendGameState.player.leino.length <= 1) {
+      if(backendGameState.player.getAllLeinoWeight() <= 1) {
         weight *= 10;
-      }
-      if(backendGameState.player.leino.length >= 2) {
-        weight *= 0.05;
       }
       return weight;
     }
@@ -48,19 +45,16 @@ class WoodLeino extends Ability {
   }
 
   apply(player) {
-    player.leino.push('wood');
+    player.addLeino('wood');
   }
 
   get spawnWeight() {
     // 只有当玩家还没有木灵脉时，才有生成权重
-    if (!backendGameState.player.leino.includes('wood')) {
+    if (!backendGameState.player.getLeinoWeight('wood') === 0) {
       // 玩家灵脉数量越少，生成权重越高
       let weight = super.spawnWeight;
-      if(backendGameState.player.leino.length <= 1) {
+      if(backendGameState.player.getAllLeinoWeight() <= 1) {
         weight *= 10;
-      }
-      if(backendGameState.player.leino.length >= 2) {
-        weight *= 0.05;
       }
       return weight;
     }

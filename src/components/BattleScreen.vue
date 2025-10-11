@@ -29,6 +29,9 @@
       :player="player"
       :is-player-turn="isPlayerTurn"
     />
+
+    <!-- 新增：临时技能覆盖容器（用于新发现技能动画、未来战斗中选牌等） -->
+    <OverlaySkillsPanel :player="player" />
   </div>
 </template>
 
@@ -37,6 +40,7 @@ import BattleLogPanel from './BattleLogPanel.vue';
 import EnemyStatusPanel from './EnemyStatusPanel.vue';
 import PlayerStatusPanel from './PlayerStatusPanel.vue';
 import ActionPanel from './ActionPanel.vue';
+import OverlaySkillsPanel from './OverlaySkillsPanel.vue';
 import frontendEventBus from '../frontendEventBus.js';
 
 export default {
@@ -46,6 +50,7 @@ export default {
     EnemyStatusPanel,
     PlayerStatusPanel,
     ActionPanel,
+    OverlaySkillsPanel,
   },
   props: {
     player: { type: Object, required: true },

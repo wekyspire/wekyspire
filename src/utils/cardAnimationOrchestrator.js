@@ -39,7 +39,7 @@ import cardDomRegistry, { getCardEl } from './cardDomRegistry.js';
 const defaultEase = 'power2.out';
 
 const orchestrator = {
-  overlayEl: null,
+  overlayEl: null, // 用于存储所有ghost的overlay DOM element
   centerAnchorEl: null,
   deckAnchorEl: null,
   ghostContainerEl: null,
@@ -104,11 +104,22 @@ const orchestrator = {
       ];
     },
     appearFromAnchor({ durationMs = 300 } = {}) {
-      // 已废弃 toBase：统一使用 toCard:true 将卡牌对齐到其当前 DOM 位置
       return [
         { toCard: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
       ];
-    }
+    },
+    // 新增：原地淡入（依赖已在 cardDomRegistry 注册的 DOM 位置，不做位移，仅淡入，可选配置）
+    appearInPlace({ durationMs = 300, finalScale = 1, fromOpacity = 0, toOpacity = 1 } = {}) {
+      return [
+        { toCard: true, scale: finalScale, opacity: toOpacity, duration: durationMs, ease: defaultEase }
+      ];
+    },
+    // 令ghost飞回cardDomRegistry中注册的DOM位置，实际逻辑和appearFromAnchor类似
+    flyToInPlace({ durationMs = 300 } = {}) {
+      return [
+        { toCard: true, scale: 1, opacity: 1, duration: durationMs, ease: defaultEase }
+      ];
+    },
   },
 
   init({ overlayEl, centerAnchorEl, deckAnchorEl, ghostContainerEl }) {
@@ -283,7 +294,11 @@ const orchestrator = {
     try { ghost.remove(); } catch (_) {}
     // 优先还原注册表内的 card DOM，兜底尝试 startEl
     const originalEl = getCardEl(id) || startEl;
-    if (restoreStart) { try { originalEl.style.visibility = ''; } catch (_) {} }
+    if (restoreStart) {
+      try {
+        originalEl.style.visibility = '';
+      } catch (_) {}
+    }
     this._ghostRegistry.delete(id);
   },
 
@@ -364,6 +379,8 @@ const orchestrator = {
             const targetTop = rect.top + rect.height / 2 - baseRect.height / 2;
             props.left = targetLeft; props.top = targetTop;
             curLeft = targetLeft; curTop = targetTop;
+          } else {
+            console.warn('找不到目标卡片 DOM，无法对齐：', targetId, targetEl);
           }
         } catch (_) {}
       }
@@ -454,6 +471,8 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         preOpts.initialFromAnchor = options.anchor || 'deck';
         preOpts.startScale = (options && options.startScale) != null ? options.startScale : 0.6;
         preOpts.fade = (options && options.fade) != null ? options.fade : true;
+      } else if (kind === 'appearInPlace') {
+        preOpts.preGhostInvisible = true; // 原地淡入：先隐藏 ghost，播放时再显示
       } else {
         preOpts.preGhostInvisible = true;
       }
@@ -469,6 +488,7 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
       to: options.toContainer || 'skills-hand'
     };
   }
+
   // 生成 token（可由外部预先提供）
   if (transfer) {
     if (!transfer.token) transfer.token = `${Date.now()}-${id}-${Math.random().toString(36).slice(2, 10)}`;
@@ -510,50 +530,47 @@ async function animateById({ id, kind, options = {}, steps, hideStart, completio
         const { durationMs = 300, startScale = 0.6, fade = true } = options || {};
         const built = orchestrator.buildSteps.appearFromAnchor({ durationMs });
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore', initialFromAnchor: (options.anchor || 'deck'), startScale, fade });
-        try { frontendEventBus.emit('card-appear-finished', { id }); } catch (_) {}
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'centerThenDeck': {
-        const built = orchestrator.buildSteps.centerThenDeck(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+      case 'appearInPlace': {
+        const { durationMs = 300 } = options || {};
+        const built = orchestrator.buildSteps.appearInPlace({ durationMs });
+        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: true, endMode: 'restore' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'flyToCenter': {
-        const built = orchestrator.buildSteps.flyToCenter(options || {});
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
-        try { orchestrator._addToCenter(id); } catch (_) {}
+      case 'flyToInPlace': {
+        const { durationMs = 300} = options || {};
+        const built = orchestrator.buildSteps.flyToInPlace({ durationMs });
+        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: false, endMode: 'restore' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'flyToDeckFade':
-      case 'drop': {
-        const built = orchestrator.buildSteps.flyToDeckFade(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
+      case 'flyToAnchor': {
+        const { durationMs = 350, anchor = 'center', scale = 1.2, rotate, ease } = options || {};
+        const step = { toAnchor: anchor, scale, duration: durationMs };
+        if (typeof rotate === 'number') step.rotate = rotate;
+        if (ease) step.ease = ease;
+        await orchestrator.playCardSequenceById(el, id, [step], { scheduledEpoch, hideStart: hideStart !== false, endMode: options?.endMode || 'keep' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
-      case 'exhaust':
       case 'burn': {
         const built = orchestrator.buildSteps.exhaustBurn(options || {});
-        try { orchestrator._removeFromCenter(id); } catch (_) {}
         await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'destroy' });
         emitEnd();
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
         break;
       }
       default: {
-        const built = orchestrator.buildSteps.flyToCenter(options || {});
-        await orchestrator.playCardSequenceById(el, id, built, { scheduledEpoch, hideStart: hideStart !== false, endMode: 'keep' });
-        try { orchestrator._addToCenter(id); } catch (_) {}
-        emitEnd();
+        // 未指定或未知 kind：若无 steps，则不执行；避免隐式行为
+        console.warn('[cardAnimationOrchestrator] Unknown kind or missing steps; nothing to play:', kind, id);
+        emitEnd({ skipped: true });
         if (completionToken) try { frontendEventBus.emit('animation-card-by-id-finished', { token: completionToken }); } catch (_) {}
       }
     }

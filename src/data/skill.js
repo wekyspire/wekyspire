@@ -1,4 +1,5 @@
 import animationSequencer from './animationSequencer.js';
+import {enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 
 // 技能抽象类
 class Skill {
@@ -11,17 +12,25 @@ class Skill {
     this.power = 0; // 技能可能会被弱化或强化，此时，修改此数字（正为强化，负为弱化）
     this.subtitle = ''; // 副标题，一般而言仅有S级或特殊、诅咒技能有
     this.baseManaCost = baseManaCost || 0; // 魏启消耗
-    this.baseActionPointCost = baseActionPointCost || 1; // 行动点消耗，默认为1
+    this.baseActionPointCost = (baseActionPointCost !== undefined) ? baseActionPointCost : 1; // 行动点消耗，默认为1
     this.baseMaxUses = baseMaxUses || 1; // 基础最大充能次数，inf代表无需充能，可以随便用
     this.remainingUses = this.maxUses; // 剩余充能次数
     this.skillSeriesName = skillSeriesName || name; // 技能系列名称
-    this.upgradeTo = ""; // 如果此技能可以升级，升级后的技能名称。如果有多个升级方向，则为数组。
     this.spawnWeight = spawnWeight || 1; // 技能出现权重，默认为1
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
     this.baseColdDownTurns = 0;
     this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
-    // 新增：卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
+    this.canSpawnAsReward_ = true; // 是否可以自然生成为奖励，某些特殊技能（如大力一击等战斗中生成的卡牌）不可自然生成
+    // 卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
     this.cardMode = 'normal';
+    // 获得此技能的前置技能
+    // null：自由出现
+    // 字符串：由某一些技能升级而来，要求必须有该技能
+    // 数组：由某一集合技能升级而来，要求必须有该系列的某一个技能
+    this.precessor = null;
+    // 字符串数组，按灵脉的出现概率提升乘子，灵脉相性越好，出现概率越高
+    // 格式：'leinoName': {threshold: 灵脉等级阈值, weight: 超过阈值后的权重提升乘子}
+    this.leinoModifiers = []
   }
 
   // 简化：统一冷却事件，仅发送 'cooldown-tick'（不再区分 start/progress/end，也无 progress 数值）
@@ -30,11 +39,13 @@ class Skill {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({
         tags: ['skill-cd', `skill-${id}`],
-        waitTags: [],
-        durationMs: 0,
+        durationMs: 100,
         start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'cooldown-tick', deltaCooldown: deltaCooldown }),
         meta: { skillId: id, overlay: true, phase: 'cooldown-tick' }
       });
+      if(deltaCooldown !== 0) {
+        enqueueDelay(0);
+      }
     } catch (_) {}
   }
 
@@ -44,8 +55,7 @@ class Skill {
       const id = this.uniqueID;
       animationSequencer.enqueueInstruction({
         tags: ['skill-upgrade', `skill-${id}`],
-        waitTags: [],
-        durationMs: 0,
+        durationMs: 100,
         start: ({ emit }) => emit('skill-card-overlay-effect', { id, type: 'upgrade-flash', 'deltaPower': deltaPower }),
         meta: { skillId: id, overlay: true, phase: 'upgrade-flash' }
       });
@@ -80,10 +90,11 @@ class Skill {
   }
 
   // 回合开始时或被手动调用时，推进冷却流程
-  coldDown() {
+  coldDown(deltaStacks = 1) {
     if (this.coldDownTurns !== 0) {
       if (this.remainingUses !== this.maxUses) {
-        this.remainingColdDownTurns--;
+        this.remainingColdDownTurns = Math.max(this.remainingColdDownTurns - deltaStacks, 0);
+        this.remainingColdDownTurns = Math.min(this.remainingColdDownTurns, this.coldDownTurns);
         let charged = false;
         if (this.remainingColdDownTurns <= 0) {
           this.remainingColdDownTurns = this.coldDownTurns;
@@ -91,7 +102,7 @@ class Skill {
           charged = true;
         }
         // 无论是否完成一段充能，只要 remainingColdDownTurns 发生了变化就发一次 tick
-        this._emitCooldownTick();
+        this._emitCooldownTick(deltaStacks);
       } else {
         this.resetColdDownProcess();
       }
@@ -135,6 +146,16 @@ class Skill {
     // 默认实现，子类可以重写
   }
 
+  // 此卡进入战斗时调用
+  onEnterBattle (player) {
+    // 默认实现，子类可以重写
+  }
+
+  // 此卡离开战斗时调用
+  onLeaveBattle (player) {
+    // 默认实现，子类可以重写
+  }
+
   // 使用技能
   // 此方法会被调用多次，直到返回值是bool类型
   // @param {Player} player: 玩家对象
@@ -161,7 +182,7 @@ class Skill {
   // 重新生成技能描述（根据玩家状态计算具体数值）
   regenerateDescription(player) {
     // 默认实现，子类可以重写
-    return '未实现';
+    return '';
   }
 
   // 判断技能是否可用

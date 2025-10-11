@@ -4,8 +4,9 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
-import {captureSnapshot, enqueueAnimateCardById, enqueueState} from "./animationInstructionHelpers";
+import {captureSnapshot, enqueueAnimateCardById, enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 import {enqueueHurtAnimation, enqueueUnitDeath} from "./animationInstructionHelpers";
+import { enqueueCardDropToDeck } from './animationInstructionHelpers';
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -130,6 +131,9 @@ export function addEffect(target, effectName, stacks = 1) {
   } else {
     target.effects[effectName] = stacks;
   }
+  if(target.type === 'player') {
+    backendEventBus.emit(EventNames.Player.EFFECT_CHANGED, { effectName, deltaStacks: stacks });
+  }
 }
 
 // 统一的效果移除入口
@@ -148,6 +152,7 @@ export function applyHeal(target, heal) {
 }
 
 export function drawSkillCard(player, number = 1) {
+  number = Math.min(number, player.maxDrawSkillCardCount);
   let returnSkill = null;
   let ids = [];
   for (let i = 0; i < number; i++) {
@@ -170,6 +175,10 @@ export function drawSkillCard(player, number = 1) {
     if(i === 0) {
       returnSkill = firstSkill;
     }
+    // TODO: 此时，事件在动画入队前触发，如果需要在事件内继续加入动画，则可能出现问题。
+    // 但这在目前结构下难以避免，如果要让抽卡动画批量丝滑播放，则只能在所有DOM对齐（后端状态更新完毕）后才能入队动画。
+    // 以后可能会更新前端动画引擎，让卡牌动画动态跟踪最新DOM位置。
+    backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: firstSkill.uniqueID });
   }
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
   ids.forEach((id) => {
@@ -181,32 +190,92 @@ export function drawSkillCard(player, number = 1) {
   return returnSkill;
 }
 
-export function dropSkillCard(player, skillID) {
-  const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+export function drawSelectedSkillCard (player, skillID) {
+  if (!skillID) {
+    console.warn('未指定技能ID，无法抽取指定技能。');
+    return null;
+  }
+  if (player.frontierSkills.length >= player.maxHandSize) {
+    // addBattleLog('你的手牌已满，无法抽取更多卡牌！');
+    return null;
+  }
+  if(player.maxDrawSkillCardCount <= 0) {
+    return null;
+  }
+  enqueueDelay(0);
+  // 先尝试牌库
+  const index = player.backupSkills.findIndex(skill => skill.uniqueID === skillID);
   if (index !== -1) {
-    // 播放动画
-    enqueueAnimateCardById( {id: skillID, kind: 'drop'});
     // 执行逻辑
-    const [droppedSkill] = player.frontierSkills.splice(index, 1);
-    player.backupSkills.push(droppedSkill);
-    // 触发技能丢弃事件
-    backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+    const [drawnSkill] = player.backupSkills.splice(index, 1);
+    player.frontierSkills.push(drawnSkill);
+    // 播放动画
+    enqueueAnimateCardById(
+      {id: skillID, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}}
+    );
+    backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
+    return drawnSkill;
+  } else {
+    // 尝试从 overlaySkills 抽取（新发现的卡牌）
+    const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
+    if(overlayIndex !== -1) {
+      // 先飞到中间（创建幽灵并中转，这是Card在两个容器间移动的必要操作）
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'flyToAnchor',
+        options: { anchor: 'center', scale: 1.2 }
+      });
+      const [drawnSkill] = player.overlaySkills.splice(overlayIndex, 1);
+      player.frontierSkills.push(drawnSkill);
+      // 然后飞回手牌
+      enqueueAnimateCardById( {
+        id: skillID,
+        kind: 'flyToInPlace',
+        transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'skills-hand' }
+      });
+      backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
+      return drawnSkill;
+    } else {
+      console.warn(`技能ID为 ${skillID} 的技能不在后备/Overlay列表中，无法抽取。`);
+      return null;
+    }
+  }
+}
+
+export function dropSkillCard(player, skillID, inDeckOrder = -1) {
+  const index = player.frontierSkills.findIndex(skill => skill.uniqueID === skillID);
+  let droppedSkill = null;
+  if (index !== -1) {
+    // 播放动画 => 统一使用 dropToDeck 组合原语
+    enqueueCardDropToDeck(skillID, { /* default duration */ }, { });
+    // 执行逻辑
+    [droppedSkill] = player.frontierSkills.splice(index, 1);
+
   } else {
     // 尝试从咏唱位丢弃
     const activatedIndex = Array.isArray(player.activatedSkills) ? player.activatedSkills.findIndex(skill => skill.uniqueID === skillID) : -1;
     if(activatedIndex !== -1) {
-      enqueueAnimateCardById( {
-        id: skillID,
-        kind: 'drop',
-        transfer: { type: 'deactivate', from: 'activated-bar', to: 'deck' }
-      });
-      const [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
-      player.backupSkills.push(droppedSkill);
-      backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
+      enqueueCardDropToDeck(skillID, { }, { });
+      [droppedSkill] = player.activatedSkills.splice(activatedIndex, 1);
     } else {
-      console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位列表中，无法丢弃。`);
+      // 最后尝试从 overlaySkills 丢弃（新发现的卡牌）
+      const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
+      if(overlayIndex !== -1) {
+        enqueueCardDropToDeck(skillID, { }, { });
+        [droppedSkill] = player.overlaySkills.splice(overlayIndex, 1);
+      } else {
+        console.warn(`技能ID为 ${skillID} 的技能不在前台/咏唱位/Overlay列表中，无法丢弃。`);
+        return ;
+      }
     }
   }
+  if(inDeckOrder < 0) {
+    player.backupSkills.push(droppedSkill);
+  } else {
+    player.backupSkills.splice(inDeckOrder, 0, droppedSkill);
+  }
+  // 触发技能丢弃事件
+  backendEventBus.emit(EventNames.Player.SKILL_DROPPED, { skill: droppedSkill });
 }
 
 export function burnSkillCard(player, skillID) {
@@ -221,6 +290,14 @@ export function burnSkillCard(player, skillID) {
     console.warn(`技能ID为 ${skillID} 的技能不在前台/后备/咏唱位列表中，无法焚烧。`);
     return;
   }
+
+  let exhaustedSkill = null;
+  if(activatedIndex !== -1) exhaustedSkill = player.activatedSkills[activatedIndex];
+  else if(frontierIndex !== -1) exhaustedSkill = player.frontierSkills[frontierIndex];
+  else exhaustedSkill = player.backupSkills[backupIndex];
+  // 卡牌离场
+  exhaustedSkill.onLeaveBattle(player);
+
   // 判定来源容器，用于动画 transfer
   let fromContainer = 'unknown';
   if (activatedIndex !== -1) fromContainer = 'activated-bar';
@@ -230,26 +307,20 @@ export function burnSkillCard(player, skillID) {
   // 动画（先播动画再修改逻辑，以便 orchestrator 拿到当前位置 DOM）
   enqueueAnimateCardById( {id: skillID, kind: 'burn', transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }});
 
-  let exhaustedSkill = null;
   if (activatedIndex !== -1) {
     exhaustedSkill = player.activatedSkills.splice(activatedIndex, 1)[0];
-    // 从总技能数组移除
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
     player.burntSkills.push(exhaustedSkill);
   } else if (frontierIndex !== -1) {
     exhaustedSkill = player.frontierSkills.splice(frontierIndex, 1)[0];
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) {
-      const burnt = player.skills.splice(skillListIndex, 1);
-      player.burntSkills.push(burnt[0]);
-    }
+    player.burntSkills.push(exhaustedSkill[0]);
   } else if (backupIndex !== -1) {
     exhaustedSkill = player.backupSkills.splice(backupIndex, 1)[0];
-    const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
-    if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
     player.burntSkills.push(exhaustedSkill);
   }
+  // 从总技能数组移除
+  const skillListIndex = player.skills.findIndex(skill => skill === exhaustedSkill);
+  if (skillListIndex !== -1) player.skills.splice(skillListIndex, 1);
+  // 触发技能焚毁事件
   backendEventBus.emit(EventNames.Player.SKILL_BURNT, { skill: exhaustedSkill });
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
 }
@@ -260,4 +331,35 @@ export function willSkillBurn(skill) {
   // 与之前逻辑： (coldDownTurns !== 0 || maxUses === Infinity || remainingUses > 0) 则不 burn 相反
   const canReturn = (skill.coldDownTurns !== 0) || (skill.maxUses === Infinity) || (skill.remainingUses > 0);
   return !canReturn;
+}
+
+// 发现一张卡牌，并立刻进入牌库或手牌
+// destination 可选 'skills-hand'（前台）或 'deck'（后备），默认为 'skills-hand'
+export function discoverSkillCard(player, skill, destination='skills-hand') {
+  if (!skill || !(skill instanceof Object) || !skill.uniqueID) {
+    console.warn('尝试发现非法的技能卡牌：', skill);
+    return;
+  }
+  const skillID = skill.uniqueID;
+  // 先放入 overlaySkills 以注册卡牌原始DOM元素
+  player.overlaySkills.push(skill);
+  enqueueDelay(0);
+  enqueueAnimateCardById({
+    id: skill.uniqueID,
+    kind: 'appearInPlace'
+  });
+  // 触发发现事件
+  backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, { skill: skill, destination: destination });
+
+  if (destination === 'skills-hand') {
+    if (player.frontierSkills.length >= player.maxHandSize
+      || drawSelectedSkillCard(player, skill.uniqueID) === null) {
+      burnSkillCard(player, skill.uniqueID)
+    }
+  } else if(destination === 'deck') {
+    dropSkillCard(player, skill.uniqueID);
+  } else {
+    console.warn('未知的发现卡牌目标容器：', destination, '，默认放入牌库。');
+    dropSkillCard(player, skill.uniqueID);
+  }
 }

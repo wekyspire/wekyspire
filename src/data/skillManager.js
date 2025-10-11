@@ -19,18 +19,37 @@ class SkillManager {
 
     // 动态导入所有技能文件
     const skillModules = [
-      await import('./skills/basic.js'),
-      await import('./skills/blast.js'),
-      await import('./skills/cMinus.js'),
-      await import('./skills/concentration.js'),
-      await import('./skills/fireAssist.js'),
-      await import('./skills/fireControl.js'),
-      await import('./skills/heal.js'),
-      await import('./skills/levitation.js'),
-      await import('./skills/punchKicks.js'),
-      await import('./skills/refuelWeky.js'),
-      await import('./skills/shielding.js'),
-      await import('./skills/speedThinking.js'),
+      await import('./skills/martial_arts/agilePunch.js'),
+      await import('./skills/martial_arts/block.js'),
+      await import('./skills/martial_arts/guardHit.js'),
+      await import('./skills/martial_arts/heavySmash.js'),
+      await import('./skills/martial_arts/machete.js'),
+      await import('./skills/martial_arts/martialArtPose.js'),
+      await import('./skills/martial_arts/misc.js'),
+      await import('./skills/martial_arts/onePunch.js'),
+      await import('./skills/martial_arts/peakMartialArt.js'),
+      await import('./skills/martial_arts/precise.js'),
+      await import('./skills/martial_arts/preparedHit.js'),
+      await import('./skills/martial_arts/punch.js'),
+      await import('./skills/martial_arts/roundSlash.js'),
+      await import('./skills/martial_arts/shapelessPunch.js'),
+      await import('./skills/martial_arts/shielding.js'),
+      await import('./skills/martial_arts/slash.js'),
+      await import('./skills/martial_arts/taiji.js'),
+      await import('./skills/martial_arts/transcendence.js'),
+      // await import('./skills/blast.js'),
+      // await import('./skills/cMinus.js'),
+      // await import('./skills/concentration.js'),
+      // await import('./skills/fireAssist.js'),
+      // await import('./skills/fireControl.js'),
+      // await import('./skills/heal.js'),
+      // await import('./skills/levitation.js'),
+      // await import('./skills/punchKicks.js'),
+      // await import('./skills/refuelWeky.js'),
+      // await import('./skills/shielding.js'),
+      // await import('./skills/speedThinking.js'),
+      // await import('./skills/curses.js'),
+      // await import('./skills/matialArts')
       // await import('./skills/remi.js'),
       // await import('./skills/lumi.js')
     ];
@@ -72,17 +91,19 @@ class SkillManager {
   }
   
   // 获取随机技能
-  getRandomSkills(count, playerLeino= ['normal'], playerSkillSlots = [], playerTier = 0, bestQuality = false) {
-    // console.log(playerLeino);
+  getRandomSkills(count, playerLeino= {}, playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+    // ---- 收集所有技能的元数据（扩展: precessor, leinoModifiers） ----
     const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
-      // 创建临时实例以获取技能系列名称和等阶
       const tempSkill = new SkillClass();
       return {
         name: name,
         type: tempSkill.type,
         series: tempSkill.skillSeriesName,
         tier: tempSkill.tier,
-        spawnWeight: tempSkill.spawnWeight
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
+        spawnWeight: tempSkill.spawnWeight,
+        precessor: tempSkill.precessor, // 可能是字符串 / 数组 / null
+        leinoModifiers: tempSkill.leinoModifiers // 可能是字符串 / 数组 / null
       };
     });
 
@@ -94,48 +115,41 @@ class SkillManager {
     const playerSkillSeries = playerSkills.map(skill => skill.skillSeriesName);
     const playerSkillNames = playerSkills.map(skill => skill.name);
 
-    // 过滤掉玩家已有的技能和同系列的技能，以及等阶大于玩家等阶的技能
+    // 过滤掉不可生成为奖励的技能，有前置技能的技能，以及等阶大于玩家等阶的技能
     const baseAvailableSkills = allSkills.filter(skill =>
-      !playerSkillNames.includes(skill.name) &&
-      !playerSkillSeries.includes(skill.series) &&
-      skill.tier <= playerTier
+      skill.tier <= playerTier &&
+      skill.canSpawnAsReward_ &&
+      skill.precessor === null && // 只能是自由出现的技能
+      skill.tier >= 0 // 不能是（-1）特殊卡
     );
 
-    // —— 收集玩家技能可升级目标（upgradeTo，可为字符串或数组）并加入奖池 ——
-    const upgradeTargetNames = new Set();
-    const upgradeSourceMap = new Map(); // targetName -> sourceSkillName
-    for(const ownedSkill of playerSkills) {
-      const upgradeTo = ownedSkill.upgradeTo;
-      if(!upgradeTo) continue;
-      if(Array.isArray(upgradeTo)) {
-        upgradeTo.forEach(name => {
-          if(name && name !== ownedSkill.name) {
-            upgradeTargetNames.add(name);
-            if(!upgradeSourceMap.has(name)) upgradeSourceMap.set(name, ownedSkill.name);
-          }
-        });
-      } else if (typeof upgradeTo === 'string') {
-        if(upgradeTo && upgradeTo !== ownedSkill.name) {
-          upgradeTargetNames.add(upgradeTo);
-          if(!upgradeSourceMap.has(upgradeTo)) upgradeSourceMap.set(upgradeTo, ownedSkill.name);
-        }
+    // —— 新升级候选逻辑：根据 precessor 反向推导 ——
+    // precessor: 表示此技能的前置技能（或前置技能数组）。如果玩家拥有前置技能，则该技能加入奖池
+    const upgradeCandidates = [];
+    for (const meta of allSkills) {
+      if (playerSkillNames.includes(meta.name)) continue; // 已拥有不加入
+      if (meta.tier > playerTier) continue; // 等阶限制（保持与旧逻辑一致）
+      if (!meta.precessor) continue; // 没有前置技能
+
+      let matchedSource = null;
+      if (Array.isArray(meta.precessor)) {
+        matchedSource = meta.precessor.find(p => playerSkillNames.includes(p)) || null;
+      } else if (typeof meta.precessor === 'string') {
+        matchedSource = playerSkillNames.includes(meta.precessor) ? meta.precessor : null;
       }
+      if (!matchedSource) continue; // 玩家没有其任意前置技能
+
+      // 避免重复添加（如果之前 baseAvailable 已包含则跳过）
+      if (baseAvailableSkills.some(s => s.name === meta.name)) continue;
+
+      upgradeCandidates.push({ ...meta, isUpgradeCandidate: true, upgradedFrom: matchedSource });
     }
 
-    // 根据名称找到元数据并追加到可用列表（即使同系列也允许，因为这是升级路径）
-    for(const targetName of upgradeTargetNames) {
-      if(playerSkillNames.includes(targetName)) continue; // 已拥有不再加入
-      // 查找此技能的元数据
-      const meta = allSkills.find(s => s.name === targetName);
-      if(!meta) continue; // 注册表中不存在
-      if(meta.tier > playerTier) continue; // 仍然遵守等阶限制（如需忽略，可移除此行）
-      // 避免重复
-      if(!baseAvailableSkills.some(s => s.name === meta.name)) {
-        baseAvailableSkills.push({ ...meta, isUpgradeCandidate: true, upgradedFrom: upgradeSourceMap.get(targetName) });
-      }
+    // 合并（升级候选可以绕过“同系列排除”限制）
+    const availableSkills = [...baseAvailableSkills];
+    for (const u of upgradeCandidates) {
+      if (!availableSkills.some(s => s.name === u.name)) availableSkills.push(u);
     }
-
-    const availableSkills = baseAvailableSkills; // 之后流程对 availableSkills 操作
 
     // 计算每个技能的出现权重
     const weightedSkills = availableSkills.map(skill => {
@@ -155,22 +169,29 @@ class SkillManager {
         modifyFactor = 0.70;
       }
 
-      // 增加当前等阶的技能出现权重
-      if(tierDifference < 1) modifyFactor *= 1.2;
-
       // 高质量奖励中，贴近玩家等级上限技能概率大幅提升
       if(bestQuality && tierDifference < 1) modifyFactor *= 5;
       if(bestQuality && tierDifference < 2) modifyFactor *= 3;
 
-      if(true) {
-        // 特殊的，关于技能属性和灵脉属性对权重进行修正
-        if (playerLeino.findIndex(type => type === skill.type) !== -1) {
-          if (skill.type !== 'normal') modifyFactor *= 3; // 技能属性匹配，权重翻3倍
-        } else {
-          // 否然默认权重仅有 1/10
-          modifyFactor *= 0.1;
-          // 对于相对玩家的高阶异属性灵脉技能，根本无法学习
-          if (tierDifference < 2) modifyFactor = 0;
+      // 基础：技能主类型与玩家灵脉的耦合权重
+      {
+        let leinoFactor = Math.max(playerLeino[skill.type] || 0.2, 0); // 没有该属性时，给予一个较低的基础值
+        if (skill.type === 'normal') leinoFactor = Math.max(leinoFactor, 1); // 普通技能（非灵御技能）至少保证有 1 倍权重
+        modifyFactor *= leinoFactor;
+      }
+
+      // 新增：leinoModifiers 进一步影响（表示此卡受多种灵脉影响）
+      if (skill.leinoModifiers) {
+        const list = Array.isArray(skill.leinoModifiers) ? skill.leinoModifiers : [skill.leinoModifiers];
+        // 采用 “平均值” 模型，避免多元素乘积导致爆炸或极端衰减
+        const factors = list.map(key => {
+          const v = playerLeino[key];
+            // 若玩家该灵脉因子缺失，则视为 1（中性，不放大不缩小）
+          return (typeof v === 'number' && v > 0) ? v : 1;
+        });
+        if (factors.length > 0) {
+          const avg = factors.reduce((a,b)=>a+b,0) / factors.length;
+          modifyFactor *= avg;
         }
       }
 
@@ -215,7 +236,7 @@ class SkillManager {
       const skillInfo = weightedSkills[selectedIndex];
       const skill = this.createSkill(skillInfo.name);
       if(skillInfo.isUpgradeCandidate) {
-        skill.isUpgradeCandidate = true; // 标记（目前 UI 未使用）
+        skill.isUpgradeCandidate = true; // 标记（目前 UI 未使用或用于展示）
         if(skillInfo.upgradedFrom) skill.upgradedFrom = skillInfo.upgradedFrom; // 记录来源技能名称
       }
       selectedSkills.push(skill);

@@ -13,7 +13,7 @@ export default {
   },
   methods: {
     claimReward() {
-      backendEventBus.emit(EventNames.Rest.CLAIM_BREAKTHROUGH);
+      backendEventBus.emit(EventNames.PlayerOperations.CLAIM_BREAKTHROUGH);
       this.$emit('claimed');
     }
   }

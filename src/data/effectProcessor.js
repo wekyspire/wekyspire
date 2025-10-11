@@ -208,6 +208,21 @@ export function processEndOfTurnEffects(target) {
   if (target.effects['虚弱'] > 0) {
     target.addEffect('虚弱', -1);
   }
+
+  // 不灭效果
+  if (target.effects['不灭'] > 0) {
+    target.addEffect('不灭', -1);
+  }
+
+  // 禁忌效果
+  if (target.effects['禁忌'] > 0) {
+    target.addEffect('禁忌', -1);
+  }
+
+  // 滞气效果
+  if (target.effects['滞气'] > 0) {
+    target.addEffect('滞气', -1);
+  }
 }
 
 /**

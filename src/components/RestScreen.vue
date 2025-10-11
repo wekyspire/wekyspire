@@ -123,11 +123,11 @@ export default {
   methods: {
     onCloseSkillRewardPanel() {
       // 后端控制阶段切换，此处不做处理 -> 改为发出放弃当前奖励事件
-      backendEventBus.emit(EventNames.Rest.DROP_REWARD);
+      backendEventBus.emit(EventNames.PlayerOperations.DROP_REWARD);
     },
     onCloseAbilityRewardPanel() {
       // 放弃当前能力奖励
-      backendEventBus.emit(EventNames.Rest.DROP_REWARD);
+      backendEventBus.emit(EventNames.PlayerOperations.DROP_REWARD);
     },
 
     onSkillRewardSelected(currentSkill) {
@@ -137,8 +137,8 @@ export default {
         const sourceSlotIndex = slots.findIndex(s => s && s.name === currentSkill.upgradedFrom);
         if(sourceSlotIndex !== -1) {
           const oldSkill = slots[sourceSlotIndex];
-          backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-            skill: currentSkill,
+          backendEventBus.emit(EventNames.PlayerOperations.CLAIM_SKILL, {
+            skillID: currentSkill.uniqueID,
             slotIndex: sourceSlotIndex,
             clearRewards: false
           });
@@ -151,8 +151,8 @@ export default {
       }
       // 回退：未能自动升级则自动增添到末尾（若有空位）
       if(this.gameState.player.cultivatedSkills.length < this.gameState.player.maxSkills) {
-        backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-          skill: currentSkill,
+        backendEventBus.emit(EventNames.PlayerOperations.CLAIM_SKILL, {
+          skillID: currentSkill.uniqueID,
           slotIndex: -1,
           clearRewards: false
         });
@@ -166,25 +166,25 @@ export default {
       this.skillSelectionPanelVisible = false;
     },
     onSkillSelected(slotIndex) {
-      backendEventBus.emit(EventNames.Rest.CLAIM_SKILL, {
-        skill: this.claimingSkill,
+      backendEventBus.emit(EventNames.PlayerOperations.CLAIM_SKILL, {
+        skillID: this.claimingSkill.uniqueID,
         slotIndex,
         clearRewards: false
       });
       this.closeSkillSelectionPanel();
     },
     onAbilityRewardSelected(ability) {
-      backendEventBus.emit(EventNames.Rest.CLAIM_ABILITY, {
+      backendEventBus.emit(EventNames.PlayerOperations.CLAIM_ABILITY, {
         ability,
         clearRewards: false
       });
     },
     closeShopPanel() {
-      backendEventBus.emit(EventNames.Rest.FINISH);
+      backendEventBus.emit(EventNames.PlayerOperations.FINISH);
     },
     onApplySkillOrderChanges(newSkills) {
       const skillIDs = newSkills.map(s => s.uniqueID);
-      backendEventBus.emit(EventNames.Rest.REORDER_SKILLS, { skillIDs });
+      backendEventBus.emit(EventNames.PlayerOperations.REORDER_SKILLS, { skillIDs });
     }
 
   }

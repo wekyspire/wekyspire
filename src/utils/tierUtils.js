@@ -16,6 +16,20 @@ const SKILL_TIER_MAP = {
   '9': 'S级'
 };
 
+export const SkillTier = {
+  SPECIAL: -1,
+  D: 0,
+  C_MINUS: 1,
+  C_PLUS: 2,
+  B_MINUS: 3,
+  B: 4,
+  B_PLUS: 5,
+  A_MINUS: 6,
+  A: 7,
+  A_PLUS: 8,
+  S: 9
+};
+
 // 能力等阶映射
 const ABILITY_TIER_MAP = {
   '-1': '特殊',

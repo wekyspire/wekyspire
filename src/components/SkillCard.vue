@@ -104,12 +104,12 @@ export default {
   mounted() {
     // 仅在需要时由组件自身注册到全局卡片DOM注册表
     if (this.autoRegisterInRegistry) {
-      try { registerCardEl(this.skill?.uniqueID, this.$refs.root); this._registeredSelf = true; } catch (_) {}
+      try { registerCardEl(this.skill?.uniqueID, this.$refs.root, this.skill.uniqueID); this._registeredSelf = true; } catch (_) {}
     }
   },
   beforeUnmount() {
     if (this._registeredSelf) {
-      try { unregisterCardEl(this.skill?.uniqueID, this.$refs.root); } catch (_) {}
+      try { unregisterCardEl(this.skill?.uniqueID, this.skill.uniqueID); } catch (_) {}
       this._registeredSelf = false;
     }
   },

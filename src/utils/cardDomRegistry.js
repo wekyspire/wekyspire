@@ -1,20 +1,29 @@
-// Simple global registry mapping card uniqueID -> DOM element
+// Simple global registry mapping card uniqueID -> {el: DOM element, tag: parent container tag}
 const registry = new Map();
 
-export function registerCardEl(id, el) {
+export function registerCardEl(id, el, parent_container_tag) {
   if (id == null || !el) return;
-  registry.set(id, el);
+  if (!parent_container_tag) {
+    console.warn("registerCardEl missing parent_container_tag", id, el);
+    return;
+  }
+  registry.set(id, {el: el, tag: parent_container_tag});
 }
 
-export function unregisterCardEl(id, el) {
+// 仅在parent_container_tag与当前注册的匹配时才删除，避免误删
+export function unregisterCardEl(id, parent_container_tag) {
   if (id == null) return;
+  if(!parent_container_tag) {
+    console.warn("unregisterCardEl missing parent_container_tag", id);
+  }
   const current = registry.get(id);
-  if (!current || (el && current !== el)) return;
-  registry.delete(id);
+  if (current && current.tag === parent_container_tag) {
+    registry.delete(id);
+  }
 }
 
 export function getCardEl(id) {
-  return registry.get(id) || null;
+  return registry.get(id)?.el || null;
 }
 
 export default { registerCardEl, unregisterCardEl, getCardEl };

@@ -53,7 +53,7 @@ export default {
      },
     onBuy(purchasedItem) {
       // 交由后端事件驱动处理
-      backendEventBus.emit(EventNames.Rest.PURCHASE_ITEM, { item: purchasedItem });
+      backendEventBus.emit(EventNames.PlayerOperations.PURCHASE_ITEM, { item: purchasedItem });
       // 购买结果与刷新由后端通过事件通知（ITEM_PURCHASED + SHOP_REFRESHED）
     }
   }

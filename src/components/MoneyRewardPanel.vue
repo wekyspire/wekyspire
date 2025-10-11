@@ -18,7 +18,7 @@ export default {
   },
   methods: {
     claimReward() {
-      backendEventBus.emit(EventNames.Rest.CLAIM_MONEY);
+      backendEventBus.emit(EventNames.PlayerOperations.CLAIM_MONEY);
       this.$emit('claimed');
     }
   }

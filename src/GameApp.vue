@@ -48,8 +48,10 @@
     <!-- 全局动画覆盖层（全游戏共享） -->
     <AnimationOverlay ref="animationOverlay" />
 
-    <!-- 全局唯一悬浮提示框 -->
+    <!-- 全局唯一悬浮提示框（文字/效果/命名） -->
     <FloatingTooltip />
+    <!-- 新增：卡牌预览悬浮提示框 -->
+    <FloatingCardTooltip />
   </div>
 </template>
 
@@ -66,6 +68,7 @@ import ParticleEffectManager from './components/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/MessagePopupScreen.vue'
 import AnimationOverlay from './components/AnimationOverlay.vue'
 import FloatingTooltip from './components/FloatingTooltip.vue'
+import FloatingCardTooltip from './components/FloatingCardTooltip.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 import orchestrator from './utils/cardAnimationOrchestrator.js';
@@ -84,7 +87,8 @@ export default {
     ParticleEffectManager,
     MessagePopupScreen,
     AnimationOverlay,
-    FloatingTooltip
+    FloatingTooltip,
+    FloatingCardTooltip
   },
   computed: {
     isPlayerTurn() {

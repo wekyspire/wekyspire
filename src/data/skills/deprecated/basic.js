@@ -112,7 +112,8 @@ export class PrepareExercise extends Skill {
   constructor() {
     super('活动筋骨', 'normal', 0, 0, 1, 1);
     this.stacks = 1;
-    this.baseColdDownTurns = 3;
+    this.baseColdDownTurns = 4;
+    this.baseSlowStart = true;
   }
 
   // 使用技能

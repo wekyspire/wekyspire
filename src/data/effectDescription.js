@@ -200,6 +200,13 @@ const effectDescriptions = {
     icon: '☠️',
     color: '#c36cff' // 靛青色
   },
+  '滞气': {
+    name: '滞气',
+    description: '无法抽牌，回合结束时，层数减1',
+    type: 'debuff',
+    icon: '🌀',
+    color: '#708090' // 石板灰
+  },
   
   // 发动技能时触发的效果
   '连发': {
