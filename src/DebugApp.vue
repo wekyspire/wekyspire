@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import ArenaDebugScreen from './components/ArenaDebugScreen.vue';
+import ArenaDebugScreen from './components/global/ArenaDebugScreen.vue';
 
 export default {
   name: 'DebugApp',

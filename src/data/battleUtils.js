@@ -4,9 +4,15 @@ import {
   processPostAttackEffects, processAttackTakenEffects, processDamageTakenEffects, processAttackFinishEffects
 } from './effectProcessor.js';
 import { addBattleLog, addDamageLog, addDeathLog, addHealLog } from './battleLogUtils.js';
-import {captureSnapshot, enqueueAnimateCardById, enqueueDelay, enqueueState} from "./animationInstructionHelpers";
+import {captureSnapshot, enqueueDelay, enqueueState} from "./animationInstructionHelpers";
 import {enqueueHurtAnimation, enqueueUnitDeath} from "./animationInstructionHelpers";
 import { enqueueCardDropToDeck } from './animationInstructionHelpers';
+import { 
+  enqueueCardAnimation, 
+  enqueueCardAppearInPlace, 
+  enqueueCardBurn,
+  enqueueAnimatableElementEnterTracking
+} from '../utils/animationHelpers.js';
 import backendEventBus, {EventNames} from "../backendEventBus";
 
 // 将护盾/生命结算 + 日志输出 + 死亡判定抽象为通用助手
@@ -164,10 +170,8 @@ export function drawSkillCard(player, number = 1) {
       // addBattleLog('你的后备技能已空，无法抽取更多卡牌！');
       break;
     }
-    // 对于入手而言，动画由后端统一触发
+    // 先进行状态更新，令SkillHand能响应式为新手牌创建锚点
     const firstSkill = player.backupSkills.shift();
-
-    // 手动触发入手动画，与其他卡牌动画保持一致（等待前序动画完成）
     if (firstSkill && firstSkill.uniqueID) {
       player.frontierSkills.push(firstSkill);
       ids.push(firstSkill.uniqueID);
@@ -175,17 +179,27 @@ export function drawSkillCard(player, number = 1) {
     if(i === 0) {
       returnSkill = firstSkill;
     }
-    // TODO: 此时，事件在动画入队前触发，如果需要在事件内继续加入动画，则可能出现问题。
-    // 但这在目前结构下难以避免，如果要让抽卡动画批量丝滑播放，则只能在所有DOM对齐（后端状态更新完毕）后才能入队动画。
-    // 以后可能会更新前端动画引擎，让卡牌动画动态跟踪最新DOM位置。
     backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: firstSkill.uniqueID });
   }
+  // 排队前端状态同步动画指令
   enqueueState({snapshot: captureSnapshot(), durationMs: 0});
+  // 显示卡牌，并将卡牌切换到锚点跟踪模式。让其自然入手。
   ids.forEach((id) => {
-    enqueueAnimateCardById(
-      {id: id, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}},
-      {waitTags: ['state', 'ui'], durationMs: 200}
-    );
+    // 1.卡牌在牌库位置出现（小牌）
+    const appearTag = enqueueCardAnimation(id, {
+      from: {
+        anchor: 'deck',
+        scale: 0.6,
+        opacity: 1
+      },
+      ease: 'power2.out'
+    });
+    
+    // 2. 开启锚点跟踪，让卡牌自然从出现位置逐渐变大并飞入手牌
+    enqueueAnimatableElementEnterTracking(id, {
+      waitTags: [appearTag],
+      durationMs: 200
+    });
   });
   return returnSkill;
 }
@@ -209,30 +223,43 @@ export function drawSelectedSkillCard (player, skillID) {
     // 执行逻辑
     const [drawnSkill] = player.backupSkills.splice(index, 1);
     player.frontierSkills.push(drawnSkill);
-    // 播放动画
-    enqueueAnimateCardById(
-      {id: skillID, kind: 'appearFromAnchor', options: {anchor: 'deck', durationMs: 500, startScale: 0.6, fade: true}}
-    );
+
+    // 1. 卡牌在牌库位置出现（小牌）
+    const appearTag = enqueueCardAnimation(skillID, {
+      from: { 
+        anchor: 'deck', 
+        scale: 0.6, 
+        opacity: 1
+      },
+      ease: 'power2.out'
+    }, { waitTags: ['all'] });
+    
+    // 2. 开启锚点跟踪，让卡牌自然从出现位置逐渐变大并飞入手牌
+    enqueueAnimatableElementEnterTracking(skillID, {
+      waitTags: [appearTag]
+    });
+    
     backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
     return drawnSkill;
   } else {
     // 尝试从 overlaySkills 抽取（新发现的卡牌）
     const overlayIndex = player.overlaySkills.findIndex(skill => skill.uniqueID === skillID);
     if(overlayIndex !== -1) {
-      // 先飞到中间（创建幽灵并中转，这是Card在两个容器间移动的必要操作）
-      enqueueAnimateCardById( {
-        id: skillID,
-        kind: 'flyToAnchor',
-        options: { anchor: 'center', scale: 1.2 }
-      });
+      // 先飞到中间
+      const centerTag = enqueueCardAnimation(skillID, {
+        anchor: 'center',
+        to: { scale: 1.2 },
+        duration: 350
+      }, { waitTags: ['all'] });
+      
       const [drawnSkill] = player.overlaySkills.splice(overlayIndex, 1);
       player.frontierSkills.push(drawnSkill);
-      // 然后飞回手牌
-      enqueueAnimateCardById( {
-        id: skillID,
-        kind: 'flyToInPlace',
-        transfer: { type: 'discover', from: 'overlay-skills-panel', to: 'skills-hand' }
+      
+      // 然后回到原位（开启锚点跟踪，自动前往手牌）
+      enqueueAnimatableElementEnterTracking(skillID, {
+        waitTags: [centerTag]
       });
+      
       backendEventBus.emit(EventNames.Player.SKILL_DRAWN, { skillID: drawnSkill.uniqueID });
       return drawnSkill;
     } else {
@@ -304,8 +331,8 @@ export function burnSkillCard(player, skillID) {
   else if (frontierIndex !== -1) fromContainer = 'skills-hand';
   else if (backupIndex !== -1) fromContainer = 'deck';
 
-  // 动画（先播动画再修改逻辑，以便 orchestrator 拿到当前位置 DOM）
-  enqueueAnimateCardById( {id: skillID, kind: 'burn', transfer: { type: 'burn', from: fromContainer, to: 'graveyard' }});
+  // 使用新的焚毁动画系统
+  enqueueCardBurn(skillID, { waitTags: ['all'] });
 
   if (activatedIndex !== -1) {
     exhaustedSkill = player.activatedSkills.splice(activatedIndex, 1)[0];
@@ -344,10 +371,7 @@ export function discoverSkillCard(player, skill, destination='skills-hand') {
   // 先放入 overlaySkills 以注册卡牌原始DOM元素
   player.overlaySkills.push(skill);
   enqueueDelay(0);
-  enqueueAnimateCardById({
-    id: skill.uniqueID,
-    kind: 'appearInPlace'
-  });
+  enqueueCardAppearInPlace(skill.uniqueID, { duration: 300 });
   // 触发发现事件
   backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, { skill: skill, destination: destination });
 

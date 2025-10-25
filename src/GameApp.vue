@@ -52,26 +52,31 @@
     <FloatingTooltip />
     <!-- 新增：卡牌预览悬浮提示框 -->
     <FloatingCardTooltip />
+    
+    <!-- 新动画系统：可动画元素容器 -->
+    <AnimatableElementContainer />
   </div>
 </template>
 
 <script>
-import StartScreen from './components/StartScreen.vue'
-import BattleScreen from './components/BattleScreen.vue'
-import RestScreen from './components/RestScreen.vue'
-import EndScreen from './components/EndScreen.vue'
-import DialogScreen from './components/DialogScreen.vue'
-import BossShowupAnimation from './components/BossShowupAnimation.vue'
-import CutsceneScreen from './components/CutsceneScreen.vue'
-import AudioControllerScreen from './components/AudioControllerScreen.vue'
-import ParticleEffectManager from './components/ParticleEffectManager.vue'
-import MessagePopupScreen from './components/MessagePopupScreen.vue'
-import AnimationOverlay from './components/AnimationOverlay.vue'
-import FloatingTooltip from './components/FloatingTooltip.vue'
-import FloatingCardTooltip from './components/FloatingCardTooltip.vue'
+import StartScreen from './components/start/StartScreen.vue'
+import BattleScreen from './components/battle/BattleScreen.vue'
+import RestScreen from './components/rest/RestScreen.vue'
+import EndScreen from './components/end/EndScreen.vue'
+import DialogScreen from './components/end/DialogScreen.vue'
+import BossShowupAnimation from './components/battle/BossShowupAnimation.vue'
+import CutsceneScreen from './components/end/CutsceneScreen.vue'
+import AudioControllerScreen from './components/global/AudioControllerScreen.vue'
+import ParticleEffectManager from './components/global/ParticleEffectManager.vue'
+import MessagePopupScreen from './components/end/MessagePopupScreen.vue'
+import AnimationOverlay from './components/global/AnimationOverlay.vue'
+import FloatingTooltip from './components/global/FloatingTooltip.vue'
+import FloatingCardTooltip from './components/global/FloatingCardTooltip.vue'
+import AnimatableElementContainer from './components/global/AnimatableElementContainer.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
-import orchestrator from './utils/cardAnimationOrchestrator.js';
+import animator from './utils/animator.js';
+import { initInteractionHandler } from './utils/interactionHandler.js';
 
 export default {
   name: 'App',
@@ -88,7 +93,8 @@ export default {
     MessagePopupScreen,
     AnimationOverlay,
     FloatingTooltip,
-    FloatingCardTooltip
+    FloatingCardTooltip,
+    AnimatableElementContainer
   },
   computed: {
     isPlayerTurn() {
@@ -104,8 +110,13 @@ export default {
     // 初始化全局动画编排器：注入全局Overlay引用
     const overlayRefs = this.$refs.animationOverlay?.getRefs?.();
     if (overlayRefs) {
-      orchestrator.init(overlayRefs);
+      // 初始化新动画系统
+      animator.init(overlayRefs);
+      console.log('[GameApp] Animator initialized with overlay refs:', overlayRefs);
     }
+    
+    // 初始化交互处理器
+    initInteractionHandler();
   },
   methods: {
     restartGame() {

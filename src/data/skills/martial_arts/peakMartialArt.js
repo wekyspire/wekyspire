@@ -10,7 +10,7 @@ import { SkillTier } from '../../../utils/tierUtils.js';
 // 抽牌则敌人造成固定伤害
 class BasicPeakMartialArt extends Skill {
   constructor(
-    name = '入门',
+    name = '武学·入门',
     tier = SkillTier.C_PLUS,
     baseDamagePerDraw = 1,
     apCost = 2,
@@ -65,8 +65,8 @@ class BasicPeakMartialArt extends Skill {
 // 造成2伤害
 export class PeakMartialArt extends BasicPeakMartialArt {
   constructor() {
-    super('习武', SkillTier.B_MINUS, 2);
-    this.precessor = '入门';
+    super('武学·熟练', SkillTier.B_MINUS, 2);
+    this.precessor = '武学·入门';
   }
 }
 
@@ -74,8 +74,8 @@ export class PeakMartialArt extends BasicPeakMartialArt {
 // 造成3伤害，可复用
 export class PeakMartialArtExpert extends BasicPeakMartialArt {
   constructor() {
-    super('精通', SkillTier.B, 3, 2, 3);
-    this.precessor = '习武';
+    super('武学·精通', SkillTier.B, 3, 2, 3);
+    this.precessor = '武学·熟练';
   }
 }
 
@@ -83,8 +83,8 @@ export class PeakMartialArtExpert extends BasicPeakMartialArt {
 // 造成4伤害，AP消耗减少1
 export class PeakMartialArtMastery extends BasicPeakMartialArt {
   constructor() {
-    super('卓绝', SkillTier.B_PLUS, 4, 1, 3);
-    this.precessor = '精通';
+    super('武学·卓绝', SkillTier.B_PLUS, 4, 1, 3);
+    this.precessor = '武学·精通';
   }
 }
 
@@ -92,8 +92,8 @@ export class PeakMartialArtMastery extends BasicPeakMartialArt {
 // 造成6伤害，冷却变成2回合
 export class PeakMartialArtTranscendent extends BasicPeakMartialArt {
   constructor() {
-    super('盖世武学·至境', SkillTier.A_MINUS, 6, 1, 2);
-    this.precessor = '卓绝';
+    super('武学·超凡', SkillTier.A_MINUS, 6, 1, 2);
+    this.precessor = '武学·卓绝';
   }
 }
 
@@ -102,6 +102,6 @@ export class PeakMartialArtTranscendent extends BasicPeakMartialArt {
 export class PeakMartialArtSupreme extends BasicPeakMartialArt {
   constructor() {
     super('无双', SkillTier.A, 9, 1, 1);
-    this.precessor = '超凡';
+    this.precessor = '武学·超凡';
   }
 }

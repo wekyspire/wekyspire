@@ -16,6 +16,9 @@
 
   /* Card animation overlay (ghosts) */
   --z-animation: 1500;
+  
+  /* New animation system - animatable elements */
+  --z-animatable-elements: 1400;
 
   /* Effects */
   --z-particles: 2000;

@@ -8,11 +8,11 @@ import { backendGameState as gameState } from './gameState.js'
 import {
   enqueueDelay,
   enqueueUnlockControl,
-  enqueueAnimateCardById,
-  enqueueLockControl, enqueueClearCardAnimations, enqueueState, captureSnapshot
+  enqueueLockControl, enqueueState, captureSnapshot
 } from './animationInstructionHelpers.js'
 import {burnSkillCard, drawSkillCard, dropSkillCard, willSkillBurn} from "./battleUtils";
 import { enqueueCardDropToDeck } from './animationInstructionHelpers';
+import { enqueueCardAnimation } from '../utils/animationHelpers.js';
 import skill from "./skill";
 // 开始战斗
 export function enterBattleStage() {
@@ -196,8 +196,11 @@ function useSkill(skill) {
   addPlayerActionLog(`你使用了 /blue{${skill.name}}！`);
 
   // 技能脱手发动动画（卡牌移动到中央）
-  enqueueAnimateCardById({id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 }}, { tags: ['ui'], waitTags: [] });
-  enqueueDelay(0);
+  enqueueCardAnimation(skill.uniqueID, {
+    anchor: 'center',
+    to: { scale: 1.2 },
+    duration: 350
+  }, { waitTags: [] }); // 马上执行，不进行阻塞，给予玩家响应
 
   // 资源结算
   skill.consumeResources(gameState.player);
@@ -249,20 +252,23 @@ function activateChantSkill(skill) {
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILL_ENABLED, { skill, reason: 'use' });
   backendEventBus.emit(EventNames.Player.ACTIVATED_SKILLS_UPDATED, { activatedSkills: player.activatedSkills });
   enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
-  // Transition animation
-  enqueueAnimateCardById({
-    id: skill.uniqueID,
-    steps: [ { toCard: true, scale: 1.0, duration: 400, ease: 'power2.inOut' } ],
-    options: { endMode: 'restore' },
-    transfer: { type: 'activate', from: 'skills-hand', to: 'activated-bar' }
-  }, { tags: ['ui'], waitTags: ['state'] });
+  // Transition animation - 卡牌从手牌移动到咏唱位
+  enqueueCardAnimation(skill.uniqueID, {
+    to: { scale: 1.0 },
+    duration: 400,
+    ease: 'power2.inOut'
+  }, { tags: ['card-activate'], waitTags: ['state'] });
 }
 
 // 手动停止咏唱技能：支付费用 + 再次 use + onDisable + 普通结算（drop/burn）
 function manualStopActivatedSkill(skill) {
   const player = gameState.player;
   addPlayerActionLog(`你停止了 /blue{${skill.name}} 的咏唱！`);
-  enqueueAnimateCardById({ id: skill.uniqueID, kind: 'flyToAnchor', options: { anchor: 'center', scale: 1.2 } }, { tags: ['ui'], waitTags: [] });
+  enqueueCardAnimation(skill.uniqueID, {
+    anchor: 'center',
+    to: { scale: 1.2 },
+    duration: 350
+  }, { tags: ['card-use'], waitTags: [] });
   enqueueDelay(0);
   if (skill.canUse(player)) {
     skill.consumeResources(player);
@@ -391,8 +397,7 @@ function battleVictory(isVictory) {
   gameState.player.backupSkills = [];
   gameState.player.burntSkills = [];
 
-  // 清理掉卡牌ghost
-  enqueueClearCardAnimations();
+  // 注意：新动画系统会自动清理，不再需要手动清理卡牌动画
 
   // 战斗结束事件
   backendEventBus.emit(EventNames.Game.POST_BATTLE, {

@@ -6,7 +6,7 @@ import ItemManager from './itemManager.js'
 import backendEventBus, { EventNames } from '../backendEventBus.js'
 import { backendGameState as gameState } from './gameState.js'
 import { getNextPlayerTier, upgradePlayerTier } from './player.js'
-import { enqueueAnimateCardById } from './animationInstructionHelpers.js'
+import { enqueueCardAnimation } from '../utils/animationHelpers.js'
 import frontendEventBus from '../frontendEventBus.js'
 
 export function spawnSkillRewards() {
@@ -83,19 +83,29 @@ export function claimSkillReward(skillID, slotIndex, clearRewardsFlag) {
   }
   // 移除upgrade标签
   skill.isUpgradeCandidate = false;
-  // 先入队飞行动画（以便在状态同步/切换面板前克隆幽灵）
+  // 入队飞行动画：卡牌飞向牌堆并淡出
   try {
-    enqueueAnimateCardById({
-      id: skill.uniqueID,
-      kind: undefined,
-      steps: [
-        { toAnchor: 'deck', scale: 0.55, rotate: 18, duration: 520, ease: 'power2.in' },
-        { opacity: 0, duration: 120 },
-        { call: () => { try { frontendEventBus.emit('rest-deck-bump'); } catch (_) {} }, holdMs: 0 }
-      ],
-      hideStart: true,
-      options: { endMode: 'destroy' }
+    // 第一阶段：飞向牌堆
+    const tag1 = enqueueCardAnimation(skill.uniqueID, {
+      anchor: 'deck',
+      to: { 
+        scale: 0.55, 
+        rotate: 18 
+      },
+      duration: 520,
+      ease: 'power2.in'
     }, { waitTags: ['all'] });
+    
+    // 第二阶段：淡出
+    enqueueCardAnimation(skill.uniqueID, {
+      to: { opacity: 0 },
+      duration: 120
+    }, { waitTags: [tag1] });
+    
+    // 触发牌堆震动效果
+    setTimeout(() => {
+      try { frontendEventBus.emit('rest-deck-bump'); } catch (_) {}
+    }, 640);
   } catch (_) {}
 
   // 如果是升级候选，优先自动查找原技能并替换其槽位

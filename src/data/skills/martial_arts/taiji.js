@@ -11,7 +11,7 @@ import { SkillTier } from '../../../utils/tierUtils.js';
 // 机制：进入咏唱后，玩家每打出6张牌，立刻抽1张牌
 class BasicTaiji extends Skill {
   constructor(
-    name = '借力',
+    name = '解力',
     tier = SkillTier.C_PLUS,
     apCost = 2,
     coldDownTurns = 0,
@@ -96,7 +96,7 @@ export class NearTaiji extends BasicTaiji {
   }
 }
 
-// 太极（A-
+// 太极（A）
 // 每打3张牌，抽1张牌，冷却降为1
 export class Taiji extends BasicTaiji {
   constructor() {

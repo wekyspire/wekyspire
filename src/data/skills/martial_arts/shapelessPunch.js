@@ -93,11 +93,11 @@ export class DragonShapelessPunch extends BasicShapelessPunch {
   }
 }
 
-// 虚形拳（A-）（虚形拳）
+// 空形拳（A-）（虚形拳）
 // 额外伤害提升，抽卡数提升
 export class TrueShapelessPunch extends BasicShapelessPunch {
   constructor() {
-    super('虚形拳', SkillTier.A_MINUS, 12, 7, 4, 1, 33, 4);
+    super('空形拳', SkillTier.A_MINUS, 12, 7, 4, 1, 33, 4);
     this.precessor = '龙形拳';
   }
 }

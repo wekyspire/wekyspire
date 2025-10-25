@@ -59,11 +59,11 @@ export class TripleHit extends ChargedHit {
   }
 }
 
-// 惊鸿速击（A-）
+// 惊鸿连击（A-）
 // 发现三张零开销
 export class SwiftHit extends ChargedHit {
   constructor() {
-    super('惊鸿速击', 6, 3, 0);
+    super('惊鸿连击', 6, 3, 0);
     this.precessor = '三重击';
   }
 }

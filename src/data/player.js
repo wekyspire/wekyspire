@@ -33,9 +33,9 @@ export function getPlayerTierFromTierIndex(tierIndex) {
     {tier: 4, name: '资深灵御'},
     {tier: 5, name: '高级灵御'},
     {tier: 6, name: '准大师灵御'},
-    {tier: 7, name: '大师灵御', subtitle: '古往今来，灵御协会所能给出的最高认可'},
-    {tier: 8, name: '一代宗师', subtitle: '和独开一代的宗师们并肩而立'},
-    {tier: 9, name: '传奇', subtitle: '即便肉身消陨，你的名字也会回荡于传说之中'}
+    {tier: 7, name: '大师灵御'},
+    {tier: 8, name: '一代宗师'},
+    {tier: 9, name: '传奇'}
   ];
   return tiers[tierIndex];
 }

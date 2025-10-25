@@ -5,7 +5,7 @@
 //   status: 'pending' | 'running' | 'finished'
 //   tags: Set<string>         // 默认至少包含 'all'
 //   waitTags: Set<string>     // 默认至少包含 'all'
-//   durationMs: number        // 预设时长；Infinity 代表仅靠前端事件完成
+//   durationMs: number        // 指令超时时强制完成时长，可为 Infinity
 //   start: (ctx) => void      // 启动逻辑，在进入 running 时触发
 //   meta?: any                // 透传数据（可选）
 // - 可执行判定（假设更符合直觉的语义）：
@@ -32,7 +32,7 @@ class AnimationSequencer {
     this._instructions = [];   // 保序数组
     this._idToTimer = new Map();
 
-    // 监听来自前端的“动画完成”通知
+    // 监听来自前端的“动画完成”通知，从而完成对应指令来支持不定长度动画编排
     frontendEventBus.on('animation-instruction-finished', (payload = {}) => {
       const id = payload?.id;
       if (id) this.finish(id, 'frontend');
