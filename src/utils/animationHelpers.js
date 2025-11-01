@@ -44,7 +44,7 @@ export function enqueueCardAnimation(id, animPayload, options = {}) {
  * @param {string} toContainer - 目标容器（默认 'skills-hand'）
  * @param {Object} options - 选项
  */
-export function enqueueCardAppear(id, fromAnchor = 'deck', toContainer = 'skills-hand', options = {}) {
+export function enqueueCardAppear(id, fromAnchor = 'deck', options = {}) {
   const duration = options.duration || 300;
   const startScale = options.startScale || 0.6;
   
@@ -72,6 +72,7 @@ export function enqueueCardAppear(id, fromAnchor = 'deck', toContainer = 'skills
  * @param {Object} options - 选项
  */
 export function enqueueCardBurn(id, options = {}) {
+  console.log("enqueueCardBurn", id);
   const totalDuration = options.duration || 850;
   const scaleUp = options.scaleUp || 1.15;
   
@@ -191,31 +192,6 @@ export function enqueueCardDropToDeck(id, options = {}) {
   });
   
   return tag1;
-}
-
-/**
- * 卡牌原地淡入
- * @param {number|string} id - 卡牌 ID
- * @param {Object} options - 选项
- */
-export function enqueueCardAppearInPlace(id, options = {}) {
-  const duration = options.duration || 300;
-  const finalScale = options.finalScale || 1;
-  const fromOpacity = options.fromOpacity || 0;
-  const toOpacity = options.toOpacity || 1;
-  
-  return enqueueCardAnimation(id, {
-    from: { opacity: fromOpacity },
-    to: { 
-      scale: finalScale, 
-      opacity: toOpacity 
-    },
-    duration,
-    ease: 'power2.out'
-  }, {
-    tags: ['card-appear'],
-    waitTags: options.waitTags
-  });
 }
 
 /**
@@ -340,9 +316,7 @@ export default {
   enqueueCardAnimation,
   enqueueCardAppear,
   enqueueCardBurn,
-  enqueueCardCenterThenDeck,
   enqueueCardDropToDeck,
-  enqueueCardAppearInPlace,
   enqueueDelay,
   enqueuePanelHurt,
   enqueuePanelKnockback,

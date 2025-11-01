@@ -44,6 +44,7 @@ import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../../utils/colorUtils";
 import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
+import {displayGameState} from "../../data/gameState";
 
 export default {
   name: 'SkillCard',
@@ -95,8 +96,14 @@ export default {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
     },
     isChant() { return this.skill?.cardMode === 'chant'; },
-    disabled() { return this.skill.disabled || (this.player && !this.skill.canUse(this.player)); },
-    backendCanUse() {}
+    disabled() {
+      if(this.skill && this.skill.disabled) return true;
+      if(this.player) {
+        if(this.skill.isActivated) return false; // 激活技能总能被撤销
+        if(!this.skill.canUse(this.player)) return true;
+      }
+      return false;
+    }
   },
   mounted() {
   },

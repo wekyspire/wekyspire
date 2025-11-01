@@ -39,6 +39,13 @@ class Enemy extends Unit {
   act(player) {
     // 子类需要实现具体逻辑
   }
+
+  // 获取下回合意图（用于UI展示）
+  // 默认返回空数组；子类应覆盖返回一组意图项：
+  // 例如：[{ type:'attack', times:1, damage:6 }, { type:'defend', amount:4 }]
+  getIntention() {
+    return [];
+  }
 }
 
 export default Enemy;

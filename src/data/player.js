@@ -91,10 +91,15 @@ export class Player extends Unit {
     this.maxSkills = 20; // 玩家拥有的总技能上限
     this.cultivatedSkills = []; // 已培养技能（顺序即为战斗中的默认顺序）
     // 场上技能与战斗列表
-    this.skills = []; // 初始场上技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
+    this.skills = []; // 在场技能。在战斗开始前由 cultivatedSkills 深拷贝生成，在战斗结束后清空。
     this.frontierSkills = []; // 前台技能列表，玩家在当前回合可以使用的技能
     this.backupSkills = []; // 后备技能列表，用于存储暂时不可用的技能
     this.burntSkills = []; // 坟地技能列表，存放被焚毁的技能（战斗中完全消耗掉的技能）
+    // 咏唱位：当前激活的咏唱型技能
+    this.activatedSkills = [];
+    this.maxActivatedSkills = 1; // 默认一个咏唱位
+    // 在场，但是不在手牌、牌库、激活区内的卡牌（用于新发现/战斗中选牌的技能显示与动画 DOM 来源）
+    this.overlaySkills = [];
     this.maxFrontierSkills = 10; // 最大前台技能数量
     this.initialDrawFrontierSkills = 2; // 战斗开始时，额外抽取前台技能数量
     this.drawFrontierSkills = 3; // 每回合抽取前台技能数量
@@ -111,11 +116,6 @@ export class Player extends Unit {
     this.initialShiftSkillActionPointCost = 0; // 每场战斗第一次换卡的行动点消耗
     this.currentShiftSkillActionPointCost = this.initialShiftSkillActionPointCost; // 当前换卡行动点消耗，每丢一次消耗增1
 
-    // 咏唱位：当前激活的咏唱型技能
-    this.activatedSkills = [];
-    this.maxActivatedSkills = 1; // 默认一个咏唱位
-    // 新增：临时覆盖技能容器（用于新发现/战斗中选牌的技能显示与动画 DOM 来源）
-    this.overlaySkills = [];
   }
 
   addLeino(type, value) {
@@ -125,6 +125,9 @@ export class Player extends Unit {
     else {
       this.leinoFactors[type] = value;
     }
+  }
+  get maxHandSize () {
+    return this.maxFrontierSkills;
   }
   getLeinoWeight(type) {
     return Math.max(this.leinoFactors[type] || 0, 0);

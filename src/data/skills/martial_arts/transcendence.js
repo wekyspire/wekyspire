@@ -1,10 +1,10 @@
 // 超越
 // 获得行动点，但无法再抽牌
-import Skill from "../../skill";
-import {launchAttack} from "../../battleUtils";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
-import { backendGameState as gameState } from '../../gameState.js';
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from "@data/skill";
+import backendEventBus, {EventNames} from "@/backendEventBus";
+import { backendGameState as gameState } from '@data/gameState.js';
+import {SkillTier} from "@/utils/tierUtils";
+import { createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js';
 
 // 肾上腺素激增（C-）（超越）
 // 获得行动点，但无法再抽牌1回合
@@ -22,9 +22,11 @@ export class BasicTranscendence extends Skill {
     return Math.max(1, super.maxUses + this.power);
   }
 
-  use (player, enemy, stage) {
+  use (player, enemy, stage, ctx) {
     player.gainActionPoint(this.apGain);
-    player.addEffect('滞气', this.stall);
+    if (this.stall > 0) {
+      createAndSubmitAddEffect(player, '滞气', this.stall, ctx?.parentInstruction ?? null);
+    }
     return true;
   }
 

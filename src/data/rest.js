@@ -10,22 +10,26 @@ import { enqueueCardAnimation } from '../utils/animationHelpers.js'
 import frontendEventBus from '../frontendEventBus.js'
 
 export function spawnSkillRewards() {
-  // 技能奖励
+  // 新技能奖励（抽3选1）
   let tier = gameState.player.tier;
-  // 如果已经生成了突破奖励，那么生成技能奖励时奖励提升
   if(gameState.rewards.breakthrough) {
     const nextTier = getNextPlayerTier(tier);
     if(nextTier) tier = nextTier;
   }
-  gameState.rewards.skills = SkillManager.getInstance().getRandomSkills(
-    4, gameState.player.leino, gameState.player.cultivatedSkills, tier, true // 生成高质量奖励
+  gameState.rewards.newSkills = SkillManager.getInstance().getRandomNewSkills(
+    3, gameState.player.leino, gameState.player.cultivatedSkills, tier, true
+  );
+  // 升级候选（抽3个可升级项）
+  gameState.rewards.upgradeSkills = SkillManager.getInstance().getRandomUpgradeSkills(
+    3, gameState.player.cultivatedSkills, tier
   );
 }
 
 export function clearRewards() {
   gameState.rewards.money = 0;
   gameState.rewards.breakthrough = false;
-  gameState.rewards.skills = [];
+  gameState.rewards.newSkills = [];
+  gameState.rewards.upgradeSkills = [];
   gameState.rewards.abilities = [];
 }
 
@@ -72,17 +76,17 @@ export function claimMoney() {
   backendEventBus.emit(EventNames.Player.MONEY_CLAIMED, amount);
 }
 
-// 领取技能奖励
+// 领取技能奖励（新技能）
 export function claimSkillReward(skillID, slotIndex, clearRewardsFlag) {
   if (!skillID) return;
-  const skill = gameState.rewards.skills.find(s => s && s.uniqueID === skillID);
-  // 技能不存在或已被领取
+  // 从 newSkills 中找
+  const pool = Array.isArray(gameState.rewards.newSkills) ? gameState.rewards.newSkills : [];
+  const skill = pool.find(s => s && s.uniqueID === skillID);
   if (!skill) {
-    console.warn('尝试领取不存在的技能奖励：', skillID);
+    console.warn('尝试领取不存在的新技能奖励：', skillID);
     return;
   }
-  // 移除upgrade标签
-  skill.isUpgradeCandidate = false;
+
   // 入队飞行动画：卡牌飞向牌堆并淡出
   try {
     // 第一阶段：飞向牌堆
@@ -108,36 +112,44 @@ export function claimSkillReward(skillID, slotIndex, clearRewardsFlag) {
     }, 640);
   } catch (_) {}
 
-  // 如果是升级候选，优先自动查找原技能并替换其槽位
-  if (skill.isUpgradeCandidate && skill.upgradedFrom) {
-    const idx = gameState.player.cultivatedSkills.findIndex(s => s && s.name === skill.upgradedFrom);
-    if (idx !== -1) {
-      slotIndex = idx; // 强制替换
-    }
-  }
-
-  // 计算可用容量（最多 maxSkills 个）
+  // 计算可用容量
   const capacity = Math.min(gameState.player.maxSkills || 0, gameState.player.cultivatedSkills.length + 1);
   if (typeof slotIndex !== 'number' || slotIndex < 0) slotIndex = gameState.player.cultivatedSkills.length;
   if (slotIndex >= capacity) slotIndex = capacity - 1;
-
-  console.log('领取技能奖励：', skill, '放置于槽位', slotIndex, '（容量', capacity, '）');
-  // 放置/替换技能
+  // 放置/替换
   if(slotIndex >= gameState.player.cultivatedSkills.length) {
     gameState.player.cultivatedSkills.push(skill);
   } else {
     gameState.player.cultivatedSkills[slotIndex] = skill;
   }
-
-  if(clearRewardsFlag) {
-    // 领取一个技能后，清空剩余技能奖励（仅允许领取一次）
-    gameState.rewards.skills = [];
-  }
-  // 阶段推进
+  // 无论传入标志如何，都清空新技能奖励池，避免重复进入技能奖励阶段
+  gameState.rewards.newSkills = [];
   gotoNextRestStage();
-
-  // 发送事件（统一为 Player.SKILL_REWARD_CLAIMED）
   backendEventBus.emit(EventNames.Player.SKILL_REWARD_CLAIMED, { skill: skill, slotIndex: slotIndex });
+}
+
+// 领取升级奖励（从3个可升级项中选1个进行升级替换）
+export function claimUpgradeReward(skillID) {
+  if (!skillID) return;
+  const pool = Array.isArray(gameState.rewards.upgradeSkills) ? gameState.rewards.upgradeSkills : [];
+  const upgraded = pool.find(s => s && s.uniqueID === skillID);
+  if (!upgraded || !upgraded.isUpgradeCandidate || !upgraded.upgradedFrom) {
+    console.warn('尝试领取无效的升级奖励：', skillID);
+    return;
+  }
+  // 找到来源技能并替换
+  const idx = gameState.player.cultivatedSkills.findIndex(s => s && s.name === upgraded.upgradedFrom);
+  if (idx === -1) {
+    console.warn('未找到升级来源技能：', upgraded.upgradedFrom);
+    return;
+  }
+  const oldSkill = gameState.player.cultivatedSkills[idx];
+  // 清理升级标记
+  upgraded.isUpgradeCandidate = false;
+  gameState.player.cultivatedSkills[idx] = upgraded;
+  console.log(`技能升级：将 ${oldSkill.name} 升级为 ${upgraded.name}`);
+  gotoNextRestStage();
+  backendEventBus.emit(EventNames.Player.SKILL_REWARD_CLAIMED, { skill: upgraded, slotIndex: idx });
 }
 
 // 领取能力奖励
@@ -196,11 +208,12 @@ export function reorderSkills(skillUniqueIDs) {
 }
 
 function computeNextRestStage(currentStage = gameState.restScreenStage) {
-  // 按顺序：money -> breakthrough -> skill -> ability -> shop
+  // 新顺序：money -> breakthrough -> skill(新技能) -> upgrade(升级) -> ability -> shop
   let availableStages = [];
   if (gameState.rewards.money > 0) availableStages.push('money');
   if (gameState.rewards.breakthrough) availableStages.push('breakthrough');
-  if (Array.isArray(gameState.rewards.skills) && gameState.rewards.skills.length > 0) availableStages.push('skill');
+  if (Array.isArray(gameState.rewards.newSkills) && gameState.rewards.newSkills.length > 0) availableStages.push('skill');
+  if (Array.isArray(gameState.rewards.upgradeSkills) && gameState.rewards.upgradeSkills.length > 0) availableStages.push('upgrade');
   if (Array.isArray(gameState.rewards.abilities) && gameState.rewards.abilities.length > 0) availableStages.push('ability');
   if (gameState.shopItems.length > 0) availableStages.push('shop');
   const currentIndex = availableStages.indexOf(currentStage);
@@ -220,5 +233,11 @@ export function gotoNextRestStage() {
 }
 
 export function dropCurrentReward(stage = gameState.restScreenStage) {
+  // 放弃当前奖励：清空对应池并推进
+  if (stage === 'skill') gameState.rewards.newSkills = [];
+  else if (stage === 'upgrade') gameState.rewards.upgradeSkills = [];
+  else if (stage === 'ability') gameState.rewards.abilities = [];
+  else if (stage === 'money') gameState.rewards.money = 0;
+  else if (stage === 'breakthrough') gameState.rewards.breakthrough = false;
   gotoNextRestStage();
 }

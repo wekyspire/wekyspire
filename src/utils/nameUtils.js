@@ -15,6 +15,12 @@ export function countString (num, suffix = '') {
   return `${num}${suffix}`;
 }
 
+// 量词（1则无）
+export function quantifierString (num, singular) {
+  if(num === 1) return '';
+  return `${num}${singular}`;
+}
+
 export function modifiedNumberString (num, suffix = '') {
   if(num === 0) return '';
   if(num < 0) return `/red{${num}${suffix}}`;

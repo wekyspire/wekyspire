@@ -40,6 +40,7 @@ export const EventNames = {
     // 休整阶段操作
     CLAIM_MONEY: 'rest-claim-money',
     CLAIM_SKILL: 'rest-claim-skill',
+    CLAIM_UPGRADE: 'rest-claim-upgrade',
     CLAIM_ABILITY: 'rest-claim-ability',
     CLAIM_BREAKTHROUGH: 'rest-claim-breakthrough',
     REORDER_SKILLS: 'rest-reorder-skills',
@@ -73,6 +74,11 @@ export const EventNames = {
   },
   Shop: {
     ITEM_PURCHASED: 'item-purchased'
+  },
+  Executor: {
+    // 结算器相关事件，可以通过监听这两个事件，在恰当时机修改结算树或指令来以最高自由度实现任意特定效果
+    PRE_INSTRUCTION_EXECUTION: 'executor-pre-instruction-execution',
+    POST_INSTRUCTION_EXECUTION: 'executor-post-instruction-execution'
   }
 };
 

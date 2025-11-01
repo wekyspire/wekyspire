@@ -36,7 +36,8 @@ export function createGameState() {
     rewards: {
       breakthrough: false,
       money: 0,
-      skills: [],
+      newSkills: [],
+      upgradeSkills: [],
       abilities: []
     },
 

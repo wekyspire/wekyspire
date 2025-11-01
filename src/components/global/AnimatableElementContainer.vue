@@ -91,7 +91,7 @@ export default {
         if (domEl) {
           animator.register(uniqueID, domEl, 'card');
           registeredIds.value.add(uniqueID);
-          console.log('[AnimatableElementContainer] Registered card:', uniqueID);
+          // console.log('[AnimatableElementContainer] Registered card:', uniqueID);
         }
       });
     };
@@ -107,11 +107,11 @@ export default {
         animator.unregister(id);
         delete cardRefs.value[id];
         registeredIds.value.delete(id); // 从已注册集合中移除
-        console.log('[AnimatableElementContainer] Unregistered card:', id);
+        // console.log('[AnimatableElementContainer] Unregistered card:', id);
       });
       
       prevSkillIds = newIds;
-      console.log('[AnimatableElementContainer] All skills:', newIds.length, ', Registered:', registeredIds.value.size);
+      // console.log('[AnimatableElementContainer] All skills:', newIds.length, ', Registered:', registeredIds.value.size);
     }, { deep: true });
 
     // 交互事件处理

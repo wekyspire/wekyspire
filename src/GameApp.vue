@@ -55,6 +55,9 @@
     
     <!-- 新动画系统：可动画元素容器 -->
     <AnimatableElementContainer />
+
+    <!-- 新增：全局玩家输入控制器（处理结算期的异步输入） -->
+    <PlayerInputController />
   </div>
 </template>
 
@@ -73,6 +76,7 @@ import AnimationOverlay from './components/global/AnimationOverlay.vue'
 import FloatingTooltip from './components/global/FloatingTooltip.vue'
 import FloatingCardTooltip from './components/global/FloatingCardTooltip.vue'
 import AnimatableElementContainer from './components/global/AnimatableElementContainer.vue'
+import PlayerInputController from './components/global/PlayerInputController.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 import animator from './utils/animator.js';
@@ -94,7 +98,8 @@ export default {
     AnimationOverlay,
     FloatingTooltip,
     FloatingCardTooltip,
-    AnimatableElementContainer
+    AnimatableElementContainer,
+    PlayerInputController
   },
   computed: {
     isPlayerTurn() {

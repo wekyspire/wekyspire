@@ -16,7 +16,8 @@ import { submitInstruction } from '../globalExecutor.js';
 import { addPlayerActionLog } from '../../battleLogUtils.js';
 import { enqueueDelay, enqueueState, captureSnapshot, enqueueCardDropToDeck } from '../../animationInstructionHelpers.js';
 import { enqueueCardAnimation } from '../../../utils/animationHelpers.js';
-import { burnSkillCard, dropSkillCard, willSkillBurn } from '../../battleUtils.js';
+import { willSkillBurn } from '../../battleUtils.js';
+import { createAndSubmitBurnSkillCard, createAndSubmitDropSkillCard } from '../../battleInstructionHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class UseSkillInstruction extends BattleInstruction {
@@ -149,7 +150,7 @@ export class UseSkillInstruction extends BattleInstruction {
       const replaced = player.activatedSkills[0];
       if (replaced) {
         const willBurnReplaced = willSkillBurn(replaced);
-        // 生命周期钩子在burn之前调用
+        // 生命周期钩子在burn/丢弃之前调用
         try {
           replaced.onDisable(player, 'replaced');
         } catch (_) {}
@@ -159,13 +160,11 @@ export class UseSkillInstruction extends BattleInstruction {
         });
         
         if (willBurnReplaced) {
-          burnSkillCard(player, replaced.uniqueID);
+          // 指令式焚毁（会处理容器迁移与动画）
+          createAndSubmitBurnSkillCard(player, replaced.uniqueID, this);
         } else {
-          // 非焚毁：动画drop + 从activated移除并进后备
-          enqueueCardDropToDeck(replaced.uniqueID, {}, {});
-          // 修改状态
-          player.activatedSkills.shift();
-          player.backupSkills.push(replaced);
+          // 指令式丢回牌库底（会从activated中移除并进后备）
+          createAndSubmitDropSkillCard(player, replaced.uniqueID, -1, this);
         }
       }
     }
@@ -200,16 +199,13 @@ export class UseSkillInstruction extends BattleInstruction {
   _handleSkillAfterUse() {
     const player = this.player;
     const skill = this.skill;
-    
-    // 判断技能是否应该焚毁
     const shouldBurn = willSkillBurn(skill);
-    
     if (shouldBurn) {
-      // 焚毁技能
-      burnSkillCard(player, skill.uniqueID);
+      // 指令式焚毁（两阶段：离场→焚毁）
+      createAndSubmitBurnSkillCard(player, skill.uniqueID, this);
     } else {
-      // 回到牌库
-      dropSkillCard(player, skill.uniqueID);
+      // 指令式回牌库（丢到牌库底）
+      createAndSubmitDropSkillCard(player, skill.uniqueID, -1, this);
     }
   }
 

@@ -56,12 +56,18 @@ export default {
         
         // 将相对于容器的位置转换为绝对屏幕坐标
         // 锚点是卡牌的中心点
-        map.set(skill.uniqueID, {
-          x: rootX + layout[index].x + this.cardWidth / 2,
-          y: rootY + this.cardHeight / 2,
-          scale: layout[index].scale || 1,
-          rotation: 0
-        });
+        const ax = rootX + layout[index].x + this.cardWidth / 2;
+        const ay = rootY + this.cardHeight / 2;
+        const as = layout[index].scale || 1;
+
+        if (Number.isFinite(ax) && Number.isFinite(ay) && Number.isFinite(as)) {
+          map.set(skill.uniqueID, {
+            x: ax,
+            y: ay,
+            scale: as,
+            rotation: 0
+          });
+        }
       });
       
       return map;
@@ -76,17 +82,19 @@ export default {
       const MIN_STEP = 30;
       const MIN_GAP = -cardWidth + MIN_STEP;
 
+      // 使用安全的悬浮索引（防止越界）
+      const i0 = (this.hoveredIndex >= 0 && this.hoveredIndex < n) ? this.hoveredIndex : -1;
+
       const pairExtra = new Array(Math.max(0, n - 1)).fill(0);
-      if (this.hoveredIndex >= 0 && n > 1) {
-        const i0 = this.hoveredIndex;
+      if (i0 >= 0 && n > 1) {
         const baseExtra = 120;
         const decay = 0.6;
         for (let d = 0; i0 - 1 - d >= 0 || i0 + d < n - 1; d++) {
           const inc = baseExtra * Math.pow(decay, d) / 2;
           const leftPair = i0 - 1 - d;
           const rightPair = i0 + d;
-          if (leftPair >= 0) pairExtra[leftPair] += inc;
-          if (rightPair < pairExtra.length) pairExtra[rightPair] += inc;
+          if (leftPair >= 0 && leftPair < pairExtra.length) pairExtra[leftPair] += inc;
+          if (rightPair >= 0 && rightPair < pairExtra.length) pairExtra[rightPair] += inc;
         }
         for (let i = 0; i < pairExtra.length; i++) {
           const maxAllowed = (i === i0 - 1 || i === i0) ? DEFAULT_GAP : 0;
@@ -113,8 +121,8 @@ export default {
       for (let i = 0; i < n; i++) {
         out[i] = {
           x: Math.round(x),
-          z: 10 + i + (i === this.hoveredIndex ? 1000 : 0),
-          scale: (i === this.hoveredIndex) ? 1.08 : 1.0,
+          z: 10 + i + (i === i0 ? 1000 : 0),
+          scale: (i === i0) ? 1.08 : 1.0,
         };
         x += cardWidth;
         if (i < pairGap.length) x += pairGap[i];
@@ -165,6 +173,11 @@ export default {
     },
     containerHeight() {
       this.scheduleAnchorsPush();
+    },
+    // 当可见ID列表变化时，校正 hoveredIndex，避免越界
+    visibleIds() {
+      const n = this.visibleSkills.length;
+      if (this.hoveredIndex >= n) this.hoveredIndex = n > 0 ? n - 1 : -1;
     }
   },
   methods: {
@@ -193,8 +206,15 @@ export default {
             return;
           }
           const map = this.anchorsMap;
-          if (map && map.size > 0) {
-            animator.updateAnchors('skills-hand', map);
+          // 过滤掉无效坐标，避免污染 animator
+          const safeMap = new Map();
+          for (const [key, value] of map.entries()) {
+            if (value && Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.scale ?? 1)) {
+              safeMap.set(key, value);
+            }
+          }
+          if (safeMap.size > 0) {
+            animator.updateAnchors('skills-hand', safeMap);
           }
         } finally {
           this._pendingAnchorUpdate = false;

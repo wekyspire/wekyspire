@@ -215,19 +215,27 @@ function handleCardClick({ id, x, y }) {
   
   // 检查是否是玩家回合
   if (displayGameState.isEnemyTurn) return;
-  
-  // 查找卡牌
-  const skill = displayGameState.player?.frontierSkills?.find(s => s.uniqueID === id);
-  if (!skill) return;
-  
-  // 检查是否可用
-  if (!canUseSkill(skill)) return;
-  
-  // 发送后端指令
-  backendEventBus.emit(EventNames.PlayerOperations.PLAYER_USE_SKILL, id);
-  
-  // 生成粒子效果
-  spawnParticlesAtPosition(x, y, skill.manaCost, skill.actionPointCost);
+
+  // 卡牌使用
+  {
+    const skill = displayGameState.player?.frontierSkills?.find(s => s.uniqueID === id);
+    if (skill && canUseSkill(skill)) {
+
+      // 发送后端指令
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_USE_SKILL, id);
+
+      // 生成粒子效果
+      spawnParticlesAtPosition(x, y, skill.manaCost, skill.actionPointCost);
+    }
+  }
+  // 卡牌解除激活
+  {
+    const skill = displayGameState.player?.activatedSkills?.find(s => s.uniqueID === id);
+    if (skill && skill.isActivated) {
+      // 发送后端指令
+      backendEventBus.emit(EventNames.PlayerOperations.PLAYER_STOP_ACTIVATED_SKILL, id);
+    }
+  }
 }
 
 /**

@@ -7,6 +7,9 @@
   /* Regular content baseline */
   --z-base: 0;
 
+  /* Animatable elements: cards, panels, etc */
+  --z-animatable-elements: 1100;
+
   /* Regular overlays (selection panels, dim overlays) */
   --z-overlay: 1200;
   --z-overlay-content: 1210; /* overlay inner content if needed */
@@ -14,11 +17,7 @@
   /* Tooltips in regular UI (above base/overlay, below particles) */
   --z-tooltip: 1300;
 
-  /* Card animation overlay (ghosts) */
-  --z-animation: 1500;
-  
-  /* New animation system - animatable elements */
-  --z-animatable-elements: 1400;
+
 
   /* Effects */
   --z-particles: 2000;

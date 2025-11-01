@@ -1,8 +1,6 @@
 // 诅咒系列技能，负面效果，spawnWeight都为0
 
 import Skill from '../../skill.js';
-import { launchAttack, dealDamage, gainShield } from '../../battleUtils.js';
-import { addBattleLog } from '../../battleLogUtils.js';
 
 // 粘液诅咒
 export class SlimeCurse extends Skill {

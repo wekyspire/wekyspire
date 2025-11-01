@@ -16,31 +16,31 @@
  * 5. execute返回true时弹出栈，返回false时保留在栈顶
  */
 
-import { backendEventBus } from '../../backendEventBus.js';
+import backendEventBus, {EventNames} from '../../backendEventBus.js';
+import {backendGameState} from "../gameState";
+import BackendEventBus from "../../backendEventBus.js";
 
 export class BattleInstructionExecutor {
   constructor() {
-    /**
-     * 元语栈，用于DFS遍历
-     * 栈顶元素是当前要执行的元语
-     */
     this.instructionStack = [];
-    
-    /**
-     * 执行器运行状态标志
-     * 用于防止并发执行（同一时间只能有一个结算协程运行）
-     */
     this.isRunning = false;
-    
-    /**
-     * 执行统计信息（用于调试和性能监控）
-     */
-    this.statistics = {
-      totalExecuted: 0,
-      totalSkipped: 0,
-      totalSubmitted: 0,
-      maxStackDepth: 0
-    };
+    this.statistics = { totalExecuted: 0, totalSkipped: 0, totalSubmitted: 0, maxStackDepth: 0 };
+    this.rootInstructions = [];
+  }
+  // 检查战斗结束
+  checkBattleEnd () {
+    // 看看玩家是不是逝了
+    const isPlayerDead = backendGameState.player.hp <= 0;
+    const isEnemyDead = backendGameState.enemy.hp <= 0;
+    if (isPlayerDead) {
+      return true;
+    }
+    // 看看敌人是不是逝了
+    if (isEnemyDead) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -59,17 +59,18 @@ export class BattleInstructionExecutor {
       console.error('[BattleInstructionExecutor] Cannot submit null instruction');
       return;
     }
-    
-    this.instructionStack.push(instruction);
-    this.statistics.totalSubmitted++;
-    
-    // 更新最大栈深度
-    if (this.instructionStack.length > this.statistics.maxStackDepth) {
-      this.statistics.maxStackDepth = this.instructionStack.length;
+    // 将新指令接到其父亲的children末尾；若无父，则作为新的root
+    const parent = instruction.parentInstruction;
+    if (parent) {
+      parent.addChild(instruction);
+    } else {
+      this.rootInstructions.push(instruction);
+      // 若当前未运行且栈为空，则作为新的起点
+      if (!this.isRunning && this.instructionStack.length === 0) {
+        this.instructionStack.push(instruction);
+      }
     }
-    
-    // 调试日志（可选，生产环境可关闭）
-    // console.log(`[Executor] Submitted: ${instruction.getDebugInfo()}, Stack depth: ${this.instructionStack.length}`);
+    this.statistics.totalSubmitted++;
   }
 
   /**
@@ -80,10 +81,20 @@ export class BattleInstructionExecutor {
    * @returns {BattleInstruction|null} 栈顶元语，栈为空时返回null
    */
   getCurrentInstruction() {
-    if (this.instructionStack.length === 0) {
-      return null;
-    }
+    if (this.instructionStack.length === 0) return null;
     return this.instructionStack[this.instructionStack.length - 1];
+  }
+
+  tryEnqueueNextRoot () {
+    if (this.instructionStack.length === 0) {
+      while(this.rootInstructions.length > 0) {
+        const nextRoot = this.rootInstructions.shift();
+        if (nextRoot && nextRoot.isAlive()) {
+          this.instructionStack.push(nextRoot);
+          break ;
+        }
+      }
+    }
   }
 
   /**
@@ -103,88 +114,91 @@ export class BattleInstructionExecutor {
    * @returns {Promise<Object>} 执行统计信息
    */
   async runUntilComplete() {
-    // 并发保护
     if (this.isRunning) {
       console.warn('[BattleInstructionExecutor] Executor is already running!');
+      console.trace();
       return this.statistics;
     }
-    
     this.isRunning = true;
-    
-    // 重置统计信息
     this.statistics.totalExecuted = 0;
     this.statistics.totalSkipped = 0;
     this.statistics.maxStackDepth = this.instructionStack.length;
-    
-    // 发送结算开始事件
+
+    // 若栈为空但有roots，则将roots逐个压栈（按提交顺序）
+    if (this.instructionStack.length === 0 && this.rootInstructions.length > 0) {
+      this.instructionStack.push(this.rootInstructions[0]);
+    }
+
     backendEventBus.emit('BATTLE_SETTLEMENT_START', {});
-    
     try {
-      // 主执行循环
       while (this.instructionStack.length > 0) {
-        const currentInstruction = this.getCurrentInstruction();
-        
-        // 检查是否可执行（取消传播机制）
-        if (!currentInstruction.canExecute()) {
-          // 元语被取消，直接丢弃
+        const node = this.getCurrentInstruction();
+        // 若当前节点已经死亡，直接退栈
+        if (!node.isAlive()) {
           this.instructionStack.pop();
           this.statistics.totalSkipped++;
-          
-          // 调试日志
-          // console.log(`[Executor] Skipped (cancelled): ${currentInstruction.getDebugInfo()}`);
+          // 当栈清空但还有更多root尚未遍历时，推进到下一个root
+          this.tryEnqueueNextRoot();
           continue;
         }
-        
-        // 执行元语（可能await异步操作）
-        let completed = false;
-        try {
-          completed = await currentInstruction.execute();
-          this.statistics.totalExecuted++;
-          
-          // 发送元语执行完成事件（可用于调试和监控）
-          backendEventBus.emit('INSTRUCTION_EXECUTED', {
-            instruction: currentInstruction,
-            completed: completed
-          });
-          
-        } catch (error) {
-          // 捕获元语执行错误
-          console.error(`[Executor] Error executing instruction: ${currentInstruction.getDebugInfo()}`, error);
-          
-          // 错误处理策略：弹出出错的元语，继续执行
-          // 可根据需求调整（如终止整个结算流程）
-          this.instructionStack.pop();
-          continue;
+        // 尝试执行当且节点
+        if (!node.isCompleted()) {
+          console.log(`[Executor] Current stack depth: ${this.instructionStack.length}. Executing: ${node.getDebugInfo()}`);
+          let completed = false;
+          try {
+            backendEventBus.emit(EventNames.Executor.PRE_INSTRUCTION_EXECUTION, {instruction: node});
+            completed = await node.execute();
+            this.statistics.totalExecuted++;
+            backendEventBus.emit(EventNames.Executor.POST_INSTRUCTION_EXECUTION, {instruction: node, completed});
+          } catch (error) {
+            console.error(`[Executor] Error executing instruction: ${node.getDebugInfo()}`, error);
+            // 出错直接标记完成并弹出，继续回退
+            completed = true;
+          }
+          // 此节点执行完成，标记
+          if (completed) {
+            node.markCompleted();
+          }
+          // 检查是否战斗结束
+          if (this.checkBattleEnd()) {
+            console.log('[Executor] Battle ended during execution.');
+            // 清空栈以结束执行
+            this.instructionStack = [];
+            break;
+          }
         }
-        
-        // 根据完成状态决定是否弹出栈
-        if (completed) {
+        // DFS优先遍历未访问的子节点
+        const child = node.nextUnvisitedChild();
+        if (child) {
+          this.instructionStack.push(child);
+          if (this.instructionStack.length > this.statistics.maxStackDepth) {
+            this.statistics.maxStackDepth = this.instructionStack.length;
+          }
+        } else if (node.isCompleted()) {
+          // 没有未访问子节点：若节点已完成，则弹出
           this.instructionStack.pop();
-          // console.log(`[Executor] Completed: ${currentInstruction.getDebugInfo()}`);
+          // 当栈清空但还有更多root尚未遍历时，推进到下一个root
+          this.tryEnqueueNextRoot();
+          continue;
         } else {
-          // 未完成，保留在栈顶，下次迭代继续执行
-          // console.log(`[Executor] Pending: ${currentInstruction.getDebugInfo()}`);
+          // 没有可执行儿子节点，但节点未完成执行，保持在栈顶等待下一轮执行
         }
-        
-        // 栈深度安全检查（防止无限递归）
+
         if (this.instructionStack.length > 1000) {
           console.error('[Executor] Stack depth exceeded 1000! Possible infinite loop.');
           throw new Error('BattleInstructionExecutor: Stack overflow detected');
         }
       }
-      
-      // 发送结算完成事件
-      backendEventBus.emit('BATTLE_SETTLEMENT_COMPLETE', {
-        statistics: this.statistics
-      });
-      
+
+      backendEventBus.emit('BATTLE_SETTLEMENT_COMPLETE', { statistics: this.statistics });
       console.log('[Executor] Settlement complete:', this.statistics);
-      
+    } catch (e) {
+      console.log('[Executor] Error settlement complete:', this.statistics);
+      throw e;
     } finally {
-      // 确保isRunning标志被重置
       this.isRunning = false;
     }
-    
+
     return this.statistics;
   }
 
@@ -196,15 +210,9 @@ export class BattleInstructionExecutor {
       console.warn('[Executor] Cannot reset while running!');
       return;
     }
-    
     this.instructionStack = [];
-    this.statistics = {
-      totalExecuted: 0,
-      totalSkipped: 0,
-      totalSubmitted: 0,
-      maxStackDepth: 0
-    };
-    
+    this.rootInstructions = [];
+    this.statistics = { totalExecuted: 0, totalSkipped: 0, totalSubmitted: 0, maxStackDepth: 0 };
     console.log('[Executor] Reset complete');
   }
 

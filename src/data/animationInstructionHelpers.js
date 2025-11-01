@@ -11,7 +11,6 @@ import {
   enqueueCardBurn,
   enqueueCardCenterThenDeck,
   enqueueCardDropToDeck,
-  enqueueCardAppearInPlace,
   enqueueDelay as animHelpersDelay
 } from '../utils/animationHelpers.js';
 

@@ -1,10 +1,10 @@
 // 护盾系列技能
 // 还有一些小单卡
-import Skill from '../../skill.js';
-import { launchAttack, dealDamage, gainShield } from '../../battleUtils.js';
-import {SkillTier} from "../../../utils/tierUtils";
-import {backendGameState} from "../../gameState";
-import backendEventBus, {EventNames} from "../../../backendEventBus";
+import Skill from '@data/skill.js';
+import { createAndSubmitGainShield, createAndSubmitAddEffect, createAndSubmitLaunchAttack } from '@data/battleInstructionHelpers.js';
+import {SkillTier} from "@/utils/tierUtils";
+import {backendGameState} from '@data/gameState';
+import backendEventBus, {EventNames} from "@/backendEventBus";
 
 // 盾（D）（护盾系列）
 export class BasicShielding extends Skill {
@@ -22,10 +22,10 @@ export class BasicShielding extends Skill {
   }
 
   // 使用技能
-  use(player, enemy) {
-    gainShield(player, player, this.shield);
+  use(player, enemy, stage, ctx) {
+    createAndSubmitGainShield(player, player, this.shield, ctx?.parentInstruction ?? null);
     if(this.blockAmount > 0) {
-      player.addEffect('格挡', this.blockAmount);
+      createAndSubmitAddEffect(player, '格挡', this.blockAmount, ctx?.parentInstruction ?? null);
     }
     return true;
   }
@@ -72,14 +72,12 @@ export class EmergencyShield extends Skill {
     return 11;
   }
 
-  // 使用技能
-  use(player, enemy) {
-    gainShield(player, player, this.shield);
+  use(player, enemy, stage, ctx) {
+    createAndSubmitGainShield(player, player, this.shield, ctx?.parentInstruction ?? null);
     this.extraColdDownTurns += 1;
     return true;
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
     return `获得${this.shield}/named{护盾}，使用后/named{冷却}时间增1`;
   }
@@ -136,12 +134,12 @@ export class SolidifyShield extends Skill {
     return Math.max(7 - this.power, 4);
   }
 
-  use(player, enemy) {
+  use(player, enemy, stage, ctx) {
     const shieldAmount = player.shield;
     if (shieldAmount > 0) {
       const blockAmount = Math.floor(shieldAmount / this.factor);
       if (blockAmount > 0) {
-        player.addEffect('格挡', blockAmount);
+        createAndSubmitAddEffect(player, '格挡', blockAmount, ctx?.parentInstruction ?? null);
       }
     }
     return true;
@@ -161,10 +159,10 @@ export class ShieldBash extends Skill {
     this.baseColdDownTurns = 3;
   }
 
-  use(player, enemy) {
+  use(player, enemy, stage, ctx) {
     const shieldAmount = player.shield;
     if (shieldAmount > 0) {
-      launchAttack(player, enemy, shieldAmount);
+      createAndSubmitLaunchAttack(player, enemy, shieldAmount, ctx?.parentInstruction ?? null);
     }
     return true;
   }

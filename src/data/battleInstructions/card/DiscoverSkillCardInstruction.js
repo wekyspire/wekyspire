@@ -8,9 +8,10 @@ import { BattleInstruction } from '../BattleInstruction.js';
 import { DrawSkillCardInstruction } from './DrawSkillCardInstruction.js';
 import { DropSkillCardInstruction } from './DropSkillCardInstruction.js';
 import { BurnSkillCardInstruction } from './BurnSkillCardInstruction.js';
+import { SkillLeaveBattleInstruction } from './SkillLeaveBattleInstruction.js';
 import { submitInstruction } from '../globalExecutor.js';
-import { enqueueDelay } from '../../animationInstructionHelpers.js';
-import { enqueueCardAppearInPlace } from '../../../utils/animationHelpers.js';
+import { enqueueDelay, enqueueState, captureSnapshot } from '../../animationInstructionHelpers.js';
+import { enqueueCardAppear } from '../../../utils/animationHelpers.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
 
 export class DiscoverSkillCardInstruction extends BattleInstruction {
@@ -28,11 +29,14 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
 
   async execute() {
     if (this.executionStage === 0) {
-      // 先放入overlaySkills以注册card牌DOM元素
+      // 先放入skills & overlaySkills以注册card牌DOM元素
+      this.player.skills.push(this.skill);
       this.player.overlaySkills.push(this.skill);
-      enqueueDelay(0);
-      enqueueCardAppearInPlace(this.skill.uniqueID, { duration: 300 });
-      
+      // 立即同步一次显示层状态，确保AnimatableElementContainer注册DOM
+      const stateTag = enqueueState({ snapshot: captureSnapshot(), durationMs: 0 });
+      // 卡牌出现动画（等待状态同步完成）
+      enqueueCardAppear(this.skill.uniqueID, 'center');
+
       // 触发发现事件
       backendEventBus.emit(EventNames.Player.SKILL_DISCOVERED, {
         skill: this.skill,
@@ -47,13 +51,9 @@ export class DiscoverSkillCardInstruction extends BattleInstruction {
       // 根据destination处理
       if (this.destination === 'skills-hand') {
         if (this.player.frontierSkills.length >= this.player.maxHandSize) {
-          // 手牌已满，焚毁
-          const burnInst = new BurnSkillCardInstruction({
-            player: this.player,
-            skillID: this.skill.uniqueID,
-            parentInstruction: this
-          });
-          submitInstruction(burnInst);
+          // 手牌已满，离场→焚毁
+          submitInstruction(new SkillLeaveBattleInstruction({ player: this.player, skillID: this.skill.uniqueID, parentInstruction: this }));
+          submitInstruction(new BurnSkillCardInstruction({ player: this.player, skillID: this.skill.uniqueID, parentInstruction: this }));
         } else {
           // 抽到手牌
           const drawInst = new DrawSkillCardInstruction({

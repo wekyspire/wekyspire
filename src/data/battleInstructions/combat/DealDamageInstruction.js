@@ -12,9 +12,9 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { processDamageTakenEffects } from '../../effectProcessor.js';
 import { addDamageLog, addDeathLog, addBattleLog } from '../../battleLogUtils.js';
 import { enqueueHurtAnimation, enqueueUnitDeath } from '../../animationInstructionHelpers.js';
+import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js';
 
 export class DealDamageInstruction extends BattleInstruction {
   /**
@@ -111,14 +111,27 @@ export class DealDamageInstruction extends BattleInstruction {
         hpDamage: 0,
         passThroughDamage: 0
       });
-      
       const sourceName = this.source ? `从${this.source.name}` : '';
       addBattleLog(`${this.target.name}${sourceName}受到伤害，但不起作用！`);
     }
     
-    // 处理受到伤害时的效果
-    processDamageTakenEffects(this.target, passThoughDamage, hpDamage);
-    
+    // 处理受到伤害时的效果（指令化）
+    // TODO 增加专有指令来处理受伤后结算的效果
+    if ((this.target.effects?.['飞行'] || 0) > 0 && hpDamage > 0) {
+      createAndSubmitAddEffect(this.target, '飞行', -1, this);
+    }
+    if ((this.target.effects?.['暴怒'] || 0) > 0) {
+      const stacks = this.target.effects['暴怒'];
+      createAndSubmitAddEffect(this.target, '力量', stacks, this);
+    }
+    if ((this.target.effects?.['执着'] || 0) > 0) {
+      const stacks = this.target.effects['执着'];
+      createAndSubmitAddEffect(this.target, '集中', stacks, this);
+    }
+    if ((this.target.effects?.['灼烧'] || 0) > 0 && Math.random() < 0.5) {
+      createAndSubmitAddEffect(this.target, '燃烧', this.target.effects['灼烧'], this);
+    }
+
     // 检查死亡
     const dead = this.target.hp <= 0;
     if (dead) {

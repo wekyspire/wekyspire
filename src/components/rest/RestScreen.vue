@@ -18,23 +18,22 @@
             v-else-if="currentStage === 'breakthrough'"
           />
           
-          <!-- 技能奖励面板 -->
+          <!-- 技能奖励面板（新技能） -->
           <SkillRewardPanel
             v-else-if="currentStage === 'skill'"
-            :skills="gameState.rewards.skills"
+            :skills="gameState.rewards.newSkills"
             @close="onCloseSkillRewardPanel"
             @selected-skill-reward="onSkillRewardSelected"
           />
-          
-          <!-- 能力奖励面板 -->
-          <AbilityRewardPanel
-            v-else-if="currentStage === 'ability'"
-            :abilities="gameState.rewards.abilities"
-            @selected-ability-reward="onAbilityRewardSelected"
-            @close="onCloseAbilityRewardPanel"
+
+          <!-- 升级奖励面板 -->
+          <UpgradeRewardPanel
+            v-else-if="currentStage === 'upgrade'"
+            :skills="gameState.rewards.upgradeSkills"
+            @selected-upgrade-reward="onUpgradeRewardSelected"
+            @close="onCloseUpgradeRewardPanel"
           />
-          
-          <!-- 商店 + 准备面板并列显示 -->
+
           <ShopPanel
             v-else-if="currentStage === 'shop'"
             :shop-items="gameState.shopItems"
@@ -87,6 +86,7 @@ import PreparationPanel from './PreparationPanel.vue';
 import RestControlPanel from './RestControlPanel.vue';
 import frontendEventBus from "../../frontendEventBus";
 import backendEventBus, { EventNames } from "../../backendEventBus";
+import UpgradeRewardPanel from './UpgradeRewardPanel.vue';
 
 export default {
   name: 'RestScreen',
@@ -100,7 +100,8 @@ export default {
     MoneyRewardPanel,
     BreakthroughRewardPanel,
     PreparationPanel,
-    RestControlPanel
+    RestControlPanel,
+    UpgradeRewardPanel
   },
   props: {
     gameState: {
@@ -127,6 +128,13 @@ export default {
     },
     onCloseAbilityRewardPanel() {
       // 放弃当前能力奖励
+      backendEventBus.emit(EventNames.PlayerOperations.DROP_REWARD);
+    },
+
+    onUpgradeRewardSelected(skill) {
+      backendEventBus.emit(EventNames.PlayerOperations.CLAIM_UPGRADE, { skillID: skill.uniqueID });
+    },
+    onCloseUpgradeRewardPanel() {
       backendEventBus.emit(EventNames.PlayerOperations.DROP_REWARD);
     },
 

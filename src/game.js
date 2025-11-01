@@ -8,7 +8,7 @@ import {
   initializeBattleFlowListeners
 } from './data/battle.js'
 import {
-  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage, dropCurrentReward
+  claimMoney, claimSkillReward, claimAbilityReward, claimBreakthroughReward, reorderSkills, purchaseItem, spawnRewards, clearRewards, setInitialRestStage, dropCurrentReward, claimUpgradeReward
 } from './data/rest.js'
 
 function startGame() {
@@ -89,6 +89,9 @@ export function initGameFlowListeners() {
   });
   backendEventBus.on(EventNames.PlayerOperations.CLAIM_SKILL, ({ skillID, slotIndex, clearRewards }) => {
     claimSkillReward(skillID, slotIndex, !!clearRewards);
+  });
+  backendEventBus.on(EventNames.PlayerOperations.CLAIM_UPGRADE, ({ skillID }) => {
+    claimUpgradeReward(skillID);
   });
   backendEventBus.on(EventNames.PlayerOperations.CLAIM_ABILITY, ({ ability, clearRewards }) => {
     claimAbilityReward(ability, !!clearRewards);

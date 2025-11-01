@@ -22,8 +22,13 @@
 * 技能效果发动元语`ActivateSkillBattleInstruction`，对应battleUtils内`activateSkill`所代表的元语，执行时，调用技能的技能效果函数（类似于现在技能的use函数），此函数一般会向指令队列头部插入更多元语。
 等等。
 
-
 一些额外提示：
+* 我曾我使用Qwen3-Coder进行了部分的重构，它的重构结果虽然基本符合我的预期，但有一些地方不是很理想，而且现在暂时没有取代旧后端逻辑（尚未接入）。我发现几个主要问题：
+    * Skill的内置自定逻辑应当能获得ActivateSkillInstruction的句柄（从而新增指令并正确指定parent instruction、修改指令等），但目前并没有传递这个句柄。
+    * 部分原语的动画逻辑和最新的动画逻辑（battleUtils.js内）不完全匹配。比如抽卡，`enqueueCardAnimation`的调用有些微妙的差别。
+    * 一些原语需要进一步拆分，比如BurnSkillCardInstruction，需要拆分为一个两阶段原语，并新增SkillLeaveBattleInstruction插在中间。
+    * 在完成修整和重构后，请将一个简单技能迁移到新的结算逻辑上用于测试，后续迁移我来做。
+    * 不过它的许多实现都是完整的，你可以在其上进行修正和部分重构即可。
 * 目前，代码内并未区分技能的使用（消耗资源和卡牌、发动技能）和技能的发动（单纯发动技能），请在重构过程中帮我做出区分（分为useSkill和activateSkill，useSkill元语可展开为ConsumeSkillResourcesBattleInstruction、ActivateSkillBattleInstruction）。
 ）。
 * 由于一些积弊，目前代码质量不是很好，这对开发造成了一定困难。因此，在重构中，请务必完整阅读相关代码，彻底理解后再动手。并且务必注重你的代码质量！请仔细思考和规划，避免写出维护困难的垃圾代码，但同时也要注意避免过度设计。

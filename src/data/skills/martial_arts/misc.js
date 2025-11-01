@@ -1,9 +1,9 @@
 // 一些单卡
 
-import Skill from '../../skill.js';
-import {launchAttack, dealDamage, gainShield, drawSkillCard, dropSkillCard, burnSkillCard, discoverSkillCard} from '../../battleUtils.js';
-import {signedNumberString, signedNumberStringW0} from "../../../utils/nameUtils";
-import {SkillTier} from "../../../utils/tierUtils";
+import Skill from '@data/skill.js';
+import { createAndSubmitLaunchAttack, createAndSubmitDealDamage, createAndSubmitDropSkillCard, createAndSubmitAddEffect } from '@data/battleInstructionHelpers.js';
+import {signedNumberString, signedNumberStringW0} from "@/utils/nameUtils";
+import {SkillTier} from "@/utils/tierUtils";
 
 // 莽撞攻击（D）（莽撞攻击）
 export class CarelessPunch extends Skill {
@@ -16,68 +16,20 @@ export class CarelessPunch extends Skill {
     return Math.max(super.coldDownTurns - this.power, 0);
   }
 
-  // 使用技能
-  use(player, enemy, stage) {
-    if(stage === 0) {
-      launchAttack(player, enemy, 10);
+  // 使用技能（分两阶段）
+  use(player, enemy, stage, ctx) {
+    if (stage === 0) {
+      createAndSubmitLaunchAttack(player, enemy, 10, ctx?.parentInstruction ?? null);
       return false;
     } else {
-      dealDamage(player, player, 3, true);
+      createAndSubmitDealDamage(player, player, 3, true, ctx?.parentInstruction ?? null);
       return true;
     }
   }
 
-  // 重新生成技能描述
   regenerateDescription(player) {
-    if(player) {
-      const damage = 10 + (player?.attack ?? 0);
-      return `造成${damage}点伤害，受3伤害`;
-    }
-    return `造成10点伤害，受3伤害`;
-  }
-}
-
-// 飞刀（C-）（单卡）
-// 攻击并丢弃相邻牌，需要前后都有牌
-export class SpeedyPunch extends Skill {
-  constructor() {
-    super('飞刀', 'normal', SkillTier.C_PLUS, 0, 1, 1);
-    this.baseColdDownTurns = 1;
-  }
-
-  get damage () {
-    return Math.max(16 + 7 * this.power, 5);
-  }
-
-  canUse(player) {
-    if(super.canUse(player)) {
-      const index = this.getInBattleIndex(player);
-      if(index > 0 && index < player.frontierSkills.length - 1) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // 使用技能
-  use(player, enemy, stage) {
-    launchAttack(player, enemy, this.damage);
-    // 看看左边技能
-    const leftSkill = player.frontierSkills[this.getInBattleIndex(player) - 1];
-    if(leftSkill) {
-      dropSkillCard(player, leftSkill.uniqueID);
-    }
-    // 看看右边技能
-    const rightSkill = player.frontierSkills[this.getInBattleIndex(player) + 1];
-    if(rightSkill) {
-      dropSkillCard(player, rightSkill.uniqueID);
-    }
-    return true;
-  }
-
-  // 重新生成技能描述
-  regenerateDescription(player) {
-    return `${this.damage + (player?.attack ?? 0)}伤害，丢弃两侧卡，发动需两侧有卡`;
+    const damage = 10 + (player?.attack ?? 0);
+    return `造成${damage}点伤害，受3伤害`;
   }
 }
 
@@ -91,15 +43,17 @@ export class CunningPunch extends Skill {
   get damage() {
     return Math.max(6 + 3 * this.power, 4);
   }
-  use(player, enemy, stage) {
-    if(stage === 0) {
-      launchAttack(player, enemy, this.damage);
+  use(player, enemy, stage, ctx) {
+    if (stage === 0) {
+      createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
       return false;
     } else {
-      if(player.frontierSkills.length > 1) {
+      if (player.frontierSkills.length > 1) {
         const leftSkill = player.frontierSkills[0];
-        if(leftSkill.uniqueID !== this.uniqueID)
-          dropSkillCard(player, leftSkill.uniqueID, 0);
+        if (leftSkill && leftSkill.uniqueID !== this.uniqueID) {
+          // 放到牌库顶
+          createAndSubmitDropSkillCard(player, leftSkill.uniqueID, 0, ctx?.parentInstruction ?? null);
+        }
       }
       return true;
     }
@@ -119,12 +73,12 @@ export class ProbingPunch extends Skill {
   get damage() {
     return Math.max(5 + 3 * this.power, 4);
   }
-  use(player, enemy, stage) {
-    if(stage === 0) {
-      launchAttack(player, enemy, this.damage);
+  use(player, enemy, stage, ctx) {
+    if (stage === 0) {
+      createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
       return false;
     } else {
-      player.addEffect('格挡', 1);
+      createAndSubmitAddEffect(player, '格挡', 1, ctx?.parentInstruction ?? null);
       return true;
     }
   }
@@ -145,13 +99,20 @@ export class ElegantKick extends Skill {
     return Math.max(6 + 3 * this.power, 3);
   }
 
-  // 使用技能
-  use(player, enemy) {
-    const result = launchAttack(player, enemy, this.damage);
-    if(result.hpDamage > 0) {
-      enemy.addEffect('虚弱');
+  use(player, enemy, stage, ctx) {
+    // 拆成两阶段：阶段0 提交攻击；阶段1 读取攻击结果并按需加 debuff
+    if (stage === 0) {
+      const inst = createAndSubmitLaunchAttack(player, enemy, this.damage, ctx?.parentInstruction ?? null);
+      // 保存指令句柄到 ctx
+      ctx.attackInst = inst;
+      return false;
+    } else {
+      const result = ctx.attackInst?.attackResult;
+      if (result && result.hpDamage > 0) {
+        createAndSubmitAddEffect(enemy, '虚弱', 1, ctx?.parentInstruction ?? null);
+      }
+      return true;
     }
-    return true;
   }
 
   regenerateDescription(player) {

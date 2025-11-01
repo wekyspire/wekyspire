@@ -19,24 +19,32 @@ class SkillManager {
 
     // 动态导入所有技能文件
     const skillModules = [
-      await import('./skills/martial_arts/agilePunch.js'),
-      await import('./skills/martial_arts/block.js'),
-      await import('./skills/martial_arts/guardHit.js'),
+      await import('./skills/martial_arts/dissect/block.js'),
+      await import('./skills/martial_arts/dissect/breakingMove.js'),
+      await import('./skills/martial_arts/dissect/martialArtPose.js'),
+      await import('./skills/martial_arts/dissect/preciseDissect.js'),
+      await import('./skills/martial_arts/punch/agilePunch.js'),
+      await import('./skills/martial_arts/punch/fastPunch.js'),
+      await import('./skills/martial_arts/punch/onePunch.js'),
+      await import('./skills/martial_arts/punch/peakMartialArt.js'),
+      await import('./skills/martial_arts/punch/punch.js'),
+      await import('./skills/martial_arts/punch/shapelessPunch.js'),
+      await import('./skills/martial_arts/punch/taiji.js'),
+      await import('./skills/martial_arts/slash/breathing.js'),
+      await import('./skills/martial_arts/slash/flyingDagger'),
+      await import('./skills/martial_arts/slash/knifeBackStrike.js'),
+      await import('./skills/martial_arts/slash/machete.js'),
+      await import('./skills/martial_arts/slash/pullBlade.js'),
+      await import('./skills/martial_arts/slash/roundSlash.js'),
+      await import('./skills/martial_arts/slash/slash.js'),
+      await import('./skills/martial_arts/slash/storeEdge.js'),
+      await import('./skills/martial_arts/slash/bladeKeeper.js'),
+      await import('./skills/martial_arts/slash/annihilate.js'),
       await import('./skills/martial_arts/heavySmash.js'),
-      await import('./skills/martial_arts/machete.js'),
-      await import('./skills/martial_arts/martialArtPose.js'),
       await import('./skills/martial_arts/misc.js'),
-      await import('./skills/martial_arts/onePunch.js'),
-      await import('./skills/martial_arts/peakMartialArt.js'),
-      await import('./skills/martial_arts/precise.js'),
-      await import('./skills/martial_arts/preparedHit.js'),
-      await import('./skills/martial_arts/punch.js'),
-      await import('./skills/martial_arts/roundSlash.js'),
-      await import('./skills/martial_arts/shapelessPunch.js'),
       await import('./skills/martial_arts/shielding.js'),
-      await import('./skills/martial_arts/slash.js'),
-      await import('./skills/martial_arts/taiji.js'),
       await import('./skills/martial_arts/transcendence.js'),
+      await import('./skills/martial_arts/slash/sharpenBlade.js'),
       // await import('./skills/blast.js'),
       // await import('./skills/cMinus.js'),
       // await import('./skills/concentration.js'),
@@ -246,6 +254,132 @@ class SkillManager {
     }
     
     return selectedSkills;
+  }
+
+  // 新增：仅获取“新技能”奖励（不含升级候选）
+  getRandomNewSkills(count, playerLeino = {}, playerSkillSlots = [], playerTier = 0, bestQuality = false) {
+    const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
+      const tempSkill = new SkillClass();
+      return {
+        name,
+        type: tempSkill.type,
+        series: tempSkill.skillSeriesName,
+        tier: tempSkill.tier,
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
+        spawnWeight: tempSkill.spawnWeight,
+        precessor: tempSkill.precessor,
+        leinoModifiers: tempSkill.leinoModifiers
+      };
+    });
+    const playerNonEmptySkillSlots = playerSkillSlots.filter(skill => skill !== null);
+    const playerSkills = playerNonEmptySkillSlots.map(slot => slot);
+
+    // 只保留“新技能”
+    const baseAvailable = allSkills.filter(meta =>
+      meta.tier <= playerTier && meta.canSpawnAsReward_ && meta.precessor === null && meta.tier >= 0
+    );
+
+    // 权重
+    const weighted = baseAvailable.map(skill => {
+      const tierDifference = playerTier - skill.tier;
+      let modifyFactor = 1;
+      if (skill.tier >= 8) modifyFactor *= 0.7;
+      if (skill.tier >= 5) modifyFactor *= 0.8;
+      if (tierDifference > 7) modifyFactor = 0.15;
+      else if (tierDifference > 6) modifyFactor = 0.40;
+      else if (tierDifference > 5) modifyFactor = 0.70;
+      if (bestQuality && tierDifference < 1) modifyFactor *= 5;
+      if (bestQuality && tierDifference < 2) modifyFactor *= 3;
+      // leino 主属性
+      let leinoFactor = Math.max(playerLeino[skill.type] || 0.2, 0);
+      if (skill.type === 'normal') leinoFactor = Math.max(leinoFactor, 1);
+      modifyFactor *= leinoFactor;
+      // leino 修饰符
+      if (skill.leinoModifiers) {
+        const list = Array.isArray(skill.leinoModifiers) ? skill.leinoModifiers : [skill.leinoModifiers];
+        const factors = list.map(key => {
+          const v = playerLeino[key];
+          return (typeof v === 'number' && v > 0) ? v : 1;
+        });
+        if (factors.length > 0) {
+          const avg = factors.reduce((a,b)=>a+b,0) / factors.length;
+          modifyFactor *= avg;
+        }
+      }
+      return { ...skill, weight: skill.spawnWeight * modifyFactor };
+    });
+
+    const selected = [];
+    const actualCount = Math.min(count, weighted.length);
+    const pool = [...weighted];
+    for (let i = 0; i < actualCount; i++) {
+      const totalWeight = pool.reduce((sum, s) => sum + s.weight, 0);
+      if (totalWeight <= 0) break;
+      const r = Math.random() * totalWeight;
+      let acc = 0, idx = 0;
+      for (let j = 0; j < pool.length; j++) { acc += pool[j].weight; if (r <= acc) { idx = j; break; } }
+      const skillInfo = pool[idx];
+      const inst = this.createSkill(skillInfo.name);
+      selected.push(inst);
+      pool.splice(idx, 1);
+    }
+    return selected;
+  }
+
+  // 新增：仅获取“升级候选”奖励（基于玩家已有技能，返回升级后的新卡）
+  getRandomUpgradeSkills(count, playerSkills = [], playerTier = 0) {
+    const allSkills = Array.from(this.skillRegistry.entries()).map(([name, SkillClass]) => {
+      const tempSkill = new SkillClass();
+      return {
+        name,
+        type: tempSkill.type,
+        series: tempSkill.skillSeriesName,
+        tier: tempSkill.tier,
+        canSpawnAsReward_: tempSkill.canSpawnAsReward_,
+        spawnWeight: tempSkill.spawnWeight,
+        precessor: tempSkill.precessor,
+        leinoModifiers: tempSkill.leinoModifiers
+      };
+    });
+    const playerNames = (playerSkills || []).map(s => s && s.name).filter(Boolean);
+
+    // 收集升级候选
+    const upgrades = [];
+    for (const meta of allSkills) {
+      if (playerNames.includes(meta.name)) continue;
+      if (meta.tier > playerTier) continue;
+      if (!meta.precessor) continue;
+      let matched = null;
+      if (Array.isArray(meta.precessor)) {
+        matched = meta.precessor.find(p => playerNames.includes(p)) || null;
+      } else if (typeof meta.precessor === 'string') {
+        matched = playerNames.includes(meta.precessor) ? meta.precessor : null;
+      }
+      if (!matched) continue;
+      upgrades.push({ ...meta, isUpgradeCandidate: true, upgradedFrom: matched });
+    }
+    if (upgrades.length === 0) return [];
+
+    // 简单按 spawnWeight 抽取（可追加更多加权规则）
+    const weighted = upgrades.map(s => ({ ...s, weight: (s.spawnWeight || 1) * 2 }));
+    const selected = [];
+    const pool = [...weighted];
+    const actual = Math.min(count, pool.length);
+    for (let i = 0; i < actual; i++) {
+      const total = pool.reduce((sum, s) => sum + s.weight, 0);
+      if (total <= 0) break;
+      const r = Math.random() * total;
+      let idx = 0, acc = 0;
+      for (let j = 0; j < pool.length; j++) { acc += pool[j].weight; if (r <= acc) { idx = j; break; } }
+      const info = pool[idx];
+      const inst = this.createSkill(info.name);
+      // 标记升级元信息（供后续自动替换槽位）
+      inst.isUpgradeCandidate = true;
+      inst.upgradedFrom = info.upgradedFrom;
+      selected.push(inst);
+      pool.splice(idx, 1);
+    }
+    return selected;
   }
 }
 

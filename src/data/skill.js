@@ -20,6 +20,7 @@ class Skill {
     this.remainingColdDownTurns = 0; // 回合剩余冷却时间
     this.baseColdDownTurns = 0;
     this.baseSlowStart = false; // 是否为慢热型技能，慢热型技能开始时充能为0
+    this.isActivated = false; // 是否激活，仅对咏唱类技能有效
     this.canSpawnAsReward_ = true; // 是否可以自然生成为奖励，某些特殊技能（如大力一击等战斗中生成的卡牌）不可自然生成
     // 卡牌模式（normal 普通；chant 咏唱型，可进入咏唱位）
     this.cardMode = 'normal';
@@ -130,7 +131,7 @@ class Skill {
   }
 
   getInBattleIndex (player) {
-    return player.frontierSkills.indexOf(this);
+    return player.frontierSkills.findIndex(s=> s.uniqueID === this.uniqueID);
   }
 
   // 战斗开始时调用，用于初始化技能
@@ -198,8 +199,14 @@ class Skill {
   }
 
   // 咏唱型技能启用/停用生命周期钩子（仅 cardMode === 'chant' 使用）
-  onEnable(player) { /* 默认无行为；子类可覆盖 */ }
-  onDisable(player, reason) { /* 默认无行为；子类可覆盖 */ }
+  onEnable(player) {
+    this.isActivated = true;
+    /* 默认无行为；子类可覆盖 */
+  }
+  onDisable(player, reason) {
+    this.isActivated = false;
+    /* 默认无行为；子类可覆盖 */
+  }
 }
 
 export default Skill;

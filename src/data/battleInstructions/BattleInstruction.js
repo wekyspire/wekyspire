@@ -31,9 +31,14 @@ export class BattleInstruction {
     
     /**
      * 取消标志，标记此元语是否被取消
-     * 被取消的元语在canExecute检查时返回false，执行器会跳过执行
+     * 被取消的元语在isAlive检查时返回false，执行器会自动弹出这些元语
      */
     this.cancelled = false;
+
+    // 子元语管理
+        this.children = [];
+        this._nextChildIndex = 0;
+        this._isCompleted = false;
   }
 
   /**
@@ -56,18 +61,19 @@ export class BattleInstruction {
   }
 
   /**
-   * 检查元语是否可执行
+   * 检查元语是否"存活”
    * 
-   * 元语不可执行的情况：
+   * 元语死亡的情况：
    * 1. 自身被取消（this.cancelled === true）
    * 2. 父链中任意元语被取消（递归检查parentInstruction）
    * 
    * 这实现了取消的传播机制：当一个元语被取消时，
-   * 其所有子元语（直接或间接）都将不可执行。
+   * 其所有子元语（直接或间接）都将死亡。
+   * 注意：已经完成（isCompleted）的元语不会被再次执行，但仍然存活
    * 
-   * @returns {boolean} 可执行返回true，不可执行返回false
+   * @returns {boolean} 存活返回true，不可执行返回false
    */
-  canExecute() {
+  isAlive() {
     // 检查自身是否被取消
     if (this.cancelled) {
       return false;
@@ -75,7 +81,7 @@ export class BattleInstruction {
     
     // 递归检查父链
     if (this.parentInstruction) {
-      return this.parentInstruction.canExecute();
+      return this.parentInstruction.isAlive();
     }
     
     // 自身未取消且无父元语（或父链全部可执行）
@@ -86,12 +92,13 @@ export class BattleInstruction {
    * 取消此元语
    * 
    * 取消操作只影响"未执行"的元语，已执行的元语不会回滚状态。
-   * 取消会传播到所有子元语（通过canExecute的父链检查机制）。
+   * 取消会传播到所有子元语（通过isAlive的父链检查机制）。
    * 
    * 使用场景：
    * - 敌人死亡后取消剩余攻击
    * - 条件不满足时取消后续效果
    * - 技能被打断时取消后续结算
+   * - ...等等卡牌交叉导致的复杂效果
    */
   cancel() {
     this.cancelled = true;
@@ -105,5 +112,55 @@ export class BattleInstruction {
    */
   getDebugInfo() {
     return `[${this.constructor.name}] ID:${this.uniqueID} Cancelled:${this.cancelled}`;
+  }
+
+  /**
+   * 添加子元语
+   *
+   * @param {BattleInstruction} child - 子元语实例
+   */
+  addChild(child) {
+    if (!child) return;
+    if (!child.parentInstruction) child.parentInstruction = this;
+    this.children.push(child);
+  }
+
+  /**
+   * 检查是否还有未访问的子元语
+   *
+   * @returns {boolean} 有未访问的子元语返回true，否则返回false
+   */
+  hasUnvisitedChildren() {
+    return this._nextChildIndex < this.children.length;
+  }
+
+  /**
+   * 获取下一个未访问的子元语
+   *
+   * @returns {BattleInstruction|null} 下一个未访问的子元语实例，或null如果没有更多未访问的子元语
+   */
+  nextUnvisitedChild() {
+    if (!this.hasUnvisitedChildren()) return null;
+    const c = this.children[this._nextChildIndex];
+    this._nextChildIndex += 1;
+    return c;
+  }
+
+  /**
+   * 标记元语为完成状态
+   *
+   * 完成的元语将不会再被执行，其状态也不会被回滚。
+   */
+  markCompleted() {
+    this._isCompleted = true;
+  }
+
+  /**
+   * 检查元语是否已完成
+   *
+   * @returns {boolean} 已完成返回true，否则返回false
+   */
+  isCompleted() {
+    return this._isCompleted;
   }
 }

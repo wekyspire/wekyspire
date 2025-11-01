@@ -13,8 +13,8 @@
 
 import { BattleInstruction } from '../BattleInstruction.js';
 import { DealDamageInstruction } from './DealDamageInstruction.js';
-import { processPostAttackEffects, processAttackTakenEffects, processAttackFinishEffects } from '../../effectProcessor.js';
 import { submitInstruction } from '../globalExecutor.js';
+import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js';
 
 export class LaunchAttackInstruction extends BattleInstruction {
   /**
@@ -84,16 +84,31 @@ export class LaunchAttackInstruction extends BattleInstruction {
       
       // 计算最终伤害
       let finalDamage = this.baseDamage + this.attacker.attack;
-      
-      // 处理攻击者的攻击后效果（力量、虚弱、超频等）
-      finalDamage = processPostAttackEffects(this.attacker, this.target, finalDamage);
-      
-      // 处理目标的受到攻击效果（格挡、闪避、易伤等）
-      finalDamage = processAttackTakenEffects(this.target, finalDamage);
-      
-      // 固定防御减免
+
+      // 攻击者的攻击后效果（力量、虚弱、超频等）
+      finalDamage += (this.attacker.effects['力量'] || 0);
+      if ((this.attacker.effects['虚弱'] || 0) > 0) {
+        finalDamage = Math.ceil(finalDamage * 0.5);
+      }
+      if ((this.attacker.effects['超频'] || 0) > 0 && Math.random() < 0.1) {
+        finalDamage *= 2;
+      }
+
+      // 目标的受到攻击效果（格挡、闪避、易伤等）
+      if ((this.target.effects['格挡'] || 0) > 0) {
+        finalDamage = Math.floor(finalDamage / 2);
+        createAndSubmitAddEffect(this.target, '格挡', -1, this);
+      }
+      if ((this.target.effects['闪避'] || 0) > 0) {
+        finalDamage = 0;
+        createAndSubmitAddEffect(this.target, '闪避', -1, this);
+      }
+      if ((this.target.effects['易伤'] || 0) > 0) {
+        finalDamage = Math.floor(finalDamage * 1.5);
+      }
+
       finalDamage = Math.max(finalDamage - this.target.defense, 0);
-      
+
       // 创建伤害结算元语
       this.damageInstruction = new DealDamageInstruction({
         source: this.attacker,
@@ -118,13 +133,13 @@ export class LaunchAttackInstruction extends BattleInstruction {
       this.attackResult = this.damageInstruction.result;
       
       // 如果目标未死亡，处理攻击完成效果
-      if (!this.attackResult.dead) {
-        processAttackFinishEffects(
-          this.attacker,
-          this.target,
-          this.attackResult.hpDamage,
-          this.attackResult.passThoughDamage
-        );
+      if (this.attackResult && !this.attackResult.dead) {
+        // 攻击完成效果（如高燃弹药等在 DealDamageInstruction 或其他路径处理）
+        // TODO 增加专有指令来处理后攻击效果结算
+        if ((this.attacker.effects['高燃弹药'] || 0) > 0 && this.attackResult.passThoughDamage > 0) {
+          const burnLevel = (this.attacker.effects['高燃弹药'] * 2 || 0);
+          createAndSubmitAddEffect(this.target, '燃烧', Math.floor(burnLevel), this);
+        }
       }
       
       // 攻击完成

@@ -1,5 +1,4 @@
-// filepath: d:\cb_6\hineven_wekyspire\wekyspire\src\data\unit.js
-import { addEffect as addEffectToTarget, removeEffect as removeEffectFromTarget, applyHeal as applyHealToTarget } from './battleUtils.js'
+import { createAndSubmitAddEffect, createAndSubmitApplyHeal } from './battleInstructionHelpers.js';
 import effectDescriptions from './effectDescription.js'
 
 // 基础作战单位抽象类（玩家/敌人公用）
@@ -29,23 +28,23 @@ export default class Unit {
     return this.baseMagic + (this.effects['集中'] || 0);
   }
 
-  // 添加效果（委托 battleUtils）
+  // 添加效果（指令式）
   addEffect(effectName, stacks = 1) {
-    addEffectToTarget(this, effectName, stacks);
+    createAndSubmitAddEffect(this, effectName, stacks);
   }
 
-  // 移除效果（委托 battleUtils）
+  // 移除效果（指令式：添加负层数）
   removeEffect(effectName, stacks = 1) {
-    removeEffectFromTarget(this, effectName, stacks);
+    createAndSubmitAddEffect(this, effectName, -Math.abs(stacks));
   }
 
   hasEffect(effectName) {
     return (this.effects[effectName] || 0) !== 0;
   }
 
-  // 应用治疗（委托 battleUtils）
+  // 应用治疗（指令式）
   applyHeal(heal) {
-    applyHealToTarget(this, heal);
+    createAndSubmitApplyHeal(this, heal);
   }
 
   // 随机移除效果

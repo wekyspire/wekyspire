@@ -134,6 +134,11 @@ const namedEntities = {
     icon: '🎵',
     color: 'purple',
     description: '咏唱技能是仅能在咏唱槽上持续发动的技能，咏唱时生效，需持续占用咏唱槽。'
+  },
+  '光滑': {
+    icon: '✨',
+    color: 'aqua',
+    description: '光滑技能在回合结束时，如在手牌中，弃入牌库。'
   }
 };
 

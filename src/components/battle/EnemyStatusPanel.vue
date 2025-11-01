@@ -4,6 +4,16 @@
       <div class="enemy-avatar">
           <img v-if="enemy.avatarUrl" :src="enemy.avatarUrl" :alt="enemy.name" class="avatar-image" />
           <div v-else class="avatar-placeholder"></div>
+          <!-- 敌人意图（悬浮在头像下边沿） -->
+          <div class="intention-bar">
+            <div v-for="(icon, idx) in intentionIcons" :key="idx" class="intention-item"
+                 @mouseenter="onIntentionEnter($event, icon)"
+                 @mousemove="onIntentionMove($event)"
+                 @mouseleave="onIntentionLeave">
+              <span class="intention-emoji">{{ icon.emoji }}</span>
+              <span v-if="icon.text" class="intention-text">{{ icon.text }}</span>
+            </div>
+          </div>
       </div>
       <div class="enemy-details">
         <div class="enemy-header">
@@ -65,6 +75,7 @@ import EffectDisplayBar from '../global/EffectDisplayBar.vue';
 import HurtAnimationWrapper from '../global/HurtAnimationWrapper.vue';
 import HealthBar from '../global/HealthBar.vue';
 import Enemy from "../../data/enemy";
+import frontendEventBus from '@/frontendEventBus.js';
 
 export default {
   name: 'EnemyStatusPanel',
@@ -88,8 +99,28 @@ export default {
       }
     };
   },
-  watch: {
-
+  computed: {
+    intentionIcons() {
+      const list = (typeof this.enemy.getIntention === 'function') ? (this.enemy.getIntention() || []) : [];
+      // Map intentions to visual icons and short texts
+      return list.map(int => {
+        switch (int.type) {
+          case 'attack':
+            if((int.times || 1) === 1) {
+              return { emoji: '🗡️', text: `${int.damage || '？'}`, detail: `下回合此敌人将攻击，造成 ${int.damage || "？"} 伤害` };
+            }
+            return { emoji: '🗡️', text: `${int.times || 1}x${int.damage || "？"}`, detail: `下回合此敌人将攻击 ${int.times || 1} 次，每次 ${int.damage || "？"} 伤害` };
+          case 'defend':
+            return { emoji: '🛡️', text: `${int.amount || ''}`, detail: `下回合此敌人将进行防御` };
+          case 'buff':
+            return { emoji: '✨', text: '', detail: `下回合此敌人将进行强化` };
+          case 'debuff':
+            return { emoji: '☠️', text: '', detail: `下回合此敌人将对你施加某种负面效果` };
+          default:
+            return { emoji: '❓', text: '', detail: '特殊动作' };
+        }
+      });
+    }
   },
   methods: {
     showEnemyInfo(event) {
@@ -98,31 +129,32 @@ export default {
       if (wrapper) {
         const wrapperRect = wrapper.getBoundingClientRect();
         const buttonRect = event.target.getBoundingClientRect();
-        
-        // 计算相对于wrapper的位置
         const relativeX = buttonRect.left - wrapperRect.left + 30;
         const relativeY = buttonRect.top - wrapperRect.top - 10;
-        
-        this.enemyInfo = {
-          show: true,
-          x: relativeX,
-          y: relativeY
-        };
+        this.enemyInfo = { show: true, x: relativeX, y: relativeY };
       } else {
-        // 如果没有找到wrapper，使用绝对定位作为fallback
-        this.enemyInfo = {
-          show: true,
-          x: event.clientX + 20,
-          y: event.clientY - 10
-        };
+        this.enemyInfo = { show: true, x: event.clientX + 20, y: event.clientY - 10 };
       }
     },
-    
     hideEnemyInfo() {
       this.enemyInfo.show = false;
     },
-    
-
+    onIntentionEnter(e, icon) {
+      const rect = this.$el.getBoundingClientRect();
+      frontendEventBus.emit('tooltip:show', {
+        name: '意图',
+        text: icon.detail || '',
+        x: e.clientX,
+        y: e.clientY,
+        maxWidth: 280
+      });
+    },
+    onIntentionMove(e) {
+      frontendEventBus.emit('tooltip:move', { x: e.clientX, y: e.clientY });
+    },
+    onIntentionLeave() {
+      frontendEventBus.emit('tooltip:hide');
+    }
   }
 };
 </script>
@@ -154,6 +186,7 @@ export default {
 .enemy-avatar {
   width: 350px;
   height: 250px;
+  position: relative;
 }
 
 .avatar-image {
@@ -323,4 +356,34 @@ export default {
   margin-right: 20px;
   margin-bottom: 5px;
 }
+
+/* 敌人意图相关样式 */
+.intention-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.intention-item {
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 14px;
+  padding: 2px 6px;
+  font-size: 23px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.intention-item:hover { background: rgba(0,0,0,0.7); }
+
+.intention-emoji { font-size: 14px; }
+
+.intention-text { font-weight: 600; }
 </style>

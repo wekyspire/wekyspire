@@ -41,3 +41,11 @@ export { DiscoverSkillCardInstruction } from './card/DiscoverSkillCardInstructio
 
 // 异步元语
 export { AwaitPlayerInputInstruction } from './async/AwaitPlayerInputInstruction.js';
+
+// 状态变更元语
+export { GainManaInstruction } from './state/GainManaInstruction.js';
+export { ConsumeManaInstruction } from './state/ConsumeManaInstruction.js';
+
+// 回合效果处理元语
+export { ProcessEndOfTurnEffectsInstruction } from './turnEffects/ProcessEndOfTurnEffectsInstruction.js';
+export { ProcessEndOfTurnEffectInstruction } from './turnEffects/ProcessEndOfTurnEffectInstruction.js';

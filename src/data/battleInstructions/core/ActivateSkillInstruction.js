@@ -16,8 +16,8 @@
  */
 
 import { BattleInstruction } from '../BattleInstruction.js';
-import { processSkillActivationEffects } from '../../effectProcessor.js';
 import backendEventBus, { EventNames } from '../../../backendEventBus.js';
+import { createAndSubmitAddEffect } from '../../battleInstructionHelpers.js';
 
 export class ActivateSkillInstruction extends BattleInstruction {
   /**
@@ -44,7 +44,9 @@ export class ActivateSkillInstruction extends BattleInstruction {
     this.player = player;
     this.skill = skill;
     this.enemy = enemy;
-    
+    // 提供给技能逻辑的上下文对象，默认携带 parentInstruction 句柄
+    this.context = { parentInstruction: this };
+
     /**
      * 技能内部阶段（对应skill.use的stage参数）
      * 支持多阶段技能
@@ -58,30 +60,33 @@ export class ActivateSkillInstruction extends BattleInstruction {
    * 流程：
    * 1. 处理技能发动时效果
    * 2. 检查战斗是否结束，若结束则取消自身并返回true
-   * 3. 调用skill.use(player, enemy, stage)
+   * 3. 调用skill.use(player, enemy, stage, context)
    * 4. 若skill.use返回true，发送SKILL_USED事件并返回true
    * 5. 否则stage++并返回false（下次继续调用skill.use）
    * 
    * @returns {Promise<boolean>}
    */
   async execute() {
-    // 处理技能发动时效果（仅在stage=0时处理）
     if (this.stage === 0) {
-      // 使用修正后的玩家对象
       const modPlayer = this.player.getModifiedPlayer ? this.player.getModifiedPlayer() : this.player;
-      processSkillActivationEffects(modPlayer);
-      
-      // 检查战斗是否结束
+      // 指令化的技能发动时效果（目前仅“连发”）
+      if ((modPlayer.effects?.['连发'] || 0) > 0) {
+        try { if (typeof modPlayer.gainActionPoint === 'function') modPlayer.gainActionPoint(1); } catch (_) {}
+        createAndSubmitAddEffect(modPlayer, '连发', -1, this);
+      }
       if (this._checkBattleEnded()) {
-        this.cancel(); // 取消自身
+        this.cancel();
         return true;
       }
     }
-    
-    // 调用skill.use方法
+
+    // 在每次调用前，确保上下文中的 parentInstruction 指向当前实例（以防被外部覆盖）
+    this.context.parentInstruction = this;
+
+    // 调用skill.use方法，传递上下文
     // 使用修正后的玩家对象
     const modPlayer = this.player.getModifiedPlayer ? this.player.getModifiedPlayer() : this.player;
-    const result = this.skill.use(modPlayer, this.enemy, this.stage);
+    const result = this.skill.use(modPlayer, this.enemy, this.stage, this.context);
     
     // 检查战斗是否结束
     if (this._checkBattleEnded()) {

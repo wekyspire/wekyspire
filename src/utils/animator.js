@@ -310,10 +310,29 @@ class Animator {
       return;
     }
 
-    this._containerAnchors.set(containerKey, anchorsMap);
+    // 过滤掉无效的锚点，防止 NaN 坐标污染注册表
+    const safeMap = new Map();
+    for (const [id, anchor] of anchorsMap.entries()) {
+      if (!anchor) continue;
+      const sx = Number.isFinite(anchor.x) ? anchor.x : null;
+      const sy = Number.isFinite(anchor.y) ? anchor.y : null;
+      const ss = anchor.scale == null || Number.isFinite(anchor.scale) ? anchor.scale : null;
+      if (sx != null && sy != null) {
+        // 复制一份，避免外部引用被后续修改
+        const item = { x: sx, y: sy };
+        if (ss != null) item.scale = ss;
+        if (anchor.rotation != null && Number.isFinite(anchor.rotation)) item.rotation = anchor.rotation;
+        safeMap.set(id, item);
+      }
+    }
+
+    // 如果没有有效锚点，直接返回，不更新现有状态
+    if (safeMap.size === 0) return;
+
+    this._containerAnchors.set(containerKey, safeMap);
 
     // 更新注册表中的锚点引用
-    for (const [id, anchor] of anchorsMap.entries()) {
+    for (const [id, anchor] of safeMap.entries()) {
       const entry = this._registry.get(id);
       if (entry) {
         entry.anchor = anchor;
