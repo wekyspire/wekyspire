@@ -34,14 +34,14 @@ export class CarelessPunch extends Skill {
 }
 
 // 狡黠打击（C+）（单卡）
-// 造成6伤害，将最左侧牌置入牌堆顶
+// 造成9伤害，将最左侧牌置入牌堆顶
 export class CunningPunch extends Skill {
   constructor() {
     super('狡黠打击', 'normal', SkillTier.C_PLUS, 0, 1, 1);
     this.baseColdDownTurns = 2;
   }
   get damage() {
-    return Math.max(6 + 3 * this.power, 4);
+    return Math.max(9 + 4 * this.power, 4);
   }
   use(player, enemy, stage, ctx) {
     if (stage === 0) {
@@ -71,7 +71,7 @@ export class ProbingPunch extends Skill {
     this.baseColdDownTurns = 1;
   }
   get damage() {
-    return Math.max(5 + 3 * this.power, 4);
+    return Math.max(8 + 4 * this.power, 4);
   }
   use(player, enemy, stage, ctx) {
     if (stage === 0) {

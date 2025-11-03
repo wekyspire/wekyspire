@@ -6,7 +6,7 @@ import {enqueueDelay} from "../animationInstructionHelpers";
 // MEFM-3 Boss敌人
 export class MEFM3 extends Enemy {
   constructor(battleIntensity) {
-    const hp = 25 + 11 * battleIntensity;
+    const hp = 25 + 13 * battleIntensity;
     const attack = Math.round((3 + battleIntensity) * 0.4);
     super(
       'MEFM-3', hp, attack, 1 + Math.floor(battleIntensity / 5), 0,
@@ -85,8 +85,8 @@ export class MEFM3 extends Enemy {
 // 卡姆拉 Boss敌人
 export class Karmura extends Enemy {
   constructor(battleIntensity) {
-    const hp = 20 + 8 * battleIntensity;
-    const attack = Math.round((6 + battleIntensity) * 0.6);
+    const hp = 20 + 9 * battleIntensity;
+    const attack = Math.round((6 + battleIntensity) * 0.65);
     super(
       '卡姆拉', hp, attack, 1, 0,
       new URL('../assets/enemies/slime.png', import.meta.url).href

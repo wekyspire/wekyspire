@@ -6,8 +6,8 @@ import {enqueueDelay} from "../animationInstructionHelpers";
 // 雪狼 精英敌人
 export class BigWolf extends Enemy {
   constructor(battleIntensity) {
-    const hp = 40 + 7 * battleIntensity;
-    const attack = Math.round(2 + 0.6 * battleIntensity);
+    const hp = 40 + 8.5 * battleIntensity;
+    const attack = Math.round(2 + 0.75 * battleIntensity);
     super('雪狼', hp, attack, Math.floor(battleIntensity / 5), 0);
     this.actionIndex = 0;
     this.actRounds = 0;

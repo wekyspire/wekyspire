@@ -1,7 +1,7 @@
 /* Centralized z-index map (higher = on top)
    Order (top → bottom): Dialog > Cutscene > BossShowup > Particles > Regular content
    Regular overlays (slot/ability overlays) are below particles.
-   AnimationOverlay (card ghosts) is above regular overlays but below particles.
+   AnimationAnchors (card ghosts) is above regular overlays but below particles.
 */
 :root {
   /* Regular content baseline */

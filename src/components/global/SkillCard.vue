@@ -1,14 +1,14 @@
 <template>
   <div 
-    :class="['skill-card', { disabled: disabled, 'chant-mode': isChant }]"
+    class="skill-card"
     @click="onClick"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
     :style="skillCardStyle"
     ref="root"
   >
-    <!-- Overlay 动画层（冷却/升级等） -->
-    <SkillCardAnimationOverlay :skill="skill" :disabled="previewMode" />
+    <!-- Overlay 动画层（冷却/升级等）暂时注释，改由上层DOM/Pixi处理 -->
+    <!-- <SkillCardAnimationAnchors :skill="skill" :disabled="previewMode" /> -->
     <!-- 背景 -->
     <div class="skill-card-background-paper"></div>
     <div class="skill-card-background-image" :style="skillCardImageStyle"></div>
@@ -43,12 +43,12 @@ import SkillCosts from './skillCard/SkillCosts.vue';
 import SkillFeaturesAndUses from './skillCard/SkillFeaturesAndUses.vue';
 import SkillMeta from './skillCard/SkillMeta.vue';
 import {adjustColorBrightness} from "../../utils/colorUtils";
-import SkillCardAnimationOverlay from './SkillCardAnimationOverlay.vue';
-import {displayGameState} from "../../data/gameState";
+// import SkillCardAnimationAnchors from './SkillCardAnimationAnchors.vue';
+// import {displayGameState} from "../../data/gameState";
 
 export default {
   name: 'SkillCard',
-  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta, SkillCardAnimationOverlay },
+  components: { ColoredText, SkillCosts, SkillFeaturesAndUses: SkillFeaturesAndUses, SkillMeta },
   props: {
     skill: { type: Object, required: true },
     player: { type: Object, default: null },
@@ -73,7 +73,7 @@ export default {
       return {
         backgroundColor: this.adjustColorBrightness(color, 40),
         borderColor: this.adjustColorBrightness(color, -40),
-        cursor: (!this.disabled && this.canClick) ? 'pointer' : 'not-allowed'
+        cursor: (this.canClick) ? 'pointer' : 'not-allowed'
       };
     },
     skillBackgroundColor() {
@@ -94,26 +94,13 @@ export default {
     },
     skillCardImageStyle() {
       return { backgroundImage: `url(${this.skillCardImageUrl})` };
-    },
-    isChant() { return this.skill?.cardMode === 'chant'; },
-    disabled() {
-      if(this.skill && this.skill.disabled) return true;
-      if(this.player) {
-        if(this.skill.isActivated) return false; // 激活技能总能被撤销
-        if(!this.skill.canUse(this.player)) return true;
-      }
-      return false;
     }
-  },
-  mounted() {
-  },
-  beforeUnmount() {
   },
   methods: {
     getSkillTierLabel,
     adjustColorBrightness,
     onClick(event) {
-      if (!this.disabled && this.canClick) {
+      if (this.canClick) {
         this.$emit('skill-card-clicked', this.skill, event);
       }
     },
@@ -144,12 +131,6 @@ export default {
 .skill-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-.skill-card.disabled {
-  filter: brightness(50%);
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .skill-card-background-paper {
@@ -208,8 +189,6 @@ export default {
   box-shadow: 0 0 4px rgba(0,0,0,0.4);
   z-index: 2;
 }
-
-.skill-card.chant-mode { box-shadow:0 0 0 2px #6a5af9, 0 0 8px rgba(106,90,249,0.6); }
 
 .upgrade-replace-tooltip {
   position: absolute;

@@ -17,7 +17,7 @@ function startGame() {
 
   // 为玩家添加初始技能到养成技能列表（写入后端状态）
   const initialSkill1 = SkillManager.getInstance().createSkill('肾上腺素激增');
-  const initialSkill2 = SkillManager.getInstance().createSkill('拳');
+  const initialSkill2 = SkillManager.getInstance().createSkill('破势');
   const initialSkill3 = SkillManager.getInstance().createSkill('拳');
   const initialSkill4 = SkillManager.getInstance().createSkill('盾');
   const initialSkill5 = SkillManager.getInstance().createSkill('盾');

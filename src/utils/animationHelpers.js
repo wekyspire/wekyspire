@@ -73,59 +73,50 @@ export function enqueueCardAppear(id, fromAnchor = 'deck', options = {}) {
  */
 export function enqueueCardBurn(id, options = {}) {
   console.log("enqueueCardBurn", id);
-  const totalDuration = options.duration || 850;
+  const burnDuration = options.duration || 1200;
   const scaleUp = options.scaleUp || 1.15;
   
   // 第一阶段：放大
   const tag1 = enqueueCardAnimation(id, {
     to: { scale: scaleUp },
     duration: 350,
-    particleEmit: {
-      intervalMs: 70,
-      burst: 10,
-      particleConfig: {
-        colors: ['#cf1818', '#ffd166', '#ff6f00'],
-        size: [5, 10],
-        speed: [40, 160],
-        life: [800, 1400],
-        gravity: 0,
-        drag: [0.05, 0.05],
-        zIndex: 6,
-        spread: 1
-      }
-    }
   }, {
     tags: ['card-burn'],
     waitTags: options.waitTags
   });
-  
-  // 第二阶段：淡出
-  const tag2 = enqueueCardAnimation(id, {
-    to: { 
-      opacity: 0, 
-      rotate: 0 
-    },
-    duration: 500,
-    particleEmit: {
-      intervalMs: 70,
-      burst: 10,
-      particleConfig: {
-        colors: ['#cf1818', '#ffd166', '#ff6f00'],
-        size: [5, 10],
-        speed: [40, 160],
-        life: [800, 1400],
-        gravity: 0,
-        drag: [0.05, 0.05],
-        zIndex: 6,
-        spread: 1
-      }
-    }
+
+  // 第二阶段：燃烧
+  const tag2 = genAutoTag('card-burn');
+  animationSequencer.enqueueInstruction({
+    tags: ['card-burn', tag2],
+    waitTags: [tag1],
+    durationMs: Math.max(burnDuration - 50, 0), // 预留时间给淡出阶段
+    start: ({ emit, id: instructionId }) => {
+      // 通过 animator 的 animateEffect 通道，桥接到 Overlay
+      emit('animate-element-effect', {
+        id,
+        effect: 'burn',
+        duration: burnDuration,
+        // 透传一些可选参数，便于 Overlay 做更炫的视觉（可忽略）
+        options: {
+          scaleUp,
+          particles: {
+            colors: ['#cf1818', '#ffd166', '#ff6f00']
+          }
+        },
+        instructionId
+      });
+    }});
+  // 最终阶段：淡出（在燃烧动画尚未播完时开始淡出，防止燃烧动画（pulse）播完了还看得到残影）
+  const tag3 = enqueueCardAnimation(id, {
+    to: { opacity: 0 },
+    duration: 0,
+    ease: 'power2.in'
   }, {
-    tags: ['card-burn'],
-    waitTags: [tag1]
+    waitTags: [tag2]
   });
-  
-  return tag2;
+
+  return tag3;
 }
 
 /**
@@ -214,31 +205,6 @@ export function enqueueDelay(durationMs = 0, options = {}) {
 }
 
 /**
- * 面板受伤震动
- * @param {string} panelId - 面板 ID
- * @param {number} damage - 伤害值
- * @param {Object} options - 选项
- */
-export function enqueuePanelHurt(panelId, damage = 0, options = {}) {
-  const duration = Math.min(200 + damage * 2, 600);
-  
-  return animationSequencer.enqueueInstruction({
-    tags: ['panel-anim', 'panel-hurt'],
-    waitTags: options.waitTags || ['all'],
-    durationMs: duration,
-    start: ({ emit, id }) => {
-      emit('apply-element-effect', {
-        id: panelId,
-        instructionId: id,
-        effect: 'shake',
-        intensity: Math.min(damage / 10, 5),
-        duration
-      });
-    }
-  });
-}
-
-/**
  * 面板击退
  * @param {string} panelId - 面板 ID
  * @param {string} direction - 方向 ('left' | 'right')
@@ -318,7 +284,6 @@ export default {
   enqueueCardBurn,
   enqueueCardDropToDeck,
   enqueueDelay,
-  enqueuePanelHurt,
   enqueuePanelKnockback,
   enqueueAnimatableElementResumeTracking: enqueueAnimatableElementEnterTracking
 };

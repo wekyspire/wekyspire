@@ -103,9 +103,6 @@ class Animator {
 
     // 全局锚点监听器：name -> handler（用于去重与清理）
     this._globalAnchorListeners = new Map();
-
-    // 配置（暂未使用，保留兼容位）
-    this._overlayEl = null;
     
     // 全局锚点跟踪配置（统一使用毫秒）
     this._anchorTrackingDurationMs = DEFAULT_TRACKING_DURATION_MS; // 默认锚点跟踪平滑动画持续时间（毫秒）
@@ -189,7 +186,6 @@ class Animator {
    * 初始化
    */
   init(options = {}) {
-    this._overlayEl = options.overlayEl || null;
     
     // 设置全局锚点
     if (options.centerAnchorEl) {
@@ -217,6 +213,11 @@ class Animator {
       this.animate(payload);
     });
     
+    // 新增：监听纯特效动画指令（用于桥接到 Pixi Overlay）
+    frontendEventBus.on('animate-element-effect', (payload) => {
+      this.animateEffect(payload);
+    });
+
     // 监听动画到锚点指令
     frontendEventBus.on('animate-element-to-anchor', (payload) => {
       this.animateToAnchor(payload.id, payload.anchor || 'rest', payload);
@@ -230,9 +231,6 @@ class Animator {
     // 标准化事件：进入某个状态
     frontendEventBus.on('enter-element-dragging', ({ id }) => this.enterDragging(id));
     frontendEventBus.on('enter-element-idle', ({ id }) => this.enterIdle(id));
-
-    // 效果事件
-    frontendEventBus.on('apply-element-effect', (payload) => this.applyEffect(payload));
   }
 
   // ========== 可动画元素注册表管理 ==========
@@ -498,67 +496,10 @@ class Animator {
   // ========== 动画执行 ==========
 
   /**
-   * 应用特效（独立于普通位移动画），保持与历史行为一致：
-   * - 停止 tracking 与当前 tween
-   * - 进入 animating 状态
-   * - 播放特效，duration 后回到 idle，并通知完成
-   */
-  applyEffect(payload) {
-    const { id, effect, duration = 300, instructionId } = payload || {};
-    const entry = this._registry.get(id);
-    if (!entry) {
-      console.warn('[animator] applyEffect: element not registered', id);
-      if (instructionId) {
-        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
-      }
-      return;
-    }
-
-    const { element } = entry;
-
-    // 统一前置：停止 tracking/动画，进入 animating
-    this._stopTracking(entry);
-    this._killCurrentTween(entry);
-    // 若已有特效，先中断并释放
-    this._interruptEffect(entry);
-    entry.state = STATES.ANIMATING;
-
-    // 分发具体效果
-    let tween = null;
-    switch (effect) {
-      case 'shake':
-        tween = this._applyShakeEffect(element, payload);
-        break;
-      default:
-        console.warn('[animator] applyEffect: unknown effect', effect);
-        break;
-    }
-
-    // 注册可中断的特效状态
-    const timerId = setTimeout(() => {
-      // 正常完成路径
-      if (entry.state === STATES.ANIMATING) {
-        entry.state = STATES.IDLE;
-      }
-      if (instructionId) {
-        frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
-      }
-      delete entry._effect;
-    }, duration);
-    entry._effect = { timerId, tween, instructionId };
-  }
-
-  /**
    * 切换到animating状态并执行动画指令，在duration后停止动画并回归idle状态。
    */
   animate(payload) {
-    const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId, effect } = payload;
-
-    // 如果是特效请求，改由 applyEffect 处理
-    if (effect) {
-      this.applyEffect(payload);
-      return;
-    }
+    const { id, from = {}, to = {}, duration = 300, ease = defaultEase, anchor, instructionId } = payload;
 
     const entry = this._registry.get(id);
     if (!entry) {
@@ -673,6 +614,39 @@ class Animator {
 
     // 保存当前 tween
     entry.currentTween = tween;
+  }
+
+  /**
+   * 纯特效动画：不操作 DOM，仅向 Pixi Overlay 发出特效启动信号，并在 duration 后通知 sequencer 完成。
+   * 典型：burn 焚毁、命中闪光等。
+   */
+  animateEffect(payload = {}) {
+    const { id, effect = 'burn', duration = 850, instructionId, options = {} } = payload;
+    if (id == null) {
+      console.warn('[animator] animateEffect: missing id');
+      if (instructionId) frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+      return;
+    }
+
+    let overlayName = null;
+    switch (effect) {
+      case 'burn':
+        overlayName = 'pulse:burn';
+        break;
+      default:
+        overlayName = `pulse:${effect}`;
+        break;
+    }
+
+    try {
+      frontendEventBus.emit('overlay:effect:add', { id, name: overlayName, options: { duration, ...options } });
+    } catch (e) {
+      console.warn('[animator] animateEffect: emit overlay failed', e);
+    }
+
+    setTimeout(() => {
+      if (instructionId) frontendEventBus.emit('animation-instruction-finished', { id: instructionId });
+    }, Math.max(0, duration));
   }
 
   /**
@@ -902,6 +876,59 @@ class Animator {
     }
     delete entry._effect;
   }
+
+  /**
+   * 获取指定适配器类型已注册元素的快照列表
+   * @param {string} adapterType 例如 'card' | 'unit-panel'
+   * @returns {Array<{ id: string, element: HTMLElement, adapterType: string }>}
+   */
+  getRegisteredByAdapter(adapterType) {
+    const list = [];
+    for (const [id, entry] of this._registry.entries()) {
+      if (!entry?.element) continue;
+      if (!adapterType || entry.adapterType === adapterType) {
+        list.push({ id, element: entry.element, adapterType: entry.adapterType });
+      }
+    }
+    return list;
+  }
+
+  /**
+   * 获取指定适配器类型的元素几何快照（用于 Pixi overlay 精确对齐）
+   * 返回: [{ id, cx, cy, baseW, baseH, rot, sx, sy, opacity }]
+   */
+  getTransformsSnapshotByAdapter(adapterType) {
+    const list = [];
+    for (const [id, entry] of this._registry.entries()) {
+      if (!entry?.element) continue;
+      if (adapterType && entry.adapterType !== adapterType) continue;
+      const el = entry.element;
+      const rect = el.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+      // 读取 CSS 变换矩阵
+      const cs = getComputedStyle(el);
+      const t = cs.transform;
+      let rot = 0, sx = 1, sy = 1;
+      if (t && t !== 'none') {
+        const m = new DOMMatrix(t);
+        rot = Math.atan2(m.m12, m.m11);
+        sx = Math.hypot(m.m11, m.m12);
+        sy = Math.hypot(m.m21, m.m22);
+      }
+      let baseW = el.offsetWidth || 0;
+      let baseH = el.offsetHeight || 0;
+      if (!baseW || !baseH) {
+        baseW = rect.width / (sx || 1);
+        baseH = rect.height / (sy || 1);
+      }
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const opacity = parseFloat(cs.opacity) || 1;
+      const visible = (cs.visibility !== 'hidden') && (cs.display !== 'none');
+      list.push({ id, cx, cy, baseW, baseH, rot, sx, sy, opacity, visible });
+    }
+    return list;
+  }
 }
 
 // 导出单例
@@ -914,4 +941,3 @@ if (typeof window !== 'undefined') {
 }
 
 export default animator;
-

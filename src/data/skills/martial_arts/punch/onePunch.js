@@ -6,9 +6,9 @@ import { backendGameState as gameState } from '@data/gameState.js';
 import {SkillTier} from '@/utils/tierUtils';
 
 export class FinalStrike extends Skill {
-  constructor(name = '狠狠一击', tier = SkillTier.C_MINUS, damage = 18, powerMultiplier = 7, cardActivationColdDown = 0, canColdDownInBackground = true) {
-    super(name, 'normal', tier, 0, 2, 1, '一击');
-    this.baseColdDownTurns = 10; // 基础冷却时间
+  constructor(name = '狠狠一击', tier = SkillTier.C_MINUS, coldDownTurns = 4, damage = 18, powerMultiplier = 7, cardActivationColdDown = 0, canColdDownInBackground = true) {
+    super(name, 'normal', tier, 0, 1, 1, '一击');
+    this.baseColdDownTurns = coldDownTurns; // 基础冷却时间
     this.baseSlowStart = true; // 慢启动
     this.baseDamage = damage; // 基础伤害
     this.powerMultiplier = powerMultiplier; // 每点力量增加的伤害
@@ -66,7 +66,7 @@ export class FinalStrike extends Skill {
 // 造成27伤害
 export class RendingFist extends FinalStrike {
   constructor() {
-    super('强击', SkillTier.C_PLUS, 25, 11, 1);
+    super('强击', SkillTier.C_PLUS, 5, 25, 11, 1);
     this.precessor = '狠狠一击';
   }
 }
@@ -75,7 +75,7 @@ export class RendingFist extends FinalStrike {
 // 造成40伤害
 export class ViciousFist extends FinalStrike {
   constructor() {
-    super('悍拳', 3, 40, 15, 1);
+    super('悍拳', SkillTier.B_MINUS, 6, 40, 15, 1);
     this.precessor = '强击';
   }
 }
@@ -84,7 +84,7 @@ export class ViciousFist extends FinalStrike {
 // 造成90伤害
 export class CrashingFist extends FinalStrike {
   constructor() {
-    super('崩拳', 5, 90, 20, 1);
+    super('崩拳', SkillTier.B_PLUS, 7, 90, 20, 1);
     this.precessor = '悍拳';
   }
 }

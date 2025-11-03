@@ -1,5 +1,7 @@
 <template>
   <div id="game-app">
+    <!-- 全屏Pixi背景（z=0，最底层） -->
+    <GameBackgroundScreen />
     <transition name="screen-transition" mode="out-in">
     <!-- 开始游戏界面 -->
     <StartScreen 
@@ -26,36 +28,34 @@
       @restart-game="restartGame"
     />
     </transition>
-    
+
     <!-- 对话界面 -->
     <DialogScreen />
-    
-    <!-- Boss登场特效界面 -->
+
+    <!-- Boss登场特效界面，之后会逐渐移植到Pixi webgl实现上 -->
     <BossShowupAnimation />
-    
-    <!-- 过场动画界面 -->
+
+    <!-- 过场动画界面，之后会逐渐移植到Pixi webgl实现上 -->
     <CutsceneScreen :game-state="gameState" />
-    
+
     <!-- 音频控制界面 -->
     <AudioControllerScreen />
-    
-    <!-- 粒子效果管理器 -->
+
+    <!-- 粒子效果管理器，之后会逐渐移植到Pixi webgl实现上 -->
     <ParticleEffectManager />
-    
+
     <!-- 消息弹出框界面 -->
     <MessagePopupScreen />
 
-    <!-- 全局动画覆盖层（全游戏共享） -->
-    <AnimationOverlay ref="animationOverlay" />
-
+    <!-- 动画锚点生成器 -->
+    <AnimationAnchors ref="animationAnchors" />
     <!-- 全局唯一悬浮提示框（文字/效果/命名） -->
     <FloatingTooltip />
-    <!-- 新增：卡牌预览悬浮提示框 -->
     <FloatingCardTooltip />
-    
-    <!-- 新动画系统：可动画元素容器 -->
+    <!-- 动画卡牌容器 (DOM) -->
     <AnimatableElementContainer />
-
+    <!-- 新增：Pixi 卡牌覆盖层（高于 animatable elements 层） -->
+    <GamePixiOverlay />
     <!-- 新增：全局玩家输入控制器（处理结算期的异步输入） -->
     <PlayerInputController />
   </div>
@@ -72,11 +72,13 @@ import CutsceneScreen from './components/end/CutsceneScreen.vue'
 import AudioControllerScreen from './components/global/AudioControllerScreen.vue'
 import ParticleEffectManager from './components/global/ParticleEffectManager.vue'
 import MessagePopupScreen from './components/end/MessagePopupScreen.vue'
-import AnimationOverlay from './components/global/AnimationOverlay.vue'
+import AnimationAnchors from './components/global/AnimationAnchors.vue'
 import FloatingTooltip from './components/global/FloatingTooltip.vue'
 import FloatingCardTooltip from './components/global/FloatingCardTooltip.vue'
 import AnimatableElementContainer from './components/global/AnimatableElementContainer.vue'
 import PlayerInputController from './components/global/PlayerInputController.vue'
+import GameBackgroundScreen from './components/global/GameBackgroundScreen.vue'
+import GamePixiOverlay from './components/global/GamePixiOverlay.vue'
 
 import { displayGameState as gameState, resetAllGameStates } from './data/gameState.js';
 import animator from './utils/animator.js';
@@ -95,11 +97,13 @@ export default {
     AudioControllerScreen,
     ParticleEffectManager,
     MessagePopupScreen,
-    AnimationOverlay,
+    AnimationAnchors,
     FloatingTooltip,
     FloatingCardTooltip,
     AnimatableElementContainer,
-    PlayerInputController
+    PlayerInputController,
+    GameBackgroundScreen,
+    GamePixiOverlay
   },
   computed: {
     isPlayerTurn() {
@@ -113,11 +117,11 @@ export default {
   },
   mounted() {
     // 初始化全局动画编排器：注入全局Overlay引用
-    const overlayRefs = this.$refs.animationOverlay?.getRefs?.();
-    if (overlayRefs) {
+    const anchorRefs = this.$refs.animationAnchors?.getRefs?.();
+    if (anchorRefs) {
       // 初始化新动画系统
-      animator.init(overlayRefs);
-      console.log('[GameApp] Animator initialized with overlay refs:', overlayRefs);
+      animator.init(anchorRefs);
+      console.log('[GameApp] Animator initialized with anchor refs:', anchorRefs);
     }
     
     // 初始化交互处理器

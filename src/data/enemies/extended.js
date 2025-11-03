@@ -6,9 +6,9 @@ import { SlimeCurse } from '../skills/curse/enemyCurses.js';
 // 魔化瑞米（普通）
 export class Remi extends Enemy {
   constructor(battleIntensity) {
-    const hp = 23 + 5 * battleIntensity;
-    const attack = 6 + Math.floor(battleIntensity * 0.8);
-    super('魔化瑞米', hp, attack, 1,
+    const hp = 23 + 6 * battleIntensity;
+    const attack = 6 + Math.floor(battleIntensity);
+    super('魔化瑞米', hp, attack, 0,
       new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
@@ -71,7 +71,7 @@ export class Remi extends Enemy {
 // 嗡嗡虫群（普通）
 export class BuzzlingBugs extends Enemy {
   constructor(battleIntensity) {
-    const hp = 5 + Math.floor(2 * battleIntensity);
+    const hp = 4 + Math.floor(2.3 * battleIntensity);
     const attack = 1 + Math.floor(battleIntensity * 0.5);
     super('嗡嗡虫群', hp, attack, 0,
       new URL('../../assets/enemies/slime.png', import.meta.url).href
@@ -105,9 +105,9 @@ export class BuzzlingBugs extends Enemy {
 // 黏黏史莱姆（普通）
 export class SlimySlime extends Enemy {
   constructor(battleIntensity) {
-    const hp = 27 + Math.floor(6 * battleIntensity);
-    const attack = 3 + Math.floor(battleIntensity * 0.6);
-    super('黏黏史莱姆', hp, attack, 1,
+    const hp = 27 + Math.floor(6.7 * battleIntensity);
+    const attack = 3 + Math.floor(battleIntensity * 0.8);
+    super('黏黏史莱姆', hp, attack, 0,
       new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
@@ -141,15 +141,15 @@ export class SlimySlime extends Enemy {
 // 腐食甲虫（普通）
 export class StinkyBugs extends Enemy {
   constructor(battleIntensity) {
-    const hp = 18 + Math.floor(4 * battleIntensity);
-    const attack = 1 + Math.floor(battleIntensity * 0.2);
-    super('腐食甲虫', hp, attack, 1,
+    const hp = 18 + Math.floor(6.5 * battleIntensity);
+    const attack = 1 + Math.floor(battleIntensity * 0.3);
+    super('腐食甲虫', hp, attack, 0,
       new URL('../../assets/enemies/slime.png', import.meta.url).href
     );
     this.battleIntensity = battleIntensity;
     this.actionIndex = 0;
     this.description = '一群散发着臭气的大甲虫，噫，好恶心。';
-    this.effects['坚固'] = 2; // 初始坚固2
+    this.effects['坚固'] = 3; // 初始坚固3
   }
   calculateDamage(base, _) { return base + this.attack; }
   getIntention() {

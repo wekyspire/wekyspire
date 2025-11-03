@@ -12,7 +12,7 @@
 <script>
 import frontendEventBus from '../../frontendEventBus.js';
 export default {
-  name: 'SkillCardAnimationOverlay',
+  name: 'SkillCardAnimationAnchors',
   props: { skill: { type: Object, required: true }, disabled: { type: Boolean, default: false } },
   data() {
     return {
