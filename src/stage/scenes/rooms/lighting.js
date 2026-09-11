@@ -271,14 +271,21 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     lampTintK = THREE.MathUtils.clamp(k, 0, 1);
   }
 
-  /** 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。 */
-  function setFocus(target, { strength = 1 } = {}) {
+  /**
+   * 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。
+   * @param opts.fill false = **只压暗外围、不打正面补光**。售货机需要这一档：它柜内是
+   *   unlit 自发光（补光照不到商品），而走进敞开玻璃柜的补光会把柜内背板照爆
+   *   （用户报"怼脸时柜子中间一团白光"）；但压暗外围仍要，机器才从背景里跳出来。
+   */
+  function setFocus(target, { strength = 1, fill = true } = {}) {
     if (!target) { focusTarget = null; focusWant = 0; return; }
     focusTarget = (target.isVector3
       ? target.clone()
       : new THREE.Vector3(target.x, target.y, target.z));
     focusWant = THREE.MathUtils.clamp(strength, 0, 1);
+    focusFillK = fill ? 1 : 0;
   }
+  let focusFillK = 1;
 
   let time = 0;
   /** 帧驱动：焦点缓动与压暗 + 幽火闪烁 + 火焰粒子发射（同 dungeon3D 口径） */
@@ -295,7 +302,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
       else if (!l.light.color.equals(l.baseColor)) l.light.color.copy(l.baseColor);
     }
 
-    if (focusK > 0.001 && focusTarget) {
+    if (focusK > 0.001 && focusTarget && focusFillK > 0.5) {
       focusLight.visible = true;
       focusLight.intensity = (focusCfg.base ?? 3600) * focusK;
       focusLight.position.copy(focusTarget);

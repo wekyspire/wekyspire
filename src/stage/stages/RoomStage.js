@@ -792,11 +792,9 @@ export class RoomStage {
       return;
     }
     const p = new THREE.Vector3(entry.x, this._focusLightY(entry), entry.z);
-    // 售货机**不需要焦点补光**：货架上的商品卡是 unlit 自发光（补光照不到它们），而正面补光
-    // 会打进敞开的玻璃柜、把柜内背板与货道隔片照爆（怼脸时柜子中间一团白光，把两排货糊掉）。
-    // 外围压暗照旧（dim 由 setFocus(null) 之外的路径控制），机器靠自发光与灯池读。
-    if (entry.kind === 'vending') this._room?.lighting?.setFocus?.(null);
-    else this._room?.lighting?.setFocus?.(p, { strength: 1 });
+    // 售货机：**只压暗外围、不打正面补光**——柜内商品是 unlit 自发光（补光照不到），
+    // 而打进敞开玻璃柜的补光会把柜内背板照爆（怼脸时柜子中间一团白光，把两排货糊掉）
+    this._room?.lighting?.setFocus?.(p, entry.kind === 'vending' ? { fill: false } : { strength: 1 });
     this._startCamTween(this._focusPose(entry, p), ZOOM_MS, () => {
       if (this._focused === name) this._openPanel(name);   // 推到位才开面板
     });
