@@ -398,9 +398,9 @@ export function buildRoomPanel(snap) {
  * 房间表头：标题 + 售货机入口（售货机与房间并存、不占房间名额，入口是**本地**动作）。
  * 场景式休息房把机器面板拆开单开（点哪台开哪台），所以表头要能被两个面板各自复用。
  */
-function roomHeader(w, snap) {
+function roomHeader(w, snap, title = null) {
   const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
-  w.push({ kind: 'title', text: `${meta.glyph} ${meta.name}`, align: 'center' });
+  w.push({ kind: 'title', text: title ?? `${meta.glyph} ${meta.name}`, align: 'center' });
   if (snap.shop) {
     w.push({
       kind: 'button', id: 'room:shop', width: 300, size: 'sub',
@@ -607,7 +607,7 @@ function bankWidgets(w, snap) {
 /** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */
 export function buildSlotPanel(snap) {
   const w = [];
-  roomHeader(w, snap);
+  roomHeader(w, snap, '🎰 老虎机');
   slotWidgets(w, snap);
   return w;
 }
@@ -615,7 +615,7 @@ export function buildSlotPanel(snap) {
 /** **银行机面板**（场景式休息房：点银行机 → 开这一份）。 */
 export function buildBankPanel(snap) {
   const w = [];
-  roomHeader(w, snap);
+  roomHeader(w, snap, '🏦 银行机');
   bankWidgets(w, snap);
   return w;
 }
@@ -665,7 +665,7 @@ function campWidgets(w, snap) {
 /** **营地部分面板**（场景式房间：点篝火开这一份）。 */
 export function buildCampPanel(snap) {
   const w = [];
-  roomHeader(w, snap);
+  roomHeader(w, snap, '🔥 营地');
   campWidgets(w, snap);
   return w;
 }
@@ -673,7 +673,7 @@ export function buildCampPanel(snap) {
 /** **训练部分面板**（场景式房间：点训练桩开这一份）。 */
 export function buildTrainingPanel(snap) {
   const w = [];
-  roomHeader(w, snap);
+  roomHeader(w, snap, '⚔ 训练场');
   trainingWidgets(w, snap);
   return w;
 }
