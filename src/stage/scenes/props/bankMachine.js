@@ -37,18 +37,22 @@ export default {
     K.tilt(lid, -0.22, 0, 0);
     g.add(K.put(lid, 0, y0 + bodyH + 0.12, -0.06));
 
-    // 小屏：幽青自发光（比老虎机的转轮窗更小更冷）+ 屏框（铁件）
+    // 小屏：幽青自发光（比老虎机的转轮窗更小更冷）。**屏幕是嵌进面板的凹口**（用户定：
+    // "正面来点起伏"）——外框厚出柜面、屏面退到框内，四周留出倒角阴影。
     const sy = y0 + bodyH * 0.66;
-    g.add(K.put(K.box({ color: shade(P.iron, -0.1), size: [1.7, 1.15, 0.24], family: 'metal' }),
-      0, sy, D / 2 + 0.02));
+    const bzW = 1.6, bzH = 1.06, bzZ = D / 2 + 0.20;      // 外框（厚，凸出柜面 0.32）
+    g.add(K.put(K.box({ color: shade(P.iron, -0.16), size: [bzW, bzH, 0.44], family: 'metal' }),
+      0, sy, bzZ - 0.1));
+    g.add(K.put(K.box({ color: shade(P.iron, -0.30), size: [1.32, 0.8, 0.06], family: 'metal' }),
+      0, sy, bzZ + 0.02));                                // 凹腔底（屏就贴在它前面一点）
     // 屏幕与扫描线：kit 图元（unlit 顶点色）；**材质由 rig 换成独立实例**后逐帧驱动
-    const screen = K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.1], family: 'unlit' }),
-      0, sy, D / 2 + 0.16);
+    const screen = K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.05], family: 'unlit' }),
+      0, sy, bzZ + 0.09);
     screen.userData.animRole = 'screen';
     screen.userData.screenText = '余额 0';   // rig 用 bakeBoldText 烘上去 + 闪烁
     g.add(screen);
-    const scanline = K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.1], family: 'unlit' }),
-      0, sy - 0.32, D / 2 + 0.17);
+    const scanline = K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.05], family: 'unlit' }),
+      0, sy - 0.32, bzZ + 0.12);
     scanline.userData.animRole = 'scanline';
     g.add(scanline);
 
@@ -71,6 +75,24 @@ export default {
       -0.3, y0 + 0.5, D / 2 + 0.08));
     g.add(K.put(K.box({ color: shade(P.iron, -0.2), size: [1.1, 0.1, 0.3], family: 'metal' }),
       -0.3, y0 + 0.31, D / 2 + 0.09));
+
+    // ================= 正面起伏（用户定 2026-09-11："至少正面来点起伏"）=================
+    // ① 两根竖向壁柱：从底座通到顶，凸出柜面 0.14 —— 把正面切成"左柱 / 屏 / 右柱"三段
+    for (const sx of [-1, 1]) {
+      g.add(K.put(K.box({ color: shade(P.stone, 0.04), size: [0.24, bodyH + 0.2, 0.28], family: 'stone' }),
+        sx * (W / 2 - 0.22), y0 + bodyH / 2 + 0.1, D / 2 + 0.06));
+    }
+    // ② 中缝凹槽（两柱之间一条暗竖缝 + 上下端头，读作钣金拼接）
+    g.add(K.put(K.box({ color: shade(P.night, 0.18), size: [0.1, bodyH - 0.1, 0.1], family: 'metal' }),
+      0, y0 + bodyH / 2, D / 2 + 0.02));
+    // ③ 操作台唇边：键盘斜台外沿的挡边（原来台面是平的，没有层次）
+    g.add(K.put(K.box({ color: shade(P.iron, -0.24), size: [2.0, 0.14, 0.12], family: 'metal' }),
+      0, y0 + bodyH * 0.34 - 0.02, D / 2 + 0.14));
+    // ④ 顶冠：比柜身宽一档的檐板 + 一道凹线（机构感、也给顶部收边）
+    g.add(K.put(K.box({ color: shade(P.stone, 0.06), size: [W + 0.16, 0.16, D + 0.1], family: 'stone' }),
+      0, y0 + bodyH + 0.42, 0));
+    g.add(K.put(K.box({ color: shade(P.night, 0.2), size: [W + 0.18, 0.06, D + 0.12], family: 'metal' }),
+      0, y0 + bodyH + 0.33, 0));
 
     // 侧面一小块散热栅（铁件细条，打散大平面）
     for (let i = 0; i < 4; i++) {
