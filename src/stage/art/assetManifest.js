@@ -8,7 +8,7 @@
 // 只温浏览器缓存（<img>/CSS 引用同一 URL，后续取用零网络零解码等待）。
 import { sharedUnitArtCache } from './unitArt.js';
 import { sharedCardArtCache } from './cardArtCache.js';
-import { sharedBubbleArtCache } from './bubbleArt.js';
+import { sharedUiArtCache } from './bubbleArt.js';
 
 // 根级散图（如 remi.webp）与任意深度子目录（cards/decor/ 等）均被 ** 命中；
 // 扩展名过滤天然排除 css/mp3 等非位图（素材经 tools/compress_art.py 转 WebP）
@@ -29,7 +29,7 @@ export const ART_MANIFEST = Object.freeze(
  */
 export function preloadAllArt({ onProgress, imageFactory = null, caches = null } = {}) {
   const Img = imageFactory ?? (typeof Image !== 'undefined' ? Image : null);
-  const targets = caches ?? { stage: sharedUnitArtCache, card: sharedCardArtCache, ui: sharedBubbleArtCache };
+  const targets = caches ?? { stage: sharedUnitArtCache, card: sharedCardArtCache, ui: sharedUiArtCache };
   const total = ART_MANIFEST.length;
   const warmInto = (path, url, img) => {
     const t = path.includes('/assets/stage/')

@@ -1,6 +1,8 @@
-// PanelObject：休息阶段面板容器（UI pass 空间）。两种形态：
+// PanelObject：休息阶段面板容器（UI pass 空间）。三种形态：
 //   · anchored —— 无背板、贴左上角、定宽竖排行流（战前准备）。
-//   · modal    —— 全屏背板 + 居中内容（奖励/房间/进阶）。
+//   · modal    —— 全屏背板 + 居中内容（奖励/进阶/占位房间）。
+//   · dock     —— **底部停靠**：只给内容一块半透明底（无全屏背板），整组贴屏幕下沿居中——
+//                 场景式休息房（3D 房间 + 机器）用**它**：房间要一直看得见，面板只是操作条。
 //
 // 职责边界（quest_prompts/THREE_UI_MIGRATION.md §4.2-2）：只做「把一组 widget 画出来 +
 // 把点击路由成 action」，**不判断能不能点**（enabled 由快照下发），也不认识任何 run 状态。
@@ -42,7 +44,13 @@ const FORMS = {
     width: 760, padX: 24, padY: 20,
     rowH: { title: 36, text: 22, sub: 20, button: 34, main: 44, gap: 12, tiles: 104, cards: 300 },
   },
+  dock: {
+    width: 620, padX: 22, padY: 18,
+    rowH: { title: 32, text: 20, sub: 18, button: 30, main: 38, gap: 10, tiles: 96, cards: 260 },
+  },
 };
+// dock 形态：整组内容底边贴这条 y（UI 相机坐标系里靠近屏幕下沿，留出安全边）
+const DOCK_BOTTOM = UI_CAMERA_LOOK_AT_Y - 34;
 const CARD_SCALE = 0.8;      // 面板内卡面缩放（3 张一排：3×20.8 + 间隙 < 取景带 177.8）
 const BADGE_PX = 58;         // 「已选取」打勾徽标直径（逻辑像素）
 const BADGE_MARGIN = 18;     // 徽标中心距卡面右/下边的距离（逻辑像素）
@@ -76,6 +84,7 @@ export class PanelObject extends THREE.Group {
     this._rowSeq = 0;   // 可 hover 文本行的 pickable id 序号
     this.kind = null;
     if (form === 'modal') this.position.set(0, UI_CAMERA_LOOK_AT_Y, Z.PANEL);
+    else if (form === 'dock') this.position.set(0, DOCK_BOTTOM, Z.PANEL); // 实际 y 在 setWidgets 里按内容高回推
     else this.position.set(-HALF_UI_W + this._g.marginX / PX_PER_WU,
       UI_TOP - this._g.marginY / PX_PER_WU, Z.PANEL);
   }
@@ -95,10 +104,15 @@ export class PanelObject extends THREE.Group {
     this._clearRows();
     const g = this._g;
     const innerW = (g.width - g.padX * 2) / PX_PER_WU;
-    // 局部原点：anchored = 面板左上；modal = 取景带中心（背板/居中布局都以此为基准）
-    const flowTop = this.form === 'modal' ? WORLD_HEIGHT / 2 - g.padY / PX_PER_WU - 30 / PX_PER_WU : -g.padY / PX_PER_WU;
-    const centerX = this.form === 'modal' ? 0 : g.padX / PX_PER_WU + innerW / 2;
-    const left = this.form === 'modal' ? centerX - innerW / 2 : g.padX / PX_PER_WU;
+    // 局部原点：anchored = 面板左上；modal = 取景带中心（背板/居中布局都以此为基准）；
+    // dock = 内容顶边（setWidgets 末尾按内容高把整组下推到底沿）
+    const flowTop = this.form === 'modal'
+      ? WORLD_HEIGHT / 2 - g.padY / PX_PER_WU - 30 / PX_PER_WU
+      : (this.form === 'dock' ? 0 : -g.padY / PX_PER_WU);
+    const centerX = (this.form === 'modal' || this.form === 'dock')
+      ? 0 : g.padX / PX_PER_WU + innerW / 2;
+    const left = this.form === 'dock' ? -innerW / 2
+      : (this.form === 'modal' ? centerX - innerW / 2 : g.padX / PX_PER_WU);
 
     if (this.form === 'modal' && !this._backdrop) this._addBackdrop();
 
@@ -143,7 +157,7 @@ export class PanelObject extends THREE.Group {
         // 等比收进行框：烘焙高度由字号决定（fontPx×1.4），可能高于行高，不收敛会压到下一行
         const s = Math.min(1, hWu / text.scale.y, innerW / text.scale.x);
         text.scale.set(text.scale.x * s, text.scale.y * s, 1);
-        if (this.form === 'modal' || w.align === 'center') text.placeCenterTop(centerX, y);
+        if (this.form !== 'anchored' || w.align === 'center') text.placeCenterTop(centerX, y);
         else text.placeLeftTop(left, y);
         text.position.z = Z.CONTENT; // 同按钮：内容一律在背板之上
         this.add(text);
@@ -161,6 +175,24 @@ export class PanelObject extends THREE.Group {
       this._contentBottom = y;
     }
     this._panelHeight = (flowTop - y) + this._g.padY / PX_PER_WU;
+    if (this.form === 'dock') this._placeDock(this._panelHeight);
+  }
+
+  /** dock：内容自上而下排完后，把整组下推到底沿（内容底 = DOCK_BOTTOM），并补一块背板。 */
+  _placeDock(heightWu) {
+    this.position.set(0, DOCK_BOTTOM + heightWu, Z.PANEL);
+    const w = this._g.width / PX_PER_WU;
+    if (this._backdrop) {
+      this._backdrop.scale.set(w / (HALF_UI_W * 2), heightWu / WORLD_HEIGHT, 1);
+      return;
+    }
+    const bg = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, heightWu),
+      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.78 }),
+    );
+    bg.position.set(0, -heightWu / 2, Z.BACKDROP);
+    this.add(bg);
+    this._backdrop = bg;
   }
 
   get heightWu() { return this._panelHeight ?? 0; }

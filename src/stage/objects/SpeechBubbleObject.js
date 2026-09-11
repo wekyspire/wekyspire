@@ -17,7 +17,7 @@
 // 美术未就绪（或 headless 无 document）时退化为一块深色底板 + 文本，不影响模块可用。
 
 import * as THREE from 'three';
-import { sharedBubbleArtCache, BUBBLE_ART } from '../art/bubbleArt.js';
+import { sharedUiArtCache, BUBBLE_ART } from '../art/bubbleArt.js';
 
 // 两张图共用同一主椭圆（实测自 512×512 素材）：中心/半轴（归一化到图宽）
 const ELLIPSE = { cx: 0.506, cy: 0.462, rx: 0.365, ry: 0.187 };
@@ -108,7 +108,7 @@ export class SpeechBubbleObject extends THREE.Group {
    *   width: 默认气泡宽度（UI 世界单位，图版是正方形；文本盒按主椭圆内接矩形派生）
    *   art:   美术缓存（缺省共享单例；测试可注入 { getTexture } 桩）
    */
-  constructor({ width = 28, art = sharedBubbleArtCache } = {}) {
+  constructor({ width = 28, art = sharedUiArtCache } = {}) {
     super();
     this._art = art;
     this._width = width;

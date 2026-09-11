@@ -16,6 +16,8 @@ import { getAllyDefinition } from '../core/allies/registry.js';
 import { createBridge, EventNames } from '../bridge/index.js';
 import { BattleStage } from '../stage/stages/BattleStage.js';
 import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
+import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
+import { RoomStage } from '../stage/stages/RoomStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
@@ -157,6 +159,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
   const eventRoom = reactive({ result: null });
   let battleStage = null;
+  let roomStage = null;   // 场景式休息房舞台（仅 gameStage==='room' 且有配方时存在）
   const log = reactive([]);  // 战斗日志（Shell 展示用）
 
   // three.js 状态栏（两舞台共享 PlayerStatusObject）：战斗外 AP 恒满，魏启 = run 持久值；
@@ -177,14 +180,16 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     ? { present: false }
     : { present: true, hp: remiMaxHp };
   const syncMapStatus = () => {
-    mapStage?.setStatus({
+    const status = {
       ap: run.player.maxActionPoints, apMax: run.player.maxActionPoints,
       mana: run.player.mana, manaMax: run.player.maxMana,
       money: run.player.money,
       hp: run.player.hp, maxHp: run.player.maxHp,
       relics: equippedRelicViews(),
       remi: remiView(),
-    });
+    };
+    mapStage?.setStatus(status);
+    roomStage?.setStatus(status);   // 场景式休息房：同一份数值推给房间舞台的状态栏/顶端资源行
     // 金币/遗物在顶端资源行（状态栏不再显示）；战斗护盾不跨阶段残留
     battleStage?.topBar.setMoney(run.player.money);
     battleStage?.topBar.setRelics(equippedRelicViews());
@@ -199,7 +204,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
   const notify = () => {
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
-    mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 面板内容跟随阶段迁移（同一快照推导）
+    const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）
+    mapStage?.setPanel?.(snap);
+    roomStage?.setPanel?.(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
@@ -316,6 +323,54 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRewards(run);
     if (run.gameStage === 'room') { slot.lastSpin = null; slot.anim = null; eventRoom.result = null; } // 进新房清上一房瞬态
     notify();
+    void maybeEnterRestScene();   // 落到有休息房配方的房间 → 幕间黑幕切进房间场景
+  }
+
+  // ---- 场景式休息房（第一间 = 赌厅 casino，用户定 2026-09-11）----
+  // gameStage 落到 'room' 且该房类型有配方（restRecipeFor）时，用**幕间黑幕**切到房间场景
+  // （RoomStage）；没有配方的房间类型继续走塔楼层 + 占位面板，不切场景。
+  // 离开由玩家**主动**发起（房间右下角「继续前进」箭头）→ 同样走黑幕回塔楼。
+  let restEntering = false;
+  async function enterRestRoomScene() {
+    const recipe = restRecipeFor(run.currentRoom);
+    if (!recipe || !stageManager) return false;
+    const doSwap = () => {
+      roomStage?.dispose();
+      roomStage = markRaw(new RoomStage({
+        recipe,
+        seed: `${seed}:rest:${run.floor}`,
+        stageManager,
+        bus: animBus,
+        snap: panelSnapshot(run, panelExtras()),
+      }));
+      roomStage.setPanelIntentHandler(dispatchPanelIntent);
+      stageManager.setStage(roomStage);
+      syncMapStatus();   // 状态栏/资源行进房先落位（不等 notify）
+    };
+    await cutscene.sceneTransition(doSwap, { holdMs: 220 });
+    return true;
+  }
+  /** 有配方且当前不在房间场景时进入（幂等：并发/重复调用只切一次）。 */
+  async function maybeEnterRestScene() {
+    if (restEntering || roomStage || run.gameStage !== 'room' || !restRecipeFor(run.currentRoom)) return false;
+    restEntering = true;
+    try { return await enterRestRoomScene(); } finally { restEntering = false; }
+  }
+  /** 离开房间场景：黑幕中点换回塔楼层（地图舞台的层位先摆好，揭幕即到位）。 */
+  async function exitRestRoomScene() {
+    if (!roomStage) return false;
+    const doSwap = () => {
+      if (stageManager && mapStage) {
+        mapStage.setFloor(run.floor, run.totalFloors);
+        stageManager.setStage(mapStage);
+      }
+      roomStage?.dispose();
+      roomStage = null;
+      syncMapStatus();
+    };
+    if (stageManager) await cutscene.sceneTransition(doSwap);
+    else doSwap();
+    return true;
   }
 
   // ---- rooms（每房一次免费操作后即离房；消费/重复交互待后续细化）----
@@ -408,6 +463,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'room') return;
     completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
     notify();
+    void exitRestRoomScene();   // 主动离开休息室 → 幕间黑幕回塔楼
   }
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
   function spin() { // 可重复消费（每次扣费/消耗免费 roll）；roll 动画经 run sequencer 串行编排
@@ -526,6 +582,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'room') return;
     completeRoom(run);
     notify();
+    void exitRestRoomScene();
   }
   function triggerEvent() {
     if (run.gameStage !== 'room' || run.currentRoom !== 'event' || eventRoom.result) return; // 已探索不重复结算
@@ -624,6 +681,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function dispose() {
     battleStage?.dispose();
     battleStage = null;
+    roomStage?.dispose();
+    roomStage = null;
     runSequencer.cancelAll();
   }
 
@@ -649,6 +708,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     campOptions: () => campOptions(run),
     getBattleBridge: () => battleBridge,
     getBattleStage: () => battleStage,
+    getRoomStage: () => roomStage,   // 场景式休息房舞台（App 的指针路由据此转发）
+    enterRestRoomScene,              // 显式进入场景式休息房（读档/调试/测试用；正常路径由 claimReward 触发）
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
     campChoose, leaveRoom, bankDo, gurpasDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,

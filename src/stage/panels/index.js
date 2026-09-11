@@ -257,17 +257,8 @@ const upgradeButton = (source) => ({
 
 /** 奖励房（模态）：训练场 / 营地 / 老虎机 / 事件房。 */
 export function buildRoomPanel(snap) {
-  const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
   const w = [];
-  w.push({ kind: 'title', text: `${meta.glyph} ${meta.name}`, align: 'center' });
-  // 售货机与房间并存（不占房间名额）：本层有货架就给一个入口（打开是**本地**动作，不消耗房间行动）
-  if (snap.shop) {
-    w.push({
-      kind: 'button', id: 'room:shop', width: 300, size: 'sub',
-      label: `自动售货机（持有 ${snap.money} 金币）`,
-      action: { action: 'openShop', local: true },
-    });
-  }
+  roomHeader(w, snap);
 
   if (snap.room === 'training') {
     const t = snap.training ?? {};
@@ -363,6 +354,92 @@ export function buildRoomPanel(snap) {
   }
 
   if (snap.room === 'slot') {
+    roomHeader(w, snap);
+    slotWidgets(w, snap);
+    bankWidgets(w, snap);
+    w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
+    return w;
+  }
+
+  if (snap.room === 'gurpas') {
+    const g = snap.gurpas ?? { items: [], sellable: [] };
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: `持有 ${g.money} 金币 ｜ 她只收 A/S 级遗物` });
+    // 买到即开的卡包：优先占屏（三选一）
+    if (g.pendingPackCards?.length) {
+      w.push({ kind: 'sub', align: 'center', tint: '#ffd75e', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
+      w.push({
+        kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
+        items: g.pendingPackCards.map(c => ({
+          defId: c.defId, view: withLabels(c.view),
+          action: { action: 'gurpasTake', defId: c.defId },
+        })),
+      });
+      return w;
+    }
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '货架：' });
+    g.items.forEach((it, i) => {
+      const sold = it.sold ? '（已售出）' : '';
+      const used = it.kind === 'remove' ? `（已用 ${it.used ?? 0}/${2}）` : '';
+      w.push({
+        kind: 'button', id: `gurpas:buy:${i}`, width: 460, size: 'sub',
+        label: `${it.label} — ${it.price} 金${sold}${used}`,
+        enabled: !it.sold && (it.kind !== 'remove' || (it.used ?? 0) < 2) && g.money >= it.price,
+        action: { action: 'gurpasBuy', index: i },
+      });
+      if (it.sub) w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `　${it.sub}` });
+    });
+    w.push({ kind: 'gap' });
+    if (g.sellable?.length) {
+      w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '收购（A/S 级）：' });
+      for (const s of g.sellable) {
+        w.push({
+          kind: 'button', id: `gurpas:sell:${s.relicId}`, width: 400, size: 'sub',
+          label: `卖出 ${s.name}（${s.rarity}）→ +${s.price} 金`,
+          action: { action: 'gurpasSell', relicId: s.relicId },
+        });
+      }
+    } else {
+      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（你身上没有她收的 A/S 级遗物）' });
+    }
+    w.push({ kind: 'button', id: 'room:leave', label: '离开', width: 240, size: 'sub', action: { action: 'leaveRoom' } });
+    return w;
+  }
+
+  if (snap.room === 'event') {
+    const e = snap.event ?? {};
+    if (!e.result) {
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
+      w.push({ kind: 'button', id: 'event:explore', width: 240, label: '探索', action: { action: 'triggerEvent' } });
+    } else {
+      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: eventText(e.result) });
+      w.push({ kind: 'button', id: 'event:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveEvent' } });
+    }
+    return w;
+  }
+
+  w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（此房间暂无面板）' });
+  return w;
+}
+
+/** 售货机（模态）：货架列表 + 购买；卡包开出三选一时切换为选卡视图。 */
+/**
+ * 房间表头：标题 + 售货机入口（售货机与房间并存、不占房间名额，入口是**本地**动作）。
+ * 场景式休息房把机器面板拆开单开（点哪台开哪台），所以表头要能被两个面板各自复用。
+ */
+function roomHeader(w, snap) {
+  const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
+  w.push({ kind: 'title', text: `${meta.glyph} ${meta.name}`, align: 'center' });
+  if (snap.shop) {
+    w.push({
+      kind: 'button', id: 'room:shop', width: 300, size: 'sub',
+      label: `自动售货机（持有 ${snap.money} 金币）`,
+      action: { action: 'openShop', local: true },
+    });
+  }
+}
+
+/** 老虎机本体的 widget（无表头、无离开——场景式房间点机器单开，占位房间由 buildRoomPanel 组装）。 */
+function slotWidgets(w, snap) {
     const s = snap.slot ?? {};
     const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
     w.push({
@@ -463,146 +540,101 @@ export function buildRoomPanel(snap) {
         label: '粉碎物品…', action: { action: 'requestDevour' },
       });
     }
-    // —— 银行机（与老虎机成对出现；SLOT_MACHINE.md §银行机）——
-    const bk = snap.bank;
-    if (bk) {
-      w.push({ kind: 'gap' });
-      w.push({ kind: 'sub', align: 'center', tint: '#9ccfff', text: '🏦 银行机' });
-      w.push({
-        kind: 'sub', align: 'center', tint: '#9aa3b8',
-        text: `存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`,
-      });
-      if (bk.deposit > 0) {
-        w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金` });
-      }
-      if (bk.pendingDebuffs?.length) {
-        w.push({
-          kind: 'sub', align: 'center', tint: '#ff8a80',
-          text: '身负恶魔词条：' + bk.pendingDebuffs.map(d => `${d.name}(剩${d.battlesLeft}场)`).join('、'),
-        });
-      }
-      if (bk.pendingRoll) {
-        w.push({
-          kind: 'text', align: 'center', tint: '#ff8a80',
-          text: `恶魔 roll（已入账 ${bk.pendingRoll.gold} 金）：必须选一个词条承受`,
-        });
-        for (const o of bk.pendingRoll.options) {
-          w.push({
-            kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
-            label: `${o.name}：${o.desc}`,
-            action: { action: 'bankPick', id: o.id },
-          });
-        }
-      } else {
-        if (bk.money > 0) {
-          w.push({
-            kind: 'button', id: 'bank:deposit', width: 300, size: 'sub',
-            label: `存入全部（${bk.money} 金）`,
-            action: { action: 'bankDeposit' },
-          });
-        }
-        if (bk.deposit > 0) {
-          w.push({
-            kind: 'button', id: 'bank:withdraw', width: 340, size: 'sub',
-            label: `取款（${bk.deposit} 金，会打断连击）`,
-            action: { action: 'bankWithdraw' },
-          });
-        }
-        if (bk.canOverdraft) {
-          w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '超额取款（立刻拿钱，代价是恶魔词条）：' });
-          for (const t of bk.tiers) {
-            w.push({
-              kind: 'button', id: `bank:overdraft:${t.id}`, width: 240, size: 'sub',
-              label: `${t.name} +${t.gold} 金`,
-              action: { action: 'bankOverdraft', tier: t.id },
-            });
-          }
-        } else if (bk.lockout > 0) {
-          w.push({
-            kind: 'sub', align: 'center', tint: '#77809a',
-            text: `银行机暂时不让你超额取款（再过 ${bk.lockout} 次见面）`,
-          });
-        }
-      }
-      for (const offer of bk.offers ?? []) {
-        w.push(offer === 'upgrade'
-          ? {
-            kind: 'button', id: 'bank:offerUpgrade', width: 320, size: 'sub',
-            label: '立即免费升级一张卡',
-            action: { action: 'openUpgradePicker', source: 'bankUpgrade', local: true },
-          }
-          : {
-            kind: 'button', id: 'bank:offerBurn', width: 320, size: 'sub',
-            label: '自选焚毁一张卡',
-            action: { action: 'openUpgradePicker', source: 'bankBurn', local: true },
-          });
-      }
-    }
-    w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
-    return w;
-  }
+}
 
-  if (snap.room === 'gurpas') {
-    const g = snap.gurpas ?? { items: [], sellable: [] };
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: `持有 ${g.money} 金币 ｜ 她只收 A/S 级遗物` });
-    // 买到即开的卡包：优先占屏（三选一）
-    if (g.pendingPackCards?.length) {
-      w.push({ kind: 'sub', align: 'center', tint: '#ffd75e', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
-      w.push({
-        kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
-        items: g.pendingPackCards.map(c => ({
-          defId: c.defId, view: withLabels(c.view),
-          action: { action: 'gurpasTake', defId: c.defId },
-        })),
-      });
-      return w;
-    }
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '货架：' });
-    g.items.forEach((it, i) => {
-      const sold = it.sold ? '（已售出）' : '';
-      const used = it.kind === 'remove' ? `（已用 ${it.used ?? 0}/${2}）` : '';
-      w.push({
-        kind: 'button', id: `gurpas:buy:${i}`, width: 460, size: 'sub',
-        label: `${it.label} — ${it.price} 金${sold}${used}`,
-        enabled: !it.sold && (it.kind !== 'remove' || (it.used ?? 0) < 2) && g.money >= it.price,
-        action: { action: 'gurpasBuy', index: i },
-      });
-      if (it.sub) w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `　${it.sub}` });
-    });
+/** 银行机的 widget（同上）。 */
+function bankWidgets(w, snap) {
+  const bk = snap.bank;
+  if (!bk) return;
     w.push({ kind: 'gap' });
-    if (g.sellable?.length) {
-      w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '收购（A/S 级）：' });
-      for (const s of g.sellable) {
+    w.push({ kind: 'sub', align: 'center', tint: '#9ccfff', text: '🏦 银行机' });
+    w.push({
+      kind: 'sub', align: 'center', tint: '#9aa3b8',
+      text: `存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`,
+    });
+    if (bk.deposit > 0) {
+      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金` });
+    }
+    if (bk.pendingDebuffs?.length) {
+      w.push({
+        kind: 'sub', align: 'center', tint: '#ff8a80',
+        text: '身负恶魔词条：' + bk.pendingDebuffs.map(d => `${d.name}(剩${d.battlesLeft}场)`).join('、'),
+      });
+    }
+    if (bk.pendingRoll) {
+      w.push({
+        kind: 'text', align: 'center', tint: '#ff8a80',
+        text: `恶魔 roll（已入账 ${bk.pendingRoll.gold} 金）：必须选一个词条承受`,
+      });
+      for (const o of bk.pendingRoll.options) {
         w.push({
-          kind: 'button', id: `gurpas:sell:${s.relicId}`, width: 400, size: 'sub',
-          label: `卖出 ${s.name}（${s.rarity}）→ +${s.price} 金`,
-          action: { action: 'gurpasSell', relicId: s.relicId },
+          kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
+          label: `${o.name}：${o.desc}`,
+          action: { action: 'bankPick', id: o.id },
         });
       }
     } else {
-      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（你身上没有她收的 A/S 级遗物）' });
+      if (bk.money > 0) {
+        w.push({
+          kind: 'button', id: 'bank:deposit', width: 300, size: 'sub',
+          label: `存入全部（${bk.money} 金）`,
+          action: { action: 'bankDeposit' },
+        });
+      }
+      if (bk.deposit > 0) {
+        w.push({
+          kind: 'button', id: 'bank:withdraw', width: 340, size: 'sub',
+          label: `取款（${bk.deposit} 金，会打断连击）`,
+          action: { action: 'bankWithdraw' },
+        });
+      }
+      if (bk.canOverdraft) {
+        w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '超额取款（立刻拿钱，代价是恶魔词条）：' });
+        for (const t of bk.tiers) {
+          w.push({
+            kind: 'button', id: `bank:overdraft:${t.id}`, width: 240, size: 'sub',
+            label: `${t.name} +${t.gold} 金`,
+            action: { action: 'bankOverdraft', tier: t.id },
+          });
+        }
+      } else if (bk.lockout > 0) {
+        w.push({
+          kind: 'sub', align: 'center', tint: '#77809a',
+          text: `银行机暂时不让你超额取款（再过 ${bk.lockout} 次见面）`,
+        });
+      }
     }
-    w.push({ kind: 'button', id: 'room:leave', label: '离开', width: 240, size: 'sub', action: { action: 'leaveRoom' } });
-    return w;
-  }
-
-  if (snap.room === 'event') {
-    const e = snap.event ?? {};
-    if (!e.result) {
-      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
-      w.push({ kind: 'button', id: 'event:explore', width: 240, label: '探索', action: { action: 'triggerEvent' } });
-    } else {
-      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: eventText(e.result) });
-      w.push({ kind: 'button', id: 'event:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveEvent' } });
+    for (const offer of bk.offers ?? []) {
+      w.push(offer === 'upgrade'
+        ? {
+          kind: 'button', id: 'bank:offerUpgrade', width: 320, size: 'sub',
+          label: '立即免费升级一张卡',
+          action: { action: 'openUpgradePicker', source: 'bankUpgrade', local: true },
+        }
+        : {
+          kind: 'button', id: 'bank:offerBurn', width: 320, size: 'sub',
+          label: '自选焚毁一张卡',
+          action: { action: 'openUpgradePicker', source: 'bankBurn', local: true },
+        });
     }
-    return w;
-  }
+}
 
-  w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（此房间暂无面板）' });
+/** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */
+export function buildSlotPanel(snap) {
+  const w = [];
+  roomHeader(w, snap);
+  slotWidgets(w, snap);
   return w;
 }
 
-/** 售货机（模态）：货架列表 + 购买；卡包开出三选一时切换为选卡视图。 */
+/** **银行机面板**（场景式休息房：点银行机 → 开这一份）。 */
+export function buildBankPanel(snap) {
+  const w = [];
+  roomHeader(w, snap);
+  bankWidgets(w, snap);
+  return w;
+}
+
 export function buildShopPanel(snap) {
   const shop = snap.shop ?? { items: [], pending: null };
   const w = [];
