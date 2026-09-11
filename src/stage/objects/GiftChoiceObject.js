@@ -25,7 +25,7 @@ export class GiftChoiceObject extends THREE.Group {
    *   size:  色块边长（世界单位）
    *   onPick: (id) => void（选中并播完"飞出"动画后回调）
    */
-  constructor({ items = [], size = 3.4, onPick = null } = {}) {
+  constructor({ items = [], size = 3.0, onPick = null } = {}) {
     super();
     this._items = [];
     this._onPick = onPick;
@@ -50,12 +50,16 @@ export class GiftChoiceObject extends THREE.Group {
       g.add(frame, block);
       // ③ 名称（白字黑边，与操纵条同一口径）
       if (typeof document !== 'undefined') {
-        const label = bakeBoldText(it.name, { fontPx: 44, tint: '#ffffff', stroke: 'rgba(0,0,0,0.95)' });
+        // ⚠ 烘 64px 再**缩到 0.32**（不是把烘焙逻辑像素直接当世界尺寸：那样 44px 的字
+        // 有 4.4wu 高，比 3.4wu 的货块还大，整块屏被字糊住）
+        const label = bakeBoldText(it.name, { fontPx: 64, tint: '#ffffff', stroke: 'rgba(0,0,0,0.95)' });
         const text = new THREE.Mesh(
           new THREE.PlaneGeometry(label.width / 10, label.height / 10),
           new THREE.MeshBasicMaterial({ map: label.texture, transparent: true }),
         );
-        text.position.set(0, -size * 0.78, 0.01);
+        // 名称**印在货块上**（占位阶段最稳：货块永远在画面里，名字就不会掉到屏外/被面板盖住）
+        text.scale.setScalar(0.22);
+        text.position.set(0, -size * 0.22, 0.01);
         g.add(text);
       }
       g.userData.item = it;

@@ -557,45 +557,38 @@ export class RoomStage {
     if (this._gift) return true;                       // 已在演：吞掉重复点击
     const machine = this._markers.find(m => m.name === 'slot')?.entry;
     if (!machine) return false;
-    // ① 相机：出料口特写（用出料翻板的世界坐标当主体）
-    const flap = machine.parts?.flap ?? null;
-    const anchor = new THREE.Vector3();
-    if (flap) flap.getWorldPosition(anchor);
-    else anchor.set(machine.x, -30 + 4, machine.z + 2);
-    const box = flap
-      ? new THREE.Box3().setFromObject(flap).expandByScalar(1.6)
-      : new THREE.Box3(anchor.clone().setY(anchor.y - 3), anchor.clone().setY(anchor.y + 3));
-    const size = box.getSize(new THREE.Vector3());
-    const c = box.getCenter(new THREE.Vector3());
-    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
-    const dist = Math.max(size.y * 3.4, 14);
+    // ① 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
+    //    且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
     const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
-    const position = c.clone().addScaledVector(fwd, dist).add(new THREE.Vector3(0, 1.2, 0));
-    const look = c.clone().add(new THREE.Vector3(0, size.y * 0.5, 0));
-    const m = new THREE.Matrix4().lookAt(position, look, new THREE.Vector3(0, 1, 0));
+    const mbox = new THREE.Box3().setFromObject(machine.object);
+    const mid = mbox.getCenter(new THREE.Vector3());
+    const spot = new THREE.Vector3(machine.x, mid.y + 0.5, machine.z).addScaledVector(fwd, 6.5);
+    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
+    const dist = Math.max(18, mbox.getSize(new THREE.Vector3()).y * 1.15);
+    const position = spot.clone().addScaledVector(fwd, dist);
+    const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
     this._startCamTween(
       { position, quaternion: new THREE.Quaternion().setFromRotationMatrix(m) },
       0.5,
-      () => this._spawnGift(items, anchor, fwd),
+      () => this._spawnGift(items, spot),
     );
     // 演出期间抑制机器常驻抖动（怼脸看细节）
     for (const rig of this._rigs.values()) rig.setFocus?.(false);
     return true;
   }
 
-  /** 生成两件占位货（贴着出料口、朝外浮起），并登记拾取。 */
-  _spawnGift(items, anchor, fwd) {
+  /** 生成两件占位货（机器腰高、身前；每一件面向相机漂浮），并登记拾取。 */
+  _spawnGift(items, spot) {
     if (this._gift) return;
     this._gift = new GiftChoiceObject({
       items,
-      size: 3.4,
+      size: 3.0,
       onPick: (id) => {
         this._onIntent?.({ action: 'slotTakeGift', choice: id });
         this._removeGift(0.5);
       },
     });
-    this._gift.position.copy(anchor).addScaledVector(fwd, 2.6);
-    this._gift.position.y += 1.4;
+    this._gift.position.copy(spot);
     this._room?.group.add(this._gift);
     this._gift.attachPicker(this._picker);
   }
