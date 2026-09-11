@@ -98,6 +98,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const reels = parts?.reels ?? [];
   const bulbs = parts?.bulbs ?? [];
   const needle = parts?.needle ?? null;
+  const gate = parts?.gate ?? null;
+  const gateOpenY = parts?.gateOpenY ?? 0;
+  const gateClosedY = parts?.gateClosedY ?? 0;
+  const demonTint = new THREE.Color(parts?.demonTint ?? P.potionRed);
   const reelLamps = parts?.reelLamps ?? [];
   // 转轮面数由资产决定（道具导出 SYMBOLS 长度）；资产侧只有 kit 共享材质，
   // 彩灯/指示灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
@@ -181,6 +185,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     spinEnergy: 0,       // 0..1 转轮当前动能（驱动整机震动/拨杆共振）
     needleTilt: 0,       // 拨针摆角（弹簧积分）
     needleVel: 0,
+    demonK: 0,           // 0..1 恶魔态风格权重（灯效/彩灯偏暗红）
+    gateK: 0,            // 0 = 开门（闸口收起），1 = 关门（盖住开口）
+    reelsDemon: false,   // 转盘是否已换成恶魔盘
+    seq: null,           // 闸口/换盘的时序脚本（见 runSeq）
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
     shakeAmp: 0,
@@ -231,6 +239,59 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       }
     });
   }
+  // ---- 恶魔 roll 的机械演出（用户定 2026-09-11）----
+  // 闸口 = 盖住转轮窗的板：关 → 换盘 → 开。整段是**时序脚本**（每步 dur + 插值函数），
+  // 由 update 推进；脚本跑完前 isBusy() 为真（宿主据此禁掉拉杆/输入）。
+  // 恶魔态风格（彩灯 + 光照偏暗红）走 demonK 权重，与机械动画解耦——宿主可单独拉。
+  function runSeq(steps) {
+    st.seq = { steps, i: 0, t: 0 };
+  }
+  /** 进入恶魔 roll：关闸 → 换恶魔盘 → 开闸（期间 demonK 拉满）。 */
+  function demonEnter() {
+    if (st.seq || st.spin) return false;
+    st.demonWant = 1;
+    runSeq([
+      { dur: 0.42, fn: (t) => { st.gateK = t; } },                       // 关闸
+      { dur: 0.18, fn: () => { swapReels(true); } },                     // 关着换盘
+      { dur: 0.42, fn: (t) => { st.gateK = 1 - t; } },                   // 开闸
+    ]);
+    return true;
+  }
+  /** 退出恶魔 roll：关闸 → 换回普通盘 → 开闸（demonK 归零）。 */
+  function demonExit() {
+    if (st.seq) return false;
+    st.demonWant = 0;
+    runSeq([
+      { dur: 0.42, fn: (t) => { st.gateK = t; } },
+      { dur: 0.18, fn: () => { swapReels(false); } },
+      { dur: 0.42, fn: (t) => { st.gateK = 1 - t; } },
+    ]);
+    return true;
+  }
+  /** 换盘：恶魔盘 = 占位暗红（素材到位后在这里换 symbolKeys 取图）。 */
+  function swapReels(demon) {
+    st.reelsDemon = demon;
+    for (const r of reels) {
+      const mesh = r.userData.drumMesh;
+      if (!mesh) continue;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        if (!m?.color) continue;
+        if (demon) { if (!m.userData.__base) m.userData.__base = m.color.clone(); m.color.copy(demonTint); }
+        else if (m.userData?.__base) { m.color.copy(m.userData.__base); delete m.userData.__base; }
+      }
+    }
+  }
+  function stepSeq(dt) {
+    const q = st.seq;
+    if (!q) return;
+    q.t += dt;
+    const step = q.steps[q.i];
+    const t = Math.min(1, step.dur > 0 ? q.t / step.dur : 1);
+    step.fn(t);
+    if (q.t >= step.dur) { q.i += 1; q.t = 0; if (q.i >= q.steps.length) st.seq = null; }
+  }
+
   // ---- 拉杆 ----
   function pull({ tier = 'minor', symbols = null } = {}) {
     if (st.spin) return false;                      // 转轮中不能再拉（调用方另有防抖）
@@ -256,6 +317,9 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
 
   function update(dt) {
     st.t += dt;
+    stepSeq(dt);                                   // 闸口/换盘时序
+    st.demonK += ((st.demonWant ?? 0) - st.demonK) * Math.min(1, dt * 3.5);
+    if (gate) gate.position.y = gateOpenY + (gateClosedY - gateOpenY) * st.gateK;
     applyArtPanels();   // 画牌贴图：图刚解码完的那一帧贴上（之后就空转）
     applyReelArt();     // 轮盘图案同理
     // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
@@ -377,7 +441,11 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     setHover: (on) => { st.hoverTarget = on ? 1 : 0; },
     /** 追光（相机怼脸）开关：抑制抖动幅度——近景里同样的位移看起来会剧烈得多。 */
     setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
-    isBusy: () => !!st.spin,
+    // 恶魔 roll（宿主编排；美术未到位时转盘走占位暗红）
+    demonEnter, demonExit,
+    isDemon: () => !!st.reelsDemon || (st.demonWant ?? 0) > 0,
+    setDemonStyle: (k) => { st.demonWant = Math.max(0, Math.min(1, k)); },
+    isBusy: () => !!st.spin || !!st.seq,
     state: st,
   };
 }

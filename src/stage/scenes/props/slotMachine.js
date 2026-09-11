@@ -273,6 +273,17 @@ export default {
       g.add(fmesh);
     }
 
+    // ================= 窗口闸口（恶魔 roll 用；用户定 2026-09-11）=================
+    // 恶魔 roll 时：闸口先关闭 → 转盘换成恶魔专用盘 → 闸口再打开；结束后反向来一遍。
+    // 就是一块盖住开口的板，由 rig 沿 Y 滑动（关门 = 覆盖开口，开门 = 抬到压边之后藏起来）。
+    // 材质由 rig 拿独立实例（恶魔态偏暗红）——故登记 animRole 由它接管。
+    const gate = K.put(
+      K.box({ color: shade(P.iron, -0.34), size: [winW + 0.06, winH + 0.05, 0.12], family: 'metal' }),
+      0, openTop + winH * 0.72, D / 2 - 0.02,     // 初始：抬起（开门态）
+    );
+    gate.userData.animRole = 'gate';
+    g.add(gate);
+
     // ================= 三个转轮鼓 =================
     const reels = [];
     for (let i = 0; i < reelCount; i++) {
@@ -429,7 +440,12 @@ export default {
     leverPivot.add(K.put(knobMesh, 0.56, 1.86, 0));
     g.add(leverPivot);
 
-    g.userData.parts = { body: g, leverPivot, reels, bulbs, reelLamps, needle: needlePivot };
+    g.userData.parts = {
+      body: g, leverPivot, reels, bulbs, reelLamps, needle: needlePivot, gate,
+      gateOpenY: openTop + winH * 0.72,    // rig 用：开门位
+      gateClosedY: winY,                   // rig 用：关门位（盖住开口）
+      demonTint: shade(P.potionRed, -0.2), // 恶魔态占位色（偏暗红；素材到位后换贴图）
+    };
     g.userData.interactive = 'slot';
     return g;
   },
