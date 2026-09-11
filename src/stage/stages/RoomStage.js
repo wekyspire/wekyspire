@@ -24,6 +24,7 @@ import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
 import { createVendingMachineRig } from '../scenes/interactive/vendingMachineRig.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { ContinueButtonObject } from '../objects/ContinueButtonObject.js';
+import { MachineMarkerObject } from '../objects/MachineMarkerObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
 import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
@@ -210,7 +211,7 @@ export class RoomStage {
 
     // ---- 机器 rig + 头顶浮标（可点：浮标比机器大得多，远景也点得中）----
     this._rigs = new Map();      // name -> rig
-    this._markers = [];          // { name, object, marker, ring }
+    this._markers = [];          // { name, entry, marker(箭头浮标), hover }
     this._buildInteractives();
 
     // ---- UI：状态栏 + 顶端资源行 + 继续前进按钮 ----
@@ -412,6 +413,7 @@ export class RoomStage {
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
     const name = this._machineOf(hit);
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
+    for (const m of this._markers) m.hover = (m.name === name);   // 箭头浮标 hover 提亮
     // 售货机商品卡：悬停抬起 + 盘子提亮（点下去就是买；下标全局唯一，各 rig 只认自己的）
     const gi = this._goodsIndexOf(hit);
     for (const rig of this._rigs.values()) rig.setGoodsHover?.(gi);
@@ -487,6 +489,7 @@ export class RoomStage {
     this._showcase?.dispose();
     this._showcase = null;
     this._removePanel();
+    for (const m of this._markers) m.marker?.dispose?.();
     this._statusBar.dispose();
     this._topBar.dispose();
     this._markers = [];
@@ -513,37 +516,15 @@ export class RoomStage {
           })
             : null;
       if (rig) this._rigs.set(name, rig);
-      // 地面光环（hover 提亮）+ 头顶浮标（菱形 + 光柱）：远景读得出"这台能点"
+      // 头顶浮标 = **一枚跳动的发光箭头**（用户定 2026-09-12：去掉地面光圈与光柱，只留箭头）。
       // ⚠ y 必须落在房间地平（FLOOR_Y）上：道具都摆在 FLOOR_Y 平面，浮标写 y=0 会飘到半空
-      // （30 世界单位的悬空，"机器旁边的金菱形"与机器读作两件东西）
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
-        new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(entry.x, FLOOR_Y + 0.12, entry.z + 1.2 * entry.scale);
-      this._room.group.add(ring);
-      const marker = new THREE.Group();
-      marker.position.set(entry.x, FLOOR_Y, entry.z);
-      // 浮标高度：贴到机器**包围盒顶**上方一点点（从包围盒算，各种尺度的机器都不用逐个调参）
+      // （30 世界单位的悬空，与机器读作两件东西）；箭尖指着机器顶上方一点点，
+      // 高度从**包围盒顶**算，各种尺度的机器都不用逐个调参。
       const topY = new THREE.Box3().setFromObject(entry.object).max.y;
-      const bobY = Math.max(5, topY - FLOOR_Y + 2.4);
-      const bob = new THREE.Mesh(
-        new THREE.BoxGeometry(2.2, 2.2, 2.2),
-        new THREE.MeshBasicMaterial({ color: 0xffe08a }),
-      );
-      bob.position.y = bobY;
-      bob.rotation.set(Math.PI / 4, Math.PI / 4, 0);
-      marker.add(bob);
-      const beam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.5, bobY, 6, 1, true),
-        new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
-      );
-      beam.position.y = bobY / 2;
-      marker.add(beam);
-      marker.userData.bob = bob;
+      const marker = new MachineMarkerObject({ size: Math.max(1, entry.scale * 0.52) });
+      marker.position.set(entry.x, FLOOR_Y + Math.max(4, topY - FLOOR_Y + 1.3), entry.z);
       this._room.group.add(marker);
-      this._markers.push({ name, entry, marker, ring, hover: false });
+      this._markers.push({ name, entry, marker, hover: false });
     }
   }
 
@@ -1164,19 +1145,10 @@ export class RoomStage {
     const camPos = this._sm?.camera?.position ?? null;
     this._room?.update?.(dt, null, camPos);
     for (const rig of this._rigs.values()) rig.update(dt);
-    // 浮标跳动 / 光环呼吸：聚焦的那台更亮更大（远景也读得出"当前在看哪台"）
+    // 浮标：跳动的发光箭头（聚焦/hover 的那台更亮更大，远景也读得出"当前在看哪台"）
     for (const m of this._markers) {
-      const bob = m.marker.userData.bob;
-      if (bob) {
-        bob.position.y += Math.sin(this._t * 3.1 + (m.entry?.x ?? 0)) * 0.006;
-        bob.rotation.y += dt * 1.1;
-        const want = (m.name === this._focused ? 1.35 : 1) * (1 + 0.08 * Math.sin(this._t * 3.4));
-        bob.scale.setScalar(bob.scale.x + (want - bob.scale.x) * Math.min(1, dt * 6));
-      }
-      if (m.ring) {
-        const want = (m.name === this._focused ? 0.5 : 0.18) + 0.22 * (0.5 + 0.5 * Math.sin(this._t * 1.7 + 1));
-        m.ring.material.opacity += (want - m.ring.material.opacity) * Math.min(1, dt * 5);
-      }
+      m.marker.setHighlight(m.name === this._focused || !!m.hover);
+      m.marker.update(dt);
     }
     this._continue.update(dt);
     this._showcase?.update(dt);

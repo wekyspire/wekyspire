@@ -17,6 +17,7 @@ import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig
 import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';
 import { createVendingMachineRig } from '../stage/scenes/interactive/vendingMachineRig.js';
 import { FLOOR_Y } from '../stage/scenes/dungeon3D.js';
+import { MachineMarkerObject } from '../stage/objects/MachineMarkerObject.js';
 
 const params = new URLSearchParams(location.search);
 
@@ -146,8 +147,6 @@ function pickCrusher(clientX, clientY) {
   }
   return null;
 }
-
-const bobbingScale = (name) => (name === hovered ? 1.35 : 1) * (1 + 0.08 * Math.sin(time * 3.4));
 
 function setHovered(name) {
   if (hovered === name) return;
@@ -382,39 +381,13 @@ function rebuild() {
       ]);
       rig.setDisplay?.('余额 30');
     }
-    // 地面光环（hover 提亮；点它也能聚焦）
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
-      new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(entry.x, FLOOR_Y + 0.12, entry.z + 1.2 * entry.scale);
-    room.group.add(ring);
-    markerRings.push({ name, ring });
-    // 悬浮浮标（远景可读：跳动菱形 + 竖直光柱；hover 放大变亮）——⚠ 与机器同一地平面（FLOOR_Y）
-    const marker = new THREE.Group();
-    marker.position.set(entry.x, FLOOR_Y, entry.z);
+    // 头顶浮标 = **一枚跳动的发光箭头**（与正式房间同一件对象；用户定 2026-09-12：
+    // 去掉地面光环与光柱，只留箭头）——⚠ 底在房间地平（FLOOR_Y），箭尖指着机器顶
     const topY = new THREE.Box3().setFromObject(entry.object).max.y;
-    const bobY = Math.max(5, topY - FLOOR_Y + 2.4);
-    const bob = new THREE.Mesh(
-      new THREE.BoxGeometry(2.2, 2.2, 2.2),
-      new THREE.MeshBasicMaterial({ color: 0xffe08a }),
-    );
-    bob.position.y = bobY;
-    bob.rotation.set(Math.PI / 4, Math.PI / 4, 0);   // 菱形
-    marker.add(bob);
-    // 竖直光柱：把浮标和机器连起来（远景也看得出"这台能点"）
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.5, bobY, 6, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
-    );
-    beam.position.y = bobY / 2;
-    marker.add(beam);
-    marker.userData.bob = bob;
-    marker.userData.beam = beam;
+    const marker = new MachineMarkerObject({ size: Math.max(1, entry.scale * 0.52) });
+    marker.position.set(entry.x, FLOOR_Y + Math.max(4, topY - FLOOR_Y + 1.3), entry.z);
     room.group.add(marker);
-    markerRings[markerRings.length - 1].marker = marker;
-    markerRings[markerRings.length - 1].entry = entry;
+    markerRings.push({ name, marker, entry });
   }
   focused = null;
   barEl.classList.remove('open');
@@ -544,18 +517,10 @@ renderer.setAnimationLoop(() => {
   camera.lookAt(orbit.target);
   room?.update(dt, null, camera.position);
   for (const rig of rigs.values()) rig.update(dt);
-  // 浮标跳动 / 光环呼吸
+  // 浮标：跳动的发光箭头（hover / 聚焦的那台更亮更大）
   for (const m of markerRings) {
-    const bob = m.marker?.userData?.bob;
-    if (bob) {
-      bob.position.y += Math.sin(time * 3.1 + (m.entry?.x ?? 0)) * 0.006;
-      bob.rotation.y += dt * 1.1;
-      const target = bobbingScale(m.name);
-      bob.scale.setScalar(bob.scale.x + (target - bob.scale.x) * Math.min(1, dt * 6));
-    }
-    if (m.ring) m.ring.material.opacity = 0.22 + 0.25 * (0.5 + 0.5 * Math.sin(time * 1.7 + 1)) + (m.hover ? 0.45 : 0);
-    const beam = m.marker?.userData?.beam;
-    if (beam) beam.material.opacity = 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(time * 2.3)) + (m.hover ? 0.3 : 0);
+    m.marker?.setHighlight?.(m.hover || m.name === focused);
+    m.marker?.update?.(dt);
   }
   stepCamTween(dt);
   syncAnchorPins();
