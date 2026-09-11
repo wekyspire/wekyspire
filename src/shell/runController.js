@@ -327,6 +327,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
 
   // ---- 场景式休息房（第一间 = 赌厅 casino，用户定 2026-09-11）----
+  // 全屏选卡/选遗物/获得物特写都画在**当前活动舞台**的 uiScene 上（只有活动舞台会被渲染）：
+  // 房间场景打开时归 RoomStage，否则归塔楼层 MapStage。两个舞台同名同义的接口即此契约。
+  const panelStage = () => roomStage ?? mapStage;
   // gameStage 落到 'room' 且该房类型有配方（restRecipeFor）时，用**幕间黑幕**切到房间场景
   // （RoomStage）；没有配方的房间类型继续走塔楼层 + 占位面板，不切场景。
   // 离开由玩家**主动**发起（房间右下角「继续前进」箭头）→ 同样走黑幕回塔楼。
@@ -544,7 +547,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       }],
     });
     if (picked !== 'card' && picked !== 'relic') return false;
-    return !!mapStage?.openDevourPicker({
+    return !!panelStage()?.openDevourPicker({
       kind: picked,
       cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId })),
       relics: relics.map(r => ({
@@ -557,7 +560,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           : devourSlot(run, { kind: 'relic', relicId: key });
         notify();
         // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
-        mapStage?.showcaseItem({
+        panelStage()?.showcaseItem({
           title: `+${res.gold} 金币`,
           desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡' : '老虎机满意地嚼碎了那件遗物',
           effect: res.freeRoll ? '它还额外吐了一次免费拉杆' : '金币已经落进你的钱袋',

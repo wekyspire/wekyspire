@@ -42,6 +42,8 @@ function easeOutBack(t, k = 1.7) {
 
 /** 放射光束贴图（程序化烘焙：中心亮、向外的锥形光条 + 柔和衰减）。 */
 function bakeGodRays(size = 512, spokes = 18) {
+  // node/headless 无 canvas：返回 null，调用方跳过光束层（特写其余部分照常）
+  if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -120,6 +122,7 @@ export class ItemShowcaseObject extends THREE.Group {
       }),
     );
     rays.position.set(0, ART.y, Z.RAYS);
+    rays.visible = !!this._raysTex;   // headless：无光束贴图就不画这一层
     this._rays = rays;
     this.add(rays);
 

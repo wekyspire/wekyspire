@@ -20,6 +20,9 @@ import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { ContinueButtonObject } from '../objects/ContinueButtonObject.js';
+import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
+import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
+import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { buildSlotPanel, buildBankPanel, buildShopPanel } from '../panels/index.js';
@@ -76,6 +79,10 @@ export class RoomStage {
     this._panelKind = null;      // 当前面板对应的机器（null = 收起）
     this._focused = null;        // 聚焦的机器名
     this._downHit = null;
+    this._cardPicker = null;    // 全屏选卡（升级/焚毁；惰性建）
+    this._relicPicker = null;   // 全屏选遗物（粉尘/粉碎；惰性建）
+    this._showcase = null;      // 获得物特写（金币大奖等；惰性建）
+    this._pickerConfirm = null; // 当前选择界面的确认回调（按入口切换）
     this._pickIds = [];
     this._t = 0;
     this._slotSpinId = null;
@@ -146,6 +153,120 @@ export class RoomStage {
     if (remi) this._statusBar.setRemi(remi);
   }
 
+  // ---- 全屏选择界面 / 获得物特写（与 MapStage 同名同义：宿主按"当前舞台"调用）----
+  // ⚠ 与 MapStage 的这两段是同构的（选卡/选遗物/特写三件套）。后续可抽 `StagePickerKit`
+  // 让两个舞台共用一份；眼下房间层只用到 slot/bank 三个来源，故先就地实现，不动已验证的塔楼路径。
+  /** 选择界面文本烘焙：honors fontPx/tint/maxWidth（不能用状态栏那套固定 style 的烘焙）。 */
+  _pickerBakeText() {
+    if (this._pickerBake !== undefined) return this._pickerBake;
+    this._pickerBake = (typeof document === 'undefined')
+      ? null
+      : (text, { fontPx = 16, tint = '#cdd6f4', maxWidth } = {}) => renderRichTextBlock(text, {
+        maxWidth: maxWidth ?? 4000,
+        scale: 3,
+        style: { fontSize: fontPx, lineHeight: Math.round(fontPx * 1.3), color: tint },
+      });
+    return this._pickerBake;
+  }
+
+  /** 打开「选卡」界面；source 决定候选与确认后上行的意图（房间层：slot 免费升级 / 银行升级 / 银行焚毁）。 */
+  openUpgradePicker(source) {
+    const snap = this._snap;
+    const cards = (source === 'bankUpgrade'
+      ? (snap?.bank?.upgradeCards ?? [])
+      : source === 'bankBurn'
+        ? (snap?.bank?.burnCards ?? [])
+        : (snap?.slot?.upgradeCards ?? []))
+      .filter(c => c.enabled !== false);
+    if (!cards.length) return false;
+    if (!this._cardPicker) {
+      this._cardPicker = new CardScrollPickerObject({
+        bakeText: this._pickerBakeText(),
+        bus: this._bus,
+        onCancel: () => { /* 收起即可，面板还在 */ },
+        onConfirm: (ids) => this._pickerConfirm?.(ids),
+      });
+      this.uiScene.add(this._cardPicker);
+    }
+    this._pickerConfirm = (ids) => {
+      const uniqueID = ids[0];
+      this._onIntent?.(source === 'bankUpgrade'
+        ? { action: 'bankUpgradeOffer', uniqueID }
+        : source === 'bankBurn'
+          ? { action: 'bankBurnOffer', uniqueID }
+          : { action: 'slotPickUpgrade', uniqueID });
+    };
+    this._cardPicker.attachPicker(this._picker);
+    this._cardPicker.open({
+      title: source === 'bankBurn' ? '选择要焚毁的卡' : '选择要升级的卡',
+      hint: source === 'bankBurn'
+        ? '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页'
+        : '悬停查看升级后的卡面 ｜ 滚轮翻页',
+      cards: cards.map(c => ({
+        uniqueID: c.uniqueID, defId: c.defId, view: c.view, enabled: c.enabled, tipDefId: c.tipDefId,
+      })),
+      confirmLabel: source === 'bankBurn' ? '确认焚毁' : '确认升级',
+    });
+    return true;
+  }
+
+  /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
+  openDevourPicker({ kind, cards = [], relics = [], onPick = null } = {}) {
+    if (kind === 'relic') {
+      if (!relics.length) return false;
+      if (!this._relicPicker) {
+        this._relicPicker = new RelicScrollPickerObject({
+          bakeText: this._pickerBakeText(),
+          bus: this._bus,
+          onConfirm: (ids) => this._pickerConfirm?.(ids),
+        });
+        this.uiScene.add(this._relicPicker);
+      }
+      this._pickerConfirm = (ids) => onPick?.(ids[0]);
+      this._relicPicker.attachPicker(this._picker);
+      this._relicPicker.open({
+        title: '粉碎哪件遗物？',
+        hint: '喂给老虎机换金币 ｜ 悬停查看效果 ｜ 滚轮翻页（S 级嚼不动）',
+        relics,
+        confirmLabel: '确认粉碎',
+      });
+      return true;
+    }
+    if (!cards.length) return false;
+    if (!this._cardPicker) {
+      this._cardPicker = new CardScrollPickerObject({
+        bakeText: this._pickerBakeText(),
+        bus: this._bus,
+        onConfirm: (ids) => this._pickerConfirm?.(ids),
+      });
+      this.uiScene.add(this._cardPicker);
+    }
+    this._pickerConfirm = (ids) => onPick?.(ids[0]);
+    this._cardPicker.attachPicker(this._picker);
+    this._cardPicker.open({
+      title: '粉碎哪张卡？',
+      hint: '喂给老虎机换金币 ｜ 悬停查看卡面 ｜ 滚轮翻页（诅咒卡另有奖赏）',
+      cards,
+      confirmLabel: '确认粉碎',
+    });
+    return true;
+  }
+
+  /** 获得物特写（通用组件：有素材用素材，没有就拿色块代替）。 */
+  showcaseItem(item) {
+    if (!item) return false;
+    if (!this._showcase) {
+      this._showcase = new ItemShowcaseObject();
+      this.uiScene.add(this._showcase);
+      this._showcase.attachPicker(this._picker);
+    }
+    return this._showcase.show(item);
+  }
+
+  get showcasing() { return !!this._showcase?.busy; }
+  get cardPicker() { return this._cardPicker; }
+  get relicPicker() { return this._relicPicker; }
+
   /** 当前聚焦的机器名（调试/测试）。 */
   get focusedMachine() { return this._focused; }
   /** 当前打开的面板种类（'slot' | 'bank' | 'shop' | null）。 */
@@ -172,6 +293,9 @@ export class RoomStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
+    if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
+    if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
     const name = this._machineOf(hit);
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
     this._continue.setHovered(hit?.id === this._continue.pickId);
@@ -192,6 +316,9 @@ export class RoomStage {
     const hit = this._picker.pick(x, y);
     const down = this._downHit;
     this._downHit = null;
+    if (this._showcase?.busy) { this._showcase.onClick(hit); return; }        // 点任意处退出特写
+    if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
+    if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
     if (down && hit && down.kind === hit.kind && down.id === hit.id) {
       this._activate(hit);
       return;
@@ -200,7 +327,11 @@ export class RoomStage {
     if (!hit || hit.kind === 'background') this._focusMachine(null);
   }
 
-  handleWheel() { return false; }
+  handleWheel(deltaY) {
+    if (this._cardPicker?.opened) return this._cardPicker.scrollBy(deltaY / 100);
+    if (this._relicPicker?.opened) return this._relicPicker.scrollBy(deltaY / 100);
+    return false;
+  }
 
   onEnter(manager) {
     this._sm = manager;
@@ -229,6 +360,12 @@ export class RoomStage {
     this.composeScene = null;
     this.composeResize = null;
     this._continue.dispose();
+    this._cardPicker?.dispose();
+    this._cardPicker = null;
+    this._relicPicker?.dispose();
+    this._relicPicker = null;
+    this._showcase?.dispose();
+    this._showcase = null;
     this._removePanel();
     this._statusBar.dispose();
     this._topBar.dispose();
@@ -476,7 +613,7 @@ export class RoomStage {
       if (action.action === 'backToRoom') { this._focusMachine(null); return; }
       if (action.action === 'openShop') { this.openShop(); return; }
       if (action.action === 'closeShop') { this._openPanel(this._focused); return; }
-      if (action.action === 'openUpgradePicker') { this._onIntent?.(action); return; }  // 选卡界面仍由编排器/塔楼侧接管
+      if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       return;
     }
     this._onIntent?.(action);
@@ -530,6 +667,7 @@ export class RoomStage {
       }
     }
     this._continue.update(dt);
+    this._showcase?.update(dt);
   }
 
   /** 机位补间推进（ease-out cubic）：位置线性插值 + 四元数球面插值。 */
