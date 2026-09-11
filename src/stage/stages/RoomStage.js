@@ -29,7 +29,7 @@ import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
-import { buildSlotPanel, buildBankPanel, buildCampPanel, buildTrainingPanel, buildShopPanel } from '../panels/index.js';
+import { buildSlotPanel, buildBankPanel, buildCampTrainingPanel, buildShopPanel } from '../panels/index.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { GiftChoiceObject } from '../objects/GiftChoiceObject.js';
 import { Picker } from '../picker/Picker.js';
@@ -46,8 +46,10 @@ const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const PANEL_OF = {
   slot: buildSlotPanel,
   bank: buildBankPanel,
-  camp: buildCampPanel,
-  training: buildTrainingPanel,
+  // 合并房（营地·训练场）：**点篝火或训练桩都开同一份面板**（营地选项 + 训练选项一起给，
+  // 用户定 2026-09-12）——两个部分同处一室，不该让玩家来回点两件东西找入口
+  camp: buildCampTrainingPanel,
+  training: buildCampTrainingPanel,
   shop: buildShopPanel,     // 售货机（主柜）：点机身直接开货架面板（不再是房间表头上的一个按钮）
   shop2: buildShopPanel,    // 溢出柜（货架 > 4 件时才有）：同一份货架面板（数据是全局的）
 };
@@ -94,6 +96,20 @@ function slotSubject(entry) {
     new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 2),
   );
 }
+/** 取一件物的**上段**（火盆/火焰这种"脸在上半身"的物件）：从高度份额 `from` 到顶。 */
+function upperSubject(entry, from = 0.35, topPad = 0.22) {
+  const box = new THREE.Box3().setFromObject(entry.object);
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  // ⚠ 顶面留余量：火焰粒子是**场景粒子**（不在道具包围盒里），不留白会把火苗切在画外
+  const topY = box.max.y + size.y * topPad;
+  return new THREE.Box3(
+    new THREE.Vector3(c.x - size.x / 2, box.min.y + size.y * from, c.z - size.z / 2),
+    new THREE.Vector3(c.x + size.x / 2, topY, c.z + size.z / 2),
+  );
+}
+function bowlSubject(entry) { return upperSubject(entry, 0.42); }
+
 // 单件取景覆盖：老虎机怼脸（fracH>0.5 = 主体占屏更大）；其余交互物走默认整件取景
 const FOCUS_OF = {
   // 怼脸处方：主体（转轮窗 + 拉杆 + 下半身的投料口/计数器）占屏 0.88，底边抬到 0.26
@@ -102,6 +118,9 @@ const FOCUS_OF = {
   // 售货机同样怼脸（用户定 2026-09-12：点售货机要看清货架上的商品与价格）：
   // 主体 = **货架区开口**（不含底座/操作列/顶牌），底边抬到操纵条之上（两排货 + 价格全露出来）
   vending: { fracH: 0.62, bottom: 0.36, pad: 0.95, subject: vendingSubject },
+  // 篝火（营地·训练场的交互物）：主体 = **火盆 + 火焰**（不含三足）——整件取景时腿占了半屏，
+  // 火苗顶到画外；换成"看火"，机器一般怼近一点（用户定 2026-09-12 的交互节奏）
+  camp: { fracH: 0.6, bottom: 0.38, pad: 0.9, subject: bowlSubject },
 };
 
 /**
@@ -253,15 +272,22 @@ export class RoomStage {
     return this._pickerBake;
   }
 
-  /** 打开「选卡」界面；source 决定候选与确认后上行的意图（房间层：slot 免费升级 / 银行升级 / 银行焚毁）。 */
+  /**
+   * 打开「选卡」界面；source 决定候选与确认后上行的意图。
+   * 房间层来源：营地上级 / 训练升级 / 老虎机免费升级 / 银行升级 / 银行焚毁。
+   * ⚠ 候选必须按 source 取对应快照段——曾经一律读 `snap.slot.upgradeCards`，
+   * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
+   */
   openUpgradePicker(source) {
     const snap = this._snap;
-    const cards = (source === 'bankUpgrade'
-      ? (snap?.bank?.upgradeCards ?? [])
-      : source === 'bankBurn'
-        ? (snap?.bank?.burnCards ?? [])
-        : (snap?.slot?.upgradeCards ?? []))
-      .filter(c => c.enabled !== false);
+    const CARDS_OF = {
+      camp: () => snap?.camp?.upgradeCards,
+      training: () => snap?.training?.upgradeCards,
+      bankUpgrade: () => snap?.bank?.upgradeCards,
+      bankBurn: () => snap?.bank?.burnCards,
+      slot: () => snap?.slot?.upgradeCards,
+    };
+    const cards = (CARDS_OF[source]?.() ?? []).filter(c => c.enabled !== false);
     if (!cards.length) return false;
     if (!this._cardPicker) {
       this._cardPicker = new CardScrollPickerObject({
@@ -272,13 +298,16 @@ export class RoomStage {
       });
       this.uiScene.add(this._cardPicker);
     }
+    const INTENT_OF = {
+      camp: (uniqueID) => ({ action: 'campChoose', option: 'upgrade', uniqueID }),
+      training: (uniqueID) => ({ action: 'trainingUpgrade', uniqueID }),
+      bankUpgrade: (uniqueID) => ({ action: 'bankUpgradeOffer', uniqueID }),
+      bankBurn: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
+      slot: (uniqueID) => ({ action: 'slotPickUpgrade', uniqueID }),
+    };
     this._pickerConfirm = (ids) => {
-      const uniqueID = ids[0];
-      this._onIntent?.(source === 'bankUpgrade'
-        ? { action: 'bankUpgradeOffer', uniqueID }
-        : source === 'bankBurn'
-          ? { action: 'bankBurnOffer', uniqueID }
-          : { action: 'slotPickUpgrade', uniqueID });
+      const intent = INTENT_OF[source]?.(ids[0]);
+      if (intent) this._onIntent?.(intent);
     };
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
@@ -600,7 +629,12 @@ export class RoomStage {
       return;
     }
     if (hit.id === this._continue.pickId) {
-      if (this._snap?.training?.forced) {   // 强绑抓牌未领：不走，给一句提示泡泡
+      // 合并房（营地·训练场）：**两部分的奖励都处理完才能走**（用户定 2026-09-12）——
+      // 没在火边歇过 / 没把训练做完就点继续，这里把人拉回火堆并给一句提示，
+      // 免得玩家一路点过去把这一层的收益漏掉（两部分都恒有可做的动作，不会卡死）
+      const pendingPart = this._pendingCampTraining();
+      if (pendingPart) { this._nudgeCampTraining(pendingPart); return; }
+      if (this._snap?.training?.forced) {   // 强绑抓牌未领（同上，单独给一句）
         this._nudgeForcedPick();
         return;
       }
@@ -689,6 +723,43 @@ export class RoomStage {
     this._gift = null;
   }
 
+  /**
+   * 合并房里**还没处理完的部分**（null = 都做完了，可以离房）。
+   * 判定刻意保守（只认"确实有可做的事"）：两部分都恒有终止动作（营地恒有"休整"、
+   * 训练恒有 升级+抓牌 / 抓牌 / 跳过训练），所以这个门不会把人卡死在房里。
+   */
+  _pendingCampTraining() {
+    const snap = this._snap;
+    if (!snap || snap.room !== 'campTraining') return null;
+    const t = snap.training ?? {};
+    if (t.choices?.length || t.forced) return 'training';      // 三选一还挂着（强绑尾款）
+    if (!t.done) return 'training';                            // 训练整个没做
+    const c = snap.camp ?? {};
+    if (!c.used && (c.options?.length ?? 0) > 0) return 'camp'; // 火边还没歇过
+    return null;
+  }
+
+  /** 没做完就想走：把镜头拉回**篝火**（两部分的入口都在它那份面板里）并给一句泡泡。 */
+  _nudgeCampTraining(part) {
+    const name = this._markers.some(m => m.name === 'camp') ? 'camp' : 'training';
+    const entry = this._markers.find(m => m.name === name)?.entry;
+    if (entry && this._focused !== name) this._focusMachine(name);
+    else if (entry) this._openPanel(name);
+    if (!entry) return;
+    const t = this._snap?.training ?? {};
+    const c = this._snap?.camp ?? {};
+    const campLeft = !c.used && (c.options?.length ?? 0) > 0;
+    const trainLeft = !t.done || !!t.forced;
+    this._bubbles.say('room:campHint', {
+      ...this._midAnchorOf(entry, 1.5),
+      text: (campLeft && trainLeft) ? '火边还有事没做完呢。'
+        : part === 'camp' ? '还没在火边歇过呢。' : '训练还没做完呢。',
+      kind: 'thought',
+      duration: 2.6,
+      tint: 0xffe0b0,
+    });
+  }
+
   /** 强绑抓牌未领时点「继续前进」：把镜头拉到训练桩并冒一句泡泡（"先挑卡"）——比"按钮没反应"清楚。 */
   _nudgeForcedPick() {
     const target = this._markers.find(m => m.name === 'training') ? 'training' : this._focused;
@@ -697,7 +768,7 @@ export class RoomStage {
     const anchor = entry ?? this._markers[0]?.entry;
     if (anchor) {
       this._bubbles.say('room:hint', {
-        ...this._uiAnchorOf(anchor, 14),
+        ...this._midAnchorOf(anchor, 1.5),
         text: '还没把挑好的卡放进牌组呢。',
         kind: 'thought',
         duration: 2.6,
@@ -774,6 +845,18 @@ export class RoomStage {
     const box = new THREE.Box3().setFromObject(entry.object);
     const c = box.getCenter(new THREE.Vector3());
     return sm.worldToUI(c.x, Math.max(c.y, box.max.y) + lift * (entry.scale ?? 1), c.z);
+  }
+
+  /**
+   * 物件**中部**的 UI 锚点（怼脸取景时物件顶/底都在画外，提示泡泡要挂在看得见的地方）。
+   * lift 是世界单位（不乘 scale——怼脸处方里 scale 已经很大，乘完就飞出去了）。
+   */
+  _midAnchorOf(entry, lift = 1.5) {
+    const sm = this._sm;
+    if (!sm?.worldToUI) return { x: 0, y: 0 };
+    const box = new THREE.Box3().setFromObject(entry.object);
+    const c = box.getCenter(new THREE.Vector3());
+    return sm.worldToUI(c.x, c.y + lift, c.z);
   }
 
   /** 聚焦某个交互物（null = 退回房间全景）。用户定的节奏：**先把相机推到物件前，推到位之后再
@@ -973,8 +1056,9 @@ export class RoomStage {
   _syncSlotFromSnapshot() {
     this._syncVending();
     this._syncBank();
-    // 强绑抓牌未领时不许离房：continue 箭头压暗（点了给一句泡泡提示，见 _activate）
-    this._continue.setDim(this._snap?.training?.forced ? 0.4 : 1);
+    // 合并房两部分的奖励都领完才允许离房：continue 箭头在没领完时压暗
+    // （点了给一句泡泡并把镜头拉回篝火，见 _activate 的 _pendingCampTraining 分支）
+    this._continue.setDim(this._pendingCampTraining() ? 0.4 : 1);
     const s = this._snap?.slot;
     const rig = this._rigs.get('slot');
     if (!s || !rig) return;

@@ -259,12 +259,18 @@ const upgradeButton = (source) => ({
 const pushCampGroup = (w, c = { options: [] }) => {
   const tiles = [];
   if (c.options.includes('recoverRemi')) {
-    tiles.push({ id: 'recoverRemi', name: '🐾 找回瑞米', desc: '那位老朋友回到了身边', action: { action: 'campChoose', option: 'recoverRemi' } });
+    tiles.push({ id: 'recoverRemi', name: '🐾 找回瑞米', desc: '瑞米回到身边', action: { action: 'campChoose', option: 'recoverRemi' } });
   }
   if (c.options.includes('rest')) {
-    tiles.push({ id: 'rest', name: '🔥 休整', desc: '回复 35% 最大生命，魏启全部回满', action: { action: 'campChoose', option: 'rest' } });
+    // ⚠ 瓦片副标题是**单行不换行**（bakeButtonFace 的 sublabel，画在瓦片画布上）：
+    // 超出瓦片宽度会被**画布裁掉**（症状：两头的字没了只剩中间）。故 desc 压到 ~6 个汉字，
+    // 完整口径放到下面的说明行（sub 行会换行/缩放，放得下）
+    tiles.push({ id: 'rest', name: '🔥 休整', desc: '回血 35%', action: { action: 'campChoose', option: 'rest' } });
   }
   if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
+  if (c.options.includes('rest')) {
+    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '休整 = 回复 35% 最大生命，并把魏启全部回满' });
+  }
   if (c.options.includes('upgrade')) {
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '或免费升级一张卡：' });
     w.push(upgradeButton('camp'));
@@ -668,7 +674,7 @@ function campWidgets(w, snap) {
     else pushCampGroup(w, c);
 }
 
-/** **营地部分面板**（场景式房间：点篝火开这一份）。 */
+/** **营地部分面板**（单房 'camp' 占位路径：只有营地组）。 */
 export function buildCampPanel(snap) {
   const w = [];
   roomHeader(w, snap, '🔥 营地');
@@ -676,10 +682,30 @@ export function buildCampPanel(snap) {
   return w;
 }
 
-/** **训练部分面板**（场景式房间：点训练桩开这一份）。 */
+/** **训练部分面板**（单房 'training' 占位路径：只有训练组）。 */
 export function buildTrainingPanel(snap) {
   const w = [];
   roomHeader(w, snap, '⚔ 训练场');
+  trainingWidgets(w, snap);
+  return w;
+}
+
+/**
+ * **营地 · 训练场合并房面板**（用户定 2026-09-12）。
+ *
+ * 场景式房间里**点篝火（或训练桩）开这一份**：营地选项与训练选项一起给——两个部分同处一室，
+ * 玩家点任何一个交互物都该看到全部可做的事，不用来回点两件东西。
+ * 例外：训练的三选一还挂着时（升级后的强绑尾款）**只显示训练部分**——那是必须做完的抉择，
+ * 把营地组也铺上去会把下沿停靠面板顶到屏幕上缘、盖住房间。
+ */
+export function buildCampTrainingPanel(snap) {
+  const w = [];
+  const t = snap.training ?? {};
+  roomHeader(w, snap, '🔥 营地 · ⚔ 训练场');
+  if (t.choices?.length && t.forced) { trainingWidgets(w, snap); return w; }
+  campWidgets(w, snap);
+  w.push({ kind: 'gap' });
+  w.push({ kind: 'sub', align: 'center', tint: t.done ? '#6f7a92' : '#9aa3b8', text: '⚔ 训练部分（本房一次）：' });
   trainingWidgets(w, snap);
   return w;
 }
