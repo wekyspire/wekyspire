@@ -32,7 +32,7 @@ import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusOb
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { buildSlotPanel, buildBankPanel, buildCampTrainingPanel, buildShopPanel } from '../panels/index.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
-import { GiftChoiceObject } from '../objects/GiftChoiceObject.js';
+import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -45,8 +45,8 @@ const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 // 交互物 name → 该物件的操纵面板（**加房间只加一行数据**：配方里给 live 件 `name`，
 // 这里登记对应面板 builder；RoomStage 不做任何房间/机器判断）。
 const PANEL_OF = {
-  slot: buildSlotPanel,
-  bank: buildBankPanel,
+  slot: (snap) => buildSlotPanel(snap, { sceneChoice: true }),
+  bank: (snap) => buildBankPanel(snap, { sceneChoice: true }),
   // 合并房（营地·训练场）：**点篝火或训练桩都开同一份面板**（营地选项 + 训练选项一起给，
   // 用户定 2026-09-12）——两个部分同处一室，不该让玩家来回点两件东西找入口
   camp: buildCampTrainingPanel,
@@ -141,6 +141,10 @@ function vendingSubject(entry) {
     new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 3),
   );
 }
+// 恶魔 roll（银行机超额取款的代价）：灯池染暗红 + 词条卡片按等级分色（占位美术）
+const DEMON_LAMP = 0x9a2432;
+const DEMON_TIER_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
+const DEMON_TIER_NAME = { yellow: '黄色级', red: '红色级', black: '黑色级' };
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
@@ -226,6 +230,7 @@ export class RoomStage {
     this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
     this.uiScene.add(this._bubbles);
     this._gift = null;                   // 安慰奖二选一演出件（惰性；见 _playGift）
+    this._demon = null;                  // 恶魔 roll 状态机（见 _stepDemonRoll）
     this._continue = new ContinueButtonObject();
     this._continue.position.set(CONTINUE_POS.x, CONTINUE_POS.y, PANEL_ABOVE_Z + 2);
     this._continue.setEnabled(true);   // 拾取登记在 attachInput（此时可能还没 Picker）
@@ -408,6 +413,7 @@ export class RoomStage {
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
     if (this._gift?.active) { this._gift.onHover(hit); return; }   // 安慰奖演出中：只认两件货
+    if (this._demon?.cards?.active) { this._demon.cards.onHover(hit); return; }   // 恶魔词条三选一
     if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
@@ -436,6 +442,7 @@ export class RoomStage {
     const down = this._downHit;
     this._downHit = null;
     if (this._gift?.active) { const id = this._gift.pickIndexOf(hit); if (id) this._gift.choose(id); return; }
+    if (this._demon?.cards?.active) { const id = this._demon.cards.pickIndexOf(hit); if (id) this._demon.cards.choose(id); return; }
     if (this._showcase?.busy) { this._showcase.onClick(hit); return; }        // 点任意处退出特写
     if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
@@ -481,6 +488,7 @@ export class RoomStage {
     this.composeResize = null;
     this._bubbles.dispose();
     this._removeGift();
+    this._removeDemonCards();
     this._continue.dispose();
     this._cardPicker?.dispose();
     this._cardPicker = null;
@@ -613,14 +621,11 @@ export class RoomStage {
       // 合并房（营地·训练场）：**两部分的奖励都处理完才能走**（用户定 2026-09-12）——
       // 没在火边歇过 / 没把训练做完就点继续，这里把人拉回火堆并给一句提示，
       // 免得玩家一路点过去把这一层的收益漏掉（两部分都恒有可做的动作，不会卡死）
-      const pendingPart = this._pendingCampTraining();
-      if (pendingPart) { this._nudgeCampTraining(pendingPart); return; }
-      if (this._snap?.training?.forced) {   // 强绑抓牌未领（同上，单独给一句）
-        this._nudgeForcedPick();
-        return;
-      }
-      // 卡包买到即开：三选一还没选 → 先选（金币已扣，选择不能就这么丢了）
-      if (this._snap?.shop?.pending) { this._nudgeShopPending(); return; }
+      const duty = this._pendingRoomDuty();
+      if (duty === 'camp' || duty === 'training') { this._nudgeCampTraining(duty); return; }
+      if (duty === 'demon') { this._nudgeDemonRoll(); return; }
+      if (duty === 'shop') { this._nudgeShopPending(); return; }
+      if (duty === 'forced') { this._nudgeForcedPick(); return; }
       // 还欠着离房安慰奖（拉了 ≥2 次杆没中奖）→ 先吐出可乐/鸡腿让你选，选完再离房
       if (this._playGift()) return;
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
@@ -661,14 +666,9 @@ export class RoomStage {
     if (this._gift) return true;                       // 已在演：吞掉重复点击
     const machine = this._markers.find(m => m.name === 'slot')?.entry;
     if (!machine) return false;
-    // ① 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
-    //    且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
-    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
-    const mbox = new THREE.Box3().setFromObject(machine.object);
-    const mid = mbox.getCenter(new THREE.Vector3());
-    const spot = new THREE.Vector3(machine.x, mid.y + 0.5, machine.z).addScaledVector(fwd, 6.5);
-    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
-    const dist = Math.max(18, mbox.getSize(new THREE.Vector3()).y * 1.15);
+    // 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
+    // 且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
+    const { spot, dist, fwd } = this._billboardStage(machine, items.length * 3.0 + 4.35);
     const position = spot.clone().addScaledVector(fwd, dist);
     const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
     this._startCamTween(
@@ -681,11 +681,29 @@ export class RoomStage {
     return true;
   }
 
+  /**
+   * 机器前"摆一排 billboard"的取景处方（安慰奖两件 / 恶魔词条三张共用）：
+   * @returns { spot, dist, fwd } spot = 卡片组的中心落点（机器腰高、身前 6.5），
+   *   dist = 相机距离（**按卡片组总宽反解**：三张一排比两张宽，不按宽度退远会切边），
+   *   fwd = 机器朝向（相机沿它后退）。
+   */
+  _billboardStage(machine, totalW) {
+    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
+    const mbox = new THREE.Box3().setFromObject(machine.object);
+    const mid = mbox.getCenter(new THREE.Vector3());
+    const spot = new THREE.Vector3(machine.x, mid.y + 0.5, machine.z).addScaledVector(fwd, 6.5);
+    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
+    const aspect = this._sm?.camera?.aspect || (16 / 9);
+    const distW = (totalW * 1.18) / (2 * Math.tan(vFov / 2) * aspect);
+    const dist = Math.max(18, distW, mbox.getSize(new THREE.Vector3()).y * 1.15);
+    return { spot, dist, fwd };
+  }
+
   /** 生成两件占位货（机器腰高、身前；每一件面向相机漂浮），并登记拾取。 */
   _spawnGift(items, spot) {
     if (this._gift) return;
-    this._gift = new GiftChoiceObject({
-      items,
+    this._gift = new ChoiceBillboardObject({
+      items: items.map(it => ({ id: it.id, name: it.name, sub: it.effect, tint: it.tint })),
       size: 3.0,
       onPick: (id) => {
         this._onIntent?.({ action: 'slotTakeGift', choice: id });
@@ -705,19 +723,42 @@ export class RoomStage {
   }
 
   /**
-   * 合并房里**还没处理完的部分**（null = 都做完了，可以离房）。
-   * 判定刻意保守（只认"确实有可做的事"）：两部分都恒有终止动作（营地恒有"休整"、
-   * 训练恒有 升级+抓牌 / 抓牌 / 跳过训练），所以这个门不会把人卡死在房里。
+   * 房里**还欠着的事**（null = 可以离房）：'camp' | 'training' | 'demon' | 'shop' | 'forced'。
+   * 判定刻意保守（只认"确实有可做/必须做的"）：营地恒有"休整"、训练恒有终止动作，
+   * 恶魔 roll 与卡包三选一都是**钱已到手**的选择题——不选完不许走，但都有明确的出口。
    */
-  _pendingCampTraining() {
+  _pendingRoomDuty() {
     const snap = this._snap;
-    if (!snap || snap.room !== 'campTraining') return null;
+    if (!snap) return null;
+    if (snap.bank?.pendingRoll) return 'demon';                  // 超额取款的钱已经进袋了
+    if (snap.shop?.pending) return 'shop';                       // 卡包买到即开，还没挑牌
+    if (snap.training?.forced) return 'forced';                  // 升级后的强绑抓牌
+    if (snap.room !== 'campTraining') return null;
     const t = snap.training ?? {};
-    if (t.choices?.length || t.forced) return 'training';      // 三选一还挂着（强绑尾款）
-    if (!t.done) return 'training';                            // 训练整个没做
+    if (t.choices?.length || !t.done) return 'training';
     const c = snap.camp ?? {};
-    if (!c.used && (c.options?.length ?? 0) > 0) return 'camp'; // 火边还没歇过
+    if (!c.used && (c.options?.length ?? 0) > 0) return 'camp';
     return null;
+  }
+
+  /** 合并房旧名（保留给内部语义：返回 'camp' | 'training' | null）。 */
+  _pendingCampTraining() {
+    const d = this._pendingRoomDuty();
+    return (d === 'camp' || d === 'training') ? d : null;
+  }
+
+  /** 恶魔 roll 未选就想走：钱已经到手，先把词条领了——镜头拉回老虎机 + 泡泡。 */
+  _nudgeDemonRoll() {
+    if (this._focused !== 'slot') this._focusMachine('slot');
+    const entry = this._markers.find(m => m.name === 'slot')?.entry;
+    if (!entry) return;
+    this._bubbles.say('room:demon', {
+      ...this._midAnchorOf(entry, 1.5),
+      text: '恶魔 roll 还没选词条呢。',
+      kind: 'thought',
+      duration: 2.6,
+      tint: 0xff9a9a,
+    });
   }
 
   /** 没做完就想走：把镜头拉回**篝火**（两部分的入口都在它那份面板里）并给一句泡泡。 */
@@ -1037,9 +1078,9 @@ export class RoomStage {
   _syncSlotFromSnapshot() {
     this._syncVending();
     this._syncBank();
-    // 合并房两部分的奖励都领完才允许离房：continue 箭头在没领完时压暗
-    // （点了给一句泡泡并把镜头拉回篝火，见 _activate 的 _pendingCampTraining 分支）
-    this._continue.setDim(this._pendingCampTraining() ? 0.4 : 1);
+    this._syncDemonRoll();
+    // 奖励没领完就压暗「继续前进」（合并房两部分 / 恶魔 roll / 卡包待选；点了给泡泡并拉镜头）
+    this._continue.setDim(this._pendingRoomDuty() ? 0.4 : 1);
     const s = this._snap?.slot;
     const rig = this._rigs.get('slot');
     if (!s || !rig) return;
@@ -1067,6 +1108,103 @@ export class RoomStage {
     const rig = this._rigs.get('bank');
     if (!bk || !rig?.setScreen) return;
     rig.setScreen(bk.deposit > 0 ? `存款 ${bk.deposit}` : `余额 ${this._snap.money ?? 0}`);
+  }
+
+  // ================= 内部：恶魔 roll（银行机超额取款的代价）=================
+  // 用户定 2026-09-12：超额取款 → **视角立刻切到老虎机** → 机器切恶魔形态（关闸 → 换暗红盘
+  // → 开闸，灯池同时染暗红）→ 自动开转 → 停稳后弹出三张词条卡片 → 点选其一 → 退场
+  // （换回普通盘、灯效复原）→ 回银行机并回执宿主播"奖励到手"特写（那笔超额取款的金币）。
+  // 状态机由 _tick 推进（dt 驱动，与所有演出同一时基；不用定时器，免得被 rAF 节流坑）。
+  _syncDemonRoll() {
+    const pr = this._snap?.bank?.pendingRoll ?? null;
+    const rig = this._rigs.get('slot');
+    if (!rig) return;
+    if (pr && !this._demon) this._startDemonRoll(pr);
+    else if (!pr && this._demon) {
+      // 词条已选（快照里 pendingRoll 没了）→ 退场。若卡片还挂着（占位面板按钮选的）先收掉
+      if (this._demon.phase !== 'exit') { this._demon.phase = 'exit'; this._demon.started = false; }
+    }
+  }
+
+  _startDemonRoll(pr) {
+    this._demon = {
+      phase: 'enter', started: false,
+      gold: pr.gold, tier: pr.tier,
+      options: (pr.options ?? []).map(o => ({ id: o.id, name: o.name, desc: o.desc, tier: o.tier })),
+      cards: null,
+    };
+    // ① 视角立刻切到老虎机（玩家此刻站在银行机面板前）——推到位的回调里机器才开始关闸换盘
+    if (this._focused !== 'slot') this._focusMachine('slot');
+    // ② 灯池染暗红 + 机器进恶魔风格（换盘本身由 demonEnter 的"关闸 → 换盘 → 开闸"时序做）
+    this._room?.lighting?.setLampTint?.(DEMON_LAMP, 1);
+    this._rigs.get('slot')?.setDemonStyle?.(1);
+  }
+
+  /** 帧驱动相位推进：enter（关闸换盘）→ spin（自动开转）→ choose（卡片等点选）→ exit（换回普通盘）。 */
+  _stepDemonRoll(dt) {
+    const d = this._demon;
+    if (!d) return;
+    const rig = this._rigs.get('slot');
+    if (!rig) { this._demon = null; return; }
+    if (d.phase === 'enter') {
+      if (!d.started) { if (rig.isBusy() || !rig.demonEnter?.()) return; d.started = true; return; }
+      if (rig.isBusy()) return;
+      d.phase = 'spin'; d.started = false;
+    } else if (d.phase === 'spin') {
+      if (!d.started) {
+        // 恶魔 roll 不是中奖：tier 'none'（不亮中奖灯），三根盘各落一面
+        if (!rig.pull({ tier: 'none', symbols: null })) return;
+        d.started = true;
+        return;
+      }
+      if (rig.isBusy()) return;
+      d.phase = 'choose';
+      this._spawnDemonChoice(d);
+    } else if (d.phase === 'exit') {
+      if (!d.started) {
+        this._removeDemonCards();
+        if (rig.isBusy() || !rig.demonExit?.()) return;
+        d.started = true;
+        return;
+      }
+      if (rig.isBusy()) return;
+      rig.setDemonStyle?.(0);
+      this._room?.lighting?.setLampTint?.(null, 0);
+      this._demon = null;
+      if (this._markers.some(m => m.name === 'bank')) this._focusMachine('bank');   // 回到取钱的那台
+      this._onIntent?.({ action: 'demonAnimDone' });                                // 宿主播奖励特写
+    }
+  }
+
+  /** 三张词条卡片：机器身前一排（名字 + 词条等级副标题，色块按等级分色），点选即承受。 */
+  _spawnDemonChoice(d) {
+    const machine = this._markers.find(m => m.name === 'slot')?.entry;
+    if (!machine || !d.options.length) return;
+    d.cards = new ChoiceBillboardObject({
+      items: d.options.map(o => ({
+        id: o.id, name: o.name,
+        sub: DEMON_TIER_NAME[o.tier] ?? '',
+        tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
+      })),
+      size: 3.2,
+      gap: 3.6,     // 三张一排：间距收一点，取景才不会贴边（总宽 = 2×gap + 卡宽）
+      onPick: (id) => { this._onIntent?.({ action: 'bankPick', id }); },
+    });
+    const { spot, dist, fwd } = this._billboardStage(machine, d.cards.totalWidth);
+    d.cards.position.copy(spot);
+    this._room?.group.add(d.cards);
+    d.cards.attachPicker(this._picker);
+    const position = spot.clone().addScaledVector(fwd, dist);
+    const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
+    this._startCamTween({ position, quaternion: new THREE.Quaternion().setFromRotationMatrix(m) }, 0.5, null);
+  }
+
+  _removeDemonCards() {
+    const d = this._demon;
+    if (!d?.cards) return;
+    this._room?.group.remove(d.cards);
+    d.cards.dispose();
+    d.cards = null;
   }
 
   /**
@@ -1150,9 +1288,11 @@ export class RoomStage {
       m.marker.setHighlight(m.name === this._focused || !!m.hover);
       m.marker.update(dt);
     }
+    this._stepDemonRoll(dt);
     this._continue.update(dt);
     this._showcase?.update(dt);
     this._gift?.update(dt, this._sm?.camera ?? null);   // 安慰奖 billboard 面向相机 + 浮动
+    this._demon?.cards?.update(dt, this._sm?.camera ?? null);   // 恶魔词条卡片同理
     for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
       const entry = this._markers.find(m => m.name === key)?.entry;
       if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));

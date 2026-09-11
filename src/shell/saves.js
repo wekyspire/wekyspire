@@ -50,6 +50,16 @@ export function snapshotRun(run) {
     slotDevour: run.slotDevour ?? 0,
     slotFreeRolls: run.slotFreeRolls ?? 0,
     slotApples: run.slotApples ?? 0,
+    // 银行机状态（存款/连击/超额取款黑名单/待选恶魔词条/词条附赠操作）与跨战斗词条队列：
+    // 不存档的话，读档会把存款吞掉、也能把恶魔 roll 的代价赖掉（2026-09-12 补）
+    bank: run.bank ? {
+      ...run.bank,
+      blackCleared: [...(run.bank.blackCleared ?? [])],
+      offers: [...(run.bank.offers ?? [])],
+      pendingRoll: run.bank.pendingRoll
+        ? { ...run.bank.pendingRoll, options: [...(run.bank.pendingRoll.options ?? [])] } : null,
+    } : null,
+    pendingDebuffs: (run.pendingDebuffs ?? []).map(d => ({ ...d })),
     player: {
       hp: p.hp, maxHp: p.maxHp,
       mana: p.mana, maxMana: p.maxMana,

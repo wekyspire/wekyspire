@@ -131,6 +131,15 @@ function restoreFromSave(run, save) {
   run.slotDevour = save.slotDevour ?? 0;
   run.slotFreeRolls = save.slotFreeRolls ?? 0;
   run.slotApples = save.slotApples ?? 0;
+  // 银行机状态与跨战斗恶魔词条（旧档无此字段 → 视为未访问过银行机 / 无词条）
+  run.bank = save.bank ? {
+    ...save.bank,
+    blackCleared: [...(save.bank.blackCleared ?? [])],
+    offers: [...(save.bank.offers ?? [])],
+    pendingRoll: save.bank.pendingRoll
+      ? { ...save.bank.pendingRoll, options: [...(save.bank.pendingRoll.options ?? [])] } : null,
+  } : null;
+  run.pendingDebuffs = (save.pendingDebuffs ?? []).map(d => ({ ...d }));
 }
 
 export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false } = {}) {
@@ -455,6 +464,38 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     maybeLeaveRoom();
   }
   // 合并房的主动离房（单房由动作自动离房，不需要这个）
+  // ---- 恶魔 roll（银行机超额取款）----
+  // 演出顺序 = 视角切到老虎机 → 关闸换恶魔盘（灯池染红）→ 自动转 → **三张词条卡片三选一**
+  // → 退场换回普通盘 → **奖励特写**（那笔超额取款的金币）。场景那半在 RoomStage 的状态机里，
+  // 这里只记"选完词条后要播什么"，等场景回执 demonAnimDone 再播（否则特写会盖住退场演出）。
+  const DEMON_TIER_LABEL = { yellow: '黄色级', red: '红色级', black: '黑色级' };
+  let demonRewardShow = null;   // { gold, tier, name }
+  let demonFuse = null;         // 兜底：场景没回执（无场景/被拆）也要把特写放出来
+  function bankDemonPick(id) {
+    const pr = run.bank?.pendingRoll;
+    const gold = pr?.gold ?? 0;
+    const res = chooseDemonDebuff(run, id);
+    demonRewardShow = { gold, tier: res.tier, name: res.name };
+    const inScene = !!roomStage && run.currentRoom === 'slot';
+    if (!inScene) { showDemonReward(); return res; }
+    clearTimeout(demonFuse);
+    demonFuse = setTimeout(() => { demonFuse = null; showDemonReward(); }, 6000);
+    return res;
+  }
+  function showDemonReward() {
+    clearTimeout(demonFuse);
+    demonFuse = null;
+    const p = demonRewardShow;
+    demonRewardShow = null;
+    if (!p) return false;
+    return !!panelStage()?.showcaseItem?.({
+      title: `+${p.gold} 金币`,
+      desc: '银行机超额取款',
+      effect: `代价：${p.name}（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
+      tint: 0xffd75e,
+    });
+  }
+
   // ---- 银行机（与老虎机成对；SLOT_MACHINE.md §银行机）----
   function bankDo(kind, arg) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
@@ -462,7 +503,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       if (kind === 'deposit') bankDeposit(run, arg ?? null);       // 缺省 = 全部存入
       else if (kind === 'withdraw') bankWithdraw(run);
       else if (kind === 'overdraft') bankOverdraft(run, arg);
-      else if (kind === 'pick') chooseDemonDebuff(run, arg);
+      else if (kind === 'pick') bankDemonPick(arg);
       else if (kind === 'upgradeOffer') bankUpgrade(run, arg);
       else if (kind === 'burnOffer') bankBurn(run, arg);
     } catch (err) {
@@ -776,6 +817,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // 商店（售货机）：与房间并存，购买不消耗房间行动
     else if (action === 'buyShopItem') shopBuy(intent.index);
     else if (action === 'shopAnimDone') shopAnimDone(intent.index);
+    else if (action === 'demonAnimDone') showDemonReward();   // 恶魔 roll 退场回执（非玩家意图）
     else if (action === 'takeShopCard') shopTakeCard(intent.defId);
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);

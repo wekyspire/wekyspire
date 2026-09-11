@@ -63,6 +63,7 @@ export const SLOT_GIFTS = Object.freeze({
     name: '可乐',
     desc: '「就算没中奖，也总得喝点什么。」',
     effect: '恢复 4 生命；下一场战斗开始时额外恢复 1 魏启。',
+    tint: 0xc0392b,          // 占位美术的色块/特写底色（唯一事实源，场景与面板共用）
     heal: 4,
     manaBonus: 1,
   },
@@ -71,6 +72,7 @@ export const SLOT_GIFTS = Object.freeze({
     name: '鸡腿',
     desc: '「机器烤的，别问它怎么烤的。」',
     effect: '恢复 9 生命；最大生命 +1。',
+    tint: 0xd9a05b,
     heal: 9,
     maxHp: 1,
   },
@@ -135,7 +137,8 @@ export function slotView(run) {
     cost,
     rolls: st.rolls,
     freeRolls: run.slotFreeRolls ?? 0,
-    canSpin: (run.slotFreeRolls ?? 0) > 0 || run.player.money >= cost,
+    // 恶魔 roll 挂着时机器切到恶魔形态、不能拉杆（spinSlot 同款守卫）
+    canSpin: !run.bank?.pendingRoll && ((run.slotFreeRolls ?? 0) > 0 || run.player.money >= cost),
     majorChance: Math.min(1, SLOT.majorBase + SLOT.majorStep * st.sinceMajor),
     minorChance: (() => {
       const major = Math.min(1, SLOT.majorBase + SLOT.majorStep * st.sinceMajor);
@@ -301,6 +304,8 @@ function makePrize(run, tier) {
 export function spinSlot(run) {
   if (run.currentRoom !== 'slot') throw new Error('当前不在老虎机房');
   if (run.slotPending) throw new Error('上一次的产出还没处理（领取或放弃）');
+  // 恶魔 roll 挂着时机器是"恶魔形态"：先把词条选了（钱已经到手，不能拿钱跑）
+  if (run.bank?.pendingRoll) throw new Error('先处理恶魔 roll（在机器上选一个词条）');
 
   const free = (run.slotFreeRolls ?? 0) > 0;
   const cost = spinCost(run);

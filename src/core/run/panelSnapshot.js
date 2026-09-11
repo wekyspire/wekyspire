@@ -280,7 +280,7 @@ export function roomSnapshot(run, extra = {}) {
       // 离房安慰奖（拉了 ≥2 次杆且没中奖）：**只下发"欠着"与可选项的文本**，
       // 领不领、什么时候领由流程侧决定（点「继续前进」时才进演出）
       gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
-        id: g.id, name: g.name, desc: g.desc, effect: g.effect,
+        id: g.id, name: g.name, desc: g.desc, effect: g.effect, tint: g.tint,
       })) : null,
       // 演出进行中：{ id, tier, kind }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）。
       // ⚠ **tier 才是转轮灯效/落面的输入**（'major'/'minor'/'none'）；kind 只是奖项种类

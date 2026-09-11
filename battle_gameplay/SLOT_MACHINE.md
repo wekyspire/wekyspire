@@ -135,10 +135,29 @@ Debuff列表
   白字黑边标签占位，`objects/GiftChoiceObject.js`）→ 点选其一（选中件朝镜头飞出、另一件缩没）→
   上行 `slotTakeGift` → 结算 + **获得物特写**（通用组件）。占位房间走面板上的两个按钮，同一结算入口。
 
+**已完成：恶魔 roll 交互流（2026-09-12 用户定，全链闭环）**
+- 触发：银行机**超额取款**（黄 15 / 红 40 / 黑 90 金）→ core 立刻入账并挂 `run.bank.pendingRoll`
+  （三个**不同**词条，种子化洗牌；黑色级已通过过的词条移出池子）。
+- 演出（`RoomStage._syncDemonRoll` 的状态机，dt 驱动，不用定时器）：
+  **① 视角立刻切到老虎机**（玩家此刻站在银行机面板前）→ ② `rig.demonEnter()` 关闸 → 换恶魔盘
+  → 开闸，同时 `lighting.setLampTint(暗红, 1)` 把机器灯池染红 → ③ **自动开转**
+  （`rig.pull({ tier: 'none' })`，恶魔 roll 不是中奖，不亮中奖灯）→ ④ 停稳后机器身前弹出
+  **三张词条卡片**（`objects/ChoiceBillboardObject.js`：色块 billboard + 名字 + 词条等级 +
+  逐个自动收缩放，点选其一）→ ⑤ `rig.demonExit()` 换回普通盘 + 灯效复原 → ⑥ 镜头回银行机。
+- 词条文本：卡片只印名字与等级（`浑浑噩噩 / 黑色级`），**完整描述在操纵面板里**（三行只读）
+  ——比 hover tooltip 稳（不用悬停就能读全，也不依赖 tooltipHub 的 token 类型）。
+- 结算（core `chooseDemonDebuff`）：立即类（掉血/焚卡/降级）就地生效、永久类走 `baseStats`、
+  跨战斗类进 `run.pendingDebuffs`（战斗开始时折入 `battleState.debuffs`，战后每场 -1）；
+  黑色级通过 → 记 `blackCleared` 并把 `lockout` 置 1（**下次见到银行机不再允许超额取款**）。
+- **奖励特写**：退场回执 `demonAnimDone` 之后播「+N 金币 / 银行机超额取款 / 代价：词条名」，
+  顺序刻意排在退场之后（特写盖住退场演出就白做了）。
+- 守卫：恶魔 roll 挂着时**不能拉杆**（`spinSlot` 抛错 + 快照 `canSpin=false`）、
+  **不能离房**（「继续前进」压暗 + 点了拉回老虎机并冒泡泡）——钱已经到手，不能拿钱跑。
+- 存档：`run.bank`（存款/连击/黑名单/待选词条/附赠操作）与 `run.pendingDebuffs` 一并落盘
+  （2026-09-12 补：原先不存档会把存款吞掉）。
+
 **待做**
-1. **恶魔 roll 交互流**：三选一的 debuff tooltip（走 `tooltipHub`，需要一份 debuff 的
-   id/名称/描述下行字段）+ 选完后 `demonExit()`（闸口关 → 换回普通盘 → 开闸）+
-   灯效恢复（`setDemonStyle(0)` + `setLampTint(color, 0)`）。
-2. **恶魔盘素材**：真素材到位后换 `swapReels()` 里的取图（现为占位暗红）。
-3. **主流程接线**：房间层切场景后，机身投料口直接派发 `requestDevour` 意图（现在只有
-   面板入口能走到；意图与链路已就绪）。
+1. **恶魔盘素材 / 词条卡美术**：真素材到位后换 `rig.swapReels()` 的取图与词条卡的色块
+   （现为占位暗红盘 + 按等级分色的纯色卡）。
+2. **机身投料口直达**：房间层已接（点投料口 → 进度满即 `requestDevour`），
+   但**面板入口**仍是主路径；将来把投料口做成"随时可点，不满给进度提示"。

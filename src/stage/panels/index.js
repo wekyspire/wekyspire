@@ -423,7 +423,9 @@ function roomHeader(w, snap, title = null) {
 }
 
 /** 老虎机本体的 widget（无表头、无离开——场景式房间点机器单开，占位房间由 buildRoomPanel 组装）。 */
-function slotWidgets(w, snap) {
+function slotWidgets(w, snap, { sceneChoice = false } = {}) {
+    // 恶魔 roll 进行中：机器已切恶魔形态、拉杆锁定（core 同款守卫）——面板只讲这一件事
+    if (snap.bank?.pendingRoll) { demonRollWidgets(w, snap.bank.pendingRoll, sceneChoice); return; }
     const s = snap.slot ?? {};
     const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
     w.push({
@@ -539,8 +541,34 @@ function slotWidgets(w, snap) {
     }
 }
 
+/**
+ * 恶魔 roll 进行中（机器已切恶魔形态）：**词条在场景里选**（老虎机上那三张卡片），
+ * 面板只给状态与三条效果文本（对着卡片读）。
+ * @param sceneChoice true = 场景里选（不给按钮，只有可读行）；false = 无场景的占位路径（给按钮）
+ */
+function demonRollWidgets(w, pr, sceneChoice) {
+  w.push({ kind: 'gap' });
+  w.push({ kind: 'title', text: '😈 恶魔 roll', align: 'center' });
+  w.push({
+    kind: 'sub', align: 'center', tint: '#c9a86a',
+    text: `超额取款已入账 ${pr.gold} 金——${sceneChoice ? '在老虎机上点一张卡片' : ''}选一个词条承受：`,
+  });
+  for (const o of pr.options) {
+    if (sceneChoice) {
+      w.push({ kind: 'text', align: 'center', tint: '#ff8a80', text: `・${o.name}：${o.desc}` });
+    } else {
+      w.push({
+        kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
+        label: `${o.name}：${o.desc}`,
+        action: { action: 'bankPick', id: o.id },
+      });
+    }
+  }
+  return true;
+}
+
 /** 银行机的 widget（同上）。 */
-function bankWidgets(w, snap) {
+function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   const bk = snap.bank;
   if (!bk) return;
     w.push({ kind: 'gap' });
@@ -559,17 +587,7 @@ function bankWidgets(w, snap) {
       });
     }
     if (bk.pendingRoll) {
-      w.push({
-        kind: 'text', align: 'center', tint: '#ff8a80',
-        text: `恶魔 roll（已入账 ${bk.pendingRoll.gold} 金）：必须选一个词条承受`,
-      });
-      for (const o of bk.pendingRoll.options) {
-        w.push({
-          kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
-          label: `${o.name}：${o.desc}`,
-          action: { action: 'bankPick', id: o.id },
-        });
-      }
+      demonRollWidgets(w, bk.pendingRoll, sceneChoice);
     } else {
       if (bk.money > 0) {
         w.push({
@@ -617,18 +635,18 @@ function bankWidgets(w, snap) {
 }
 
 /** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */
-export function buildSlotPanel(snap) {
+export function buildSlotPanel(snap, opts = {}) {
   const w = [];
   roomHeader(w, snap, '🎰 老虎机');
-  slotWidgets(w, snap);
+  slotWidgets(w, snap, opts);
   return w;
 }
 
 /** **银行机面板**（场景式休息房：点银行机 → 开这一份）。 */
-export function buildBankPanel(snap) {
+export function buildBankPanel(snap, opts = {}) {
   const w = [];
   roomHeader(w, snap, '🏦 银行机');
-  bankWidgets(w, snap);
+  bankWidgets(w, snap, opts);
   return w;
 }
 
