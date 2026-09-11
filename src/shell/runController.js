@@ -209,10 +209,15 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 操作）；基准集在读档/入档时同步，不会把已有遗物当成"刚获得"。
   let shownRelicIds = new Set(run.player.relics);
   const relicShowcaseQueue = [];
+  // 售货机购买的演出协调（声明在 flushRelicShowcase 之前：那个闭包要读 shopDispensing）
+  let shopPendingShow = null;   // 刚买下、等着播获得演出的那件
+  let shopDispensing = false;   // 出货演出进行中（挡住遗物差分的即时特写）
+  let shopFuse = null;          // 兜底：场景没回执（无场景/被拆）也要把特写放出来
   const flushRelicShowcase = () => {
     const stage = roomStage ?? mapStage;                 // 不调 panelStage()：那个 const 在本块之后才初始化
     if (!stage?.showcaseItem || !relicShowcaseQueue.length || stage.showcasing) return false;
     if (run.gameStage === 'battle') return false;        // 战斗内不打断（差分已记，战后那拍再播）
+    if (shopDispensing) return false;                    // 售货机出货演出中：等场景回执再播（别盖住出货）
     const def = getRelicDefinition(relicShowcaseQueue.shift());
     if (!def) return false;
     const cost = def.nonSlot ? '非槽位式' : `占用 ${def.cost ?? 0} 槽`;
@@ -616,11 +621,59 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     });
   }
   // ---- 商店（售货机，SHOP.md §一）----
-  // 与奖励房并存、不占房间名额：购买不消耗房间行动，故不调 completeRoom。
+  // 商店房 = 一整间货房（用户定 2026-09-12）：点货架上的商品即买。**演出顺序**是
+  // 「机器出货（场景 rig）→ 物品获得特写」——所以这里买入只记下"待演出"，等场景回执
+  // `shopAnimDone` 再播特写；否则全屏特写会直接盖住出货的开门/掉落/翻板那几拍。
   function shopBuy(index) {
     if (run.gameStage !== 'room' || !run.shop) return;
-    buyShopItem(run, index);
+    const it = run.shop.items?.[index];
+    const res = buyShopItem(run, index);
+    // 卡包不计入（买到即开走面板三选一，没有"一件物品到手"的画面）
+    shopPendingShow = (it && it.kind !== 'pack')
+      ? { index, kind: it.kind, name: it.name, effect: it.effect, relicId: it.relicId ?? null }
+      : null;
+    // 场景里真的有这张卡片才会播出货演出 → 有回执；没有就当场播特写（headless/降级路径）
+    const hasTile = !!shopPendingShow && [...(roomStage?.rigs?.values() ?? [])]
+      .some(r => (r.goodsTargets?.() ?? []).some(t => t.index === index));
+    shopDispensing = hasTile;
+    clearTimeout(shopFuse);
+    shopFuse = null;
+    if (shopDispensing) {
+      shopFuse = setTimeout(() => {
+        shopFuse = null;
+        shopDispensing = false;
+        shopShowcase(shopPendingShow);
+        shopPendingShow = null;
+      }, 4000);
+    }
     notify();
+    if (!shopDispensing) { shopShowcase(shopPendingShow); shopPendingShow = null; }
+    return res;
+  }
+  /** 场景回执：那件货已经掉进出货口了 → 播获得特写（遗物走全局差分那条线，口径统一）。 */
+  function shopAnimDone(index) {
+    if (run.gameStage !== 'room') return false;
+    clearTimeout(shopFuse);
+    shopFuse = null;
+    shopDispensing = false;
+    const p = shopPendingShow && (index == null || shopPendingShow.index === index) ? shopPendingShow : null;
+    shopPendingShow = null;
+    if (!p) { flushRelicShowcase(); return false; }   // 仍要放行被挡下的遗物特写
+    shopShowcase(p);
+    return true;
+  }
+  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a };
+  /** 买到手的那件东西的特写（遗物交给全局差分：素材与描述口径都在那边）。 */
+  function shopShowcase(p) {
+    if (!p) return false;
+    if (p.kind === 'relic') return flushRelicShowcase();
+    return !!panelStage()?.showcaseItem?.({
+      title: p.name ?? '买到的东西',
+      desc: '来自瑞米的自动售货机',
+      effect: p.effect ?? '',
+      artKey: p.kind,                       // assets/items|props：potion / apple（没素材就色块）
+      tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
+    });
   }
   function shopTakeCard(defId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
@@ -722,6 +775,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'leaveEvent') leaveEvent();
     // 商店（售货机）：与房间并存，购买不消耗房间行动
     else if (action === 'buyShopItem') shopBuy(intent.index);
+    else if (action === 'shopAnimDone') shopAnimDone(intent.index);
     else if (action === 'takeShopCard') shopTakeCard(intent.defId);
   }
   mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);

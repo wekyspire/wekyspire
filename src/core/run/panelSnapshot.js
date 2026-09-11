@@ -182,14 +182,17 @@ export function roomSnapshot(run, extra = {}) {
   const p = run.player;
   const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
 
-  // 售货机（与房间并存，不占房间名额）：商店层才给货架；卡包开出的三选一挂起时优先呈现
+  // 售货机（商店房 = room === 'shop'）：货架 + 卡包开出的三选一挂起时优先呈现
   if (isShopFloor(run.floor) && run.shop) {
     snap.shop = {
       floor: run.shop.floor,
       discount: run.shop.discount,
       broken: !!run.shop.broken, // 故事模式：瑞米被打跑 → 货架不完整（附道歉文案）
       items: run.shop.items.map((it, index) => ({
-        index, kind: it.kind, label: it.label, sub: it.sub ?? '',
+        index, kind: it.kind,
+        name: it.name ?? it.label,          // 短名（货架 billboard 的面板名）
+        label: it.label, sub: it.sub ?? '',
+        effect: it.effect ?? it.sub ?? '',  // 获得演出的"具体作用"行
         relicId: it.relicId ?? null, // 遗物货：供 hover 效果预览
         price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
       })),

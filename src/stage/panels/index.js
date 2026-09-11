@@ -229,6 +229,7 @@ const ROOM_META = {
   campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
   gurpas: { name: '古尔帕斯之店', glyph: '🏪', hint: '旧魏启大陆的物件——她只收 A/S 级遗物' },
   slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
+  shop: { name: '商店房', glyph: '🧃', hint: '瑞米维护的自动售货机——点击货架上的商品直接购买' },
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
 
@@ -389,11 +390,16 @@ export function buildRoomPanel(snap) {
     return w;
   }
 
+  if (snap.room === 'shop') {
+    // 商店房：**一整间货房**（用户定 2026-09-12）。场景版（RoomStage）点售货机开货架面板；
+    // 这里是无场景的占位路径（headless/降级）——同一份货架内容，末尾给"离开房间"。
+    return buildShopPanel(snap, { standalone: true });
+  }
+
   w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（此房间暂无面板）' });
   return w;
 }
 
-/** 售货机（模态）：货架列表 + 购买；卡包开出三选一时切换为选卡视图。 */
 /**
  * 房间表头：标题 + 售货机入口（售货机与房间并存、不占房间名额，入口是**本地**动作）。
  * 场景式休息房把机器面板拆开单开（点哪台开哪台），所以表头要能被两个面板各自复用。
@@ -678,7 +684,14 @@ export function buildTrainingPanel(snap) {
   return w;
 }
 
-export function buildShopPanel(snap) {
+/**
+ * 售货机操纵面板（场景式商店房里点售货机 → 下沿停靠）。
+ * @param snap 房间快照
+ * @param opts.standalone 无场景的占位路径（房间面板就是这一份）：末尾给"离开房间"而不是"离开售货机"
+ * @param opts.buttons    带购买按钮（缺省 = standalone）。场景版不带：3D 货架就在眼前，
+ *                        再排一列按钮只会把面板顶高、把货架挤到操纵条下面
+ */
+export function buildShopPanel(snap, { standalone = false, buttons = standalone } = {}) {
   const shop = snap.shop ?? { items: [], pending: null };
   const w = [];
 
@@ -702,6 +715,13 @@ export function buildShopPanel(snap) {
     text: `持有 ${snap.money} 金币`
       + (shop.discount < 1 ? ` ｜ 瑞米给了折扣（${Math.round(shop.discount * 10)} 折）` : ''),
   });
+  // 购买有两条路：**直接点货架上的商品**（场景里的 billboard，买不起价格标红）或这里的按钮。
+  // 场景版（dock 停靠面板）**不再放按钮**：货架就在眼前的 3D 里，重复一排按钮只会把面板顶高、
+  // 把货架挤到操纵条下面去；占位版（standalone）没有 3D 货架，才需要按钮。
+  w.push({
+    kind: 'sub', align: 'center', tint: '#77809a',
+    text: buttons ? '选择要买的商品：' : '点击货架上的商品直接购买（买不起的价格标红）',
+  });
   if (shop.broken) {
     w.push({
       kind: 'sub', align: 'center', tint: '#c9a86a',
@@ -717,7 +737,7 @@ export function buildShopPanel(snap) {
       // 遗物货 hover 出效果预览（买之前能看清是什么）
       ...(it.relicId ? { token: { type: 'relic', payload: { relicId: it.relicId } } } : {}),
     });
-    if (!it.sold) {
+    if (!it.sold && buttons) {
       w.push({
         kind: 'button', id: `shop:buy:${it.index}`, width: 240, size: 'sub',
         label: it.affordable ? `购买（${it.price} 金）` : '金币不足',
@@ -727,10 +747,12 @@ export function buildShopPanel(snap) {
     }
   }
   w.push({ kind: 'gap' });
-  w.push({
-    kind: 'button', id: 'shop:leave', width: 220, size: 'sub', label: '离开售货机',
-    action: { action: 'closeShop', local: true },
-  });
+  w.push(standalone
+    ? { kind: 'button', id: 'shop:leaveRoom', width: 220, size: 'sub', label: '离开', action: { action: 'leaveRoom' } }
+    : {
+      kind: 'button', id: 'shop:leave', width: 220, size: 'sub', label: '离开售货机',
+      action: { action: 'closeShop', local: true },
+    });
   return w;
 }
 

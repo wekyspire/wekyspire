@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { getScene } from '../scenes/index.js';
 import { getProp } from '../scenes/props/index.js';
 import { createRng } from '../scenes/kit/scatter.js';
+import { FLOOR_Y } from '../scenes/dungeon3D.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
@@ -47,7 +48,8 @@ const PANEL_OF = {
   bank: buildBankPanel,
   camp: buildCampPanel,
   training: buildTrainingPanel,
-  shop: buildShopPanel,     // 售货机：点机身直接开货架面板（不再是房间表头上的一个按钮）
+  shop: buildShopPanel,     // 售货机（主柜）：点机身直接开货架面板（不再是房间表头上的一个按钮）
+  shop2: buildShopPanel,    // 溢出柜（货架 > 4 件时才有）：同一份货架面板（数据是全局的）
 };
 
 // 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
@@ -97,7 +99,28 @@ const FOCUS_OF = {
   // 怼脸处方：主体（转轮窗 + 拉杆 + 下半身的投料口/计数器）占屏 0.88，底边抬到 0.26
   // ——窗口顶到上缘、操作区露在操纵条之上（操纵条占屏幕下沿 ~25%）
   slot: { fracH: 0.88, bottom: 0.26, pad: 0.92, subject: slotSubject },
+  // 售货机同样怼脸（用户定 2026-09-12：点售货机要看清货架上的商品与价格）：
+  // 主体 = **货架区开口**（不含底座/操作列/顶牌），底边抬到操纵条之上（两排货 + 价格全露出来）
+  vending: { fracH: 0.62, bottom: 0.36, pad: 0.95, subject: vendingSubject },
 };
+
+/**
+ * 售货机的取景主体：**货架区开口**（cards 立在托盘上，卡片顶沿再留一点余量）。
+ * 取景只框"玻璃柜里的货"——整机取景会让货架缩得太小、价格读不出来（怼脸的意义就在这）。
+ * 机器带 ry/缩放，故用机身的局部→世界换算，不手算朝向。
+ */
+function vendingSubject(entry) {
+  const bay = entry.parts?.bay;
+  if (!bay) return null;
+  const s = entry.scale ?? 1;
+  const c = entry.object.localToWorld(new THREE.Vector3(bay.x, bay.y, bay.z));
+  const halfW = (bay.w / 2) * s + 0.5;
+  const halfH = (bay.h / 2) * s + 0.3;
+  return new THREE.Box3(
+    new THREE.Vector3(c.x - halfW, c.y - halfH, c.z - 3),
+    new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 3),
+  );
+}
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
@@ -141,6 +164,7 @@ export class RoomStage {
     this._showcase = null;      // 获得物特写（金币大奖等；惰性建）
     this._pickerConfirm = null; // 当前选择界面的确认回调（按入口切换）
     this._pickIds = [];
+    this._goodsPickIds = new Set();  // 商品卡拾取 id（随货架增删对账）
     this._t = 0;
     this._slotSpinId = null;
     this._slotPoll = null;
@@ -359,6 +383,9 @@ export class RoomStage {
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
     const name = this._machineOf(hit);
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
+    // 售货机商品卡：悬停抬起 + 盘子提亮（点下去就是买；下标全局唯一，各 rig 只认自己的）
+    const gi = this._goodsIndexOf(hit);
+    for (const rig of this._rigs.values()) rig.setGoodsHover?.(gi);
     this._continue.setHovered(hit?.id === this._continue.pickId);
     this._panel?.onHover?.(hit);   // 面板按钮/卡面 hover（缺席 = 无面板）
   }
@@ -450,21 +477,28 @@ export class RoomStage {
     {
       const rig = entry.kind === 'slot' ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
         : entry.kind === 'bank' ? createBankMachineRig({ object: entry.object, parts: entry.parts })
-          : entry.kind === 'vending' ? createVendingMachineRig({ object: entry.object, parts: entry.parts })
+          : entry.kind === 'vending' ? createVendingMachineRig({
+            object: entry.object, parts: entry.parts,
+            // 出货演出播完 → 回执宿主（宿主再播"物品到手"的获得特写；演出顺序不能被特写盖掉）
+            onDispensed: (index) => this._onIntent?.({ action: 'shopAnimDone', index }),
+          })
             : null;
       if (rig) this._rigs.set(name, rig);
       // 地面光环（hover 提亮）+ 头顶浮标（菱形 + 光柱）：远景读得出"这台能点"
+      // ⚠ y 必须落在房间地平（FLOOR_Y）上：道具都摆在 FLOOR_Y 平面，浮标写 y=0 会飘到半空
+      // （30 世界单位的悬空，"机器旁边的金菱形"与机器读作两件东西）
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
         new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
       );
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(entry.x, 0.12, entry.z + 1.2 * entry.scale);
+      ring.position.set(entry.x, FLOOR_Y + 0.12, entry.z + 1.2 * entry.scale);
       this._room.group.add(ring);
       const marker = new THREE.Group();
-      marker.position.set(entry.x, 0, entry.z);
-      // 浮标高度：贴到机器顶部上方一点点（原来 19/16 = "飘在天上"，与机器读作两件东西）
-      const bobY = (entry.kind === 'slot' ? 13 : 10.5) * (entry.scale / 2);
+      marker.position.set(entry.x, FLOOR_Y, entry.z);
+      // 浮标高度：贴到机器**包围盒顶**上方一点点（从包围盒算，各种尺度的机器都不用逐个调参）
+      const topY = new THREE.Box3().setFromObject(entry.object).max.y;
+      const bobY = Math.max(5, topY - FLOOR_Y + 2.4);
       const bob = new THREE.Mesh(
         new THREE.BoxGeometry(2.2, 2.2, 2.2),
         new THREE.MeshBasicMaterial({ color: 0xffe08a }),
@@ -484,16 +518,18 @@ export class RoomStage {
     }
   }
 
-  /** 拾取登记：浮标 + 机器本体（world 空间）+ UI（继续按钮 / 面板按钮）。 */
+  /** 拾取登记：浮标 + 机器本体（world 空间）+ 商品卡 + UI（继续按钮 / 面板按钮）。 */
   _registerPickables() {
     if (!this._picker) return;
     this._pickIds = [];
+    this._goodsPickIds = new Set();
     for (const m of this._markers) {
       const id = `room:machine:${m.name}`;
       this._picker.addPickable(id, m.marker, { kind: 'machine' });
       this._pickIds.push(id);
-      // 机器本体也给一个 id（点机器本身同样聚焦）
-      this._picker.addPickable(`room:body:${m.name}`, m.entry.object, { kind: 'machine' });
+      // 机器本体也给一个 id（点机器本身同样聚焦）。售货机用 `parts.pickBody`（机身合批件，
+      // **不含玻璃门**）：整机登记的话，玻璃门会先被射线命中，柜内的商品卡永远点不到
+      this._picker.addPickable(`room:body:${m.name}`, m.entry.parts?.pickBody ?? m.entry.object, { kind: 'machine' });
       this._pickIds.push(`room:body:${m.name}`);
     }
     // 老虎机正面的**投料口/计数器**热区（rig 给的可点件）：点它就是"粉碎物品"入口
@@ -503,9 +539,51 @@ export class RoomStage {
       this._picker.addPickable(id, obj, { kind: 'machine' });
       this._pickIds.push(id);
     });
+    this._syncGoodsPickables();
     this._picker.addPickable(this._continue.pickId, this._continue, { kind: 'button', space: 'ui' });
     this._pickIds.push(this._continue.pickId);
     this._panel?.attachPicker(this._picker);
+  }
+
+  /**
+   * 商品卡拾取登记（**增量对账**）：货架随快照增删（买到货、换层），登记表也要跟着变——
+   * 卖掉的卡片必须立刻从 Picker 摘掉，否则空货位还能点到（"点了没反应"）。
+   */
+  _syncGoodsPickables() {
+    if (!this._picker) return;
+    const want = new Map();
+    for (const rig of this._rigs.values()) {
+      for (const t of rig?.goodsTargets?.() ?? []) want.set(`room:goods:${t.index}`, t.object);
+    }
+    for (const id of [...this._goodsPickIds]) {
+      if (want.has(id)) continue;
+      this._picker.removePickable(id);
+      this._goodsPickIds.delete(id);
+      const i = this._pickIds.indexOf(id);
+      if (i >= 0) this._pickIds.splice(i, 1);
+    }
+    for (const [id, object] of want) {
+      if (this._goodsPickIds.has(id)) continue;
+      this._picker.addPickable(id, object, { kind: 'goods' });
+      this._goodsPickIds.add(id);
+      this._pickIds.push(id);
+    }
+  }
+
+  /** hit → 商品卡下标（kind 'goods' 或遗物 token 热区都算）。 */
+  _goodsIndexOf(hit) {
+    const id = hit?.id;
+    if (typeof id !== 'string' || !id.startsWith('room:goods:')) return null;
+    const n = Number(id.slice('room:goods:'.length));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** 这件货属于哪台机器（溢出柜时的货架切片靠它区分；点哪台推近哪台）。 */
+  _goodsOwner(index) {
+    for (const [name, rig] of this._rigs) {
+      if ((rig.goodsTargets?.() ?? []).some(t => t.index === index)) return name;
+    }
+    return null;
   }
 
   /** hit → 机器名（浮标或本体任一命中）。 */
@@ -526,9 +604,20 @@ export class RoomStage {
         this._nudgeForcedPick();
         return;
       }
+      // 卡包买到即开：三选一还没选 → 先选（金币已扣，选择不能就这么丢了）
+      if (this._snap?.shop?.pending) { this._nudgeShopPending(); return; }
       // 还欠着离房安慰奖（拉了 ≥2 次杆没中奖）→ 先吐出可乐/鸡腿让你选，选完再离房
       if (this._playGift()) return;
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
+      return;
+    }
+    // 售货机商品卡：点 = 买。**但没怼脸时先推近**——远景里机器中央就是货架，第一次点它
+    // 若直接成交，玩家连商品名与价格都没看清（用户定的节奏：先 zoom in 看货，再点选购买）
+    const gi = this._goodsIndexOf(hit);
+    if (gi != null) {
+      const owner = this._goodsOwner(gi);
+      if (owner && this._focused !== owner) { this._focusMachine(owner); return; }
+      this._buyGoods(gi);
       return;
     }
     // 投料口：进度满 = 直接进"粉碎物品"链（对话 → 选卡/遗物）；没满就先聚焦机器（看得出还差几次）
@@ -617,6 +706,67 @@ export class RoomStage {
     }
   }
 
+  /** 卡包三选一未选就想走：镜头拉回售货机 + 打开货架面板（金币已扣，选择不能丢）。 */
+  _nudgeShopPending() {
+    const name = this._markers.some(m => m.name === 'shop') ? 'shop' : 'shop2';
+    const entry = this._markers.find(m => m.name === name)?.entry;
+    if (!entry) return;
+    if (this._focused === name) this._openPanel(name);
+    else this._focusMachine(name);
+    // 提示挂在**货架下沿**（怼脸取景里机器顶在画外；挂机器顶上的话玩家看不到）
+    this._bubbles.say('room:pack', {
+      ...this._vendingHintAnchor(entry),
+      text: '卡包里还有一张没挑呢。',
+      kind: 'thought',
+      duration: 2.4,
+      tint: 0xffe6ad,
+    });
+  }
+
+  /** 售货机提示泡泡的 UI 锚点：货架区**下沿**（怼脸时机器顶在画外，挂顶上等于没挂）。 */
+  _vendingHintAnchor(entry) {
+    const bay = entry?.parts?.bay;
+    const sm = this._sm;
+    if (!bay || !entry || !sm?.worldToUI) return this._uiAnchorOf(entry ?? {}, 4);
+    const p = entry.object.localToWorld(new THREE.Vector3(bay.x, bay.y - bay.h / 2 + 0.4, bay.z));
+    return sm.worldToUI(p.x, p.y, p.z);
+  }
+
+  /** 点商品卡：买得起 → 上行购买意图；买不起 → 盘子摇头 + 一句泡泡（不是"点了没反应"）。 */
+  _buyGoods(index) {
+    const it = this._snap?.shop?.items?.[index];
+    if (!it || it.sold) return false;
+    if (!it.affordable) {
+      for (const rig of this._rigs.values()) rig.deny?.();
+      // 泡泡挂在**被点的那件货**上方（不是机器顶）：怼脸取景里机器顶在画外，
+      // 挂在机器顶上的提示玩家根本看不到（"点了没反应"的老毛病）
+      const obj = this._goodsObject(index);
+      const sm = this._sm;
+      const at = (obj && sm?.worldToUI)
+        ? (() => { const w = obj.getWorldPosition(new THREE.Vector3()); return sm.worldToUI(w.x, w.y + 1.9, w.z); })()
+        : this._uiAnchorOf(this._markers.find(m => m.name === 'shop')?.entry ?? {}, 4);
+      this._bubbles.say('room:money', {
+        x: at.x, y: at.y,
+        text: `还差 ${Math.max(0, it.price - (this._snap.money ?? 0))} 金……`,
+        kind: 'thought',
+        duration: 2.2,
+        tint: 0xff9a9a,
+      });
+      return false;
+    }
+    this._onIntent?.({ action: 'buyShopItem', index });
+    return true;
+  }
+
+  /** 某件货的卡片根对象（泡泡挂点/调试用）。 */
+  _goodsObject(index) {
+    for (const rig of this._rigs.values()) {
+      const t = (rig.goodsTargets?.() ?? []).find(x => x.index === index);
+      if (t) return t.object;
+    }
+    return null;
+  }
+
   /** 世界锚点 → UI 空间（泡泡/文字挂在物件上方）。 */
   _uiAnchorOf(entry, lift = 10) {
     const sm = this._sm;
@@ -641,8 +791,12 @@ export class RoomStage {
       this._startCamTween(this._basePose(), ZOOM_MS, null);
       return;
     }
-    const p = new THREE.Vector3(entry.x, this._machineMidY(entry), entry.z);
-    this._room?.lighting?.setFocus?.(p, { strength: 1 });
+    const p = new THREE.Vector3(entry.x, this._focusLightY(entry), entry.z);
+    // 售货机**不需要焦点补光**：货架上的商品卡是 unlit 自发光（补光照不到它们），而正面补光
+    // 会打进敞开的玻璃柜、把柜内背板与货道隔片照爆（怼脸时柜子中间一团白光，把两排货糊掉）。
+    // 外围压暗照旧（dim 由 setFocus(null) 之外的路径控制），机器靠自发光与灯池读。
+    if (entry.kind === 'vending') this._room?.lighting?.setFocus?.(null);
+    else this._room?.lighting?.setFocus?.(p, { strength: 1 });
     this._startCamTween(this._focusPose(entry, p), ZOOM_MS, () => {
       if (this._focused === name) this._openPanel(name);   // 推到位才开面板
     });
@@ -652,6 +806,13 @@ export class RoomStage {
   _machineMidY(entry) {
     const box = new THREE.Box3().setFromObject(entry.object);
     return box.min.y + (box.max.y - box.min.y) * 0.5;
+  }
+
+  /** 焦点补光的高度：售货机压到**下半身**（出货口一带）——光心落在货架之下，柜内背板不被照爆。 */
+  _focusLightY(entry) {
+    const box = new THREE.Box3().setFromObject(entry.object);
+    const h = box.max.y - box.min.y;
+    return box.min.y + h * (entry.kind === 'vending' ? 0.22 : 0.5);
   }
 
   /** 全景基准机位（StageManager 构造时那套）。 */
@@ -846,41 +1007,71 @@ export class RoomStage {
   }
 
   /**
-   * 售货机同步：**只在商店层存在**（用户定 2026-09-12——售货机不是赌厅/营地的常驻陈设，
-   * 而是"商店层才有的一台柜子"）。
-   *   有 `snap.shop` → 按配方的 `anchors.shop` **动态生成**（只建一次）并同步库存/显示；
-   *   没有（非商店层）→ **根本不建**（不是摆一台藏着）。
-   * 库存变了由 rig 自己比对——刚卖掉的那格会播出货演出（门开→货落→翻板→门合→灯牌爆闪）。
+   * 售货机同步（**商店房 'shop' = 一整间货房**，用户定 2026-09-12）：
+   *   · 主柜来自配方（`guaranteed` + `live`，name='shop'）——定点、被 claim，撒布件不会压到它；
+   *   · 货架超过一台的容量（4 件，故事模式瑞米等级高时 5 件）→ 在 `anchors.shop2` 生成**溢出柜**
+   *     （只此一路是动态生成：锚点位没有 claim，故生成前先避让已占红线，见 `_freeSpot`）；
+   *   · 库存按机器**切片**下发（index 用全局货架下标——购买/拾取都用它）；
+   *   · 卡包买到即开：三选一挂起时把面板顶到前面来（金币已扣，选择不能丢）。
    */
   _syncVending() {
     const shop = this._snap?.shop ?? null;
-    if (!shop) return false;                       // 非商店层：不生成、不显示
-    if (!this._markers.some(m => m.name === 'shop')) {
-      if (!this._spawnShopMachine()) return false;
+    if (!shop) return false;                       // 非商店房：不生成、不显示
+    const items = shop.items ?? [];
+    const cap = Math.max(1, this._rigs.get('shop')?.state?.capacity ?? 4);
+    const machines = Math.max(1, Math.ceil(items.length / cap));
+    for (let i = 0; i < machines; i++) {
+      const name = i === 0 ? 'shop' : `shop${i + 1}`;
+      if (!this._markers.some(m => m.name === name) && !this._spawnShopMachine(name, i)) break;
+      const rig = this._rigs.get(name);
+      rig?.setStock(items.slice(i * cap, (i + 1) * cap));
+      rig?.setDisplay(`余额 ${this._snap.money ?? 0}`);
     }
-    const rig = this._rigs.get('shop');
-    rig?.setStock(shop.items ?? []);
-    rig?.setDisplay(`余额 ${this._snap.money ?? 0}`);
+    this._syncGoodsPickables();
+    if (shop.pending && this._panelKind !== 'shop') this._openPanel('shop');
     return true;
   }
 
-  /** 按配方的 `anchors.shop` 生成售货机（位置/朝向/缩放都来自配方，Stage 不猜坐标）。 */
-  _spawnShopMachine() {
-    const a = this._sceneDef?.anchors?.shop;
+  /**
+   * 按配方的锚点生成一台售货机（`index` 0 = 主柜位 shop、1 = 溢出柜位 shop2）。
+   * 只用于**溢出柜**：主柜在配方 guaranteed 里（被 claim）。溢出柜位没有 claim，故先算一个
+   * 不与已摆件重叠的落点（`_freeSpot`）；锚点缺失 → 放弃生成（宁可少一台，不重叠）。
+   */
+  _spawnShopMachine(name, index = 1) {
+    const anchors = this._sceneDef?.anchors ?? {};
+    const a = index === 0 ? anchors.shop : (anchors[`shop${index + 1}`] ?? anchors.shop2);
     if (!a || !this._room) return false;
     const def = getProp('vendingMachine');
-    const obj = def.build({ rng: createRng(`${this.recipe}:shop`) });
-    obj.position.set(a.x, 0, a.z);                 // 房间组自己在 FLOOR_Y 上（y 由组承担）
+    const scale = a.scale ?? 1;
+    const fp = def.footprint ?? { x: 3.2, z: 2.4 };
+    const spot = this._freeSpot(a.x, a.z, fp.x * scale, fp.z * scale);
+    const obj = def.build({ rng: createRng(`${this.recipe}:shop:${name}`) });
+    obj.position.set(spot.x, FLOOR_Y, spot.z);     // 与配方摆件同一地平面（FLOOR_Y）
     obj.rotation.y = a.ry ?? 0;
-    obj.scale.setScalar(a.scale ?? 1);
+    obj.scale.setScalar(scale);
     obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this._room.group.add(obj);
-    this._addInteractive('shop', {
+    this._addInteractive(name, {
       object: obj, kind: obj.userData.interactive ?? 'vending',
-      x: a.x, z: a.z, ry: a.ry ?? 0, scale: a.scale ?? 1,
+      x: spot.x, z: spot.z, ry: a.ry ?? 0, scale,
       parts: obj.userData.parts ?? null,
     });
     return true;
+  }
+
+  /** 在 (x,z) 附近找一个不与房间已摆件重叠的落点（原始位优先，其次沿 ±x/±z 退让）。 */
+  _freeSpot(x, z, w, d) {
+    const list = this._room?.placements ?? [];
+    const hit = (cx, cz) => list.some((p) => !p.floating && !p.onWall && !p.hosted
+      && cx - w / 2 < p.x + (p.fx ?? 1) && cx + w / 2 > p.x - (p.fx ?? 1)
+      && cz - d / 2 < p.z + (p.fz ?? 1) && cz + d / 2 > p.z - (p.fz ?? 1));
+    if (!hit(x, z)) return { x, z };
+    for (const step of [5, 10, 16, 22]) {
+      for (const [dx, dz] of [[-step, 0], [step, 0], [0, -step], [0, step], [-step, -step], [step, step]]) {
+        if (!hit(x + dx, z + dz)) return { x: x + dx, z: z + dz };
+      }
+    }
+    return { x, z };
   }
 
   // ================= 内部：逐帧 =================

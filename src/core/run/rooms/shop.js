@@ -1,8 +1,9 @@
 // 瑞米维护的自动售货机（SHOP.md §一）：常规补给。
 //
 // 定位：给金币一个稳定的日常出口，用确定性平衡卡包三选一的随机性——想买什么，这里能直接买到。
-// 出没：固定 4/8、15/19、25/29、36/40 层的休息阶段，**不占奖励房名额**（与老虎机/营地/事件并存，
-// 是休息阶段的一个常驻货架）。每次遇到刷新货架，买光不补。
+// 出没：固定 4/8、15/19、25/29、36/40 层——这些楼层**整层就是商店房**（`roomOfFloor` 直接给
+// `'shop'`，房间场景是一间比战斗房空旷的货房，售货机摆在固定位置；用户定 2026-09-12）。
+// 每次遇到刷新货架，买光不补。
 //
 // 与瑞米的联动**仅故事模式**（肉鸽模式：货架恒定满、无折扣、无对话、遗物随机刷新）：
 //   · 瑞米被打跑 → 下次遇到时货架不完整（少一件）+ 一句道歉
@@ -17,7 +18,7 @@ import { allRelics, getRelicDefinition } from '../../relics/registry.js';
 import { availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK } from '../rewards.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 
-// 出没楼层（每章两次；已避开训练层 4N-2、Boss 层 11N 与 Boss 前营地层）
+// 商店房楼层（每章两次；已避开训练层 4N-2、Boss 层 11N 与 Boss 前营地层）
 export const SHOP_FLOORS = Object.freeze([4, 8, 15, 19, 25, 29, 36, 40]);
 export const isShopFloor = (floor) => SHOP_FLOORS.includes(floor);
 
@@ -74,7 +75,9 @@ function rollStock(run) {
 
   // 恢复药剂：总是有且只有一件
   items.push(makeItem('potion', {
-    id: 'potion', label: '恢复药剂', sub: '恢复 15% 生命上限', price: SHOP_PRICE.potion,
+    id: 'potion', name: '恢复药剂', label: '恢复药剂', sub: '恢复 15% 生命上限',
+    effect: '恢复 15% 生命上限',
+    price: SHOP_PRICE.potion,
   }));
 
   // 故事模式：瑞米被打跑则货架不完整（少一件）+ 道歉文案
@@ -101,16 +104,18 @@ function rollStock(run) {
       if (packPicked) continue;             // 一柜只放一个卡包
       const packs = availablePacks(run).map(p => p.id);
       const packId = packs[Math.floor(rng.next() * packs.length)];
+      const packName = PACKS[packId]?.name ?? packId;
       items.push(makeItem('pack', {
         id: `pack:${packId}`, packId,
-        label: `卡包 · ${PACKS[packId]?.name ?? packId}`,
-        sub: '买到即开，包内三选一',
+        name: `${packName}卡包`, label: `卡包 · ${packName}`,
+        sub: '买到即开，包内三选一', effect: '买到即开，包内三选一',
         price: packPrice(run, packId, rng),
       }));
       packPicked = true;
     } else if (kind === 'apple') {
       items.push(makeItem('apple', {
-        id: 'apple', label: '瑞米最爱的苹果', sub: '喂给瑞米，提升等级与好感',
+        id: 'apple', name: '瑞米最爱的苹果', label: '瑞米最爱的苹果',
+        sub: '喂给瑞米，提升等级与好感', effect: '瑞米果实 +1（等级与好感提升）',
         price: SHOP_PRICE.apple,
       }));
       kinds.splice(kinds.findIndex(([k]) => k === 'apple'), 1); // 只放一件
@@ -119,10 +124,12 @@ function rollStock(run) {
       const relicId = draftRelic(run, { rarity, sources: ['vending'], exclude: usedRelics });
       if (!relicId) continue;               // 该档没货了 → 换别的东西再掷
       usedRelics.push(relicId);
+      const relicName = getRelicDefinition(relicId)?.name ?? relicId;
       items.push(makeItem('relic', {
         id: `relic:${relicId}`, relicId, rarity,
-        label: `${rarity} 级遗物 · ${getRelicDefinition(relicId)?.name ?? relicId}`,
+        name: relicName, label: `${rarity} 级遗物 · ${relicName}`,
         sub: getRelicDefinition(relicId)?.description ?? '',
+        effect: getRelicDefinition(relicId)?.description ?? '',
         price: priceIn(rarity === 'C' ? SHOP_PRICE.relicC : SHOP_PRICE.relicB, rng),
       }));
     }

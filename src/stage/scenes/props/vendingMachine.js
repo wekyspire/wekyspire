@@ -5,14 +5,15 @@
 //
 // 造型意图（用户定 2026-09-11）：**两层货架、每层最多摆 2 件、正面一块玻璃门**。
 // 货架区做成**真凹腔**（上/下横梁 + 左右立柱围出开口，背板整块 unlit 恒亮 = "柜内一直亮着"），
-// 玻璃门是独立的 doorPivot 子组（铰链在货架区左缘）——将来商店房要"开门取货"时，
-// rig 直接绕 Y 转这个枢轴即可，几何无需改。四件"货"是四个独立小件（animRole='slotItem'
-// + userData.slot），库存由快照下行，rig 逐格换色/缩小（卖空 = 缩到不可见）。
+// 玻璃门是独立的 doorPivot 子组（铰链在货架区左缘）——商店房"开门取货"由 rig 绕 Y 转这个枢轴。
+// 四个货位是四个**锚点**（animRole 无、仅 Object3D + 托盘）：货品本体是**遗物/药水的 billboard
+// + 价格**（用户定 2026-09-12），由 rig 按快照把卡片立在托盘上（道具侧保持无状态；见 rig 的 setStock）。
 //
 // 可动件契约（build() 返回的 Group 上挂 `userData.parts`）：
 //   parts.body          整机（受击/开机微抖）
 //   parts.doorPivot     玻璃门枢轴（绕 Y 旋开；门板+门框+把手都是它的子件）
-//   parts.slots[4]      { mesh, index }——两层的四个货位（rig 换色/隐藏）
+//   parts.slots[4]      { index, anchor }——两层的四个货位锚点（rig 在 anchor 上立货品卡片）
+//   parts.bay           货架区开口的**局部包围盒**（{ x, y, z, w, h }，供 RoomStage 怼脸取景）
 //   parts.flap          出货口翻板（出货时向外弹一下）
 //   parts.marquee       顶灯牌发光带（rig 闪烁/呼吸）
 //   parts.display       价格/余额显示条（rig 可烘字/闪）
@@ -32,11 +33,17 @@ export default {
   mount: 'floor',
   tags: ['machine', 'metal', 'container', 'glass', 'lamp', 'interactive'],
   // 灯池：**暖白**（柜内灯管/灯带的口径，不是赌具的暖金也不是银行机的冷青）。
-  // gain 压到 ~0.12：灯池被 composeRoom 推到门前（LAMP_FRONT_PUSH），太近会把机壳照爆。
+  // gain 压到 ~0.05：灯池被 composeRoom 推到门前（LAMP_FRONT_PUSH），太近会把机壳照爆。
   // 灯池再收一档（0.12→0.07）：柜面大面积是玻璃，池子贴太近会在玻璃上打出白色高光斑，
   // 把柜内的货全糊掉（用户 2026-09-12 报"一排看不到两个物品"的真凶之一）
+  // 2026-09-12 二次：单池落在**货架中段**，怼脸时光心正对敞开的柜门 → 柜内背板被照爆
+  // （一团白光把两排货糊掉）。灯池只留**柜脚一段**（地面上"这台亮着"），柜内亮度全交给
+  // unlit 背板与商品卡自己（怼脸时高位的池子也会在货架上方糊出一团白光，用户报"中间一团亮"）。
   lampGain: 0.05,
   lampColor: shade(P.wax, -0.04),
+  lampBands: [
+    { h: 0.1, gain: 0.9 },    // 低位：柜脚/出货口一带（地面光池 + 机器的"落地感"）
+  ],
   footprint: { x: 3.2, z: 2.4 },
   behaviors: [],
   build({ rng = null } = {}) {
@@ -108,34 +115,25 @@ export default {
       g.add(K.put(K.box({ color: shade(steel, -0.16), size: [0.04, 1.02, D - 0.66], family: 'metal' }),
         bayCx, by + 0.57, -0.06));
     }
-    // 四个货位：每层 2 件（品相由 rig 按库存换色；卖空 = rig 缩小）
+    // 四个货位：每层 2 件。**货品本体不在这里**——商店房要的是「遗物/药水的 billboard +
+    // 价格」（用户定 2026-09-12），由 rig 按快照的货架把卡片**立在托盘上**（见 rig 的 setStock）。
+    // 道具侧只给一个**货位锚点**（立卡片的落点：托盘上表面）与四张托盘，几何保持无状态。
     const slots = [];
-    const slotColors = [P.potionRed, P.potionGreen, P.gold, P.potionBlue];
     shelfY.forEach((sy, layer) => {
       [-1, 1].forEach((side, col) => {
         const index = layer * 2 + col;
-        const mesh = K.put(
-          // 货品 **乘算提亮**保色相（shade 是朝白插值 = 去饱和，隔玻璃看更糊）；乘到 >1
-          // 也让它读作"柜内灯照着的商品"（HDR 亮部，吃 bloom 的亮部通道）
-          K.box({
-            color: new THREE.Color(slotColors[index]).multiplyScalar(1.35).getHex(),
-            size: [0.62, 0.72, 0.5],
-            family: 'unlit',
-          }),
-          bayCx + side * (bayW * 0.25), sy, 0.02,
-        );
-        mesh.userData.animRole = 'slotItem';
-        mesh.userData.slot = index;
-        g.add(mesh);
-        slots.push({ mesh, index });
+        const x = bayCx + side * (bayW * 0.25);
+        const anchor = new THREE.Object3D();
+        anchor.position.set(x, sy - 0.33, D / 2 - 0.5);   // 托盘上表面（卡片由此往上立）
+        anchor.userData.slot = index;
+        g.add(anchor);
+        slots.push({ index, anchor });
       });
     });
-    // 货位底座（每件下面一小块"托盘"，把四件在视觉上分格）+ 前沿价签座
+    // 货位托盘（每件下面一块"托盘"，把四件在视觉上分格；静态件，随壳体合批）
     for (const s of slots) {
       g.add(K.put(K.box({ color: shade(steel, -0.24), size: [0.66, 0.05, 0.54], family: 'metal' }),
-        s.mesh.position.x, s.mesh.position.y - 0.38, s.mesh.position.z));
-      g.add(K.put(K.box({ color: P.night, size: [0.44, 0.14, 0.05], family: 'unlit' }),
-        s.mesh.position.x, s.mesh.position.y - 0.28, s.mesh.position.z + 0.3));
+        s.anchor.position.x, s.anchor.position.y - 0.025, s.anchor.position.z - 0.28));
     }
 
     // ================= 玻璃门（独立枢轴：铰链在开口左缘）=================
@@ -219,25 +217,29 @@ export default {
       0, cabTop + 0.07, 0));
 
     // ================= 静态子件合并（预算回本；同老虎机口径）=================
-    // 壳体/横梁/立柱/层板/操作列/顶牌…相对机身完全不动，此前是几十个独立 mesh。
-    // 后处理：把"没有 animRole 且不在 parts 里"的散件按材质族合并（世界变换烘进顶点）。
+    // 壳体/横梁/立柱/层板/托盘/操作列/顶牌…相对机身完全不动，此前是几十个独立 mesh。
+    // 后处理：把"不在 parts 里"的散件按材质族合并（世界变换烘进顶点）。
+    let pickBody = null;
     {
-      const animated = new Set([doorPivot, flap, marquee, display, ...slots.map(s => s.mesh)]);
-      const keep = new Set();
-      g.traverse((o) => { if (o.userData?.animRole) keep.add(o); });
+      const animated = new Set([doorPivot, flap, marquee, display, ...slots.map(s => s.anchor)]);
       const statics = new THREE.Group();
       for (const c of [...g.children]) {
-        if (c.isMesh && !keep.has(c) && !animated.has(c)) statics.add(c);
+        if (c.isMesh && !animated.has(c)) statics.add(c);
       }
       if (statics.children.length) {
         const merged = mergeStatic(statics);
         merged.name = 'vendingStatics';
         g.add(merged);
+        pickBody = merged;   // 机身拾取靶（**不含玻璃门**：门会把柜内商品卡的射线全挡住）
       }
     }
 
     g.userData.parts = {
       body: g, doorPivot, slots, flap, marquee, display,
+      // 机身拾取靶（RoomStage 用它登记"点机器本体"）：不含门/翻板/灯牌/卡片
+      pickBody,
+      // 货架区开口的局部口径（供取景：怼脸看货架时框这一块，而不是整机）
+      bay: { x: bayCx, y: (bayBot + bayTop) / 2, z: D / 2 - 0.3, w: bayW + 0.36, h: bayH + 0.2 },
     };
     g.userData.interactive = 'vending';
     return g;

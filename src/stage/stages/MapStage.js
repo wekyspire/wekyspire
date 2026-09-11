@@ -25,7 +25,9 @@ const PANEL_BUILDERS = {
   reward: { build: buildRewardPanel, form: 'modal' },
   ascension: { build: buildAscensionPanel, form: 'modal' },
   room: { build: buildRoomPanel, form: 'modal' },
-  shop: { build: buildShopPanel, form: 'modal' },
+  // 售货机在塔楼层的占位视图（场景式商店房走 RoomStage 的 dock 面板）：这里没有 3D 货架，
+  // 所以要带购买按钮（`buttons: true`），否则降级路径上买不了东西
+  shop: { build: (snap) => buildShopPanel(snap, { buttons: true }), form: 'modal' },
 };
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：

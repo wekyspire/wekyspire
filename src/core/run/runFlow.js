@@ -4,7 +4,7 @@ import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
-import { ensureShopStock } from './rooms/shop.js';
+import { ensureShopStock, isShopFloor } from './rooms/shop.js';
 import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
 import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
 import { activeRelics } from './prep.js';
@@ -35,12 +35,14 @@ export function deriveBattleSeed(seed, floor) {
 
 // 奖励房派发（§1/§4；2026-09-11 用户定：**营地与训练场合并**）。
 // 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地·训练场合并房**（二者总是一起出现，
-// 固定不随机）；其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
+// 固定不随机）；商店层（4/8、15/19…）整层是**商店房**（售货机摆在固定位置，用户定 2026-09-12）；
+// 其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
 // 后果（有意为之）：回复来源集中在合并层（2/6/10/14/18/21/26/30/32/34/38/42/43）。
 export function roomOfFloor(floor, rng) {
   if (isBossFloor(floor)) return null;   // Boss 层无奖励房（Boss 奖励=删卡，另行处理）
   if (isPreBossFloor(floor) || isTrainingFloor(floor)) return 'campTraining';
   if (floor === GURPAS_FLOOR) return 'gurpas';   // 古尔帕斯之店：35 层固定（SHOP.md §二）
+  if (isShopFloor(floor)) return 'shop';         // 瑞米售货机：整层商店房（SHOP.md §一）
   return rng.pick(['slot', 'event']);
 }
 

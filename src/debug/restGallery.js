@@ -15,6 +15,8 @@ import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';
+import { createVendingMachineRig } from '../stage/scenes/interactive/vendingMachineRig.js';
+import { FLOOR_Y } from '../stage/scenes/dungeon3D.js';
 
 const params = new URLSearchParams(location.search);
 
@@ -172,7 +174,14 @@ function focusMachine(name) {
   const reels = parts.reels ?? [];
   const sp = new THREE.Vector3();
   let halfW; let halfH; let screenH; let margin;
-  if (parts.leverPivot && reels.length) {
+  if (parts.bay) {
+    // 售货机（商店房）：框**货架区开口**——怼脸看货与价格；底边留出下方交互条的位置
+    sp.copy(m.entry.object.localToWorld(new THREE.Vector3(parts.bay.x, parts.bay.y, parts.bay.z)));
+    halfW = (parts.bay.w / 2) * m.entry.scale * 1.04;
+    halfH = (parts.bay.h / 2) * m.entry.scale * 1.04;
+    screenH = parts.bay.h * m.entry.scale;
+    margin = 1.08;
+  } else if (parts.leverPivot && reels.length) {
     const screenLike = reels[Math.floor(reels.length / 2)] ?? m.entry.object;
     screenLike.getWorldPosition(sp);
     const a = new THREE.Vector3(); const b = new THREE.Vector3();
@@ -356,23 +365,37 @@ function rebuild() {
   for (const [name, entry] of room.interactives ?? new Map()) {
     const rig = entry.kind === 'slot'
       ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
-      : createBankMachineRig({ object: entry.object, parts: entry.parts });
+      : entry.kind === 'vending'
+        ? createVendingMachineRig({ object: entry.object, parts: entry.parts })
+        : createBankMachineRig({ object: entry.object, parts: entry.parts });
     rigs.set(name, rig);
     // 计数器初次同步（正式流程里在面板打开/数据变化时调用）
     if (name === 'slot') rig.setDevour?.({ progress: devourProgress, every: DEVOUR_EVERY, ready: devourReady() });
+    // 售货机：陈列一份**样例货架**（真实数据来自 panelSnapshot.snap.shop；这里是视觉门）——
+    // 故意混一件"买不起"的（价格标红）与一件遗物（走遗物立绘）
+    if (entry.kind === 'vending') {
+      rig.setStock?.([
+        { index: 0, kind: 'relic', name: '塔的馈赠', price: 30, sold: false, affordable: true },
+        { index: 1, kind: 'potion', name: '恢复药剂', price: 20, sold: false, affordable: true },
+        { index: 2, kind: 'pack', name: '体修卡包', price: 28, sold: false, affordable: true },
+        { index: 3, kind: 'relic', name: '光滑小圆盾', price: 55, sold: false, affordable: false },
+      ]);
+      rig.setDisplay?.('余额 30');
+    }
     // 地面光环（hover 提亮；点它也能聚焦）
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
       new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(entry.x, 0.12, entry.z + 1.2 * entry.scale);
+    ring.position.set(entry.x, FLOOR_Y + 0.12, entry.z + 1.2 * entry.scale);
     room.group.add(ring);
     markerRings.push({ name, ring });
-    // 悬浮浮标（远景可读：跳动菱形 + 竖直光柱；hover 放大变亮）
+    // 悬浮浮标（远景可读：跳动菱形 + 竖直光柱；hover 放大变亮）——⚠ 与机器同一地平面（FLOOR_Y）
     const marker = new THREE.Group();
-    marker.position.set(entry.x, 0, entry.z);
-    const bobY = (entry.kind === 'slot' ? 19 : 16) * (entry.scale / 2);
+    marker.position.set(entry.x, FLOOR_Y, entry.z);
+    const topY = new THREE.Box3().setFromObject(entry.object).max.y;
+    const bobY = Math.max(5, topY - FLOOR_Y + 2.4);
     const bob = new THREE.Mesh(
       new THREE.BoxGeometry(2.2, 2.2, 2.2),
       new THREE.MeshBasicMaterial({ color: 0xffe08a }),
