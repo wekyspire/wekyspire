@@ -160,6 +160,16 @@ export class StageManager {
     return { x: p.x, y: p.y };
   }
 
+  /**
+   * 世界坐标 → **UI 空间坐标**（uiCamera 的 z=uiZ 平面）：把 UI 元素锚到世界物体上的
+   * 唯一换算（单位头顶的读数文字、对话泡泡都走它）。视口未就绪时退化为原坐标（headless）。
+   */
+  worldToUI(wx, wy, wz = 0, uiZ = 70) {
+    if (!this._viewWidth || !this._viewHeight) return { x: wx, y: wy };
+    const px = this.worldToScreen(wx, wy, wz, this._camera);
+    return this.screenToWorld(px.x, px.y, uiZ, this._uiCamera);
+  }
+
   /** 世界坐标 → 屏幕像素（测试/调试逆映射）。cam 缺省世界相机；UI 空间传 uiCamera。 */
   worldToScreen(wx, wy, wz = 0, cam = this._camera) {
     cam.updateMatrixWorld();

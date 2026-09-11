@@ -23,14 +23,21 @@ const ITEM_ART_URLS = indexArtUrls(
 );
 
 export class PropArtCache extends ArtImageCache {
-  constructor() {
+  /**
+   * @param urls 可选的 key → URL 表；缺省 = props/items 两张表。
+   *   **可注入**是为了让别的「一 key 一张共享纹理」小件复用同一实现
+   *   （如对话泡泡的 `art/bubbleArt.js`），不必再抄一份缓存类。
+   */
+  constructor(urls = null) {
     super();
     this._textures = new Map();   // url -> THREE.Texture（进程级共享，勿 dispose）
+    this._urls = urls;
   }
 
   /** key（去扩展名文件名，如 'slot_machine'）→ URL；无此素材返回 null。 */
   resolveUrl(key) {
     if (!key) return null;
+    if (this._urls) return this._urls[key] ?? null;
     return ITEM_ART_URLS[key] ?? PROP_ART_URLS[key] ?? null;
   }
 

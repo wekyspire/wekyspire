@@ -24,6 +24,7 @@ ASSETS = os.path.join(os.path.dirname(__file__), '..', 'src', 'assets')
 # 目录前缀 → 质量（越具体的规则越靠前）
 QUALITY_RULES = [
     ('stage/', 90),   # 立绘：带 alpha，保边缘
+    ('ui/', 90),      # 气泡等 UI 小件：带 alpha，保边缘
     ('cards/', 85),   # 卡图插画
     ('images/', 85),  # 背景/CG
     ('cutscenes/', 85),

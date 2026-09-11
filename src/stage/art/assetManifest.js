@@ -2,11 +2,13 @@
 // 清单由构建期 import.meta.glob 自动收集：src/assets 下任何位图落盘即入册，无需登记
 // （与 core 内容注册的「显式 import」约定区分开——素材没有逻辑语义，无需显式点名；
 //   新增美术资源只要丢进 assets 任意子目录，构建即自动纳入预载）。
-// 预载成果按路径分区 warm 进共享缓存：stage/* → UnitArtCache、cards/* → CardArtCache，
+// 预载成果按路径分区 warm 进共享缓存：stage/* → UnitArtCache、cards/* → CardArtCache、
+// ui/* → BubbleArtCache（对话泡泡），
 // 舞台首拍 get() 同步命中（无「占位色块 → 补挂」闪变）；cutscenes/images 等纯展示图
 // 只温浏览器缓存（<img>/CSS 引用同一 URL，后续取用零网络零解码等待）。
 import { sharedUnitArtCache } from './unitArt.js';
 import { sharedCardArtCache } from './cardArtCache.js';
+import { sharedBubbleArtCache } from './bubbleArt.js';
 
 // 根级散图（如 remi.webp）与任意深度子目录（cards/decor/ 等）均被 ** 命中；
 // 扩展名过滤天然排除 css/mp3 等非位图（素材经 tools/compress_art.py 转 WebP）
@@ -27,12 +29,13 @@ export const ART_MANIFEST = Object.freeze(
  */
 export function preloadAllArt({ onProgress, imageFactory = null, caches = null } = {}) {
   const Img = imageFactory ?? (typeof Image !== 'undefined' ? Image : null);
-  const targets = caches ?? { stage: sharedUnitArtCache, card: sharedCardArtCache };
+  const targets = caches ?? { stage: sharedUnitArtCache, card: sharedCardArtCache, ui: sharedBubbleArtCache };
   const total = ART_MANIFEST.length;
   const warmInto = (path, url, img) => {
     const t = path.includes('/assets/stage/')
       ? targets.stage
-      : path.includes('/assets/cards/') ? targets.card : null;
+      : path.includes('/assets/cards/') ? targets.card
+        : path.includes('/assets/ui/') ? targets.ui : null;
     t?.warm?.(url, img);
   };
   if (!Img || !total) {

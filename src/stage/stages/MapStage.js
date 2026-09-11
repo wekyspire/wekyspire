@@ -8,6 +8,7 @@ import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
 import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
+import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel, buildShopPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
@@ -68,6 +69,7 @@ export class MapStage {
     // 顶端居中资源行（金币数值 + 遗物槽；与战斗内同物同位）
     this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
     this.uiScene.add(this._topBar);
+    this.uiScene.add(this._bubbles);
     this._unsubArt = this._unitArt?.addOnLoad(() => {
       this._applyAvatar();
       // 水晶/金币的晚到补挂由 PlayerStatusObject 自身的 onLoad 订阅负责（unitArt 已注入）
@@ -85,6 +87,9 @@ export class MapStage {
     this._relicPicker = null; // 全屏选遗物界面（粉碎物品入口；惰性创建）
     this._pickerConfirm = null; // 当前选卡/选遗物界面的确认回调（按入口切换）
     this._showcase = null;   // 获得物特写（遗物/药水/奖励到手时播一次；惰性创建）
+    this._bubbles = new BubbleLayer();   // 角色对话/思索泡泡（世界锚点，每帧重投影）
+    this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
+    this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -179,6 +184,42 @@ export class MapStage {
 
   /** 特写是否在播（宿主据此吞掉面板输入）。 */
   get showcasing() { return !!this._showcase?.busy; }
+
+  // ---- 角色对话/思索泡泡（通用接口，用户定 2026-09-11）----
+  // 场景里的角色（商店老板、瑞米、事件 NPC…）异步说话/思索时用：
+  //   sayAtWorld('shopkeeper', { x, y, z }, { text, kind, duration })
+  // 锚点是**世界坐标**，每帧经 StageManager 重投影到 UI 空间——相机转动/推进镜头时
+  // 泡泡跟着角色走。同一 key 重复调用 = 改台词并重新计时（不会叠出两个）。
+  /**
+   * @param key     锚点标识（角色名/单位 id）
+   * @param anchor  { x, y, z }（世界坐标；y 给"头顶高度"）
+   * @param data    { text, kind:'speech'|'thought', duration, tint, width }
+   */
+  sayAtWorld(key, anchor = {}, data = {}) {
+    const a = { x: anchor.x ?? 0, y: anchor.y ?? 0, z: anchor.z ?? 0 };
+    this._bubbleAnchors.set(key, a);
+    const p = this._sm ? this._sm.worldToUI(a.x, a.y, a.z) : { x: a.x, y: a.y };
+    return this._bubbles.say(key, { ...data, x: p.x, y: p.y });
+  }
+
+  /** 撤掉某个（或全部）角色的泡泡，并停止跟随。 */
+  hideBubble(key = null) {
+    this._bubbles.hide(key);
+    if (key == null) this._bubbleAnchors.clear();
+    else this._bubbleAnchors.delete(key);
+  }
+
+  get bubbleKeys() { return this._bubbles.keys; }
+
+  _followBubbles() {
+    if (!this._sm) return;
+    for (const key of this._bubbles.keys) {
+      const a = this._bubbleAnchors.get(key);
+      if (!a) continue;
+      const p = this._sm.worldToUI(a.x, a.y, a.z);
+      this._bubbles.moveTo(key, p.x, p.y);
+    }
+  }
 
   // ---- 全屏选卡界面（营地/训练场「升级一张卡」、粉碎物品…）----
   // 按下入口进入：界面渲染候选卡，hover 预览卡面，可返回/确认。选卡与开关都是舞台本地
@@ -375,6 +416,7 @@ export class MapStage {
   // 舞台自身不关心总线来源。
   attachInput({ stageManager, bus } = {}) {
     this._picker = stageManager ? new Picker({ stageManager, bus }) : null;
+    this._sm = stageManager ?? null;
     this._bus = bus ?? null; // 选卡界面的 tooltip 出口（card 整卡预览走同一条浮层）
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
     this._cardPicker?.attachPicker(this._picker);
@@ -464,6 +506,8 @@ export class MapStage {
       this._statusBar.update(dt);
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._showcase?.update(dt);        // 获得物特写（自带 in/hold/out 时序）
+      this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
+      this._bubbles.update(dt);
     });
   }
 
@@ -478,6 +522,8 @@ export class MapStage {
     this._unsubCardArt?.();
     this._unsubCardArt = null;
     this._removePanel();
+    this._bubbles.dispose();
+    this._bubbleAnchors.clear();
     if (this._relicPicker) {
       this.uiScene.remove(this._relicPicker);
       this._relicPicker.dispose();

@@ -29,6 +29,7 @@ import { EventNames } from '../../bridge/events.js';
 import { DisplayModel } from '../../bridge/displayModel.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
+import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
 import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
@@ -74,6 +75,11 @@ const HAND_LIFT_Y = UI_CAMERA_LOOK_AT_Y - WORLD_HEIGHT / 2
 const CARD_BURN_MS = 750;
 // 玩家状态栏摆放位：与地图舞台共享的契约，定义见 PlayerStatusObject.js
 export { PLAYER_STATUS_POS };
+
+// 角色头顶的对话/思索泡泡：锚点抬到头顶之上（单位立牌高 ~26 世界单位，原点在脚底）
+const BUBBLE_HEAD_DY = 30;
+// 手牌满被挡下时骑士的自语（用户定 2026-09-11；思索泡泡而非飘字）
+const HAND_FULL_LINE = '我无法掌控更多手牌了！';
 
 export class BattleStage {
   /**
@@ -212,6 +218,10 @@ export class BattleStage {
     this._vignette = new DamageVignette();
     this.uiScene.add(this._vignette.object);
 
+    // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
+    this._bubbles = new BubbleLayer();
+    this.uiScene.add(this._bubbles);
+
     this._unsubTick = stageManager.onTick((dt) => {
       this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
@@ -226,6 +236,8 @@ export class BattleStage {
         // 立牌光照交互：火把光衰+闪烁+纵深压暗的假采样染色（闪红窗口内不覆盖）
         if (this._scene3D) unit.applyLightTint(this._scene3D.sampleStandeeTint(unit.position, this._tintScratch));
       }
+      this._followBubbles();      // 泡泡跟随锚点（单位浮动/受击位移时也跟得上）
+      this._bubbles.update(dt);   // 角色自语/对话泡泡（自带冒出→停留→放缩消失时序）
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
       this._vignette.update(dt);  // 友军受击渐晕释放
@@ -1374,16 +1386,38 @@ export class BattleStage {
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
   /** 手牌压力提示（抽不下 / 咏唱发动被挡）：整手牌红脉冲 + 骑士头顶文字。 */
-  _handPressureHint(text = '我掌控不了更多手牌了！') {
+  /**
+   * 让某单位冒一个**对话/思索泡泡**（通用接口：位置 + 文本 + 持续时间 + 类型）。
+   * 位置由单位锚定（头顶自动跟随），文本纯文本（自动折行，不做富文本）。
+   * @param uniqueID 单位 uniqueID
+   * @param data { text, kind:'speech'|'thought', duration, tint, dy }
+   */
+  say(uniqueID, { text = '', kind = 'speech', duration = 2.6, tint = null, dy = BUBBLE_HEAD_DY } = {}) {
+    const unit = this._units.get(uniqueID);
+    if (!unit) return null;
+    const p = this._unitToUI(unit, 0, dy);
+    return this._bubbles.say(uniqueID, { x: p.x, y: p.y, text, kind, duration, tint });
+  }
+
+  /** 已经开了泡泡的单位 id 列表（调试/测试）。 */
+  get bubbleKeys() { return this._bubbles.keys; }
+
+  /** 泡泡锚点跟随：单位在浮动/受击位移/入场时，泡泡始终挂在它头顶。 */
+  _followBubbles() {
+    for (const key of this._bubbles.keys) {
+      const unit = this._units.get(key);
+      if (!unit || unit.visible === false) continue;
+      const p = this._unitToUI(unit, 0, BUBBLE_HEAD_DY);
+      this._bubbles.moveTo(key, p.x, p.y);
+    }
+  }
+
+  /** 手牌被上限挡下：整手牌红色脉冲 + 骑士头顶**思索泡泡**自语（用户定 2026-09-11）。 */
+  _handPressureHint(text = HAND_FULL_LINE) {
     for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03 });
     const proj = this._snapshot;
-    const unit = proj ? this._units.get(proj.player.uniqueID) : null;
-    if (!unit) return;
-    const p = this._unitToUI(unit, 0, 12);
-    this.particles.spawnText(p.x, p.y, text, {
-      fontSize: 30, color: '#ff8a80', fontWeight: 'bold',
-      vx: (Math.random() - 0.5) * 3, vy: 10, gravity: 0, drag: 1.1, ttl: 1.4, scalePop: 0.35, space: 'ui',
-    });
+    if (!proj?.player) return;
+    this.say(proj.player.uniqueID, { text, kind: 'thought', duration: 2.8, tint: 0xe8ecfa });
   }
 
   _pulseCard(id, color) {
@@ -1758,6 +1792,7 @@ export class BattleStage {
     this._unsubs = [];
     this.springs.clear();
     this._arrow.dispose();
+    this._bubbles.dispose();
     this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
     this._topBar.dispose();
     this.shake.dispose();      // 相机精确回基位（防偏移泄漏给下一舞台）
