@@ -604,6 +604,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           ? devourSlot(run, { kind: 'card', uniqueID: key })
           : devourSlot(run, { kind: 'relic', relicId: key });
         notify();
+        roomStage?.playCrush?.();   // 机器端的"咬合 + 迸币"演出（结算已完成，这里只是表现）
         // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
         panelStage()?.showcaseItem({
           title: `+${res.gold} 金币`,

@@ -14,9 +14,11 @@ const THEMES = {
 
 /**
  * @param {object} data  { label, sublabel = null, enabled = true, active = false }
- * @param {object} options  { width = 150, height = 60, scale = 2 }（局部坐标 10px/wu）
+ * @param {object} options  { width = 150, height = 60, scale = 2, labelStyle }（局部坐标 10px/wu）
+ *   labelStyle: { color, stroke, strokeWidth } —— 覆盖主题文字色（休息房操纵条要"白字黑边"，
+ *   场景底子颜色杂，主题的米白/金没有黑描边时对比不够）
  */
-export function bakeButtonFace(data, { width = 150, height = 60, scale = 2 } = {}) {
+export function bakeButtonFace(data, { width = 150, height = 60, scale = 2, labelStyle = null } = {}) {
   const { label, sublabel = null, enabled = true, active = false } = data;
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(width * scale);
@@ -38,17 +40,21 @@ export function bakeButtonFace(data, { width = 150, height = 60, scale = 2 } = {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const paint = (text, x, y, fontPx, fallbackColor) => {
+    ctx.font = `bold ${fontPx}px sans-serif`;
+    // 主标签走 labelStyle（白字黑边）；副标签沿用主题色，只补一层黑描边
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = labelStyle?.strokeWidth ?? Math.max(2, fontPx * 0.16);
+    ctx.strokeStyle = labelStyle?.stroke ?? 'rgba(0,0,0,0.85)';
+    ctx.fillStyle = labelStyle ? (labelStyle.color ?? '#ffffff') : fallbackColor;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  };
   if (sublabel != null) {
-    ctx.font = `bold ${Math.round(height * 0.34)}px sans-serif`;
-    ctx.fillStyle = theme.text;
-    ctx.fillText(label, width / 2, height * 0.34);
-    ctx.font = `${Math.round(height * 0.24)}px sans-serif`;
-    ctx.fillStyle = theme.sub;
-    ctx.fillText(sublabel, width / 2, height * 0.74);
+    paint(label, width / 2, height * 0.34, Math.round(height * 0.34), theme.text);
+    paint(sublabel, width / 2, height * 0.74, Math.round(height * 0.24), theme.sub);
   } else {
-    ctx.font = `bold ${Math.round(height * 0.4)}px sans-serif`;
-    ctx.fillStyle = theme.text;
-    ctx.fillText(label, width / 2, height / 2 + 1);
+    paint(label, width / 2, height / 2 + 1, Math.round(height * 0.4), theme.text);
   }
 
   const texture = new THREE.CanvasTexture(canvas);

@@ -19,6 +19,15 @@ const TINT = {
 };
 
 export function createBankMachineRig({ object, parts, seed = 'bank' }) {
+  /** 屏幕正文烘焙（宿主可随时改文本，如按快照显示存款额）。 */
+  function bakeScreen(text) {
+    if (!screen || typeof document === 'undefined') return;
+    const baked = bakeBoldText(text, { fontPx: 40, tint: '#dff6ff', stroke: 'rgba(8, 22, 32, 0.9)' });
+    screen.material.map?.dispose?.();
+    screen.material.map = baked.texture;
+    screen.material.needsUpdate = true;
+  }
+
   const body = parts?.body ?? object;
   const screen = parts?.screen ?? null;
   const scanline = parts?.scanline ?? null;
@@ -29,10 +38,8 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
     // 屏幕正文：粗体文本烘到纹理上（道具只登记 screenText，执行在 Stage 侧）。
     // 冷光由 unlit 材质 + 冷色灯池给；文本本身不发光，只随屏幕一起明灭。
     if (typeof document !== 'undefined' && screen.userData?.screenText) {
-      const baked = bakeBoldText(screen.userData.screenText, { fontPx: 40, tint: '#dff6ff', stroke: 'rgba(8, 22, 32, 0.9)' });
-      screen.material.map = baked.texture;
+      bakeScreen(screen.userData.screenText);
       screen.material.color.setRGB(0.85, 0.95, 1.0);
-      screen.material.needsUpdate = true;
     }
   }
   if (scanline) scanline.material = new THREE.MeshBasicMaterial({ color: shade(P.glowCyan, -0.5) });
@@ -115,6 +122,7 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
   return {
     act,
     update,
+    setScreen: bakeScreen,   // 屏幕文本（如「存款 12」）
     setHover: (on) => { st.hoverTarget = on ? 1 : 0; },
     setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
     isBusy: () => !!st.action,

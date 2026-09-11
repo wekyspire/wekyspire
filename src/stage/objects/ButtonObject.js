@@ -18,7 +18,7 @@ export class ButtonObject extends THREE.Mesh {
    *   bakeButton: 注入烘焙（缺省 bakeButtonFace；node 无 document 退化占位）
    *   fontPx:   标签字号
    */
-  constructor({ id, width = 150, height = 60, bakeButton = null, fontPx = 16 } = {}) {
+  constructor({ id, width = 150, height = 60, bakeButton = null, fontPx = 16, labelStyle = null } = {}) {
     super(
       new THREE.PlaneGeometry(width / PX_PER_WU, height / PX_PER_WU),
       new THREE.MeshBasicMaterial({ transparent: true }),
@@ -29,13 +29,14 @@ export class ButtonObject extends THREE.Mesh {
     this._width = width;
     this._height = height;
     this._fontPx = fontPx;
+    this._labelStyle = labelStyle;   // { color, stroke, strokeWidth }：休息房操纵条要白字黑边
     this._bakeButton = bakeButton || defaultBakeButton;
     this._sig = null;
   }
 
   /** 设置按钮数据（同签名不重烘）；返回是否发生了重烘。 */
   setData({ label, sublabel = null, enabled = true, active = false } = {}) {
-    const sig = `${label}|${sublabel ?? ''}|${enabled}|${active}|${this.hovered}`;
+    const sig = `${label}|${sublabel ?? ''}|${enabled}|${active}|${this.hovered}|${JSON.stringify(this._labelStyle)}`;
     this.data = { label, sublabel, enabled, active };
     if (sig === this._sig) return false;
     this._sig = sig;
@@ -72,7 +73,7 @@ export class ButtonObject extends THREE.Mesh {
       sublabel: this.data.sublabel,
       enabled: this.data.enabled,
       active,
-    }, { width: this._width, height: this._height, fontPx: this._fontPx });
+    }, { width: this._width, height: this._height, fontPx: this._fontPx, labelStyle: this._labelStyle });
     this.material.map = baked.texture;
     this.material.needsUpdate = true;
   }

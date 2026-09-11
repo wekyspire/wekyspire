@@ -47,7 +47,7 @@ const FORMS = {
   // 下沿停靠（场景式休息房的机器操纵条，用户 2026-09-12：**贴到接近屏幕下边沿** +
   // 字号整体调大一档 + 文字统一白字黑边）。`font` = 各行烘焙字号（逻辑像素，10px/wu）。
   dock: {
-    width: 660, padX: 24, padY: 14,
+    width: 580, padX: 24, padY: 14,
     rowH: { title: 34, text: 24, sub: 21, button: 36, main: 44, gap: 11, tiles: 96, cards: 260 },
     font: { title: 24, sub: 16, text: 18, button: 17 },
   },
@@ -122,12 +122,20 @@ export class PanelObject extends THREE.Group {
     let y = flowTop;
     for (const w of widgets) {
       if (w.kind === 'gap') { y -= this._g.rowH.gap / PX_PER_WU; continue; }
-      const h = this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text;
+      // ⚠ size 的语义按 kind 分流：**按钮**的 'sub'/'main' 是"小按钮/主按钮"，
+      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——dock 里曾因此把按钮压成 21px 高，
+      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（用户报"字体太小看不清"）。
+      const isDock = this.form === 'dock';
+      const h = (isDock && w.kind === 'button')
+        ? this._g.rowH[w.size === 'main' ? 'main' : 'button']
+        : (this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text);
       const hWu = h / PX_PER_WU;
       if (w.kind === 'button') {
         const btn = new ButtonObject({
           id: w.id, width: w.width ?? (g.width - g.padX * 2), height: h,
           bakeButton: this._bakeButton, fontPx: w.fontPx ?? (g.font?.button ?? 15),
+          // dock（休息房操纵条）：按钮文字与面板正文同口径——白字 + 黑描边
+          labelStyle: isDock ? { color: '#ffffff', stroke: 'rgba(0,0,0,0.9)' } : null,
         });
         btn.setData({ label: w.label, sublabel: w.sublabel, enabled: w.enabled !== false, active: !!w.active });
         btn.placeCenter(centerX, y - hWu / 2);
@@ -135,6 +143,8 @@ export class PanelObject extends THREE.Group {
         this.add(btn);
         this._buttons.set(w.id, btn);
         this._buttonActions.set(w.id, { action: w.action, enabled: w.enabled !== false });
+        // 按钮也可挂 token 热区（如"三选一遗物"的按钮要给遗物效果预览）——Picker 的通用挂钩
+        if (w.token) btn.userData.token = w.token;
         this._picker?.addPickable(btn.pickId, btn, { kind: 'button', space: 'ui' });
         // object 留 null：按钮统一由 _buttons 清理（横向组的瓦片也在同一张表里），避免二次释放
         this._rows.push({ widget: w, object: null, top: y, h: hWu, contentH: hWu });
@@ -189,17 +199,17 @@ export class PanelObject extends THREE.Group {
   _placeDock(heightWu) {
     this.position.set(0, DOCK_BOTTOM + heightWu, Z.PANEL);
     const w = this._g.width / PX_PER_WU;
-    if (this._backdrop) {
-      this._backdrop.scale.set(w / (HALF_UI_W * 2), heightWu / WORLD_HEIGHT, 1);
-      return;
+    // ⚠ 背板用**单元平面 + 缩放**（不是按内容高建几何）：dock 面板每次快照都会重排，
+    // 若在"已有背板"分支上再缩放一次，尺寸会越刷越小（症状：内容只有一小块黑底）。
+    if (!this._backdrop) {
+      this._backdrop = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
+      );
+      this.add(this._backdrop);
     }
-    const bg = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, heightWu),
-      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
-    );
-    bg.position.set(0, -heightWu / 2, Z.BACKDROP);
-    this.add(bg);
-    this._backdrop = bg;
+    this._backdrop.scale.set(w, heightWu, 1);
+    this._backdrop.position.set(0, -heightWu / 2, Z.BACKDROP);
   }
 
   get heightWu() { return this._panelHeight ?? 0; }
@@ -292,17 +302,24 @@ export class PanelObject extends THREE.Group {
   }
 
   /** 横向组的单项高度（wu）：卡面按缩放，瓦片按给定高。 */
+  /** 网格单项高度（wu）。dock 的卡阵另收一档：操纵条只占屏幕下沿，卡面不能撑半屏。 */
   _itemHeightWu(w) {
     return w.kind === 'cards'
-      ? CARD_HEIGHT * (w.scale ?? CARD_SCALE)
+      ? CARD_HEIGHT * this._gridCardScale(w)
       : (w.tileHeight ?? 96) / PX_PER_WU;
+  }
+
+  /** 卡阵缩放：dock 形态封顶（0.46 ≈ 单卡 16wu 高，三列一行 ≈ 屏幕高度 16%）。 */
+  _gridCardScale(w) {
+    const s = w.scale ?? CARD_SCALE;
+    return this.form === 'dock' ? Math.min(s, 0.46) : s;
   }
 
   /** 网格（瓦片/卡面）：整组在 centerX 居中；末行按自身数量居中；返回行记录。 */
   _buildGrid(w, { y, groupH, centerX, cols, itemH, gapY }) {
     const items = w.items ?? [];
     const isCards = w.kind === 'cards';
-    const cardScale = w.scale ?? CARD_SCALE;
+    const cardScale = this._gridCardScale(w);
     const itemW = isCards ? CARD_WIDTH * cardScale : TILE.width / PX_PER_WU;
     const gap = TILE.gap / PX_PER_WU;
     for (let i = 0; i < items.length; i++) {

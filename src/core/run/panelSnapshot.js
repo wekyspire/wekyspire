@@ -279,8 +279,15 @@ export function roomSnapshot(run, extra = {}) {
       gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
         id: g.id, name: g.name, desc: g.desc, effect: g.effect,
       })) : null,
-      // 演出进行中：{ id, prize }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）
-      spinning: anim ? { id: anim.id, prize: anim.prize?.kind ?? null } : null,
+      // 演出进行中：{ id, tier, kind }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）。
+      // ⚠ **tier 才是转轮灯效/落面的输入**（'major'/'minor'/'none'）；kind 只是奖项种类
+      // （moneySmall/heal/…）。早期只下发 kind，导致 rig 收到未知档位 → 落面退化成随机、
+      // 中奖灯效走 none 档（用户报"中了却没什么动静"的真凶）
+      spinning: anim ? {
+        id: anim.id,
+        tier: anim.prize?.tier ?? 'none',
+        kind: anim.prize?.kind ?? null,
+      } : null,
       lastSpin,
       // 待处理产出：原始载荷原样带上，表现文案由 Stage 侧翻译（与战后奖励同一分工）
       pending: pending ? {

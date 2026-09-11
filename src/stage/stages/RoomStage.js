@@ -33,6 +33,8 @@ import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { GiftChoiceObject } from '../objects/GiftChoiceObject.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
+import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
+import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { bakeBoldText } from '../objects/textBakers.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
@@ -75,6 +77,16 @@ function slotSubject(entry) {
     halfW = Math.max(halfW, Math.abs(lb.max.x - c.x), Math.abs(c.x - lb.min.x));
     halfH = Math.max(halfH, Math.abs(lb.max.y - c.y), Math.abs(c.y - lb.min.y));
   }
+  // 投料口/计数器（吞噬入口 + 进度）在下半身：不框进来就会被底部操纵条盖住 →
+  // 向下扩到它们（横向本来就在窗口宽度内，不会把主体拉宽）
+  const crusher = entry.parts?.crusher ?? null;
+  if (crusher) {
+    for (const o of Object.values(crusher)) {
+      if (!o?.isObject3D) continue;
+      const cb = new THREE.Box3().setFromObject(o);
+      halfH = Math.max(halfH, Math.abs(c.y - cb.min.y));
+    }
+  }
   return new THREE.Box3(
     new THREE.Vector3(c.x - halfW, c.y - halfH, c.z - 2),
     new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 2),
@@ -82,7 +94,9 @@ function slotSubject(entry) {
 }
 // 单件取景覆盖：老虎机怼脸（fracH>0.5 = 主体占屏更大）；其余交互物走默认整件取景
 const FOCUS_OF = {
-  slot: { fracH: 0.70, bottom: 0.24, pad: 0.92, subject: slotSubject },
+  // 怼脸处方：主体（转轮窗 + 拉杆 + 下半身的投料口/计数器）占屏 0.88，底边抬到 0.26
+  // ——窗口顶到上缘、操作区露在操纵条之上（操纵条占屏幕下沿 ~25%）
+  slot: { fracH: 0.88, bottom: 0.26, pad: 0.92, subject: slotSubject },
 };
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
@@ -449,7 +463,8 @@ export class RoomStage {
       this._room.group.add(ring);
       const marker = new THREE.Group();
       marker.position.set(entry.x, 0, entry.z);
-      const bobY = (entry.kind === 'slot' ? 19 : 16) * (entry.scale / 2);
+      // 浮标高度：贴到机器顶部上方一点点（原来 19/16 = "飘在天上"，与机器读作两件东西）
+      const bobY = (entry.kind === 'slot' ? 13 : 10.5) * (entry.scale / 2);
       const bob = new THREE.Mesh(
         new THREE.BoxGeometry(2.2, 2.2, 2.2),
         new THREE.MeshBasicMaterial({ color: 0xffe08a }),
@@ -728,6 +743,27 @@ export class RoomStage {
     return this._dockBake;
   }
 
+  /**
+   * 播一次**粉碎演出**（编排器在吞噬结算后调用）：把镜头拉回老虎机（粉碎口在下半身，
+   * 玩家可能正看着别的机器/面板）→ rig 咬合 + 迸币。纯表现，不影响结算。
+   */
+  playCrush() {
+    const rig = this._rigs.get('slot');
+    if (!rig?.crush) return false;
+    if (this._focused !== 'slot') this._focusMachine('slot');
+    this._startCamTween(this._focusPoseFor('slot'), 0.45, () => rig.crush());
+    return true;
+  }
+
+  /** 取某台交互物的聚焦机位（无则 null）。 */
+  _focusPoseFor(name) {
+    const entry = this._markers.find(m => m.name === name)?.entry;
+    if (!entry) return null;
+    const box = new THREE.Box3().setFromObject(entry.object);
+    const c = box.getCenter(new THREE.Vector3());
+    return this._focusPose(entry, c);
+  }
+
   /** 打开售货机面板（场景式房间点售货机机身；占位房间走房间表头的本地动作）。 */
   openShop() { this._openPanel('shop'); }
 
@@ -738,7 +774,10 @@ export class RoomStage {
       this._panel = new PanelObject({
         form: 'dock',
         onIntent: (a) => this._onPanelAction(a),
-        bakeFace: null,
+        // 卡面烘焙与战场/塔楼层同源（pending 的卡阵、选卡界面都要真卡面，不能没有）
+        bakeFace: (typeof document !== 'undefined')
+          ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
+          : null,
         // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
         // widget 各自的 tint 在 dock 形态下被忽略（见 PanelObject 的 dock 分支）
         bakeText: this._dockBakeText(),
@@ -781,6 +820,7 @@ export class RoomStage {
   /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
   _syncSlotFromSnapshot() {
     this._syncVending();
+    this._syncBank();
     // 强绑抓牌未领时不许离房：continue 箭头压暗（点了给一句泡泡提示，见 _activate）
     this._continue.setDim(this._snap?.training?.forced ? 0.4 : 1);
     const s = this._snap?.slot;
@@ -792,7 +832,7 @@ export class RoomStage {
     if (!spinning) { this._slotSpinId = null; return; }
     if (spinning.id === this._slotSpinId) return;   // 同一轮已开播（重绘不重播）
     this._slotSpinId = spinning.id;
-    const tier = spinning.prize ?? 'none';
+    const tier = spinning.tier ?? 'none';   // 'major' | 'minor' | 'none'（不是奖项种类）
     rig.pull({ tier, symbols: symbolsForTier(tier) });
     clearInterval(this._slotPoll);
     this._slotPoll = setInterval(() => {
@@ -802,6 +842,14 @@ export class RoomStage {
       this._slotSpinId = null;
       this._onIntent?.({ action: 'slotAnimDone', id: spinning.id });
     }, 120);
+  }
+
+  /** 银行机屏幕文本：显示**存款额**（道具侧写死的「余额 0」会与顶端金币数打架）。 */
+  _syncBank() {
+    const bk = this._snap?.bank;
+    const rig = this._rigs.get('bank');
+    if (!bk || !rig?.setScreen) return;
+    rig.setScreen(bk.deposit > 0 ? `存款 ${bk.deposit}` : `余额 ${this._snap.money ?? 0}`);
   }
 
   /**
