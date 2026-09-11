@@ -29,6 +29,7 @@ export class ContinueButtonObject extends THREE.Group {
     this._pressed = false;
     this._t = 0;
     this._enabled = true;
+    this._dim = 1;        // 1 = 正常；<1 = 压暗（如"强绑抓牌未领"时暂不可离房）
     this._ready = false;
     this._plate = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
@@ -41,6 +42,8 @@ export class ContinueButtonObject extends THREE.Group {
 
   get enabled() { return this._enabled; }
   setEnabled(on) { this._enabled = !!on; this._plate.visible = !!on; return this; }
+  /** 压暗（**仍可点**：点了给提示而不是离房）——0.4 ≈ 明确"现在走不了"但还看得见。 */
+  setDim(k = 1) { this._dim = Math.max(0.15, Math.min(1, k)); return this; }
   setHovered(on) { this._hoverTarget = on ? 1 : 0; return this; }
   setPressed(on) { this._pressed = !!on; return this; }
 
@@ -52,7 +55,9 @@ export class ContinueButtonObject extends THREE.Group {
     const breathe = 1 + 0.022 * Math.sin(this._t * 2.4);
     const k = breathe * (1 + 0.07 * this._hover) * (this._pressed ? 0.94 : 1);
     this.scale.setScalar(k);
-    this._plate.material.color.setScalar(1 + 0.22 * this._hover);
+    const bright = (1 + 0.22 * this._hover) * this._dim;
+    this._plate.material.color.setScalar(bright);
+    this._plate.material.opacity = 0.45 + 0.55 * this._dim;
     return true;
   }
 

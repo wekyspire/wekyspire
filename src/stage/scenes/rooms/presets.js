@@ -463,18 +463,128 @@ const CASINO = {
   fog: { color: 0x1b1219, near: 165, far: 345 },   // 暖暗雾（冷蓝会把"华丽赌厅"拉回地牢）
 };
 
+// ============================================================================
+// 营地 · 训练场（休息房 2026-09-11）：**第一间"非机器"场景式休息房**。
+//   · 两个交互物 = 房间的两个部分：**篝火（营地）** 与 **训练桩（训练场）**——
+//     点谁推近看谁，各自的操纵面板下沿停靠（RoomStage 按 interactives 的 name 分发）。
+//   · 布光走 `camp` 预设：火光主导（火是主角，盏数多/基数高）+ 一道高窗月光做冷暖对比。
+//   · 构图：左半营地（篝火/吊锅/铺盖/木箱）、右半演武（训练桩/铁砧/武器架/箭靶），
+//     中轴留给一张长桌（过道感），前景（UI 安全区）只留压边大件。
+// ============================================================================
+const CAMP = {
+  id: 'camp',
+  theme: 'dungeon',
+  lighting: 'camp',
+  room: { scale: 0.88 },   // 比要塞大厅亲密一档（围着火的空间）
+  grading: { exposure: 1.09, tint: [1.06, 1.0, 0.92] },   // 暖调（火光照场）
+  // 室内营地：无大窗，只留高窄缝透一线月光（与 camp 预设的 moon 0.55 呼应）
+  wall: {
+    windows: [],
+    slits: [{ x: -10, y: 58 }, { x: 22, y: 60 }],
+    brickChance: 0.28,
+  },
+  wallSkin: {
+    spalls: 1,
+    holes: 0, holeChance: 0, backHoleChance: 0,
+    bites: 1, biteChance: 0.3, backBiteChance: 0.12,
+  },
+  // 地面基本平整（道具/铺盖要躺得稳）：只留一点起伏与苔斑，不开盆地/高台/裂缝
+  floor: { slabCount: 8, mossChance: 0.14, patches: 4, terrain: { amp: 4, basins: 0, platforms: 0, fissures: 0, slopes: 1 } },
+  facade: {
+    structureProb: 0.3,
+    structureOverlapProb: 0.3,
+    decorProb: { high: 0.26, mid: 0.5, low: 0.26 },
+    // 兵营/居室味（挂甲、铺盖、帘幕）压过宗教与墓穴；**灯串权重抬高**（营地的暖光串）
+    tags: { barrack: 2.2, quarters: 2.0, generic: 1.4, chapel: 0.3, crypt: 0.2, festoon: 2.4 },
+  },
+  scatter: {
+    tags: {
+      quarters: 2.4, barrack: 1.6, furniture: 2.0, container: 1.6,
+      lightSource: 1.6, generic: 1.2, rubble: 0.6, decal: 0.8, wood: 1.2,
+    },
+    scale: 2.1,
+    bands: {
+      back: { cell: 16, density: 0.46 },
+      left: { cell: 17, density: 0.42 },
+      right: { cell: 17, density: 0.42 },
+      mid: { cell: 22, density: 0.3 },      // 两区之间要留过道
+      midRight: { cell: 24, density: 0.26 },
+      fgLeft: { cell: 30, density: 0.04 },  // 前景 = UI 安全区：只留压边大件
+      fgRight: { cell: 30, density: 0.04 },
+      front: { cell: 30, density: 0.05 },
+    },
+  },
+  // 撒印：干草/灰烬/足迹为主（营地地面的"住人痕迹"）
+  decals: { count: 18, tags: { decal: 3, wood: 1.2, rubble: 1 } },
+  ceiling: { chandeliers: 0 },   // 营地不吊灯：光是地上的火 + 墙上的灯串
+  bigSilhouettes: ['wardrobeTall', 'crateStack', 'barrelStack', 'columnRound'],
+  clusters: 3,      // 营地的"住人杂物堆"比赌厅多
+  breakers: 2,
+  maintenance: 0.55,
+  // 外围固定火源：两盏落地烛台（边角暖点，不参与撑亮度）
+  fires: [
+    { id: 'candleStand', x: -26, z: -43, scale: 1.2 },
+    { id: 'candleStand', x: 26, z: -43, scale: 1.2 },
+  ],
+  // 构图定点：**两个交互物** + 各自的功能陈设。整组压到背墙前（z≈-45），前景留空给面板。
+  guaranteed: [
+    // —— 左：营地部分（篝火）——
+    { id: 'brazierFire', x: -14, z: -45, ry: 0.08, scale: 2.3, live: true, name: 'camp' },
+    { id: 'cauldronWitch', x: -17.6, z: -43.6, ry: 0.4, scale: 1.35 },  // 火边大锅（营地伙食）
+    { id: 'kettleTripod', x: -11.4, z: -46.6, ry: -0.4, scale: 1.4 },   // 吊锅（也是火光）
+    { id: 'logPile', x: -18.8, z: -47.4, ry: -0.3, scale: 1.5 },        // 柴堆
+    { id: 'bedRoll', x: -9.6, z: -42.4, ry: 0.35, scale: 1.3 },         // 铺盖×4（围火睡）
+    { id: 'bedRoll', x: -18.4, z: -41.2, ry: -0.25, scale: 1.3 },
+    { id: 'bedRoll', x: -22.4, z: -43.4, ry: 0.9, scale: 1.3 },
+    { id: 'bedRoll', x: -13.4, z: -39.4, ry: 1.25, scale: 1.3 },
+    { id: 'strawBedding', x: -8.2, z: -46.4, ry: 0.2, scale: 1.7 },     // 干草铺
+    { id: 'stoolSquare', x: -11.6, z: -41.6, ry: 0.5, scale: 1.2 },     // 火边三张凳
+    { id: 'stoolSquare', x: -16.4, z: -46.2, ry: -0.5, scale: 1.2 },
+    { id: 'stoolSquare', x: -17.2, z: -40.2, ry: 0.2, scale: 1.2 },
+    { id: 'crateStack', x: -6.6, z: -48.4, ry: 0.3, scale: 1.35 },      // 营地货箱
+    // —— 右：训练部分（训练桩）——
+    { id: 'trainingDummy', x: 14, z: -45, ry: -0.1, scale: 2.6, live: true, name: 'training' },
+    { id: 'anvilIron', x: 8.8, z: -43.2, ry: 0.6, scale: 1.6 },         // 铁砧
+    { id: 'weaponRack', x: 19.6, z: -44.8, ry: -0.4, scale: 1.7 },      // 武器架
+    { id: 'arrowTarget', x: 23.2, z: -47.8, ry: -0.5, scale: 1.5 },     // 箭靶
+    { id: 'spearBundle', x: 17.4, z: -41.6, ry: 0.25, scale: 1.45 },    // 长矛捆
+    { id: 'shieldStack', x: 22, z: -42.6, ry: -0.2, scale: 1.5 },       // 盾堆
+    { id: 'toolRackSmith', x: 5.8, z: -47.4, ry: 0.45, scale: 1.5 },    // 工具板
+    { id: 'benchWood', x: 13.6, z: -40.4, ry: 0.1, scale: 1.4 },        // 演武场边的长凳
+    { id: 'crossedSwords', x: 17.2, z: -47.4, ry: 0.5, scale: 1.3 },    // 交叉剑（演武标记）
+    { id: 'spikesGround', x: 10.4, z: -47.8, ry: 0.2, scale: 1.2 },     // 抗性训练桩
+    // —— 中轴：长桌（两区之间的过道感）+ 两条凳 ——
+    { id: 'tableWood', x: 0, z: -49, ry: 0, scale: 1.3 },
+    { id: 'stoolSquare', x: -3.2, z: -48, ry: 0.4, scale: 1.1 },
+    { id: 'stoolSquare', x: 3.2, z: -48, ry: -0.4, scale: 1.1 },
+    // 落地灯笼：两区外侧的柔和灯池（灯笼串走 facade 的 festoon 权重，见上）
+    { id: 'lanternFloor', x: -24.5, z: -45.5, ry: 0.3, scale: 1.1 },
+    { id: 'lanternFloor', x: 24.5, z: -45.5, ry: -0.3, scale: 1.1 },
+  ],
+  // 交互锚点契约（RoomStage 按 name 分发面板）：篝火 = 营地部分、训练桩 = 训练部分
+  anchors: {
+    camp: { x: -14, z: -45, ry: 0.08 },
+    training: { x: 14, z: -45, ry: -0.1 },
+    table: { x: 0, z: -49, ry: 0 },
+    uiSafe: { bottomRatio: 0.42 },
+  },
+  compositionDecal: null,
+  fog: { color: 0x241a14, near: 170, far: 360 },   // 暖暗雾（营地的火烟感）
+};
+
 export const RECIPES = Object.freeze({
   fortress: FORTRESS, palace: PALACE, manor: MANOR, library: LIBRARY,
   boss: BOSS, mezzanine: MEZZANINE,
   casino: CASINO,   // 休息房（老虎机 / 银行机）
+  camp: CAMP,       // 休息房（营地 · 训练场）
 });
 
 /**
  * 休息房 → 配方映射（用户定 2026-09-11：休息阶段也用 PCG 房间，不再纯 UI）。
- * 本阶段只声明映射与锚点；主流程接线（runController 切场景 + 面板叠加）在下一阶段。
  */
 export const REST_RECIPES = Object.freeze({
-  slot: 'casino',   // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
+  slot: 'casino',           // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
+  campTraining: 'camp',     // 营地 · 训练场合并房（篝火 = 营地、训练桩 = 训练）
 });
 
 /** 取休息房配方 id；未登记的房间类型返回 null（调用方回退纯 UI）。 */

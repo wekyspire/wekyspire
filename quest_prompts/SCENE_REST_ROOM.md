@@ -196,8 +196,11 @@ open http://localhost:5177/restGallery.html?recipe=casino&seed=demo
    **点机器 → 相机推近（整机占屏 50%、机器中心抬到屏高 76%）→ 推到位才弹出该机器的操纵 UI**；
    点空白或面板的「← 返回房间」→ 收 UI + 拉回全景。机位借的是 StageManager 的世界相机，
    `cameraBase/restoreBaseCamera` 保证退出时还原。
-3. **更多休息房**：售货机层（`vending` 房）、古尔帕斯之店（`gurpas` 房，35 层固定）——同方法换配方
-   （`REST_RECIPES` 加一行 + 房间面板按机器拆一份 builder）。
+3. **更多休息房**：**营地·训练场已完成（2026-09-11，第二间）**——`CAMP` 配方（篝火@-14/-45 =
+   营地半场、训练桩@14/-45 = 训练半场，两个 `live` 件各带 `name`）+ `camp` 布光预设（火光主导、
+   环境光压最低、一道高窗月光做冷暖对比）+ `buildCampPanel`/`buildTrainingPanel`。
+   剩余：售货机层（`vending` 房，需新出一个售货机道具）、古尔帕斯之店（`gurpas` 房，35 层固定，
+   等它的玩法实装）——同方法换配方（`REST_RECIPES` 加一行 + 面板表加一行 + 一份 builder）。
 4. **视觉继续**（2026-09-11 已完成一轮：暖调重配比 + 彩灯串 + 追光 + 老虎机真开窗/吃光滚轴）：
    剩余 = 中奖灯效档位再调、转轮面换成真纹理（`drumGeometry` 走 UV 就能接美术）、浮标造型、
    赌桌区细节（筹码/酒杯/账本）。

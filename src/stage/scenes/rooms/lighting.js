@@ -95,6 +95,26 @@ export const LIGHTING_PRESETS = {
     focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
     tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
   },
+  // 营地·训练场（休息房 2026-09-11）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
+  // 这里的光源是地上的篝火/火盆（火点光基数更高、罩得更远、盏数更多），环境光压到最低
+  // （"暗处围着火"的营地感），再留一道高窗月光做冷暖对比。
+  camp: {
+    hemi: [0x453a34, 0x2a221c, 1.05],
+    moon: 0.6,                           // 高窗透进一点月光：给暖火光做冷暖对比
+    fill: 0.11,
+    bounce: [[100, 100], [80, 88]],      // 地面反弹（火光的地面池之外再垫一层）
+    battleGlow: [0xc9a077, 5600, 185],   // 中景暖补光：撑住"营地是亮的"（低于火、高于环境）
+    centerFill: [0xffbe86, 6200, 180],   // 中央暖光：与火叠成双层暖光池（全场主亮源）
+    fire: { base: FIRE_BASE * 1.0, dist: 155, cap: 10 },    // ★火是主角（基数/距离/盏数全高）
+    lamp: {
+      color: 0xffc07a, base: 2000, dist: 110, cap: 6,
+      // 灯笼串：暖为主，留一点粉紫变化（整圈同色会读成廉价跑马灯）
+      colors: [0xffc07a, 0xffab6a, 0xd8986a, 0xc8a0b8, 0xd8d0e8],
+    },
+    focus: { color: 0xffd9a8, base: 1100, dist: 78, offset: 15, dim: 0.7, rise: 3.0, lift: 0.06 },
+    // 单位染色底同样偏暖（火光照人）：base 暖中性、fireGain 暖橙
+    tint: { base: [0.64, 0.57, 0.5], fireGain: [0.3, 0.2, 0.12], radius: 66 },
+  },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
   'boss-rim': {
     hemi: [0x463a4a, 0x281e28, 1.0],

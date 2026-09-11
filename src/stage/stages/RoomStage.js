@@ -25,22 +25,29 @@ import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
-import { buildSlotPanel, buildBankPanel, buildShopPanel } from '../panels/index.js';
+import { buildSlotPanel, buildBankPanel, buildCampPanel, buildTrainingPanel, buildShopPanel } from '../panels/index.js';
+import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
-// 聚焦机位（用户定 2026-09-11：**点机器先推近，推到位再显示该机器的操作 UI**）：
-// margin = 取景余量（越小越贴脸）；aimLift = 视轴下移占可见高度的比例——机器因此落在画面
-// 上半部，下沿留给停靠面板。取景口径沿用 restGallery 的 focusMachine（关键件反解距离）。
-// fracH = 机器占可视高比例；bottom = 机器底边离屏底的比例（其余下沿留给停靠面板）；
-// pad = 横向也要装得下时留的余量。距离与视轴下移都由这两个比例**反解**出来（不手调 margin）。
-const FOCUS = {
-  slot: { fracH: 0.50, bottom: 0.46, pad: 0.92 },
-  bank: { fracH: 0.50, bottom: 0.46, pad: 0.92 },
+// 交互物 name → 该物件的操纵面板（**加房间只加一行数据**：配方里给 live 件 `name`，
+// 这里登记对应面板 builder；RoomStage 不做任何房间/机器判断）。
+const PANEL_OF = {
+  slot: buildSlotPanel,
+  bank: buildBankPanel,
+  camp: buildCampPanel,
+  training: buildTrainingPanel,
 };
+
+// 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
+// fracH = 物件占可视高比例；bottom = 物件底边离屏底的比例（其余下沿留给停靠面板）；
+// pad = 横向装得下时的余量。距离与视轴下移都由这几个比例**反解**（不手调 margin）。
+// 默认一套适用所有尺寸（距离自适应），个别物件要贴脸/退远时按 kind 覆盖。
+const FOCUS_DEFAULT = { fracH: 0.50, bottom: 0.46, pad: 0.92 };
+const FOCUS_OF = {};   // 例：{ trainingDummy: { fracH: 0.42 } }
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
@@ -111,7 +118,7 @@ export class RoomStage {
     // ---- 机器 rig + 头顶浮标（可点：浮标比机器大得多，远景也点得中）----
     this._rigs = new Map();      // name -> rig
     this._markers = [];          // { name, object, marker, ring }
-    this._buildMachines();
+    this._buildInteractives();
 
     // ---- UI：状态栏 + 顶端资源行 + 继续前进按钮 ----
     this._unitArt = unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null);
@@ -122,6 +129,8 @@ export class RoomStage {
     this.uiScene.add(this._statusBar);
     this._topBar = new TopResourceBarObject({ bakeLabel: mkBake });
     this.uiScene.add(this._topBar);
+    this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
+    this.uiScene.add(this._bubbles);
     this._continue = new ContinueButtonObject();
     this._continue.position.set(CONTINUE_POS.x, CONTINUE_POS.y, PANEL_ABOVE_Z + 2);
     this._continue.setEnabled(true);   // 拾取登记在 attachInput（此时可能还没 Picker）
@@ -359,6 +368,7 @@ export class RoomStage {
     this._composer = null;
     this.composeScene = null;
     this.composeResize = null;
+    this._bubbles.dispose();
     this._continue.dispose();
     this._cardPicker?.dispose();
     this._cardPicker = null;
@@ -375,14 +385,15 @@ export class RoomStage {
 
   // ================= 内部：场景与机器 =================
 
-  _buildMachines() {
+  _buildInteractives() {
     const interactives = this._room?.interactives;
     if (!interactives) return;
     for (const [name, entry] of interactives) {
-      const rig = entry.kind === 'slot'
-        ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
-        : createBankMachineRig({ object: entry.object, parts: entry.parts });
-      this._rigs.set(name, rig);
+      // 机器类（有 parts）才有 rig；普通陈设（篝火/训练桩…）只要浮标 + 拾取 + 推近
+      const rig = entry.kind === 'slot' ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
+        : entry.kind === 'bank' ? createBankMachineRig({ object: entry.object, parts: entry.parts })
+          : null;
+      if (rig) this._rigs.set(name, rig);
       // 地面光环（hover 提亮）+ 头顶浮标（菱形 + 光柱）：远景读得出"这台能点"
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
@@ -451,6 +462,10 @@ export class RoomStage {
       return;
     }
     if (hit.id === this._continue.pickId) {
+      if (this._snap?.training?.forced) {   // 强绑抓牌未领：不走，给一句提示泡泡
+        this._nudgeForcedPick();
+        return;
+      }
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
       return;
     }
@@ -467,7 +482,33 @@ export class RoomStage {
   }
 
   /**
-   * 聚焦某台机器（null = 退回房间全景）。用户定的节奏：**先把相机推到机器前，推到位之后再
+  /** 强绑抓牌未领时点「继续前进」：把镜头拉到训练桩并冒一句泡泡（"先挑卡"）——比"按钮没反应"清楚。 */
+  _nudgeForcedPick() {
+    const target = this._markers.find(m => m.name === 'training') ? 'training' : this._focused;
+    if (target) this._focusMachine(target);
+    const entry = this._markers.find(m => m.name === 'training')?.entry;
+    const anchor = entry ?? this._markers[0]?.entry;
+    if (anchor) {
+      this._bubbles.say('room:hint', {
+        ...this._uiAnchorOf(anchor, 14),
+        text: '还没把挑好的卡放进牌组呢。',
+        kind: 'thought',
+        duration: 2.6,
+        tint: 0xe8ecfa,
+      });
+    }
+  }
+
+  /** 世界锚点 → UI 空间（泡泡/文字挂在物件上方）。 */
+  _uiAnchorOf(entry, lift = 10) {
+    const sm = this._sm;
+    if (!sm?.worldToUI) return { x: 0, y: 0 };
+    const box = new THREE.Box3().setFromObject(entry.object);
+    const c = box.getCenter(new THREE.Vector3());
+    return sm.worldToUI(c.x, Math.max(c.y, box.max.y) + lift * (entry.scale ?? 1), c.z);
+  }
+
+  /** 聚焦某个交互物（null = 退回房间全景）。用户定的节奏：**先把相机推到物件前，推到位之后再
    * 弹出该机器的操作 UI**；退回时反过来——先收 UI/追光，再把机位拉回全景。
    */
   _focusMachine(name) {
@@ -515,7 +556,7 @@ export class RoomStage {
    */
   _focusPose(entry, center) {
     const cam = this._sm?.camera;
-    const cfg = FOCUS[entry.kind === 'slot' ? 'slot' : 'bank'];
+    const cfg = { ...FOCUS_DEFAULT, ...(FOCUS_OF[entry.kind] ?? {}) };
     const bb = new THREE.Box3().setFromObject(entry.object);
     const size = bb.getSize(new THREE.Vector3());
     const c = bb.getCenter(new THREE.Vector3());
@@ -560,10 +601,9 @@ export class RoomStage {
 
   // ================= 内部：面板 =================
 
-  _openPanel(machine) {
-    const kind = machine === 'slot' ? 'slot' : machine === 'bank' ? 'bank' : null;
-    if (!kind) { this._panelKind = null; this._removePanel(); return; }
-    this._panelKind = kind;
+  _openPanel(name) {
+    if (!name || !PANEL_OF[name]) { this._panelKind = null; this._removePanel(); return; }
+    this._panelKind = name;
     this._renderPanel();
   }
 
@@ -589,13 +629,9 @@ export class RoomStage {
       kind: 'button', id: 'room:back', width: 220, size: 'sub',
       label: '← 返回房间', action: { action: 'backToRoom', local: true },
     }];
-    if (this._panelKind === 'shop') {
-      this._panel.setWidgets('shop', [...back, ...buildShopPanel(snap)]);
-    } else if (this._panelKind === 'bank') {
-      this._panel.setWidgets('bank', [...back, ...buildBankPanel(snap)]);
-    } else {
-      this._panel.setWidgets('slot', [...back, ...buildSlotPanel(snap)]);
-    }
+    const build = this._panelKind === 'shop' ? buildShopPanel : PANEL_OF[this._panelKind];
+    if (!build) { this._panelKind = null; this._removePanel(); return; }
+    this._panel.setWidgets(this._panelKind, [...back, ...build(snap)]);
     this._panel.attachPicker(this._picker);
   }
 
@@ -623,6 +659,8 @@ export class RoomStage {
 
   /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
   _syncSlotFromSnapshot() {
+    // 强绑抓牌未领时不许离房：continue 箭头压暗（点了给一句泡泡提示，见 _activate）
+    this._continue.setDim(this._snap?.training?.forced ? 0.4 : 1);
     const s = this._snap?.slot;
     const rig = this._rigs.get('slot');
     if (!s || !rig) return;
@@ -668,6 +706,11 @@ export class RoomStage {
     }
     this._continue.update(dt);
     this._showcase?.update(dt);
+    for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
+      const entry = this._markers.find(m => m.name === key)?.entry;
+      if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));
+    }
+    this._bubbles.update(dt);
   }
 
   /** 机位补间推进（ease-out cubic）：位置线性插值 + 四元数球面插值。 */
