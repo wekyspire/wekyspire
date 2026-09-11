@@ -321,7 +321,10 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
     const meshes = [];
     built.traverse(o => { if (o.isMesh) meshes.push(o); });
     expect(meshes.length).toBeGreaterThan(0);
-    const budget = (def.tags ?? []).includes('interactive') ? MESH_MAX_INTERACTIVE : MESH_MAX;
+    // 预算口径：默认 40（静态）/60（interactive）；**单件可显式声明 `budget` 覆盖**
+    // （主会话批准的例外，必须在道具注释里写清"为什么值得"与回本计划——见 SCENE_PROP_WORKFLOW §3）。
+    const budget = def.budget?.meshes
+      ?? ((def.tags ?? []).includes('interactive') ? MESH_MAX_INTERACTIVE : MESH_MAX);
     expect(meshes.length, '网格数超预算（拆件或简化）').toBeLessThanOrEqual(budget);
     let verts = 0;
     const families = new Set();
@@ -341,7 +344,7 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
           && Number.isFinite(m.scale[axis])).toBe(true);
       }
     }
-    expect(verts).toBeLessThanOrEqual(VERT_MAX);
+    expect(verts).toBeLessThanOrEqual(def.budget?.verts ?? VERT_MAX);
     expect(families.size).toBeLessThanOrEqual(FAMILY_MAX);
   });
 
