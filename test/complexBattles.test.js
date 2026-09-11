@@ -69,7 +69,7 @@ registerSkill({
     }
     if (stage === 1) {
       sctx.self._input = new AwaitPlayerInputInstruction({
-        request: { kind: 'selectHandCard', count: 1 },
+        request: { kind: 'selectCards', source: 'hand', count: 1 },
       });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;
@@ -205,7 +205,7 @@ describe('复杂战斗：结算期输入（完美花刀）', () => {
     d.play('perfectCut');
     expect(slime.hp).toBe(17);                       // stage 0 伤害已结算
     expect(d.pendingInput).toBeTruthy();             // 泵停在输入请求
-    expect(d.pendingInput.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput.request.kind).toBe('selectCards');
     expect(d.isWaiting()).toBe(false);               // 不是回合级 WAIT
 
     const target = d.state.zones.hand.find(s => s.defId === 'punch');

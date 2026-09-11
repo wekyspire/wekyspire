@@ -4,6 +4,11 @@ import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
+import { ensureShopStock } from './rooms/shop.js';
+import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
+import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
+import { activeRelics } from './prep.js';
+import { getRelicDefinition } from '../relics/registry.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -28,13 +33,15 @@ export function deriveBattleSeed(seed, floor) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-// 奖励房派发（§1/§4）：打完 floor 层后进入的房间。
-// 训练房/营地保底是固定规则，其余按 run rng 四选一（占位等权，权重细则见 §9）。
+// 奖励房派发（§1/§4；2026-09-11 用户定：**营地与训练场合并**）。
+// 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地·训练场合并房**（二者总是一起出现，
+// 固定不随机）；其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
+// 后果（有意为之）：回复来源集中在合并层（2/6/10/14/18/21/26/30/32/34/38/42/43）。
 export function roomOfFloor(floor, rng) {
   if (isBossFloor(floor)) return null;   // Boss 层无奖励房（Boss 奖励=删卡，另行处理）
-  if (isPreBossFloor(floor)) return 'camp'; // 保底营地优先（与训练层 21 碰撞时营地胜出，§9）
-  if (isTrainingFloor(floor)) return 'training';
-  return rng.pick(['slot', 'camp', 'event']);
+  if (isPreBossFloor(floor) || isTrainingFloor(floor)) return 'campTraining';
+  if (floor === GURPAS_FLOOR) return 'gurpas';   // 古尔帕斯之店：35 层固定（SHOP.md §二）
+  return rng.pick(['slot', 'event']);
 }
 
 // 遭遇生成：floorEnemyGenerator 按楼层分段池 + HP/攻击缩放产出可序列化描述符。
@@ -92,6 +99,9 @@ export function finishBattle(run, verdict, battle = null) {
   const remi = battle?.battleState.allies.find(a => a.defId === 'remi');
   if (remi?.isDead()) run.remi.drivenOff = true;
   if (verdict === 'victory') {
+    // 遗物的战斗胜利钩子：**run 级资源只在 run 层改**（战斗内订阅不得直写 run 状态）。
+    // 放在 spawnRewards 之前——遗物收益与战后奖励分开记账。
+    for (const id of activeRelics(run)) getRelicDefinition(id)?.onBattleVictory?.(run, battle);
     if (isBossFloor(run.floor)) {
       run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
       run.player.hp = run.player.maxHp; // 章间休整：HP 回满
@@ -101,7 +111,10 @@ export function finishBattle(run, verdict, battle = null) {
   } else {
     run.gameStage = 'end';
     run.result = 'defeat';
+    bankOnDeath(run);   // 死亡导致银行机存款清空（SLOT_MACHINE.md）
   }
+  // 跨战斗恶魔词条：本场已消耗一场
+  consumePendingDebuffs(run);
   return run;
 }
 
@@ -113,6 +126,11 @@ export function completeRewards(run) {
   run.currentRoom = roomOfFloor(run.floor, run.rng);
   if (run.currentRoom) {
     run.gameStage = 'room';
+    // 售货机与房间**并存**（不占房间名额）：商店层进房时把当层货架掷好（按楼层缓存）
+    ensureShopStock(run);
+    // 银行机与老虎机成对出现：进老虎机房即算"见到银行机一次"（递减超额取款黑名单）
+    if (run.currentRoom === 'slot') bankOnVisit(run);
+    if (run.currentRoom === 'gurpas') ensureGurpasStock(run);  // 进店掷货架（同层不重掷）
     return run;
   }
   return advanceFloor(run); // Boss 层无奖励房，直接推进
@@ -122,10 +140,12 @@ export function completeRewards(run) {
 // 离开训练房时训练次数达标 → 直接进入进阶事件（§4.1/§5.3，不再延后）。
 export function completeRoom(run) {
   expectStage(run, 'room');
+  // 训练「先升后抓」的强绑尾款：升级已发生、抓牌未领 → 不允许离房（GUI/headless 同一守卫）
+  if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取，不能离开房间');
   const room = run.currentRoom;
   run.currentRoom = null;
   run.roomData = null;
-  if (room === 'training' && ascensionReady(run)) {
+  if ((room === 'training' || room === 'campTraining') && ascensionReady(run)) {
     run.gameStage = 'ascension';
     return run;
   }
@@ -141,6 +161,8 @@ export function advanceFloor(run) {
     return run;
   }
   run.gameStage = 'prep';
+  // 银行机计息（SLOT_MACHINE.md：每过一层连击 +1 并按档位结算存款利息）
+  accrueBankInterest(run);
   run.encounter = generateEncounter(run);
   return run;
 }

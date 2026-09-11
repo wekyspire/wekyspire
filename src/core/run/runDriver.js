@@ -157,6 +157,15 @@ export class RunDriver {
         if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
         else campRest(run);
         break;
+      case 'campTraining':
+        // 合并房（2026-09-11）：训练部分缺省同 'training'，营地部分缺省同 'camp'（两部分各一次）
+        if (trainingMode(run) === 'upgrade') {
+          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+          trainDraw(run, run.roomData.drawChoices[0]);
+        } else { trainDrawChoices(run); trainDraw(run, null); }
+        if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
+        else campRest(run);
+        break;
       case 'event':
         playEvent(run);
         break;

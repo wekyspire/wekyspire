@@ -358,10 +358,127 @@ const MEZZANINE = {
   fog: { color: 0x14202e, near: 250, far: 620 }, // 月透大窗，雾亮一档
 };
 
+// ============================================================================
+// 休息房配方（用户定 2026-09-11）：**PCG 不只用于战斗，也用于休息阶段房间**
+// 与战斗房配方的差异（方法层，详见 quest_prompts/SCENE_REST_ROOM.md）：
+//   · 无战斗走廊约束——不追求「中景留空给单位站位」，改为**视觉焦点带**（中景偏上）+
+//     「UI 安全区」（画面下方留给休息面板，密度压到最低、只放压边大件）；
+//   · 需要**交互锚点**（anchors）：休息房的核心设施（老虎机/银行机/柜台）落位固定，
+//     供前端把面板按钮与场景物件对应起来（本次只声明，主流程接线在下一阶段）；
+//   · 布光走 `casino` 预设：无窗室内 + 机器灯池（`lamp` 通道：自发光不冒火）。
+// ============================================================================
+const CASINO = {
+  id: 'casino',
+  theme: 'dungeon',
+  lighting: 'casino',
+  room: { scale: 0.86 },   // 赌厅比要塞大厅亲密（空间收缩把背墙拉近、机器占比更大）
+  grading: { exposure: 1.1, tint: [1.07, 1.0, 0.93] },   // 暖调（华丽感）：曝光微抬 + 红抬蓝压
+  // 无窗室内（无窗 → 无体积月光光束；墙面靠皮肤与挂饰撑），只留一道高窄缝透一点夜光
+  wall: {
+    windows: [],
+    slits: [{ x: -10, y: 58 }],
+    brickChance: 0.3,
+  },
+  wallSkin: {
+    spalls: 2,
+    holes: 0, holeChance: 0, backHoleChance: 0,   // 室内：不破洞（漏月光会破坏"密闭赌厅"）
+    bites: 1, biteChance: 0.35, backBiteChance: 0.1,
+  },
+  // 地面平整（机器/桌椅要站得稳）：地形特征全关，只留石板错位与少量苔斑
+  floor: { slabCount: 9, mossChance: 0.06, patches: 3, terrain: { amp: 0, basins: 0, platforms: 0, fissures: 0, slopes: 0 } },
+  facade: {
+    structureProb: 0.34,
+    structureOverlapProb: 0.3,
+    decorProb: { high: 0.2, mid: 0.5, low: 0.3 },
+    // 居室/室内陈设压过军事与宗教（镜/挂画/帘幕读作赌厅装潢）；
+    // **festoon 高权重**（用户定 2026-09-11：简陋小彩灯是赌厅的"华丽 vs 残破"戏剧对比主笔）
+    tags: { quarters: 2.4, generic: 1.2, chapel: 0.5, crypt: 0.3, festoon: 3.2 },
+  },
+  scatter: {
+    tags: {
+      furniture: 2.8, quarters: 1.8, container: 1.2, generic: 1,
+      lightSource: 1.5, rubble: 0.3, decal: 0.5, stone: 0.4,
+    },
+    scale: 2.2,
+    bands: {
+      back: { cell: 15, density: 0.52 },
+      left: { cell: 16, density: 0.44 },
+      right: { cell: 16, density: 0.44 },
+      // 中景是焦点带：桌椅密度最高（两台机器之间要有可读的空隙，故不拉满）
+      mid: { cell: 20, density: 0.34 },
+      midRight: { cell: 22, density: 0.28 },
+      // 前景带 = UI 安全区：只放压边大件，密度压到最低（面板会盖住这里）
+      fgLeft: { cell: 30, density: 0.04 },
+      fgRight: { cell: 30, density: 0.04 },
+      front: { cell: 30, density: 0.05 },
+    },
+  },
+  // 撒印：金币/筹码散落为主（coinScatter = decal+metal）——赌厅地面要有"钱流过"的痕迹
+  decals: { count: 22, tags: { decal: 3, metal: 2.4, quarters: 1 } },
+  ceiling: { chandeliers: 2 },
+  bigSilhouettes: ['wardrobeTall', 'columnRound', 'crateStack', 'barrelStack'],
+  clusters: 2,
+  breakers: 2,
+  maintenance: 0.5,
+  // 烛台（带火：赌厅的暖点；**外围光减量**——只留背墙两盏，亮度交给中央暖金光池
+  // 与机器灯池，火不再是撑场的光源）
+  fires: [
+    { id: 'candelabraFloor', x: -25, z: -40 },
+    { id: 'candelabraFloor', x: 25, z: -40 },
+  ],
+  // 构图定点：**核心设施**（老虎机/银行机 + 柜台）。整组压到背墙前（z≈-44）——
+  // 休息房的构图读法是"背墙 + 柜台 + 两机"，悬在大厅中央会读成空旷走廊。
+  // 机器 1.35 倍放大：它们是交互焦点，体量要压得住场（guaranteed 支持 scale 覆盖）。
+  guaranteed: [
+    // live: true = **可动组件**（不进静态合批，登记进 room.interactives 由 rig 驱动动画）
+    // 体量（用户定 2026-09-11）：老虎机再放大 1.5×（1.35×1.5≈2.0）、银行机放大一倍（≈2.7）
+    { id: 'slotMachine', x: -12.5, z: -44, ry: 0.14, scale: 2.0, live: true, name: 'slot' },
+    { id: 'bankMachine', x: 12.5, z: -44, ry: -0.14, scale: 2.7, live: true, name: 'bank' },
+    { id: 'tableLong', x: 0, z: -47, ry: 0, scale: 1.3 },      // 柜台（两机之间的中轴）
+    { id: 'stoolSquare', x: -12.5, z: -37, ry: 0.2, scale: 1.2 }, // 机器前的凳子（暗示可交互）
+    { id: 'stoolSquare', x: 12.5, z: -37, ry: -0.2, scale: 1.2 },
+    // 「钱」的两个读点：两机旁的钱箱（庄家的进账）
+    { id: 'chestTreasure', x: -17.5, z: -44, ry: 0.35, scale: 1.25 },
+    { id: 'chestTreasure', x: 17.5, z: -44, ry: -0.35, scale: 1.25 },
+    // 赌桌区：中景左右各一张圆桌 + 两凳（"等人下注"的氛围）
+    { id: 'tableRound', x: -27, z: -50, ry: 0.4, scale: 1.3 },
+    { id: 'stoolSquare', x: -31.4, z: -49, ry: 0.9, scale: 1.1 },
+    { id: 'stoolSquare', x: -23.2, z: -51.4, ry: -0.6, scale: 1.1 },
+    { id: 'tableRound', x: 27, z: -50, ry: -0.35, scale: 1.3 },
+    { id: 'stoolSquare', x: 31.4, z: -49, ry: -0.9, scale: 1.1 },
+    { id: 'stoolSquare', x: 23.2, z: -51.4, ry: 0.6, scale: 1.1 },
+    // 地毯：机器前的"赌位"（rugWorn = cloth/quarters，作构图件压地面）
+    { id: 'rugWorn', x: -12.5, z: -40, ry: 0.1, scale: 1.6 },
+    { id: 'rugWorn', x: 12.5, z: -40, ry: -0.1, scale: 1.6 },
+  ],
+  // 交互锚点契约（主流程接线用）：设施在房间内的位置与朝向 + UI 安全区比例
+  anchors: {
+    slot: { x: -12.5, z: -44, ry: 0.14 },
+    bank: { x: 12.5, z: -44, ry: -0.14 },
+    counter: { x: 0, z: -47, ry: 0 },
+    // UI 安全区：屏幕下缘起的比例（休息面板将覆盖这一带，构图不在此放精细件）
+    uiSafe: { bottomRatio: 0.42 },
+  },
+  compositionDecal: null,
+  fog: { color: 0x1b1219, near: 165, far: 345 },   // 暖暗雾（冷蓝会把"华丽赌厅"拉回地牢）
+};
+
 export const RECIPES = Object.freeze({
   fortress: FORTRESS, palace: PALACE, manor: MANOR, library: LIBRARY,
   boss: BOSS, mezzanine: MEZZANINE,
+  casino: CASINO,   // 休息房（老虎机 / 银行机）
 });
+
+/**
+ * 休息房 → 配方映射（用户定 2026-09-11：休息阶段也用 PCG 房间，不再纯 UI）。
+ * 本阶段只声明映射与锚点；主流程接线（runController 切场景 + 面板叠加）在下一阶段。
+ */
+export const REST_RECIPES = Object.freeze({
+  slot: 'casino',   // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
+});
+
+/** 取休息房配方 id；未登记的房间类型返回 null（调用方回退纯 UI）。 */
+export const restRecipeFor = (roomType) => REST_RECIPES[roomType] ?? null;
 // 隔层：特殊房（不计层数），SDK 直接 getRoomScene('mezzanine', seed)
 export const MEZZANINE_ID = 'mezzanine';
 

@@ -41,6 +41,15 @@ export function snapshotRun(run) {
     result: run.result,
     pendingCardRemoval: run.pendingCardRemoval,
     relicUses: { ...run.relicUses },
+    shop: run.shop ? { ...run.shop, items: run.shop.items.map(it => ({ ...it })) } : null,
+    shopPending: run.shopPending ? { ...run.shopPending, choices: [...run.shopPending.choices] } : null,
+    shopAppleBought: !!run.shopAppleBought,
+    slot: run.slot ? { ...run.slot } : null,
+    slotPending: run.slotPending ? { ...run.slotPending } : null,
+    slotUpgradePending: !!run.slotUpgradePending,
+    slotDevour: run.slotDevour ?? 0,
+    slotFreeRolls: run.slotFreeRolls ?? 0,
+    slotApples: run.slotApples ?? 0,
     player: {
       hp: p.hp, maxHp: p.maxHp,
       mana: p.mana, maxMana: p.maxMana,
@@ -56,6 +65,7 @@ export function snapshotRun(run) {
       ascensionCount: p.ascensionCount,
       bodyLevel: p.bodyLevel ?? 0,
       maxHandSize: p.maxHandSize,
+      baseStats: { ...p.baseStats }, // run 级修正的基准（遗物成长/防御重算依赖它）
     },
     remi: { ...run.remi, unlockedSupports: [...run.remi.unlockedSupports] },
   };

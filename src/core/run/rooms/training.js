@@ -27,13 +27,15 @@ export function trainingMode(run) {
 export function trainUpgrade(run, uniqueID, targetId = null) {
   const result = promoteCard(run, uniqueID, targetId);
   if (!result) throw new Error('该卡暂无可用晋升目标，无法升级');
-  run.roomData = { drawChoices: rollTrainingChoices(run), forced: true };
+  // 保留合并房的其他记账字段（campUsed 等）——合并房里营地与训练是两个独立部分
+  run.roomData = { ...(run.roomData ?? {}), drawChoices: rollTrainingChoices(run), forced: true };
   return run;
 }
 
 // 退化模式手动开局：roll 三选一候选待抉择（可领取也可跳过）
 export function trainDrawChoices(run) {
-  run.roomData = { drawChoices: rollTrainingChoices(run) };
+  if (run.roomData?.trained) throw new Error('本房的训练已经完成了');
+  run.roomData = { ...(run.roomData ?? {}), drawChoices: rollTrainingChoices(run) };
   return run.roomData.drawChoices;
 }
 
@@ -48,14 +50,15 @@ export function trainDraw(run, defId = null) {
   } else if (run.roomData?.forced) {
     throw new Error('升级后的抓牌不可跳过');
   }
-  run.roomData = null;
+  run.roomData = { campUsed: run.roomData?.campUsed ?? false, trained: true }; // 清瞬态、留营地记账
   run.player.trainingCount += 1;
   return run;
 }
 
-// 阶段一「免费升一」的跳过（或退化房未开局直接离开）：同样记一次训练并离场
+// 阶段一「免费升一」的跳过（或退化房未开局直接离开）：同样记一次训练
 export function skipTraining(run) {
-  run.roomData = null;
+  if (run.roomData?.trained) throw new Error('本房的训练已经完成了');
+  run.roomData = { campUsed: run.roomData?.campUsed ?? false, trained: true };
   run.player.trainingCount += 1;
   return run;
 }

@@ -13,4 +13,5 @@ import './commonSkills.js';
 import './enemies.js';
 import './allies.js';
 import './abilities.js';
+import './relicCards.js';
 import './relics.js';

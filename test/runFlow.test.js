@@ -25,19 +25,27 @@ describe('塔结构与楼层表（RUN_DESIGN §1/§4）', () => {
     expect(trainings).toEqual([2, 6, 10, 14, 18, 26, 30, 34, 38, 42]); // 22 是 Boss 层
   });
 
-  it('Boss 战前一层必出营地保底，且优先于训练房', () => {
+  // 2026-09-11 用户定：营地与训练场**合并**为同一房（campTraining）固定一起出现；
+  // 其余自由楼层只在 事件/老虎机 之间随机（不再单独出营地）。
+  it('Boss 前一层与训练层都是合并房（营地·训练场）', () => {
     expect([10, 21, 32, 43].every(isPreBossFloor)).toBe(true);
     const rng = createRng(1);
-    for (const f of [10, 21, 32, 43]) expect(roomOfFloor(f, rng)).toBe('camp');
+    for (const f of [10, 21, 32, 43]) expect(roomOfFloor(f, rng)).toBe('campTraining');
+    for (const f of [2, 6, 14, 18]) expect(roomOfFloor(f, createRng(1))).toBe('campTraining'); // 4N-2
   });
 
-  it('Boss 层无奖励房；其余层派发四种房之一', () => {
+  it('Boss 层无奖励房；自由楼层只在 事件/老虎机 之间随机', () => {
     const rng = createRng(1);
     expect(roomOfFloor(11, rng)).toBeNull();
-    for (const f of [3, 4, 7, 8, 12, 15]) {
-      expect(['slot', 'camp', 'event']).toContain(roomOfFloor(f, rng));
+    const kinds = new Set();
+    for (const f of [1, 3, 4, 7, 8, 12, 15, 16, 20]) {
+      const room = roomOfFloor(f, rng);
+      expect(['slot', 'event']).toContain(room);
+      kinds.add(room);
     }
-    expect(roomOfFloor(2, createRng(1))).toBe('training');
+    expect(kinds.size).toBeGreaterThan(0);
+    // 自由楼层永不单独出 营地/训练场（它们只在合并房里）
+    expect(roomOfFloor(2, createRng(1))).toBe('campTraining');
   });
 });
 
@@ -136,8 +144,8 @@ describe('RunDriver 整局驱动（§6.5）', () => {
     // 每层都有战斗记录，层数连续
     expect(d.history.map(h => h.floor)).toEqual(
       Array.from({ length: d.history.length }, (_, i) => i + 1));
-    // 训练房缺省处理：每个训练房都被计入 trainingCount
-    const trainingRooms = d.history.filter(h => h.room === 'training').length;
+    // 训练缺省处理：每个合并房（营地·训练场）都被计入一次 trainingCount
+    const trainingRooms = d.history.filter(h => h.room === 'campTraining').length;
     expect(trainingRooms).toBeGreaterThan(0);
     expect(d.run.player.trainingCount).toBe(trainingRooms);
     // 进阶缺省处理：门槛曲线 = 首进阶 1 次训练，此后每 2 次训练 +1 级

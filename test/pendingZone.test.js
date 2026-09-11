@@ -36,7 +36,7 @@ registerSkill({
     if (stage === 0) {
       sctx.self._input = new AwaitPlayerInputInstruction({
         request: {
-          kind: 'selectHandCard', count: 1,
+          kind: 'selectCards', source: 'hand', count: 1,
           candidates: sctx.battleState.zones.hand.map(c => c.uniqueID),
         },
       });

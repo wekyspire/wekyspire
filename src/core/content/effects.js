@@ -1,6 +1,6 @@
 import { registerEffect } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
-import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -112,7 +112,9 @@ registerEffect({
 
 // 荆棘：受到攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡；
 // 无来源的环境伤害不反）。2026-09 定调：反伤不再穿透——穿透固定伤害过强。
-// 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。
+// 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。定位与调参档位见 ENEMIES_1.md §4.1。
+// ⚠️ 双方同时持有会互相递归（A 反 B、B 反 A…直到一方死亡，单次攻击内连锁结算完）：
+// 做玩家侧反伤遗物前必须先定连锁策略（仅一方生效 / 限一次 / 限层数）。
 registerEffect({
   id: 'thorns',
   type: 'buff',
@@ -423,4 +425,87 @@ registerEffect({
   description: '死亡时爆炸伤害 +3/层（爆囊亡语）。',
   icon: '🧨',
   color: 'red',
+});
+
+// 奇迹（2026-09 用户定，塞西莉亚体系通用机制）：生命拒绝降到 0 或以下——minHp 地板 = 1
+// 走 getStat 读轨，与伤害管线同源、不特判。
+// 自己回合结束时层数 -1；**层数归零 = 奇迹终结 = 死亡**。
+// 归零结算顺序不可颠倒：先由 AddEffect 摘掉地板（层数归零同时注销本订阅），再以 fixed
+// 伤害直落 0——反过来的话地板会把致命伤再挡回 1，永远死不掉。
+// 归零死亡带 tags:['miracle']：塞西莉亚之恩赐的「致命拦截」按此标记豁免，否则
+// 「延迟死亡 → 奇迹耗尽 → 又被拦截」会自我续命成不死。
+// 同一效果供两处复用：遗物「塞西莉亚之恩赐」（奇迹1）与旧版技能「塞西莉亚奇迹」（奇迹3）。
+registerEffect({
+  id: 'miracle',
+  type: 'buff',
+  stacking: 'count',
+  name: '奇迹',
+  description: '生命不会降到 0 或以下；自己回合结束时层数 -1，层数归零时死亡。',
+  icon: '🕊️',
+  color: 'green',
+  statModifiers: { minHp: () => 1 },
+  subscriptions: (unit) => [{
+    when: TurnEndInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('miracle');
+      if (stacks <= 0) return;
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'miracle', stacks: -1,
+      }), instr);
+      if (stacks <= 1) {
+        // 层数归零：奇迹终结即死亡。amount = hp + shield 保证落到 0（fixed 不过防御，
+        // 护盾先吸掉 shield、余额正好打空生命）。
+        ctx.kernel.submitInstruction(new DealDamageInstruction({
+          source: null, target: unit, amount: unit.hp + unit.shield,
+          fixed: true, tags: ['miracle'],
+        }), instr);
+      }
+    },
+  }],
+});
+
+// ---- 脆弱 / 伤残（EFFECTS.md §负面效果；2026-09-11 实装）----
+// 这两个是老虎机「恶魔 roll」也需要的通用负面效果，遗物「老旧的战术目镜」先用上。
+
+// 脆弱：获得护盾时，获得量减少层数层（不可小于 0）。层数不随触发递减（文档未写递减）。
+registerEffect({
+  id: 'fragile',
+  type: 'debuff',
+  stacking: 'count',
+  name: '脆弱',
+  description: '获得护盾时，获得量减少层数层。',
+  icon: '🪨',
+  color: 'purple',
+  subscriptions: (unit) => [{
+    when: GainShieldInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit,
+    react: (instr) => {
+      const stacks = unit.getEffectStacks('fragile');
+      if (stacks > 0) instr.setPayload('amount', Math.max(0, instr.payload.amount - stacks));
+    },
+  }],
+});
+
+// 伤残：所有来源伤害增加层数层。固定伤害跳过修正步（F2）且 payload 白名单为空，不受影响
+// （与格挡同一条铁律，见上方 block 的注释）。
+registerEffect({
+  id: 'maim',
+  type: 'debuff',
+  stacking: 'count',
+  name: '伤残',
+  description: '受到的伤害增加层数层（固定伤害不受影响）。',
+  icon: '🩸',
+  color: 'purple',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit && !instr.fixed,
+    react: (instr) => {
+      const stacks = unit.getEffectStacks('maim');
+      if (stacks > 0) instr.setPayload('damage', instr.payload.damage + stacks);
+    },
+  }],
 });

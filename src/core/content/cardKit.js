@@ -126,6 +126,21 @@ export function breakAllBlock(sctx, target = sctx.player) {
 }
 
 // 【短暂】：出牌时登记一次性回合结束回库（消耗卡焚毁后照常回牌库）
+/**
+ * 【短暂】非消耗形态：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，
+ * 抽到不打出也不许"攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态；
+ * **消耗**+短暂（打出即焚毁、回合末再回库）走 returnToDeckAtTurnEnd。
+ */
+export function leaveHandAtTurnEnd(sctx) {
+  const uniqueID = sctx.self.uniqueID;
+  return {
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
+  };
+}
+
 export function returnToDeckAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
   sctx.kernel.addSubscription({
@@ -156,24 +171,43 @@ export function hitLanded(sctx) {
 
 // ---- 结算期选牌 ----
 
-// 手牌选牌请求：返回 AwaitPlayerInputInstruction（调用方存到 sctx.self 上，下一段读 selected）
-export function requestHandSelection(sctx, { count = 1, filter = null, reason = null } = {}) {
-  const hand = sctx.battleState.zones.hand.filter(c => (filter ? filter(c) : true));
+/**
+ * 通用「从指定卡牌集里选 min~max 张」请求（2026-09-11）。
+ * `source` 只描述卡牌集来自哪个区：'hand' 的候选在战斗场景里**已有唯一 CardObject**，
+ * 前端界面应当**接管/移动**这些实例（不渲染副本）；'deck'/'burnt' 等区的候选在场景里
+ * 没有对象，界面按投影新建即可（与牌库查看器同口径）。
+ * 候选为空时**不提交**（空集无合法应答，会把界面挂死）——调用方据此跳过。
+ */
+export function requestCardSelection(sctx, {
+  source = 'hand', min = 1, max = null, filter = null, reason = null, zone = null,
+  // 覆盖层开关：'hand' 来源默认走既有「点手牌」交互；'deck' 等区场景里没有可点对象，
+  // 默认必须开覆盖层（否则无从选取）。手牌来源也可显式 overlay:true 走覆盖层。
+  overlay = null,
+} = {}) {
+  const zoneName = zone ?? (source === 'deck' ? 'deck' : 'hand');
+  const pool = (sctx.battleState.zones[zoneName] ?? []).filter(c => (filter ? filter(c) : true));
+  if (pool.length === 0) return null;                       // 空集守卫：不发起请求
+  const lo = Math.max(0, Math.min(min, pool.length));
+  const hi = Math.max(lo, Math.min(max ?? Math.max(min, pool.length), pool.length));
   const instr = new AwaitPlayerInputInstruction({
-    request: { kind: 'selectHandCard', count, reason, candidates: hand.map(c => c.uniqueID) },
+    request: {
+      kind: 'selectCards', source, min: lo, max: hi, reason,
+      picker: (overlay ?? (source !== 'hand')) ? 'overlay' : undefined,
+      candidates: pool.map(c => c.uniqueID),
+    },
   });
   sctx.kernel.submitInstruction(instr);
   return instr;
 }
 
+// 手牌选牌请求：返回 AwaitPlayerInputInstruction（调用方存到 sctx.self 上，下一段读 selected）
+export function requestHandSelection(sctx, { count = 1, filter = null, reason = null } = {}) {
+  return requestCardSelection(sctx, { source: 'hand', min: count, max: count, filter, reason });
+}
+
 // 牌库选牌请求（寻找/抽出类）
 export function requestDeckSelection(sctx, { count = 1, filter = null, reason = null } = {}) {
-  const deck = sctx.battleState.zones.deck.filter(c => (filter ? filter(c) : true));
-  const instr = new AwaitPlayerInputInstruction({
-    request: { kind: 'selectDeckCard', count, reason, candidates: deck.map(c => c.uniqueID) },
-  });
-  sctx.kernel.submitInstruction(instr);
-  return instr;
+  return requestCardSelection(sctx, { source: 'deck', min: count, max: count, filter, reason });
 }
 
 // 读选牌结果（应答值恒为 uniqueID 数组；未应答/空选择返回 []）

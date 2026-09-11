@@ -21,7 +21,7 @@ registerSkill({
       const hand = sctx.battleState.zones.hand;
       if (hand.length === 0) return true;
       sctx.self._input = new AwaitPlayerInputInstruction({
-        request: { kind: 'selectHandCard', count: 1, candidates: hand.map(c => c.uniqueID) },
+        request: { kind: 'selectCards', source: 'hand', count: 1, candidates: hand.map(c => c.uniqueID) },
       });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;

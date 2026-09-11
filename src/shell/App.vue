@@ -1,8 +1,8 @@
 <script setup>
 // Vue 薄壳：三层场景的最外层编排（README「场景层级」总纲）。
 // 菜单层 = 纯 Vue（StartScreen / GameMenu / EndPanel）；
-// 大世界层（塔楼层）= MapStage（ThreeJS）+ PrepPanel 等 Vue 面板叠加；
-// 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud / RewardPanel 等叠加。
+// 大世界层（塔楼层）= MapStage（ThreeJS）+ Three 面板（prep 等，见 stage/panels/）；
+// 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud 等叠加；休息阶段面板见 stage/panels/。
 // dialogue / cutscene overlay 由 Vue 渲染，跨后两层（CutsceneOverlay）。
 import { onMounted, onBeforeUnmount, ref, computed, provide } from 'vue';
 import '../core/content/index.js'; // 注册全部最小内容
@@ -13,26 +13,23 @@ import { readSave } from './saves.js';
 import StartScreen from './components/StartScreen.vue';
 import AssetLoadingScreen from './components/AssetLoadingScreen.vue';
 import GameMenu from './components/GameMenu.vue';
-import PrepPanel from './components/PrepPanel.vue';
 import BattleHud from './components/BattleHud.vue';
-import RewardPanel from './components/RewardPanel.vue';
-import RoomPanel from './components/RoomPanel.vue';
-import AscensionPanel from './components/AscensionPanel.vue';
 import EndPanel from './components/EndPanel.vue';
 import MenuPopup from './components/MenuPopup.vue';
 import MenuDialog from './components/MenuDialog.vue';
 import TooltipOverlay from './components/TooltipOverlay.vue';
 import { fitGameFrame } from './frame.js';
+import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
-import './components/runPanels.css'; // 发育阶段 run 面板公共样式（奖励/房间/进阶）
 
 const canvas = ref(null);
 const frame = ref(null);
 const ctrl = ref(null);
 let stageManager = null;
 let mapStage = null;
+let detachTooltipForward = null; // 常驻 3D→tooltip 转发（随 ctrl 生命周期）
 
 const phase = ref('menu');      // 'menu' | 'game'（菜单级与游戏级的最外层切换）
 const menuOpen = ref(false);    // 游戏内弹出菜单（Esc）
@@ -68,9 +65,14 @@ function dismissMenuToast(id) {
 
 function newGame({ storyMode = false, loadSave = null } = {}) {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
+  detachTooltipForward?.();
+  detachTooltipForward = null;
   mapStage?.dispose?.();
   mapStage = new MapStage({});
   ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode });
+  // 地图舞台的输入通道 + 常驻 tooltip 转发：装配点在此（同时持有 stageManager 与 animBus）
+  mapStage.attachInput({ stageManager, bus: ctrl.value.animBus });
+  detachTooltipForward = attachTooltipForwarding(ctrl.value.animBus);
   mapStage.setFloor(ctrl.value.run.floor, ctrl.value.run.totalFloors);
   stageManager.setStage(mapStage);
   phase.value = 'game';
@@ -85,6 +87,8 @@ function onStart({ storyMode, loadSave }) {
 
 function toTitle() {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
+  detachTooltipForward?.();
+  detachTooltipForward = null;
   mapStage?.dispose?.();
   mapStage = null;
   ctrl.value = null;
@@ -93,18 +97,35 @@ function toTitle() {
   phase.value = 'menu';
 }
 
+// 当前接受指针输入的舞台：战斗层是 BattleStage，其余阶段（prep/reward/room/
+// ascension/end）都是地图舞台上的 Three 面板（原 Vue 面板 DOM 层已迁走）
+function activeStage() {
+  const c = ctrl.value;
+  if (!c) return null;
+  return c.run.gameStage === 'battle' ? c.getBattleStage() : mapStage;
+}
+
 function onPointer(type) {
   return (e) => {
-    const battleStage = ctrl.value?.getBattleStage();
-    if (!battleStage || ctrl.value.run.gameStage !== 'battle') return;
+    const stage = activeStage();
+    if (!stage?.[type]) return;
     // 画布在 16:9 取景框内，窗口坐标需减去取景框偏移
     const rect = e.currentTarget.getBoundingClientRect();
-    battleStage[type]?.(e.clientX - rect.left, e.clientY - rect.top);
+    stage[type](e.clientX - rect.left, e.clientY - rect.top);
   };
 }
 
 // 预生成指针 handler：模板里直接写 onPointer('x') 只会调工厂丢弃闭包，$event 传不进去
 const onPointerMove = onPointer('handlePointerMove');
+// 滚轮专用：通用 onPointer 传的是指针坐标，而 handleWheel 要的是 **e.deltaY**
+// （原实现把 clientX 当 deltaY 传进去，导致只能向下滚、无法向上——交互 bug 已修）。
+// 方向保持浏览器原生语义（向下滚 deltaY > 0 = 内容上移/看后面的卡）。
+function onWheel(e) {
+  const stage = activeStage();
+  if (!stage?.handleWheel) return;
+  e.preventDefault();
+  stage.handleWheel(e.deltaY);
+}
 const onPointerDown = onPointer('handlePointerDown');
 const onPointerUp = onPointer('handlePointerUp');
 
@@ -143,6 +164,7 @@ onBeforeUnmount(() => {
       @pointermove="onPointerMove"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
+      @wheel="onWheel"
     ></canvas>
     <!-- 菜单层顶层加载门：全量美术预载完成前挡住一切（最高 z-index），完成才放行开始界面 -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />
@@ -150,11 +172,8 @@ onBeforeUnmount(() => {
     <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />
     <template v-else-if="ctrl">
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
-      <PrepPanel v-if="stage === 'prep'" :ctrl="ctrl" />
-      <BattleHud v-else-if="stage === 'battle'" :ctrl="ctrl" />
-      <RewardPanel v-else-if="stage === 'reward'" :ctrl="ctrl" />
-      <RoomPanel v-else-if="stage === 'room'" :ctrl="ctrl" />
-      <AscensionPanel v-else-if="stage === 'ascension'" :ctrl="ctrl" />
+      <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
+      <BattleHud v-if="stage === 'battle'" :ctrl="ctrl" />
       <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>

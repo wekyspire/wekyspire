@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 
 import {
-  HELP, freshState, exec, render, renderDeck, renderLib, renderTerms,
+  HELP, freshState, exec, render, renderDeck, renderLib, renderRelics, renderTerms,
   sessionDir, sessionPath, stageCn,
 } from './playSession.mjs';
 
@@ -41,7 +41,11 @@ const file = sessionPath(sessionName);
 if (argv[0] === 'new') {
   const seed = Number.parseInt(argv[1] ?? '', 10);
   if (!Number.isInteger(seed)) { console.error('用法: new <种子数字>'); process.exit(1); }
-  if (fs.existsSync(file)) { console.error(`会话已存在：${file}`); process.exit(1); }
+  if (fs.existsSync(file)) {
+    console.error(`会话已存在：${file}`);
+    console.error(`（不用再 new：直接给动作即可，例如 node tools/headlessPlay.mjs ${sessionName} state）`);
+    process.exit(1);
+  }
   fs.writeFileSync(file, JSON.stringify({ seed, actions: [] }, null, 2));
   console.log(`已建档 ${sessionName}（种子 ${seed}）`);
   process.exit(0);
@@ -50,7 +54,7 @@ if (!fs.existsSync(file)) { console.error(`会话不存在：${file}（先 new�
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 const action = argv.join(' ').trim();
 // 纯视图命令不进 exec；preview 只读（进 exec 取结果但不入档）
-const pureView = !action || /^(state|help|terms|deck|lib)$/.test(action);
+const pureView = !action || /^(state|help|terms|deck|lib|relics)$/.test(action);
 const noRecord = pureView || action.startsWith('preview');
 
 let S;
@@ -71,5 +75,6 @@ if (!noRecord) {
 if (action === 'help') console.log(HELP);
 else if (action === 'deck') console.log(renderDeck(S));
 else if (action === 'lib') console.log(renderLib(S));
+else if (action === 'relics') console.log(renderRelics(S));
 else if (action === 'terms') console.log(renderTerms(S));
 else console.log(render(S));

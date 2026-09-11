@@ -112,7 +112,7 @@ function pickWeighted(rng, pool, weights, { sizeBias = 0, wideBias = 0 } = {}) {
 // ---- 摆位记录（placements）：暴露给契约测试 ----
 function measure(obj) {
   const b = new THREE.Box3().setFromObject(obj);
-  return { height: b.max.y - b.min.y };
+  return { height: b.max.y - b.min.y, centerY: (b.max.y + b.min.y) / 2 };
 }
 
 /**
@@ -135,6 +135,11 @@ export function composeRoom(recipeId, seed = 'dev') {
   staticRoot.name = `room:${recipeId}`;
   // 地板与撒印独立合批：它们是贴地接收面，castShadow 必须关——
   // 水平薄板对低角度月光自投影 = 全场阴影痤疮（dungeon3D 地板只 receive 的口径）
+  // 可动组件（`live: true` 的构图定点件：老虎机/银行机这类带复杂动画的交互物）——
+  // **不进静态合批**（合批后无法逐帧驱动子件），单独一根 root 并登记进 `interactives`
+  const liveRoot = new THREE.Group();
+  liveRoot.name = 'room:live';
+  const interactives = new Map();   // name -> { object, def, placement, kind }
   const floorRoot = new THREE.Group();
   floorRoot.name = 'room:floor';
   const decalRoot = new THREE.Group();
@@ -155,10 +160,11 @@ export function composeRoom(recipeId, seed = 'dev') {
     if (scale !== 1) obj.scale.setScalar(scale);
     root.add(obj);
     const fp = def.footprint || { x: 1, z: 1 };
-    const { height } = measure(obj);
+    const { height, centerY } = measure(obj);
     placements.push({
       id: def.id, place: def.place, x, y, z, ry,
-      fx: (fp.x / 2) * scale, fz: (fp.z / 2) * scale, height, tags: def.tags || [],
+      fx: (fp.x / 2) * scale, fz: (fp.z / 2) * scale, height, midY: centerY,
+      tags: def.tags || [], lampGain: def.lampGain ?? 1, lampColor: def.lampColor,
       onWall, hosted, floating: def.mount === 'ceiling', composition,
     });
     return height;
@@ -379,6 +385,34 @@ export function composeRoom(recipeId, seed = 'dev') {
   };
   const fireAnchors = [];   // 构图定点火源（最高优先级，必发光）
   const fireExtra = [];   // 撒布/立面收集的火位（cap 富余时依次点亮）
+  // 灯锚（`lamp` 标签：机器/招牌/彩灯串这类**自发光但不该冒火**的体）：单独一条通道，
+  // lighting 只生成点光池、不生成火焰粒子（见 lighting.js 的 lamp 处方）。
+  // 高度口径：落地件取体量上段（光池罩住四周）；**墙挂件取自身包围盒中心 + 向室内推
+  // LAMP_WALL_PUSH**——挂件从挂点向下垂（彩灯串/吊灯），落地口径会把光池放到挂点上方；
+  // 而灯池还贴墙的话（灯珠离墙 ~1）会在墙上打出爆白的彩色斑，推离墙面才是柔和的彩色氛围光。
+  const LAMP_WALL_PUSH = 4.5;
+  const lampAnchorOf = (p) => {
+    if (!p.tags.includes('lamp')) return null;
+    const gain = p.lampGain ?? 1;
+    if (p.onWall) {
+      return {
+        x: p.x + Math.sin(p.ry) * LAMP_WALL_PUSH,
+        y: p.midY ?? p.y,
+        z: p.z + Math.cos(p.ry) * LAMP_WALL_PUSH,
+        gain, color: p.lampColor,
+      };
+    }
+    return { x: p.x, y: p.y + Math.min(p.height * 0.7, 6), z: p.z, gain, color: p.lampColor };
+  };
+  const lampAnchors = [];
+  // 撒布/角簇/立面三类辅助摆位的锚收集（火位进 fireExtra 候补，灯位直接进 lampAnchors）
+  const collectAuxAnchors = () => {
+    const p = placements[placements.length - 1];
+    const fa = fireAnchorOf(p);
+    if (fa) fireExtra.push(fa);
+    const la = lampAnchorOf(p);
+    if (la) lampAnchors.push(la);
+  };
 
   // 扶壁肋墙带避让：件背缘与墙面间隙小于肋深时，给出沿离墙方向的推距（不推=0）。
   // 墙裙恒定 1.6 深，由基础间隙 2.0 覆盖；肋体更深，逐个核算。
@@ -448,8 +482,7 @@ export function composeRoom(recipeId, seed = 'dev') {
         const tilt = terra.tiltAt(px, pz) || {};
         track(def, obj, { x: px, y: ty(px, pz), z: pz, ry, scale: isc, ...tilt });
         claim(px, pz, hx, hz);
-        const anchor = fireAnchorOf(placements[placements.length - 1]);
-        if (anchor) fireExtra.push(anchor);
+        collectAuxAnchors();
         // 堆积感：边缘带主物旁补一个小件货堆（桶挨着箱、筐挨着架）；坡/缝不补
         if (isEdge && !terraIsBarren(px, pz) && plotRng() < 0.6) {
           const compPool = normalPool.filter(d => {
@@ -474,8 +507,7 @@ export function composeRoom(recipeId, seed = 'dev') {
               const cobj = comp.build({ rng: createRng(`${seed}:${recipeId}:p${placements.length}`) });
               track(comp, cobj, { x: ox, y: ty(ox, oz), z: oz, ry: Math.atan2(0 - ox, -10 - oz), scale: csc });
               claim(ox, oz, chx, chz, 0.8);
-              const cAnchor = fireAnchorOf(placements[placements.length - 1]);
-              if (cAnchor) fireExtra.push(cAnchor);
+              collectAuxAnchors();
             }
           }
         }
@@ -514,10 +546,23 @@ export function composeRoom(recipeId, seed = 'dev') {
   for (const g of recipe.guaranteed || []) {
     const def = getProp(g.id);
     const obj = def.build({ rng: createRng(`${seed}:${recipeId}:g:${g.id}`) });
-    track(def, obj, { x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true });
-    claim(g.x, g.z, (def.footprint?.x ?? 2) / 2, (def.footprint?.z ?? 2) / 2);
+    const gsc = g.scale ?? 1;
+    const live = !!g.live;
+    track(def, obj, {
+      x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true, scale: gsc,
+      root: live ? liveRoot : staticRoot,
+    });
+    claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
+    if (live) {
+      interactives.set(g.name ?? g.id, {
+        object: obj, def, kind: obj.userData.interactive ?? g.id,
+        x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
+      });
+    }
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
+    const lamp = lampAnchorOf(placements[placements.length - 1]);
+    if (lamp) lampAnchors.push(lamp);
   }
 
   // ---- 墙根角簇：大件沿墙密堆积，塑造几何起伏（用户反馈"墙角没有大件堆积"）----
@@ -595,8 +640,7 @@ export function composeRoom(recipeId, seed = 'dev') {
       const obj = def.build({ rng: createRng(`${seed}:${recipeId}:k${placements.length}`) });
       track(def, obj, { x: cx, y: ty(cx, cz), z: cz, ry: Math.atan2(0 - cx, -10 - cz), scale: ksc });
       claim(cx, cz, khx, khz, 1.2);
-      const kAnchor = fireAnchorOf(placements[placements.length - 1]);
-      if (kAnchor) fireExtra.push(kAnchor);
+      collectAuxAnchors();
       u += dir * (kalong * 2 + 1.0 + clusterRng() * 1.2);
     }
   }
@@ -640,8 +684,7 @@ export function composeRoom(recipeId, seed = 'dev') {
         else pos.x += facadeRng() * 0.4 * maint;
       }
       track(def, obj, { ...pos, ry, onWall: true });
-      const anchor = fireAnchorOf(placements[placements.length - 1]);
-      if (anchor) fireExtra.push(anchor);
+      collectAuxAnchors();
     };
     // 结构层：每 bay 独立 roll 主结构；命中后再按 structureOverlapProb roll 叠加结构
     // （排除同 def，bayWidth2 需邻 bay 也开口自由——只约束开口，不互斥其他结构）
@@ -801,10 +844,12 @@ export function composeRoom(recipeId, seed = 'dev') {
   decalMerged.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
   const group = new THREE.Group();
   group.name = `roomScene:${recipeId}`;
-  group.add(merged, floorMerged, decalMerged);
+  group.add(merged, floorMerged, decalMerged, liveRoot);
 
   // ---- 布光 / 夜空 / 月光浮尘 ----
-  const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra]);
+  // 灯锚按 gain 降序：颜色轮转表的前几位留给 gain=1 的机器，彩灯串（gain<1）拿后面的彩灯色
+  lampAnchors.sort((a, b) => (b.gain ?? 1) - (a.gain ?? 1));
+  const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra], lampAnchors);
   group.add(lighting.group);
   const skydome = buildSkydome({ moonDir: new THREE.Vector3(-0.55, 0.5, -0.45), flat: true });
   group.add(skydome);
@@ -834,7 +879,7 @@ export function composeRoom(recipeId, seed = 'dev') {
   // ---- 场景契约：update / sampleStandeeTint（口径同 dungeon3D，色彩参数走布光预设）----
   const scratch = new THREE.Color();
   function update(dt, particles = null, camPos = null) {
-    lighting.update(dt, particles);
+    lighting.update(dt, particles, camPos);
     if (camPos) skydome.updateSkydome(camPos);
     if (moonDust) moonDust.update(dt, lighting.moonlight);
   }
@@ -861,6 +906,7 @@ export function composeRoom(recipeId, seed = 'dev') {
     group,
     torches: lighting.torches,
     placements,
+    interactives,   // 可动组件登记（休息房的机器等）：{ object, parts, kind, x/z/ry }
     openings: { windows: left.windowRects, door },
     recipe,
     // 特殊色调（用户定 2026-09）：配方 grading 随契约下发——exposure=渲染曝光倍率；
@@ -869,6 +915,8 @@ export function composeRoom(recipeId, seed = 'dev') {
     update,
     sampleStandeeTint,
     moonlight: lighting.moonlight,
+    // 布光句柄（休息房交互层用）：setFocus(target|null) 做 zoomin 追光（压暗外围、打亮机器）
+    lighting,
     skydome,
   };
 }

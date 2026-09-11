@@ -8,6 +8,7 @@
 // 卡图异步加载：未命中先按无图出卡，加载完成订阅重出（与战场 addOnLoad 重烘同语言）。
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { getSkillDefinition } from '../../core/skills/registry.js';
+import { cardViewFromDef } from '../../core/skills/cardView.js';
 import { bakeCardFace } from '../../stage/richtext/cardFace.js';
 import { hitTestRegions } from '../../stage/richtext/layout.js';
 import { sharedCardArtCache } from '../../stage/art/cardArtCache.js';
@@ -21,25 +22,12 @@ const props = defineProps({
   ctx: { type: Object, default: () => ({}) },
 });
 
-// projectCardFull 同形的卡面视图（战斗外口径：text 走应用前 describe）
-function viewOf(def) {
-  if (!def) return null;
-  return {
-    name: def.name ?? '',
-    tier: def.tier ?? null,
-    type: def.type ?? 'normal',
-    series: def.series ?? null,
-    cost: def.cost ?? { mana: 0, actionPoint: 0 },
-    keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
-    cardMode: def.cardMode ?? 'normal',
-    chantWeight: def.chantWeight ?? null,
-    pack: def.pack ?? null,
-    charges: def.charges ?? null,
-    text: def.describe?.(props.ctx) ?? '',
-  };
-}
-
-const view = computed(() => viewOf(getSkillDefinition(props.skillId)));
+// 卡面视图：与休息阶段面板共用 core 的 cardViewFromDef（战斗无关口径），
+// 关键词 id → 卡面页脚中文标签的映射在本层做（标签表在 bridge，core 不得反向依赖）。
+const view = computed(() => {
+  const v = cardViewFromDef(getSkillDefinition(props.skillId), props.ctx);
+  return v ? { ...v, keywords: v.keywords.map(k => KEYWORD_LABELS[k] ?? k) } : null;
+});
 
 // 卡图取值：cache.get 未命中会发起异步加载并返回 null（先按无图出卡）
 const art = ref(view.value ? sharedCardArtCache.get(view.value) : null);

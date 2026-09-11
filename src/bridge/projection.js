@@ -1,7 +1,7 @@
 import { swapCostOf } from '../core/state/battleState.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
-import { makeSkillCtx, canUseSkill } from '../core/skills/helpers.js';
+import { makeSkillCtx, canUseSkill, chantActivationLegal } from '../core/skills/helpers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
 
 // 状态投影：battleState → 前端只读视图（纯数据、可序列化）。
@@ -102,14 +102,21 @@ export function projectBattle(battle) {
       maxActionPoints: ctx.player.maxActionPoints,
     },
     enemies: battleState.enemies.map(projectUnit),
+    // 失明（银行机恶魔词条）：玩家看不见敌人意图（Stage 据此隐藏意图条）
+    blind: !!battleState.debuffs?.blind,
     allies: battleState.allies.map(projectUnit),
     // 手牌额外带 usable：可用性判定本体在 core（canUseSkill），本地渲染直接调 core；
     // 但直播观战端没有 core，只能吃投影——故随投影下发，远端 bridge 据此回答
     // intents.canPlayCard（BattleStage.js:811 用它定手牌亮度）
-    hand: battleState.zones.hand.map(rt => ({
-      ...projectCardFull(battle, rt),
-      usable: canUseSkill(ctx, rt),
-    })),
+    hand: battleState.zones.hand.map(rt => {
+      const usable = canUseSkill(ctx, rt);
+      // 不可用原因（首期只标「咏唱发动会被手牌压力挡下」——这类灰卡玩家看不出原因，
+      // 需要 UI 给出提示；资源/冷却不足肉眼可读，不在此列）
+      const def = getSkillDefinition(rt.defId);
+      const blocked = (!usable && def?.cardMode === 'chant' && !rt.isActivated
+        && !chantActivationLegal(ctx, rt, def)) ? 'chantPressure' : null;
+      return { ...projectCardFull(battle, rt), usable, blocked };
+    }),
     // 结算区（发动/被跨节拍处理的卡）：仅 id 列表——手牌来源的卡视图已在离手前
     // 的 hand 投影中建好；牌库来源（如斩进阶的宾语转化）无既有卡面，由 presenter
     // 的 cardShowcased/cardTransformed 载荷代投影 cardView（cardAdded 同款协议）。

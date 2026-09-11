@@ -4,7 +4,7 @@ import { BattleDriver } from '../src/core/sdk/driver.js';
 import { registerSkill } from '../src/core/skills/registry.js';
 import { registerEffect } from '../src/core/effects/registry.js';
 import { moveCard } from '../src/core/state/battleState.js';
-import { DealDamageInstruction } from '../src/core/instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction } from '../src/core/instructions/combat.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
 import { TurnEndInstruction } from '../src/core/instructions/turn.js';
 import { PLAYER_BASE_HP } from '../src/core/state/player.js';
@@ -149,5 +149,43 @@ describe('不灭：minHp 地板', () => {
     d.endTurn(); // 1 → 0，注销（敌方行动：攻 3）
     expect(d.player.getEffect('undying')).toBeNull();
     expect(d.player.hp).toBe(PLAYER_BASE_HP - 12); // 史莱姆攻/盾交替，只命中两次
+  });
+});
+
+// ---- 固定伤害 vs 护盾：回合开始的顺序（2026-09 修） ----
+// 病灶：护盾清零排在"回合开始效果结算"**之前**，于是燃烧（固定伤害，按 EFFECTS.md 可被护盾吸收）
+// 结算时护盾那一项永远读到 0 —— 燃烧事实上变成穿透。修法＝把清盾挪到结算之后（battleRoot 的
+// core:shieldReset 订阅，priority -50），并让"回合开始给护盾"的出现类效果排在它之后（≤ -100）。
+describe('固定伤害与护盾的结算顺序', () => {
+  it('燃烧（固定伤害）先被护盾吸收，再清盾', () => {
+    const d = new BattleDriver({ deck: ['punch'], enemies: ['slime'], seed: 3, config: { initialDraw: 1 } });
+    const e = d.state.enemies[0];
+    d.start();
+    d.dispatch(new GainShieldInstruction({ target: e, amount: 10 }));
+    d.dispatch(new AddEffectInstruction({ target: e, effectId: 'burn', stacks: 5 }));
+    const hp0 = e.hp;
+    d.endTurn(); // 敌方回合开始：先结算燃烧（护盾吸收）→ 再清盾
+    expect(e.getEffectStacks('burn')).toBe(4); // 燃烧照常跳伤并递减
+    expect(e.hp).toBe(hp0);                    // 关键：5 点伤害被护盾吃掉，HP 不掉
+    expect(e.shield).toBe(0);                  // 护盾用掉 5、余额被同拍的清盾抹平
+  });
+
+  it('回合开始给护盾的效果不被同一拍的清盾抹掉（光滑小圆盾）', () => {
+    const d = new BattleDriver({ deck: ['punch', 'punch'], enemies: ['slime'], seed: 9, config: { initialDraw: 1 } });
+    d.player.relics = ['smoothBuckler'];
+    d.player.equippedRelics = ['smoothBuckler'];
+    d.start();
+    expect(d.player.shield).toBe(0); // 第一回合不给
+    d.endTurn();                     // 进第二回合：清盾（0）→ 再给 12
+    expect(d.player.shield).toBeGreaterThanOrEqual(12);
+  });
+
+  it('战斗开始时获得的护盾（遗物）在自己第一回合不被清掉', () => {
+    const d = new BattleDriver({ deck: ['punch'], enemies: ['slime'], seed: 11, config: { initialDraw: 1 } });
+    d.player.relics = ['steelShard']; // 非槽位式：战斗开始 +1 护盾
+    d.start();
+    expect(d.player.shield).toBeGreaterThanOrEqual(1);
+    d.endTurn();                      // 第一回合结束 → 第二回合开始才清
+    expect(d.player.shield).toBe(0);
   });
 });

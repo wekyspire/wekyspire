@@ -72,7 +72,9 @@ const TEMPLATES = [
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
   // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §7）——
   // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
-  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'stoneCocoon' }] },
+  // 2026-09-11 用户试玩后削：原「爆囊×2 + 石茧×2」四敌同时施压（两只石茧苏醒后每回合 20+ 伤
+  // 叠爆囊死亡反伤）堪比精英，删掉一只石茧 → 三敌；难度份额改由前三槽分摊。
+  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }] },
   { id: 'twinClock', name: '钟摆双塔', minFloor: 5, maxFloor: 10, slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
   // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
   { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
@@ -204,15 +206,28 @@ export function generateEncounter(run) {
     const d = Math.min(Math.max(t, def.difficulty.min), def.difficulty.max);
     return { defId: def.id, d };
   });
-  return slots.map(s => descriptorOf(s.defId, s.d));
+  const out = slots.map(s => descriptorOf(s.defId, s.d));
+  // 石茧群（用户 2026-09-11）：同层第二只起**延迟一回合苏醒**且难度更低（苏醒越晚越弱）。
+  // 否则多只同拍苏醒＝每回合 20+ 伤，是第 1 章最容易低估的死局。
+  const cocoons = out.map((s, i) => (s.defId === 'stoneCocoon' ? i : -1)).filter(i => i >= 0);
+  if (cocoons.length > 1) {
+    const def = getEnemyDefinition('stoneCocoon');
+    for (const i of cocoons.slice(1)) {
+      // 难度降一档但不低于该敌人的难度下界（契约：实例难度必须落在 def 的 [min,max] 内）；
+      // 下界已到 min 时，削弱体现在「延迟苏醒 + 苏醒时少叠一层力量」上。
+      const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
+      out[i] = descriptorOf('stoneCocoon', d, { wakeDelay: 2, wakeStrength: 1 });
+    }
+  }
+  return out;
 }
 
-/** 描述符 = defId + 实例难度 + 缩放终值（锚点：精英按 base，普通按 2）。 */
-function descriptorOf(defId, difficulty) {
+/** 描述符 = defId + 实例难度 + 缩放终值（锚点：精英按 base，普通按 2）。extra 供变体参数。 */
+function descriptorOf(defId, difficulty, extra = {}) {
   const def = getEnemyDefinition(defId);
   const unit = def.createUnit();
   scaleUnit(unit, difficulty, def.difficulty.elite ? def.difficulty.base : 2);
-  return { defId, maxHp: unit.maxHp, attack: unit.attack, difficulty };
+  return { defId, maxHp: unit.maxHp, attack: unit.attack, difficulty, ...extra };
 }
 
 /** 描述符/裸 id → 敌人实例（战斗装配用；裸 id 兼容测试直塞 ['slime'] 的旧写法）。 */
@@ -222,5 +237,7 @@ export function spawnEnemy(entry) {
   unit.maxHp = entry.maxHp ?? unit.maxHp;
   unit.hp = unit.maxHp;
   if (entry.attack != null) unit.attack = entry.attack;
+  if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;       // 石茧等：苏醒回合参数
+  if (entry.wakeStrength != null) unit.wakeStrength = entry.wakeStrength;
   return unit;
 }

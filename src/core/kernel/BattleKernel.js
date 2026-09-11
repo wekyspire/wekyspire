@@ -214,6 +214,10 @@ export default class BattleKernel {
     return typeOk && (!entry.filter || entry.filter(instr, ctx));
   }
 
+  // 注意：filter 是「收集阶段」对全部订阅求值的，早于任何一个 react 跑——所以 filter
+  // 看到的是**本批次 PRE react 修饰之前**的 payload（格挡减半、换伤翻倍都还没写入）。
+  // 凡是要按「最终数值」判断的（致命预判、阈值触发等），判定必须写在 react 里，并用
+  // priority 把自己排到修饰者之后（范例：content/relics.js 的塞西莉亚之恩赐）。
   _collect(instr, phase, ctx) {
     return this.subscriptions
       .filter(e => e.phase === phase && this._matches(e, instr, ctx))

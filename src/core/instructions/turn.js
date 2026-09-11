@@ -4,6 +4,7 @@ import { DrawCardsInstruction } from './cards.js';
 import { SweepSkillCooldownInstruction } from './skill.js';
 import { AddEffectInstruction } from './effects.js';
 import { GainManaInstruction } from './resources.js';
+import { DealDamageInstruction } from './combat.js';
 import AIActInstruction from './aiAct.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
@@ -68,10 +69,14 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.battleState.turn.side = 'player';
         ctx.battleState.turn.count += 1;
         resetTurnHistory(ctx.battleState);
-        ctx.player.shield = 0;    // 护盾在自己回合开始清零（持续整个敌方回合）
+        // 护盾重置不在这里——它由 battleRoot 注册的订阅在**回合开始效果结算之后**执行
+        // （先清盾会让燃烧等固定伤害永远吃不到护盾，2026-09 修）
         ctx.player.actionPoints = ctx.player.maxActionPoints;
         // 魏启自然恢复：每回合开始 +1（battle.md §6；走指令——上限截断与 PRE 修饰同管线）
-        ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), this);
+        // 银行机恶魔词条（无梦/噩梦/失眠）在指定回合内暂停自动回复
+        if (!((ctx.battleState.debuffs?.noManaRegenTurns ?? 0) > 0)) {
+          ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), this);
+        }
         ctx.kernel.submitInstruction(new PlayerTurnStartInstruction(), this);
         return false;
       case 1:
@@ -91,10 +96,13 @@ export class PlayerTurnInstruction extends BattleInstruction {
       case 2:
         // 首回合不抽牌：起手牌由 PreBattle 的 initialDraw 发放
         if (ctx.battleState.turn.count > 1) {
-          ctx.kernel.submitInstruction(
-            new DrawCardsInstruction({
-              count: ctx.battleState.config.drawPerTurn, reason: 'turnStart',
-            }), this);
+          const d = ctx.battleState.debuffs;
+          const penalty = ctx.battleState.turn.count <= (d?.drawPenaltyTurns ?? 0) ? 1 : 0;
+          const count = Math.max(0, ctx.battleState.config.drawPerTurn - penalty);
+          if (count > 0) {
+            ctx.kernel.submitInstruction(
+              new DrawCardsInstruction({ count, reason: 'turnStart' }), this);
+          }
         }
         return false;
       case 3:
@@ -112,9 +120,29 @@ export class PlayerTurnInstruction extends BattleInstruction {
             new AIActInstruction({ unit: ally, resolveDef: getAllyDefinition }), this);
         }
         return false;
-      case 6:
+      case 6: {
+        // 银行机恶魔词条（回合末结算）：落魄/失望的持续伤害、绝望的定时死亡，
+        // 以及「前 N 回合」类计数的递减（在回合末推进，下一回合开始即生效）
+        const d = ctx.battleState.debuffs;
+        const t = ctx.battleState.turn.count;
+        if (d?.dotFromTurn && t >= d.dotFromTurn.turn) {
+          ctx.kernel.submitInstruction(new DealDamageInstruction({
+            target: ctx.player, amount: d.dotFromTurn.amount, tags: ['demonDot'],
+          }), this);
+        }
+        if (d?.deathAtTurnEnd && t === d.deathAtTurnEnd) {
+          // 绝望：第 N 回合结束时死亡——穿透一切（护盾/防御都不该救）
+          ctx.kernel.submitInstruction(new DealDamageInstruction({
+            target: ctx.player, amount: 9999, pierce: true, tags: ['despair'],
+          }), this);
+        }
+        if (d) {
+          if (d.drawPenaltyTurns > 0) d.drawPenaltyTurns -= 1;
+          if (d.noManaRegenTurns > 0) d.noManaRegenTurns -= 1;
+        }
         ctx.kernel.submitInstruction(new PlayerTurnEndInstruction(), this);
         return false;
+      }
       default:
         return true;
     }
@@ -127,7 +155,6 @@ export class EnemyTurnInstruction extends BattleInstruction {
     switch (this._stage) {
       case 0:
         ctx.battleState.turn.side = 'enemy';
-        for (const e of aliveEnemies(ctx.battleState)) e.shield = 0;
         ctx.kernel.submitInstruction(new EnemyTurnStartInstruction(), this);
         return false;
       case 1:

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>休息房陈列页</title>
+    <script>
+      window.__errs = [];
+      window.__ready = false;
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+      #room-canvas { display: block; }
+      #room-overlay {
+        position: fixed; top: 10px; left: 12px; pointer-events: none;
+        font: 13px/1.7 monospace; color: #cfd8e3;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      }
+      #room-overlay h1 { margin: 0 0 2px; font: 600 15px/1.4 monospace; color: #e8eef8; }
+      #room-overlay select, #room-overlay input, #room-overlay button {
+        pointer-events: auto; margin-top: 4px; background: #10141f; color: #cfd8e3;
+        border: 1px solid #3a465c; border-radius: 4px; padding: 2px 6px; font: 12px monospace;
+      }
+      /* 休息面板安全区：休息阶段的 UI 面板将覆盖这一带——构图不该在此放精细件。
+         （?ui=0 关闭；?ui=0.55 换比例） */
+      #ui-safe {
+        position: fixed; left: 0; right: 0; bottom: 0; height: 42%;
+        background: repeating-linear-gradient(135deg, rgba(255, 90, 120, 0.07) 0 14px, rgba(255, 90, 120, 0.13) 14px 28px);
+        border-top: 1px dashed rgba(255, 120, 150, 0.55);
+        pointer-events: none;
+      }
+      #ui-safe span {
+        position: absolute; left: 10px; top: 6px;
+        font: 12px monospace; color: #ff9db0; text-shadow: 0 1px 3px #000;
+      }
+      /* 交互锚点标记（世界坐标投影到屏幕） */
+      .anchor-pin {
+        position: fixed; transform: translate(-50%, -50%);
+        font: 12px/1.5 monospace; color: #ffe08a; text-shadow: 0 1px 3px #000;
+        pointer-events: none; white-space: nowrap;
+      }
+      .anchor-pin::before {
+        content: ''; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px;
+        margin: -5px 0 0 -5px; border: 1px solid #ffe08a; border-radius: 50%;
+      }
+      .anchor-pin b { position: relative; }
+      /* 机器交互条：聚焦时从下方滑出（游戏内会换成正式面板） */
+      #machine-bar {
+        position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(140%);
+        display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+        background: rgba(12, 16, 26, 0.92); border: 1px solid #3a465c; border-radius: 10px;
+        font: 13px/1.6 monospace; color: #cfd8e3; transition: transform 0.28s ease;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      }
+      #machine-bar.open { transform: translateX(-50%) translateY(0); }
+      #machine-bar button {
+        background: #182035; color: #ffe08a; border: 1px solid #55658a; border-radius: 6px;
+        padding: 8px 16px; font: 600 13px monospace; cursor: pointer;
+      }
+      #machine-bar button:hover { background: #232f4d; }
+      #machine-bar button:disabled { opacity: 0.45; cursor: default; }
+      #machine-title { color: #ffe08a; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="room-overlay">
+      <h1>休息房陈列页 · restGallery</h1>
+      <div id="room-info"></div>
+      <div>配方：
+        <select id="recipe-select"></select>
+        种子：<input id="seed-input" size="10" />
+        <button id="rebuild">重建</button>
+      </div>
+      <div>拖拽旋转 ｜ 滚轮缩放 ｜ 相机默认取休息机位（与战斗同一取景，fov24 斜视）</div>
+      <div>虚线带 = <span style="color:#ff9db0">休息面板安全区</span>（?ui=0 关 / ?ui=0.55 换比例）
+        ｜ 金圈 = 交互锚点（?anchors=0 关）</div>
+    </div>
+    <div id="ui-safe"><span>休息面板安全区（UI 将覆盖此带）</span></div>
+    <!-- 机器交互条（聚焦某台机器时出现；真实游戏里换成正式面板，这里先做交互原型） -->
+    <div id="machine-bar">
+      <span id="machine-title"></span>
+      <span id="machine-body"></span>
+      <button id="machine-back">返回房间</button>
+    </div>
+    <script type="module" src="/src/debug/restGallery.js"></script>
+  </body>
+</html>

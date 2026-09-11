@@ -115,3 +115,5 @@ tmp/
 
 # seedream 素材管线虚拟环境（tools/seedream/out/ 已被顶层 out/ 规则覆盖）
 tools/seedream/.venv/
+# 会话/计划草稿（ZCode 工作目录产物）
+.zcode/

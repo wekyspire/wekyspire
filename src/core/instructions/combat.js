@@ -29,6 +29,14 @@ export class DealDamageInstruction extends BattleInstruction {
 
   execute(ctx) {
     const target = this.target;
+    // 过期目标守卫（2026-09-11 用户报）：目标缺失或已死 → **静默落空**。
+    // 起因：多段伤害是一次性捕获目标后连打 N 段（各 content 自己写 for 循环），
+    // 目标在中间段被击杀时，剩余段仍会结算并播放"虚空伤害"演出，且重复触发死亡。
+    // 与「过期引用无害」的既有哲学一致（弃牌/换牌等指令的同款前置守卫）。
+    if (!target || target.isDead()) {
+      this.result = { damage: 0, defenseBlocked: 0, shieldAbsorbed: 0, dealt: 0, targetDead: true, skipped: true };
+      return true;
+    }
     const raw = this.fixed ? this.amount : this.payload.damage;
     const pierce = this.fixed ? false : this.payload.pierce;
     const defense = (pierce || this.fixed) ? 0 : target.getStat('defense');
@@ -76,6 +84,33 @@ export class DealDamageInstruction extends BattleInstruction {
         def?.onDeath?.({ ...ctx, unit: target, def });
       }
     }
+    return true;
+  }
+}
+
+// 致命预判（只读）：该伤害指令按当前 payload 结算后目标是否会死。
+// 公式与上面 execute 同源（防御 → 护盾 → minHp 地板），供 PRE 订阅做「致命拦截」用
+// （塞西莉亚之恩赐）；两者必须一起改，否则拦截会在临界值上判错。
+export function wouldBeLethal(instr, target) {
+  const raw = instr.fixed ? instr.amount : instr.payload.damage;
+  const pierce = instr.fixed ? false : instr.payload.pierce;
+  const defense = (pierce || instr.fixed) ? 0 : target.getStat('defense');
+  let dmg = Math.max(raw - defense, 0);
+  if (!pierce) dmg -= Math.min(target.shield, dmg);
+  return target.hp - dmg <= target.getStat('minHp');
+}
+
+// 清空护盾（回合开始的护盾重置）。**执行时机必须晚于回合开始的效果结算**：
+// 燃烧等「固定伤害」按 EFFECTS.md 可被护盾吸收，若先清盾再结算，护盾那一步永远读到 0，
+// 燃烧就会事实上变成穿透（2026-09 修：此前正是这个顺序 bug）。
+export class ClearShieldInstruction extends BattleInstruction {
+  constructor({ target }, opts = {}) {
+    super(opts);
+    this.target = target; // Unit
+  }
+
+  execute() {
+    this.target.shield = 0;
     return true;
   }
 }

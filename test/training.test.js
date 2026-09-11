@@ -68,7 +68,7 @@ describe('promotesTo 晋升机制（RUN_DESIGN §6.2）', () => {
     const rt = createSkillRuntime('testDead');
     run.player.deck.push(rt);
     expect(() => trainUpgrade(run, rt.uniqueID)).toThrow(/无法升级/);
-    expect(run.roomData).toBeNull(); // 失败不留半途状态
+    expect(run.roomData?.drawChoices ?? null).toBeNull(); // 失败不留半途状态
   });
 });
 
@@ -92,7 +92,8 @@ describe('训练场免费流程（§4.1 先升后抓强绑）', () => {
     expect(run.player.deck.length).toBe(before + 1);
     expect(run.player.deck.at(-1).defId).toBe(choices[0]);
     expect(run.player.trainingCount).toBe(1);
-    expect(run.roomData).toBeNull(); // 抉择后清理
+    expect(run.roomData?.trained).toBe(true); // 完成标记（瞬态已清；合并房还要靠它区分两部分）
+    expect(run.roomData?.drawChoices ?? null).toBeNull();
   });
 
   it('跳过放行回归（原 bug）：未 roll 候选直接跳过不再抛错；领取仍须先 roll', () => {
@@ -101,7 +102,7 @@ describe('训练场免费流程（§4.1 先升后抓强绑）', () => {
     trainDraw(run, null);
     expect(run.player.deck.length).toBe(before);
     expect(run.player.trainingCount).toBe(1);
-    expect(run.roomData).toBeNull();
+    expect(run.roomData?.trained).toBe(true);
     expect(() => trainDraw(run, 'anything')).toThrow(/尚未生成抓牌候选/);
   });
 
@@ -117,7 +118,7 @@ describe('训练场免费流程（§4.1 先升后抓强绑）', () => {
     expect(run.player.deck.length).toBe(before + 1);
     expect(run.player.deck.at(-1).defId).toBe(choices[0]);
     expect(run.player.trainingCount).toBe(1);
-    expect(run.roomData).toBeNull();
+    expect(run.roomData?.trained).toBe(true);
   });
 
   it('skipTraining：阶段一「免费升一」跳过也记一次训练并清瞬态', () => {
@@ -125,6 +126,6 @@ describe('训练场免费流程（§4.1 先升后抓强绑）', () => {
     trainDrawChoices(run);          // 脏 roomData 也应被清掉
     skipTraining(run);
     expect(run.player.trainingCount).toBe(1);
-    expect(run.roomData).toBeNull();
+    expect(run.roomData?.trained).toBe(true);
   });
 });

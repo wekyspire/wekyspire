@@ -32,11 +32,12 @@ import {
   TransformCardInstruction,
 } from '../instructions/cards.js';
 import { DealDamageInstruction } from '../instructions/combat.js';
-import { ChantTriggerInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
-  returnToDeckAtTurnEnd, requestHandSelection, requestDeckSelection, selected, isBladeCard,
+  returnToDeckAtTurnEnd, leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
+  selected, isBladeCard,
 } from './cardKit.js';
 
 // ==== 共享小工具 ===============================================================
@@ -47,19 +48,6 @@ import {
 function stuckHandCards(sctx) {
   return sctx.battleState.zones.hand.filter(
     c => c.uniqueID !== sctx.self.uniqueID && !canUseSkill(sctx, c));
-}
-
-// 【短暂】非消耗形态：回合结束时若仍滞留手牌，回到牌库（打出走 FIFO 回库底，
-// 抽到不打出也不许"攥着过夜"——砺刀/磨锋/展锐用）。消耗+短暂的「焚毁后回库」
-// 走 cardKit.returnToDeckAtTurnEnd（开刃/斩灭/呼吸用）。
-function leaveHandAtTurnEnd(sctx) {
-  const uniqueID = sctx.self.uniqueID;
-  return {
-    when: PlayerTurnEndInstruction, phase: 'post',
-    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'hand',
-    react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
-  };
 }
 
 // 咏唱触发段的「抽N → 选N弃」链（刀法/刃心）。订阅触发里无法走技能 use 多阶段
@@ -86,7 +74,7 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
         }
         this._ask = new AwaitPlayerInputInstruction({
           request: {
-            kind: 'selectHandCard', count: Math.min(this.count, hand.length),
+            kind: 'selectCards', source: 'hand', count: Math.min(this.count, hand.length),
             reason: this.reason, candidates: hand.map(c => c.uniqueID),
           },
         });
@@ -404,7 +392,7 @@ registerSkill({
       return false;
     }
     // 抽牌已落地：把抽到的牌插回两侧原位
-    const drawn = sctx.self._draw.result.drawn;
+    const drawn = sctx.self._draw?.result?.drawn ?? []; // 抽牌可能被否决（滞气等）→ 结果为空
     sctx.self._draw = null;
     const { left: hadLeft, right: hadRight } = sctx.self._hadSides;
     sctx.self._hadSides = null;
@@ -800,7 +788,7 @@ const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
       return false;
     }
     // 抽牌落地：把抽到的牌按原手位升序插回（精确复原换牌前的手牌次序）
-    const drawn = sctx.self._swapDraw.result.drawn;
+    const drawn = sctx.self._swapDraw?.result?.drawn ?? []; // 同上：被「滞气」否决时无结果
     const slots = sctx.self._swapSlots;
     sctx.self._swapDraw = null;
     sctx.self._swapSlots = null;

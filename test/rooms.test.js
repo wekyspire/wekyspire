@@ -7,7 +7,7 @@ import {
 } from '../src/core/run/runFlow.js';
 import { chooseSkillReward } from '../src/core/run/rewards.js';
 import { CAMP_PLACEHOLDER, campOptions, campRest, campRecoverRemi, campUpgrade } from '../src/core/run/rooms/camp.js';
-import { SLOT_PLACEHOLDER, spinSlot } from '../src/core/run/rooms/slotMachine.js';
+import { SLOT, spinCost, spinSlot, takeSlotPrize } from '../src/core/run/rooms/slotMachine.js';
 import { EVENT_SCRIPTS, playEvent } from '../src/core/run/rooms/event.js';
 
 // 测试用晋升链（本文件独立模块注册表）
@@ -71,32 +71,46 @@ describe('营地（RUN_DESIGN §4.3）', () => {
 describe('老虎机（§4.2，权重占位）', () => {
   it('房间/金币校验', () => {
     expect(() => spinSlot(inRoom('camp', { money: 99 }))).toThrow(/不在老虎机房/);
-    expect(() => spinSlot(inRoom('slot', { money: SLOT_PLACEHOLDER.spinCost - 1 }))).toThrow(/金币不足/);
+    expect(() => spinSlot(inRoom('slot', { money: SLOT.baseCost - 1 }))).toThrow(/金币不足/);
   });
 
-  it('多 seed 抽奖：扣费正确且奖项效果自洽', () => {
-    const types = new Set();
+  it('多 seed 抽奖：扣费 = 本次单价，产出可领取且效果自洽', () => {
+    const kinds = new Set();
     for (let seed = 1; seed <= 40; seed++) {
-      const run = inRoom('slot', { seed, money: 100 });
-      const hp = run.player.hp;
-      const res = spinSlot(run);
-      types.add(res.type);
-      expect(run.player.money).toBe(100 - SLOT_PLACEHOLDER.spinCost
-        + (res.type === 'money' ? SLOT_PLACEHOLDER.moneyPrize : 0));
-      if (res.type === 'fruit') expect(run.remi.fruits).toBe(1);
-      if (res.type === 'training') expect(run.player.trainingCount).toBe(1);
-      if (res.type === 'card') expect(run.player.deck.at(-1).defId).toBe(res.defId);
-      expect(run.player.hp).toBe(hp); // 老虎机不动生命
+      const run = inRoom('slot', { seed, money: 400 });
+      const cost = spinCost(run);
+      const before = run.player.money;
+      const prize = spinSlot(run);
+      expect(prize.cost).toBe(cost);
+      expect(run.player.money).toBe(before - cost);   // 扣费（产出另算，等领取）
+      // 未中奖不产生 pending（可直接再拉杆，见 headless 试玩 report-r1-A 缺陷#5）
+      expect(!!run.slotPending).toBe(prize.kind !== 'nothing');
+      kinds.add(prize.kind);
+
+      if (run.slotPending) {
+        const choice = prize.choices?.[0]?.id ?? prize.relicChoices?.[0]?.id ?? null;
+        takeSlotPrize(run, choice);
+        expect(run.slotPending).toBeNull();
+      }
+      if (prize.relicId) expect(run.player.relics).toContain(prize.relicId); // 遗物走抽选 SDK
     }
-    expect(types.size).toBeGreaterThan(1); // 权重表多项均有机会
+    expect(kinds.size).toBeGreaterThan(1); // 档内多项均有机会
   });
 
-  it('确定性：同种子抽奖序列一致', () => {
+  it('确定性：同种子抽奖序列一致（含价格与奖项）', () => {
     const seq = (seed) => {
-      const run = inRoom('slot', { seed, money: 100 });
-      return [spinSlot(run).type, spinSlot(run).type];
+      const run = inRoom('slot', { seed, money: 400 });
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        const p = spinSlot(run);
+        out.push([p.cost, p.kind, p.money ?? null]);
+        if (run.slotPending) takeSlotPrize(run, p.choices?.[0]?.id ?? p.relicChoices?.[0]?.id ?? null);
+      }
+      return out;
     };
     expect(seq(9)).toEqual(seq(9));
+    expect(seq(9)[0][0]).toBe(SLOT.baseCost);      // 首次单价
+    expect(seq(9)[1][0]).toBe(SLOT.baseCost + SLOT.costStep); // 第二次涨价
   });
 });
 

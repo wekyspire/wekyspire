@@ -41,18 +41,23 @@ export class DrawCardsInstruction extends BattleInstruction {
   execute(ctx) {
     const { zones } = ctx.battleState;
     const drawn = [];
+    let blockedByHandLimit = false;   // 加权满手挡下（前端据此给"手牌已满"提示）
+    let deckEmpty = false;
     for (let i = 0; i < this.payload.count; i++) {
-      if (effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) break; // 加权满手：不抽
-      if (zones.deck.length === 0) break; // 牌库空：落空（不判负、不重洗）
+      if (effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) { blockedByHandLimit = true; break; }
+      if (zones.deck.length === 0) { deckEmpty = true; break; }
       const card = this.from === 'bottom' ? zones.deck.pop() : zones.deck.shift();
       zones.hand.push(card);
       drawn.push(card);
     }
-    this.result = { drawn };
+    // 两个 break 原因分开记账：前端要区分"抽不下"（要提示玩家）与"牌库空"（无需提示）
+    this.result = { drawn, skipped: this.payload.count - drawn.length, blockedByHandLimit, deckEmpty };
 
     ctx.battleState.history.turn.drawn += drawn.length;
     ctx.battleState.history.battle.drawn += drawn.length;
-    ctx.presenter?.cardDrawn?.({ cards: drawn, from: this.from });
+    ctx.presenter?.cardDrawn?.({
+      cards: drawn, from: this.from, skipped: this.result.skipped, blockedByHandLimit, deckEmpty,
+    });
     return true;
   }
 }

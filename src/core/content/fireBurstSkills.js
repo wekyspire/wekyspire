@@ -15,7 +15,7 @@ import { DealDamageInstruction, GainShieldInstruction } from '../instructions/co
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
 import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
-import { PostBattleInstruction } from '../instructions/battleRoot.js';
+import { applyBattleModifier } from '../run/prep.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
@@ -545,19 +545,15 @@ registerSkill({
 });
 
 // 膨胀（A）：手牌上限+1，自身燃烧5。按设计稿无费用无消耗：可重复打出，自施燃烧为代价。
-// 手牌上限是 run 级字段（跨战斗持久），卡片效果按战斗级处理——战后经 PostBattle
-// once-POST 回滚，避免跨战斗残留。
+// 手牌上限是 run 级字段（跨战斗持久），卡片效果按战斗级处理——写 battleState.modifiers
+// （本场修正，随战斗消失），故不需要战后回滚；重复打出即多次 +1（与打出次数一致）。
 registerSkill({
   id: 'expand', name: '膨胀', type: 'fire', tier: 'A', series: 'common',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   use(sctx) {
-    sctx.player.maxHandSize += 1;
-    sctx.kernel.addSubscription({
-      when: PostBattleInstruction, phase: 'post', window: 'once',
-      react: (instr, ctx) => { ctx.player.maxHandSize -= 1; },
-    });
+    applyBattleModifier(sctx, 'maxHandSize', 1);
     addEffect(sctx, 'burn', 5);
     return true;
   },

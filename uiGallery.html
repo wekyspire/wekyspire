@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>休息阶段面板陈列页</title>
+    <script>
+      window.__errs = [];
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+    </style>
+  </head>
+  <body>
+    <!-- 休息阶段（prep / reward / room / ascension）Three 面板的视觉门。
+         knobs 与用法见 src/debug/uiGallery.js 头部注释。 -->
+    <script type="module" src="/src/debug/uiGallery.js"></script>
+  </body>
+</html>

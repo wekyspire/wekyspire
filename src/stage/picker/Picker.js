@@ -76,12 +76,12 @@ export class Picker {
         if (!visibleUp(hit.object)) continue; // 隐藏对象不可命中（幽灵 token 统一防线）
         const owner = this._findPickable(hit.object);
         if (!owner) continue;
-        // 单位 token 二级查询（userData.token 与卡面 hitRegion 同构）：
-        // 悬停（无 kinds 过滤）→ 返回 token 命中走 tooltip:* 协议；
-        // 拖牌/瞄准（kinds 指定 unit）→ 仍返回整单位，token 区域也是合法出牌落点
-        if (owner.entry.kind === 'unit' && hit.object.userData?.token
-          && (!kinds || kinds.includes('token'))) {
-          return { kind: 'token', id: owner.id, region: hit.object.userData.token };
+        // 通用 token 热区（与卡面 hitRegion 同构）：**任意** pickable 带 userData.token 皆可命中，
+        // 面板行（遗物效果）、顶端资源栏遗物槽、单位效果行/意图条共用这一个挂钩。
+        // token 挂在 pickable 的根对象或命中面片上都认（前者更省事：槽位是 Group→Mesh 两级）。
+        const tokenRegion = owner.entry.object3D?.userData?.token ?? hit.object.userData?.token;
+        if (tokenRegion && (!kinds || kinds.includes('token'))) {
+          return { kind: 'token', id: owner.id, region: tokenRegion };
         }
         // 整卡命中后做 hit map 二级查询（仅卡面面片）
         if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {

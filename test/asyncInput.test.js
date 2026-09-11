@@ -29,7 +29,7 @@ registerSkill({
       if (sctx.battleState.zones.deck.length === 0) return true; // 无牌可找，提前收尾
       sctx.self._input = new AwaitPlayerInputInstruction({
         request: {
-          kind: 'selectDeckCard', count: 1,
+          kind: 'selectCards', source: 'deck', count: 1,
           candidates: sctx.battleState.zones.deck.map(c => c.uniqueID),
         },
       });
@@ -49,12 +49,12 @@ registerSkill({
   cost: { mana: 0, actionPoint: 1 },
   use(sctx, stage) {
     if (stage === 0) {
-      sctx.self._a = new AwaitPlayerInputInstruction({ request: { kind: 'selectHandCard', count: 1 } });
+      sctx.self._a = new AwaitPlayerInputInstruction({ request: { kind: 'selectCards', source: 'hand', count: 1 } });
       sctx.kernel.submitInstruction(sctx.self._a);
       return false;
     }
     if (stage === 1) {
-      sctx.self._b = new AwaitPlayerInputInstruction({ request: { kind: 'selectHandCard', count: 1 } });
+      sctx.self._b = new AwaitPlayerInputInstruction({ request: { kind: 'selectCards', source: 'hand', count: 1 } });
       sctx.kernel.submitInstruction(sctx.self._b);
       return false;
     }
@@ -107,7 +107,7 @@ registerSkill({
       return false;
     }
     if (stage === 1) {
-      sctx.self._input = new AwaitPlayerInputInstruction({ request: { kind: 'selectHandCard', count: 1 } });
+      sctx.self._input = new AwaitPlayerInputInstruction({ request: { kind: 'selectCards', source: 'hand', count: 1 } });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;
     }
@@ -147,7 +147,7 @@ describe('异步结算：完美飞刀（焚两侧 + 牌库检索）', () => {
     expect(zoneOf(d.state, left.uniqueID)).toBe('burnt');
     expect(zoneOf(d.state, right.uniqueID)).toBe('burnt');
     expect(d.state.history.battle.burnt).toBe(2);
-    expect(d.pendingInput?.request.kind).toBe('selectDeckCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     expect(d.pendingInput.request.candidates.sort())
       .toEqual(d.state.zones.deck.map(c => c.uniqueID).sort());
 

@@ -68,7 +68,7 @@ registerSkill({
         && getSkillDefinition(c.defId).keywords?.includes('blade'));
       if (blades.length === 0) return true; // 无刀可锻，直接收尾
       sctx.self._input = new AwaitPlayerInputInstruction({
-        request: { kind: 'selectHandCard', count: 1, candidates: blades.map(c => c.uniqueID) },
+        request: { kind: 'selectCards', source: 'hand', count: 1, candidates: blades.map(c => c.uniqueID) },
       });
       sctx.kernel.submitInstruction(sctx.self._input);
       return false;
@@ -170,7 +170,7 @@ describe('锻刀：选牌强化并丢弃 + 回合结束回牌库', () => {
     d.start();
 
     d.play('forgeBlade');
-    expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     const blade = d.state.zones.hand.find(c => c.defId === 'testBlade');
     expect(d.pendingInput.request.candidates).toEqual([blade.uniqueID]); // 只可选刀法牌
 

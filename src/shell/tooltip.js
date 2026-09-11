@@ -7,6 +7,7 @@
 //   effect   优先 effectId 反查（单位效果行——投影自带 id，注册表按 id 命中）；
 //            缺省按显示名反查（卡面富文本 markup 以显示名为载体——烘焙即快照，
 //            名字匹配与卡面上印的文本天然一致，这是有意为之的快照语义）
+//   relic    遗物效果预览：名称（稀有度 · 槽位）+ 效果描述
 //   card     卡牌整卡预览：按 id 反查（markup 只存 id，印出的名字永远等于定义名）；
 //            模型带 cardPreview { skillId, params }，TooltipOverlay 渲染 CardFacePreview
 //            （应用前口径 describe，params 经 ctx.params 透传插值）
@@ -17,6 +18,7 @@
 import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
 import { getSkillDefinition, hasSkill } from '../core/skills/registry.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
+import { getRelicDefinition, hasRelic } from '../core/relics/registry.js';
 
 // 整卡预览的估算尺寸（tooltipHub 边缘翻转用）：CardFacePreview 宽 200 + 宿主 padding
 export const CARD_PREVIEW_SIZE = Object.freeze({ w: 216, h: 294 });
@@ -25,6 +27,7 @@ export function tooltipModel(kind, payload = {}) {
   switch (kind) {
     case 'effect': return effectModel(payload);
     case 'card': return cardModel(payload);
+    case 'relic': return relicModel(payload);
     case 'named': return namedModel(payload);
     case 'intention': return intentionModel(payload);
     case 'shift': return { title: payload.name ?? '', body: '' };
@@ -49,6 +52,18 @@ function cardModel({ cardId, params }) {
     body: '',
     cardPreview: { skillId: def.id, params: params ?? {} },
     size: CARD_PREVIEW_SIZE,
+  };
+}
+
+// relic：遗物效果预览（面板遗物行 / 顶端资源栏遗物槽 hover）。标题带稀有度与槽位
+// （购物与装卸都要看这两个数），正文即效果描述。
+function relicModel({ relicId }) {
+  if (relicId == null || !hasRelic(relicId)) return { title: `[relic] ${relicId}`, body: '' };
+  const def = getRelicDefinition(relicId);
+  const slot = def.nonSlot ? '非槽位式 · 恒生效' : `${def.cost ?? 1} 槽`;
+  return {
+    title: `${def.name ?? relicId}（${def.rarity ?? 'C'} · ${slot}）`,
+    body: def.description ?? '',
   };
 }
 

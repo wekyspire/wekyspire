@@ -22,6 +22,9 @@ import { mergeStatic } from '../src/stage/scenes/kit/merge.js';
 
 // ---- 预算常量（WORKFLOW §3；超预算 = 拆资产或简化，不是调大常量） ----
 const MESH_MAX = 40;
+// 可动组件的网格预算放宽（用户定 2026-09-11：老虎机/银行机这类**不进静态合批**的
+// 交互件要更高近景细节）：`interactive` 标签的件允许到 60；静态件仍守 40（合批成本口径）。
+const MESH_MAX_INTERACTIVE = 60;
 const VERT_MAX = 3000;
 const FAMILY_MAX = 3;
 
@@ -318,7 +321,8 @@ describe.each(files.map(f => [f]))('场景资产契约：%s', (f) => {
     const meshes = [];
     built.traverse(o => { if (o.isMesh) meshes.push(o); });
     expect(meshes.length).toBeGreaterThan(0);
-    expect(meshes.length, '网格数超预算（拆件或简化）').toBeLessThanOrEqual(MESH_MAX);
+    const budget = (def.tags ?? []).includes('interactive') ? MESH_MAX_INTERACTIVE : MESH_MAX;
+    expect(meshes.length, '网格数超预算（拆件或简化）').toBeLessThanOrEqual(budget);
     let verts = 0;
     const families = new Set();
     for (const m of meshes) {

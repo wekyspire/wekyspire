@@ -19,13 +19,24 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
-import { SLOT_PLACEHOLDER, spinSlot } from '../core/run/rooms/slotMachine.js';
+import {
+  bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
+} from '../core/run/rooms/bank.js';
+import {
+  buyGurpas, takeGurpasCard, sellGurpasRelic, removeCardAtGurpas,
+} from '../core/run/rooms/gurpas.js';
+import {
+  SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
+  devourSlot, devourableRelics, devourableCards, slotView,
+} from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
+import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
   chooseAscension, LEINO_DIMENSIONS,
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
 } from '../core/run/ascension.js';
-import { equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
+import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
+import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
@@ -44,6 +55,37 @@ const DEFAULT_DECK = [...BODY_STARTER_DECK];
 // PCG 房型开关：true = 战斗房间按章节/Boss 走配方层（scenes/rooms），
 // false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
 const USE_PCG_ROOMS = true;
+
+// 塔楼抵达节拍时长（ms）：指令 durationMs 与等待侧兜底共用同一数值源
+const FLOOR_ARRIVE_MS = 4000;
+
+/**
+ * 等待塔楼抵达动画播完（塔楼高亮块"长出"）。
+ *
+ * **必须 resolve**：战后剧本与 notify（面板 / 金币 / 资源行刷新）都排在这一拍之后。
+ * 早先这里漏了 resolve——网页端每次战后 notify 都不执行（奖励面板不出现、金币停在旧值），
+ * 此前只有 Vue 面板靠 reactive 自行刷新才把它掩盖过去。
+ *
+ * 两道保险丝：① 指令自身 durationMs（队列节拍卫生）；② 等待侧 setTimeout——若指令因
+ * 队列被堵而根本没启动，队列那个 durationMs 计时器压根不会被创建（计时器是在
+ * _startInstruction 里挂的），只能靠等待侧兜底放行。
+ *
+ * 单列为可测函数：endBattle 走真实 BattleStage（要 canvas），headless 下无法整链驱动。
+ */
+export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms = FLOOR_ARRIVE_MS } = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = () => { if (settled) return; settled = true; resolve(); };
+    sequencer.enqueueInstruction({
+      meta: { event: 'tower:floor-arrive', floor },
+      durationMs: ms,
+      start: ({ id, emit }) => mapStage.arriveFloor(floor, totalFloors, {
+        onDone: () => { emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id }); settle(); },
+      }),
+    });
+    setTimeout(settle, ms + 200);
+  });
+}
 
 // 存档快照 → run：advanceFloor 推进层数（遭遇/房间按 seed 确定性，无需回放），
 // 再覆盖养成字段。存档语义 = 检查点：落盘只在 prep，故恢复后必处 prep。
@@ -68,9 +110,23 @@ function restoreFromSave(run, save) {
   p.ascensionCount = sp.ascensionCount;
   p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
   p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
+  // 旧档无 baseStats：以当前值为基准兜底；随后 refreshRunModifiers 会把遗物修正重算回去
+  p.baseStats = sp.baseStats ? { ...sp.baseStats } : {
+    maxHp: p.maxHp, maxMana: p.maxMana, maxActionPoints: p.maxActionPoints,
+    attack: p.attack, defense: p.defense, maxHandSize: p.maxHandSize,
+  };
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
   run.relicUses = { ...save.relicUses };
+  run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;
+  run.shopPending = save.shopPending ? { ...save.shopPending, choices: [...save.shopPending.choices] } : null;
+  run.shopAppleBought = !!save.shopAppleBought;
+  run.slot = save.slot ? { ...save.slot } : null;
+  run.slotPending = save.slotPending ? { ...save.slotPending } : null;
+  run.slotUpgradePending = !!save.slotUpgradePending;
+  run.slotDevour = save.slotDevour ?? 0;
+  run.slotFreeRolls = save.slotFreeRolls ?? 0;
+  run.slotApples = save.slotApples ?? 0;
 }
 
 export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false } = {}) {
@@ -91,9 +147,15 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
   }
+  // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
+  refreshRunModifiers(run);
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
+  // 房间层舞台侧瞬态（不进 core run）：老虎机演出播放态 + 事件结算结果。
+  // 面板快照经 panelExtras() 一并下行（roomSnapshot 的 extra 入参）。
+  const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
+  const eventRoom = reactive({ result: null });
   let battleStage = null;
   const log = reactive([]);  // 战斗日志（Shell 展示用）
 
@@ -130,10 +192,14 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage?.statusBar.setPlayerHp(run.player.hp, run.player.maxHp);
     battleStage?.statusBar.setRemi(remiView());
   };
+  // 面板快照的舞台侧瞬态：老虎机演出播放态与事件结果不在 core run 里（见 roomSnapshot 注释）
+  const panelExtras = () => ({ slot, eventResult: eventRoom.result });
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
+  mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
   const notify = () => {
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
+    mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 面板内容跟随阶段迁移（同一快照推导）
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
@@ -217,20 +283,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       }
       battleStage?.dispose(); // 战斗舞台随退场释放（此前引用滞留至下一场被静默覆盖）
       battleStage = null;
+      // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
+      // 于是爬塔动画播完才看到战后的血量/金币。这里在黑幕中就先把状态推给地图舞台
+      // （只刷状态栏/资源行，不动面板、不触发存档与预载）。
+      syncMapStatus();
     };
     (async () => {
       if (stageManager) await cutscene.sceneTransition(doSwap);
       else doSwap(); // headless/无舞台：直切
-      // 塔楼抵达（S5）：排在黑幕 reveal 之后（同一队列串行），当前层高亮块长出
+      // 塔楼抵达（S5）：排在黑幕 reveal 之后（同一队列串行），当前层高亮块长出；
+      // 等待语义与两道保险丝见 awaitFloorArrive 的注释（曾因漏 resolve 卡死战后链条）
       if (stageManager && mapStage) {
-        await new Promise(resolve => {
-          runSequencer.enqueueInstruction({
-            meta: { event: 'tower:floor-arrive', floor: run.floor },
-            durationMs: 4000, // 前端卡死保险丝
-            start: ({ id, emit }) => mapStage.arriveFloor(run.floor, run.totalFloors, {
-              onDone: () => emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id }),
-            }),
-          });
+        await awaitFloorArrive(runSequencer, mapStage, {
+          floor: run.floor, totalFloors: run.totalFloors,
         });
       }
       await playPendingCutscenes(); // reward 阶段命中项（Boss 层 = postBoss）
@@ -258,51 +323,109 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 训练房「先升后抓」：升级动作只挂起强制三选一（roomData.forced）不离房，
   // 抓牌领取/跳过/阶段一跳过三种终端任一发生才 completeRoom。
   // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
+  // 合并房（campTraining）：营地与训练各自一次；roomData 同时承载两个部分的记账，
+  // 所以「训练是否可用」不能再用 roomData 的真假判断，改看 trained/drawChoices。
+  const trainingLocked = () => !!run.roomData?.trained || !!run.roomData?.drawChoices;
+  const campLocked = () => !!run.roomData?.campUsed;
+  // 合并房不自动离房（两部分都要给机会），单房保持原语义「做完即离房」
+  function maybeLeaveRoom() {
+    if (run.gameStage !== 'room') return;
+    if (run.currentRoom === 'campTraining') { notify(); return; }
+    completeRoom(run);
+    notify();
+  }
   function trainingUpgrade(uniqueID) {
-    if (run.gameStage !== 'room' || run.roomData) return;
+    if (run.gameStage !== 'room' || trainingLocked()) return;
     trainUpgrade(run, uniqueID); // 内部已 roll 强制抓牌候选
     notify();
   }
   function trainingSkip() {
-    if (run.gameStage !== 'room' || run.roomData) return; // 已在抉择中 → 必须走对应选择
+    if (run.gameStage !== 'room' || trainingLocked()) return; // 已在抉择中 → 必须走对应选择
     skipTraining(run);
-    completeRoom(run);
-    notify();
+    maybeLeaveRoom();
   }
   function trainingDrawRoll() {
-    if (run.gameStage !== 'room' || run.roomData) return;
+    if (run.gameStage !== 'room' || trainingLocked()) return;
     trainDrawChoices(run);
     notify();
   }
   function trainingDraw(defId = null) {
-    if (run.gameStage !== 'room') return;
+    if (run.gameStage !== 'room' || !run.roomData?.drawChoices) return;
     trainDraw(run, defId); // forced 状态下 null 由核心抛错拦截（UI 不渲染跳过入口）
-    completeRoom(run);
-    notify();
+    maybeLeaveRoom();
   }
   function campChoose(option, uniqueID = null) {
-    if (run.gameStage !== 'room') return;
+    if (run.gameStage !== 'room' || campLocked()) return;
     if (option === 'rest') campRest(run);
     else if (option === 'recoverRemi') campRecoverRemi(run);
     else if (option === 'upgrade') campUpgrade(run, uniqueID);
-    completeRoom(run);
+    maybeLeaveRoom();
+  }
+  // 合并房的主动离房（单房由动作自动离房，不需要这个）
+  // ---- 银行机（与老虎机成对；SLOT_MACHINE.md §银行机）----
+  function bankDo(kind, arg) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
+    try {
+      if (kind === 'deposit') bankDeposit(run, arg ?? null);       // 缺省 = 全部存入
+      else if (kind === 'withdraw') bankWithdraw(run);
+      else if (kind === 'overdraft') bankOverdraft(run, arg);
+      else if (kind === 'pick') chooseDemonDebuff(run, arg);
+      else if (kind === 'upgradeOffer') bankUpgrade(run, arg);
+      else if (kind === 'burnOffer') bankBurn(run, arg);
+    } catch (err) {
+      console.warn('[bank]', err.message);
+    }
     notify();
   }
-  const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
+
+  // Boss 奖励的删卡机会（§2.1）：与古尔帕斯删卡服务同一套能力
+  function bossRemoveCard(uniqueID) {
+    if (run.pendingCardRemoval <= 0) return;
+    try {
+      removeCardAtGurpas(run, uniqueID);
+      run.pendingCardRemoval -= 1;
+    } catch (err) {
+      console.warn('[removeCard]', err.message);
+    }
+    notify();
+  }
+
+  // ---- 古尔帕斯之店（35 层固定房；SHOP.md §二）----
+  function gurpasDo(kind, arg, arg2) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'gurpas') return;
+    try {
+      if (kind === 'buy') buyGurpas(run, arg);
+      else if (kind === 'take') takeGurpasCard(run, arg);
+      else if (kind === 'sell') sellGurpasRelic(run, arg);
+      else if (kind === 'remove') removeCardAtGurpas(run, arg2 ?? arg);
+    } catch (err) {
+      console.warn('[gurpas]', err.message);
+    }
+    notify();
+  }
+
+  function leaveRoom() {
+    if (run.gameStage !== 'room') return;
+    completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
+    notify();
+  }
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
-  function spin() { // 可重复消费（每次扣费）；roll 动画经 run sequencer 串行编排
+  function spin() { // 可重复消费（每次扣费/消耗免费 roll）；roll 动画经 run sequencer 串行编排
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
-    const outcome = spinSlot(run); // 逻辑先行：扣费/入账立即结算，演出随后揭示
+    if (run.slotPending) return; // 上一次产出还没处理
+    const prize = spinSlot(run); // 逻辑先行：扣费与定奖立即结算，演出随后揭示产出
     runSequencer.enqueueInstruction({
-      meta: { event: 'room:slot-spin', prize: outcome.type },
+      meta: { event: 'room:slot-spin', prize: prize.kind },
       durationMs: 4000, // 前端卡死保险丝（UI 未回执时兜底推进）
       start: ({ id, emit }) => {
-        slot.anim = { id, prize: outcome };
+        slot.anim = { id, prize };
         slotFinish = (reportId) => {
           if (reportId !== id) return false;
           slot.anim = null;
-          slot.lastSpin = outcome; // 结果文字在动画落定后揭示（渐进揭示语义）
+          slot.lastSpin = prize; // 结果在动画落定后揭示（渐进揭示语义）
           slotFinish = null;
+          // 揭示后必须重推面板快照：面板是**快照驱动**的（漏掉它的症状＝永远停在「转动中」）
+          notify();
           emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
           return true;
         };
@@ -310,13 +433,49 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     });
     notify();
   }
+  // 产出结算（可放弃——文档：这些产出总是可以放弃不要的）
+  function slotTake(choice = null) {
+    if (run.gameStage !== 'room' || !run.slotPending) return;
+    takeSlotPrize(run, choice);
+    slot.lastSpin = null; // 结算完收起揭示横幅
+    notify();
+  }
+  function slotDecline() {
+    if (run.gameStage !== 'room' || !run.slotPending) return;
+    declineSlotPrize(run);
+    slot.lastSpin = null;
+    notify();
+  }
+  // 大奖「免费指定升级」：选卡界面确认后落地
+  function slotPickUpgrade(uniqueID) {
+    if (run.gameStage !== 'room' || !run.slotUpgradePending) return;
+    slotUpgrade(run, uniqueID);
+    notify();
+  }
+  // 吞噬（粉碎换金币）
+  function slotDevour(target) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
+    devourSlot(run, target);
+    notify();
+  }
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
+  // ---- 商店（售货机，SHOP.md §一）----
+  // 与奖励房并存、不占房间名额：购买不消耗房间行动，故不调 completeRoom。
+  function shopBuy(index) {
+    if (run.gameStage !== 'room' || !run.shop) return;
+    buyShopItem(run, index);
+    notify();
+  }
+  function shopTakeCard(defId) {
+    if (run.gameStage !== 'room' || !run.shopPending) return;
+    takeShopCard(run, defId);
+    notify();
+  }
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
     completeRoom(run);
     notify();
   }
-  const eventRoom = reactive({ result: null });
   function triggerEvent() {
     if (run.gameStage !== 'room' || run.currentRoom !== 'event' || eventRoom.result) return; // 已探索不重复结算
     eventRoom.result = playEvent(run);
@@ -358,6 +517,56 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function unequip(relicId) { unequipRelic(run, relicId); notify(); }
   function useRelic(relicId) { prepUseRelic(run, relicId); notify(); }
 
+  // ---- 休息阶段面板：意图上行 ----
+  // 意图表 = Stage 上报的 { action, ... }。Stage 侧不判断可用性（enabled 由快照下发），
+  // 这里只把语义落到既有入口（与 bridge/intents「UI 操作 → flow API 的唯一入口」同律）。
+  // 面板逐个迁移：迁移一个在此加一条 action。
+  function dispatchPanelIntent(intent) {
+    const action = intent?.action;
+    if (action === 'equip') equip(intent.relicId);
+    else if (action === 'unequip') unequip(intent.relicId);
+    else if (action === 'useRelic') useRelic(intent.relicId);
+    else if (action === 'startBattle') startBattle();
+    else if (action === 'chooseRewardPack') chooseRewardPack(intent.packId);
+    else if (action === 'claimReward') claimReward(intent.defId ?? null);
+    else if (action === 'chooseAscensionDimension') chooseAscensionDimension(intent.dimension);
+    else if (action === 'skipAscension') skipAscension();
+    else if (action === 'chooseSeedCards') chooseSeedCards(intent.defIds);
+    else if (action === 'rerollSeedOffering') rerollSeedOffering();
+    // 房间层
+    else if (action === 'trainingUpgrade') trainingUpgrade(intent.uniqueID);
+    else if (action === 'trainingDrawRoll') trainingDrawRoll();
+    else if (action === 'trainingDraw') trainingDraw(intent.defId ?? null);
+    else if (action === 'trainingSkip') trainingSkip();
+    else if (action === 'campChoose') campChoose(intent.option, intent.uniqueID ?? null);
+    else if (action === 'spin') spin();
+    else if (action === 'slotAnimDone') reportSlotAnimDone(intent.id); // 舞台演出回执（非玩家意图）
+    else if (action === 'bankDeposit') bankDo('deposit', intent.amount ?? null);
+    else if (action === 'bankWithdraw') bankDo('withdraw');
+    else if (action === 'bankOverdraft') bankDo('overdraft', intent.tier);
+    else if (action === 'bankPick') bankDo('pick', intent.id);
+    else if (action === 'bankUpgradeOffer') bankDo('upgradeOffer', intent.uniqueID);
+    else if (action === 'bankBurnOffer') bankDo('burnOffer', intent.uniqueID);
+    else if (action === 'bossRemoveCard') bossRemoveCard(intent.uniqueID);
+    else if (action === 'gurpasBuy') gurpasDo('buy', intent.index);
+    else if (action === 'gurpasTake') gurpasDo('take', intent.defId);
+    else if (action === 'gurpasSell') gurpasDo('sell', intent.relicId);
+    else if (action === 'gurpasRemove') gurpasDo('remove', intent.uniqueID, intent.uniqueID);
+    else if (action === 'leaveRoom') leaveRoom();
+    else if (action === 'leaveSlot') leaveSlot();
+    else if (action === 'slotTake') slotTake(intent.choice ?? null);
+    else if (action === 'slotDecline') slotDecline();
+    else if (action === 'slotPickUpgrade') slotPickUpgrade(intent.uniqueID);
+    else if (action === 'slotDevourRelic') slotDevour({ kind: 'relic', relicId: intent.relicId });
+    else if (action === 'slotDevourCard') slotDevour({ kind: 'card', uniqueID: intent.uniqueID });
+    else if (action === 'triggerEvent') triggerEvent();
+    else if (action === 'leaveEvent') leaveEvent();
+    // 商店（售货机）：与房间并存，购买不消耗房间行动
+    else if (action === 'buyShopItem') shopBuy(intent.index);
+    else if (action === 'takeShopCard') shopTakeCard(intent.defId);
+  }
+  mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
+
   // 离局清理（App.toTitle/newGame 调用）：战斗舞台释放 + 挂起演出瞬落
   // （动画不可序列化——重进/读档由检查点重建稳态）
   function dispose() {
@@ -369,7 +578,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   return {
     run, runBus, log, slot, eventRoom, cutscene,
     sequencer: runSequencer, animBus, dispose,
-    LEINO_DIMENSIONS, SLOT_PLACEHOLDER,
+    LEINO_DIMENSIONS, SLOT,
+    slotView: () => slotView(run),
+    devourableRelics: () => devourableRelics(run),
+    devourableCards: () => devourableCards(run),
     skillName: (id) => getSkillDefinition(id)?.name ?? id,
     // 升级预览：该卡晋升后的目标定义（过等阶门禁，与 trainUpgrade 缺省取的第一个可用目标一致）
     promoteTargetOf: (rt) => gatedPromotionTargets(run, getSkillDefinition(rt.defId))[0] ?? null,
@@ -386,7 +598,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getBattleStage: () => battleStage,
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
-    campChoose, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
+    campChoose, leaveRoom, bankDo, gurpasDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };

@@ -5,6 +5,7 @@ import {
 } from '../src/core/run/runFlow.js';
 import { RunDriver } from '../src/core/run/runDriver.js';
 import { createRunController } from '../src/shell/runController.js';
+import { takeSlotPrize } from '../src/core/run/rooms/slotMachine.js';
 import { recordSave, readSave, clearSave } from '../src/shell/saves.js';
 
 // run 生命周期（Shell 编排器层）：存档 rng 直存、舞台防重入、房间瞬态清理、
@@ -93,29 +94,37 @@ describe('房间瞬态清理', () => {
     expect(ctrl.eventRoom.result.eventId).toBeTruthy();
   });
 
-  it('老虎机 roll（S4）：逻辑先行、演出串行、回执揭示、伪回执拒绝', () => {
+  it('老虎机 roll：逻辑先行、回执后揭示产出、伪回执拒绝、产出未处理不可再抽', () => {
     const ctrl = createRunController({ seed: 42 });
     ctrl.run.gameStage = 'room';
     ctrl.run.currentRoom = 'slot';
-    ctrl.run.player.money = 100;
+    ctrl.run.player.money = 400;
+    // 保底拉满 → 本次必中：这两个用例的语义依赖"有产出待处理"（未中奖不产生产出）
+    ctrl.run.slot = { floor: ctrl.run.floor, rolls: 0, sinceMinor: 20, sinceMajor: 0 };
 
     ctrl.spin(); // 第一次拉杆：队列空闲 → 立即起 roll
     const firstId = ctrl.slot.anim.id;
-    expect(ctrl.slot.lastSpin).toBeNull();       // 结果未揭示（动画未落定）
-    expect(ctrl.run.player.money).not.toBe(100); // 逻辑先行：扣费已结算（中奖则含奖金）
+    expect(ctrl.slot.lastSpin).toBeNull();          // 结果未揭示（动画未落定）
+    expect(ctrl.run.player.money).toBeLessThan(400); // 逻辑先行：扣费已结算
+    expect(ctrl.run.slotPending).toBeTruthy();       // 产出已定，等领取/放弃
 
-    ctrl.spin(); // 连点第二次：第二条 roll 指令排在第一条后
-    expect(ctrl.slot.anim.id).toBe(firstId);     // 仍是第一条在播（严格串行）
+    ctrl.spin(); // 产出未处理：再拉杆无效（不会排队第二条）
+    expect(ctrl.slot.anim.id).toBe(firstId);
     expect(ctrl.reportSlotAnimDone('bogus-id')).toBe(false); // 伪回执拒绝
 
-    expect(ctrl.reportSlotAnimDone(firstId)).toBe(true); // UI animationend 回执
-    expect(ctrl.slot.lastSpin).toBeTruthy();     // 第一条结果揭示
-    expect(ctrl.slot.anim).toBeTruthy();         // 第二条同步接棒
-    const secondId = ctrl.slot.anim.id;
-    expect(secondId).not.toBe(firstId);
-
-    ctrl.reportSlotAnimDone(secondId);
+    expect(ctrl.reportSlotAnimDone(firstId)).toBe(true);
+    expect(ctrl.slot.lastSpin).toBeTruthy();         // 产出揭示
     expect(ctrl.slot.anim).toBeNull();
-    expect(ctrl.sequencer.pendingCount).toBe(0); // 全部排干
+    expect(ctrl.sequencer.pendingCount).toBe(0);     // 队列排干
+
+    // 领取后才允许再抽
+    const pd = ctrl.run.slotPending;
+    takeSlotPrize(ctrl.run, pd.choices?.[0]?.id ?? pd.relicChoices?.[0]?.id ?? null);
+    ctrl.run.slot = { ...ctrl.run.slot, sinceMinor: 20, sinceMajor: 0 }; // 同上：保证有产出
+    ctrl.spin();
+    expect(ctrl.slot.anim).toBeTruthy();
+    expect(ctrl.slot.anim.id).not.toBe(firstId);
+    ctrl.reportSlotAnimDone(ctrl.slot.anim.id);
+    expect(ctrl.sequencer.pendingCount).toBe(0);
   });
 });

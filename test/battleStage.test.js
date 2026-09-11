@@ -25,7 +25,7 @@ registerSkill({
     if (stage === 0) {
       sctx.self._input = new AwaitPlayerInputInstruction({
         request: {
-          kind: 'selectHandCard', count: 1,
+          kind: 'selectCards', source: 'hand', count: 1,
           candidates: sctx.battleState.zones.hand
             .filter(c => c.uniqueID !== sctx.self.uniqueID).map(c => c.uniqueID),
         },
@@ -333,7 +333,7 @@ describe('BattleStage 无头联调', () => {
     drag(stage, [askPos.x, askPos.y, askPos.z], [0, 0]); // 打出问询
 
     const proj = bridge.getProjection();
-    expect(proj.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(proj.pendingInput?.request.kind).toBe('selectCards');
     const candidateId = proj.pendingInput.request.candidates[0];
     expect(stage._views.get(candidateId).visualState).toBe('highlighted');
 

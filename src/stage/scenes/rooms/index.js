@@ -12,11 +12,15 @@ import { RECIPES } from './presets.js';
  * @returns 场景定义 { id, build3D, battleLine, slots }
  */
 export function getRoomScene(recipeId, seed = 'dev') {
+  const recipe = RECIPES[recipeId];
   return {
     id: `pcg:${recipeId}`,
     build3D: () => composeRoom(recipeId, seed),
     battleLine: DUNGEON.battleLine,
     slots: DUNGEON.slots,
+    // 休息房等配方可声明交互锚点（设施位置/朝向 + UI 安全区）：随场景定义下发，
+    // 前端据此把面板元素与场景物件对应起来（战斗房为 undefined，行为不变）
+    anchors: recipe?.anchors,
   };
 }
 

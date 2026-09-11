@@ -2,6 +2,7 @@ import { advanceFloor } from './runFlow.js';
 import { allSkills } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { packOf } from './rewards.js';
+import { gainMaxMana } from './prep.js';
 
 // 进阶事件（RUN_DESIGN §5.3）：离开训练房时训练次数达标 → 直接进入（无延后、无随机性）。
 // 内容：选一条主维度升级 + 恢复全部状态 + 魏启上限提升 +（达标时）能力授予。
@@ -168,7 +169,9 @@ export function chooseAscension(run, dimension = null) {
   if (run.cardOffering) throw new Error('种子卡尚未选定');
 
   run.player.ascensionCount += 1;
-  run.player.maxMana += ASCENSION_PLACEHOLDER.manaGain; // 魏启上限提升
+  // 魏启上限提升：必须走 gainMaxMana（同时抬 baseStats）——直写会被下一场 PreBattle 的
+  // refreshRunModifiers 重算抹掉（2026-09-11 修的 bug：进阶 +1 实际上从未生效）。
+  gainMaxMana(run, ASCENSION_PLACEHOLDER.manaGain);
   run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
   // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「跳过/点火」无脑化，回满血留给 Boss 通关）
   run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);

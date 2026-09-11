@@ -57,6 +57,29 @@ export const LIGHTING_PRESETS = {
     fire: { base: FIRE_BASE * 0.56, dist: 145, cap: 14 },
     tint: { base: [0.5, 0.53, 0.72], fireGain: [0.18, 0.22, 0.5], radius: 64 },
   },
+  // 赌厅（休息房·老虎机/银行机）：**外围光再压一档、亮度靠中央光撑**（用户定 2026-09-11）。
+  // 处方读法：吊灯暖金光池（centerFill）是全场主亮源 → 机器/彩灯灯池（lamp）是第二层 →
+  // 环境/月光/地面反弹/中景补光/烛火全部退成"暗底"（对比度来源：华丽聚光 vs 破烂四周）。
+  // 暖调=赌厅基调（冷幽底色只留一点点方向感），与要塞/庄园的冷蓝划开。
+  casino: {
+    hemi: [0x4a3a52, 0x2a1e24, 0.38],    // 环境光再压一档（外围光），底色偏暖紫（烛光/彩灯染过）
+    moon: 0.06,                          // 无窗：月光只剩方向感
+    fill: 0.04,
+    bounce: [[50, 86], [38, 74]],        // 地面反弹收一档（别把四周从暗里拉回来）
+    battleGlow: [0xc79a68, 2200, 145],   // 中景补光改暖金，强度再收
+    centerFill: [0xffc87a, 5600, 180],   // ★中央光撑亮度：暖金吊灯光池（原为冷紫 2500）
+    fire: { base: FIRE_BASE * 0.5, dist: 125, cap: 4 },        // 烛位减到 4：外围点缀，不参与撑亮度
+    // 灯池（机器 + 彩灯串）：机器暖金、彩灯串按后面几位彩灯色（colors 轮转，见 lamp 循环）
+    lamp: {
+      color: 0xffb45a, base: 4200, dist: 140, cap: 8,
+      colors: [0xffb45a, 0xffab52, 0xff8a6a, 0x9ad89a, 0x9ab4e8, 0xffd06a],
+    },
+    // 焦点布光（zoomin 时）：外围统一压暗 dim + **正面补光**把机器中央屏幕区打亮（setFocus）。
+    // base/offset/dist 经 restGallery 实拍 A/B 定：光心在屏幕正前方 ~14（贴太近=整面洗白、
+    // 太远=照到整间屋子）；dist 收到 70 让光池只罩机器，别把大厅重新点亮。
+    focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
+    tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
+  },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
   'boss-rim': {
     hemi: [0x463a4a, 0x281e28, 1.0],
@@ -72,10 +95,11 @@ export const LIGHTING_PRESETS = {
 };
 
 /**
- * 按预设组装灯光。fireAnchors=[{x,y,z}]（composeRoom 从 lightSource 道具收集的火位）。
- * @returns {group, torches, moonlight, tint, update(dt, particles)}
+ * 按预设组装灯光。fireAnchors=[{x,y,z}]（composeRoom 从 lightSource 道具收集的火位）；
+ * lampAnchors=[{x,y,z,gain}]（`lamp` 标签的自发光体：机器/彩灯串，只出光池不出火）。
+ * @returns {group, torches, moonlight, tint, update(dt, particles, camPos), setFocus(target|null), focusLight}
  */
-export function createLighting(key, fireAnchors = []) {
+export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const preset = LIGHTING_PRESETS[key];
   if (!preset) throw new Error(`lighting: 未知布光预设 "${key}"`);
   const group = new THREE.Group();
@@ -120,6 +144,25 @@ export function createLighting(key, fireAnchors = []) {
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
   group.add(centerFill);
 
+  // 灯池（`lamp` 锚：机器/招牌/彩灯这类自发光体）：**只出点光、不出火焰粒子**——
+  // 与火点光共用同一套处方字段风格（preset.lamp = { color, base, dist, cap }）。
+  // 无闪烁（机器灯是稳的），也不投影（避免机器自遮挡出现硬边）。
+  // 锚可带 gain（道具 def 的 lampGain）：彩灯串这类"外围小灯"按减半出池，别抢机器/中央光。
+  const lampLights = [];
+  if (preset.lamp) {
+    // 颜色：锚自带 color 优先（道具 def 的 lampColor）；否则按 `colors` 轮转（**gain 降序后**
+    // 前几个必然留给 gain=1 的机器，彩灯串拿到后面的彩灯色）；再否则预设单色。
+    const ring = preset.lamp.colors;
+    lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a, i) => {
+      const base = (preset.lamp.base ?? 900) * (a.gain ?? 1);
+      const color = a.color ?? (ring ? ring[i % ring.length] : (preset.lamp.color ?? P.glowCyan));
+      const light = new THREE.PointLight(color, base, preset.lamp.dist ?? 90, 1.8);
+      light.position.set(a.x, a.y, a.z);
+      group.add(light);
+      lampLights.push({ light, base });
+    });
+  }
+
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
   const torches = [];
   for (const a of fireAnchors.slice(0, preset.fire.cap)) {
@@ -133,15 +176,74 @@ export function createLighting(key, fireAnchors = []) {
     });
   }
 
+  // ---- 焦点布光（用户定 2026-09-11：zoomin 时"压暗背景、把机器屏幕照亮"）----
+  // setFocus(target|null) 后 update 在 focusK 上缓动：
+  //   · 外围光池（环境/月光/补光/反弹/中央光/灯池/烛火）统一乘 (1 - focusK*dim) → 背景沉下去；
+  //   · 另开一盏观众侧补光落在 target↔相机连线上（相机方向 offset 处）——机器朝向观众的那面
+  //     被照亮，读作舞台追光。屏幕/灯珠是 unlit 族（不吃光），所以它们的自发光不受影响。
+  const focusCfg = preset.focus ?? {
+    color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08,
+  };
+  const focusLight = new THREE.PointLight(focusCfg.color, 0, focusCfg.dist, 2.0);
+  focusLight.visible = false;
+  group.add(focusLight);
+  let focusTarget = null;   // Vector3 | null
+  let focusWant = 0;        // 目标强度 0..1
+  let focusK = 0;           // 缓动后的实际强度（每帧驱动光强与压暗系数）
+  const focusDir = new THREE.Vector3();
+
+  // 外围光清单：base 强度在 setFocus 时被统一压暗（焦点光不在此列）
+  const peripheral = [
+    { light: hemi, base: preset.hemi[2] },
+    { light: moonlight, base: preset.moon },
+    { light: fill, base: preset.fill },
+    { light: pA, base: bounceA[0] },
+    { light: pB, base: bounceB[0] },
+    { light: battleGlow, base: glowBase },
+    { light: centerFill, base: cfBase },
+  ];
+
+  /** 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。 */
+  function setFocus(target, { strength = 1 } = {}) {
+    if (!target) { focusTarget = null; focusWant = 0; return; }
+    focusTarget = (target.isVector3
+      ? target.clone()
+      : new THREE.Vector3(target.x, target.y, target.z));
+    focusWant = THREE.MathUtils.clamp(strength, 0, 1);
+  }
+
   let time = 0;
-  /** 帧驱动：幽火闪烁 + 火焰粒子发射（同 dungeon3D 口径） */
-  function update(dt, particles = null) {
+  /** 帧驱动：焦点缓动与压暗 + 幽火闪烁 + 火焰粒子发射（同 dungeon3D 口径） */
+  function update(dt, particles = null, camPos = null) {
     time += dt;
+    // 焦点缓动
+    focusK += (focusWant - focusK) * Math.min(1, dt * (focusCfg.rise ?? 3.2));
+    if (Math.abs(focusWant - focusK) < 0.003) focusK = focusWant;
+    const periph = 1 - focusK * (focusCfg.dim ?? 0.72);
+    for (const p of peripheral) p.light.intensity = p.base * periph;
+    for (const l of lampLights) l.light.intensity = l.base * periph;
+
+    if (focusK > 0.001 && focusTarget) {
+      focusLight.visible = true;
+      focusLight.intensity = (focusCfg.base ?? 3600) * focusK;
+      focusLight.position.copy(focusTarget);
+      if (camPos) {
+        focusDir.copy(camPos).sub(focusTarget);
+        if (focusDir.lengthSq() > 1e-4) focusLight.position.addScaledVector(focusDir.normalize(), focusCfg.offset ?? 14);
+      } else {
+        focusLight.position.z += focusCfg.offset ?? 14;
+      }
+      focusLight.position.y += (focusCfg.offset ?? 14) * (focusCfg.lift ?? 0.08);
+    } else {
+      focusLight.visible = false;
+      focusLight.intensity = 0;
+    }
+
     for (const t of torches) {
       t.intensity = 1
         + 0.16 * Math.sin(time * 11 + t.phase)
         + 0.08 * Math.sin(time * 23 + t.phase * 1.7);
-      t.light.intensity = preset.fire.base * t.intensity;
+      t.light.intensity = preset.fire.base * t.intensity * periph;
       if (particles) {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
@@ -155,5 +257,5 @@ export function createLighting(key, fireAnchors = []) {
     }
   }
 
-  return { group, torches, moonlight, tint: preset.tint, update };
+  return { group, torches, moonlight, tint: preset.tint, update, setFocus, focusLight };
 }

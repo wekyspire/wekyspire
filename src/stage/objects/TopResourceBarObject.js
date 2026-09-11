@@ -22,9 +22,11 @@ export class TopResourceBarObject extends THREE.Group {
    * @param {object} options
    *   bakeLabel: (text) => { texture, width, height }   文本烘焙（缺省 1x1 占位）
    */
-  constructor({ bakeLabel = null } = {}) {
+  constructor({ bakeLabel = null, picker = null } = {}) {
     super();
     this.name = 'topResourceBar';
+    this._picker = picker; // 拾取器（遗物槽 hover → tooltip；可不传=纯展示）
+    this._slotPickIds = [];
     this._bake = bakeLabel || defaultBake;
     this._ppw = 10; // 烘焙像素 → 世界单位（顶端栏独立于状态栏缩放）
 
@@ -93,12 +95,43 @@ export class TopResourceBarObject extends THREE.Group {
     const sig = JSON.stringify(items.map(r => [r.id, r.icon, r.usesLeft ?? null]));
     if (sig === this._relicSig) return;
     this._relicSig = sig;
+    for (const id of this._slotPickIds) this._picker?.removePickable(id);
+    this._slotPickIds = [];
     for (const child of [...this._relicRow.children]) disposeSubtree(child);
-    items.forEach((r) => this._relicRow.add(makeRelicSlot(r)));
+    items.forEach((r, i) => {
+      const slot = makeRelicSlot(r);
+      this._relicRow.add(slot);
+      // 槽位可 hover：token 挂在槽（Group）上，Picker 从 pickable 根对象取 token
+      if (this._picker) {
+        const pid = `topbar:relic:${i}:${r.id}`;
+        slot.userData.token = { type: 'relic', payload: { relicId: r.id } };
+        this._picker.addPickable(pid, slot, { kind: 'row', space: 'ui' });
+        this._slotPickIds.push(pid);
+      }
+    });
     this._layout();
   }
 
+  /** 换/脱拾取器（舞台在 attachInput 时注入；随后重建当前槽位以完成登记）。 */
+  attachPicker(picker) {
+    for (const id of this._slotPickIds) this._picker?.removePickable(id);
+    this._slotPickIds = [];
+    this._picker = picker ?? null;
+    if (this._picker && this._relicRow.children.length) {
+      this._relicRow.children.forEach((slot, i) => {
+        const id = slot.name?.replace(/^relic:/, '') ?? `${i}`;
+        const pid = `topbar:relic:${i}:${id}`;
+        slot.userData.token = { type: 'relic', payload: { relicId: id } };
+        this._picker.addPickable(pid, slot, { kind: 'row', space: 'ui' });
+        this._slotPickIds.push(pid);
+      });
+    }
+    return this;
+  }
+
   dispose() {
+    for (const id of this._slotPickIds) this._picker?.removePickable(id);
+    this._slotPickIds = [];
     this._moneyLabel.geometry.dispose();
     this._moneyMaterial.map?.dispose?.();
     this._moneyMaterial.dispose();

@@ -230,7 +230,7 @@ describe('添柴系列：焚卡换魏启', () => {
       const card = toHand(d, id);
       const victim = toHand(d, 'punch');
       d.play(id); // 挂起等待选牌
-      expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+      expect(d.pendingInput?.request.kind).toBe('selectCards');
       d.respond([victim.uniqueID]);
       expect(zoneOf(d.state, victim.uniqueID), id).toBe('burnt');
       expect(d.player.mana, id).toBe(1 + mana);

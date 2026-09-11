@@ -22,7 +22,7 @@ registerSkill({
     if (stage === 0) {
       sctx.self._input = new AwaitPlayerInputInstruction({
         request: {
-          kind: 'selectHandCard', count: 1,
+          kind: 'selectCards', source: 'hand', count: 1,
           candidates: sctx.battleState.zones.hand
             .filter(c => c.uniqueID !== sctx.self.uniqueID).map(c => c.uniqueID),
         },
@@ -253,7 +253,7 @@ describe('Bridge：结算期输入仲裁', () => {
 
     expect(events.map(e => e.type)).toEqual([EventNames.INPUT_REQUESTED]);
     const { request } = events[0].payload;
-    expect(request.kind).toBe('selectHandCard');
+    expect(request.kind).toBe('selectCards');
     expect(bridge.getProjection().pendingInput?.request).toEqual(request);
     expect(bridge.interaction.activeRequest).toEqual(request);
 

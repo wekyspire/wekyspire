@@ -226,7 +226,7 @@ describe('花刀系列：弃牌换护盾（2026-09 稿改防御）', () => {
     d.play('handCleave');
     expect(d.player.shield).toBe(8);                   // 8 护盾，不再造成伤害
     expect(hp0 - enemyHp(d)).toBe(0);
-    expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     d.respond([victim.uniqueID]);
     expect(zoneOf(d.state, victim.uniqueID)).toBe('deck');   // 弃牌 = 落牌库底
     expect(d.pendingInput).toBeNull();
@@ -503,7 +503,7 @@ describe('飞刀系列：邻牌献祭', () => {
     expect(hp0 - enemyHp(d)).toBe(20);
     expect(zoneOf(d.state, left.uniqueID)).toBe('burnt');  // 焚毁两侧
     expect(zoneOf(d.state, right.uniqueID)).toBe('burnt');
-    expect(d.pendingInput?.request.kind).toBe('selectDeckCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     const [p1, p2] = [d.state.zones.deck[0], d.state.zones.deck[1]];
     d.respond([p1.uniqueID, p2.uniqueID]);
     expect(zoneOf(d.state, p1.uniqueID)).toBe('hand');
@@ -530,7 +530,8 @@ describe('飞刀系列：邻牌献祭', () => {
     expect(slashRt.remainingUses).toBe(0);
     expect(slashRt.currentCooldown).toBe(1);
     expect(zoneOf(d.state, right.uniqueID)).toBe('burnt');    // 普通牌照常焚毁
-    expect(d.pendingInput?.request.kind).toBe('selectDeckCard');   // 寻找照常
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
+    expect(d.pendingInput?.request.source).toBe('deck');   // 寻找照常
     d.respond([d.state.zones.deck[0].uniqueID]);
     expect(d.pendingInput).toBeNull();
   });
@@ -805,7 +806,7 @@ describe('开刃系列：斩进阶', () => {
     const blade = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
     d.play('practiceBlade');
     expect(d.state.zones.hand.some(c => c.defId === 'guard')).toBe(true);   // 先抽1落地
-    expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     expect(d.pendingInput.request.candidates).toEqual([blade.uniqueID]);   // 只可选刀法牌
     d.respond([blade.uniqueID]);
     expect(blade.power).toBe(4);
@@ -840,7 +841,7 @@ describe('刀法咏唱：抽弃循环', () => {
     d.play('bladeArt');
     expect(art.isActivated).toBe(true);
     d.endTurn();                                          // P5：抽1 → 请求选1弃
-    expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     const victim = d.state.zones.hand.find(c => c.uniqueID !== art.uniqueID);
     d.respond([victim.uniqueID]);
     expect(zoneOf(d.state, victim.uniqueID)).toBe('deck');
@@ -857,7 +858,7 @@ describe('刀法咏唱：抽弃循环', () => {
     const heart = toHand(d, 'bladeHeart');
     d.play('bladeHeart');
     d.endTurn();
-    expect(d.pendingInput?.request.kind).toBe('selectHandCard');
+    expect(d.pendingInput?.request.kind).toBe('selectCards');
     expect(d.pendingInput.request.count).toBe(2);
     const victims = d.state.zones.hand.filter(c => c.uniqueID !== heart.uniqueID).slice(0, 2);
     d.respond(victims.map(c => c.uniqueID));

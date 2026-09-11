@@ -42,16 +42,19 @@ import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
 import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
-import { bakeCardFace } from '../richtext/cardFace.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
+import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
+// 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
+// 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
+import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
+export { CARD_WIDTH, CARD_HEIGHT };
 
-export const CARD_WIDTH = 26;   // 20 × 1.3：2026-08 手牌观感迭代整体放大卡面
-export const CARD_HEIGHT = 35.1;
 export const PLAY_LINE_Y = -20;
+const PICK_SCALE = 0.62; // 选卡覆盖层的卡缩放（比手牌略大，便于点选）
 const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（静息 z≤15，悬浮抬升后 ≤36），viewer（z=80）打开时 aiming 不可达
 
 const BUTTON_SIZE = { w: 15, h: 6 };
@@ -97,12 +100,7 @@ export class BattleStage {
     this._unitArt = (typeof document !== 'undefined')
       ? sharedUnitArtCache
       : null;
-    this._bakeFace = bakeFace || ((card) => bakeCardFace(card, {
-      scale: 3, // 卡面烘焙超采样：卡牌 26×35.1wu 在 1080p 已近 380px 高，scale 2 会糊
-      art: this._artCache?.get(card) ?? null,
-      decor: this._artCache?.getDecor?.(card) ?? null, // 系列装饰图层（素材未就位为 null，走程序化占位）
-      manaCrystal: this._unitArt?.getFile('mana_crystal_full.png') ?? null, // 魏启开销徽章素材（未就位蓝色圆回落）
-    }));
+    this._bakeFace = bakeFace || makeCardFaceBaker({ cardArt: this._artCache, unitArt: this._unitArt });
     // 小字号文本（HP/效果行/资源点）：烘焙 scale 3 供更干净的 mipmap 链，
     // 并开各向异性过滤（效果行随 billboard 与俯视相机成斜角，aniso 防斜向模糊/闪烁）
     this._bakeLabel = bakeLabel || ((text) => {
@@ -193,6 +191,9 @@ export class BattleStage {
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
     this._inputSelection = [];
     // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
+    // 战斗内「选卡牌集」覆盖层（request.picker === 'overlay'）：手牌来源接管既有实例，
+    // 其它区来源按投影新建；见 _openPick/_closePick
+    this._pick = null;
     this._viewer = new CardGalleryObject({
       cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
       bakeFace: this._bakeFace, picker: this.picker,
@@ -268,7 +269,7 @@ export class BattleStage {
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
     // 顶端居中资源行（金币数值 + 遗物槽；与地图层同物同位，runController 喂值）
-    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
+    this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel, picker: this.picker });
     this.uiScene.add(this._topBar);
     this._resources = { ap: this._statusBar.apCoin, mana: this._statusBar.manaCrystal };
     this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）
@@ -328,6 +329,9 @@ export class BattleStage {
     const proj = this._snapshot;
     if (!proj) return;
     this._closeViewer(); // 状态已变，查看器内容失效
+    const overlayReq = proj.pendingInput?.request?.picker === 'overlay' ? proj.pendingInput.request : null;
+    if (overlayReq) this._openPick(overlayReq);   // 幂等（同一 request 不重建）
+    else this._closePick();
     this._syncUnits(proj);
     this._syncCardZones(proj);
     this._syncCardContents(proj);
@@ -372,7 +376,8 @@ export class BattleStage {
       obj.position.set(tr.x, tr.y, tr.z);
       obj._baseScale = tr.scale;
       if (!unitProj.isDead) obj.scale.set(tr.scale, tr.scale, 1);
-      obj.setUnit(unitProj);
+      // 失明（银行机恶魔词条）：敌人意图不可见 → 清空意图条（玩家只能靠猜）
+      obj.setUnit(proj.blind && side === 'enemy' ? { ...unitProj, intention: null } : unitProj);
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
@@ -511,12 +516,17 @@ export class BattleStage {
       const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
       if (entry.faceSig !== sig) {
         entry.faceSig = sig;
+        // defId 变化 = 转化/进阶（如斩→裂石斩）：走专属金色演出（手牌内的转化路径，
+        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）
+        const defChanged = entry.prevDefId != null && entry.prevDefId !== card.defId;
         view.setCard(card);
+        if (defChanged) this._transformFx(id);
         // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
-        if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
+        else if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
           this._pulseCard(id, 0xffd34c);
         }
       }
+      entry.prevDefId = card.defId;
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
@@ -708,7 +718,13 @@ export class BattleStage {
     // 主按钮：结束回合；结算期退化为确认/选择提示
     let label = '结束回合';
     let enabled = proj.waitingPlayerInput && !pending;
-    if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
+    if (this._pick) {
+      const n = this._pick.selection.length;
+      const { min, max } = this._pick;
+      const need = min === max ? `${min}` : `${min}~${max}`;
+      label = `确认(${n}/${need})`;
+      enabled = n >= min && n <= max;   // 到 min 即可提交（「至多 N」的上限由收集侧封顶）
+    } else if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
     else if (pending?.kind?.startsWith('select')) {
       if ((pending.count ?? 1) > 1) { label = `确认(${this._inputSelection.length}/${pending.count})`; enabled = this._inputSelection.length === pending.count; }
       else { label = '选择目标'; enabled = false; }
@@ -787,6 +803,84 @@ export class BattleStage {
     ]);
   }
 
+  // ---- 战斗内选卡牌集覆盖层 ----
+  // 'hand' 来源：候选在场景里已有唯一 CardObject（_views）→ **接管**（只改布局目标，
+  //   不渲染副本，关闭即还原手牌布局；弹簧/生命周期纪律不受影响）。
+  // 其它来源（deck/burnt…）：候选在场景里没有对象 → 按投影**新建**、关闭即销毁
+  //   （与牌库查看器 CardGalleryObject 同口径，id 加 'pick:' 前缀隔离）。
+  _openPick(request) {
+    if (this._pick && this._pick.request === request) return; // 幂等：同一请求刷新即跳过重建
+    this._closePick();
+    const ids = request.candidates ?? [];
+    const pick = {
+      request,
+      ids,
+      mode: request.source === 'hand' ? 'hand' : 'instantiate',
+      min: request.min ?? request.count ?? 1,
+      max: request.max ?? request.count ?? 1,
+      selection: [],
+      temp: new Map(), // pickerId -> { object, uniqueID }
+    };
+    this._pick = pick;
+    if (pick.mode === 'instantiate') {
+      const anchors = this._pickAnchors(ids.length);
+      ids.forEach((uid, i) => {
+        const cardProj = this._findCardProj(uid);
+        if (!cardProj) return;
+        const pickerId = `pick:${uid}`;
+        const obj = new CardObject({
+          uniqueID: pickerId, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
+        });
+        obj.setCard(cardProj);
+        const a = anchors[i];
+        obj.position.set(a.x, a.y, 30);
+        obj.scale.set(a.scale ?? PICK_SCALE, a.scale ?? PICK_SCALE, 1);
+        obj.visible = true;
+        this.uiScene.add(obj);
+        this.picker.addPickable(pickerId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
+        pick.temp.set(pickerId, { object: obj, uniqueID: uid });
+      });
+    }
+    this._layoutAndTrack();
+  }
+
+  _closePick() {
+    if (!this._pick) return;
+    for (const [pickerId, entry] of this._pick.temp) {
+      this.picker.removePickable(pickerId);
+      this.uiScene.remove(entry.object);
+      entry.object.dispose();
+    }
+    this._pick = null;
+  }
+
+  /** 覆盖层网格锚点（卡牌空间，整体居中）。列数与缩放随张数自适应：
+   *  张数多时（牌库来源常见 15~30 张）自动变多列、缩得更小，避免超出取景框。 */
+  _pickAnchors(count) {
+    const scale = count > 18 ? 0.42 : (count > 10 ? 0.52 : PICK_SCALE);
+    const cols = Math.min(count > 10 ? 8 : 5, Math.max(1, count));
+    const rows = Math.ceil(count / cols);
+    const stepX = CARD_WIDTH * scale * 1.12;
+    const stepY = CARD_HEIGHT * scale * 1.18;
+    const yTop = ((rows - 1) * stepY) / 2;
+    return Array.from({ length: count }, (_, i) => {
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      const inRow = Math.min(cols, count - r * cols);
+      return { x: (c - (inRow - 1) / 2) * stepX, y: yTop - r * stepY, scale };
+    });
+  }
+
+  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区） */
+  _findCardProj(uniqueID) {
+    const zones = this._snapshot?.zones ?? {};
+    for (const list of Object.values(zones)) {
+      const hit = (list ?? []).find(c => c.uniqueID === uniqueID);
+      if (hit) return hit;
+    }
+    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID) ?? null;
+  }
+
   _layoutAndTrack() {
     // 保持显示状态快照中的手牌顺序（视图表插入序≠手牌序）
     const proj = this._snapshot;
@@ -794,13 +888,24 @@ export class BattleStage {
     const orderedHand = proj.hand.map(c => c.uniqueID).filter(id => this._views.has(id));
     const onStage = new Set(orderedHand);
     // 瞄准中的卡视作"被撑开"对象：位置不变但抬升放大、两侧排开（瞄准时不响应 hover 切换）
-    const spreadId = this._aiming?.id ?? this._hoveredCardId;
+    const spreadId = this._pick ? null : (this._aiming?.id ?? this._hoveredCardId);
     this.layout.layoutHand('hand', orderedHand, spreadId);
     // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
       if (a && this.model.getZone(id) !== 'held') targets.set(id, a);
+    }
+    // 选卡覆盖层（手牌来源）：把候选的目标锚点换成网格位——同一批 CardObject 直接
+    // "飞"进界面，不渲染副本；关闭时 targets 自然回到手牌扇形
+    if (this._pick?.mode === 'hand') {
+      const anchors = this._pickAnchors(this._pick.ids.length);
+      this._pick.ids.forEach((uid, i) => {
+        if (!anchors[i]) return;
+        targets.set(uid, anchors[i]);
+        const view = this._views.get(uid);
+        if (view) view.scale.set(anchors[i].scale ?? PICK_SCALE, anchors[i].scale ?? PICK_SCALE, 1);
+      });
     }
     this.springs.setTargets(targets);
     for (const [id, view] of this._views) {
@@ -827,7 +932,12 @@ export class BattleStage {
       // 视觉态优先级：瞄准中（高亮）> 结算期选卡（候选高亮/其余压灰）> 换卡模式（可换手牌高亮）
       // > 手牌可发动性（不可发动淡灰白）> normal
       const pending = proj.pendingInput?.request;
-      if (this._aiming?.id === id) {
+      if (this._pick) {
+        // 覆盖层：候选可点（选中态高亮），非候选压灰；其余视觉态一律让位
+        const isCandidate = this._pick.ids.includes(id);
+        view.setVisualState(this._pick.selection.includes(id) ? 'highlighted'
+          : (isCandidate ? 'normal' : 'disabled'));
+      } else if (this._aiming?.id === id) {
         view.setVisualState('highlighted');
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
@@ -875,6 +985,9 @@ export class BattleStage {
     // 入手抽牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍；
     // 造牌入库（toZone 'deck'）则走 _addCardBeat：卡面生成 → 飞入牌库 → 计数随其后 sync 跳增
     if (type === EventNames.ANIM_CARD_DRAWN) {
+      // 因手牌上限没抽到牌（core 在载荷里分开记了 blockedByHandLimit 与 deckEmpty）：
+      // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（用户 2026-09-11 报）
+      if (payload?.blockedByHandLimit) this._handPressureHint();
       return this._pulsePile('deck', finish);
     }
     if (type === EventNames.ANIM_CARD_ADDED) {
@@ -1016,19 +1129,28 @@ export class BattleStage {
 
   // 转化闪变（宾语变化生效反馈主体）：卡面换绑 cardView + 金色迸发 + 尺寸脉冲。
   // held/deck 来源卡不经 _syncCardContents（只扫手牌），换脸只能由本节拍承担。
-  _transformBeat(payload, finish) {
-    const id = payload?.card?.uniqueID ?? null;
-    const view = id != null ? this._views.get(id) : null;
-    if (!view) return finish();
-    if (payload?.cardView) view.setCard(payload.cardView);
+  /** 卡牌转化/进阶的共用演出（金色粒子迸发 + 尺寸脉冲）。
+   *  两个入口：结算树的 ANIM_CARD_TRANSFORMED 节拍（_transformBeat，卡在展示/持有位），
+   *  以及手牌内被转化的对账路径（_syncCardContents 发现 defId 变化）。 */
+  _transformFx(id, onDone = null) {
+    const view = this._views.get(id);
+    if (!view) { onDone?.(); return; }
     const p = view.position;
     this.particles.spawn(p.x, p.y, { count: 22, color: 0xffd76a, speed: 12, ttl: 0.7, size: 1.6, z: p.z ?? 0 });
     this.particles.spawn(p.x, p.y, { count: 10, color: 0xfff3c0, speed: 18, ttl: 0.5, size: 1.1, z: p.z ?? 0 });
     const s0 = view.scale.x || 1;
     this.animator.animate(id, { scale: s0 * 1.25 }, {
       durationMs: 150,
-      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: finish }),
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: onDone ?? undefined }),
     });
+  }
+
+  _transformBeat(payload, finish) {
+    const id = payload?.card?.uniqueID ?? null;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) return finish();
+    if (payload?.cardView) view.setCard(payload.cardView);
+    this._transformFx(id, finish);
   }
 
   // 单位世界坐标（含偏移）→ UI 世界坐标：伤害/治疗读数文本走 uiScene 前景层
@@ -1251,6 +1373,19 @@ export class BattleStage {
   }
 
   // 牌面脉冲（non-blocking FX）：overlay 发光片从放大缩回原位后隐藏，不进注册表、不占队列
+  /** 手牌压力提示（抽不下 / 咏唱发动被挡）：整手牌红脉冲 + 骑士头顶文字。 */
+  _handPressureHint(text = '我掌控不了更多手牌了！') {
+    for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03 });
+    const proj = this._snapshot;
+    const unit = proj ? this._units.get(proj.player.uniqueID) : null;
+    if (!unit) return;
+    const p = this._unitToUI(unit, 0, 12);
+    this.particles.spawnText(p.x, p.y, text, {
+      fontSize: 30, color: '#ff8a80', fontWeight: 'bold',
+      vx: (Math.random() - 0.5) * 3, vy: 10, gravity: 0, drag: 1.1, ttl: 1.4, scalePop: 0.35, space: 'ui',
+    });
+  }
+
   _pulseCard(id, color) {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
   }
@@ -1362,10 +1497,19 @@ export class BattleStage {
 
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
+    if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
     const hit = this.picker.pick(x, y);
     const proj = this._snapshot;
+    // 点了「因手牌压力发动不了」的咏唱卡：灰卡本身没说原因，这里补一次明确反馈
+    if (hit.kind === 'card') {
+      const clicked = proj?.hand.find(c => c.uniqueID === hit.id);
+      if (clicked?.blocked === 'chantPressure') {
+        this._handPressureHint('手牌太多，咏唱发动不了！');
+        return;
+      }
+    }
     // 换卡模式下点手牌是"点按换出"，不进入拖拽
     if (hit.kind === 'card' && !proj?.pendingInput && !this._swapMode) {
       // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后
@@ -1398,6 +1542,21 @@ export class BattleStage {
     }
     const proj = this._snapshot;
     const pending = proj?.pendingInput?.request ?? null;
+
+    // 选卡覆盖层：点候选 = 切换选中（不打出、不瞄准）；上限封顶 max
+    if (this._pick && this._pick.request === pending) {
+      const hitPick = this.picker.pick(x, y);
+      const uid = hitPick?.kind !== 'card' ? null
+        : (this._pick.mode === 'hand' ? hitPick.id : this._pick.temp.get(hitPick.id)?.uniqueID);
+      if (uid && this._pick.ids.includes(uid)) {
+        const sel = this._pick.selection;
+        const i = sel.indexOf(uid);
+        if (i >= 0) sel.splice(i, 1);
+        else if (sel.length < this._pick.max) sel.push(uid);
+        this.reconcile();   // 同一 request 幂等 → 只刷新选中态与按钮
+        return;
+      }
+    }
 
     // 瞄准松手：指针在存活敌人身上 → 指定目标打出；否则取消（卡本就在锚点，只清状态）。
     // 提交前再验显示态：瞄准中途节拍推进可能已把卡压灰（如结算期），灰卡不打
@@ -1451,7 +1610,8 @@ export class BattleStage {
       // 显示态门：按钮面为灰（非等待输入/结算期未就绪）时不分发任何意图——
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
-      if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
+      if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
+      else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
       else this.bridge.intents.endTurn();
       this._inputSelection = [];

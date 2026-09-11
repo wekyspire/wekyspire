@@ -17,7 +17,7 @@ import { zoneOf, aliveEnemies, unitsOfSide, allAliveUnits } from '../state/battl
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
-import { PostBattleInstruction } from '../instructions/battleRoot.js';
+import { applyBattleModifier } from '../run/prep.js';
 import { getEffectDefinition } from '../effects/registry.js';
 import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, resolvedDamageText } from './cardKit.js';
 
@@ -69,10 +69,8 @@ function totalEnemyBurn(sctx) {
 }
 
 // 燃元 B：1AP，消耗。每有 4 层（敌方）燃烧，魏启上限 +1。
-// 口径：上限抬升「战斗内永久」——player 是 run 级对象、直写会跨战斗残留，故在
-// skillRuntime 上记账（卡牌计数器放 runtime、不藏闭包），战后经 PostBattleInstruction
-// 的 once POST 回滚（clearWindow('battle') 在 execute 内发生、先于 POST，battle 窗口的
-// 回滚订阅会被清掉，故用 once 窗口挂载）。
+// 口径：上限抬升「战斗内永久」——写进 battleState.modifiers（本场修正），
+// 随战斗对象一起消失，故**不需要战后回滚**，也不再往 skillRuntime 上挂记账字段。
 registerSkill({
   id: 'emberOrigin', name: '燃元', type: 'fire', tier: 'B', series: 'ember',
   cost: { mana: 0, actionPoint: 1 },
@@ -81,20 +79,9 @@ registerSkill({
   keywords: ['exhaust'],
   use(sctx) {
     const gain = Math.floor(totalEnemyBurn(sctx) / 4);
-    if (gain > 0) {
-      // 无现成「上限变更」指令：在指令树内直写 maxMana（时序仍随结算树定序，
-      // 仅无事件播报，显示由队列排空后的状态同步兜底）
-      sctx.player.maxMana += gain;
-      sctx.self.gainedMaxMana = (sctx.self.gainedMaxMana ?? 0) + gain;
-    }
+    if (gain > 0) applyBattleModifier(sctx, 'maxMana', gain);
     return true;
   },
-  subscriptions: (sctx) => [{
-    // 战后回滚：恢复魏启上限（燃烧换来的上限只在本场战斗内成立）
-    when: PostBattleInstruction, phase: 'post', window: 'once',
-    filter: () => (sctx.self.gainedMaxMana ?? 0) > 0,
-    react: (instr, ctx) => { ctx.player.maxMana -= sctx.self.gainedMaxMana; },
-  }],
   describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1（本场战斗内）',
   battleDescribe: (sctx) => {
     const total = totalEnemyBurn(sctx);
