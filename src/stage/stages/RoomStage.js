@@ -15,6 +15,8 @@
 
 import * as THREE from 'three';
 import { getScene } from '../scenes/index.js';
+import { getProp } from '../scenes/props/index.js';
+import { createRng } from '../scenes/kit/scatter.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
@@ -390,8 +392,12 @@ export class RoomStage {
   _buildInteractives() {
     const interactives = this._room?.interactives;
     if (!interactives) return;
-    for (const [name, entry] of interactives) {
-      // 机器类（有 parts）才有 rig；普通陈设（篝火/训练桩…）只要浮标 + 拾取 + 推近
+    for (const [name, entry] of interactives) this._addInteractive(name, entry);
+  }
+
+  /** 登记一件交互物：机器类（有 parts/kind）才建 rig；普通陈设只要浮标 + 拾取 + 推近。 */
+  _addInteractive(name, entry) {
+    {
       const rig = entry.kind === 'slot' ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
         : entry.kind === 'bank' ? createBankMachineRig({ object: entry.object, parts: entry.parts })
           : entry.kind === 'vending' ? createVendingMachineRig({ object: entry.object, parts: entry.parts })
@@ -684,22 +690,41 @@ export class RoomStage {
   }
 
   /**
-   * 售货机同步：**只在商店层通电营业**（`snap.shop` 为 null 的层整机隐藏）。
-   * 隐藏即不可点（Picker 的 visibleUp 守卫），所以不必动态增减拾取登记。
+   * 售货机同步：**只在商店层存在**（用户定 2026-09-12——售货机不是赌厅/营地的常驻陈设，
+   * 而是"商店层才有的一台柜子"）。
+   *   有 `snap.shop` → 按配方的 `anchors.shop` **动态生成**（只建一次）并同步库存/显示；
+   *   没有（非商店层）→ **根本不建**（不是摆一台藏着）。
    * 库存变了由 rig 自己比对——刚卖掉的那格会播出货演出（门开→货落→翻板→门合→灯牌爆闪）。
    */
   _syncVending() {
-    const entry = this._markers.find(m => m.name === 'shop');
-    const rig = this._rigs.get('shop');
-    if (!entry || !rig) return;
     const shop = this._snap?.shop ?? null;
-    const on = !!shop;
-    entry.entry.object.visible = on;
-    entry.marker.visible = on;
-    entry.ring.visible = on;
-    if (!on) { if (this._focused === 'shop') this._focusMachine(null); return; }
-    rig.setStock(shop.items ?? []);
-    rig.setDisplay(`余额 ${this._snap.money ?? 0}`);
+    if (!shop) return false;                       // 非商店层：不生成、不显示
+    if (!this._markers.some(m => m.name === 'shop')) {
+      if (!this._spawnShopMachine()) return false;
+    }
+    const rig = this._rigs.get('shop');
+    rig?.setStock(shop.items ?? []);
+    rig?.setDisplay(`余额 ${this._snap.money ?? 0}`);
+    return true;
+  }
+
+  /** 按配方的 `anchors.shop` 生成售货机（位置/朝向/缩放都来自配方，Stage 不猜坐标）。 */
+  _spawnShopMachine() {
+    const a = this._sceneDef?.anchors?.shop;
+    if (!a || !this._room) return false;
+    const def = getProp('vendingMachine');
+    const obj = def.build({ rng: createRng(`${this.recipe}:shop`) });
+    obj.position.set(a.x, 0, a.z);                 // 房间组自己在 FLOOR_Y 上（y 由组承担）
+    obj.rotation.y = a.ry ?? 0;
+    obj.scale.setScalar(a.scale ?? 1);
+    obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this._room.group.add(obj);
+    this._addInteractive('shop', {
+      object: obj, kind: obj.userData.interactive ?? 'vending',
+      x: a.x, z: a.z, ry: a.ry ?? 0, scale: a.scale ?? 1,
+      parts: obj.userData.parts ?? null,
+    });
+    return true;
   }
 
   // ================= 内部：逐帧 =================

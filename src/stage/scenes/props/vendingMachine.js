@@ -1,5 +1,7 @@
 // 自动售货机（休息房：瑞米售货机 / 商店房）：两层货架的玻璃门立柜 + 右侧操作列 + 底部出货口。
-// 原点=底面中心（y=0 落地），宽约 2.5 / 深约 1.8 / 高约 7.6（比银行机更瘦高——"售货柜"的量感）。
+// 原点=底面中心（y=0 落地），宽 3.6 / 深 1.9 / 高约 6.8。
+// ⚠ **宽度是硬指标**（用户 2026-09-12 报「太窄，两件物品挤在一起」）：货架区要装下两层 ×
+// 每层两件、且两件之间留出可读的货道缝——所以柜体做成「矮胖柜台机」而不是瘦高立柜。
 //
 // 造型意图（用户定 2026-09-11）：**两层货架、每层最多摆 2 件、正面一块玻璃门**。
 // 货架区做成**真凹腔**（上/下横梁 + 左右立柱围出开口，背板整块 unlit 恒亮 = "柜内一直亮着"），
@@ -31,14 +33,16 @@ export default {
   tags: ['machine', 'metal', 'container', 'glass', 'lamp', 'interactive'],
   // 灯池：**暖白**（柜内灯管/灯带的口径，不是赌具的暖金也不是银行机的冷青）。
   // gain 压到 ~0.12：灯池被 composeRoom 推到门前（LAMP_FRONT_PUSH），太近会把机壳照爆。
-  lampGain: 0.12,
+  // 灯池再收一档（0.12→0.07）：柜面大面积是玻璃，池子贴太近会在玻璃上打出白色高光斑，
+  // 把柜内的货全糊掉（用户 2026-09-12 报"一排看不到两个物品"的真凶之一）
+  lampGain: 0.05,
   lampColor: shade(P.wax, -0.04),
   footprint: { x: 3.2, z: 2.4 },
   behaviors: [],
   build({ rng = null } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('vendingMachine');
-    const W = 2.5, D = 1.8, bodyH = 6.6, plinthH = 0.5;
+    const W = 3.6, D = 1.9, bodyH = 6.3, plinthH = 0.5;
     const y0 = plinthH;                       // 柜身底
     const cabTop = y0 + bodyH;
     const iron = shade(P.iron, -0.06);
@@ -56,10 +60,10 @@ export default {
     // 前脸分层口径（同老虎机，杜绝共面闪烁）：L0 柜面 D/2=0.90 ｜ L1 门框 0.98 ｜
     // L2 玻璃 1.02 ｜ L3 把手 1.10 ｜ L4 操作列面板 0.96 ｜ L5 灯牌 0.92
     const controlW = 0.74;                    // 右侧操作列宽
-    const bayW = W - controlW - 0.42;         // 货架区开口宽
-    const bayCx = -W / 2 + 0.21 + bayW / 2;   // 开口中心 x
-    const bayTop = cabTop - 1.05;             // 开口顶（上方留给灯牌）
-    const bayBot = y0 + 1.5;                  // 开口底（下方留给出货口）
+    const bayW = W - controlW - 0.46;         // 货架区开口宽（≈2.4：两层 × 两件 + 货道缝）
+    const bayCx = -W / 2 + 0.23 + bayW / 2;   // 开口中心 x
+    const bayTop = cabTop - 0.95;             // 开口顶（上方留给灯牌）
+    const bayBot = y0 + 1.35;                 // 开口底（下方留给出货口）
     const bayH = bayTop - bayBot;
     const shelfY = [bayBot + bayH * 0.26, bayBot + bayH * 0.66];   // 两层货位的**物品中心**高
 
@@ -98,6 +102,12 @@ export default {
       g.add(K.put(K.box({ color: shade(lighting, -0.18), size: [bayW - 0.1, 0.05, 0.05], family: 'unlit' }),
         bayCx, by + 0.02, D / 2 - 0.4));
     }
+    // 货道隔片：每层一道竖向薄隔（真机的货道读法）——**两件一眼读成两格**，
+    // 也顺带把"每层恰好两件"的规格写进几何（比只靠间距更稳）
+    for (const by of boardY) {
+      g.add(K.put(K.box({ color: shade(steel, -0.16), size: [0.04, 1.02, D - 0.66], family: 'metal' }),
+        bayCx, by + 0.57, -0.06));
+    }
     // 四个货位：每层 2 件（品相由 rig 按库存换色；卖空 = rig 缩小）
     const slots = [];
     const slotColors = [P.potionRed, P.potionGreen, P.gold, P.potionBlue];
@@ -105,9 +115,14 @@ export default {
       [-1, 1].forEach((side, col) => {
         const index = layer * 2 + col;
         const mesh = K.put(
-          // 货品用**原色**（shade 是朝白插值，提亮=去饱和，隔玻璃看反而更糊）
-          K.box({ color: slotColors[index], size: [0.46, 0.66, 0.4], family: 'unlit' }),
-          bayCx + side * (bayW * 0.24), sy, 0.02,
+          // 货品 **乘算提亮**保色相（shade 是朝白插值 = 去饱和，隔玻璃看更糊）；乘到 >1
+          // 也让它读作"柜内灯照着的商品"（HDR 亮部，吃 bloom 的亮部通道）
+          K.box({
+            color: new THREE.Color(slotColors[index]).multiplyScalar(1.35).getHex(),
+            size: [0.62, 0.72, 0.5],
+            family: 'unlit',
+          }),
+          bayCx + side * (bayW * 0.25), sy, 0.02,
         );
         mesh.userData.animRole = 'slotItem';
         mesh.userData.slot = index;
@@ -117,10 +132,10 @@ export default {
     });
     // 货位底座（每件下面一小块"托盘"，把四件在视觉上分格）+ 前沿价签座
     for (const s of slots) {
-      g.add(K.put(K.box({ color: shade(steel, -0.24), size: [0.5, 0.05, 0.44], family: 'metal' }),
-        s.mesh.position.x, s.mesh.position.y - 0.35, s.mesh.position.z));
-      g.add(K.put(K.box({ color: P.night, size: [0.34, 0.13, 0.05], family: 'unlit' }),
-        s.mesh.position.x, s.mesh.position.y - 0.26, s.mesh.position.z + 0.26));
+      g.add(K.put(K.box({ color: shade(steel, -0.24), size: [0.66, 0.05, 0.54], family: 'metal' }),
+        s.mesh.position.x, s.mesh.position.y - 0.38, s.mesh.position.z));
+      g.add(K.put(K.box({ color: P.night, size: [0.44, 0.14, 0.05], family: 'unlit' }),
+        s.mesh.position.x, s.mesh.position.y - 0.28, s.mesh.position.z + 0.3));
     }
 
     // ================= 玻璃门（独立枢轴：铰链在开口左缘）=================

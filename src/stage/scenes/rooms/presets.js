@@ -450,15 +450,16 @@ const CASINO = {
     // 地毯：机器前的"赌位"（rugWorn = cloth/quarters，作构图件压地面）
     { id: 'rugWorn', x: -12.5, z: -40, ry: 0.1, scale: 1.6 },
     { id: 'rugWorn', x: 12.5, z: -40, ry: -0.1, scale: 1.6 },
-    // 售货机（瑞米）：贴着左墙斜放、朝向房间中线——只在商店层通电营业（见 RoomStage 的
-    // shop 开关：非商店层整机隐藏，不可点，避免"看着像能买其实没货"）
-    { id: 'vendingMachine', x: -30, z: -42.5, ry: 0.52, scale: 2.2, live: true, name: 'shop' },
+    // ⚠ 售货机**不在这里**：它只在商店层出现（SHOP_FLOORS），由 RoomStage 按 anchors.shop
+    // 在快照里有 `shop` 时才动态生成——非商店层**根本不建**（不是摆一台藏着）
   ],
   // 交互锚点契约（主流程接线用）：设施在房间内的位置与朝向 + UI 安全区比例
   anchors: {
     slot: { x: -12.5, z: -44, ry: 0.14 },
     bank: { x: 12.5, z: -44, ry: -0.14 },
     counter: { x: 0, z: -47, ry: 0 },
+    // 售货机位（**只在商店层生成**）：左墙边斜放、朝向房间中线——避开两机/柜台/边桌
+    shop: { x: -30, z: -42.5, ry: 0.52, scale: 2.2 },
     // UI 安全区：屏幕下缘起的比例（休息面板将覆盖这一带，构图不在此放精细件）
     uiSafe: { bottomRatio: 0.42 },
   },
@@ -563,14 +564,15 @@ const CAMP = {
     // 落地灯笼：两区外侧的柔和灯池（灯笼串走 facade 的 festoon 权重，见上）
     { id: 'lanternFloor', x: -24.5, z: -45.5, ry: 0.3, scale: 1.1 },
     { id: 'lanternFloor', x: 24.5, z: -45.5, ry: -0.3, scale: 1.1 },
-    // 售货机：右墙边、朝向营地（只在商店层通电，见 RoomStage 的 shop 开关）
-    { id: 'vendingMachine', x: 30, z: -41.5, ry: -0.6, scale: 2.2, live: true, name: 'shop' },
+    // ⚠ 售货机不在这里：只在商店层由 RoomStage 按 anchors.shop 动态生成（同赌厅注释）
   ],
   // 交互锚点契约（RoomStage 按 name 分发面板）：篝火 = 营地部分、训练桩 = 训练部分
   anchors: {
     camp: { x: -14, z: -45, ry: 0.08 },
     training: { x: 14, z: -45, ry: -0.1 },
     table: { x: 0, z: -49, ry: 0 },
+    // 售货机位（只在商店层生成）：右墙边、朝向营地
+    shop: { x: 30, z: -41.5, ry: -0.6, scale: 2.2 },
     uiSafe: { bottomRatio: 0.42 },
   },
   compositionDecal: null,
