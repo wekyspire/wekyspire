@@ -18,7 +18,7 @@
 // ⚠ 网格数已到 `interactive` 预算上限（60，见 test/sceneProps.test.js）：再加件必须同时删件。
 
 import * as THREE from 'three';
-import { P, K, shade, M } from '../kit/index.js';
+import { P, K, shade, M, mergeStatic } from '../kit/index.js';
 
 // 转轮图案（5 档）：`key` 对应美术图 `assets/props/symbol_<key>`（由 rig 侧贴到带面上），
 // `color` 是**贴图未就绪 / 无贴图时的兜底带色**（顶点色衬底一直画着，alpha 镂空处露的就是它）。
@@ -138,12 +138,12 @@ export default {
   // 灯池强度系数：机器灯池**推到了机身前方**（见 composeRoom 的 LAMP_FRONT_PUSH），
   // 离受光面比'埋机箱里'近得多，同 base 会把正面照爆成白光 —— 按 gain 压到 ~1/10（0.34→0.10：正红壳体在高光下会先丢色相变粉，
   // 实测机壳像素 (249,143,137) 即过曝，压到 0.10 后由房间中央光主导 → 深红）。
-  // **预算例外（主会话批准，2026-09-11）**：这是休息房主角，要求长期扛近景表演，还要继续
-  // 长出"粉碎口 / 摇杆次数计数器"这类正面入口 —— 现 59/2882 已顶格，故显式抬到 76/3600。
-  // 回本计划（按"先穷尽低成本账"的规矩）：① 静态子件（壳体/金饰/面板/腰线…）按材质族合并
-  // 成 2~3 件；② 一圈彩灯 + 三颗锁定指示灯改 InstancedMesh + instanceColor（rig 同步改读
-  // instanceColor）——两步做完网格数应回到 ~20、顶点回到 ~3000 以内，届时应撤掉本例外。
-  budget: { meshes: 76, verts: 3600 },
+  // **预算**：网格数已靠"静态子件按族合并"回到标准 interactive 上限内（59 → 26），
+  // 故 **meshes 撤回 60 不设例外**；顶点仍超一点（合并会把索引几何摊平 → 顶点数涨 ~22%，
+  // 实测 3530），只对 verts 保留一个最小例外，并注明回本方向：
+  // 下一步把一圈彩灯 + 三颗锁定指示灯改 InstancedMesh + instanceColor（同样省 15 个网格），
+  // 或再减鼓的端盖/补丁段数，即可把 verts 压回 3000 以内并撤掉这条。
+  budget: { verts: 3600 },
   lampGain: 0.10,
   lampColor: shade(P.gold, 0.3),   // 机器自带暖金色（不占彩灯串的颜色轮转位）
   footprint: { x: 5.6, z: 3.6 },
@@ -439,6 +439,26 @@ export default {
     knobMesh.userData.animRole = 'leverKnob';
     leverPivot.add(K.put(knobMesh, 0.56, 1.86, 0));
     g.add(leverPivot);
+
+    // ================= 静态子件合并（预算回本，用户定 2026-09-11）=================
+    // 壳体/金饰/压边/腰线/操作台…相对机身**完全不动**，此前是几十个独立 mesh
+    // （interactive 件不进合批 → 每个都是一次 draw call）。这里做一次后处理：
+    // 把"没有 animRole 且不在 parts 里"的散件挑出来，按材质族合并（世界变换烘进顶点）。
+    // 动件（转轮/拉杆/彩灯/指示灯/拨针/闸口/画牌/分格框）有 animRole 或显式登记 → 保持独立。
+    {
+      const animated = new Set([leverPivot, needlePivot, gate, ...reels, ...bulbs, ...reelLamps]);
+      const keep = new Set();
+      g.traverse((o) => { if (o.userData?.animRole) keep.add(o); });
+      const statics = new THREE.Group();
+      for (const c of [...g.children]) {
+        if (c.isMesh && !keep.has(c) && !animated.has(c)) statics.add(c);
+      }
+      if (statics.children.length) {
+        const merged = mergeStatic(statics);
+        merged.name = 'slotStatics';
+        g.add(merged);
+      }
+    }
 
     g.userData.parts = {
       body: g, leverPivot, reels, bulbs, reelLamps, needle: needlePivot, gate,

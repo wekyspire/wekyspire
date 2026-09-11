@@ -162,7 +162,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
       const light = new THREE.PointLight(color, base, preset.lamp.dist ?? 90, 1.8);
       light.position.set(a.x, a.y, a.z);
       group.add(light);
-      lampLights.push({ light, base });
+      lampLights.push({ light, base, baseColor: new THREE.Color(color) });
     });
   }
 
@@ -206,6 +206,16 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     { light: centerFill, base: cfBase },
   ];
 
+  // 灯池染色（用户定 2026-09-11）：恶魔 roll 期间整机光照要偏暗红——灯池是静态建的，
+  // 运行期改色走这个句柄（k=0 恢复本色，k=1 全量替换）。**只染灯池**（机器/彩灯串），
+  // 不动中央光/月光（房间基调仍归预设）。
+  const lampTintTarget = new THREE.Color();
+  let lampTintK = 0;
+  function setLampTint(color, k = 1) {
+    if (color != null) lampTintTarget.set(color);
+    lampTintK = THREE.MathUtils.clamp(k, 0, 1);
+  }
+
   /** 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。 */
   function setFocus(target, { strength = 1 } = {}) {
     if (!target) { focusTarget = null; focusWant = 0; return; }
@@ -224,7 +234,11 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     if (Math.abs(focusWant - focusK) < 0.003) focusK = focusWant;
     const periph = 1 - focusK * (focusCfg.dim ?? 0.72);
     for (const p of peripheral) p.light.intensity = p.base * periph;
-    for (const l of lampLights) l.light.intensity = l.base * periph;
+    for (const l of lampLights) {
+      l.light.intensity = l.base * periph;
+      if (lampTintK > 0.001) l.light.color.copy(l.baseColor).lerp(lampTintTarget, lampTintK);
+      else if (!l.light.color.equals(l.baseColor)) l.light.color.copy(l.baseColor);
+    }
 
     if (focusK > 0.001 && focusTarget) {
       focusLight.visible = true;
@@ -260,5 +274,8 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     }
   }
 
-  return { group, torches, moonlight, tint: preset.tint, update, setFocus, focusLight };
+  return {
+    group, torches, moonlight, tint: preset.tint, update, setFocus, focusLight,
+    setLampTint,   // (color, k) 灯池染色：恶魔 roll 等运行期换风格
+  };
 }
