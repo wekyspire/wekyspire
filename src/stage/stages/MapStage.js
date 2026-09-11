@@ -14,8 +14,9 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 
-// 快照 kind → widget builder（一个面板一个；未登记 = 该阶段还没有 Three 面板，
-// 对应 Vue 面板仍在渲染——迁移是逐面板推进的）。form = PanelObject 形态。
+// 快照 kind → widget builder（一个面板一个）。四个休息阶段面板已全部迁完，
+// 未登记 kind = 该阶段没有 Three 面板（目前 stage='end' 由 Vue 的 EndPanel 接管）。
+// form = PanelObject 形态（anchored = 贴边常驻，modal = 居中遮罩模态）。
 const PANEL_BUILDERS = {
   prep: { build: buildPrepPanel, form: 'anchored' },
   reward: { build: buildRewardPanel, form: 'modal' },
