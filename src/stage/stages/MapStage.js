@@ -7,6 +7,7 @@ import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
+import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel, buildShopPanel } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -80,6 +81,7 @@ export class MapStage {
     this._snap = null;     // 当前面板快照（本地重绘用）
     this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
     this._cardPicker = null; // 全屏选卡界面（营地/训练场升级用；惰性创建）
+    this._showcase = null;   // 获得物特写（遗物/药水/奖励到手时播一次；惰性创建）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -157,6 +159,23 @@ export class MapStage {
     this._panel.setWidgets(kind, entry.build(snap, { selected: this._panelUi?.selected }));
     this._syncSlotRoll();
   }
+
+  // ---- 获得物特写（通用组件，用户定 2026-09-11）----
+  // 拿到遗物/药水/奖励时播一次：中央淡入放大（带弹跳）+ 背后上帝光 + 下方三行文本，
+  // 点击任意处退出。**组件在 Stage 层**（objects/ItemShowcaseObject.js），宿主只负责
+  // 创建/转发指针事件/逐帧驱动——数据是纯对象，不读 run 状态。
+  showcaseItem(item) {
+    if (!item) return false;
+    if (!this._showcase) {
+      this._showcase = new ItemShowcaseObject({ onDismiss: () => { /* 退出后保持挂载（复用） */ } });
+      this.uiScene.add(this._showcase);
+      this._showcase.attachPicker(this._picker);
+    }
+    return this._showcase.show(item);
+  }
+
+  /** 特写是否在播（宿主据此吞掉面板输入）。 */
+  get showcasing() { return !!this._showcase?.busy; }
 
   // ---- 全屏选卡界面（营地/训练场「升级一张卡」）----
   // 按下升级按钮进入：界面渲染**牌组全部卡**（不可升级的置灰），hover 预览升级后的卡面，
@@ -283,10 +302,12 @@ export class MapStage {
     this._bus = bus ?? null; // 选卡界面的 tooltip 出口（card 整卡预览走同一条浮层）
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
     this._cardPicker?.attachPicker(this._picker);
+    this._showcase?.attachPicker(this._picker);
   }
 
   detachInput() {
     this._panel?.attachPicker?.(null);
+    this._showcase?.attachPicker(null);
     this._picker = null;
     this._downHit = null;
   }
@@ -308,6 +329,7 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._showcase?.busy) return;                     // 特写期间吞掉 hover（不弹 tooltip）
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     this._panel?.onHover?.(hit);
   }
@@ -327,6 +349,7 @@ export class MapStage {
     const down = this._downHit;
     this._downHit = null;
     if (!down || !hit || down.kind !== hit.kind || down.id !== hit.id) return;
+    if (this._showcase?.busy) { this._showcase.onClick(hit); return; }   // 点击任意处退出
     if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
     this._panel?.onClick?.(hit);
   }
@@ -361,6 +384,7 @@ export class MapStage {
     this._unsubTick = manager.onTick((dt) => {
       this._statusBar.update(dt);
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
+      this._showcase?.update(dt);        // 获得物特写（自带 in/hold/out 时序）
     });
   }
 

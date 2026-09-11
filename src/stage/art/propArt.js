@@ -16,6 +16,11 @@ import { ArtImageCache, indexArtUrls } from './imageCache.js';
 const PROP_ART_URLS = indexArtUrls(
   import.meta.glob('../../assets/props/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
 );
+// 获得物素材（`assets/items/*`）：遗物/药水/奖励的特写图放这里；**同名时 items 优先**，
+// 于是"道具图"与"物品图"共用一个查表 key，调用方不必分两套。
+const ITEM_ART_URLS = indexArtUrls(
+  import.meta.glob('../../assets/items/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
+);
 
 export class PropArtCache extends ArtImageCache {
   constructor() {
@@ -25,7 +30,8 @@ export class PropArtCache extends ArtImageCache {
 
   /** key（去扩展名文件名，如 'slot_machine'）→ URL；无此素材返回 null。 */
   resolveUrl(key) {
-    return key ? (PROP_ART_URLS[key] ?? null) : null;
+    if (!key) return null;
+    return ITEM_ART_URLS[key] ?? PROP_ART_URLS[key] ?? null;
   }
 
   /** 同步取图：已解码 → HTMLImageElement；未命中 → 发起加载并返回 null。 */

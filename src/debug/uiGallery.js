@@ -180,6 +180,29 @@ if (opt('shop', '0') === '1' && run.shop) {
   mapStage._onPanelAction({ action: 'openShop', local: true });
 }
 
+// ?showcase=relic|potion|coin 直接播一次获得物特写（不用玩到真拿到东西那一步）
+const SHOWCASE_SAMPLES = {
+  relic: {
+    title: '春之瓶', artKey: 'relic_springFlask', tint: 0x8fd6a8,
+    desc: '瓶底永远积着一小汪不肯干的水。',
+    effect: '每场战斗开始时，恢复 5 点生命。',
+  },
+  potion: {
+    title: '恢复药剂', artKey: 'potion_heal', tint: 0xd06a7a,
+    desc: '味道像掺了铁锈的糖水。',
+    effect: '立即恢复 15% 最大生命。',
+  },
+  coin: {
+    title: '金币大奖', tint: 0xffd06a,
+    desc: '老虎机把所有家底都吐了出来。',
+    effect: '获得 40 金币。',
+  },
+};
+window.__showcase = (item) => mapStage.showcaseItem(item ?? SHOWCASE_SAMPLES.relic);
+window.__uiStage = mapStage;   // 调试句柄（查组件状态/手动驱动）
+const SHOW = opt('showcase', '');
+if (SHOW && SHOWCASE_SAMPLES[SHOW]) mapStage.showcaseItem(SHOWCASE_SAMPLES[SHOW]);
+
 // ---- 指针接线（与 App.vue 同一套调用） ----
 const local = (e) => {
   const r = canvas.getBoundingClientRect();
