@@ -79,7 +79,7 @@ export default {
         sx * (bayW / 2 + 0.06) + bayCx, (bayBot + bayTop) / 2, D / 2 - 0.02));
     }
     // 柜内背板（**unlit 恒亮** = "柜里一直亮着"，也是玻璃门后最远的一层）
-    g.add(K.put(K.box({ color: shade(lighting, -0.42), size: [bayW + 0.36, bayH + 0.3, 0.16], family: 'unlit' }),
+    g.add(K.put(K.box({ color: shade(lighting, -0.52), size: [bayW + 0.36, bayH + 0.3, 0.16], family: 'unlit' }),
       bayCx, (bayBot + bayTop) / 2, -D / 2 + BAY.t + 0.4));
     // 柜内顶/底（暗，别让开口读成通到底的黑洞）
     g.add(K.put(K.box({ color: ironDark, size: [bayW + 0.2, 0.12, D - 0.5], family: 'metal' }),
@@ -94,8 +94,8 @@ export default {
     for (const by of boardY) {
       g.add(K.put(K.box({ color: steel, size: [bayW - 0.06, boardT, D - 0.62], family: 'metal' }),
         bayCx, by, -0.06));
-      // 层板前沿的灯带（unlit：把"每层亮着"读出来）
-      g.add(K.put(K.box({ color: lighting, size: [bayW - 0.1, 0.05, 0.05], family: 'unlit' }),
+      // 层板前沿的灯带（unlit：把"每层亮着"读出来；压一档别抢货品）
+      g.add(K.put(K.box({ color: shade(lighting, -0.18), size: [bayW - 0.1, 0.05, 0.05], family: 'unlit' }),
         bayCx, by + 0.02, D / 2 - 0.4));
     }
     // 四个货位：每层 2 件（品相由 rig 按库存换色；卖空 = rig 缩小）
@@ -105,8 +105,8 @@ export default {
       [-1, 1].forEach((side, col) => {
         const index = layer * 2 + col;
         const mesh = K.put(
-          // 隔着玻璃看会掉一档，故货品颜色微提亮（unlit 族，读作"柜内灯照着的商品"）
-          K.box({ color: shade(slotColors[index], 0.1), size: [0.46, 0.66, 0.4], family: 'unlit' }),
+          // 货品用**原色**（shade 是朝白插值，提亮=去饱和，隔玻璃看反而更糊）
+          K.box({ color: slotColors[index], size: [0.46, 0.66, 0.4], family: 'unlit' }),
           bayCx + side * (bayW * 0.24), sy, 0.02,
         );
         mesh.userData.animRole = 'slotItem';
@@ -128,7 +128,8 @@ export default {
     doorPivot.position.set(bayCx - bayW / 2 - 0.06, 0, D / 2 + 0.08);
     const dW = bayW + 0.16, dH = bayH + 0.2;
     // 门板（glass 族：半透明）
-    doorPivot.add(K.put(K.box({ color: shade(P.wax, -0.35), size: [dW, dH, 0.05], family: 'glass' }),
+    // ⚠ 玻璃色**偏暗**：浅色玻璃（wax）叠在亮柜内会整面发白，货品全被洗掉
+    doorPivot.add(K.put(K.box({ color: shade(P.iron, 0.06), size: [dW, dH, 0.05], family: 'glass' }),
       dW / 2, (bayBot + bayTop) / 2, 0));
     // 门框（四边）+ 把手（竖条）：金属件，跟着门一起动
     const fr = 0.11;

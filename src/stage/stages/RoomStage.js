@@ -18,6 +18,7 @@ import { getScene } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
+import { createVendingMachineRig } from '../scenes/interactive/vendingMachineRig.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { ContinueButtonObject } from '../objects/ContinueButtonObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
@@ -40,6 +41,7 @@ const PANEL_OF = {
   bank: buildBankPanel,
   camp: buildCampPanel,
   training: buildTrainingPanel,
+  shop: buildShopPanel,     // 售货机：点机身直接开货架面板（不再是房间表头上的一个按钮）
 };
 
 // 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
@@ -392,7 +394,8 @@ export class RoomStage {
       // 机器类（有 parts）才有 rig；普通陈设（篝火/训练桩…）只要浮标 + 拾取 + 推近
       const rig = entry.kind === 'slot' ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
         : entry.kind === 'bank' ? createBankMachineRig({ object: entry.object, parts: entry.parts })
-          : null;
+          : entry.kind === 'vending' ? createVendingMachineRig({ object: entry.object, parts: entry.parts })
+            : null;
       if (rig) this._rigs.set(name, rig);
       // 地面光环（hover 提亮）+ 头顶浮标（菱形 + 光柱）：远景读得出"这台能点"
       const ring = new THREE.Mesh(
@@ -607,11 +610,8 @@ export class RoomStage {
     this._renderPanel();
   }
 
-  /** 打开售货机面板（房间表头的本地动作；与机器面板同一块停靠区）。 */
-  openShop() {
-    this._panelKind = 'shop';
-    this._renderPanel();
-  }
+  /** 打开售货机面板（场景式房间点售货机机身；占位房间走房间表头的本地动作）。 */
+  openShop() { this._openPanel('shop'); }
 
   _renderPanel() {
     const snap = this._snap;
@@ -659,6 +659,7 @@ export class RoomStage {
 
   /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
   _syncSlotFromSnapshot() {
+    this._syncVending();
     // 强绑抓牌未领时不许离房：continue 箭头压暗（点了给一句泡泡提示，见 _activate）
     this._continue.setDim(this._snap?.training?.forced ? 0.4 : 1);
     const s = this._snap?.slot;
@@ -680,6 +681,25 @@ export class RoomStage {
       this._slotSpinId = null;
       this._onIntent?.({ action: 'slotAnimDone', id: spinning.id });
     }, 120);
+  }
+
+  /**
+   * 售货机同步：**只在商店层通电营业**（`snap.shop` 为 null 的层整机隐藏）。
+   * 隐藏即不可点（Picker 的 visibleUp 守卫），所以不必动态增减拾取登记。
+   * 库存变了由 rig 自己比对——刚卖掉的那格会播出货演出（门开→货落→翻板→门合→灯牌爆闪）。
+   */
+  _syncVending() {
+    const entry = this._markers.find(m => m.name === 'shop');
+    const rig = this._rigs.get('shop');
+    if (!entry || !rig) return;
+    const shop = this._snap?.shop ?? null;
+    const on = !!shop;
+    entry.entry.object.visible = on;
+    entry.marker.visible = on;
+    entry.ring.visible = on;
+    if (!on) { if (this._focused === 'shop') this._focusMachine(null); return; }
+    rig.setStock(shop.items ?? []);
+    rig.setDisplay(`余额 ${this._snap.money ?? 0}`);
   }
 
   // ================= 内部：逐帧 =================
