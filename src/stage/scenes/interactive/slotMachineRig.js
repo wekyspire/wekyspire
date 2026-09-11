@@ -15,7 +15,8 @@
 // 纯 Stage 层：不读 Core、不读 Bridge；输入只有「拉杆时给定的结果」（调用方从 Core 拿）。
 
 import * as THREE from 'three';
-import { P } from '../kit/index.js';
+import { P, familyMaterial } from '../kit/index.js';
+import { sharedPropArtCache } from '../../art/propArt.js';
 
 const Z = Math.PI * 2;
 
@@ -96,6 +97,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const lever = parts?.leverPivot ?? null;
   const reels = parts?.reels ?? [];
   const bulbs = parts?.bulbs ?? [];
+  const needle = parts?.needle ?? null;
   const reelLamps = parts?.reelLamps ?? [];
   // 转轮面数由资产决定（道具导出 SYMBOLS 长度）；资产侧只有 kit 共享材质，
   // 彩灯/指示灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
@@ -110,6 +112,50 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const lampLit = brighten(P.gold, 20);
   for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: P.gold });
   for (const l of reelLamps) l.material = new THREE.MeshBasicMaterial({ color: lampOff });
+  // 画牌（额头招牌）：道具只留了 artKey，纹理在这里惰性套上——**逐帧试取**而不是订阅加载事件，
+  // 因为 rig 的生命周期由宿主随手 end()，订阅会在重建时漏成幽灵回调。
+  const artPanels = [];
+  object.traverse((o) => { if (o.userData?.artKey) artPanels.push(o); });
+  /** 画牌贴图：就绪即套（一次性）。图未就绪就留给 update 逐帧重试。 */
+  function applyArtPanels() {
+    for (let i = artPanels.length - 1; i >= 0; i--) {
+      const panel = artPanels[i];
+      const tex = sharedPropArtCache.getTexture(panel.userData.artKey);
+      if (!tex) continue;
+      panel.material = new THREE.MeshBasicMaterial({ map: tex });
+      artPanels.splice(i, 1);
+    }
+  }
+  applyArtPanels();   // 预载命中时"建好就贴上"，不会先闪一下空招牌
+  // 轮盘图案：每根鼓的每个带面一张美术图（`assets/props/symbol_*`，带 alpha 镂空）。
+  // 整组齐了才换（不然会出现"半根鼓有图、半根还是色块"）；材质数组末位留给衬底（见 drumGeometry）。
+  const reelArt = reels.map((reel) => ({
+    reel,
+    keys: reel.userData.symbolKeys ?? null,
+    mesh: reel.userData.drumMesh ?? reel.children[0],
+    done: false,
+  }));
+  function applyReelArt() {
+    for (const item of reelArt) {
+      if (item.done || !item.keys || !item.mesh) continue;
+      const texs = item.keys.map((k) => sharedPropArtCache.getTexture(k));
+      if (texs.some((t) => !t)) continue;
+      const baseMat = item.mesh.material;                 // 原衬底材质（kit 共享族）
+      item.mesh.material = [
+        ...texs.map((tex) => {
+          const m = familyMaterial('stone');              // 图案走**吃光族**：只被照亮，不自发光
+          m.map = tex;
+          // **alphaTest 而不是 transparent**：镂空处直接丢弃片元，旋转时没有半透明排序问题
+          m.alphaTest = 0.5;
+          m.needsUpdate = true;
+          return m;
+        }),
+        baseMat,                                          // 衬底（含端盖）
+      ];
+      item.done = true;
+    }
+  }
+  applyReelArt();
   // 拉杆：材质独立化（悬停/拉下时能闪光提示——它是"这台能点"的关键部件）
   const leverParts = [];
   lever?.traverse((o) => {
@@ -133,6 +179,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     leverRelease: 0,     // 弹起进度（0..1）
     spin: null,          // { elapsed, tier, locked: [bool], plans: [planReel…] }（见文件头时序）
     spinEnergy: 0,       // 0..1 转轮当前动能（驱动整机震动/拨杆共振）
+    needleTilt: 0,       // 拨针摆角（弹簧积分）
+    needleVel: 0,
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
     shakeAmp: 0,
@@ -208,10 +256,22 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
 
   function update(dt) {
     st.t += dt;
+    applyArtPanels();   // 画牌贴图：图刚解码完的那一帧贴上（之后就空转）
+    applyReelArt();     // 轮盘图案同理
     // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
     // 此时机器只该有极轻微的呼吸感（用户 2026-09-11：再缩一倍 → calm ≈ 0.16）。
     st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
     const calm = 1 - 0.84 * st.focus;
+
+    // ---- 横向拨针：被转轮带着抖/偏，停轮后弹簧归位（用户定 2026-09-11）----
+    if (needle) {
+      const target = -st.spinEnergy * 0.055;              // 转得越猛，针被压得越偏
+      const K_SPRING = 90, DAMP = 9;                      // 欠阻尼（ζ≈0.47）→ 归位带一点回摆
+      st.needleVel += (target - st.needleTilt) * K_SPRING * dt - st.needleVel * DAMP * dt;
+      st.needleTilt += st.needleVel * dt;
+      const wob = st.spinEnergy > 0.001 ? Math.sin(st.t * 33 + st.phase) * 0.014 * st.spinEnergy : 0;
+      needle.rotation.z = (st.needleTilt + wob) * calm;
+    }
 
     // ---- 常驻抖动：机体微微抖（幅度小但持续；中奖时叠加"激动"抖动）----
     // **层次反馈**（用户定）：转轮高速转动时整机跟着震（转盘带动机构），转速降下来震动也弱，
@@ -285,6 +345,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
           s.locked[i] = true;
           st.shake = Math.max(st.shake, 0.09);                     // 落槽小弹跳
           st.shakeAmp = Math.max(st.shakeAmp, 0.022);
+          st.needleVel += (i % 2 === 0 ? -1 : 1) * 2.6;            // 拨针被咬合震一下（左右反向）
         } else {
           r.rotation.x = a;
         }

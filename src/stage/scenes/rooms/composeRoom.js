@@ -392,9 +392,10 @@ export function composeRoom(recipeId, seed = 'dev') {
   // 而灯池还贴墙的话（灯珠离墙 ~1）会在墙上打出爆白的彩色斑，推离墙面才是柔和的彩色氛围光。
   // **落地件也必须推到体外**：老虎机/银行机这类箱体，光池落在 (x,z)=机身中心 = **箱子内部**，
   // 于是"机身里有个大点光源"（用户报障：机上光照诡异）——按朝向 ry 沿前脸法线推出
-  // (半深 + 6)，高度取体量上段；推得太近（~1.6）会把前脸照爆成一团白光。
+  // (半深 + 12)，高度取体量上段；推得太近（~1.6 或 ~6）都会把前脸照爆——
+  // 饱和壳色（正红）一旦过曝先丢色相变粉，再被 bloom 抹开，整台机器糊成一团。
   const LAMP_WALL_PUSH = 4.5;
-  const LAMP_FRONT_PUSH = 6;
+  const LAMP_FRONT_PUSH = 12;
   const lampAnchorOf = (p) => {
     if (!p.tags.includes('lamp')) return null;
     const gain = p.lampGain ?? 1;

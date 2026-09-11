@@ -42,6 +42,8 @@ const THEMES = {
     potionGreen: 0x4f7a5c,
     potionRed: 0x7a4048,
     potionBlue: 0x46628a,
+    machineRed: 0xa8262c, // 老虎机外壳正红（稍偏暗、纯度高，对标可乐机——全库唯一的例外色，
+                          // 故意跳出'冷调低饱和'：赌具要跳出来）
     ember: 0x9aa8d8,     // 余烬/火星粒子
     // ---- CATALOG2 增补（塔身物件多样化；仍守冷调低饱和） ----
     bread: 0x8a795a,
@@ -87,6 +89,7 @@ const THEMES = {
     potionGreen: 0x4a7058,
     potionRed: 0x8a3844,
     potionBlue: 0x425a84,
+    machineRed: 0xa8262c, // 老虎机外壳正红（见 dungeon 注释）
     ember: 0xb098a8,
     bread: 0x7a6a4e,
     cheese: 0x8a7c56,
