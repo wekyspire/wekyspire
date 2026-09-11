@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>魏启尖塔 · 观战</title>
+    <script>
+      // 错误探针（与 propGallery/roomGallery 同款：自动化检测用）
+      window.__errs = [];
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      /* 与正式壳同款取景框：16:9 居中，UI 以框为包含块（tooltip/指针坐标依赖它） */
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+      #game-frame { position: absolute; background: #000; transform: translateZ(0); }
+      #stage-canvas { display: block; position: absolute; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/shell/watch/main.js"></script>
+  </body>
+</html>

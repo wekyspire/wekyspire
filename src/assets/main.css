@@ -3,9 +3,16 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Microsoft YaHei', Arial, sans-serif;
-  background-color: rgb(54, 59, 62);
+  /* 游戏画布锁定 16:9 居中，窗口非 16:9 时边缘铺黑（取景框见 shell/App.vue #game-frame） */
+  background-color: #000;
 }
-/* 
+/* 应用根容器满屏：16:9 取景框在其内绝对定位 */
+#app {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+}
+/*
 #app {
   max-width: 1200px;
   margin: 0 auto;

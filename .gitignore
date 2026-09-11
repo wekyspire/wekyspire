@@ -107,3 +107,11 @@ out/
 
 # built
 dist/
+
+# 临时验证产物（冒烟截图/snapshot 等，勿放根目录）
+tmp/
+
+.playwright-mcp/*
+
+# seedream 素材管线虚拟环境（tools/seedream/out/ 已被顶层 out/ 规则覆盖）
+tools/seedream/.venv/

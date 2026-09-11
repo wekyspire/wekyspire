@@ -1,6 +1,21 @@
 # 魏启尖塔
 
 这是一个使用Vite构建，基于Vue 3框架，使用Javascript和HTML的单人肉鸽文字冒险型网页小游戏。
+
+## 场景层级（架构总纲）
+
+应用共三个场景层级，切换由 `src/shell/App.vue` 编排（phase / gameStage）：
+
+| 层级 | 别名 | 渲染方式 | 主要内容 |
+|---|---|---|---|
+| 菜单层 | 菜单级 | 纯 Vue | 开始界面 StartScreen、游戏内菜单 GameMenu、终局 EndPanel、全局 toast |
+| 大世界层 | 塔楼层 | ThreeJS 为主 | MapStage（夜空 + 塔楼侧视图 + 玩家状态栏）；PrepPanel / RoomPanel / AscensionPanel 等 Vue 面板叠加其上 |
+| 战斗层 | 房间层 | ThreeJS 为主 | BattleStage（战场）；BattleHud / RewardPanel 等 Vue 面板叠加其上 |
+
+- ThreeJS 部分共享同一 `<canvas>`，由 StageManager 在 MapStage ↔ BattleStage 间切舞台。
+- 大世界层/战斗层的少部分内容由 Vue 渲染：对话（dialogue）、cutscene 幕间转场（CutsceneOverlay）与各阶段操作面板。
+- run 的 gameStage（prep/battle/reward/room/ascension/end）决定大世界层/战斗层当前叠加哪些 Vue 面板。
+
 ## 数据说明
 
 ### 敌人

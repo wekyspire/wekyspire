@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>战斗调试页</title>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #06080e; }
+      #stage-canvas { display: block; }
+      #debug-overlay { position: fixed; inset: 0; pointer-events: none; font: 12px/1.6 monospace; color: #cfd8e3; }
+      #debug-counts { position: absolute; top: 8px; left: 10px; }
+      #debug-log { position: absolute; bottom: 8px; left: 10px; width: 40em; }
+      #debug-log .log-combat { color: #ff9d8a; }
+      #debug-log .log-skill { color: #9ad6ff; }
+      #debug-tooltip { position: absolute; max-width: 320px; background: rgba(8, 10, 16, 0.92); border: 1px solid #3a465c; border-radius: 6px; padding: 8px 10px; }
+      #debug-end { position: absolute; top: 40%; width: 100%; text-align: center; font-size: 28px; color: #ffd34c; }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="/src/debug/main.js"></script>
+  </body>
+</html>

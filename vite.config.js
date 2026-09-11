@@ -27,6 +27,17 @@ export default defineConfig(({mode}) => {
     server: {
       host: 'localhost',
       port: 5177
+    },
+    build: {
+      // 两个入口：正式壳 index.html + 观战页 watch.html（连 headless 直播中继，
+      // 见 AGENTS.md「headless 试玩与直播观战」）。dev 模式下 Vite 直接按路径服务
+      // 根目录任意 .html，无需配置；这里是为了让**构建产物**也带上观战页。
+      rollupOptions: {
+        input: {
+          main: path.join(root, 'index.html'),
+          watch: path.join(root, 'watch.html')
+        }
+      }
     }
   }
 })

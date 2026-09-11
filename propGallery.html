@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>道具陈列页</title>
+    <script>
+      window.__errs = [];
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+      #gallery-canvas { display: block; }
+      #gallery-overlay {
+        position: fixed; top: 10px; left: 12px; pointer-events: none;
+        font: 13px/1.7 monospace; color: #cfd8e3;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+      }
+      #gallery-overlay h1 { margin: 0 0 2px; font: 600 15px/1.4 monospace; color: #e8eef8; }
+      #gallery-overlay select {
+        pointer-events: auto; margin-top: 4px; background: #10141f; color: #cfd8e3;
+        border: 1px solid #3a465c; border-radius: 4px; padding: 2px 6px; font: 12px monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gallery-overlay">
+      <h1>道具陈列页 · propGallery</h1>
+      <div id="gallery-count"></div>
+      <div>拖拽旋转 ｜ 滚轮缩放 ｜ 主题：
+        <select id="theme-select"></select>
+      </div>
+    </div>
+    <script type="module" src="/src/debug/propGallery.js"></script>
+  </body>
+</html>
