@@ -26,7 +26,7 @@ import * as THREE from 'three';
 import { buildSkydome } from './skydome.js';
 import { buildMoonDust } from './moonDust.js';
 import { familyMaterial } from './kit/materials.js';
-import { P, shade } from './kit/palette.js';
+import { P, shade, desatColor } from './kit/palette.js';
 
 // 水平地板高度（世界坐标）：单位站位/牌桌UI 都以此为地面参照
 export const FLOOR_Y = -30;
@@ -280,7 +280,7 @@ export function buildDungeon3D() {
     chandelier.add(f);
     candleFlames.push(f);
   }
-  const chandelierLight = new THREE.PointLight(0x848494, CHANDELIER_LIGHT_BASE, 95, 1.8);
+  const chandelierLight = new THREE.PointLight(desatColor(0x848494).getHex(), CHANDELIER_LIGHT_BASE, 95, 1.8);
   chandelierLight.position.y = 3;
   chandelier.add(chandelierLight);
   group.add(chandelier);
@@ -399,7 +399,7 @@ export function buildDungeon3D() {
     const inner = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.0, 5), matFlame);
     inner.position.set(spot.x, y + 2.1, spot.z);
     group.add(inner);
-    const light = new THREE.PointLight(P.fireLight, TORCH_LIGHT_BASE * 0.8, 70, 1.8);
+    const light = new THREE.PointLight(desatColor(P.fireLight, { k: 0.35, cap: 0.45 }).getHex(), TORCH_LIGHT_BASE * 0.8, 70, 1.8);
     light.position.set(spot.x, y + 3, spot.z + 2);
     group.add(light);
     torches.push({
@@ -486,7 +486,7 @@ export function buildDungeon3D() {
     inner.position.set(spot.x, y + 2.2, spot.z + 1);
     group.add(inner);
 
-    const light = new THREE.PointLight(P.fireLight, TORCH_LIGHT_BASE, 78, 1.8);
+    const light = new THREE.PointLight(desatColor(P.fireLight, { k: 0.35, cap: 0.45 }).getHex(), TORCH_LIGHT_BASE, 78, 1.8);
     light.position.set(spot.x, y + 3, spot.z + 4);
     group.add(light);
 
@@ -514,10 +514,12 @@ export function buildDungeon3D() {
 
   // ---- 基础灯光：半球假 GI 环境光（保底）+ 月光（左上穿窗，唯一投影光）+ 相机侧补光
   //      + 光池假反弹 + 战场主补光 ----
+  // 灯色统一过 kit 的 desatColor 去饱和（用户 2026-09-11：tonemap 后场景过饱和偏蓝；
+  // 与 rooms/lighting.js 同一处方——本场景是 USE_PCG_ROOMS=false 时的回退，观感须一致）
   // HemisphereLight = 全局环境光，**没有位置也没有衰减**——提亮必然全场均匀洗亮，
   // 只能当保底（暗部不死黑），不能当主光；光照焦点由下方"战场主补光"承担
-  group.add(new THREE.HemisphereLight(0x3a4666, 0x232030, 1.5));
-  const moonlight = new THREE.DirectionalLight(0x9db4ec, MOONLIGHT_BASE);
+  group.add(new THREE.HemisphereLight(desatColor(0x3a4666).getHex(), desatColor(0x232030).getHex(), 1.5));
+  const moonlight = new THREE.DirectionalLight(desatColor(0x9db4ec).getHex(), MOONLIGHT_BASE);
   // position 对平行光只决定**阴影相机的深度原点**（光照方向 = position→target 不变）：
   // 必须沿光轴反向后移足够远，让整面高墙（到 +460）都落在阴影相机近平面之前——
   // 墙在 y≈49.5 以上沿光轴深度为负会被 near 裁掉，shadow map 缺上半墙，
@@ -532,19 +534,19 @@ export function buildDungeon3D() {
   sc.left = -200; sc.right = 200; sc.top = 600; sc.bottom = -120; // 须盖住加高加宽后的左墙+房间
   sc.near = 10; sc.far = 600;
   moonlight.shadow.bias = -0.0015;
-  const fill = new THREE.DirectionalLight(0x66779e, 0.5);
+  const fill = new THREE.DirectionalLight(desatColor(0x66779e).getHex(), 0.5);
   fill.position.set(30, 60, 200);
   group.add(fill);
   // 月光落地反弹（假 GI 核心）：两处光池各一盏大半径低强度点光，贴地上方朝上打，
   // 把周围柱列/墙面/拱肋当"被月光反弹的二次面"打亮——暗部不死黑，成本=两盏无阴影点光
-  const bounceA = new THREE.PointLight(0x8298d4, 620, 130, 1.8);
+  const bounceA = new THREE.PointLight(desatColor(0x8298d4).getHex(), 620, 130, 1.8);
   bounceA.position.set(-24, FLOOR_Y + 9, -17); // winA 光池（光路 t≈75 落点）
-  const bounceB = new THREE.PointLight(0x8298d4, 380, 110, 1.8);
+  const bounceB = new THREE.PointLight(desatColor(0x8298d4).getHex(), 380, 110, 1.8);
   bounceB.position.set(-24, FLOOR_Y + 9, 20);  // winB 光池
   group.add(bounceA, bounceB);
   // 战场主补光（光照焦点）：悬在战线轴中点上空的大点光，物理衰减让亮度自然
   // 向四周（远墙/近景画外）跌落——战场亮、周围暗，一盏无阴影点光搞定
-  const battleGlow = new THREE.PointLight(0x93a5d8, 8000, 260, 2.0);
+  const battleGlow = new THREE.PointLight(desatColor(0x93a5d8).getHex(), 8000, 260, 2.0);
   battleGlow.position.set(-4, FLOOR_Y + 60, -22); // battleLine near/far 中点正上方
   group.add(battleGlow);
 

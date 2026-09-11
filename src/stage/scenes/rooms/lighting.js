@@ -4,12 +4,25 @@
 // 预设差异 = 主光来源/强度配比/染色口径。火点光由 composeRoom 收集的 fireAnchors 生成。
 
 import * as THREE from 'three';
-import { P } from '../kit/index.js';
+import { P, desatColor } from '../kit/index.js';
 import { FLOOR_Y } from '../dungeon3D.js';
 import { LEFT_WALL_X } from './walls.js';
 
 // 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）
 const FIRE_BASE = 1150;
+
+// ---- 灯光去饱和（用户 2026-09-11：tonemap 后场景过饱和且偏蓝）----
+// 处方在 kit 的 `desatColor`（保持亮度、压饱和度、冷色额外多去一档）。**每个建灯处都过一遍**：
+// 灯只留轻微色倾向，画面颜色交给材质反照率——原来月光/反光/战场补光全是高饱和蓝
+// （0x9db4ec/0x8298d4/0x93a5d8），叠加 tone mapping 后整场读成"蓝"。
+// 单位染色底（preset.tint）也走同一处方：那是"单位受到的照明估计"，同样不该带高饱和蓝。
+const desat = (c) => desatColor(c).getHex();
+const desatRGB = (t) => {
+  const c = desatColor(new THREE.Color(t[0], t[1], t[2]));
+  return [c.r, c.g, c.b];
+};
+// 火：保留更多暖色倾向（幽火仍是幽火，只是不再偏紫）
+const desatFire = (c) => desatColor(c, { k: 0.35, cap: 0.45 }).getHex();
 const FLAME_RATE = 12; // 每火火焰粒子 /秒（同 dungeon3D）
 
 /**
@@ -18,7 +31,7 @@ const FLAME_RATE = 12; // 每火火焰粒子 /秒（同 dungeon3D）
  *   shadow 相机须盖住加高加宽后的左墙 + 房间；bias 防自阴影痤疮。
  */
 function makeMoonlight(intensity) {
-  const moon = new THREE.DirectionalLight(0x9db4ec, intensity);
+  const moon = new THREE.DirectionalLight(desat(0x9db4ec), intensity);
   moon.position.set(LEFT_WALL_X - 145, 145, -29);
   moon.target.position.set(30, FLOOR_Y, 0);
   moon.castShadow = true;
@@ -107,42 +120,42 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const group = new THREE.Group();
   group.name = `lighting:${key}`;
 
-  const hemi = new THREE.HemisphereLight(...preset.hemi);
+  const hemi = new THREE.HemisphereLight(desat(preset.hemi[0]), desat(preset.hemi[1]), preset.hemi[2]);
   group.add(hemi);
 
   const moonlight = makeMoonlight(preset.moon);
   group.add(moonlight, moonlight.target);
 
   if (preset.rim) {
-    const rim = new THREE.DirectionalLight(preset.rim.color, preset.rim.intensity);
+    const rim = new THREE.DirectionalLight(desat(preset.rim.color), preset.rim.intensity);
     rim.position.set(...preset.rim.position);
     rim.target.position.set(...preset.rim.target);
     group.add(rim, rim.target);
   }
 
-  const fill = new THREE.DirectionalLight(0x66779e, preset.fill);
+  const fill = new THREE.DirectionalLight(desat(0x66779e), preset.fill);
   fill.position.set(30, 60, 200);
   group.add(fill);
 
   // 月光落地反弹（假 GI）：两处光池点光——位置离开墙面（贴墙会把挂饰打得过艳，
   // "unlit 壁画刺眼"的病灶），向房间中线收，只打地板光池
   const [bounceA, bounceB] = preset.bounce;
-  const pA = new THREE.PointLight(0x8298d4, bounceA[0], bounceA[1], 1.8);
+  const pA = new THREE.PointLight(desat(0x8298d4), bounceA[0], bounceA[1], 1.8);
   pA.position.set(-10, FLOOR_Y + 6, -12);
-  const pB = new THREE.PointLight(0x8298d4, bounceB[0], bounceB[1], 1.8);
+  const pB = new THREE.PointLight(desat(0x8298d4), bounceB[0], bounceB[1], 1.8);
   pB.position.set(-10, FLOOR_Y + 6, 16);
   group.add(pA, pB);
 
   // 战场主补光（光照焦点）：悬战线中点上空的大点光，物理衰减让战场亮、四周暗。
   // 距离收在 ~195：只罩战场+近墙——收太小全场黑洞，收太大（260=整房）又把墙面洗平
   const [glowColor, glowBase, glowDist = 195] = preset.battleGlow;
-  const battleGlow = new THREE.PointLight(glowColor, glowBase, glowDist, 2.0);
+  const battleGlow = new THREE.PointLight(desat(glowColor), glowBase, glowDist, 2.0);
   battleGlow.position.set(-4, FLOOR_Y + 60, -22);
   group.add(battleGlow);
 
   // 房间中央虚拟光：框住战场中央附近的道具/单位，把玩家注意力收到战区（用户定）
   const [cfColor, cfBase, cfDist] = preset.centerFill;
-  const centerFill = new THREE.PointLight(cfColor, cfBase, cfDist, 2.0);
+  const centerFill = new THREE.PointLight(desat(cfColor), cfBase, cfDist, 2.0);
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
   group.add(centerFill);
 
@@ -158,7 +171,8 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     let ringI = 0;   // 只有"没自带颜色"的锚才吃轮转位（否则显式色会被机器占用而错位）
     lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a) => {
       const base = (preset.lamp.base ?? 900) * (a.gain ?? 1);
-      const color = a.color ?? (ring ? ring[ringI++ % ring.length] : (preset.lamp.color ?? P.glowCyan));
+      // ⚠ 这里同时覆盖 **PCG 道具的 lampColor**（a.color）：可放置物体的光源与预设灯同一处方
+      const color = desat(a.color ?? (ring ? ring[ringI++ % ring.length] : (preset.lamp.color ?? P.glowCyan)));
       const light = new THREE.PointLight(color, base, preset.lamp.dist ?? 90, 1.8);
       light.position.set(a.x, a.y, a.z);
       group.add(light);
@@ -169,7 +183,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
   const torches = [];
   for (const a of fireAnchors.slice(0, preset.fire.cap)) {
-    const light = new THREE.PointLight(P.fireLight, preset.fire.base, preset.fire.dist, 1.8);
+    const light = new THREE.PointLight(desatFire(P.fireLight), preset.fire.base, preset.fire.dist, 1.8);
     light.position.set(a.x, a.y + 3, a.z + 2);
     group.add(light);
     torches.push({
@@ -187,7 +201,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const focusCfg = preset.focus ?? {
     color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08,
   };
-  const focusLight = new THREE.PointLight(focusCfg.color, 0, focusCfg.dist, 2.0);
+  const focusLight = new THREE.PointLight(desat(focusCfg.color), 0, focusCfg.dist, 2.0);
   focusLight.visible = false;
   group.add(focusLight);
   let focusTarget = null;   // Vector3 | null
@@ -274,8 +288,14 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     }
   }
 
+  // 单位染色底（"单位受到的照明估计"）：与灯同一处方去饱和，否则单位整体泛蓝
+  const tint = {
+    base: desatRGB(preset.tint.base),
+    fireGain: desatRGB(preset.tint.fireGain),
+    radius: preset.tint.radius,
+  };
   return {
-    group, torches, moonlight, tint: preset.tint, update, setFocus, focusLight,
+    group, torches, moonlight, tint, update, setFocus, focusLight,
     setLampTint,   // (color, k) 灯池染色：恶魔 roll 等运行期换风格
   };
 }
