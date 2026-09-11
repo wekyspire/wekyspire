@@ -68,6 +68,23 @@ const rigs = new Map();      // name -> rig（老虎机/银行机的动画驱动
 const markerRings = [];      // name -> 地面光环（hover 提亮）
 let focused = null;          // 当前聚焦的机器名
 const camTween = { active: false, t: 0, dur: 0.85, from: null, to: null };
+// 摇杆次数计数器（吞噬进度）：正式流程里来自 panelSnapshot.snap.slot.devour，调试门里本地模拟
+// ——每次拉杆 +1（封顶 7），粉碎后归零。变的是**数据**，动画一律由 rig 自己的滚动积分做。
+const DEVOUR_EVERY = 7;
+let devourProgress = Number(params.get('devour')) || 0;
+const devourReady = () => devourProgress >= DEVOUR_EVERY;
+function syncDevour() {
+  rigs.get('slot')?.setDevour?.({ progress: devourProgress, every: DEVOUR_EVERY, ready: devourReady() });
+  const el = document.getElementById('bar-devour');
+  if (el) {
+    el.textContent = devourReady()
+      ? '粉碎口已张开——点机身正面的投料口，或按此处的「粉碎」'
+      : `摇杆次数 ${devourProgress}/${DEVOUR_EVERY}（粉碎口还需要 ${DEVOUR_EVERY - devourProgress} 次拉杆）`;
+    el.style.color = devourReady() ? '#ffd75e' : '#8d97b5';
+  }
+  const btn = document.getElementById('bar-crush');
+  if (btn) btn.disabled = !devourReady();
+}
 
 const info = document.getElementById('room-info');
 const barEl = document.getElementById('machine-bar');
@@ -106,6 +123,24 @@ function pickMachine(clientX, clientY) {
   }
   for (const m of markerRings) {
     if (m.entry && raycaster.intersectObject(m.entry.object, true).length) return m.name;
+  }
+  return null;
+}
+
+/** 屏幕坐标 → 聚焦机器正面的粉碎口热区（'crusher' | 'counter' | null）。
+ *  只认**当前聚焦**的机器：远景点机身 = 聚焦，怼脸后点投料口才是"投料"，两者不混。 */
+function pickCrusher(clientX, clientY) {
+  if (focused !== 'slot') return null;
+  const rig = rigs.get('slot');
+  const targets = rig?.crusherTargets?.() ?? [];
+  if (!targets.length) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  for (const hit of raycaster.intersectObjects(targets, false)) {
+    const name = rig.pickNameOf?.(hit.object);
+    if (name) return name;
   }
   return null;
 }
@@ -176,6 +211,8 @@ function focusMachine(name) {
   barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
   barBody.innerHTML = name === 'slot'
     ? '<button id="bar-pull">拉杆！（' + tier + '）</button><span id="bar-result"></span>'
+      + '<div id="bar-devour" class="devour"></div>'
+      + '<button id="bar-crush">粉碎一件物品（换金币）</button>'
     : '<button id="bar-deposit">存钱</button><button id="bar-withdraw">取钱</button>';
   if (name === 'slot') {
     document.getElementById('bar-pull').onclick = () => {
@@ -183,6 +220,9 @@ function focusMachine(name) {
       btn.disabled = true;
       const out = devOutcome();
       rig.pull(out);
+      // 每拉一次杆，粉碎进度 +1（正式流程里由 core 的 slotDevour 累加，门里本地模拟同一口径）
+      devourProgress = Math.min(DEVOUR_EVERY, devourProgress + 1);
+      syncDevour();
       const res = document.getElementById('bar-result');
       if (res) res.textContent = '';
       const timer = setInterval(() => {
@@ -194,6 +234,8 @@ function focusMachine(name) {
         }
       }, 120);
     };
+    document.getElementById('bar-crush').onclick = () => runCrush();
+    syncDevour();
   } else {
     document.getElementById('bar-deposit').onclick = () => rig.act('deposit');
     document.getElementById('bar-withdraw').onclick = () => rig.act('withdraw');
@@ -202,6 +244,17 @@ function focusMachine(name) {
 }
 
 let savedOrbit = null;
+/** 粉碎演出（调试门版）：正式流程里这条链是「对话问"粉碎什么？" → 全屏选卡/选遗物 →
+ *  提交 core 结算 → 播机器演出 + 金币获得动画」；门里只保留**机器这一端**（rig.crush），
+ *  用来单独调咬合/迸币手感。 */
+function runCrush() {
+  const rig = rigs.get('slot');
+  if (!rig || !devourReady() || rig.isBusy()) return false;
+  rig.crush();
+  devourProgress = 0;          // 用掉即清零（core 同口径）；计数器随之滚回 0/7
+  syncDevour();
+  return true;
+}
 function unfocusMachine() {
   focused = null;
   barEl.classList.remove('open');
@@ -305,6 +358,8 @@ function rebuild() {
       ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
       : createBankMachineRig({ object: entry.object, parts: entry.parts });
     rigs.set(name, rig);
+    // 计数器初次同步（正式流程里在面板打开/数据变化时调用）
+    if (name === 'slot') rig.setDevour?.({ progress: devourProgress, every: DEVOUR_EVERY, ready: devourReady() });
     // 地面光环（hover 提亮；点它也能聚焦）
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
@@ -402,6 +457,21 @@ window.addEventListener('pointerup', (e) => {
   dragging = false;
   // 点击（无明显拖动）→ 命中机器就聚焦
   if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 6) {
+    // 怼脸时优先打**机器正面的粉碎口热区**（远景点机身仍是"聚焦"，两者不混）
+    const cz = pickCrusher(e.clientX, e.clientY);
+    if (cz) {
+      if (cz === 'crusher') {
+        if (!runCrush()) {
+          const el = document.getElementById('bar-devour');
+          if (el) el.textContent = `粉碎口还闭着——还需要 ${DEVOUR_EVERY - devourProgress} 次拉杆`;
+        }
+      } else {
+        const el = document.getElementById('bar-devour');
+        if (el) el.textContent = `摇杆次数 ${devourProgress}/${DEVOUR_EVERY}（点左边的投料口粉碎）`;
+      }
+      downAt = null;
+      return;
+    }
     const hit = pickMachine(e.clientX, e.clientY);
     if (hit) focusMachine(hit);
     else if (focused && !e.target.closest('#machine-bar')) unfocusMachine();
@@ -410,6 +480,10 @@ window.addEventListener('pointerup', (e) => {
 });
 window.addEventListener('pointermove', (e) => {
   if (!dragging) {
+    if (focused === 'slot') {
+      const cz = pickCrusher(e.clientX, e.clientY);
+      if (cz) { canvas.style.cursor = 'pointer'; return; }
+    }
     if (!focused) setHovered(pickMachine(e.clientX, e.clientY));
     return;
   }
@@ -479,6 +553,9 @@ window.__focus = (name) => focusMachine(name);
 window.__unfocus = unfocusMachine;
 window.__rigs = rigs;
 window.__pull = (outcome) => rigs.get('slot')?.pull(outcome ?? devOutcome());
+// 粉碎入口：__devour(n) 直接设进度（0..7），__crush() 播一次粉碎演出（进度满才生效）
+window.__devour = (n = DEVOUR_EVERY) => { devourProgress = Math.max(0, Math.min(DEVOUR_EVERY, n)); syncDevour(); };
+window.__crush = () => runCrush();
 // 直接落机位（迭代视觉时用来推近看局部，免去拖 canvas / 裁剪猜坐标）：
 // __orbitTo(x, y, z, dist, az, el)——省略某参即保持原值；az/el 用弧度。
 window.__orbitTo = (x, y, z, dist, az, el) => {

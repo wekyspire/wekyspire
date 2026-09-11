@@ -56,6 +56,17 @@ export function gradeY(obj, top, bottom) {
   return obj;
 }
 
+/**
+ * 顶点色刷**中性白**：`InstancedMesh` + `instanceColor` 路径专用。
+ * 族材质 `vertexColors: true`，实例色与顶点色相乘——几何必须是纯白，最终颜色才完全由
+ * instanceColor 决定（用 P.flameCore 之类"近白"会带上冷偏，彩灯色相会漂）。
+ */
+export function paintNeutral(geo) {
+  const n = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  return geo;
+}
+
 function prim(geo, color, family) {
   if (color === undefined) throw new Error('primitives: color 参数必填（用 P.* token）');
   return new THREE.Mesh(paint(geo, color), materialOf(family));

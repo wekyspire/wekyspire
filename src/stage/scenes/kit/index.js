@@ -9,7 +9,7 @@ import {
 } from './materials.js';
 import {
   box, cyl, cone, prism, lathe, sphereLo, plate,
-  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY,
+  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY, paintNeutral,
 } from './primitives.js';
 import { createRng, scatter } from './scatter.js';
 import { mergeStatic } from './merge.js';
@@ -19,7 +19,7 @@ export { P, PALETTES, setTheme, getTheme, shade };
 export { M, FAMILIES, materialOf, familyMaterial };
 export {
   box, cyl, cone, prism, lathe, sphereLo, plate,
-  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY,
+  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY, paintNeutral,
 };
 export { createRng, scatter };
 export { mergeStatic };
@@ -28,6 +28,6 @@ export { B };
 /** 图元+修饰器+工具的命名空间（喂料模板里的 K.* 即它）。 */
 export const K = Object.freeze({
   box, cyl, cone, prism, lathe, sphereLo, plate,
-  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY,
+  tilt, jitter, chip, mirror, scaleXYZ, aim, put, grp, paint, gradeY, paintNeutral,
   shade, createRng, scatter, mergeStatic, materialOf,
 });

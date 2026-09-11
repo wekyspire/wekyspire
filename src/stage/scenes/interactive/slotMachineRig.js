@@ -19,6 +19,12 @@ import { P, familyMaterial } from '../kit/index.js';
 import { sharedPropArtCache } from '../../art/propArt.js';
 
 const Z = Math.PI * 2;
+const FLAP_DUR = 0.44;   // 翻牌一次（上叶折下 + 新叶落下）的时长（秒）
+
+// rig 内部临时量（避免逐帧分配）：只在同一次 update 内使用，不得跨调用持有
+const TMP_RED = new THREE.Color(P.potionRed);
+const TMP_M4 = new THREE.Matrix4();
+const TMP_V3 = new THREE.Vector3();
 
 // 档位 → 灯效/抖动强度（细节是可调参数：先给一版手感，视觉门里再调）
 const TIER_FX = {
@@ -96,13 +102,16 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const body = parts?.body ?? object;
   const lever = parts?.leverPivot ?? null;
   const reels = parts?.reels ?? [];
-  const bulbs = parts?.bulbs ?? [];
+  // 彩灯/锁定指示灯 = InstancedMesh（{ mesh, tints }）：颜色走 instanceColor，rig 逐帧 setColorAt
+  // （资产侧不再逐灯建网格/材质，见 props/slotMachine.js 的预算回本注释）。
+  const bulbRing = parts?.bulbs ?? null;
+  const lampRing = parts?.reelLamps ?? null;
   const needle = parts?.needle ?? null;
   const gate = parts?.gate ?? null;
   const gateOpenY = parts?.gateOpenY ?? 0;
   const gateClosedY = parts?.gateClosedY ?? 0;
   const demonTint = new THREE.Color(parts?.demonTint ?? P.potionRed);
-  const reelLamps = parts?.reelLamps ?? [];
+  const crusher = parts?.crusher ?? null;
   // 转轮面数由资产决定（道具导出 SYMBOLS 长度）；资产侧只有 kit 共享材质，
   // 彩灯/指示灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
   const SYM = reels[0]?.userData?.symbols?.length ?? 5;
@@ -114,8 +123,6 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const lampOn = brighten(P.gold, 12);
   const lampOnDim = brighten(P.gold, 4);
   const lampLit = brighten(P.gold, 20);
-  for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: P.gold });
-  for (const l of reelLamps) l.material = new THREE.MeshBasicMaterial({ color: lampOff });
   // 画牌（额头招牌）：道具只留了 artKey，纹理在这里惰性套上——**逐帧试取**而不是订阅加载事件，
   // 因为 rig 的生命周期由宿主随手 end()，订阅会在重建时漏成幽灵回调。
   const artPanels = [];
@@ -160,6 +167,176 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     }
   }
   applyReelArt();
+
+  // ---- 粉碎口 + 摇杆次数计数器（用户定 2026-09-11）----
+  // 资产只出几何与可点热区（userData.pickId），逐帧驱动与烘焙全在 rig：
+  //   · 计数器面板 = 一张自绘 canvas（七格刻度 + 数字滚动），材质由 rig 建
+  //   · 投料口暗腔 = 可点热区（粉碎时闪红）；金牙 = 咬合缩放 + 进度满时发亮
+  //   · 金币迸出 = rig 自建的 InstancedMesh（不进资产预算，见 SCENE_PROP_WORKFLOW §预算）
+  const counter = crusher?.counter ?? null;
+  const throat = crusher?.throat ?? null;
+  const jaw = crusher?.jaw ?? null;
+  let counterCanvas = null; let counterCtx = null; let counterTex = null;
+  if (counter && typeof document !== 'undefined') {
+    counterCanvas = document.createElement('canvas');
+    counterCanvas.width = 320; counterCanvas.height = 160;
+    counterCtx = counterCanvas.getContext('2d');
+    counterTex = new THREE.CanvasTexture(counterCanvas);
+    counterTex.colorSpace = THREE.SRGBColorSpace;
+    counterTex.anisotropy = 4;
+    counter.material = new THREE.MeshBasicMaterial({ map: counterTex });
+  }
+  if (throat) throat.material = new THREE.MeshBasicMaterial({ color: P.night });
+  if (jaw) jaw.material = new THREE.MeshBasicMaterial({ color: brighten(P.gold, 0.7) });
+
+  /** 计数器面板 = **翻牌（split-flap）显示**（用户定 2026-09-11："要做成翻牌显示，
+   *  不是能量条"）：两张卡（当前值 / 上限），每张分上下两片叶子 + 中缝；数字变化时上半片
+   *  像真翻牌一样折叠落下（见 drawFlap 的两段时序）。刻度点阵那种"能量条"读法已删。 */
+  function drawFlap(ctx, bx, by, w, h, digit, { dim = false, ready = false, from = digit, flip = 1 } = {}) {
+    const mid = by + h / 2;
+    const face = (top) => {
+      if (ready) return top ? '#3d3522' : '#2e2818';
+      if (dim) return top ? '#12161e' : '#0e1117';
+      return top ? '#262c3a' : '#1c212d';
+    };
+    ctx.fillStyle = face(true); ctx.fillRect(bx, by, w, h / 2);
+    ctx.fillStyle = face(false); ctx.fillRect(bx, mid, w, h / 2);
+    const size = Math.round(h * 0.60);
+    const colorOn = ready ? '#ffeaa8' : (dim ? '#6d7688' : '#f2f6ff');
+    const colorOld = dim ? '#5b6376' : '#c9d2e8';
+    /** 画整字的**半张**：裁到该半叶，再绕中缝竖向缩放（1→0 = 折下，0→1 = 落下）。 */
+    const half = (text, which, scale, col) => {
+      ctx.save();
+      ctx.beginPath();
+      if (which === 'top') ctx.rect(bx, by, w, h / 2); else ctx.rect(bx, mid, w, h / 2);
+      ctx.clip();
+      ctx.translate(bx + w / 2, mid);
+      ctx.scale(1, Math.max(0.002, scale));
+      ctx.translate(-(bx + w / 2), -mid);
+      ctx.font = `bold ${size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = 'rgba(4,6,11,0.8)';
+      ctx.strokeText(text, bx + w / 2, by + h / 2);
+      ctx.fillStyle = col;
+      ctx.fillText(text, bx + w / 2, by + h / 2);
+      ctx.restore();
+    };
+    if (flip >= 1) {
+      half(digit, 'top', 1, colorOn);
+      half(digit, 'bottom', 1, colorOn);
+    } else if (flip < 0.5) {
+      half(from, 'bottom', 1, colorOn);                        // 下半：还是旧牌
+      half(from, 'top', 1 - flip / 0.5, colorOld);             // 上半：折叠落下
+    } else {
+      half(digit, 'bottom', 1, colorOn);                       // 下半：已换新牌
+      half(digit, 'top', (flip - 0.5) / 0.5, colorOn);         // 上半：落下展开
+    }
+    // 中缝（阴影 + 一道细亮线 = 真翻牌两片叶子的接缝）与卡边
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(bx, mid - 2, w, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(bx, mid + 2, w, 1);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx + 1, by + 1, w - 2, h - 2);
+  }
+
+  /** 画整块计数器：槽底 + 两张翻牌（当前值 / 上限）+ 中间的斜杠。 */
+  function drawCounter(shown, from, flip, every, ready) {
+    if (!counterCtx) return;
+    const ctx = counterCtx;
+    const W = counterCanvas.width; const H = counterCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#090c12';
+    ctx.fillRect(0, 0, W, H);
+    const cw = 104; const chh = 118; const cy = (H - chh) / 2;
+    ctx.font = 'bold 46px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(180,192,220,0.42)';
+    ctx.fillText('/', 160, H / 2);
+    drawFlap(ctx, 26, cy, cw, chh, String(Math.min(shown, every)), {
+      ready, from: String(Math.min(from, every)), flip,
+    });
+    drawFlap(ctx, 190, cy, cw, chh, String(every), { dim: true });
+  }
+  const redrawCounter = () => {
+    const d = st.devour;
+    if (!d || !counterTex) return;
+    drawCounter(d.shown, d.from, d.flip, d.every, d.ready);
+    counterTex.needsUpdate = true;
+  };
+  /** 计数器下行：`{ progress, every, ready }`（= core/run/panelSnapshot 的 snap.slot.devour）。
+   *  首次同步直接落位（不播翻牌）；此后目标值变化 → 由 update 推一次**翻牌**动画。 */
+  function setDevour({ progress = 0, every = 7, ready = false } = {}) {
+    const want = Math.max(0, Math.min(every, ready ? every : progress));
+    if (!st.devour) {
+      st.devour = { shown: want, from: want, target: want, every, ready, flip: 1, flipping: false };
+      redrawCounter();
+      return true;
+    }
+    const d = st.devour;
+    const styleChanged = d.every !== every || d.ready !== ready;
+    d.every = every; d.ready = ready;
+    if (want !== d.target) {
+      d.target = want;
+      d.from = d.shown;      // 翻牌从"上一次落定的数字"起翻
+      d.shown = want;
+      d.flip = 0;
+      d.flipping = true;
+    }
+    if (styleChanged && !d.flipping) redrawCounter();
+    return true;
+  }
+  /** 进度是否已满（宿主据此决定粉碎口是否可点）。 */
+  const devourReady = () => !!st.devour?.ready;
+
+  // ---- 金币迸出（粉碎演出收尾）----
+  const COIN_N = 16;
+  let coinMesh = null;
+  const coinState = { t: 0, life: 1.15, pos: [], vel: [] };
+  function ensureCoinMesh() {
+    if (coinMesh) return coinMesh;
+    coinMesh = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.13, 0),
+      familyMaterial('unlit', { color: brighten(P.gold, 5) }),
+      COIN_N,
+    );
+    coinMesh.frustumCulled = false;
+    coinMesh.visible = false;
+    coinMesh.userData.rigOwned = 'slotCoins';
+    body.add(coinMesh);
+    return coinMesh;
+  }
+  function spawnCoins() {
+    const mesh = ensureCoinMesh();
+    const cx = crusher?.mawX ?? 0;
+    const cy = (crusher?.mawY ?? 2) + 0.25;
+    const cz = (crusher?.mawZ ?? 1.3) + 0.15;
+    coinState.pos = [];
+    coinState.vel = [];
+    for (let i = 0; i < COIN_N; i++) {
+      coinState.pos.push(new THREE.Vector3(cx, cy, cz));
+      coinState.vel.push(new THREE.Vector3(
+        (Math.random() - 0.5) * 2.2, 1.4 + Math.random() * 1.8, 1.6 + Math.random() * 1.6,
+      ));
+    }
+    coinState.t = 0;
+    mesh.visible = true;
+  }
+  /** 粉碎演出：金牙咬合 + 机壳剧震 + 口内闪红 + 金币迸出。正忙时返回 false。 */
+  function crush() {
+    if (st.crushFx || st.spin) return false;
+    st.crushFx = { t: 0, seconds: 1.3, flash: 0 };
+    st.shake = Math.max(st.shake, 0.5);
+    st.shakeAmp = Math.max(st.shakeAmp, 0.06);
+    spawnCoins();
+    return true;
+  }
+
   // 拉杆：材质独立化（悬停/拉下时能闪光提示——它是"这台能点"的关键部件）
   const leverParts = [];
   lever?.traverse((o) => {
@@ -192,22 +369,28 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
     shakeAmp: 0,
+    devour: null,        // { value, target, every, ready }：计数器（value 连续量 → 数字滚动）
+    crushFx: null,       // { t, seconds, flash }：粉碎演出
   };
 
-  // ---- 彩灯：常态呼吸 + 灯效（逐灯独立材质，直接改 color）----
-  // **逐颗底色**来自资产登记的 userData.tint（一圈彩灯颜色不同才有"赌具"味），缺省暖金。
+  // ---- 彩灯：常态呼吸 + 灯效（InstancedMesh + instanceColor，逐实例写色）----
+  // **逐颗底色**来自资产登记的 tints[]（一圈彩灯颜色不同才有"赌具"味），缺省暖金。
   // "亮起"用**乘算提亮**保住色相（详见下方 brighten 注释）——近白（flameCore）或朝白插值
   // 都会把整圈彩灯糊成白色（用户报障"彩灯亮起的时候都一律显示为白色"）。
-  const tintOf = (b) => b.userData?.tint ?? P.gold;
+  const bulbTints = bulbRing?.tints ?? [];
+  const lampTints = lampRing?.tints ?? [];
+  const bulbMesh = bulbRing?.mesh ?? null;
+  const lampMesh = lampRing?.mesh ?? null;
   // 三档亮度（线性乘算）：暗 → 常态亮（淡 bloom）→ 中奖爆亮（强 bloom）。
   // 阈值 1.45：常态 ×10 让多数色相刚过阈值（有一层薄光晕），爆闪 ×18 明显发光。
-  const bulbWarm = (b) => brighten(tintOf(b), 10);
-  const bulbDim = (b) => brighten(tintOf(b), 3);
-  const bulbLit = (b) => brighten(tintOf(b), 18);
+  const bulbWarm = (t) => brighten(t, 10);
+  const bulbDim = (t) => brighten(t, 3);
+  const bulbLit = (t) => brighten(t, 18);
 
   function paintBulbs(level = 0) {
     // level 0 = 常态（暗金呼吸）；>0 = 中奖灯效强度
-    bulbs.forEach((b, i) => {
+    for (let i = 0; i < bulbTints.length; i++) {
+      const tint = bulbTints[i];
       const breathe = 0.5 + 0.5 * Math.sin(st.t * 1.6 + i * 0.5);
       if (st.win) {
         const fx = st.win.fx;
@@ -216,28 +399,30 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         // 没有"闪"的节奏）：flash=1 约 63% 占空，flash=0.35 约 33%。
         const flashOn = fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 1.4;
         const on = chaseOn || flashOn;
-        b.material.color.copy(on ? bulbLit(b) : bulbWarm(b));
+        bulbMesh.setColorAt(i, on ? bulbLit(tint) : bulbWarm(tint));
       } else {
         // 常态：呼吸（整体偏亮——彩灯是"亮着的"，暗一档就变成没通电的塑料球）
-        const base = bulbDim(b).lerp(bulbWarm(b), 0.5 + 0.35 * breathe + 0.35 * st.hover);
-        b.material.color.copy(base);
+        const base = bulbDim(tint).lerp(bulbWarm(tint), 0.5 + 0.35 * breathe + 0.35 * st.hover);
+        bulbMesh.setColorAt(i, base);
       }
-    });
+    }
+    if (bulbMesh.instanceColor) bulbMesh.instanceColor.needsUpdate = true;
     // ---- 三颗锁定指示灯：**转轮没停就灭、停稳就亮**（用户定 2026-09-11）----
     // 中奖时随灯效闪（用各灯自己的底色，不再糊白）。
-    reelLamps.forEach((lamp, i) => {
+    for (let i = 0; i < lampTints.length; i++) {
       const locked = st.spin ? !!st.spin.locked[i] : true;   // 待机 = 已在槽位上 = 亮
       if (st.win) {
         const fx = st.win.fx;
         const on = (fx.chase > 0 && Math.floor(st.win.t * fx.chase) % 2 === 0)
           || (fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 1.4);
-        lamp.material.color.copy(on ? lampLit : lampOnDim);
+        lampMesh.setColorAt(i, on ? lampLit : lampOnDim);
       } else if (locked) {
-        lamp.material.color.copy(lampOn);
+        lampMesh.setColorAt(i, lampOn);
       } else {
-        lamp.material.color.copy(lampOff);
+        lampMesh.setColorAt(i, lampOff);
       }
-    });
+    }
+    if (lampMesh?.instanceColor) lampMesh.instanceColor.needsUpdate = true;
   }
   // ---- 恶魔 roll 的机械演出（用户定 2026-09-11）----
   // 闸口 = 盖住转轮窗的板：关 → 换盘 → 开。整段是**时序脚本**（每步 dur + 插值函数），
@@ -432,6 +617,62 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       st.win.t += dt;
       if (st.win.t > st.win.fx.seconds) st.win = null;
     }
+
+    // ---- 摇杆次数计数器：目标值变化后推一次翻牌动画（两片叶子折下/落下）----
+    // 状态推进不依赖 canvas（headless 也走），只有重绘才需要计数器贴图
+    if (st.devour?.flipping) {
+      const d = st.devour;
+      d.flip = Math.min(1, d.flip + dt / FLAP_DUR);
+      if (d.flip >= 1) d.flipping = false;
+      redrawCounter();
+    }
+    // ---- 粉碎口外观：进度满 → 金牙/面板脉动发亮；粉碎瞬间 → 口内闪红 ----
+    const readyK = st.devour?.ready && !st.crushFx ? 1 : 0;
+    if (jaw?.material) {
+      const flash = st.crushFx?.flash ?? 0;
+      // 闪白克制一点：咬合瞬间 ×3.4 已足够进 bloom 亮部通道，×7 会把上下牙糊成一坨白
+      const k = 0.7 + readyK * (1.5 + 1.1 * Math.sin(st.t * 5.2)) + flash * 3.4;
+      jaw.material.color.copy(brighten(P.gold, k));
+    }
+    if (throat?.material) {
+      const flash = Math.min(1, st.crushFx?.flash ?? 0);
+      throat.material.color.copy(P.night).lerp(TMP_RED, flash);
+    }
+    if (counter?.material) {
+      // 面板整体亮度乘子（贴图 × color）：满格时脉动——HDR 乘到 >1 才进 bloom 亮部通道
+      counter.material.color.setScalar(1 + readyK * (0.3 + 0.25 * Math.sin(st.t * 6.1)));
+    }
+    // ---- 粉碎演出推进：咬合（jaw 绕口心上下收放）+ 金币抛物 ----
+    if (st.crushFx) {
+      const c = st.crushFx;
+      c.t += dt;
+      const close = Math.min(1, c.t / 0.20);
+      const reopen = Math.max(0, Math.min(1, (c.t - 0.30) / 0.55));
+      // 咬合只收到 0.55：上下牙**交错**才读得出"牙"，压到 0.15 两排会叠成一坨金色实心块
+      if (jaw) jaw.scale.y = (1 - 0.45 * close) + 0.45 * close * reopen;
+      c.flash = close * (1 - reopen);
+      if (c.t >= c.seconds) {
+        st.crushFx = null;
+        if (jaw) jaw.scale.y = 1;
+        if (throat?.material) throat.material.color.copy(P.night);
+      }
+    }
+    if (coinMesh?.visible) {
+      coinState.t += dt;
+      const m4 = TMP_M4; const sc = TMP_V3;
+      for (let i = 0; i < COIN_N; i++) {
+        const p = coinState.pos[i]; const v = coinState.vel[i];
+        v.y -= 9.5 * dt;
+        p.addScaledVector(v, dt);
+        if (p.y < 0.35) { p.y = 0.35; v.set(0, 0, 0); }
+        const fade = Math.max(0, Math.min(1, 1 - Math.max(0, coinState.t - 0.62) / 0.45));
+        m4.makeTranslation(p.x, p.y, p.z);
+        m4.scale(sc.setScalar(fade));
+        coinMesh.setMatrixAt(i, m4);
+      }
+      coinMesh.instanceMatrix.needsUpdate = true;
+      if (coinState.t >= coinState.life) coinMesh.visible = false;
+    }
     paintBulbs(st.win ? 1 : 0);
   }
 
@@ -445,7 +686,19 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     demonEnter, demonExit,
     isDemon: () => !!st.reelsDemon || (st.demonWant ?? 0) > 0,
     setDemonStyle: (k) => { st.demonWant = Math.max(0, Math.min(1, k)); },
-    isBusy: () => !!st.spin || !!st.seq,
+    isBusy: () => !!st.spin || !!st.seq || !!st.crushFx,
+    // 粉碎入口（吞噬）：计数器下行 + 粉碎演出
+    setDevour,
+    devourReady,
+    crush,
+    /** 可点热区（宿主射线拾取用）：投料口暗腔 + 计数器面板。 */
+    crusherTargets: () => [throat, counter].filter(Boolean),
+    /** 热区 → 语义名（宿主派发意图用）：'crusher' = 投料口，'counter' = 计数器。 */
+    pickNameOf: (obj) => {
+      if (obj === throat) return 'crusher';
+      if (obj === counter) return 'counter';
+      return null;
+    },
     state: st,
   };
 }

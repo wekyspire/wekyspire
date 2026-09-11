@@ -7,7 +7,10 @@
 //     parts.leverPivot 拉杆枢轴（绕 Z 旋转 = 拉下/弹起；杆与球头是它的子件）
 //     parts.reels[]    三个**转轮鼓**（真圆柱：侧面按图案分带逐面顶点色 + 两端暗色盖；
 //                      绕 X 旋转 = 换面；每组 userData.symbols 是图案色序，index 是当前面）
-//     parts.bulbs[]    屏幕一圈彩灯（rig 换成独立材质后逐灯驱动）
+//     parts.bulbs      { mesh, tints }：屏幕一圈彩灯（InstancedMesh + instanceColor，
+//                      rig 逐帧 setColorAt；tints[i] 是该颗的底色）
+//     parts.reelLamps  同上形态：三颗锁定指示灯（转轮没停时灭、停稳后亮）
+//     parts.crusher    { throat, jaw, counter, mawX/Y/Z }：粉碎口（吞噬入口）与摇杆次数计数器
 //   ⚠ 不得进静态合批（配方 guaranteed 条目加 `live: true`）。
 //
 // 近景细节（用户定 2026-09-11：怼脸能看见的部分要够细）：屏幕框（四边金属压边）+ 付款线 +
@@ -138,12 +141,10 @@ export default {
   // 灯池强度系数：机器灯池**推到了机身前方**（见 composeRoom 的 LAMP_FRONT_PUSH），
   // 离受光面比'埋机箱里'近得多，同 base 会把正面照爆成白光 —— 按 gain 压到 ~1/10（0.34→0.10：正红壳体在高光下会先丢色相变粉，
   // 实测机壳像素 (249,143,137) 即过曝，压到 0.10 后由房间中央光主导 → 深红）。
-  // **预算**：网格数已靠"静态子件按族合并"回到标准 interactive 上限内（59 → 26），
-  // 故 **meshes 撤回 60 不设例外**；顶点仍超一点（合并会把索引几何摊平 → 顶点数涨 ~22%，
-  // 实测 3530），只对 verts 保留一个最小例外，并注明回本方向：
-  // 下一步把一圈彩灯 + 三颗锁定指示灯改 InstancedMesh + instanceColor（同样省 15 个网格），
-  // 或再减鼓的端盖/补丁段数，即可把 verts 压回 3000 以内并撤掉这条。
-  budget: { verts: 3600 },
+  // **预算**：网格数靠"静态子件按族合并"（59 → 17）+ 两圈灯改 InstancedMesh 回到标准
+  // interactive 上限内；顶点数（原 3530，合并把索引几何摊平会涨 ~22%）也靠同样的两条回本到
+  // 2954 < 3000 → **budget 例外已撤销**，本资产与其他交互件同一口径。
+  // 后续再加件仍须同时删件或继续合并（口径见 SCENE_PROP_WORKFLOW §预算）。
   lampGain: 0.10,
   lampColor: shade(P.gold, 0.3),   // 机器自带暖金色（不占彩灯串的颜色轮转位）
   footprint: { x: 5.6, z: 3.6 },
@@ -319,44 +320,60 @@ export default {
       reels.push(drum);
     }
 
-    // ================= 屏幕彩灯（rig 换独立材质后逐灯驱动）=================
+    // ================= 屏幕彩灯 & 锁定指示灯（InstancedMesh）=================
     // **必须挂在压边框上**：沿压边中心线矩形排布、球心嵌进框体一点。早期版本把它们悬在窗口
     // 前方 0.42 处（无依托），怼脸看就是一圈浮空的球（用户报障）。
-    const bulbs = [];
-    const reelLamps = [];
+    // **预算回本（用户定 2026-09-11）**：14 颗球原为 14 个 mesh / 840 顶点；改为两个
+    // InstancedMesh（彩灯 + 锁定指示灯）后只剩 2 个 mesh / 120 顶点，颜色走 instanceColor
+    // （rig 逐帧 setColorAt）——本条即"撤销顶点数例外"的回本手段。
     const ringZ = bzZ + bzD / 2 - 0.06;              // 嵌进压边前脸（L3），球心在框体内
     const rTopY = openTop + bzT / 2, rBotY = openBot - bzT / 2;
     const rSideX = winW / 2 + bzT / 2;
     const spanX = winW / 2 + bzT / 2;
-    // 彩灯**逐颗不同色**（用户定："多加几个彩灯"）：色相写在 userData.tint 上，
-    // rig 的常亮呼吸/中奖灯效都按这颗的底色走（rig 会换掉材质，这里只负责登记色相）。
-    // 注意不要用 flameCore 这类近白色：亮起来会整圈糊成白（用户报障过）。
+    // 彩灯**逐颗不同色**（用户定："多加几个彩灯"）：色相登记在 tints[] 上，rig 的常亮呼吸/
+    // 中奖灯效都按这颗的底色走。注意不要用 flameCore 这类近白色：亮起来会整圈糊成白（用户报障过）。
     const RING_TINTS = [P.gold, P.potionRed, P.potionBlue, P.potionGreen, P.gold, P.ember];
-    let tintI = 0;
-    const addBulb = (bx, by) => {
-      const tint = RING_TINTS[tintI++ % RING_TINTS.length];
-      const mesh = K.sphereLo({ color: tint, r: 0.15, family: 'unlit' });
-      mesh.position.set(bx, by, ringZ);
-      mesh.userData.animRole = 'bulb';
-      mesh.userData.tint = tint;
-      g.add(mesh);
-      bulbs.push(mesh);
-    };
+    const bulbSlots = [];
+    const addBulb = (bx, by) => bulbSlots.push({
+      x: bx, y: by, tint: RING_TINTS[bulbSlots.length % RING_TINTS.length],
+    });
     for (const sx of [-1, 1]) addBulb(sx * rSideX, rTopY);              // 上边两端各一颗（同在压边框上）
     for (let i = 0; i < 5; i++) addBulb(-spanX + (i / 4) * spanX * 2, rBotY);  // 下边 5 颗
     for (const sx of [-1, 1]) {                                        // 左右边各 2 颗
       addBulb(sx * rSideX, winY + 0.42);
       addBulb(sx * rSideX, winY - 0.42);
     }
+    /** 位置表 → 一个 InstancedMesh（球心/底色一次写定）；几何顶点色刷中性白，
+     *  最终颜色完全由 instanceColor 决定（族材质 vertexColors 会乘上去）。 */
+    const instancedBalls = (slots, radius, name) => {
+      const mesh = new THREE.InstancedMesh(
+        K.paintNeutral(new THREE.IcosahedronGeometry(radius, 0)), M.unlit, slots.length,
+      );
+      const m4 = new THREE.Matrix4();
+      slots.forEach((s, i) => {
+        mesh.setMatrixAt(i, m4.makeTranslation(s.x, s.y, s.z ?? ringZ));
+        mesh.setColorAt(i, new THREE.Color(s.tint));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+      // 视锥剔除读 geometry.boundingSphere（球心在**物体原点**，而实例散布在整面窗口上）
+      // → 不关掉会在某些机位整圈消失。
+      mesh.frustumCulled = false;
+      mesh.name = name;
+      mesh.userData.animRole = name;
+      g.add(mesh);
+      return { mesh, tints: slots.map((s) => s.tint) };
+    };
     // **三颗"锁定指示灯"**（用户定 2026-09-11）：正对三根转轮的正上方，体量略大——
     // rig 驱动：转轮没停时灭、停稳后亮（一眼看出哪一根咬合了）。
+    const lampSlots = [];
     for (let i = 0; i < reelCount; i++) {
-      const lamp = K.sphereLo({ color: shade(P.gold, -0.35), r: 0.2, family: 'unlit' });
-      lamp.position.set(-winW / 2 + cellW * (i + 0.5), rTopY, ringZ + 0.07);
-      lamp.userData.animRole = 'reelLamp';
-      g.add(lamp);
-      reelLamps.push(lamp);
+      lampSlots.push({
+        x: -winW / 2 + cellW * (i + 0.5), y: rTopY, z: ringZ + 0.07, tint: shade(P.gold, -0.35),
+      });
     }
+    const bulbs = instancedBalls(bulbSlots, 0.15, 'bulbRing');
+    const reelLamps = instancedBalls(lampSlots, 0.2, 'reelLampRing');
 
     // ================= 顶灯牌 =================
     // 牌体前脸退到 1.15（**不许和柜面 1.20 共面**：共面只在 y=7.04 相接，远看就是一条闪缝）
@@ -423,6 +440,60 @@ export default {
     g.add(K.put(K.box({ color: shade(P.iron, -0.3), size: [W - 0.1, 0.5, 0.16], family: 'metal' }),
       0, 0.42, D / 2 + 0.14));
 
+    // ================= 粉碎口 + 摇杆次数计数器（用户定 2026-09-11）=================
+    // 位置：操作台（顶 2.09）与腰线（红细线 2.76）之间的**正面唯一空档**——左半投料口、
+    // 右半计数器。两件都与窗/台面同深度带口径（L5 带 1.23~1.39），互不共面。
+    // 投料口 = 外框 + 暗腔（可点热区，rig 接管材质）+ 金牙锯齿（rig 驱动亮度）；
+    // 计数器 = 外框 + 一块 rig 烘字/刻度的面板（数字滚动动画在 rig 里，见 slotMachineRig）。
+    const mawX = -0.67, mawY = 2.42, mawW = 1.4, mawH = 0.68, mawZ = D / 2 + 0.03;
+    // 外框用**暗黄铜**（不跟壳体红抢，且比铁件更像"机器上的一个功能口"）；左右缘各让开
+    // 立柱金饰（±1.452）与计数器，宽度/位置是算过的（见 AM 上一条教训：贴面件不许越过柜宽）
+    g.add(K.put(K.box({ color: shade(P.gold, -0.34), size: [mawW + 0.16, mawH + 0.16, 0.18], family: 'metal' }),
+      mawX, mawY, mawZ));
+    // 暗腔：**不合并**（可点热区 + rig 粉碎时闪红）——前脸退到框面之后 0.08，读作"真有口"
+    const throat = K.put(K.box({ color: P.night, size: [mawW - 0.18, mawH - 0.18, 0.22], family: 'unlit' }),
+      mawX, mawY, mawZ - 0.08);
+    throat.userData.animRole = 'crusherThroat';
+    throat.userData.pickId = 'slot:crusher';
+    g.add(throat);
+    // 金牙：上下各 4 枚锯齿（一个 unlit 网格；rig 换独立材质后按"进度满"发亮）
+    let crusherJaw = null;
+    {
+      const jz = mawZ + 0.12, teeth = 4, tw = (mawW - 0.3) / teeth, th = 0.28;
+      const jpos = [], jcol = [];
+      const jc = new THREE.Color(P.gold);
+      const tri = (ax, ay, bx, by, cx2, cy2) => {
+        jpos.push(ax, ay, jz, bx, by, jz, cx2, cy2, jz);
+        for (let i = 0; i < 3; i++) jcol.push(jc.r, jc.g, jc.b);
+      };
+      for (let i = 0; i < teeth; i++) {
+        const x0 = mawX - (mawW - 0.3) / 2 + i * tw;
+        // ⚠ 绕序：`M.unlit` 是单面（FrontSide），上牙朝下 = 与下牙镜像 → 必须**反绕**，
+        // 否则整排上牙被背面剔除（病灶：怼脸只见下排 4 颗牙、上面是一块空的暗腔）。
+        tri(x0, mawY - mawH / 2 + 0.10, x0 + tw, mawY - mawH / 2 + 0.10, x0 + tw / 2, mawY - mawH / 2 + 0.10 + th);
+        tri(x0, mawY + mawH / 2 - 0.10, x0 + tw / 2, mawY + mawH / 2 - 0.10 - th, x0 + tw, mawY + mawH / 2 - 0.10);
+      }
+      const jgeo = new THREE.BufferGeometry();
+      jgeo.setAttribute('position', new THREE.Float32BufferAttribute(jpos, 3));
+      jgeo.setAttribute('color', new THREE.Float32BufferAttribute(jcol, 3));
+      jgeo.computeVertexNormals();
+      const jaw = new THREE.Mesh(jgeo, M.unlit);
+      jaw.userData.animRole = 'crusherJaw';
+      jaw.position.y = mawY;                    // 顶点已绕口心重建（见下行 translate）→ 绕口心咬合
+      jaw.geometry.translate(0, -mawY, 0);
+      g.add(jaw);
+      crusherJaw = jaw;
+    }
+    // 计数器：外框（静态）+ 面板（rig 烘「N/7 + 七格刻度」）
+    const cntX = 0.78, cntY = 2.42, cntW = 1.0, cntH = 0.56, cntZ = D / 2 + 0.03;
+    g.add(K.put(K.box({ color: shade(P.gold, -0.38), size: [cntW + 0.16, cntH + 0.16, 0.14], family: 'metal' }),
+      cntX, cntY, cntZ));
+    const counter = K.put(K.box({ color: shade(P.night, 0.12), size: [cntW, cntH, 0.08], family: 'unlit' }),
+      cntX, cntY, cntZ + 0.06);
+    counter.userData.animRole = 'devourCounter';
+    counter.userData.pickId = 'slot:devourCounter';
+    g.add(counter);
+
     // ================= 侧拉杆（枢轴在柜体外）=================
     // 座 + 护罩（一件）与枢轴分离：护罩固定在柜上，枢轴带着杆摆动
     g.add(K.put(K.box({ color: shade(P.iron, -0.22), size: [0.5, 0.9, 0.72], family: 'metal' }),
@@ -446,7 +517,7 @@ export default {
     // 把"没有 animRole 且不在 parts 里"的散件挑出来，按材质族合并（世界变换烘进顶点）。
     // 动件（转轮/拉杆/彩灯/指示灯/拨针/闸口/画牌/分格框）有 animRole 或显式登记 → 保持独立。
     {
-      const animated = new Set([leverPivot, needlePivot, gate, ...reels, ...bulbs, ...reelLamps]);
+      const animated = new Set([leverPivot, needlePivot, gate, ...reels, bulbs.mesh, reelLamps.mesh]);
       const keep = new Set();
       g.traverse((o) => { if (o.userData?.animRole) keep.add(o); });
       const statics = new THREE.Group();
@@ -465,6 +536,9 @@ export default {
       gateOpenY: openTop + winH * 0.72,    // rig 用：开门位
       gateClosedY: winY,                   // rig 用：关门位（盖住开口）
       demonTint: shade(P.potionRed, -0.2), // 恶魔态占位色（偏暗红；素材到位后换贴图）
+      // 粉碎口（吞噬入口）：throat = 可点暗腔（rig 接管材质）、jaw = 金牙（咬合动画）、
+      // counter = 计数器面板（rig 烘字 + 七格刻度）、maw = 口心世界坐标（金币迸出/投料起点）
+      crusher: { throat, jaw: crusherJaw, counter, mawX, mawY, mawZ },
     };
     g.userData.interactive = 'slot';
     return g;
