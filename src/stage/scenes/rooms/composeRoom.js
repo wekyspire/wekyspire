@@ -165,6 +165,7 @@ export function composeRoom(recipeId, seed = 'dev') {
       id: def.id, place: def.place, x, y, z, ry,
       fx: (fp.x / 2) * scale, fz: (fp.z / 2) * scale, height, midY: centerY,
       tags: def.tags || [], lampGain: def.lampGain ?? 1, lampColor: def.lampColor,
+      lampBands: def.lampBands ?? null,
       onWall, hosted, floating: def.mount === 'ceiling', composition,
     });
     return height;
@@ -396,24 +397,42 @@ export function composeRoom(recipeId, seed = 'dev') {
   // 饱和壳色（正红）一旦过曝先丢色相变粉，再被 bloom 抹开，整台机器糊成一团。
   const LAMP_WALL_PUSH = 4.5;
   const LAMP_FRONT_PUSH = 12;
+  /** 单个落地件的灯池位（推出机身前方 out 距离、高度 y）。 */
+  const frontAnchor = (p, gain, y, push) => {
+    const out = p.fz + push;
+    return {
+      x: p.x + Math.sin(p.ry) * out,
+      y,
+      z: p.z + Math.cos(p.ry) * out,
+      gain, color: p.lampColor,
+    };
+  };
+  /**
+   * 灯锚（返回**数组**：一个件可以出多盏）。
+   * 默认一件一池；道具若声明 `lampBands: [{ h, gain, push? }]`（h = 体量高度比例）
+   * 则按分段出池——**这是"用光塑造体量"的接口**：银行机就靠"低位强池 + 高位弱池"
+   * 做出"顶部暗、下方亮"（用户定 2026-09-11），单盏点光给不了上下差。
+   */
   const lampAnchorOf = (p) => {
-    if (!p.tags.includes('lamp')) return null;
+    if (!p.tags.includes('lamp')) return [];
     const gain = p.lampGain ?? 1;
     if (p.onWall) {
-      return {
+      return [{
         x: p.x + Math.sin(p.ry) * LAMP_WALL_PUSH,
         y: p.midY ?? p.y,
         z: p.z + Math.cos(p.ry) * LAMP_WALL_PUSH,
         gain, color: p.lampColor,
-      };
+      }];
     }
-    const out = p.fz + LAMP_FRONT_PUSH;
-    return {
-      x: p.x + Math.sin(p.ry) * out,
-      y: p.y + Math.min(p.height * 0.6, 8.5),
-      z: p.z + Math.cos(p.ry) * out,
-      gain, color: p.lampColor,
-    };
+    if (Array.isArray(p.lampBands) && p.lampBands.length) {
+      return p.lampBands.map((b) => frontAnchor(
+        p,
+        gain * (b.gain ?? 1),
+        p.y + Math.min(p.height * (b.h ?? 0.6), 12),
+        b.push ?? LAMP_FRONT_PUSH,
+      ));
+    }
+    return [frontAnchor(p, gain, p.y + Math.min(p.height * 0.6, 8.5), LAMP_FRONT_PUSH)];
   };
   const lampAnchors = [];
   // 撒布/角簇/立面三类辅助摆位的锚收集（火位进 fireExtra 候补，灯位直接进 lampAnchors）
@@ -421,8 +440,7 @@ export function composeRoom(recipeId, seed = 'dev') {
     const p = placements[placements.length - 1];
     const fa = fireAnchorOf(p);
     if (fa) fireExtra.push(fa);
-    const la = lampAnchorOf(p);
-    if (la) lampAnchors.push(la);
+    lampAnchors.push(...lampAnchorOf(p));
   };
 
   // 扶壁肋墙带避让：件背缘与墙面间隙小于肋深时，给出沿离墙方向的推距（不推=0）。
@@ -572,8 +590,7 @@ export function composeRoom(recipeId, seed = 'dev') {
     }
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
-    const lamp = lampAnchorOf(placements[placements.length - 1]);
-    if (lamp) lampAnchors.push(lamp);
+    lampAnchors.push(...lampAnchorOf(placements[placements.length - 1]));
   }
 
   // ---- 墙根角簇：大件沿墙密堆积，塑造几何起伏（用户反馈"墙角没有大件堆积"）----

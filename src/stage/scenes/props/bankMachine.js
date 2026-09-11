@@ -18,6 +18,13 @@ export default {
   // 实测机壳像素 (249,143,137) 即过曝，压到 0.10 后由房间中央光主导 → 深红）。
   lampGain: 0.10,
   lampColor: shade(P.glowCyan, 0.15),   // **冷色**：银行机连灯池都发冷光（用户定）
+  // **打光方案（用户定 2026-09-11）**：顶部暗、下方亮——用两盏池塑造体量：
+  // 低位强池贴近地面（push 小 → 平方衰减拉开上下差）+ 高位弱池只勾一下轮廓。
+  // 单盏点光做不出上下差（等距照明），所以这是"用光塑造"而不是"照亮"。
+  lampBands: [
+    { h: 0.14, gain: 1.5, push: 5 },    // 低：键盘/插卡/出钞一带（玩家真正操作的地方）
+    { h: 0.70, gain: 0.35, push: 11 },  // 高：屏前一点点冷光，别把顶部照亮
+  ],
   footprint: { x: 3.6, z: 2.8 },
   behaviors: [],
   build({ bodyH = 4.6, rng } = {}) {
@@ -32,7 +39,11 @@ export default {
 
     // 柜身：花岗/铁灰方柜 + 顶部斜面（旧柜台机的形状）
     const y0 = 0.34;
-    g.add(K.put(K.box({ color: body, size: [W, bodyH, D], family: 'stone' }), 0, y0 + bodyH / 2, 0));
+    const shellBox = K.box({ color: body, size: [W, bodyH, D], family: 'stone' });
+    // 柜身自带**顶暗底亮的竖向渐变**（烘焙进顶点色，不靠灯）：与 lampBands 的"上暗下亮"
+    // 打光方案叠加，无论房间怎么亮都保得住体量读法（灯只能给整体亮度，给不了上下差）。
+    K.gradeY(shellBox, shade(P.stone, -0.42), shade(P.stone, 0.0));
+    g.add(K.put(shellBox, 0, y0 + bodyH / 2, 0));
     const lid = K.box({ color: shade(P.stone, -0.04), size: [W - 0.1, 0.5, D - 0.1], family: 'stone' });
     K.tilt(lid, -0.22, 0, 0);
     g.add(K.put(lid, 0, y0 + bodyH + 0.12, -0.06));
@@ -76,11 +87,43 @@ export default {
     g.add(K.put(K.box({ color: shade(P.iron, -0.2), size: [1.1, 0.1, 0.3], family: 'metal' }),
       -0.3, y0 + 0.31, D / 2 + 0.09));
 
+    // ================= 正面近景细节（用户定 2026-09-11：继续补正面）=================
+    // ① 铭牌：顶冠下的凹槽 + 银牌 + 暗刻线（"机构资产编号"的读法）
+    g.add(K.put(K.box({ color: shade(P.night, 0.22), size: [1.1, 0.34, 0.06], family: 'metal' }),
+      0, y0 + bodyH - 0.28, D / 2 + 0.03));
+    g.add(K.put(K.box({ color: shade(P.silver, -0.28), size: [0.9, 0.2, 0.05], family: 'metal' }),
+      0, y0 + bodyH - 0.28, D / 2 + 0.07));
+    // ② 扬声器格栅（屏右侧一列细缝，读作"会出声的机器"）
+    for (let i = 0; i < 3; i++) {
+      g.add(K.put(K.box({ color: shade(P.night, 0.3), size: [0.42, 0.05, 0.04], family: 'metal' }),
+        0.72, sy + 0.2 - i * 0.14, D / 2 + 0.045));
+    }
+    // ③ 出钞口唇边（原来只有暗槽，加一道外沿挡边 + 下方接钞托）
+    g.add(K.put(K.box({ color: shade(P.iron, -0.14), size: [1.24, 0.08, 0.1], family: 'metal' }),
+      -0.3, y0 + 0.7, D / 2 + 0.14));
+    g.add(K.put(K.box({ color: shade(P.iron, -0.3), size: [1.1, 0.06, 0.5], family: 'metal' }),
+      -0.3, y0 + 0.2, D / 2 + 0.2));
+    // ④ 键盘遮檐（ATM 那道上沿挡板：给键盘一片阴影，也压出层次）
+    const keyVisor = K.box({ color: shade(P.iron, -0.2), size: [1.9, 0.08, 0.34], family: 'metal' });
+    K.tilt(keyVisor, 0.3, 0, 0);
+    g.add(K.put(keyVisor, 0, y0 + bodyH * 0.34 + 0.62, D / 2 + 0.02));
+    // ⑤ 底部通风格栅（低位一排深缝：把"下方亮"落在有内容的面上）
+    for (let i = 0; i < 2; i++) {
+      g.add(K.put(K.box({ color: shade(P.night, 0.26), size: [1.6, 0.07, 0.05], family: 'metal' }),
+        0, y0 + 0.2 + i * 0.15, D / 2 + 0.04));
+    }
+    // ⑥ 四角铆钉（壁柱上下端各一颗：近景的"五金感"）
+    for (const sx of [-1, 1]) {
+      g.add(K.put(K.cyl({ color: shade(P.silver, -0.2), r: 0.055, h: 0.06, seg: 6, family: 'metal' }),
+        sx * (W / 2 - 0.22), y0 + 0.62, D / 2 + 0.22));
+    }
+
     // ================= 正面起伏（用户定 2026-09-11："至少正面来点起伏"）=================
     // ① 两根竖向壁柱：从底座通到顶，凸出柜面 0.14 —— 把正面切成"左柱 / 屏 / 右柱"三段
     for (const sx of [-1, 1]) {
-      g.add(K.put(K.box({ color: shade(P.stone, 0.04), size: [0.24, bodyH + 0.2, 0.28], family: 'stone' }),
-        sx * (W / 2 - 0.22), y0 + bodyH / 2 + 0.1, D / 2 + 0.06));
+      const pil = K.box({ color: shade(P.stone, 0.04), size: [0.24, bodyH + 0.2, 0.28], family: 'stone' });
+      K.gradeY(pil, shade(P.stone, -0.3), shade(P.stone, 0.12));
+      g.add(K.put(pil, sx * (W / 2 - 0.22), y0 + bodyH / 2 + 0.1, D / 2 + 0.06));
     }
     // ② 中缝凹槽（两柱之间一条暗竖缝 + 上下端头，读作钣金拼接）
     g.add(K.put(K.box({ color: shade(P.night, 0.18), size: [0.1, bodyH - 0.1, 0.1], family: 'metal' }),
