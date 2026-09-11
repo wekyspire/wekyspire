@@ -18,6 +18,7 @@ import { BattleStage } from '../stage/stages/BattleStage.js';
 import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
+import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
@@ -30,6 +31,7 @@ import {
 import {
   SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
   devourSlot, devourableRelics, devourableCards, devourReady, slotView,
+  takeSlotGift, SLOT_GIFTS,
 } from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
@@ -199,6 +201,29 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   };
   // 面板快照的舞台侧瞬态：老虎机演出播放态与事件结果不在 core run 里（见 roomSnapshot 注释）
   const panelExtras = () => ({ slot, eventResult: eventRoom.result });
+  // ---- 获得遗物特写（用户定 2026-09-12）----
+  // 遗物获取路径很多（奖励选包 / 商店货架 / 老虎机奖品 / 古尔帕斯 / 事件…），逐个接线必漏；
+  // 这里统一在 notify 那一拍做**拥有集差分**：动作跑完后多出来的遗物 = 刚到手，播一次特写
+  // （物品图查 `assets/relics/<遗物名>`，没素材就退化成色块——组件自带兜底）。
+  // 同一拍最多播一件：上一件还在播就先排队，等下一次 notify 继续（玩家点掉特写总伴随下一次
+  // 操作）；基准集在读档/入档时同步，不会把已有遗物当成"刚获得"。
+  let shownRelicIds = new Set(run.player.relics);
+  const relicShowcaseQueue = [];
+  const flushRelicShowcase = () => {
+    const stage = roomStage ?? mapStage;                 // 不调 panelStage()：那个 const 在本块之后才初始化
+    if (!stage?.showcaseItem || !relicShowcaseQueue.length || stage.showcasing) return false;
+    if (run.gameStage === 'battle') return false;        // 战斗内不打断（差分已记，战后那拍再播）
+    const def = getRelicDefinition(relicShowcaseQueue.shift());
+    if (!def) return false;
+    const cost = def.nonSlot ? '非槽位式' : `占用 ${def.cost ?? 0} 槽`;
+    return stage.showcaseItem({
+      title: def.name ?? def.id,
+      desc: `遗物 · ${def.rarity ?? 'C'} 级 · ${cost}`,
+      effect: def.description ?? '',
+      artKey: def.name ?? def.id,
+      tint: parseInt((RARITY_COLORS[def.rarity] ?? RARITY_COLORS.C).slice(1), 16),
+    });
+  };
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
   mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
@@ -214,6 +239,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // 存档检查点：prep（层首）与 end（终局）落盘；战斗内退出 = 回到本层战前。
     if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run);
     runBus.emit(RunEvents.STAGE_CHANGED, { stage: run.gameStage, floor: run.floor });
+    // 新遗物 → 特写（差分见上方注释）：放在最后，确保面板/资源行已按新状态重绘
+    for (const id of run.player.relics) {
+      if (!shownRelicIds.has(id)) { shownRelicIds.add(id); relicShowcaseQueue.push(id); }
+    }
+    flushRelicShowcase();
   };
   let logSeq = 0;
   const pushLog = ({ text, kind }) => {
@@ -519,6 +549,21 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
 
+  // 离房安慰奖（SLOT_MACHINE.md：拉了 ≥2 次杆没中奖 → 送可乐/鸡腿二选一）：
+  // 场景端播完"吐出→点选→飞出"后上行到这里结算，再播一次获得物特写（获得动画）。
+  const GIFT_TINT = { cola: 0xc0392b, chicken: 0xd9a05b };
+  function slotTakeGift(choice) {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
+    const res = takeSlotGift(run, choice);
+    if (!res) return;
+    notify();
+    const g = SLOT_GIFTS[choice];
+    panelStage()?.showcaseItem?.({
+      title: g.name, desc: g.desc, effect: g.effect,
+      tint: GIFT_TINT[choice] ?? 0xffd75e,
+    });
+  }
+
   // ---- 粉碎物品（老虎机吞噬，用户定 2026-09-11）----
   // 链条：入口（面板按钮；机身投料口将来走同一意图）→ **dialogue 层**问「粉碎什么？」
   // （选项按可粉碎内容动态隐藏）→ 全屏选卡 / 选遗物 → 提交 core → 金币获得特写。
@@ -668,6 +713,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'slotTake') slotTake(intent.choice ?? null);
     else if (action === 'slotDecline') slotDecline();
     else if (action === 'slotPickUpgrade') slotPickUpgrade(intent.uniqueID);
+    else if (action === 'slotTakeGift') slotTakeGift(intent.choice);  // 离房安慰奖（可乐/鸡腿）
     else if (action === 'requestDevour') openDevourFlow();          // 粉碎入口（对话 → 选择 → 结算）
     else if (action === 'slotDevourRelic') slotDevour({ kind: 'relic', relicId: intent.relicId });
     else if (action === 'slotDevourCard') slotDevour({ kind: 'card', uniqueID: intent.uniqueID });

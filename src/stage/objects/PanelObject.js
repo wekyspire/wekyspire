@@ -44,13 +44,16 @@ const FORMS = {
     width: 760, padX: 24, padY: 20,
     rowH: { title: 36, text: 22, sub: 20, button: 34, main: 44, gap: 12, tiles: 104, cards: 300 },
   },
+  // 下沿停靠（场景式休息房的机器操纵条，用户 2026-09-12：**贴到接近屏幕下边沿** +
+  // 字号整体调大一档 + 文字统一白字黑边）。`font` = 各行烘焙字号（逻辑像素，10px/wu）。
   dock: {
-    width: 620, padX: 22, padY: 18,
-    rowH: { title: 32, text: 20, sub: 18, button: 30, main: 38, gap: 10, tiles: 96, cards: 260 },
+    width: 660, padX: 24, padY: 14,
+    rowH: { title: 34, text: 24, sub: 21, button: 36, main: 44, gap: 11, tiles: 96, cards: 260 },
+    font: { title: 24, sub: 16, text: 18, button: 17 },
   },
 };
-// dock 形态：整组内容底边贴这条 y（UI 相机坐标系里靠近屏幕下沿，留出安全边）
-const DOCK_BOTTOM = UI_CAMERA_LOOK_AT_Y - 34;
+// dock 形态：整组内容底边贴这条 y（UI 取景带下沿在 look_at_y - 50，故 -44 = 距下边沿 6）
+const DOCK_BOTTOM = UI_CAMERA_LOOK_AT_Y - 44;
 const CARD_SCALE = 0.8;      // 面板内卡面缩放（3 张一排：3×20.8 + 间隙 < 取景带 177.8）
 const BADGE_PX = 58;         // 「已选取」打勾徽标直径（逻辑像素）
 const BADGE_MARGIN = 18;     // 徽标中心距卡面右/下边的距离（逻辑像素）
@@ -124,7 +127,7 @@ export class PanelObject extends THREE.Group {
       if (w.kind === 'button') {
         const btn = new ButtonObject({
           id: w.id, width: w.width ?? (g.width - g.padX * 2), height: h,
-          bakeButton: this._bakeButton, fontPx: w.fontPx ?? 15,
+          bakeButton: this._bakeButton, fontPx: w.fontPx ?? (g.font?.button ?? 15),
         });
         btn.setData({ label: w.label, sublabel: w.sublabel, enabled: w.enabled !== false, active: !!w.active });
         btn.placeCenter(centerX, y - hWu / 2);
@@ -148,10 +151,14 @@ export class PanelObject extends THREE.Group {
         this._contentBottom = y;
         continue; // 组高已在此推进
       } else {
+        // dock（场景式操纵条）：文字**统一白色**（读在 3D 场景上，彩色/灰字对比不够）；
+        // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText
+        const dock = this.form === 'dock';
+        const f = g.font ?? { title: 20, sub: 13, text: 15 };
         const text = new TextBlockObject({
           bakeText: this._bakeText,
-          fontPx: w.kind === 'title' ? 20 : (w.kind === 'sub' ? 13 : 15),
-          tint: w.tint ?? (w.kind === 'title' ? '#ffd75e' : '#cdd6f4'),
+          fontPx: w.kind === 'title' ? f.title : (w.kind === 'sub' ? f.sub : f.text),
+          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#ffd75e' : '#cdd6f4')),
         });
         text.setText(w.text ?? '', { maxWidth: innerW });
         // 等比收进行框：烘焙高度由字号决定（fontPx×1.4），可能高于行高，不收敛会压到下一行
@@ -188,7 +195,7 @@ export class PanelObject extends THREE.Group {
     }
     const bg = new THREE.Mesh(
       new THREE.PlaneGeometry(w, heightWu),
-      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.78 }),
+      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
     );
     bg.position.set(0, -heightWu / 2, Z.BACKDROP);
     this.add(bg);

@@ -512,6 +512,19 @@ function slotWidgets(w, snap) {
         label: '粉碎物品…', action: { action: 'requestDevour' },
       });
     }
+    // 离房安慰奖（拉了 ≥2 次杆一次没中）：可乐/鸡腿二选一。场景式房间走机器"吐出"演出再选，
+    // 这里是占位面板的入口（两条路最终都上行 slotTakeGift，结算同一处）
+    if (s.gift?.length) {
+      w.push({ kind: 'gap' });
+      w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '老虎机往你怀里塞了点东西——二选一：' });
+      for (const g of s.gift) {
+        w.push({
+          kind: 'button', id: `slot:gift:${g.id}`, width: 460, size: 'sub',
+          label: `${g.name}｜${g.effect}`,
+          action: { action: 'slotTakeGift', choice: g.id },
+        });
+      }
+    }
 }
 
 /** 银行机的 widget（同上）。 */

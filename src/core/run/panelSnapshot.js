@@ -25,7 +25,7 @@ import {
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
-import { slotView, devourableRelics, devourableCards } from './rooms/slotMachine.js';
+import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
@@ -274,6 +274,11 @@ export function roomSnapshot(run, extra = {}) {
       majorChance: view.majorChance,
       minorChance: view.minorChance,
       devour: { progress: view.devourProgress, every: view.devourEvery, ready: view.devourReady },
+      // 离房安慰奖（拉了 ≥2 次杆且没中奖）：**只下发"欠着"与可选项的文本**，
+      // 领不领、什么时候领由流程侧决定（点「继续前进」时才进演出）
+      gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
+        id: g.id, name: g.name, desc: g.desc, effect: g.effect,
+      })) : null,
       // 演出进行中：{ id, prize }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）
       spinning: anim ? { id: anim.id, prize: anim.prize?.kind ?? null } : null,
       lastSpin,

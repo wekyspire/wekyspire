@@ -126,6 +126,15 @@ Debuff列表
 - 调试门：restGallery 聚焦后点机身投料口即粉碎（`__devour(n)` / `__crush()`）；
   uiGallery 的 `__uiRun()/__uiPush()/__uiStage.openDevourPicker(...)` 可单独调界面。
 
+**已完成：离房安慰奖（可乐 / 鸡腿二选一，2026-09-12）**
+- 触发：进房后**拉过 ≥2 次杆且一次都没中奖**（`run.slot.pulls/won`）→ 点「继续前进」时兑现
+  （不是 pending 产出，是 leave 流程的一环）。core：`slotGiftDue` / `takeSlotGift` / `SLOT_GIFTS`
+  （名称/描述/效果文本的唯一事实源）。效果：可乐 = 恢复 4 生命 + **下一场战斗开始时额外恢复 1 魏启**
+  （`run.pendingManaBonus`，由 battleRoot 在"魏启置上限一半"之后消费即清）；鸡腿 = 恢复 9 生命 + 最大生命 +1。
+- 演出（用户定）：点「继续前进」→ 相机推到**出料口** → 机器吐出两件 billboard（暂用纯色块 +
+  白字黑边标签占位，`objects/GiftChoiceObject.js`）→ 点选其一（选中件朝镜头飞出、另一件缩没）→
+  上行 `slotTakeGift` → 结算 + **获得物特写**（通用组件）。占位房间走面板上的两个按钮，同一结算入口。
+
 **待做**
 1. **恶魔 roll 交互流**：三选一的 debuff tooltip（走 `tooltipHub`，需要一份 debuff 的
    id/名称/描述下行字段）+ 选完后 `demonExit()`（闸口关 → 换回普通盘 → 开闸）+

@@ -48,6 +48,12 @@ export class PreBattleInstruction extends BattleInstruction {
       player.clearEffects();
       player.actionPoints = player.maxActionPoints;
       player.mana = Math.floor(player.maxMana / 2);
+      // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清
+      const manaGift = runState.pendingManaBonus ?? 0;
+      if (manaGift > 0) {
+        player.mana += manaGift;
+        runState.pendingManaBonus = 0;
+      }
 
       // 构筑牌组：克隆 runtime 进牌库，洗牌后逐卡走"进入战斗"元语（充能初始化 + 常驻订阅）
       battleState.zones.deck = player.deck.map(rt => cloneSkillRuntime(rt));

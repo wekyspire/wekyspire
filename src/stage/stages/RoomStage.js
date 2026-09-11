@@ -30,8 +30,10 @@ import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusOb
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { buildSlotPanel, buildBankPanel, buildCampPanel, buildTrainingPanel, buildShopPanel } from '../panels/index.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
+import { GiftChoiceObject } from '../objects/GiftChoiceObject.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
+import { bakeBoldText } from '../objects/textBakers.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
@@ -51,7 +53,37 @@ const PANEL_OF = {
 // pad = 横向装得下时的余量。距离与视轴下移都由这几个比例**反解**（不手调 margin）。
 // 默认一套适用所有尺寸（距离自适应），个别物件要贴脸/退远时按 kind 覆盖。
 const FOCUS_DEFAULT = { fracH: 0.50, bottom: 0.46, pad: 0.92 };
-const FOCUS_OF = {};   // 例：{ trainingDummy: { fracH: 0.42 } }
+
+/**
+ * 老虎机的取景主体（用户 2026-09-12：**点击后要"屏幕怼脸"**）：只框**三根转轮窗口 + 拉杆**
+ * （口径同 restGallery 的 focusMachine——这两件是这台机器的"脸"），不含底座/招牌/操作台，
+ * 于是机器顶到脸上、上下自然出画。其它交互物仍按整件包围盒取景（默认）。
+ */
+function slotSubject(entry) {
+  const reels = entry.parts?.reels ?? [];
+  const mid = reels[Math.floor(reels.length / 2)];
+  if (!mid) return null;
+  const c = mid.getWorldPosition(new THREE.Vector3());
+  const a = reels[0].getWorldPosition(new THREE.Vector3());
+  const b = reels[reels.length - 1].getWorldPosition(new THREE.Vector3());
+  const cell = Math.abs(a.x - b.x) / Math.max(1, reels.length - 1);
+  let halfW = (Math.abs(a.x - b.x) + cell * 1.35) * 0.5;   // 窗口宽 + 单格余量
+  let halfH = cell * 1.05 * 0.5;                            // 窗口高
+  const lever = entry.parts?.leverPivot ?? null;
+  if (lever) {                                              // 拉杆是侧面极限件，必须入画
+    const lb = new THREE.Box3().setFromObject(lever);
+    halfW = Math.max(halfW, Math.abs(lb.max.x - c.x), Math.abs(c.x - lb.min.x));
+    halfH = Math.max(halfH, Math.abs(lb.max.y - c.y), Math.abs(c.y - lb.min.y));
+  }
+  return new THREE.Box3(
+    new THREE.Vector3(c.x - halfW, c.y - halfH, c.z - 2),
+    new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 2),
+  );
+}
+// 单件取景覆盖：老虎机怼脸（fracH>0.5 = 主体占屏更大）；其余交互物走默认整件取景
+const FOCUS_OF = {
+  slot: { fracH: 0.70, bottom: 0.24, pad: 0.92, subject: slotSubject },
+};
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
@@ -135,6 +167,7 @@ export class RoomStage {
     this.uiScene.add(this._topBar);
     this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
     this.uiScene.add(this._bubbles);
+    this._gift = null;                   // 安慰奖二选一演出件（惰性；见 _playGift）
     this._continue = new ContinueButtonObject();
     this._continue.position.set(CONTINUE_POS.x, CONTINUE_POS.y, PANEL_ABOVE_Z + 2);
     this._continue.setEnabled(true);   // 拾取登记在 attachInput（此时可能还没 Picker）
@@ -306,6 +339,7 @@ export class RoomStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._gift?.active) { this._gift.onHover(hit); return; }   // 安慰奖演出中：只认两件货
     if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
@@ -329,6 +363,7 @@ export class RoomStage {
     const hit = this._picker.pick(x, y);
     const down = this._downHit;
     this._downHit = null;
+    if (this._gift?.active) { const id = this._gift.pickIndexOf(hit); if (id) this._gift.choose(id); return; }
     if (this._showcase?.busy) { this._showcase.onClick(hit); return; }        // 点任意处退出特写
     if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
@@ -373,6 +408,7 @@ export class RoomStage {
     this.composeScene = null;
     this.composeResize = null;
     this._bubbles.dispose();
+    this._removeGift();
     this._continue.dispose();
     this._cardPicker?.dispose();
     this._cardPicker = null;
@@ -475,6 +511,8 @@ export class RoomStage {
         this._nudgeForcedPick();
         return;
       }
+      // 还欠着离房安慰奖（拉了 ≥2 次杆没中奖）→ 先吐出可乐/鸡腿让你选，选完再离房
+      if (this._playGift()) return;
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
       return;
     }
@@ -491,6 +529,69 @@ export class RoomStage {
   }
 
   /**
+  /**
+   * **离房安慰奖演出**（用户定 2026-09-12）：点「继续前进」且快照里欠着安慰奖时，
+   * ① 相机推到**出料口**；② 机器"吐出"两件 billboard（可乐/鸡腿，暂无美术 = 纯色块 + 白字）；
+   * ③ 点选其一 → 选中件朝镜头飞出、另一件缩没；④ 播完上行 `slotTakeGift`（宿主结算 +
+   * 播获得物特写）。演完由快照（gift 变 null）自然收尾，玩家再点「继续前进」即离房。
+   * @returns 是否已接手这次点击（true = 别离房）
+   */
+  _playGift() {
+    const items = this._snap?.slot?.gift;
+    if (!Array.isArray(items) || !items.length) return false;
+    if (this._gift) return true;                       // 已在演：吞掉重复点击
+    const machine = this._markers.find(m => m.name === 'slot')?.entry;
+    if (!machine) return false;
+    // ① 相机：出料口特写（用出料翻板的世界坐标当主体）
+    const flap = machine.parts?.flap ?? null;
+    const anchor = new THREE.Vector3();
+    if (flap) flap.getWorldPosition(anchor);
+    else anchor.set(machine.x, -30 + 4, machine.z + 2);
+    const box = flap
+      ? new THREE.Box3().setFromObject(flap).expandByScalar(1.6)
+      : new THREE.Box3(anchor.clone().setY(anchor.y - 3), anchor.clone().setY(anchor.y + 3));
+    const size = box.getSize(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3());
+    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
+    const dist = Math.max(size.y * 3.4, 14);
+    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
+    const position = c.clone().addScaledVector(fwd, dist).add(new THREE.Vector3(0, 1.2, 0));
+    const look = c.clone().add(new THREE.Vector3(0, size.y * 0.5, 0));
+    const m = new THREE.Matrix4().lookAt(position, look, new THREE.Vector3(0, 1, 0));
+    this._startCamTween(
+      { position, quaternion: new THREE.Quaternion().setFromRotationMatrix(m) },
+      0.5,
+      () => this._spawnGift(items, anchor, fwd),
+    );
+    // 演出期间抑制机器常驻抖动（怼脸看细节）
+    for (const rig of this._rigs.values()) rig.setFocus?.(false);
+    return true;
+  }
+
+  /** 生成两件占位货（贴着出料口、朝外浮起），并登记拾取。 */
+  _spawnGift(items, anchor, fwd) {
+    if (this._gift) return;
+    this._gift = new GiftChoiceObject({
+      items,
+      size: 3.4,
+      onPick: (id) => {
+        this._onIntent?.({ action: 'slotTakeGift', choice: id });
+        this._removeGift(0.5);
+      },
+    });
+    this._gift.position.copy(anchor).addScaledVector(fwd, 2.6);
+    this._gift.position.y += 1.4;
+    this._room?.group.add(this._gift);
+    this._gift.attachPicker(this._picker);
+  }
+
+  _removeGift() {
+    if (!this._gift) return;
+    this._room?.group.remove(this._gift);
+    this._gift.dispose();
+    this._gift = null;
+  }
+
   /** 强绑抓牌未领时点「继续前进」：把镜头拉到训练桩并冒一句泡泡（"先挑卡"）——比"按钮没反应"清楚。 */
   _nudgeForcedPick() {
     const target = this._markers.find(m => m.name === 'training') ? 'training' : this._focused;
@@ -566,7 +667,7 @@ export class RoomStage {
   _focusPose(entry, center) {
     const cam = this._sm?.camera;
     const cfg = { ...FOCUS_DEFAULT, ...(FOCUS_OF[entry.kind] ?? {}) };
-    const bb = new THREE.Box3().setFromObject(entry.object);
+    const bb = cfg.subject?.(entry) ?? new THREE.Box3().setFromObject(entry.object);
     const size = bb.getSize(new THREE.Vector3());
     const c = bb.getCenter(new THREE.Vector3());
     const vFov = THREE.MathUtils.degToRad(cam?.fov ?? 24);
@@ -616,6 +717,17 @@ export class RoomStage {
     this._renderPanel();
   }
 
+  /** 操纵条文本烘焙：白字 + 黑描边（bakeBoldText 的 stroke 口径），字号由调用方给。 */
+  _dockBakeText() {
+    if (this._dockBake !== undefined) return this._dockBake;
+    this._dockBake = (typeof document === 'undefined')
+      ? null
+      : (text, { fontPx = 16 } = {}) => bakeBoldText(text, {
+        fontPx, tint: '#ffffff', stroke: 'rgba(0,0,0,0.95)',
+      });
+    return this._dockBake;
+  }
+
   /** 打开售货机面板（场景式房间点售货机机身；占位房间走房间表头的本地动作）。 */
   openShop() { this._openPanel('shop'); }
 
@@ -627,6 +739,9 @@ export class RoomStage {
         form: 'dock',
         onIntent: (a) => this._onPanelAction(a),
         bakeFace: null,
+        // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
+        // widget 各自的 tint 在 dock 形态下被忽略（见 PanelObject 的 dock 分支）
+        bakeText: this._dockBakeText(),
       });
       this.uiScene.add(this._panel);
     }
@@ -751,6 +866,7 @@ export class RoomStage {
     }
     this._continue.update(dt);
     this._showcase?.update(dt);
+    this._gift?.update(dt, this._sm?.camera ?? null);   // 安慰奖 billboard 面向相机 + 浮动
     for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
       const entry = this._markers.find(m => m.name === key)?.entry;
       if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));
