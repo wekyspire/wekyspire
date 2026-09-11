@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
-import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
+import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '../stage/scenes/volumetricMoon.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';
@@ -275,7 +275,9 @@ function rebuild() {
   room = composeRoom(recipeId, seed);           // 契约对象 { group, update, moonlight, recipe, grading, placements }
   scene.add(room.group);
   // 特殊色调（grading 契约）：曝光恒生效；tint 走 composer 合成
-  renderer.toneMappingExposure = room.grading?.exposure ?? 1;
+  // 色调映射：?tm=none|neutral|aces|reinhard 覆盖，?exp= 再乘一档曝光（A/B 用）
+  const tmMode = params.get('tm') || DEFAULT_TONE_MODE;
+  const tmExp = (room.grading?.exposure ?? 1) * (Number(params.get('exp')) || 1);
   // 雾：配方处方优先
   const fogDef = room.recipe?.fog;
   scene.fog = fogDef
@@ -285,6 +287,15 @@ function rebuild() {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
+  applyToneMapping(renderer, composer, tmMode, tmExp);
+  // bloom 旋钮：?bloom=强度 &bthr=阈值 &bknee=软膝 &brad=半径（缺省不动 = 用烘焙值）
+  const numKnob = (k) => (params.has(k) ? Number(params.get(k)) : undefined);
+  composer?.setBloom({
+    strength: numKnob('bloom'),
+    threshold: numKnob('bthr'),
+    knee: numKnob('bknee'),
+    radius: numKnob('brad'),
+  });
 
   // ---- 可动组件：建 rig + 悬浮标记 ----
   rigs.clear();

@@ -390,7 +390,11 @@ export function composeRoom(recipeId, seed = 'dev') {
   // 高度口径：落地件取体量上段（光池罩住四周）；**墙挂件取自身包围盒中心 + 向室内推
   // LAMP_WALL_PUSH**——挂件从挂点向下垂（彩灯串/吊灯），落地口径会把光池放到挂点上方；
   // 而灯池还贴墙的话（灯珠离墙 ~1）会在墙上打出爆白的彩色斑，推离墙面才是柔和的彩色氛围光。
+  // **落地件也必须推到体外**：老虎机/银行机这类箱体，光池落在 (x,z)=机身中心 = **箱子内部**，
+  // 于是"机身里有个大点光源"（用户报障：机上光照诡异）——按朝向 ry 沿前脸法线推出
+  // (半深 + 6)，高度取体量上段；推得太近（~1.6）会把前脸照爆成一团白光。
   const LAMP_WALL_PUSH = 4.5;
+  const LAMP_FRONT_PUSH = 6;
   const lampAnchorOf = (p) => {
     if (!p.tags.includes('lamp')) return null;
     const gain = p.lampGain ?? 1;
@@ -402,7 +406,13 @@ export function composeRoom(recipeId, seed = 'dev') {
         gain, color: p.lampColor,
       };
     }
-    return { x: p.x, y: p.y + Math.min(p.height * 0.7, 6), z: p.z, gain, color: p.lampColor };
+    const out = p.fz + LAMP_FRONT_PUSH;
+    return {
+      x: p.x + Math.sin(p.ry) * out,
+      y: p.y + Math.min(p.height * 0.6, 8.5),
+      z: p.z + Math.cos(p.ry) * out,
+      gain, color: p.lampColor,
+    };
   };
   const lampAnchors = [];
   // 撒布/角簇/立面三类辅助摆位的锚收集（火位进 fireExtra 候补，灯位直接进 lampAnchors）

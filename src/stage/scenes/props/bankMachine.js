@@ -13,6 +13,9 @@ export default {
   place: 'prop',
   mount: 'floor',
   tags: ['machine', 'metal', 'container', 'lamp', 'casino', 'interactive'],
+  // 灯池强度系数：机器灯池**推到了机身前方**（见 composeRoom 的 LAMP_FRONT_PUSH），
+  // 离受光面比'埋机箱里'近得多，同 base 会把正面照爆成白光 —— 按 gain 压到 ~1/6。
+  lampGain: 0.34,
   footprint: { x: 3.6, z: 2.8 },
   behaviors: [],
   build({ bodyH = 4.6, rng } = {}) {

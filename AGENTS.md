@@ -36,9 +36,32 @@ npm run preview    # 本地预览构建产物
 - **公网观战**：`https://wekyspire.hineven.site/watch.html`。链路 = 服务器上的观战页 → Apache 反代 `/relay/`（`/etc/httpd/conf.d/wekyspire.conf`，`flushpackets=on` 是 SSE 必备）→ SSH 反向隧道 `ssh -N -R 127.0.0.1:5199:127.0.0.1:5199 hineven.site` → 本机 `node tools/broadcast.mjs --origin https://wekyspire.hineven.site`。观战页在非 localhost 主机下自动走同源 `/relay`（免 CORS 与混合内容）；本机开发仍用 `?port=5199`。
 - 服务器自动部署：`/usr/local/bin/wekyspire-deploy.sh`（cron 每 5 分钟拉 `origin rewrite` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。国内网络常拉不动 GitHub/ghproxy（脚本会重试并回退镜像），必要时可直接把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
 
+## 分支与协作（2026-09-11 起）
+
+- **上游仓库 = `https://github.com/wekyspire/wekyspire`**（remote 名 `wekyspire`，`master` 为唯一主干）。
+  旧的 `origin`（`Hineven/wekyspire`）只是历史个人仓库，不再是交付目标。
+- **多人并行：每人一条自己的长期开发分支 `<名字>-dev`**（如 `hineven-dev`、`xxx-dev`），
+  都推到 `wekyspire`；功能完成后开 PR 合进 `master`（**不要直接推 master**）。
+  分支从 `wekyspire/master` 起，**开工前先 `git fetch wekyspire && git merge wekyspire/master`**
+  （长期分支落后是冲突的主要来源）。
+- 合并冲突以**自己那条 dev 分支的实现为准**（若冲突方是别人正在维护的模块，先沟通）。
+- 快速开工：
+  ```bash
+  git remote add wekyspire https://github.com/wekyspire/wekyspire   # 只需一次
+  git fetch wekyspire && git checkout -b <名字>-dev wekyspire/master
+  git push -u wekyspire <名字>-dev
+  ```
+
 ## 部署
 
-`.github/workflows/main.yml`：push 到 `master` 分支触发，`npm ci` → `VITE_BASE=<pages base_path> npm run build` → 部署 `dist/` 到 GitHub Pages。仓库根目录的 `dist/` 是构建产物，不要手改。
+- **线上站点由服务器 cron 部署**：`/usr/local/bin/wekyspire-deploy.sh`（每 5 分钟拉它自己 clone 的上游分支
+  → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。脚本早前盯的是 `origin rewrite`，
+  仓库迁到 `wekyspire` 组织后**应改为盯 `wekyspire/master`**（改脚本前以服务器实际配置为准）。
+  国内网络常拉不动 GitHub/ghproxy（脚本会重试并回退镜像），必要时可直接把本地 `dist/`
+  （`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
+- **GitHub Pages workflow 已在上游删除**（`d1541cf Delete .github/workflows/main.yml`）——
+  不要再往仓库里加回 Pages 部署；本地分支若残留该文件，推上去只会触发一个必然失败的 job。
+- 仓库根目录的 `dist/` 是构建产物（已 gitignore），不要手改。
 
 ## 架构：四层单向依赖
 

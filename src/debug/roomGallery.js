@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { DUNGEON } from '../stage/scenes/dungeon.js';
-import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
+import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '../stage/scenes/volumetricMoon.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 
 const params = new URLSearchParams(location.search);
@@ -88,9 +88,11 @@ function build(recipeId, seed) {
     }）｜ 火源 ${fires.length} ｜ 点光 ${countLights(room.group)}`;
   }
   scene.add(room.group);
-  // 特殊色调（grading 契约）：曝光倍率恒生效；tint 走 composer 合成（nocomposer 调试路径无色调）
+  // 特殊色调（grading 契约）：曝光倍率恒生效；tint 走 composer 合成
+  // 色调映射：?tm=none|neutral|aces|reinhard 覆盖、?exp= 再乘一档（A/B 用）
   const grading = room.grading;
-  renderer.toneMappingExposure = grading?.exposure ?? 1;
+  const tmMode = new URLSearchParams(location.search).get('tm') || DEFAULT_TONE_MODE;
+  const tmExp = (grading?.exposure ?? 1) * (Number(new URLSearchParams(location.search).get('exp')) || 1);
   // 雾：配方处方优先（BattleStage 缺省 165/310，火把章需远推），否则战斗缺省
   const fogDef = room.recipe?.fog;
   scene.fog = fogDef
@@ -101,6 +103,11 @@ function build(recipeId, seed) {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
+  applyToneMapping(renderer, composer, tmMode, tmExp);
+  // bloom 旋钮：?bloom=强度 &bthr=阈值 &bknee=软膝 &brad=半径（缺省不动 = 用烘焙值）
+  const q = new URLSearchParams(location.search);
+  const knob = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
+  composer?.setBloom({ strength: knob('bloom'), threshold: knob('bthr'), knee: knob('bknee'), radius: knob('brad') });
   window.__ready = false;
 }
 

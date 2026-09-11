@@ -15,7 +15,7 @@
 // 纯 Stage 层：不读 Core、不读 Bridge；输入只有「拉杆时给定的结果」（调用方从 Core 拿）。
 
 import * as THREE from 'three';
-import { P, shade } from '../kit/index.js';
+import { P } from '../kit/index.js';
 
 const Z = Math.PI * 2;
 
@@ -96,10 +96,20 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const lever = parts?.leverPivot ?? null;
   const reels = parts?.reels ?? [];
   const bulbs = parts?.bulbs ?? [];
+  const reelLamps = parts?.reelLamps ?? [];
   // 转轮面数由资产决定（道具导出 SYMBOLS 长度）；资产侧只有 kit 共享材质，
-  // 彩灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
+  // 彩灯/指示灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
   const SYM = reels[0]?.userData?.symbols?.length ?? 5;
+  // 锁定指示灯配色（用户定 2026-09-11：锁定前灭、锁定后亮）：暗铁 / 亮金 / 中奖闪用
+  // **亮度一律乘算、不调 shade()**：① shade 是朝白插值，提亮会同时去饱和（提两档就白）；
+  // ② 乘到真 HDR（线性 >1）才能进 bloom 的亮部通道——管线是 HDR 的，自发光体就得写 >1。
+  const brighten = (hex, k) => new THREE.Color(hex).multiplyScalar(k);
+  const lampOff = brighten(P.iron, 0.5);
+  const lampOn = brighten(P.gold, 12);
+  const lampOnDim = brighten(P.gold, 4);
+  const lampLit = brighten(P.gold, 20);
   for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: P.gold });
+  for (const l of reelLamps) l.material = new THREE.MeshBasicMaterial({ color: lampOff });
   // 拉杆：材质独立化（悬停/拉下时能闪光提示——它是"这台能点"的关键部件）
   const leverParts = [];
   lever?.traverse((o) => {
@@ -122,6 +132,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     leverAngle: 0,       // 0 = 静止，负 = 拉下
     leverRelease: 0,     // 弹起进度（0..1）
     spin: null,          // { elapsed, tier, locked: [bool], plans: [planReel…] }（见文件头时序）
+    spinEnergy: 0,       // 0..1 转轮当前动能（驱动整机震动/拨杆共振）
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
     shakeAmp: 0,
@@ -129,10 +140,14 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
 
   // ---- 彩灯：常态呼吸 + 灯效（逐灯独立材质，直接改 color）----
   // **逐颗底色**来自资产登记的 userData.tint（一圈彩灯颜色不同才有"赌具"味），缺省暖金。
-  const bulbOn = new THREE.Color(P.flameCore);
+  // "亮起"用**乘算提亮**保住色相（详见下方 brighten 注释）——近白（flameCore）或朝白插值
+  // 都会把整圈彩灯糊成白色（用户报障"彩灯亮起的时候都一律显示为白色"）。
   const tintOf = (b) => b.userData?.tint ?? P.gold;
-  const bulbWarm = (b) => new THREE.Color(shade(tintOf(b), 0.1));
-  const bulbDim = (b) => new THREE.Color(shade(tintOf(b), -0.22));
+  // 三档亮度（线性乘算）：暗 → 常态亮（淡 bloom）→ 中奖爆亮（强 bloom）。
+  // 阈值 1.45：常态 ×10 让多数色相刚过阈值（有一层薄光晕），爆闪 ×18 明显发光。
+  const bulbWarm = (b) => brighten(tintOf(b), 10);
+  const bulbDim = (b) => brighten(tintOf(b), 3);
+  const bulbLit = (b) => brighten(tintOf(b), 18);
 
   function paintBulbs(level = 0) {
     // level 0 = 常态（暗金呼吸）；>0 = 中奖灯效强度
@@ -141,13 +156,30 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       if (st.win) {
         const fx = st.win.fx;
         const chaseOn = fx.chase > 0 && ((i + Math.floor(st.win.t * fx.chase)) % 3 === 0);
-        const flashOn = fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 2;
+        // 爆闪用**占空比**而不是 `> 1 - flash*2`（flash=1 时那个判据恒真 → 只会一直亮、
+        // 没有"闪"的节奏）：flash=1 约 63% 占空，flash=0.35 约 33%。
+        const flashOn = fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 1.4;
         const on = chaseOn || flashOn;
-        b.material.color.copy(on ? bulbOn : bulbWarm(b));
+        b.material.color.copy(on ? bulbLit(b) : bulbWarm(b));
       } else {
         // 常态：呼吸（整体偏亮——彩灯是"亮着的"，暗一档就变成没通电的塑料球）
         const base = bulbDim(b).lerp(bulbWarm(b), 0.5 + 0.35 * breathe + 0.35 * st.hover);
         b.material.color.copy(base);
+      }
+    });
+    // ---- 三颗锁定指示灯：**转轮没停就灭、停稳就亮**（用户定 2026-09-11）----
+    // 中奖时随灯效闪（用各灯自己的底色，不再糊白）。
+    reelLamps.forEach((lamp, i) => {
+      const locked = st.spin ? !!st.spin.locked[i] : true;   // 待机 = 已在槽位上 = 亮
+      if (st.win) {
+        const fx = st.win.fx;
+        const on = (fx.chase > 0 && Math.floor(st.win.t * fx.chase) % 2 === 0)
+          || (fx.flash > 0 && Math.sin(st.win.t * 18) > 1 - fx.flash * 1.4);
+        lamp.material.color.copy(on ? lampLit : lampOnDim);
+      } else if (locked) {
+        lamp.material.color.copy(lampOn);
+      } else {
+        lamp.material.color.copy(lampOff);
       }
     });
   }
@@ -157,6 +189,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     st.pulling = true;
     st.leverRelease = 0;
     st.win = null;
+    st.shake = Math.max(st.shake, 0.12);            // 拉杆瞬间整机一顿（起转的"踹一脚"）
+    st.shakeAmp = Math.max(st.shakeAmp, 0.03);
     st.spin = {
       elapsed: 0,
       tier,
@@ -180,7 +214,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     const calm = 1 - 0.84 * st.focus;
 
     // ---- 常驻抖动：机体微微抖（幅度小但持续；中奖时叠加"激动"抖动）----
+    // **层次反馈**（用户定）：转轮高速转动时整机跟着震（转盘带动机构），转速降下来震动也弱，
+    // 落槽瞬间再叠一次"咔"式弹跳；追光怼脸时统一按 calm 压制。
     const idleAmp = (st.hover > 0.5 ? 0.02 : 0.012) * calm;
+    const vibAmp = 0.05 * st.spinEnergy * calm;
     let shakeX = 0, shakeY = 0, shakeZ = 0;
     if (st.shake > 0) {
       st.shake = Math.max(0, st.shake - dt);
@@ -189,12 +226,16 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       shakeY = Math.abs(Math.sin(st.t * 38)) * k * 0.7;
       shakeZ = Math.cos(st.t * 52) * k * 0.5;
     }
+    // 转动震动：高频 + 沿机体轴向为主（真机是被三根鼓带着左右晃）
+    const vibX = st.spinEnergy > 0.001 ? Math.sin(st.t * 37) * vibAmp : 0;
+    const vibY = st.spinEnergy > 0.001 ? Math.abs(Math.sin(st.t * 31)) * vibAmp * 0.8 : 0;
     body.position.set(
-      basePos.x + Math.sin(st.t * 13.3 + st.phase) * idleAmp + shakeX,
-      basePos.y + Math.abs(Math.sin(st.t * 9.7 + st.phase)) * idleAmp * 0.6 + shakeY,
+      basePos.x + Math.sin(st.t * 13.3 + st.phase) * idleAmp + shakeX + vibX,
+      basePos.y + Math.abs(Math.sin(st.t * 9.7 + st.phase)) * idleAmp * 0.6 + shakeY + vibY,
       basePos.z + Math.cos(st.t * 11.1 + st.phase) * idleAmp * 0.5 + shakeZ,
     );
-    body.rotation.z = (Math.sin(st.t * 7.3 + st.phase) * 0.004 + shakeZ * 0.02) * calm;
+    body.rotation.z = (Math.sin(st.t * 7.3 + st.phase) * 0.004 + shakeZ * 0.02
+      + (st.spinEnergy > 0.001 ? Math.sin(st.t * 41) * 0.0035 * st.spinEnergy : 0)) * calm;
     // hover：轻微上浮放大（配合灯提亮）
     st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
     const hoverBoost = 1 + 0.025 * st.hover;
@@ -214,7 +255,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         const overshoot = Math.sin(st.leverRelease * Math.PI) * 0.12;
         st.leverAngle = -1.05 * (1 - e) + overshoot * (1 - e);
       }
-      lever.rotation.z = st.leverAngle;
+      lever.rotation.z = st.leverAngle
+        + (st.spinEnergy > 0.001 ? Math.sin(st.t * 47) * 0.03 * st.spinEnergy : 0);  // 转轮带着拨杆共振
       // 闪光：朝冷白插值（拉下瞬间最亮）
       for (const lp of leverParts) {
         lp.mesh.material.color.copy(lp.base).lerp(new THREE.Color(P.flameCore), leverFlash * 0.75);
@@ -222,28 +264,42 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     }
 
     // ---- 转轮：① 加速 → ② 长匀速 → ③ 指数减速（将停未停）→ ④ 卡入位（阻尼弹回槽位）----
+    // 顺带测**当前转速**（角度差分）：转轮的动能驱动"机体随转轮一起震"（层次反馈，用户定）。
     if (st.spin) {
       const s = st.spin;
       s.elapsed += dt;
+      let topSpeed = 0;
       reels.forEach((r, i) => {
         if (s.locked[i]) return;
         const p = s.plans[i];
+        const a = s.elapsed >= p.tLock ? p.target : angleAt(p, s.elapsed);
+        const prev = s.prevAngle?.[i];
+        if (prev !== undefined && dt > 1e-4) {
+          topSpeed = Math.max(topSpeed, Math.abs(a - prev) / dt);
+        }
+        if (!s.prevAngle) s.prevAngle = reels.map((rr) => rr.rotation.x);
+        s.prevAngle[i] = a;
         if (s.elapsed >= p.tLock) {
           r.rotation.x = p.target;                                 // 硬落槽（离散、无累积误差）
           r.userData.index = p.targetIndex ?? r.userData.index;
           s.locked[i] = true;
           st.shake = Math.max(st.shake, 0.09);                     // 落槽小弹跳
-          st.shakeAmp = Math.max(st.shakeAmp, 0.02);
+          st.shakeAmp = Math.max(st.shakeAmp, 0.022);
         } else {
-          r.rotation.x = angleAt(p, s.elapsed);
+          r.rotation.x = a;
         }
       });
+      // 转速归一（匀速段 = 1）→ 平滑一下（落槽瞬间差分会有尖刺）
+      const e = Math.min(1, topSpeed / CRUISE_V);
+      st.spinEnergy += (e - st.spinEnergy) * Math.min(1, dt * 12);
       if (s.locked.every(Boolean)) {
         const tier = s.tier;
         st.spin = null;
         st.win = { tier, t: 0, fx: TIER_FX[tier] ?? TIER_FX.none };
         if (st.win.fx.shake > 0) { st.shake = st.win.fx.seconds; st.shakeAmp = st.win.fx.shake; }
       }
+    } else if (st.spinEnergy > 0) {
+      st.spinEnergy = Math.max(0, st.spinEnergy - dt * 1.6);       // 停轮后余震收干净
     }
 
     // ---- 中奖灯效推进 ----
