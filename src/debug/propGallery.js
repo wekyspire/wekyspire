@@ -10,6 +10,8 @@ import { createRng } from '../stage/scenes/kit/scatter.js';
 import { familyMaterial } from '../stage/scenes/kit/materials.js';
 
 const CELL = 12;          // 陈列格边长（世界单位）
+// ?only=<propId>：只陈列这一件（近景过目/调参用——全量网格下单个道具太小看不清）
+const ONLY = new URLSearchParams(location.search).get('only');
 const WALL_CLASSES = new Set(['wallDecor', 'wallStructure', 'roomWall']);
 
 const canvas = document.createElement('canvas');
@@ -76,8 +78,10 @@ function buildGallery() {
   propRoot = new THREE.Group();
   propRoot.name = 'propGallery';
 
-  const defs = [...propRegistry.values()]
+  const all = [...propRegistry.values()]
     .sort((a, b) => a.place.localeCompare(b.place) || a.id.localeCompare(b.id));
+  const defs = ONLY ? all.filter(d => d.id === ONLY) : all;
+  if (!defs.length) console.warn(`[propGallery] ?only=${ONLY} 未匹配到已登记资产`);
   const cols = Math.max(3, Math.ceil(Math.sqrt(defs.length * 1.7)));
   const matPlate = familyMaterial('stone', { color: shade(P.slab, -0.22) });
   const matWall = familyMaterial('stone', { color: shade(P.wall, -0.12) });
@@ -118,11 +122,22 @@ function buildGallery() {
 
   scene.add(propRoot);
   // 相机自动取距：按陈列盘对角线
-  const size = new THREE.Box3().setFromObject(propRoot).getSize(new THREE.Vector3());
-  orbit.dist = Math.max(46, Math.hypot(size.x, size.z) * 0.62);
-  orbit.target.set(0, 2, 0);
-  document.getElementById('gallery-count').textContent =
-    `${defs.length} 件已登记 ｜ 分组排列：place 类别`;
+  const box = new THREE.Box3().setFromObject(propRoot);
+  const size = box.getSize(new THREE.Vector3());
+  // 单件近景：**对着道具包围盒中心取景** + 距离按最长边算（远景网格才用陈列盘对角线）
+  orbit.dist = ONLY
+    ? Math.max(9, Math.max(size.x, size.y, size.z) * 2.1)
+    : Math.max(46, Math.hypot(size.x, size.z) * 0.62);
+  if (ONLY) {
+    orbit.target.copy(box.getCenter(new THREE.Vector3()));
+    orbit.dist = Math.max(7, Math.max(size.x, size.y, size.z) * 1.35);
+    orbit.yaw = -0.34;    // 略偏正面（默认 -0.5 太侧，看不出正面细节）
+    orbit.pitch = 0.26;
+  }
+  else orbit.target.set(0, 2, 0);
+  document.getElementById('gallery-count').textContent = ONLY
+    ? `单件预览：${ONLY}`
+    : `${defs.length} 件已登记 ｜ 分组排列：place 类别`;
 }
 
 function applyCamera() {
