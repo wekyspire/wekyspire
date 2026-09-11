@@ -69,7 +69,6 @@ export class MapStage {
     // 顶端居中资源行（金币数值 + 遗物槽；与战斗内同物同位）
     this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel });
     this.uiScene.add(this._topBar);
-    this.uiScene.add(this._bubbles);
     this._unsubArt = this._unitArt?.addOnLoad(() => {
       this._applyAvatar();
       // 水晶/金币的晚到补挂由 PlayerStatusObject 自身的 onLoad 订阅负责（unitArt 已注入）
@@ -88,6 +87,7 @@ export class MapStage {
     this._pickerConfirm = null; // 当前选卡/选遗物界面的确认回调（按入口切换）
     this._showcase = null;   // 获得物特写（遗物/药水/奖励到手时播一次；惰性创建）
     this._bubbles = new BubbleLayer();   // 角色对话/思索泡泡（世界锚点，每帧重投影）
+    this.uiScene.add(this._bubbles);
     this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
     this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
