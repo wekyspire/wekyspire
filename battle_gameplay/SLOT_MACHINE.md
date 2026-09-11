@@ -94,32 +94,42 @@ Debuff列表
     失望：下一场战斗中，从第4回合开始，每回合结束时受到7伤害。
     出血：下一场战斗中，战斗开始时，伤残1。
     失眠：下一场战斗中，前2回合，魏启不会自动回复。
-## 待做：恶魔 roll 的演出与"粉碎物品"入口（2026-09-11 用户定，进行中）
+## 恶魔 roll 的演出与"粉碎物品"入口（2026-09-11 用户定，进行中）
 
-**已完成（Stage 侧骨架，可直接用）**
-- 老虎机窗口**闸口**（`parts.gate`）+ rig 的 `demonEnter()` / `demonExit()`：关闸 0.42s →
-  关着换盘 0.18s → 开闸 0.42s；期间 `isBusy()` 为真（宿主据此禁拉杆）。
-- `setDemonStyle(k)`（0..1）：彩灯整圈压向暗红，与机械动画解耦；换盘暂为**占位暗红**
-  （`swapReels()` 里换材质色，真素材到位后改成换 `symbolKeys` 取图）。
-- `lighting.setLampTint(color, k)`：运行期给**灯池**染色（恶魔态整机偏暗红）。
-- 老虎机静态子件已合并（59 → 26 mesh），预算回本；只为 verts 留一条 3600 的例外。
+**已完成：粉碎物品全链（机器端 + 面板端）**
+- **机器正面两件**（`props/slotMachine.js` + `interactive/slotMachineRig.js`）：操作台与腰线
+  之间的正面空档里，左半是**投料口**（暗腔可点热区 `pickId='slot:crusher'` + 上下两排金牙
+  锯齿，上牙按镜像反绕——单面材质下原会被背面剔除），右半是**计数器**面板。
+- **翻牌式计数器**（用户定：不要"能量条"读法）：rig 自绘 canvas，两张卡（当前值 / 上限）
+  各分上下两片叶子 + 中缝，数字变化时上叶折叠落下 → 新叶落下（0.44s，`FLAP_DUR`）；
+  进度满时卡面转金并脉动。
+- **预算回本**：一圈彩灯 + 三颗锁定指示灯改两个 `InstancedMesh` + `instanceColor`
+  （14 mesh/840 顶点 → 2 mesh/120 顶点），几何顶点色走新增的 kit `paintNeutral`（纯白，
+  颜色全由实例色决定）→ 本资产 **17 mesh / 2954 顶点**，`budget` 例外已撤销。
+- **粉碎演出**：`rig.crush()` = 上下牙交错咬合（`jaw.scale.y` 绕口心）+ 口内闪红 +
+  机壳剧震 + 16 枚金币抛物迸出（rig 自建的 InstancedMesh，不进资产预算）。
+  rig 接口：`setDevour({progress,every,ready})` / `devourReady()` / `crush()` /
+  `crusherTargets()` / `pickNameOf()`；`isBusy()` 含粉碎。
+- **dialogue 层首次接入**：`cutscenePlayer` 的 dialogue step 支持
+  `pages[].choices = [{id,label,hint?,disabled?}]` + `step.onChoice(id)`；
+  `player.choose(id)` 回执开闸（**带选项的页不响应点背板翻页**），选择也写进
+  `state.lastChoice`。Overlay 渲染成整行按钮（左侧标签 + 右侧小字提示）。
+- **两个全屏选择界面**：抽出共用骨架 **`stage/objects/ScrollPickerObject.js`**
+  （背板/标题/提示/滚动带/滚动条/选中态/确认可用性/返回/tooltip/拾取登记），
+  `CardScrollPickerObject` 与新的 **`RelicScrollPickerObject`** 都只回答"一件候选长什么样"。
+  遗物候选是程序化"藏品卡"（无美术资源）：稀有度色描边 + 徽标 + 名字 + 换行描述。
+  ⚠ 选择界面的文本必须走 `MapStage._pickerBakeText()`（honors fontPx/tint/maxWidth），
+  不能用 `_bakeLabel`（那个把 style/maxWidth 写死，字号与颜色会被丢掉）。
+- **编排**（`runController.openDevourFlow`）：面板「粉碎物品…」→ `requestDevour` 意图 →
+  对话问「粉碎什么？」（选项按可粉碎内容**动态隐藏**）→ 全屏选卡/选遗物 →
+  `devourSlot` 结算 → 金币获得特写（`ItemShowcaseObject`）。面板不再平铺候选按钮墙。
+- 调试门：restGallery 聚焦后点机身投料口即粉碎（`__devour(n)` / `__crush()`）；
+  uiGallery 的 `__uiRun()/__uiPush()/__uiStage.openDevourPicker(...)` 可单独调界面。
 
-**已存在的数据（不必再改 core）**：`panelSnapshot.snap.slot` 已带
-`devour: { progress, every(=7), ready }`（摇杆次数计数器）与
-`devourables: { relics, cards }`（进度满时才给清单）——UI 直接消费即可。
-
-**待做（纯 Stage/Shell UI，建议按此顺序）**
-1. **静态子件预算回本的第二步**：彩灯 + 锁定指示灯改 InstancedMesh + instanceColor
-   （省 15 个网格，顺带把 verts 压回 3000 内、撤掉例外）。
-2. **机器正面新增两件**：① 粉碎口（可点热区 + 投料口造型）；② 摇杆次数计数器
-   （7 格刻度 + 数字滚动动画——拉杆后 +1 时滚动）。数据走上面的 `devour`。
-3. **dialogue 层首次接入**（顺便压测易用性与 bug）：点粉碎口且计数器满 → 弹
-   "粉碎什么？" + 三选项（卡牌 / 遗物 / 算了）。**没有任何可粉碎内容时对应选项不出现**
-   （卡牌候选去 S 级、遗物按价值表；`devourables` 已给清单）。
-4. **两个全屏选择界面**：卡牌复用 `CardScrollPickerObject`；**遗物选择界面是新界面**
-   （建议抽共用的"全屏滚动 + 滚动条 + 返回/确认"骨架，避免复制）。
-5. **演出收尾**：确认后物品投入粉碎口 → 粉碎动画 → 金币获得动画（金币数字跳 + 飞币）；
-   之后 `demonExit()` 的同类脚本（闸口关 → 换回普通盘 → 开闸）+ 灯效恢复
-   （`setDemonStyle(0)` + `setLampTint(color, 0)`）。
-6. **恶魔盘素材**：真素材到位后换 `swapReels` 里的取图；三选一的 debuff tooltip 走
-   现有 `tooltipHub`（与卡面热区同一套浮层），需要一份 debuff 的 id/名称/描述下行字段。
+**待做**
+1. **恶魔 roll 交互流**：三选一的 debuff tooltip（走 `tooltipHub`，需要一份 debuff 的
+   id/名称/描述下行字段）+ 选完后 `demonExit()`（闸口关 → 换回普通盘 → 开闸）+
+   灯效恢复（`setDemonStyle(0)` + `setLampTint(color, 0)`）。
+2. **恶魔盘素材**：真素材到位后换 `swapReels()` 里的取图（现为占位暗红）。
+3. **主流程接线**：房间层切场景后，机身投料口直接派发 `requestDevour` 意图（现在只有
+   面板入口能走到；意图与链路已就绪）。

@@ -200,6 +200,8 @@ const SHOWCASE_SAMPLES = {
 };
 window.__showcase = (item) => mapStage.showcaseItem(item ?? SHOWCASE_SAMPLES.relic);
 window.__uiStage = mapStage;   // 调试句柄（查组件状态/手动驱动）
+window.__uiRun = () => run;    // 样本 run（改状态后调 __uiPush() 重推快照）
+window.__uiPush = () => push();
 const SHOW = opt('showcase', '');
 if (SHOW && SHOWCASE_SAMPLES[SHOW]) mapStage.showcaseItem(SHOWCASE_SAMPLES[SHOW]);
 

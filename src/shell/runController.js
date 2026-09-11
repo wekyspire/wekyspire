@@ -27,7 +27,7 @@ import {
 } from '../core/run/rooms/gurpas.js';
 import {
   SLOT, spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
-  devourSlot, devourableRelics, devourableCards, slotView,
+  devourSlot, devourableRelics, devourableCards, devourReady, slotView,
 } from '../core/run/rooms/slotMachine.js';
 import { playEvent } from '../core/run/rooms/event.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
@@ -459,6 +459,57 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
+
+  // ---- 粉碎物品（老虎机吞噬，用户定 2026-09-11）----
+  // 链条：入口（面板按钮；机身投料口将来走同一意图）→ **dialogue 层**问「粉碎什么？」
+  // （选项按可粉碎内容动态隐藏）→ 全屏选卡 / 选遗物 → 提交 core → 金币获得特写。
+  // 对话是 Shell 层的东西（CutsceneOverlay），所以这条链只能编排在这里——Stage 只负责
+  // 「谁被点了」和「把候选画出来」，不做游戏判定。
+  async function openDevourFlow() {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return false;
+    if (run.slotPending || !devourReady(run)) return false;
+    const relics = devourableRelics(run);
+    const cards = devourableCards(run);
+    if (!relics.length && !cards.length) return false;
+    const choices = [];
+    if (cards.length) choices.push({ id: 'card', label: '粉碎一张卡牌', hint: `${cards.length} 张可选` });
+    if (relics.length) choices.push({ id: 'relic', label: '粉碎一件遗物', hint: `${relics.length} 件可选` });
+    choices.push({ id: 'cancel', label: '算了' });
+    let picked = null;
+    await cutscene.play({
+      steps: [{
+        type: 'dialogue',
+        pages: [{
+          speaker: '老虎机',
+          text: '机器张开了嘴，齿间漏出金币碰撞的响声。\n「粉碎什么？」',
+          choices,
+        }],
+        onChoice: (id) => { picked = id; },
+      }],
+    });
+    if (picked !== 'card' && picked !== 'relic') return false;
+    return !!mapStage?.openDevourPicker({
+      kind: picked,
+      cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId })),
+      relics: relics.map(r => ({
+        id: r.id, name: r.name, rarity: r.rarity,
+        desc: getRelicDefinition(r.id)?.description ?? '',
+      })),
+      onPick: (key) => {
+        const res = picked === 'card'
+          ? devourSlot(run, { kind: 'card', uniqueID: key })
+          : devourSlot(run, { kind: 'relic', relicId: key });
+        notify();
+        // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
+        mapStage?.showcaseItem({
+          title: `+${res.gold} 金币`,
+          desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡' : '老虎机满意地嚼碎了那件遗物',
+          effect: res.freeRoll ? '它还额外吐了一次免费拉杆' : '金币已经落进你的钱袋',
+          tint: 0xffd75e,
+        });
+      },
+    });
+  }
   // ---- 商店（售货机，SHOP.md §一）----
   // 与奖励房并存、不占房间名额：购买不消耗房间行动，故不调 completeRoom。
   function shopBuy(index) {
@@ -557,6 +608,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else if (action === 'slotTake') slotTake(intent.choice ?? null);
     else if (action === 'slotDecline') slotDecline();
     else if (action === 'slotPickUpgrade') slotPickUpgrade(intent.uniqueID);
+    else if (action === 'requestDevour') openDevourFlow();          // 粉碎入口（对话 → 选择 → 结算）
     else if (action === 'slotDevourRelic') slotDevour({ kind: 'relic', relicId: intent.relicId });
     else if (action === 'slotDevourCard') slotDevour({ kind: 'card', uniqueID: intent.uniqueID });
     else if (action === 'triggerEvent') triggerEvent();
@@ -580,6 +632,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     sequencer: runSequencer, animBus, dispose,
     LEINO_DIMENSIONS, SLOT,
     slotView: () => slotView(run),
+    openDevourFlow,
     devourableRelics: () => devourableRelics(run),
     devourableCards: () => devourableCards(run),
     skillName: (id) => getSkillDefinition(id)?.name ?? id,

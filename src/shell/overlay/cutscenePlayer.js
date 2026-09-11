@@ -18,7 +18,17 @@ import { AnimationSequencer } from '../../core/anim/sequencer.js';
 //   { type:'image', src, fadeInMs?,
 //     holdMs?, fadeOutMs? }            CG/插图：淡入 → 停留 → 淡出——定时指令
 //   { type:'dialogue', pages }         对话：人工闸门指令（点击翻页，末页回执开闸）
+//                                      page 可带 `choices: [{ id, label, hint?, disabled? }]`
+//                                      ——该页不靠点击推进，必须 `choose(id)`（见下）
 //   { type:'call', fn }                瞬时回调（换舞台/改流程状态等副作用）——自完结指令
+//
+// **带选项的对话**（用户定 2026-09-11：粉碎物品入口首次用上 dialogue 层）：
+//   step = { type:'dialogue', pages:[{ speaker, text, choices }], onChoice?(id) }
+//   · 有 choices 的页：overlay 渲染按钮，点按钮 → player.choose(id)（点背板无效）
+//   · 选完 → 回执开闸（与翻页共用同一道闸门），选择同时写进 state.lastChoice
+//   · 调用方 await player.play({ steps:[…] }) 后经 onChoice / 闭包变量读结果
+//   · 选项内容由**调用方按可用内容动态拼**（如"没有可粉碎的卡就不给卡牌选项"）——
+//     层里不做游戏判定，只负责"把选项摆出来并把人选的那个交回去"
 //
 // 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；
 // 阻塞流程 = 流程侧 await play()/sceneTransition() 后再发下一个 run intent。
@@ -51,6 +61,7 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
     step: null,        // 当前 step（overlay 据此渲染）
     pageIndex: 0,      // dialogue step 页码
     phase: null,       // 多阶段 step 的子阶段：wipe=enter|cover|reveal；image=fadeIn|hold|fadeOut
+    lastChoice: null,  // 最近一次带选项对话的选择 id（调用方也可走 step.onChoice 读）
     flags: {},         // 剧情 flag 状态机（played 标记；未来分支状态扩展位）
   });
   const scripts = new Map(CUTSCENE_SCRIPTS.map(s => [s.id, s]));
@@ -179,10 +190,27 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
   /** 对话翻页；末页 → 回执开闸推进时间轴下一步 */
   function advance() {
     if (state.step?.type !== 'dialogue' || !gate) return;
+    // 带选项的页不翻页：必须点某个选项（否则会出现"点一下跳过选择"的坑）
+    if (state.step.pages[state.pageIndex]?.choices?.length) return;
     if (state.pageIndex < state.step.pages.length - 1) { state.pageIndex += 1; return; }
     const g = gate;
     gate = null;
     g.emit(FINISH_EVENT, { id: g.id });
+  }
+
+  /** 选中当前页的某个选项（带 choices 的对话页专用）：回执开闸 + 记下选择。
+   *  返回 false = 该选项不存在/被禁用（overlay 据此不关闸）。 */
+  function choose(id) {
+    if (state.step?.type !== 'dialogue' || !gate) return false;
+    const page = state.step.pages[state.pageIndex];
+    const opt = page?.choices?.find((c) => c.id === id);
+    if (!opt || opt.disabled) return false;
+    const g = gate;
+    gate = null;
+    state.lastChoice = id;
+    state.step.onChoice?.(id);
+    g.emit(FINISH_EVENT, { id: g.id });
+    return true;
   }
 
   let transitionBusy = false;
@@ -204,5 +232,5 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       .map(t => t.id);
   }
 
-  return { state, play, advance, sceneTransition, pendingTriggers };
+  return { state, play, advance, choose, sceneTransition, pendingTriggers };
 }

@@ -446,30 +446,22 @@ export function buildRoomPanel(snap) {
       action: { action: 'spin' },
     });
 
-    // 吞噬：累积满 7 次 roll 才可粉碎一件遗物/卡换金币
+    // 吞噬：累积满 7 次 roll 才可粉碎一件遗物/卡换金币。
+    // **入口是一个按钮**（不再把候选平铺成按钮墙）：点它 → dialogue 层问「粉碎什么？」
+    // → 全屏选卡/选遗物界面。编排在 runController（Stage 只上报"入口被点了"）。
     const dv = s.devour ?? {};
     w.push({ kind: 'gap' });
     w.push({
       kind: 'sub', align: 'center', tint: dv.ready ? '#a8c6a0' : '#77809a',
       text: dv.ready
-        ? '老虎机张开了嘴——可粉碎一件遗物或一张卡换取金币：'
-        : `吞噬进度 ${dv.progress ?? 0}/${dv.every ?? 7}`,
+        ? '老虎机张开了嘴——可以粉碎一件遗物或一张卡换金币：'
+        : `吞噬进度 ${dv.progress ?? 0}/${dv.every ?? 7}（每拉一次杆累积 1）`,
     });
-    if (s.devourables) {
-      for (const r of s.devourables.relics) {
-        w.push({
-          kind: 'button', id: `slot:devour:relic:${r.id}`, width: 320, size: 'sub',
-          label: `粉碎遗物：${r.name}（${r.rarity}）`,
-          action: { action: 'slotDevourRelic', relicId: r.id },
-        });
-      }
-      for (const c of s.devourables.cards) {
-        w.push({
-          kind: 'button', id: `slot:devour:card:${c.uniqueID}`, width: 320, size: 'sub',
-          label: `粉碎卡牌：${c.name}（${c.tier}）`,
-          action: { action: 'slotDevourCard', uniqueID: c.uniqueID },
-        });
-      }
+    if (dv.ready) {
+      w.push({
+        kind: 'button', id: 'slot:crush', width: 340, size: 'sub',
+        label: '粉碎物品…', action: { action: 'requestDevour' },
+      });
     }
     // —— 银行机（与老虎机成对出现；SLOT_MACHINE.md §银行机）——
     const bk = snap.bank;

@@ -44,12 +44,20 @@ const wipeDur = computed(() => {
     <img v-else-if="step?.type === 'image'" class="cg" :class="state.phase"
       :style="{ transitionDuration: cgDur + 'ms' }" :src="step.src" alt="">
 
-    <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步 -->
+    <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步。
+         该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸） -->
     <div v-else-if="page" class="dialogue" @click="player.advance()">
       <div class="box">
         <div class="speaker">{{ page.speaker }}</div>
         <div class="text">{{ page.text }}</div>
-        <div class="hint">点击继续 ▸</div>
+        <div v-if="page.choices?.length" class="choices">
+          <button v-for="c in page.choices" :key="c.id" type="button"
+            :disabled="c.disabled" @click.stop="player.choose(c.id)">
+            <span class="label">{{ c.label }}</span>
+            <span v-if="c.hint" class="hint2">{{ c.hint }}</span>
+          </button>
+        </div>
+        <div v-else class="hint">点击继续 ▸</div>
       </div>
     </div>
   </div>
@@ -112,4 +120,17 @@ const wipeDur = computed(() => {
 .speaker { color: #ffd75e; font-size: 15px; margin-bottom: 8px; }
 .text { color: #e6ecff; font-size: 17px; line-height: 1.7; min-height: 30px; }
 .hint { text-align: right; color: #6a7394; font-size: 12px; margin-top: 10px; }
+
+/* 选项按钮（带 choices 的对话页）：整行按钮 + 右侧小字提示；禁用项置灰不可点 */
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.choices button {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; padding: 11px 16px; text-align: left; cursor: pointer;
+  background: rgba(24, 32, 53, .92); color: #ffe08a;
+  border: 1px solid #55658a; border-radius: 8px;
+  font: 600 15px/1.4 sans-serif; transition: background .12s ease, border-color .12s ease;
+}
+.choices button:hover:not(:disabled) { background: #232f4d; border-color: #7d8cb8; }
+.choices button:disabled { opacity: .42; cursor: default; }
+.choices .hint2 { color: #8d97b5; font-size: 12px; font-weight: 400; }
 </style>
