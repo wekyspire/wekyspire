@@ -1,7 +1,8 @@
 # 休息阶段房间的 PCG 方法设计（2026-09-11）
 
-> 状态：**方法定稿 + 第一间房（赌厅 `casino`）已实现**，视觉在 `restGallery.html` 迭代中。
-> 主流程接线（runController 切场景 + 面板叠加/锚点对位）**下一阶段**做。
+> 状态：**方法定稿 + 第一间房（赌厅 `casino`）已实现，并已接入主流程**（2026-09-11）——
+> `RoomStage` 舞台 + cutscene 幕间黑幕进出 + 机器点选推近 + 下沿停靠面板 + 右下角「继续前进」。
+> 其它休息房暂时仍是塔楼层上的 UI 占位面板（同方法换配方即可接）。
 > 相关契约：`SCENE_PROP_WORKFLOW.md`（道具生产管线）、`SCENE_PCG_CATALOG.md`（红线摆放法）、
 > `SLOT_MACHINE.md`（老虎机/银行机玩法）、`THREE_UI_MIGRATION.md`（面板 Three 化）。
 
@@ -184,13 +185,21 @@ open http://localhost:5177/restGallery.html?recipe=casino&seed=demo
 - 契约门（headless）：`test/roomPcg.test.js`（确定性/keepout/不重叠/契约）+ `test/sceneProps.test.js`
   （道具契约按 fs 自动发现）；新增配方与道具都会被自动纳管。
 
-## 6. 已知待办（下一阶段）
+## 6. 已知待办
 
-1. **主流程接线**：`runController` 在 `gameStage === 'room'` 且 room 类型有休息房配方时切到该 PCG 场景
-   （复用 `getScene('pcg:casino', seed)`），并让 `MapStage` 的面板叠加在同一 canvas 上；
-   `restRecipeFor(roomType)` 已备好映射（`slot → casino`）。
-2. **机器可点**：按 `anchors` 注册 Pickable，点老虎机 = 打开/聚焦转轮面板，点银行机 = 聚焦存取款区。
-3. **更多休息房**：售货机层（`vending` 房）、古尔帕斯之店（`gurpas` 房，35 层固定）——同方法换配方。
+1. ~~主流程接线~~ **已完成（2026-09-11）**：`stages/RoomStage.js` 是新舞台（与 MapStage/
+   BattleStage 并列）；`runController` 在 `gameStage === 'room'` 且 `restRecipeFor(roomType)`
+   有配方时，经 `cutscene.sceneTransition` 切进该 PCG 场景（`claimReward → maybeEnterRestScene`），
+   离开走 `leaveRoom/leaveSlot` → 黑幕回塔楼。面板不再是模态遮罩，而是**下沿停靠**（PanelObject
+   的 `dock` 形态），房间全程可见；右下角常驻「继续前进」大箭头（`ContinueButtonObject`）。
+2. ~~机器可点~~ **已完成**：浮标 / 机身 / 投料口热区都注册了 Pickable（world 空间）；
+   **点机器 → 相机推近（整机占屏 50%、机器中心抬到屏高 76%）→ 推到位才弹出该机器的操纵 UI**；
+   点空白或面板的「← 返回房间」→ 收 UI + 拉回全景。机位借的是 StageManager 的世界相机，
+   `cameraBase/restoreBaseCamera` 保证退出时还原。
+3. **更多休息房**：售货机层（`vending` 房）、古尔帕斯之店（`gurpas` 房，35 层固定）——同方法换配方
+   （`REST_RECIPES` 加一行 + 房间面板按机器拆一份 builder）。
 4. **视觉继续**（2026-09-11 已完成一轮：暖调重配比 + 彩灯串 + 追光 + 老虎机真开窗/吃光滚轴）：
    剩余 = 中奖灯效档位再调、转轮面换成真纹理（`drumGeometry` 走 UV 就能接美术）、浮标造型、
-   赌桌区细节（筹码/酒杯/账本）、`uiSafe` 比例与面板实际高度对齐后再定稿。
+   赌桌区细节（筹码/酒杯/账本）。
+5. **工程收尾**：`RoomStage` 与 `MapStage` 的「选卡/选遗物/获得物特写」三件套目前是同构的两份
+   （各自 ~120 行），宜抽 `StagePickerKit` 共用；`uiSafe` 比例与实际面板高度对齐后重新校核推近取景。
