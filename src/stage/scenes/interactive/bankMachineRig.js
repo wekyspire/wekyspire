@@ -1,6 +1,7 @@
 // 银行机 rig：比老虎机克制得多（SLOT_MACHINE.md：老虎机很慷慨，银行机很吝啬）——没有
 // 拉杆与转轮，反馈走「屏幕 + 指示灯」：
-//   · 常驻：指示灯缓慢呼吸（三灯错相位）、屏幕极轻微亮度浮动
+//   · 常驻：**机体完全不动**（用户定 2026-09-11：老虎机躁动、银行机冷漠安静——连常驻浮动都取消）；
+//     屏幕上是**粗体文本 + 不规则闪烁**（CRT 冷光感），指示灯错相位缓慢呼吸
 //   · hover：指示灯提亮 + 机体轻微上浮（交互层调用 setHover）
 //   · 存/取款：屏幕闪亮 + 扫描线上下扫一次、指示灯快速追逐（存=冷青，取=偏暖金）
 //   · 处理中（后端已定结果，动画只是揭示）：可用 hold() 挂起在"闪烁"态直到调用方给结果
@@ -8,6 +9,7 @@
 
 import * as THREE from 'three';
 import { P, shade } from '../kit/index.js';
+import { bakeBoldText } from '../../objects/textBakers.js';
 
 const TINT = {
   deposit: P.glowCyan,
@@ -21,9 +23,19 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
   const scanline = parts?.scanline ?? null;
   const bulbs = parts?.bulbs ?? [];
   // 资产侧只有 kit 共享材质；屏幕/扫描线/指示灯的逐帧改色由 rig 持独立材质
-  if (screen) screen.material = new THREE.MeshBasicMaterial({ color: P.glowCyan });
+  if (screen) {
+    screen.material = new THREE.MeshBasicMaterial({ color: P.glowCyan });
+    // 屏幕正文：粗体文本烘到纹理上（道具只登记 screenText，执行在 Stage 侧）。
+    // 冷光由 unlit 材质 + 冷色灯池给；文本本身不发光，只随屏幕一起明灭。
+    if (typeof document !== 'undefined' && screen.userData?.screenText) {
+      const baked = bakeBoldText(screen.userData.screenText, { fontPx: 40, tint: '#dff6ff', stroke: 'rgba(8, 22, 32, 0.9)' });
+      screen.material.map = baked.texture;
+      screen.material.color.setRGB(0.85, 0.95, 1.0);
+      screen.material.needsUpdate = true;
+    }
+  }
   if (scanline) scanline.material = new THREE.MeshBasicMaterial({ color: shade(P.glowCyan, -0.5) });
-  for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: shade(P.potionRed, -0.35) });
+  for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: shade(P.silver, -0.4) });
   const basePos = body.position.clone();
   const baseScale = body.scale.x || 1;
   const scanBaseY = scanline?.position.y ?? 0;
@@ -45,15 +57,11 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
 
   function update(dt) {
     st.t += dt;
-    // 常驻：机体极轻微浮动 + 灯呼吸（追光怼脸时再压一档：近景里同样的位移看起来更大）
+    // 常驻：**机体一动不动**（用户定：银行机是冷漠安静的；老虎机才躁动）。
+    // hover 只体现在灯与屏幕亮度上，机体位置恒定。
     st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
     st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
-    const idle = 0.008 * (1 - 0.6 * st.focus);
-    body.position.set(
-      basePos.x + Math.sin(st.t * 6.1 + st.phase) * idle,
-      basePos.y + Math.abs(Math.sin(st.t * 4.3 + st.phase)) * idle * 0.5,
-      basePos.z + Math.cos(st.t * 5.2 + st.phase) * idle * 0.4,
-    );
+    body.position.copy(basePos);
     body.scale.setScalar(baseScale * (1 + 0.02 * st.hover));
 
     const a = st.action;
@@ -81,12 +89,18 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
     } else {
       // 常态：屏幕轻微浮动 + 指示灯错相位呼吸（提亮程度随 hover）
       if (screen) {
-        const breathe = 0.86 + 0.14 * Math.sin(st.t * 1.1 + st.phase) + 0.25 * st.hover;
+        // **不规则闪烁**（不是平滑呼吸）：几个不同频率叠出"电子屏"的抖，偶尔压暗一下
+        const f = 0.9
+          + 0.06 * Math.sin(st.t * 11.3 + st.phase)
+          + 0.04 * Math.sin(st.t * 27.7)
+          + 0.05 * Math.sin(st.t * 3.1 + st.phase * 0.7);
+        const blink = Math.sin(st.t * 0.9 + st.phase) > 0.985 ? 0.35 : 1;   // 偶发一次短暗
+        const breathe = f * blink + 0.22 * st.hover;
         screen.material.color.copy(screenBase).multiplyScalar(breathe);
       }
       bulbs.forEach((b, i) => {
         const level = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(st.t * 1.3 + i * 2.1)) + 0.4 * st.hover;
-        b.material.color.copy(new THREE.Color(P.potionRed)).multiplyScalar(0.35 + level * 0.65);
+        b.material.color.copy(new THREE.Color(shade(P.silver, -0.15))).multiplyScalar(0.3 + level * 0.6);
       });
     }
   }

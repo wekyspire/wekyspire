@@ -17,6 +17,7 @@ export default {
   // 离受光面比'埋机箱里'近得多，同 base 会把正面照爆成白光 —— 按 gain 压到 ~1/10（0.34→0.10：正红壳体在高光下会先丢色相变粉，
   // 实测机壳像素 (249,143,137) 即过曝，压到 0.10 后由房间中央光主导 → 深红）。
   lampGain: 0.10,
+  lampColor: shade(P.glowCyan, 0.15),   // **冷色**：银行机连灯池都发冷光（用户定）
   footprint: { x: 3.6, z: 2.8 },
   behaviors: [],
   build({ bodyH = 4.6, rng } = {}) {
@@ -44,6 +45,7 @@ export default {
     const screen = K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.1], family: 'unlit' }),
       0, sy, D / 2 + 0.16);
     screen.userData.animRole = 'screen';
+    screen.userData.screenText = '余额 0';   // rig 用 bakeBoldText 烘上去 + 闪烁
     g.add(screen);
     const scanline = K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.1], family: 'unlit' }),
       0, sy - 0.32, D / 2 + 0.17);
@@ -78,12 +80,35 @@ export default {
     // 顶部指示灯带（三个独立材质小灯：处理中逐灯闪）
     const bulbs = [];
     for (let i = 0; i < 3; i++) {
-      const mesh = K.sphereLo({ color: shade(P.potionRed, -0.35), r: 0.13, family: 'unlit' });
+      // 冷银指示灯（原来偏红，和"冷漠安静"的定调不符）：闪动只由 rig 在操作时驱动
+      const mesh = K.sphereLo({ color: shade(P.silver, -0.4), r: 0.13, family: 'unlit' });
       mesh.position.set(W / 2 - 0.75 + i * 0.4, y0 + bodyH + 0.42, 0);
       mesh.userData.animRole = 'bulb';
       g.add(mesh);
       bulbs.push(mesh);
     }
+
+    // ================= 冷感细节（用户定 2026-09-11：银行机要"冷漠安静"）=================
+    // ① 屏幕遮光罩：屏上方一块前倾的板 —— 机构感、把屏幕压进阴影里（冷）
+    const hood = K.box({ color: shade(P.iron, -0.28), size: [1.86, 0.1, 0.44], family: 'metal' });
+    K.tilt(hood, 0.34, 0, 0);
+    g.add(K.put(hood, 0, sy + 0.62, D / 2 + 0.16));
+    // ② 屏下冷光灯带：unlit 冷青细条（自己会亮，配合 bloom 给屏幕一圈冷光）
+    g.add(K.put(K.box({ color: P.glowCyan, size: [1.5, 0.05, 0.06], family: 'unlit' }),
+      0, sy - 0.5, D / 2 + 0.2));
+    // ③ 插卡槽（右）+ 卡片微光：读作"要插卡才能用"的冷机器
+    g.add(K.put(K.box({ color: shade(P.iron, -0.34), size: [0.7, 0.12, 0.24], family: 'metal' }),
+      -0.66, sy - 0.2, D / 2 + 0.08));
+    g.add(K.put(K.box({ color: shade(P.silver, -0.15), size: [0.5, 0.05, 0.1], family: 'unlit' }),
+      -0.66, sy - 0.2, D / 2 + 0.16));
+    // ④ 背面散热排（细密百叶，打散大平面；机构感）
+    for (let i = 0; i < 5; i++) {
+      g.add(K.put(K.box({ color: shade(P.iron, -0.3), size: [W - 0.6, 0.06, 0.1], family: 'metal' }),
+        0, y0 + 2.4 + i * 0.16, -D / 2 - 0.05));
+    }
+    // ⑤ 底座棱线（更方更硬的落地感）
+    g.add(K.put(K.box({ color: shade(P.stone, -0.3), size: [W + 0.3, 0.12, D + 0.24], family: 'stone' }),
+      0, 0.38, 0));
     g.userData.parts = { body: g, screen, scanline, bulbs };
     g.userData.interactive = 'bank';
 

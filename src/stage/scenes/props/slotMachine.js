@@ -139,6 +139,7 @@ export default {
   // 离受光面比'埋机箱里'近得多，同 base 会把正面照爆成白光 —— 按 gain 压到 ~1/10（0.34→0.10：正红壳体在高光下会先丢色相变粉，
   // 实测机壳像素 (249,143,137) 即过曝，压到 0.10 后由房间中央光主导 → 深红）。
   lampGain: 0.10,
+  lampColor: shade(P.gold, 0.3),   // 机器自带暖金色（不占彩灯串的颜色轮转位）
   footprint: { x: 5.6, z: 3.6 },
   behaviors: [],
   build({ bodyH = 6.4, reelCount = 3, marqueeW = 3.2, rng } = {}) {

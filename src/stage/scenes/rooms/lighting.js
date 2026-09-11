@@ -72,7 +72,9 @@ export const LIGHTING_PRESETS = {
     // 灯池（机器 + 彩灯串）：机器暖金、彩灯串按后面几位彩灯色（colors 轮转，见 lamp 循环）
     lamp: {
       color: 0xffb45a, base: 4200, dist: 140, cap: 8,
-      colors: [0xffb45a, 0xffab52, 0xff8a6a, 0x9ad89a, 0x9ab4e8, 0xffd06a],
+      // 彩灯串的颜色轮转：**暖金 + 嫣红/紫/白**（用户定：不要绿——赌厅是暖调，
+      // 绿光在暖色机器前很突兀）。机器自带显式 lampColor，不占这些轮转位。
+      colors: [0xffb45a, 0xff8a6a, 0xc06a8a, 0x9a8ad8, 0xd8d0e8, 0xffd06a],
     },
     // 焦点布光（zoomin 时）：外围统一压暗 dim + **正面补光**把机器中央屏幕区打亮（setFocus）。
     // base/offset/dist 经 restGallery 实拍 A/B 定：光心在屏幕正前方 ~14（贴太近=整面洗白、
@@ -153,9 +155,10 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     // 颜色：锚自带 color 优先（道具 def 的 lampColor）；否则按 `colors` 轮转（**gain 降序后**
     // 前几个必然留给 gain=1 的机器，彩灯串拿到后面的彩灯色）；再否则预设单色。
     const ring = preset.lamp.colors;
-    lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a, i) => {
+    let ringI = 0;   // 只有"没自带颜色"的锚才吃轮转位（否则显式色会被机器占用而错位）
+    lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a) => {
       const base = (preset.lamp.base ?? 900) * (a.gain ?? 1);
-      const color = a.color ?? (ring ? ring[i % ring.length] : (preset.lamp.color ?? P.glowCyan));
+      const color = a.color ?? (ring ? ring[ringI++ % ring.length] : (preset.lamp.color ?? P.glowCyan));
       const light = new THREE.PointLight(color, base, preset.lamp.dist ?? 90, 1.8);
       light.position.set(a.x, a.y, a.z);
       group.add(light);
