@@ -1,6 +1,7 @@
 // 银行机 rig：比老虎机克制得多（SLOT_MACHINE.md：老虎机很慷慨，银行机很吝啬）——没有
 // 拉杆与转轮，反馈走「屏幕 + 指示灯」：
-//   · 常驻：**机体完全不动**（用户定 2026-09-11：老虎机躁动、银行机冷漠安静——连常驻浮动都取消）；
+//   · 常驻：机体极轻微呼吸位移（"我能点击"的可交互暗示），**zoom-in 后完全取消**
+//     （用户定 2026-09-11：银行机安静但不是死物；近景里那点位移只会显得晃）；
 //     屏幕上是**粗体文本 + 不规则闪烁**（CRT 冷光感），指示灯错相位缓慢呼吸
 //   · hover：指示灯提亮 + 机体轻微上浮（交互层调用 setHover）
 //   · 存/取款：屏幕闪亮 + 扫描线上下扫一次、指示灯快速追逐（存=冷青，取=偏暖金）
@@ -57,11 +58,17 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
 
   function update(dt) {
     st.t += dt;
-    // 常驻：**机体一动不动**（用户定：银行机是冷漠安静的；老虎机才躁动）。
-    // hover 只体现在灯与屏幕亮度上，机体位置恒定。
+    // 常驻：极轻微呼吸位移（用户定："我能点击"的可交互暗示——银行机安静但**不是死物**）。
+    // zoom-in（focus）后**完全取消**：近景里这点位移只会显得晃，而且此时玩家已经点过了，
+    // 不需要再勾引（与老虎机相反：那边是压到 16%，这边直接归零）。
     st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
     st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
-    body.position.copy(basePos);
+    const idle = 0.008 * (1 - st.focus);
+    body.position.set(
+      basePos.x + Math.sin(st.t * 6.1 + st.phase) * idle,
+      basePos.y + Math.abs(Math.sin(st.t * 4.3 + st.phase)) * idle * 0.5,
+      basePos.z + Math.cos(st.t * 5.2 + st.phase) * idle * 0.4,
+    );
     body.scale.setScalar(baseScale * (1 + 0.02 * st.hover));
 
     const a = st.action;
