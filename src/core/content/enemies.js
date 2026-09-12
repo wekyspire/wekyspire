@@ -43,13 +43,15 @@ registerEnemy({
     : { kinds: ['defend'], note: '自身护盾+4' }),
 });
 
-// ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（enemies 未满
-// config.maxEnemies，与前端槽位数对齐）、且上一回合没召唤过（lastSummonTurn
-// 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），满足三条才召唤；否则攻 10 + 盾 5。
+// ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（**存活敌人数** 未满
+// config.maxEnemies，与前端槽位数对齐——enemies 数组含尸体，直接数 length 会在
+// 有单位死亡后永远「满员」，2026-09-13 Boss 波 2 冒烟抓出并统一改存活口径）、且
+// 上一回合没召唤过（lastSummonTurn 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），
+// 满足三条才召唤；否则攻 10 + 盾 5。
 // 召唤出的史莱姆尾插 enemies（本回合行动循环快照已取，下回合起参战）。
 function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
   const noSlime = !aliveEnemies(battleState).some(e => e.defId === 'slime');
-  const hasSlot = battleState.enemies.length < (battleState.config?.maxEnemies ?? 4);
+  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
   // atTurn：行动侧传缺省（当前回合）；意图预告传 turn.count+1（预告发生在敌方回合末，
   // 为下一回合预告——冷却闸门按行动时点的回合计算，否则系统性差一拍「预告攻击、
   // 实际召唤」）。noSlime/hasSlot 仍可能被玩家回合行动改变，属预告的天然残差）
@@ -99,6 +101,162 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 3 === 2
     ? { kinds: ['debuff'], note: '赋予玩家燃烧2' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
+});
+
+// ②′ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 波 2 上岗 2026-09-13）
+// 护驾：首拍召集 2 名宫廷侍从（Boss 生成器只产单 Boss，随从只能 act 内召；首拍不攻
+//   = 给玩家一个先手窗）；侍从在侧时只「督战」（全体蓄势1，不亲自攻击），且每回合
+//   自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从在侧时火焰近不了身；
+//   亲征形态失去净化 = 给火系留「先清侍从再引爆」的输出窗，对物理系无感）。
+// 亲征（侍从全灭）：攻12 → 攻12 → 盾10 三拍循环；每隔一拍行动结束，若场上仍无侍从
+//   且有 ≥2 空位，重新召集 1 名（回护驾形态）。
+// 考试点：目标优先级（清侍从 vs 抢 Boss）+ 爆发窗口管理（亲征三拍是输出窗）。
+registerEnemy({
+  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  id: 'knightCommander', name: '宫殿骑士长',
+  createUnit: () => new Enemy({ defId: 'knightCommander', name: '宫殿骑士长', maxHp: 40 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    if (unit.actionIndex === 0) {
+      for (let i = 0; i < 2; i++) {
+        actx.kernel.submitInstruction(new UnitSpawnInstruction({
+          unit: getEnemyDefinition('courtSquire').createUnit(), source: unit }));
+      }
+      return;
+    }
+    if (aliveEnemies(bs).some(e => e.defId === 'courtSquire')) {
+      // 护驾：督战（全体蓄势1）+ 自我净化（燃烧减半，向下取整）
+      for (const e of aliveEnemies(bs)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: e, effectId: 'focus', stacks: 1 }));
+      }
+      const b = unit.getEffectStacks('burn');
+      if (b >= 2) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'burn', stacks: -Math.floor(b / 2) }));
+      }
+      return;
+    }
+    // 亲征：攻12 → 攻12 → 盾10 三拍循环（_duelIndex 单调推进，形态来回切换不重置节奏）
+    const phase = (unit._duelIndex ?? 0) % 3;
+    unit._duelIndex = (unit._duelIndex ?? 0) + 1;
+    if (phase < 2) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 12 + unit.getStat('attack') }));
+    } else {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+    }
+    // 隔回合重新召集 1 名侍从（回护驾形态）
+    unit._recall = !unit._recall;
+    const twoSlots = aliveEnemies(bs).length <= (bs.config?.maxEnemies ?? 4) - 2;
+    if (unit._recall && twoSlots) {
+      actx.kernel.submitInstruction(new UnitSpawnInstruction({
+        unit: getEnemyDefinition('courtSquire').createUnit(), source: unit }));
+    }
+  },
+  getIntention: (unit, battleState) => {
+    if (unit.actionIndex === 0) return { kinds: ['summon'], note: '召集 2 名宫廷侍从' };
+    if (aliveEnemies(battleState).some(e => e.defId === 'courtSquire')) {
+      return { kinds: ['buff'], note: '督战：全体蓄势1；侍从在侧时每回合燃烧减半' };
+    }
+    const phase = (unit._duelIndex ?? 0) % 3;
+    if (phase < 2) {
+      return { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack'), note: '亲征' };
+    }
+    return { kinds: ['defend'], note: '亲征：自身护盾+10' };
+  },
+});
+
+// 宫廷侍从（骑士长召唤物，不进生成池：无 difficulty 元数据 = 生成器取不到它）。
+// 攻5 ↔ 护驾（骑士长盾8）两拍；主君已陨则护驾拍退化为攻击拍。
+registerEnemy({
+  id: 'courtSquire', name: '宫廷侍从',
+  createUnit: () => new Enemy({ defId: 'courtSquire', name: '宫廷侍从', maxHp: 14 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 1) {
+      const master = aliveEnemies(actx.battleState).find(e => e.defId === 'knightCommander');
+      if (master) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: master, amount: 8 }));
+        return;
+      }
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 5 + actx.unit.getStat('attack') }));
+  },
+  getIntention: (unit, battleState) => {
+    if (unit.actionIndex % 2 === 0) {
+      return { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') };
+    }
+    const master = aliveEnemies(battleState).find(e => e.defId === 'knightCommander');
+    return master
+      ? { kinds: ['defend'], note: '护驾：骑士长护盾+8' }
+      : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') };
+  },
+});
+
+// ②″ 33 层 Boss · 饕餮领主（章3 滚雪球/资源主题结业考，Boss 波 2 上岗 2026-09-13）
+// 四拍「盛宴」循环：召唤庄园仆从 → 攻10 → **吞噬**（吃掉场上全部仆从：每只回 15 血
+//   +力量1；同时消化自身全部燃烧层数，每层转 1 血——燃烧交互铁律：火系必须在吞噬拍
+//   之前引爆，而不是堆着等滚雪球；物理系无感）→ 攻14。
+// 玩家对策 = 在吞噬拍之前杀仆从（仆从是他的血包兼成长资粮）：杀光他就只剩平拍，
+// 但仆从会不断再召；不杀 = 养虎。考试点：多目标输出分配 +「杀还是不杀」的节奏账。
+registerEnemy({
+  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33 },
+  id: 'gluttonLord', name: '饕餮领主',
+  createUnit: () => new Enemy({ defId: 'gluttonLord', name: '饕餮领主', maxHp: 36 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const phase = unit.actionIndex % 4;
+    if (phase === 0) {
+      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? 4);
+      if (hasSlot) {
+        actx.kernel.submitInstruction(new UnitSpawnInstruction({
+          unit: getEnemyDefinition('footmanImp').createUnit(), source: unit }));
+        return;
+      }
+      // 满员：召唤拍退化为攻击拍
+    }
+    if (phase === 2) {
+      // 吞噬：吃光仆从（致命穿透伤害 = 走正常死亡结算，死亡类效果如实触发），
+      // 每只回 15 血 + 力量1；空席则吞噬拍白过（玩家管住了仆从的奖励）。
+      for (const e of aliveEnemies(bs)) {
+        if (e.defId !== 'footmanImp') continue;
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: e, amount: 999, pierce: true, tags: ['devour'] }));
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 15 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 1 }));
+      }
+      // …并消化自身全部燃烧层数（每层转 1 血；无仆可吞也消化——吞噬拍的自身代谢）
+      const b = unit.getEffectStacks('burn');
+      if (b > 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'burn', stacks: -b }));
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: b }));
+      }
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player,
+      amount: (phase === 3 ? 14 : 10) + unit.getStat('attack') }));
+  },
+  getIntention: (unit, battleState) => {
+    const phase = unit.actionIndex % 4;
+    if (phase === 0) {
+      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+      return hasSlot
+        ? { kinds: ['summon'], note: '召唤庄园仆从' }
+        : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
+    }
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
+    if (phase === 2) {
+      const n = aliveEnemies(battleState).filter(e => e.defId === 'footmanImp').length;
+      return { kinds: ['buff'], note: n > 0
+        ? `吞噬：吃掉 ${n} 名仆从（每只+15血、力量+1）并消化自身燃烧`
+        : '吞噬：无仆可吞（仍消化自身燃烧）' };
+    }
+    return { kinds: ['attack'], hits: 1, damage: 14 + unit.getStat('attack') };
+  },
 });
 
 // ③ 针鼠：**首拍竖刺（荆棘3，一次性）**，此后「攻3+护盾8 ↔ 攻6」两拍往复。
@@ -716,7 +874,7 @@ registerEnemy({
     const phase = unit.actionIndex % 4;
     if (phase === 1) {
       const noServant = !aliveEnemies(bs).some(e => e.defId === 'footmanImp');
-      const hasSlot = bs.enemies.length < (bs.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? 4);
       if (noServant && hasSlot) {
         actx.kernel.submitInstruction(new UnitSpawnInstruction({
           unit: getEnemyDefinition('footmanImp').createUnit(),
@@ -739,7 +897,7 @@ registerEnemy({
     const phase = unit.actionIndex % 4;
     if (phase === 1) {
       const noServant = !aliveEnemies(battleState).some(e => e.defId === 'footmanImp');
-      const hasSlot = battleState.enemies.length < (battleState.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
       if (noServant && hasSlot) return { kinds: ['summon'], note: '召唤仆人' };
       return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
     }
@@ -750,12 +908,14 @@ registerEnemy({
 
 // 庄园仆从（召唤物，不进生成池：无 difficulty 元数据 = 通配/精英池都取不到它——
 // 「difficulty 缺失视为不可生成」的生成器防御口径）。护主 ↔ 攻4 两拍。
+// 护主对象 = 庄园主或饕餮领主（后者 Boss 波 2 复用此件作「盛宴」资粮）。
+const footmanMasterOf = (e) => e.defId === 'manorLord' || e.defId === 'gluttonLord';
 registerEnemy({
   id: 'footmanImp', name: '庄园仆从',
   createUnit: () => new Enemy({ defId: 'footmanImp', name: '庄园仆从', maxHp: 12 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
-      const master = aliveEnemies(actx.battleState).find(e => e.defId === 'manorLord');
+      const master = aliveEnemies(actx.battleState).find(footmanMasterOf);
       if (master) {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: master, amount: 5 }));
         return;
@@ -766,9 +926,9 @@ registerEnemy({
     }));
   },
   getIntention: (unit, battleState) => {
-    const master = aliveEnemies(battleState).find(e => e.defId === 'manorLord');
+    const master = aliveEnemies(battleState).find(footmanMasterOf);
     return (unit.actionIndex % 2 === 0 && master)
-      ? { kinds: ['defend', 'buff'], note: '护主：庄园主护盾+5' }
+      ? { kinds: ['defend', 'buff'], note: '护主：主君护盾+5' }
       : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') };
   },
 });

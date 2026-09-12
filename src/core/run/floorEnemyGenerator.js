@@ -97,7 +97,14 @@ const TEMPLATES = [
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
   { id: 'elitePair', name: '精英押队', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
 ];
-const BOSS_ID = 'pyro'; // Boss 只经 boss 分支出场，永不进通配池
+// Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
+// 第二波（2026-09-13）：22 层骑士长（阵型结业考）、33 层饕餮领主（滚雪球结业考）上岗；
+// 44 层终塔 Boss 单独设计，暂由 pyro 占位。自 22 层起每个 Boss 必带燃烧交互纹理
+//（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控）。
+const BOSS_OF_FLOOR = Object.freeze({
+  11: 'pyro', 22: 'knightCommander', 33: 'gluttonLord', 44: 'pyro',
+});
+const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR));
 
 // 精英层排期（确定性，好记好测）：每章第 6、9 层（6/9、17/20、28/31、39/42）。
 // 2026-09 试玩后从 5/8 后挪：开局多一层普通战铺垫，再碰精英。
@@ -109,7 +116,7 @@ export const isEliteFloor = (floor) =>
 // difficulty 缺失视为不可生成（防御）。
 function eligiblePool(floor, elite = false) {
   return allEnemies().filter(def =>
-    def.id !== BOSS_ID
+    !BOSS_IDS.has(def.id)
     && Boolean(def.difficulty?.elite) === elite
     && eligibleAtFloor(def, floor));
 }
@@ -148,9 +155,10 @@ export function generateEncounter(run) {
   const rng = createRng(deriveBattleSeed(run.seed, floor) ^ 0x5EED); // 与旧 encounter 派生错开
   if (isBossFloor(floor)) {
     const chapter = floor / FLOORS_PER_CHAPTER - 1;
-    const bossDef = getEnemyDefinition(BOSS_ID);
+    const bossId = BOSS_OF_FLOOR[floor] ?? 'pyro';
+    const bossDef = getEnemyDefinition(bossId);
     const d = Math.min(BOSS_DIFFICULTY[chapter], bossDef.difficulty.max);
-    return [descriptorOf(BOSS_ID, d)];
+    return [descriptorOf(bossId, d)];
   }
 
   const D = floorDifficulty(floor);
