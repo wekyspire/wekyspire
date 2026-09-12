@@ -178,14 +178,14 @@ condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 5, bur
 
 // 高热工厂。「纳气N，燃烧4」为**咏唱触发效果**（battle.md P5：激活咏唱卡每回合
 // 在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅（owner=卡牌，熄灭
-// 自动注销），点亮本身不结算。设计稿未写咏唱值，按默认咏唱2计手牌压力。
+// 自动注销），点亮本身不结算。咏唱值取 1（2026-09-13 权重分档：大量 1 咏）。
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
 function feverChantCard({ id, name, tier, naqi, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fever',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 1,
     keywords: ['exhaust'],
     promotesTo,
     use() { return true; },
@@ -212,7 +212,7 @@ feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
 // 每回合在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅，点亮本身
 // 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
-// 设计稿 A 阶未写费用 → 0 费；咏唱值未写 → 按默认咏唱2计手牌压力。
+// 设计稿 A 阶未写费用 → 0 费；咏唱值取 2（中量档——第 5 轮试玩唯一验证为强卡的咏唱，留 2）。
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'kindling',
@@ -419,14 +419,15 @@ registerSkill({
   describe: () => '每累计受到5点/effect{燃烧}伤害，获得1魏启',
 });
 
-// 突破极限（A，消耗，咏唱4）：激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
+// 突破极限（A，消耗，咏唱3——2026-09-13 用户定档：魏启透支是真超模，少量 3-4 咏档）：
+// 激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
 // 的 clamp 兜底，蓝量扣到 0 为止）。放行钩子走 helpers.canUseSkill 的「已激活咏唱
 // activated.canUseSkill」裁决环——卡牌级费用豁免，与能力的 canUseSkill 同语义。
 registerSkill({
   id: 'breakLimit', name: '突破极限', type: 'fire', tier: 'A', series: 'depth',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 4,
+  cardMode: 'chant', chantWeight: 3,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {
@@ -591,7 +592,7 @@ registerSkill({
   describe: () => '每消耗1魏启，获得3护盾',
 });
 
-// 火焰眷顾（B，消耗，咏唱3）：激活期间火灵脉牌的魏启消耗 -1。
+// 火焰眷顾（B，消耗，咏唱2）：激活期间火灵脉牌的魏启消耗 -1。
 // 判定方式：沿 ConsumeManaInstruction 的父链上溯取「正在打出的卡」
 // （cardConsumingMana），type==='fire' 才减免——X 费火卡（凝焰系列，ConsumeMana
 // 由 use 内直接提交，父链同样可达持卡指令）一并享受减免。
@@ -600,7 +601,7 @@ registerSkill({
   id: 'fireAffinity', name: '火焰眷顾', type: 'fire', tier: 'B', series: 'common',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 2,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {

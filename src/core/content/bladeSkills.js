@@ -569,14 +569,14 @@ registerSkill({
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术（C，0费）：咏唱3。咏唱触发（P5）时若手牌少于 2（物理张数——激活咏唱驻手
+// 含刃术（C，0费）：咏唱1。咏唱触发（P5）时若手牌少于 2（物理张数——激活咏唱驻手
 // 是物理事实，实际含义即"手里只剩它自己"），斩进阶，此卡焚毁（焚毁先经离手熄灭，
 // 激活订阅随 owner 注销）。
 registerSkill({
   id: 'edgeBreath', name: '含刃术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{

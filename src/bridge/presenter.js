@@ -152,7 +152,7 @@ export function createBridgePresenter({
     cardDiscarded: (p) => { anim(EventNames.ANIM_CARD_DISCARDED, p); syncState(); },
     cardBurnt: (p) => { anim(EventNames.ANIM_CARD_BURNT, p); syncState(); },
     cardMoved: (p) => { anim(EventNames.ANIM_CARD_MOVED, p); syncState(); },
-    cardSwapped: (p) => { anim(EventNames.ANIM_CARD_SWAPPED, p); syncState(); },
+    cardsDumped: (p) => { anim(EventNames.ANIM_CARDS_DUMPED, p); syncState(); },
 
     // 结算期输入请求：先 sync（玩家决策前显示状态必须最新），
     // 请求本身不进动画队列，直接交仲裁器（战斗已挂起，等的是玩家不是动画）

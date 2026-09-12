@@ -1,6 +1,6 @@
 import {
-  playerUseSkill, playerEndTurn, playerSwapCard,
-  respondInput, isWaitingPlayerInput, canSwapCard,
+  playerUseSkill, playerEndTurn, playerDumpCards,
+  respondInput, isWaitingPlayerInput, canDumpCards,
 } from '../core/flow/battle.js';
 import { canUseSkill } from '../core/skills/helpers.js';
 
@@ -13,7 +13,7 @@ export function createIntents(battle) {
     // ---- 操作（返回 bool：是否被接受） ----
     playCard: (uniqueID, targetUniqueID = null) => playerUseSkill(battle, uniqueID, targetUniqueID),
     endTurn: () => playerEndTurn(battle),
-    swapCard: (uniqueID) => playerSwapCard(battle, uniqueID),
+    dumpCards: (uniqueIDs) => playerDumpCards(battle, uniqueIDs),
     respondInput: (selection) => respondInput(battle, selection),
 
     // ---- 可用性（置灰/仲裁） ----
@@ -23,6 +23,10 @@ export function createIntents(battle) {
       return !!skill && canUseSkill(ctx, skill);
     },
     canEndTurn: () => isWaitingPlayerInput(battle),
-    canSwapCard: (uniqueID) => canSwapCard(battle, uniqueID),
+    // 弃牌动作整体可用性（按钮置灰用）：有手牌 + 费够 + 自由行动窗
+    canDump: () => {
+      const hand = ctx.battleState.zones.hand;
+      return hand.length > 0 && canDumpCards(battle, [hand[0].uniqueID]);
+    },
   };
 }

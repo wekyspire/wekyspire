@@ -30,7 +30,7 @@ export const EventNames = {
   ANIM_CARD_ADDED: 'anim:card-added',
   ANIM_CARD_SHOWCASE: 'anim:card-showcase', // 结算宾语入结算区展示（原位 → 场中央）
   ANIM_CARD_TRANSFORMED: 'anim:card-transformed',
-  ANIM_CARD_SWAPPED: 'anim:card-swapped',
+  ANIM_CARDS_DUMPED: 'anim:cards-dumped', // 弃牌动作（2026-09-13 改制：付一次费弃任意张）的动作级节拍
   // 卡牌威力提升（power 增加）：卡面一次放缩脉冲，表示"这张牌的状态变了"。
   // 公共节拍——养刀术/锻刀术/练刀/火光爆发等任何会改 runtime.power 的效果都走它
   // （presenter.cardPowerUp，见 core/content/cardKit.gainPower）。
@@ -78,7 +78,7 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_CARD_ADDED]: 2500,
   [EventNames.ANIM_CARD_SHOWCASE]: 2500,
   [EventNames.ANIM_CARD_TRANSFORMED]: 3000,
-  [EventNames.ANIM_CARD_SWAPPED]: 2500,
+  [EventNames.ANIM_CARDS_DUMPED]: 2500,
   [EventNames.ANIM_CARD_POWER_UP]: 2000,   // 放缩脉冲 ~130ms + 回位；非阻塞语义（见 BattleStage 节拍）
   [EventNames.ANIM_STATE_SYNC]: 2000,   // 实际时长≈0（Stage 应用快照即回 finish），兜底同理
 };

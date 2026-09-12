@@ -3,6 +3,7 @@ import { moveCard, swapCostOf, zoneOf } from '../state/battleState.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import {
   enterBattle, leaveBattle, deactivateChant, effectiveHandCount, handLimitOf,
+  overloadLimitOf, pickOverflowVictims,
 } from '../skills/helpers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
 
@@ -11,10 +12,11 @@ import { ConsumeActionPointsInstruction } from './resources.js';
 // 咏唱离手不变量：激活的咏唱卡离开手牌（弃/焚/移/转化）必先熄灭（deactivateChant：
 // onDisable + 摘旗 + 注销订阅 + 播报）——「激活只在手牌中成立」由指令层统一保证。
 
-// battle.md §7.3（卡牌移动）：目标区为手牌而加权手牌已满时，改尝试进牌库；仍失败则焚毁。
-// 返回实际落区。手牌容量是唯一会让"移动失败"的约束（牌库/坟墓无上限）。
+// battle.md §7.3（卡牌移动）：目标区为手牌而加权手牌已达**超载上限**时，改尝试进牌库；
+// 仍失败则焚毁。超载是唯一会让"移动失败"的约束（牌库/坟墓无上限）——容量（handLimitOf）
+// 不拦移动：容量只约束回合开始抽牌与 P9 尾弃，回合内移动/抽牌可以顶进超载区。
 function resolveTargetZone(ctx, toZone) {
-  if (toZone === 'hand' && effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) {
+  if (toZone === 'hand' && effectiveHandCount(ctx.battleState) >= overloadLimitOf(ctx)) {
     return 'deck';
   }
   return toZone;
@@ -24,8 +26,8 @@ function resolveTargetZone(ctx, toZone) {
 // from: 'top'（默认）| 'bottom'（回旋斩"牌库末抽牌"类机制）。
 // reason: 抽牌缘由标记（'turnStart' = 回合开始抽牌），供 filter 区分
 // "回合开始抽牌数修正"（龟守/神龟姿态）与技能抽牌。
-// 满手判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一，用户定）：
-// 手满后不再抽。牌库抽空即落空（FIFO 无重洗——牌库是唯一循环区，无弃牌堆可回收）。
+// 超载判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一，用户定）：
+// 顶到超载后不再抽。牌库抽空即落空（FIFO 无重洗——牌库是唯一循环区，无弃牌堆可回收）。
 export class DrawCardsInstruction extends BattleInstruction {
   constructor({ count = 1, from = 'top', reason = null }, opts = {}) {
     super(opts);
@@ -41,10 +43,12 @@ export class DrawCardsInstruction extends BattleInstruction {
   execute(ctx) {
     const { zones } = ctx.battleState;
     const drawn = [];
-    let blockedByHandLimit = false;   // 加权满手挡下（前端据此给"手牌已满"提示）
+    let blockedByHandLimit = false;   // 加权**超载**挡下（前端据此给"手牌已满"提示）
     let deckEmpty = false;
     for (let i = 0; i < this.payload.count; i++) {
-      if (effectiveHandCount(ctx.battleState) >= handLimitOf(ctx)) { blockedByHandLimit = true; break; }
+      // 抽牌截断走超载口径：容量只约束回合开始抽牌（turn.js 已按容量房间算好 count），
+      // 回合内的抽牌效果允许顶过容量、直到超载——超载空间是抽牌卡的当回合价值空间
+      if (effectiveHandCount(ctx.battleState) >= overloadLimitOf(ctx)) { blockedByHandLimit = true; break; }
       if (zones.deck.length === 0) { deckEmpty = true; break; }
       const card = this.from === 'bottom' ? zones.deck.pop() : zones.deck.shift();
       zones.hand.push(card);
@@ -107,6 +111,21 @@ export class DiscardCardInstruction extends BattleInstruction {
   }
 }
 
+// P9 清理段·超载尾弃（玩家回合结束后段，turn.js 的 PlayerTurnInstruction 收尾挂载）：
+// 从手牌尾部向前弃置非激活卡，直到加权手牌数 ≤ 容量——「回合内抽上来的牌不过夜」，
+// 跨回合留存的只有容量内的战略手牌。激活咏唱豁免（付费点亮的咏唱不得被系统掐灭）。
+// 弃置 = 回牌库底（Z2 非消耗离手口径），从最尾端开始逐张——FIFO 循环序因此确定可规划。
+export class DiscardOverflowInstruction extends BattleInstruction {
+  execute(ctx) {
+    const victims = pickOverflowVictims(ctx.battleState.zones.hand, handLimitOf(ctx));
+    for (const uniqueID of victims) {
+      ctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID }), this);
+    }
+    this.result = { discarded: victims.length };
+    return true;   // 子节点（逐张弃置）作为已完成节点的子节点照常泵完
+  }
+}
+
 // 移牌：任意 zone → 任意 zone（可选落点 index）。牌库检索抽取（完美飞刀）、
 // 回合结束自动回库（开刃/斩灭）、手牌自由换序（刃心）等统一走这里，保证有 PRE/POST 与播报。
 export class MoveCardInstruction extends BattleInstruction {
@@ -155,12 +174,15 @@ export class AddCardInstruction extends BattleInstruction {
   }
 }
 
-// 换牌：玩家流程动作（非技能卡）。费用（swapCostOf，走资源指令子节点 → PRE 可修饰）
-// → 弃牌 → 抽 1（reason:'swap'，不受龟守等回合抽牌修正影响）→ swapCount+1。
-export class SwapCardInstruction extends BattleInstruction {
-  constructor({ uniqueID }, opts = {}) {
+// 弃牌：玩家流程动作（非技能卡）。2026-09-13 改制（用户定）：原「换牌」（弃 1 抽 1）
+// 废除——抽到满体系下补给由下一回合的「抽到容量」提供，本动作改为**支付一次阶梯
+// 费用（swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中任意张卡**（回牌库底），
+// 作为手牌排出口（打不完/全是打不出的牌时主动清空留手位）。
+// 费用走资源指令子节点（PRE 可修饰）；弃置走标准弃牌指令（咏唱离手熄灭等同口径）。
+export class DumpCardsInstruction extends BattleInstruction {
+  constructor({ uniqueIDs }, opts = {}) {
     super(opts);
-    this.uniqueID = uniqueID;
+    this.uniqueIDs = uniqueIDs;
   }
 
   execute(ctx) {
@@ -173,13 +195,14 @@ export class SwapCardInstruction extends BattleInstruction {
         return false;
       }
       case 1:
-        ctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID: this.uniqueID }), this);
-        ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'swap' }), this);
+        for (const uniqueID of this.uniqueIDs) {
+          ctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID }), this);
+        }
         return false;
       default:
         ctx.battleState.swapCount += 1;
-        this.result = { cost: this.cost };
-        ctx.presenter?.cardSwapped?.({ uniqueID: this.uniqueID, cost: this.cost });
+        this.result = { cost: this.cost, discarded: this.uniqueIDs.length };
+        ctx.presenter?.cardsDumped?.({ uniqueIDs: this.uniqueIDs, cost: this.cost });
         return true;
     }
   }

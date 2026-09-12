@@ -314,6 +314,9 @@ registerRelic({
 registerRelic({
   id: 'masterInsight', name: '宗师的心得', rarity: 'C', cost: 1,
   description: '每场战斗打出的第三张牌，打出后回复其行动力消耗。',
+  // 铭刻（flavor：tooltip 效果描述后另起一段展示；RELICS.md 原文——叠炎体系
+  // 「与燃烧博弈」的设计哲学注脚：收益与风险并存）
+  flavor: '不要玩火，不要玩火，玩火必自焚。',
   subscriptions: () => {
     let plays = 0;
     return [{

@@ -1,6 +1,7 @@
 import BattleInstruction, { WAIT } from '../kernel/BattleInstruction.js';
 import { resetTurnHistory, aliveAllies, aliveEnemies } from '../state/battleState.js';
-import { DrawCardsInstruction } from './cards.js';
+import { DrawCardsInstruction, DiscardOverflowInstruction } from './cards.js';
+import { effectiveHandCount, handLimitOf } from '../skills/helpers.js';
 import { SweepSkillCooldownInstruction } from './skill.js';
 import { AddEffectInstruction } from './effects.js';
 import { GainManaInstruction } from './resources.js';
@@ -56,6 +57,7 @@ export class ChantTriggerInstruction extends BattleInstruction {
 // → P7 盟友行动 → P6/P8 回合结束结算（主角回合结束与"回合结束类触发"合并为一枚指令：
 //   现有机械内容——滞气递减、短暂回库、turn 窗口清扫——全部属于 P8；P6 在本实现里
 //   只是"玩家操作结束"的边界，由 P7 之前的位置天然表达）
+// → P9 清理段（超载尾弃：超出容量的手牌从尾部弃回牌库底，激活咏唱豁免）
 // 注意：盟友在玩家操作**之后**行动（旧实现的"盟友先行动"已废弃）。
 export class PlayerTurnInstruction extends BattleInstruction {
   constructor(opts = {}) {
@@ -98,7 +100,11 @@ export class PlayerTurnInstruction extends BattleInstruction {
         if (ctx.battleState.turn.count > 1) {
           const d = ctx.battleState.debuffs;
           const penalty = ctx.battleState.turn.count <= (d?.drawPenaltyTurns ?? 0) ? 1 : 0;
-          const count = Math.max(0, ctx.battleState.config.drawPerTurn - penalty);
+          // 抽到**手牌容量**（加权口径，2026-09-13 两级手牌制）：留手 = 放弃等额新牌，
+          // 囤牌自动被课税。config.drawPerTurn 是"每回合抽牌数上限"调参旋钮——
+          // 99 ≈ 必抽满（新制），调小退化为"固定抽 N"旧制，A/B 试玩同一条代码路径
+          const room = handLimitOf(ctx) - effectiveHandCount(ctx.battleState);
+          const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room) - penalty);
           if (count > 0) {
             ctx.kernel.submitInstruction(
               new DrawCardsInstruction({ count, reason: 'turnStart' }), this);
@@ -143,6 +149,11 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.kernel.submitInstruction(new PlayerTurnEndInstruction(), this);
         return false;
       }
+      case 7:
+        // P9 清理段·超载尾弃：回合结束触发全部结算完之后，把超出容量的手牌从尾部
+        // 弃回牌库底（激活咏唱豁免）——「回合内抽上来的牌不过夜」
+        ctx.kernel.submitInstruction(new DiscardOverflowInstruction(), this);
+        return false;
       default:
         return true;
     }

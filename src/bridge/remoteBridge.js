@@ -74,13 +74,13 @@ export function createRemoteBridge({
     sequencer,
     intents: {
       canPlayCard: cardUsable,
-      canSwapCard: () => !!snapshot?.waitingPlayerInput && !snapshot?.pendingInput
+      canDump: () => !!snapshot?.waitingPlayerInput && !snapshot?.pendingInput
         && (snapshot?.hand?.length ?? 0) > 0
         && snapshot.player.actionPoints >= snapshot.swapCost,
       // 观战端不出招：这些是给 Stage 的守卫用的桩
       playCard: () => false,
       endTurn: () => false,
-      swapCard: () => false,
+      dumpCards: () => false,
       respondInput: () => false,
     },
     interaction: {

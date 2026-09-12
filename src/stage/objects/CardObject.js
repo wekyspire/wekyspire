@@ -121,6 +121,11 @@ export class CardObject extends THREE.Group {
 
   get hasActiveGlow() { return this.fx.hasEdgeGlow; }
 
+  /** 「将弃」标记（P9 尾弃预告，Three 层特效：红色呼吸描边 + 暗化盖纱）。幂等。 */
+  setDoomMark(on) { this.fx.setDoomed(on); }
+
+  get hasDoomMark() { return this.fx.hasDoomMark; }
+
   /** 帧驱动卡面特效（脉冲回程/盖纱呼吸/流光轨道）。 */
   updateFx(dt) { this.fx.update(dt); }
 

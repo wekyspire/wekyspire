@@ -17,8 +17,8 @@ export { defOf } from './session/format.mjs';
 export { sessionDir, sessionPath, listSessions, readSession, writeSession } from './session/files.mjs';
 
 export const HELP = `动作表（按当前阶段）：
-  战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | swap <手牌#> <卡名> | swap <卡名>
-        （弃1抽1，首次免费之后逐次+1） | end | auto
+  战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | dump <手牌#> <卡名> [更多# 卡名…]
+        （付一次费弃任意张，首次免费之后逐次+1） | end | auto
         in <候选#> <卡名>（应答输入请求） | lib（查牌库——抽牌严格按顺序，可预知未来抽到什么）
   奖励: pack <#|体修|火|通用> | take <候选#> <卡名> | take <卡名> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw

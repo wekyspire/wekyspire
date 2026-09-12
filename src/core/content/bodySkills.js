@@ -211,14 +211,14 @@ registerChargeShuffle({ id: 'comboStrike', name: '连击', tier: 'C', count: 3, 
 // 四重击（B）
 registerChargeShuffle({ id: 'quadrupleHit', name: '四重击', tier: 'B', count: 4, promotesTo: 'instantThousand' });
 
-// 无限连击（A）：1AP 消耗 + 咏唱5——发动后驻手（占 5 张手牌压力），
-// 每次咏唱触发洗入 4 张瞬击（常驻引擎）；再次打出免费解除，因消耗焚毁离场。
-// 高咏唱值即代价：激活后手牌几乎不可再抽，引擎与手牌压力对赌。
+// 无限连击（A）：1AP 消耗 + 咏唱3（2026-09-13 权重分档：少量强卡 3-4 咏）——
+// 发动后驻手，每次咏唱触发洗入 4 张瞬击（常驻引擎）；再次打出免费解除，因消耗焚毁离场。
+// 高咏唱值即代价：激活后手牌抽取明显受限，引擎与手牌压力对赌。
 registerSkill({
   id: 'endlessCombo', name: '无限连击', type: 'normal', tier: 'A', series: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 5,
+  cardMode: 'chant', chantWeight: 3,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {
@@ -338,12 +338,14 @@ registerSkill({
 // 计数器放 skillRuntime（chantCount，plain data 可序列化），跨回合累积不清零；
 // 自身发动/解除不计入（filter 按 uniqueID 排除）。
 
+// weight 全链统一 3（2026-09-13 用户定：升级链路上咏唱压力应一致或减少，否则升级会变成
+// 负面事件；太极作为 A 阶跨回合抽牌引擎是超模卡，3 也是尊重到位）。
 function registerPlayCountChant({ id, name, tier, every, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 3,
     promotesTo,
     use() { return true; },
     activated: {
@@ -410,8 +412,8 @@ registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 4 }
 
 // 万变拳（B）：1AP 冷却2——下张打出的牌 AP 费用为 0。
 // 实现：打出时注册 once PRE 订阅，把下一次「卡牌打出树内」的 AP 消耗指令 payload 置 0。
-// filter 校验结算栈中存在 UseSkillInstruction：只对打出的卡生效，换牌
-// （SwapCardInstruction 树）不吃这份免费；打出 0AP 卡不产生消耗指令，免费保留至
+// filter 校验结算栈中存在 UseSkillInstruction：只对打出的卡生效，弃牌动作
+// （DumpCardsInstruction 树）不吃这份免费；打出 0AP 卡不产生消耗指令，免费保留至
 // 下一张有费用的卡（宽容口径）。
 registerSkill({
   id: 'wildFist', name: '万变拳', type: 'normal', tier: 'B', series: 'fist',
@@ -483,8 +485,9 @@ registerSkill({
 });
 
 // 情况不对（起始套牌泛用保险 D）：固有消耗卡——弃全手牌抽等量，鬼抽时的整体重调。
-// 固有保证起手必然上手（详见 namedTerms「固有」）；不入奖励池：系统级保险卡，
-// 定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
+// 2026-09-13 用户定：激活的咏唱卡豁免（与 P9 尾弃同一豁免口径——付费点亮的咏唱不被
+// 保险卡掐灭），只弃非激活的手牌。固有保证起手必然上手（详见 namedTerms「固有」）；
+// 不入奖励池：系统级保险卡，定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
 registerSkill({
   id: 'badOmen', name: '情况不对', type: 'normal', tier: 'D',
   cost: { mana: 0, actionPoint: 1 },
@@ -493,16 +496,16 @@ registerSkill({
   keywords: ['exhaust', 'innate'],
   canSpawnAsReward: false,
   use(sctx) {
-    // 自身已在结算区（pending），手中即其余卡：全部弃掉后抽等量
-    const hand = [...sctx.battleState.zones.hand];
+    // 自身已在结算区（pending），手中即其余卡：弃掉非激活咏唱的全部，抽等量
+    const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
     for (const c of hand) {
       sctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID: c.uniqueID }));
     }
     drawCards(sctx, hand.length);
     return true;
   },
-  describe: () => '弃其余全部手牌，抽等量卡',
-  battleDescribe: () => '弃其余全部手牌，抽等量卡',
+  describe: () => '弃其余手牌（激活的咏唱卡除外），抽等量卡',
+  battleDescribe: () => '弃其余手牌（激活的咏唱卡除外），抽等量卡',
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====

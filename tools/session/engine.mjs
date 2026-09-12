@@ -24,8 +24,9 @@ import { getRelicDefinition, allRelics } from '../../src/core/relics/registry.js
 import { gatedPromotionTargets } from '../../src/core/run/promotion.js';
 import { prepUseRelic, equipRelic, unequipRelic, grantRelic } from '../../src/core/run/prep.js';
 import {
-  startBattle, playerUseSkill, playerEndTurn, playerSwapCard, isBattleFinished, respondInput,
+  startBattle, playerUseSkill, playerEndTurn, playerDumpCards, isBattleFinished, respondInput,
 } from '../../src/core/flow/battle.js';
+import { swapCostOf } from '../../src/core/state/battleState.js';
 import {
   createRun, enterBattle, createRunBattle, finishBattle, completeRewards, completeRoom, isBossFloor,
 } from '../../src/core/run/runFlow.js';
@@ -182,7 +183,7 @@ export function exec(S, raw) {
   switch (cmd) {
     case 'note': S.lastOutcome = `记事: ${t.slice(1).join(' ')}`; return;
     case 'state': case 'deck': case 'terms': case 'help': S.lastOutcome = ''; return;
-    case 'fight': case 'play': case 'swap': case 'end': case 'in': case 'auto': case 'why':
+    case 'fight': case 'play': case 'swap': case 'dump': case 'end': case 'in': case 'auto': case 'why':
       return execBattle(S, cmd, t);
     case 'pack': case 'take': case 'skip': return execReward(S, cmd, t);
     case 'act': return execRoom(S, t);
@@ -272,13 +273,29 @@ function execBattle(S, cmd, t) {
       if (isBattleFinished(battle)) settleBattle(S);
       return;
     }
-    case 'swap': {
+    case 'swap': // 旧会话兼容（改制前单张换牌 → 单张弃牌）
+    case 'dump': {
+      // 弃牌（2026-09-13 改制）：付一次阶梯费（swapCostOf）弃任意张。多张成对给「编号 卡名」
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
-      if (!hand.length) throw new Error('手牌为空，无法换牌');
-      const { skill, note } = pickHandCard(hand, a, b, isIdxArg(a));
-      if (!playerSwapCard(battle, skill.uniqueID)) throw new Error('无法换牌（行动点不足？）');
-      S.lastOutcome = `换牌 ${defOf(skill).name}${note}`;
+      const args = [a, b, ...t.slice(3)].filter(x => x != null);
+      if (!hand.length) throw new Error('手牌为空，无法弃牌');
+      if (!args.length) throw new Error('用法：dump <手牌#> <卡名> [更多# 更多卡名…]（付一次费弃任意张）');
+      const picks = [];
+      if (args.length === 1) {
+        picks.push(pickHandCard(hand, args[0], null, false));
+      } else {
+        if (args.length % 2 !== 0) throw new Error('多张弃牌需成对给出「编号 卡名」');
+        for (let i = 0; i < args.length; i += 2) {
+          picks.push(pickHandCard(hand, args[i], args[i + 1], isIdxArg(args[i])));
+        }
+      }
+      const ids = picks.map(p => p.skill.uniqueID);
+      if (new Set(ids).size !== ids.length) throw new Error('重复选择了同一张卡');
+      const cost = swapCostOf(battle.battleState);
+      if (!playerDumpCards(battle, ids)) throw new Error(`无法弃牌（需 ${cost}AP/不在自由行动窗）`);
+      const names = picks.map(p => `${defOf(p.skill).name}${p.note}`).join('、');
+      S.lastOutcome = `弃牌 ${names}（付 ${cost}AP 弃 ${ids.length} 张）`;
       return;
     }
     case 'end': {

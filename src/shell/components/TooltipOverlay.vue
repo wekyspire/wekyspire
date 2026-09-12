@@ -31,6 +31,8 @@ const s = tooltipState;
   pointer-events: none;
 }
 .tooltip b { color: #eef4ff; }
+/* 正文允许 \n 分段（如遗物铭刻 flavor 接在效果描述后） */
+.tip-body { white-space: pre-line; }
 /* 整卡预览宿主：去 max-width 文本约束，卡宽固定 200（与 tooltip.js CARD_PREVIEW_SIZE 同步） */
 .tooltip.is-card { max-width: none; padding: 8px; }
 .tip-card { width: 200px; }

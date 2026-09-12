@@ -4,6 +4,8 @@
 // 不回 CardObject 散装实现。
 // z 分层（牌面 z=0；焚毁着色器挂牌面本体、余烬 z=1.2，均在 CardObject 侧不属本层）：
 //   veil  盖纱  z=0.35 —— 持久状态指示（冷却中/衰败），低透明呼吸
+//   doom  将弃  z=0.36（暗化盖纱）+ 0.5（描边框）—— P9 尾弃预告：红色呼吸描边（用户定
+//         2026-09-13，Three 层实现——重要视效，后续动画扩展都在本层）
 //   pulse 闪光 z=0.45 —— 一次性加色脉冲（冷却推进/威力提升/衰败反向）
 //   edge  流光 z=0.6  —— 咏唱激活的绕边小光点
 // 三张平面各自惰性创建；焚毁接管牌面前调 clearTransient() 熄灭全部叠加。
@@ -17,6 +19,9 @@ const VEIL_STYLE = {
 const VEIL_BREATH = 0.06; // 呼吸幅度
 const VEIL_PERIOD = 2.2;  // 呼吸周期（秒）
 const PULSE_OPACITY = 0.55;
+// 将弃描边：警示红 + 急促呼吸（1.2s——逼近的截止感）；暗化盖纱让牌面"沉"下去
+const DOOM_COLOR = 0xd84848;
+const DOOM_PERIOD = 1.2;
 
 export class CardFxLayer extends THREE.Group {
   constructor({ width = 20, height = 27 } = {}) {
@@ -27,6 +32,7 @@ export class CardFxLayer extends THREE.Group {
     this._t = 0;             // 层内统一时钟（盖纱呼吸相位共用）
     this._veil = null;       // 持久盖纱平面
     this._veilMode = null;   // null | 'cooling' | 'decayed'
+    this._doom = null;       // 将弃特效组（暗化盖纱 + 四边描框，惰性创建）
     this._pulse = null;      // 脉冲平面
     this._pulseTl = null;    // { elapsed, duration, scale } | null
     this._edgeDot = null;    // 咏唱流光点
@@ -99,10 +105,54 @@ export class CardFxLayer extends THREE.Group {
   get hasEdgeGlow() { return !!this._edgeDot; }
   get edgeDot() { return this._edgeDot; } // 测试/调试窥视
 
+  /** 「将弃」标记（P9 尾弃预告）：红色呼吸描边框 + 暗化盖纱。幂等。呼吸推进在 update(dt)。 */
+  setDoomed(on) {
+    if (on === !!this._doom) return;
+    if (!on) {
+      this.remove(this._doom);
+      this._doom.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      this._doom = null;
+      return;
+    }
+    const g = new THREE.Group();
+    g.name = 'doom';
+    // 暗化盖纱（普通混合压暗牌面——"这张牌要离开了"的沉下去感；加色系特效压不住它）
+    const shade = new THREE.Mesh(
+      new THREE.PlaneGeometry(this._w, this._h),
+      new THREE.MeshBasicMaterial({ color: 0x1a0808, transparent: true, opacity: 0.3, depthWrite: false }),
+    );
+    shade.position.z = 0.36;
+    shade.name = 'shade';
+    g.add(shade);
+    // 四边描框（呼吸主件）：比牌面外扩 0.6，框条粗 1.1
+    const w = this._w + 1.2, h = this._h + 1.2, t = 1.1;
+    const mkBar = (bw, bh, x, y) => {
+      const bar = new THREE.Mesh(
+        new THREE.PlaneGeometry(bw, bh),
+        new THREE.MeshBasicMaterial({
+          color: DOOM_COLOR, transparent: true, opacity: 0.8,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      bar.position.set(x, y, 0.5);
+      bar.name = 'bar';
+      g.add(bar);
+    };
+    mkBar(w + t, t, 0, h / 2);           // 顶
+    mkBar(w + t, t, 0, -h / 2);          // 底
+    mkBar(t, h + t, -w / 2, 0);          // 左
+    mkBar(t, h + t, w / 2, 0);           // 右
+    this._doom = g;
+    this.add(g);
+  }
+
+  get hasDoomMark() { return !!this._doom; }
+
   /** 焚毁等接管牌面前：熄灭全部叠加特效（不销毁资源——卡随后整体 dispose）。 */
   clearTransient() {
     this.setEdgeGlow(false);
     this.setCooling(null);
+    this.setDoomed(false);
     if (this._pulse) this._pulse.visible = false;
     this._pulseTl = null;
   }
@@ -124,6 +174,13 @@ export class CardFxLayer extends THREE.Group {
       const st = VEIL_STYLE[this._veilMode];
       this._veil.material.opacity = st.base
         + VEIL_BREATH * (0.5 + 0.5 * Math.sin((this._t / VEIL_PERIOD) * Math.PI * 2));
+    }
+    if (this._doom) {
+      // 将弃呼吸：描边框 0.45~0.95 急促明暗（逼近的截止感），暗化盖纱同相反相轻颤
+      const k = 0.5 + 0.5 * Math.sin((this._t / DOOM_PERIOD) * Math.PI * 2);
+      for (const o of this._doom.children) {
+        o.material.opacity = o.name === 'bar' ? 0.45 + 0.5 * k : 0.22 + 0.12 * (1 - k);
+      }
     }
     if (this._edgeDot) {
       this._edgeT = (this._edgeT + dt * 0.35) % 1; // ≈2.9s 一圈

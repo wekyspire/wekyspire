@@ -52,14 +52,23 @@ export function canUseSkill(ctx, self) {
 // 玩家获得所有已激活咏唱卡的 activated 能力；无激活数上限——其代价是手牌压力：
 // 激活的咏唱卡按咏唱值（chantWeight）计多张手牌（咏唱3 = 占 3 张手牌位）。
 
-// 手牌上限（旧档无字段时兜底 7；能力可修改 player.maxHandSize）
+// 手牌容量（跨回合留存口径；旧档无字段时兜底 7；能力可修改 player.maxHandSize）：
+// 回合开始抽牌抽到此上限，回合结束超载部分被尾弃（P9）。
 export function handLimitOf(ctx) {
   return ctx.player.maxHandSize ?? 7;
 }
 
-// 单卡的手牌压力权重：激活咏唱 = 咏唱值，其余恒 1
+// 超载上限 = 容量 + 5（2026-09-13 两级手牌口径，用户定：7 容量 + 12 超载起步）。
+// 回合内的抽牌效果可以把手牌顶过容量、直到超载；超载空间当回合有效、不过夜。
+export const OVERLOAD_HEADROOM = 5;
+export function overloadLimitOf(ctx) {
+  return handLimitOf(ctx) + OVERLOAD_HEADROOM;
+}
+
+// 单卡的手牌压力权重：激活咏唱 = 咏唱值（缺省 1——2026-09-13 权重分档，用户定：
+// 大量 1 咏 / 中量 2 咏 / 少量强卡 3-4 咏），其余恒 1
 export function handWeightOf(card) {
-  return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 2) : 1;
+  return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 1) : 1;
 }
 
 // 加权手牌数（抽牌满手判定 / 咏唱发动合法性共用口径）
@@ -67,10 +76,26 @@ export function effectiveHandCount(battleState) {
   return battleState.zones.hand.reduce((n, c) => n + handWeightOf(c), 0);
 }
 
+// P9 超载尾弃的对象枚举（核心清理与前端「将弃」预告共用同一算法，两处不得漂移）：
+// 从手牌尾部（最新到的卡）向前枚举，**跳过激活咏唱**（豁免——付费点亮的咏唱
+// 不得被系统掐灭，用户定 2026-09-13），直到加权手牌数 ≤ 容量。
+// 返回 uniqueID 数组，尾部在前——弃置顺序即数组顺序（最右最先回牌库底，FIFO 确定）。
+export function pickOverflowVictims(hand, capacity) {
+  let total = hand.reduce((n, c) => n + handWeightOf(c), 0);
+  const victims = [];
+  for (let i = hand.length - 1; i >= 0 && total > capacity; i--) {
+    const card = hand[i];
+    if (card.isActivated) continue;
+    victims.push(card.uniqueID);
+    total -= handWeightOf(card);
+  }
+  return victims;
+}
+
 // 咏唱发动合法性：激活后（自身权重 1 → chantWeight）加权手牌数 ≤ 上限。
 // 卡在手牌中调用（结算中的卡已离手，先放回再算）。
 export function chantActivationLegal(ctx, self, def = getSkillDefinition(self.defId)) {
-  const weight = def.chantWeight ?? 2;
+  const weight = def.chantWeight ?? 1;
   return effectiveHandCount(ctx.battleState) + weight - 1 <= handLimitOf(ctx);
 }
 

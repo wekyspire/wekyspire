@@ -273,7 +273,10 @@ export class BattleStage {
     this._buttonSigs = {};
     this._btnData = {};   // 每个按钮最近一次的数据（悬停态变化时据此重烘）
     this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
-    this._swapMode = false; // 换卡模式：点换卡按钮进入，手牌高亮，点一张手牌换出
+    // 弃牌模式（2026-09-13 改制，原「换卡」单张换出废除）：点弃牌按钮进入，
+    // 手牌任意点选（本地多选集），主按钮变「确认(n)」一次提交——付一次阶梯费弃任意张
+    this._dumpMode = false;
+    this._dumpSel = new Set();
     // ---- 战后奖励面板宿主（用户定 2026-09-12）----
     // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
     // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
@@ -303,7 +306,6 @@ export class BattleStage {
     // 下一回合的牌：结算没错，但画面还在放上一回合的动画，纯误操作）。
     this._endTurnRequested = false;
     this._endTurnLockKey = null; // 点击那一快照的回合 key（'player:N'）；解锁只认**新的玩家回合**
-    this._swapLocked = false; // 换卡刚提交：挡同一节拍内的连续点击（下次 sync 解锁）
 
     // 选目标瞄准箭头（杀戮尖塔式）：UI pass 覆盖层，指针追随物，不进队列/注册表
     this._arrow = new TargetingArrowObject();
@@ -368,7 +370,11 @@ export class BattleStage {
     if (this._endTurnRequested && snapshot.turn?.side === 'player' && key !== this._endTurnLockKey) {
       this._endTurnRequested = false;
     }
-    this._swapLocked = false;   // 每个状态同步节拍解锁换卡（挡的是同一节拍内的连点）
+    // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）
+    if (this._dumpSel.size) {
+      const inHand = new Set(snapshot.hand?.map(c => c.uniqueID) ?? []);
+      for (const id of [...this._dumpSel]) if (!inHand.has(id)) this._dumpSel.delete(id);
+    }
     this.reconcile();
   }
 
@@ -403,6 +409,7 @@ export class BattleStage {
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
+    this._updateDoomMarks();   // 将弃名单随快照变化（新视图补挂/离场视图摘除）
   }
 
   _syncUnits(proj) {
@@ -860,10 +867,15 @@ export class BattleStage {
     const inPlayerTurn = proj.turn?.side === 'player' && (proj.turn?.count ?? 0) >= 1
       && proj.verdict == null;
 
-    // 主按钮：结束回合；结算期退化为确认/选择提示
+    // 主按钮：结束回合；弃牌模式/结算期退化为确认/选择提示
     let label = '结束回合';
     let enabled = inPlayerTurn && !pending && !this._endTurnRequested;
-    if (this._pick) {
+    if (this._dumpMode) {
+      // 弃牌模式：主按钮 = 提交选择（付一次阶梯费弃任意张，2026-09-13 改制）
+      const n = this._dumpSel.size;
+      label = n > 0 ? `弃掉${n}张` : '弃牌';
+      enabled = n >= 1;
+    } else if (this._pick) {
       const n = this._pick.selection.length;
       const { min, max } = this._pick;
       const need = min === max ? `${min}` : `${min}~${max}`;
@@ -877,17 +889,17 @@ export class BattleStage {
     }
     this._setButtonState('main', { label, enabled });
 
-    // 换卡模式只在玩家的自由行动窗存活：窗口关闭（结算输入/回合外/回合过渡锁）自动退出
-    if (!inPlayerTurn || pending || this._endTurnRequested) this._swapMode = false;
+    // 弃牌模式只在玩家的自由行动窗存活：窗口关闭（结算输入/回合外/回合过渡锁）自动退出
+    // （直接摘旗，不走 _setDumpMode——它内部会重入本函数）
+    if (!inPlayerTurn || pending || this._endTurnRequested) { this._dumpMode = false; this._dumpSel.clear(); }
     const cost = proj.swapCost;
-    // 换卡同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
-    // canSwapCard 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害），
-    // 连点防御落在**换出提交**那一侧（见 `_swapLocked`）。
-    // 回合过渡锁（_endTurnRequested）期间换卡一并关闭——与打牌同一把锁（用户定 2026-09-13）
-    const canSwap = inPlayerTurn && !pending && !this._endTurnRequested && proj.hand.length > 0
+    // 弃牌同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
+    // canDumpCards 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害）。
+    // 回合过渡锁（_endTurnRequested）期间弃牌一并关闭——与打牌同一把锁（用户定 2026-09-13）
+    const canDump = inPlayerTurn && !pending && !this._endTurnRequested && proj.hand.length > 0
       && proj.player.actionPoints >= cost;
     this._setButtonState('swap', {
-      label: '换卡', sublabel: `⚡${cost}`, enabled: canSwap, active: this._swapMode,
+      label: '弃牌', sublabel: `⚡${cost}`, enabled: canDump, active: this._dumpMode,
     });
   }
 
@@ -907,9 +919,10 @@ export class BattleStage {
     btn.setVisualState(base.enabled ? 'normal' : 'disabled');
   }
 
-  _setSwapMode(on) {
-    if (this._swapMode === on || !this._snapshot) return;
-    this._swapMode = on;
+  _setDumpMode(on) {
+    if (this._dumpMode === on || !this._snapshot) return;
+    this._dumpMode = on;
+    if (!on) this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
   }
@@ -1097,8 +1110,9 @@ export class BattleStage {
         view.setVisualState('highlighted');
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
-      } else if (this._swapMode && zone === 'hand') {
-        view.setVisualState(this.bridge.intents.canSwapCard(id) ? 'highlighted' : 'disabled');
+      } else if (this._dumpMode && zone === 'hand') {
+        // 弃牌模式：选中的高亮，其余保持常态（任何手牌都可弃，无"不可选"压灰）
+        view.setVisualState(this._dumpSel.has(id) ? 'highlighted' : 'normal');
       } else if (this._endTurnRequested && zone === 'hand') {
         // 回合过渡锁（点了结束回合、下一回合快照未落）：整手压灰——锁定期打牌/换卡全关
         // （用户定 2026-09-13；放在结算期分支之后：应答输入的候选高亮不受锁影响）
@@ -1153,7 +1167,8 @@ export class BattleStage {
     if (type === EventNames.ANIM_CARD_ADDED) {
       return this._addCardBeat(payload, finish);
     }
-    if (type === EventNames.ANIM_CARD_SWAPPED) {
+    if (type === EventNames.ANIM_CARDS_DUMPED) {
+      // 弃牌动作节拍（动作级）：牌堆脉冲——弃置本体由每张卡的 ANIM_CARD_DISCARDED 承担
       return this._pulsePile('deck', finish);
     }
     // 结算宾语展示（转化前半）：从原位飞到中央展示位（高于发动展示位，避免叠卡）
@@ -1806,6 +1821,23 @@ export class BattleStage {
     if (!!this._btnHover[key] === on) return;
     this._btnHover[key] = on;
     this._setButtonState(key);   // 用缓存的上一次数据重烘（hover 已进签名）
+    if (key === 'main') this._updateDoomMarks();
+  }
+
+  // 「将弃」预告（用户定 2026-09-13，Three 层特效）：hover 结束回合按钮时，给 P9 会被
+  // 尾弃的手牌挂红色呼吸描边（CardFxLayer.setDoomed）。名单来自投影 overflowVictims
+  // （与核心清理同一算法），只在玩家自由行动窗展示——已点结束回合（锁）/结算期都不亮
+  _updateDoomMarks() {
+    const victims = (!!this._btnHover.main
+      && this._snapshot?.turn?.side === 'player'
+      && !this._snapshot?.pendingInput
+      && !this._endTurnRequested
+      && (this._snapshot?.overflowVictims?.length ?? 0) > 0)
+      ? new Set(this._snapshot.overflowVictims) : null;
+    for (const [id, view] of this._views) {
+      const on = !!victims?.has(id);
+      if (!!view._doomOn !== on) { view._doomOn = on; view.setDoomMark(on); }
+    }
   }
 
   handlePointerDown(x, y) {
@@ -1825,9 +1857,9 @@ export class BattleStage {
         return;
       }
     }
-    // 换卡模式下点手牌是"点按换出"，不进入拖拽
+    // 弃牌模式下点手牌是"切换选中"，不进入拖拽/瞄准
     // 回合过渡锁（_endTurnRequested）：锁定期手牌不发起任何出牌交互（用户定 2026-09-13）
-    if (hit.kind === 'card' && !proj?.pendingInput && !this._swapMode && !this._endTurnRequested) {
+    if (hit.kind === 'card' && !proj?.pendingInput && !this._dumpMode && !this._endTurnRequested) {
       // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后
       // 于后端（动画积压期）时，玩家看到什么就是什么，不可能"抢先"后端出牌
       const displayPlayable = this._views.get(hit.id)?.visualState !== 'disabled';
@@ -1923,28 +1955,28 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:swap') {
-      // 换卡按钮：模式开关（再点一次取消）；可用性以按钮面当前状态为准
-      if (this._swapMode) this._setSwapMode(false);
-      else if (this._buttons.swap.cardData?.enabled) this._setSwapMode(true);
+      // 弃牌按钮：模式开关（再点一次取消）；可用性以按钮面当前状态为准
+      if (this._dumpMode) this._setDumpMode(false);
+      else if (this._buttons.swap.cardData?.enabled) this._setDumpMode(true);
       return;
     }
-    if (hit.kind === 'card' && this._swapMode) {
-      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（显示灰/咏唱/费用不足）保持模式。
-      // `_swapLocked`：成功换出后本同步节拍内不再接受换卡——前端防御连续快速点击
-      // （后端 canSwapCard 也拦，但那会让"点了没反应"难以解释，这里直接不响应）。
-      // 回合过渡锁：锁定期换卡一并关闭（换卡模式已随锁自动退出，这里是兜底）
-      if (this._swapLocked || this._endTurnRequested) return;
-      if (this._views.get(hit.id)?.visualState !== 'disabled' && this.bridge.intents.canSwapCard(hit.id)) {
-        if (this.bridge.intents.swapCard(hit.id)) this._swapLocked = true;
-        this._setSwapMode(false);
-      }
+    if (hit.kind === 'card' && this._dumpMode) {
+      // 弃牌模式点手牌：切换选中（本地多选集，主按钮一次提交）。任何手牌都可弃
+      // （激活咏唱也可——弃置 = 离手熄灭，玩家自己的抉择）；回合过渡锁期间模式已退，这里是兜底
+      if (this._endTurnRequested) return;
+      if (this._dumpSel.has(hit.id)) this._dumpSel.delete(hit.id);
+      else this._dumpSel.add(hit.id);
+      this.reconcile(); // 选中态高亮 + 主按钮「弃掉N张」
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:main') {
       // 显示态门：按钮面为灰（结算期未就绪/终局/已点过结束回合）时不分发任何意图——
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
-      if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
+      if (this._dumpMode) {
+        // 弃牌提交：付一次阶梯费弃掉全部选中卡（2026-09-13 改制）；失败保持模式便于重试
+        if (this.bridge.intents.dumpCards([...this._dumpSel])) this._setDumpMode(false);
+      } else if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else {
         // 结束回合（用户定 2026-09-12）：点完**立刻**上灰（不等 sync 节拍），直到下一回合

@@ -63,9 +63,12 @@ function relicModel({ relicId }) {
   if (relicId == null || !hasRelic(relicId)) return { title: `[relic] ${relicId}`, body: '' };
   const def = getRelicDefinition(relicId);
   const slot = def.nonSlot ? '非槽位式 · 恒生效' : `${def.cost ?? 1} 槽`;
+  // flavor（铭刻）：效果描述之后另起一段的铭文（2026-09-13 用户补：宗师的心得；
+  // 纯文本第二段，靠 .tip-body 的 pre-line 换行）
+  const body = def.flavor ? `${def.description ?? ''}\n\n${def.flavor}` : (def.description ?? '');
   return {
     title: `${def.name ?? relicId}（${def.rarity ?? 'C'} · ${slot}）`,
-    body: def.description ?? '',
+    body,
   };
 }
 

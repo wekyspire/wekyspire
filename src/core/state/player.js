@@ -16,7 +16,9 @@ export default class Player extends Unit {
     this.side = 'player';
     this.maxMana = opts.maxMana ?? 3;
     this.mana = this.maxMana;
-    this.maxActionPoints = opts.maxActionPoints ?? 3;
+    // 初始 AP 4（2026-09-13 用户定：抽到容量体系下 AP 是绝对硬约束——四份试玩报告一致，
+    // 放宽试验；旧值 3）。平衡调整只动这一处缺省。
+    this.maxActionPoints = opts.maxActionPoints ?? 4;
     this.actionPoints = this.maxActionPoints;
     this.money = opts.money ?? PLAYER_BASE_MONEY;
     this.deck = [];                 // run 级卡组：[skillRuntime]
