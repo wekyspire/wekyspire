@@ -11,10 +11,13 @@
 import * as THREE from 'three';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
-import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
+import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '../stage/scenes/volumetricMoon.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';
+import { createVendingMachineRig } from '../stage/scenes/interactive/vendingMachineRig.js';
+import { FLOOR_Y } from '../stage/scenes/dungeon3D.js';
+import { MachineMarkerObject } from '../stage/objects/MachineMarkerObject.js';
 
 const params = new URLSearchParams(location.search);
 
@@ -68,6 +71,23 @@ const rigs = new Map();      // name -> rig（老虎机/银行机的动画驱动
 const markerRings = [];      // name -> 地面光环（hover 提亮）
 let focused = null;          // 当前聚焦的机器名
 const camTween = { active: false, t: 0, dur: 0.85, from: null, to: null };
+// 摇杆次数计数器（吞噬进度）：正式流程里来自 panelSnapshot.snap.slot.devour，调试门里本地模拟
+// ——每次拉杆 +1（封顶 7），粉碎后归零。变的是**数据**，动画一律由 rig 自己的滚动积分做。
+const DEVOUR_EVERY = 7;
+let devourProgress = Number(params.get('devour')) || 0;
+const devourReady = () => devourProgress >= DEVOUR_EVERY;
+function syncDevour() {
+  rigs.get('slot')?.setDevour?.({ progress: devourProgress, every: DEVOUR_EVERY, ready: devourReady() });
+  const el = document.getElementById('bar-devour');
+  if (el) {
+    el.textContent = devourReady()
+      ? '粉碎口已张开——点机身正面的投料口，或按此处的「粉碎」'
+      : `摇杆次数 ${devourProgress}/${DEVOUR_EVERY}（粉碎口还需要 ${DEVOUR_EVERY - devourProgress} 次拉杆）`;
+    el.style.color = devourReady() ? '#ffd75e' : '#8d97b5';
+  }
+  const btn = document.getElementById('bar-crush');
+  if (btn) btn.disabled = !devourReady();
+}
 
 const info = document.getElementById('room-info');
 const barEl = document.getElementById('machine-bar');
@@ -110,7 +130,23 @@ function pickMachine(clientX, clientY) {
   return null;
 }
 
-const bobbingScale = (name) => (name === hovered ? 1.35 : 1) * (1 + 0.08 * Math.sin(time * 3.4));
+/** 屏幕坐标 → 聚焦机器正面的粉碎口热区（'crusher' | 'counter' | null）。
+ *  只认**当前聚焦**的机器：远景点机身 = 聚焦，怼脸后点投料口才是"投料"，两者不混。 */
+function pickCrusher(clientX, clientY) {
+  if (focused !== 'slot') return null;
+  const rig = rigs.get('slot');
+  const targets = rig?.crusherTargets?.() ?? [];
+  if (!targets.length) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  for (const hit of raycaster.intersectObjects(targets, false)) {
+    const name = rig.pickNameOf?.(hit.object);
+    if (name) return name;
+  }
+  return null;
+}
 
 function setHovered(name) {
   if (hovered === name) return;
@@ -137,7 +173,14 @@ function focusMachine(name) {
   const reels = parts.reels ?? [];
   const sp = new THREE.Vector3();
   let halfW; let halfH; let screenH; let margin;
-  if (parts.leverPivot && reels.length) {
+  if (parts.bay) {
+    // 售货机（商店房）：框**货架区开口**——怼脸看货与价格；底边留出下方交互条的位置
+    sp.copy(m.entry.object.localToWorld(new THREE.Vector3(parts.bay.x, parts.bay.y, parts.bay.z)));
+    halfW = (parts.bay.w / 2) * m.entry.scale * 1.04;
+    halfH = (parts.bay.h / 2) * m.entry.scale * 1.04;
+    screenH = parts.bay.h * m.entry.scale;
+    margin = 1.08;
+  } else if (parts.leverPivot && reels.length) {
     const screenLike = reels[Math.floor(reels.length / 2)] ?? m.entry.object;
     screenLike.getWorldPosition(sp);
     const a = new THREE.Vector3(); const b = new THREE.Vector3();
@@ -176,6 +219,8 @@ function focusMachine(name) {
   barTitle.textContent = name === 'slot' ? '🎰 老虎机' : '🏦 银行机';
   barBody.innerHTML = name === 'slot'
     ? '<button id="bar-pull">拉杆！（' + tier + '）</button><span id="bar-result"></span>'
+      + '<div id="bar-devour" class="devour"></div>'
+      + '<button id="bar-crush">粉碎一件物品（换金币）</button>'
     : '<button id="bar-deposit">存钱</button><button id="bar-withdraw">取钱</button>';
   if (name === 'slot') {
     document.getElementById('bar-pull').onclick = () => {
@@ -183,6 +228,9 @@ function focusMachine(name) {
       btn.disabled = true;
       const out = devOutcome();
       rig.pull(out);
+      // 每拉一次杆，粉碎进度 +1（正式流程里由 core 的 slotDevour 累加，门里本地模拟同一口径）
+      devourProgress = Math.min(DEVOUR_EVERY, devourProgress + 1);
+      syncDevour();
       const res = document.getElementById('bar-result');
       if (res) res.textContent = '';
       const timer = setInterval(() => {
@@ -194,6 +242,8 @@ function focusMachine(name) {
         }
       }, 120);
     };
+    document.getElementById('bar-crush').onclick = () => runCrush();
+    syncDevour();
   } else {
     document.getElementById('bar-deposit').onclick = () => rig.act('deposit');
     document.getElementById('bar-withdraw').onclick = () => rig.act('withdraw');
@@ -202,6 +252,17 @@ function focusMachine(name) {
 }
 
 let savedOrbit = null;
+/** 粉碎演出（调试门版）：正式流程里这条链是「对话问"粉碎什么？" → 全屏选卡/选遗物 →
+ *  提交 core 结算 → 播机器演出 + 金币获得动画」；门里只保留**机器这一端**（rig.crush），
+ *  用来单独调咬合/迸币手感。 */
+function runCrush() {
+  const rig = rigs.get('slot');
+  if (!rig || !devourReady() || rig.isBusy()) return false;
+  rig.crush();
+  devourProgress = 0;          // 用掉即清零（core 同口径）；计数器随之滚回 0/7
+  syncDevour();
+  return true;
+}
 function unfocusMachine() {
   focused = null;
   barEl.classList.remove('open');
@@ -275,7 +336,9 @@ function rebuild() {
   room = composeRoom(recipeId, seed);           // 契约对象 { group, update, moonlight, recipe, grading, placements }
   scene.add(room.group);
   // 特殊色调（grading 契约）：曝光恒生效；tint 走 composer 合成
-  renderer.toneMappingExposure = room.grading?.exposure ?? 1;
+  // 色调映射：?tm=none|neutral|aces|reinhard 覆盖，?exp= 再乘一档曝光（A/B 用）
+  const tmMode = params.get('tm') || DEFAULT_TONE_MODE;
+  const tmExp = (room.grading?.exposure ?? 1) * (Number(params.get('exp')) || 1);
   // 雾：配方处方优先
   const fogDef = room.recipe?.fog;
   scene.fog = fogDef
@@ -285,6 +348,15 @@ function rebuild() {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
+  applyToneMapping(renderer, composer, tmMode, tmExp);
+  // bloom 旋钮：?bloom=强度 &bthr=阈值 &bknee=软膝 &brad=半径（缺省不动 = 用烘焙值）
+  const numKnob = (k) => (params.has(k) ? Number(params.get(k)) : undefined);
+  composer?.setBloom({
+    strength: numKnob('bloom'),
+    threshold: numKnob('bthr'),
+    knee: numKnob('bknee'),
+    radius: numKnob('brad'),
+  });
 
   // ---- 可动组件：建 rig + 悬浮标记 ----
   rigs.clear();
@@ -292,40 +364,30 @@ function rebuild() {
   for (const [name, entry] of room.interactives ?? new Map()) {
     const rig = entry.kind === 'slot'
       ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
-      : createBankMachineRig({ object: entry.object, parts: entry.parts });
+      : entry.kind === 'vending'
+        ? createVendingMachineRig({ object: entry.object, parts: entry.parts })
+        : createBankMachineRig({ object: entry.object, parts: entry.parts });
     rigs.set(name, rig);
-    // 地面光环（hover 提亮；点它也能聚焦）
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(4.2 * entry.scale * 0.5, 5.4 * entry.scale * 0.5, 28),
-      new THREE.MeshBasicMaterial({ color: 0x6f7fb0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(entry.x, 0.12, entry.z + 1.2 * entry.scale);
-    room.group.add(ring);
-    markerRings.push({ name, ring });
-    // 悬浮浮标（远景可读：跳动菱形 + 竖直光柱；hover 放大变亮）
-    const marker = new THREE.Group();
-    marker.position.set(entry.x, 0, entry.z);
-    const bobY = (entry.kind === 'slot' ? 19 : 16) * (entry.scale / 2);
-    const bob = new THREE.Mesh(
-      new THREE.BoxGeometry(2.2, 2.2, 2.2),
-      new THREE.MeshBasicMaterial({ color: 0xffe08a }),
-    );
-    bob.position.y = bobY;
-    bob.rotation.set(Math.PI / 4, Math.PI / 4, 0);   // 菱形
-    marker.add(bob);
-    // 竖直光柱：把浮标和机器连起来（远景也看得出"这台能点"）
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.5, bobY, 6, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
-    );
-    beam.position.y = bobY / 2;
-    marker.add(beam);
-    marker.userData.bob = bob;
-    marker.userData.beam = beam;
+    // 计数器初次同步（正式流程里在面板打开/数据变化时调用）
+    if (name === 'slot') rig.setDevour?.({ progress: devourProgress, every: DEVOUR_EVERY, ready: devourReady() });
+    // 售货机：陈列一份**样例货架**（真实数据来自 panelSnapshot.snap.shop；这里是视觉门）——
+    // 故意混一件"买不起"的（价格标红）与一件遗物（走遗物立绘）
+    if (entry.kind === 'vending') {
+      rig.setStock?.([
+        { index: 0, kind: 'relic', name: '塔的馈赠', price: 30, sold: false, affordable: true },
+        { index: 1, kind: 'potion', name: '恢复药剂', price: 20, sold: false, affordable: true },
+        { index: 2, kind: 'pack', name: '体修卡包', price: 28, sold: false, affordable: true },
+        { index: 3, kind: 'relic', name: '光滑小圆盾', price: 55, sold: false, affordable: false },
+      ]);
+      rig.setDisplay?.('余额 30');
+    }
+    // 头顶浮标 = **一枚跳动的发光箭头**（与正式房间同一件对象；用户定 2026-09-12：
+    // 去掉地面光环与光柱，只留箭头）——⚠ 底在房间地平（FLOOR_Y），箭尖指着机器顶
+    const topY = new THREE.Box3().setFromObject(entry.object).max.y;
+    const marker = new MachineMarkerObject({ size: Math.max(1, entry.scale * 0.52) });
+    marker.position.set(entry.x, FLOOR_Y + Math.max(4, topY - FLOOR_Y + 1.3), entry.z);
     room.group.add(marker);
-    markerRings[markerRings.length - 1].marker = marker;
-    markerRings[markerRings.length - 1].entry = entry;
+    markerRings.push({ name, marker, entry });
   }
   focused = null;
   barEl.classList.remove('open');
@@ -391,6 +453,21 @@ window.addEventListener('pointerup', (e) => {
   dragging = false;
   // 点击（无明显拖动）→ 命中机器就聚焦
   if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 6) {
+    // 怼脸时优先打**机器正面的粉碎口热区**（远景点机身仍是"聚焦"，两者不混）
+    const cz = pickCrusher(e.clientX, e.clientY);
+    if (cz) {
+      if (cz === 'crusher') {
+        if (!runCrush()) {
+          const el = document.getElementById('bar-devour');
+          if (el) el.textContent = `粉碎口还闭着——还需要 ${DEVOUR_EVERY - devourProgress} 次拉杆`;
+        }
+      } else {
+        const el = document.getElementById('bar-devour');
+        if (el) el.textContent = `摇杆次数 ${devourProgress}/${DEVOUR_EVERY}（点左边的投料口粉碎）`;
+      }
+      downAt = null;
+      return;
+    }
     const hit = pickMachine(e.clientX, e.clientY);
     if (hit) focusMachine(hit);
     else if (focused && !e.target.closest('#machine-bar')) unfocusMachine();
@@ -399,6 +476,10 @@ window.addEventListener('pointerup', (e) => {
 });
 window.addEventListener('pointermove', (e) => {
   if (!dragging) {
+    if (focused === 'slot') {
+      const cz = pickCrusher(e.clientX, e.clientY);
+      if (cz) { canvas.style.cursor = 'pointer'; return; }
+    }
     if (!focused) setHovered(pickMachine(e.clientX, e.clientY));
     return;
   }
@@ -436,18 +517,10 @@ renderer.setAnimationLoop(() => {
   camera.lookAt(orbit.target);
   room?.update(dt, null, camera.position);
   for (const rig of rigs.values()) rig.update(dt);
-  // 浮标跳动 / 光环呼吸
+  // 浮标：跳动的发光箭头（hover / 聚焦的那台更亮更大）
   for (const m of markerRings) {
-    const bob = m.marker?.userData?.bob;
-    if (bob) {
-      bob.position.y += Math.sin(time * 3.1 + (m.entry?.x ?? 0)) * 0.006;
-      bob.rotation.y += dt * 1.1;
-      const target = bobbingScale(m.name);
-      bob.scale.setScalar(bob.scale.x + (target - bob.scale.x) * Math.min(1, dt * 6));
-    }
-    if (m.ring) m.ring.material.opacity = 0.22 + 0.25 * (0.5 + 0.5 * Math.sin(time * 1.7 + 1)) + (m.hover ? 0.45 : 0);
-    const beam = m.marker?.userData?.beam;
-    if (beam) beam.material.opacity = 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(time * 2.3)) + (m.hover ? 0.3 : 0);
+    m.marker?.setHighlight?.(m.hover || m.name === focused);
+    m.marker?.update?.(dt);
   }
   stepCamTween(dt);
   syncAnchorPins();
@@ -468,6 +541,9 @@ window.__focus = (name) => focusMachine(name);
 window.__unfocus = unfocusMachine;
 window.__rigs = rigs;
 window.__pull = (outcome) => rigs.get('slot')?.pull(outcome ?? devOutcome());
+// 粉碎入口：__devour(n) 直接设进度（0..7），__crush() 播一次粉碎演出（进度满才生效）
+window.__devour = (n = DEVOUR_EVERY) => { devourProgress = Math.max(0, Math.min(DEVOUR_EVERY, n)); syncDevour(); };
+window.__crush = () => runCrush();
 // 直接落机位（迭代视觉时用来推近看局部，免去拖 canvas / 裁剪猜坐标）：
 // __orbitTo(x, y, z, dist, az, el)——省略某参即保持原值；az/el 用弧度。
 window.__orbitTo = (x, y, z, dist, az, el) => {

@@ -1,7 +1,9 @@
 # 休息阶段房间的 PCG 方法设计（2026-09-11）
 
-> 状态：**方法定稿 + 第一间房（赌厅 `casino`）已实现**，视觉在 `restGallery.html` 迭代中。
-> 主流程接线（runController 切场景 + 面板叠加/锚点对位）**下一阶段**做。
+> 状态：**方法定稿 + 三间房已实现并接入主流程**（2026-09-11 / 09-12）——
+> `RoomStage` 舞台 + cutscene 幕间黑幕进出 + 机器点选推近 + 下沿停靠面板 + 右下角「继续前进」。
+> 已落地：赌厅 `casino`（老虎机 + 银行机）、营地·训练场 `camp`、商店房 `shop`（瑞米售货机）。
+> 剩余休息房（古尔帕斯之店）仍是塔楼层上的 UI 占位面板（同方法换配方即可接）。
 > 相关契约：`SCENE_PROP_WORKFLOW.md`（道具生产管线）、`SCENE_PCG_CATALOG.md`（红线摆放法）、
 > `SLOT_MACHINE.md`（老虎机/银行机玩法）、`THREE_UI_MIGRATION.md`（面板 Three 化）。
 
@@ -112,8 +114,9 @@ rig.update(dt);                                    // 宿主逐帧驱动
 `act('deposit'|'withdraw'|'overdraft')` → 屏幕闪亮 + 扫描线扫一次 + 指示灯追逐（颜色区分存/取）。
 
 **交互层**（进入房间后）
-- 机器上方**跳动的三维浮标**（菱形 + 竖直光柱，远景可读）+ 地面光环（hover 提亮）。
-- hover → 命中机器/浮标即高亮（rig.setHover + 光环）。
+- 机器上方**跳动的发光箭头**（`objects/MachineMarkerObject.js`，远景可读；用户定 2026-09-12 简化：
+  去掉原有的地面光环与光柱，只留箭头——箭尖朝下指着机器，跳动 + 呼吸发光，hover/聚焦提亮放大）。
+- hover → 命中机器/浮标即高亮（rig.setHover + 箭头提亮）。
 - 点击 → **相机推到该机器屏幕前**（按整机包围盒 + 相机 fov 反算距离取景）+ 下方出现交互条
   （老虎机「拉杆」、银行机「存钱」「取钱」；`Esc`/「返回房间」复位）。
   - **老虎机**：贴到屏幕前（接近怼脸），但**必须留住侧面拉杆**——按"屏幕尺寸 + 拉杆尖端外扩"
@@ -184,13 +187,34 @@ open http://localhost:5177/restGallery.html?recipe=casino&seed=demo
 - 契约门（headless）：`test/roomPcg.test.js`（确定性/keepout/不重叠/契约）+ `test/sceneProps.test.js`
   （道具契约按 fs 自动发现）；新增配方与道具都会被自动纳管。
 
-## 6. 已知待办（下一阶段）
+## 6. 已知待办
 
-1. **主流程接线**：`runController` 在 `gameStage === 'room'` 且 room 类型有休息房配方时切到该 PCG 场景
-   （复用 `getScene('pcg:casino', seed)`），并让 `MapStage` 的面板叠加在同一 canvas 上；
-   `restRecipeFor(roomType)` 已备好映射（`slot → casino`）。
-2. **机器可点**：按 `anchors` 注册 Pickable，点老虎机 = 打开/聚焦转轮面板，点银行机 = 聚焦存取款区。
-3. **更多休息房**：售货机层（`vending` 房）、古尔帕斯之店（`gurpas` 房，35 层固定）——同方法换配方。
+1. ~~主流程接线~~ **已完成（2026-09-11）**：`stages/RoomStage.js` 是新舞台（与 MapStage/
+   BattleStage 并列）；`runController` 在 `gameStage === 'room'` 且 `restRecipeFor(roomType)`
+   有配方时，经 `cutscene.sceneTransition` 切进该 PCG 场景（`claimReward → maybeEnterRestScene`），
+   离开走 `leaveRoom/leaveSlot` → 黑幕回塔楼。面板不再是模态遮罩，而是**下沿停靠**（PanelObject
+   的 `dock` 形态），房间全程可见；右下角常驻「继续前进」大箭头（`ContinueButtonObject`）。
+2. ~~机器可点~~ **已完成**：浮标 / 机身 / 投料口热区都注册了 Pickable（world 空间）；
+   **点机器 → 相机推近（整机占屏 50%、机器中心抬到屏高 76%）→ 推到位才弹出该机器的操纵 UI**；
+   点空白或面板的「← 返回房间」→ 收 UI + 拉回全景。机位借的是 StageManager 的世界相机，
+   `cameraBase/restoreBaseCamera` 保证退出时还原。
+   **2026-09-12 起的补充口径**：①**进房不自动弹任何 UI**，交互一律从场景物件进；
+   ②怼脸处方按物件给（`FOCUS_OF`）：老虎机框转轮窗+拉杆、售货机框货架区、篝火取"火盆+火焰"
+   （上段主体，火焰粒子不在包围盒里故顶面留 22% 余量）；③**合并房（营地·训练场）两部分共用一份面板**
+   ——点篝火或训练桩都开 `buildCampTrainingPanel`（营地组 + 训练组一起给，强绑三选一挂起时只给训练组），
+   面板里的「升级一张卡」按 source 取 `snap.camp/training.upgradeCards`（曾一律读 `snap.slot` = 死按钮）；
+   ④**奖励没领完不许离房**：`_pendingCampTraining()` 为真时「继续前进」压暗 + 点了把人拉回篝火并冒泡泡
+   （两部分都恒有终止动作，不会卡死）。
+3. **更多休息房**：**营地·训练场已完成（2026-09-11，第二间；2026-09-12 改为一炉两用）**——
+   `CAMP` 配方（篝火@-14/-45 = 营地半场、训练桩@14/-45 = 训练半场，两个 `live` 件各带 `name`）
+   + `camp` 布光预设（火光主导、环境光压最低、一道高窗月光做冷暖对比）；两份交互被合成
+   **一份面板**（见上第 2 条的③④：点篝火/训练桩都开营地+训练两组选项，领完才放行离房）。
+   **商店房已完成（2026-09-12，第三间）**——`SHOP` 配方（`shop` 布光：暖白灯下"亮堂的店"，
+   售货机在 `guaranteed` 里 `live`，两排货架的商品卡由 rig 按快照立起来）+ 卡包买到的三选一。
+   剩余：古尔帕斯之店（`gurpas` 房，35 层固定，等它的玩法实装）——同方法换配方
+   （`REST_RECIPES` 加一行 + 面板表加一行 + 一份 builder）。
 4. **视觉继续**（2026-09-11 已完成一轮：暖调重配比 + 彩灯串 + 追光 + 老虎机真开窗/吃光滚轴）：
-   剩余 = 中奖灯效档位再调、转轮面换成真纹理（`drumGeometry` 走 UV 就能接美术）、浮标造型、
-   赌桌区细节（筹码/酒杯/账本）、`uiSafe` 比例与面板实际高度对齐后再定稿。
+   剩余 = 中奖灯效档位再调、转轮面换成真纹理（`drumGeometry` 走 UV 就能接美术）、
+   赌桌区细节（筹码/酒杯/账本）。
+5. **工程收尾**：`RoomStage` 与 `MapStage` 的「选卡/选遗物/获得物特写」三件套目前是同构的两份
+   （各自 ~120 行），宜抽 `StagePickerKit` 共用；`uiSafe` 比例与实际面板高度对齐后重新校核推近取景。

@@ -629,7 +629,7 @@ describe('呼吸系列：弃牌回补', () => {
 });
 
 describe('培植系列：养刀（power 漂移）', () => {
-  it('养刀术：咏唱1，激发时手中刀法牌伤害+2', () => {
+  it('养刀术：咏唱1，激发时手中刀法牌伤害+3（2026-09-12 稿：+2 → +3）', () => {
     const d = new BattleDriver({ deck: ['honeBlade', 'cycloneSlash', 'punch', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'honeBlade');
@@ -637,29 +637,35 @@ describe('培植系列：养刀（power 漂移）', () => {
     d.play('honeBlade');
     const blade = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
     const punch = d.state.zones.hand.find(c => c.defId === 'punch');
-    expect(blade.power).toBe(2);                          // 刀法牌 +2
+    expect(blade.power).toBe(3);                          // 刀法牌 +3
     expect(punch.power).toBe(0);                          // 非刀法不动
     expect(d.state.zones.hand.some(c => c.defId === 'honeBlade' && c.isActivated)).toBe(true);
-    // power 已入算式：回旋斩 7 + 2 = 9
+    // power 已入算式：回旋斩 7 + 3 = 10
     const rt = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
     rt.remainingUses = 1;
     rt.currentCooldown = 0;
     const hp0 = enemyHp(d);
     d.play(rt.uniqueID);
-    expect(hp0 - enemyHp(d)).toBe(9);
+    expect(hp0 - enemyHp(d)).toBe(10);
   });
 
-  it('锻刀术：咏唱1，打出刀法牌时手中其余刀法牌+1', () => {
-    const d = new BattleDriver({ deck: ['forgingBlade', 'cycloneSlash', 'fineDagger', 'punch'], enemies: [tank()], seed: 5 });
+  it('锻刀术：咏唱1，打出刀法牌时**所有**刀法牌+1（手牌与牌库都吃；2026-09-12 稿）', () => {
+    const d = new BattleDriver({
+      deck: ['forgingBlade', 'cycloneSlash', 'fineDagger', 'punch', 'whetstone'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 3 },   // whetstone（刀法牌）留牌库
+    });
     d.start();
     toHand(d, 'forgingBlade');
     toHand(d, 'cycloneSlash');
     toHand(d, 'fineDagger');
+    const deckBlade = d.state.zones.deck.find(c => c.defId === 'whetstone');
+    expect(deckBlade).toBeTruthy();
     d.play('forgingBlade');
     d.play('cycloneSlash');                               // 打出一张刀法牌
     const fine = findCard(d, 'fineDagger');
     const punch = findCard(d, 'punch');
     expect(fine.power).toBe(1);                           // 手中刀法牌 +1
+    expect(deckBlade.power).toBe(1);                      // **牌库里的刀法牌也 +1**
     expect(punch.power).toBe(0);                          // 非刀法不动
     expect(d.presenter.calls).toContainEqual({ method: 'chantToggled', args: [{ skill: expect.anything(), on: true, reason: 'played' }] });
   });
@@ -795,24 +801,52 @@ describe('开刃系列：斩进阶', () => {
     expect(hpB - enemyHp(d)).toBe(20);                    // 固定伤害：无视防御
   });
 
-  it('练刀：抽1 + 选1张手中刀法牌 +4 power 并丢弃之（2026-09 稿：无消耗）', () => {
+  it('练刀：抽1，弃掉**所有**手中刀法牌并令其本战斗+3（D 阶；2026-09-12 稿）', () => {
     const d = new BattleDriver({
-      deck: ['practiceBlade', 'cycloneSlash', 'punch', 'punch', 'guard'],
+      deck: ['practiceBlade', 'cycloneSlash', 'fineDagger', 'punch', 'guard'],
       enemies: [tank()], seed: 5, config: { initialDraw: 4 },   // guard 留牌库供抽1验证
     });
     d.start();
     toHand(d, 'practiceBlade');
-    toHand(d, 'cycloneSlash');
-    const blade = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
+    const slash = toHand(d, 'cycloneSlash');
+    const dagger = toHand(d, 'fineDagger');
     d.play('practiceBlade');
     expect(d.state.zones.hand.some(c => c.defId === 'guard')).toBe(true);   // 先抽1落地
-    expect(d.pendingInput?.request.kind).toBe('selectCards');
-    expect(d.pendingInput.request.candidates).toEqual([blade.uniqueID]);   // 只可选刀法牌
-    d.respond([blade.uniqueID]);
-    expect(blade.power).toBe(4);
-    expect(zoneOf(d.state, blade.uniqueID)).toBe('deck'); // 丢弃 = 落牌库底
-    expect(d.state.zones.burnt.some(c => c.defId === 'practiceBlade')).toBe(false);  // 去消耗
-    expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');     // 回牌库
+    expect(d.calls('requestInput')).toHaveLength(0);                        // 不再有选牌请求
+    expect(slash.power).toBe(3);                                            // 全部 +3
+    expect(dagger.power).toBe(3);
+    expect(zoneOf(d.state, slash.uniqueID)).toBe('deck');                   // 弃掉 = 落牌库底
+    expect(zoneOf(d.state, dagger.uniqueID)).toBe('deck');
+    expect(d.calls('cardPowerUp').length).toBeGreaterThanOrEqual(2);        // 公共放缩节拍逐张播
+    // 冷却1、非消耗：自身回牌库
+    expect(findCard(d, 'practiceBlade').currentCooldown).toBeGreaterThan(0);
+    expect(d.state.zones.burnt.some(c => c.defId === 'practiceBlade')).toBe(false);
+    expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');
+  });
+
+  it('练刀 B 阶（练刀·大师）：0AP，且强化量为 +5', () => {
+    const d = new BattleDriver({
+      deck: ['practiceBladeMaster', 'cycloneSlash', 'punch', 'punch'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 3 },
+    });
+    d.start();
+    const slash = toHand(d, 'cycloneSlash');
+    expect(getSkillDefinition('practiceBladeMaster').cost.actionPoint).toBe(0);
+    d.play('practiceBladeMaster');
+    expect(slash.power).toBe(5);
+  });
+
+  it('铁雨：打出手中所有碎铁（逐张嵌套出牌）', () => {
+    const d = new BattleDriver({
+      deck: ['ironRain', 'ironShard', 'ironShard'], enemies: [tank()], seed: 5, config: { initialDraw: 3 },
+    });
+    d.start();
+    const hp0 = enemyHp(d);
+    d.play('ironRain');
+    // 两张碎铁各 3 伤害（无面板），且都已打出（消耗离手）
+    expect(hp0 - enemyHp(d)).toBe(6);
+    expect(d.state.zones.hand.filter(c => c.defId === 'ironShard')).toHaveLength(0);
+    expect(d.state.zones.burnt.filter(c => c.defId === 'ironShard')).toHaveLength(2);
   });
 
   it('练刀无顽固：手中无刀法牌也可打出（不卡手），退化成纯抽1', () => {

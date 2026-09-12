@@ -54,23 +54,23 @@ const resultText = save?.result === 'victory' ? '登顶成功' : save?.result ==
   font-family: sans-serif;
 }
 .menu {
-  width: 340px; background: rgba(10, 14, 26, .96);
-  border: 1px solid #38415e; border-radius: 12px;
-  padding: 22px 26px; color: #cdd6f4;
+  width: 340px; background: rgba(8, 11, 18, .96);
+  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角（用户定 2026-09-12） */
+  padding: 22px 26px; color: #dbe4f4;
 }
-h2 { margin: 0 0 14px; font-size: 22px; color: #ffe7b3; text-align: center; }
+h2 { margin: 0 0 14px; font-size: 22px; color: #eef4ff; text-align: center; }
 .section { margin: 14px 0; }
 .section .title { font-size: 12px; color: #7d87a8; margin-bottom: 6px; }
 .row { font-size: 14px; padding: 3px 0; }
 .row.dim { color: #9aa3c0; font-size: 12px; }
 .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.toggle input { accent-color: #b3742a; width: 15px; height: 15px; cursor: pointer; }
+.toggle input { accent-color: #4d78ad; width: 15px; height: 15px; cursor: pointer; }
 .actions { display: flex; gap: 10px; margin-top: 18px; }
 button {
-  flex: 1; padding: 9px 0; font-size: 15px; cursor: pointer; border-radius: 7px;
-  background: #2c3554; color: #fff; border: 2px solid #56628f;
+  flex: 1; padding: 9px 0; font-size: 15px; cursor: pointer; border-radius: 4px;
+  background: rgba(16, 22, 34, .92); color: #eaf1fb; border: 1px solid #3f5f8c;
 }
-button:hover { filter: brightness(1.25); }
-button.primary { background: #6b421a; border-color: #c78f3a; color: #fff; }
+button:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+button.primary { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; color: #fff; }
 .hint { margin-top: 12px; text-align: center; font-size: 11px; color: #626c8f; }
 </style>

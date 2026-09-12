@@ -72,6 +72,18 @@ export function attackDamage(sctx, base, opts = {}) {
   return dealDamage(sctx, attackAmount(sctx, base), opts);
 }
 
+/**
+ * 卡牌威力提升（runtime.power 增加）——**唯一入口**：改数值 + 通知 presenter 播
+ * 「牌状态改变」的放缩节拍（公共动画：bridge 的 cardPowerUp → ANIM_CARD_POWER_UP）。
+ * 内容侧任何改 power 的地方都该走它，别裸改 `card.power += n`（那样只有数字变、没有演出）。
+ */
+export function gainPower(sctx, card, delta) {
+  if (!card || !delta) return card;
+  card.power += delta;
+  sctx.presenter?.cardPowerUp?.({ card, delta });
+  return card;
+}
+
 export function gainShield(sctx, amount, target = sctx.player) {
   sctx.kernel.submitInstruction(new GainShieldInstruction({ target, amount }));
 }
@@ -215,7 +227,11 @@ export function selected(instr) {
   return instr?.result?.selection ?? [];
 }
 
-// 是否刀法牌（培植/开刃/砺刀系列的作用域判定）
+// 是否刀法牌（培植/开刃/砺刀系列的作用域判定）。
+// 判据 = 「blade 系列」而非「keywords 含 blade」：碎铁/出鞘等**斩的衍生与处理牌**是
+// 刀法牌，但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）——
+// 用户 2026-09-12 定：碎铁应吃到关于刀法牌的一切效果与增益（养刀术/锻刀术/练刀/砺刀系）。
 export function isBladeCard(card) {
-  return getSkillDefinition(card.defId).keywords?.includes('blade') === true;
+  const def = getSkillDefinition(card.defId);
+  return def.series === 'blade' || def.keywords?.includes('blade') === true;
 }

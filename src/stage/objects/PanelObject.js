@@ -1,6 +1,8 @@
-// PanelObject：休息阶段面板容器（UI pass 空间）。两种形态：
+// PanelObject：休息阶段面板容器（UI pass 空间）。三种形态：
 //   · anchored —— 无背板、贴左上角、定宽竖排行流（战前准备）。
-//   · modal    —— 全屏背板 + 居中内容（奖励/房间/进阶）。
+//   · modal    —— 全屏背板 + 居中内容（奖励/进阶/占位房间）。
+//   · dock     —— **底部停靠**：只给内容一块半透明底（无全屏背板），整组贴屏幕下沿居中——
+//                 场景式休息房（3D 房间 + 机器）用**它**：房间要一直看得见，面板只是操作条。
 //
 // 职责边界（quest_prompts/THREE_UI_MIGRATION.md §4.2-2）：只做「把一组 widget 画出来 +
 // 把点击路由成 action」，**不判断能不能点**（enabled 由快照下发），也不认识任何 run 状态。
@@ -32,6 +34,15 @@ const Z = { PANEL: 60, BACKDROP: 80, CONTENT: 81 };
  */
 export const PANEL_ABOVE_Z = Z.PANEL + Z.CONTENT + 10;
 
+/**
+ * **全屏模态覆盖层**（获得演出、全屏选卡/选遗物）的 z 基准。
+ * 必须高于舞台自身的常驻按钮——「继续前进」挂在 PANEL_ABOVE_Z + 2，随投影机位浮动；
+ * 覆盖层若只到 PANEL_ABOVE_Z，那枚按钮就画在遮罩之**上**，看起来"还能点"
+ * （用户 2026-09-13 报：获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
+ * < 模态覆盖层；覆盖层内部再各自往上排（背板 → 主体 → 文本 → 按钮）。
+ */
+export const OVERLAY_Z = PANEL_ABOVE_Z + 8;
+
 // 两种形态的几何（逻辑像素；沿用原 Vue 面板的观感尺寸）
 const FORMS = {
   anchored: {
@@ -42,7 +53,16 @@ const FORMS = {
     width: 760, padX: 24, padY: 20,
     rowH: { title: 36, text: 22, sub: 20, button: 34, main: 44, gap: 12, tiles: 104, cards: 300 },
   },
+  // 下沿停靠（场景式休息房的机器操纵条，用户 2026-09-12：**贴到接近屏幕下边沿** +
+  // 字号整体调大一档 + 文字统一白字黑边）。`font` = 各行烘焙字号（逻辑像素，10px/wu）。
+  dock: {
+    width: 580, padX: 24, padY: 14,
+    rowH: { title: 34, text: 24, sub: 21, button: 36, main: 44, gap: 11, tiles: 96, cards: 260 },
+    font: { title: 24, sub: 16, text: 18, button: 17 },
+  },
 };
+// dock 形态：整组内容底边贴这条 y（UI 取景带下沿在 look_at_y - 50，故 -44 = 距下边沿 6）
+const DOCK_BOTTOM = UI_CAMERA_LOOK_AT_Y - 44;
 const CARD_SCALE = 0.8;      // 面板内卡面缩放（3 张一排：3×20.8 + 间隙 < 取景带 177.8）
 const BADGE_PX = 58;         // 「已选取」打勾徽标直径（逻辑像素）
 const BADGE_MARGIN = 18;     // 徽标中心距卡面右/下边的距离（逻辑像素）
@@ -76,6 +96,7 @@ export class PanelObject extends THREE.Group {
     this._rowSeq = 0;   // 可 hover 文本行的 pickable id 序号
     this.kind = null;
     if (form === 'modal') this.position.set(0, UI_CAMERA_LOOK_AT_Y, Z.PANEL);
+    else if (form === 'dock') this.position.set(0, DOCK_BOTTOM, Z.PANEL); // 实际 y 在 setWidgets 里按内容高回推
     else this.position.set(-HALF_UI_W + this._g.marginX / PX_PER_WU,
       UI_TOP - this._g.marginY / PX_PER_WU, Z.PANEL);
   }
@@ -95,22 +116,35 @@ export class PanelObject extends THREE.Group {
     this._clearRows();
     const g = this._g;
     const innerW = (g.width - g.padX * 2) / PX_PER_WU;
-    // 局部原点：anchored = 面板左上；modal = 取景带中心（背板/居中布局都以此为基准）
-    const flowTop = this.form === 'modal' ? WORLD_HEIGHT / 2 - g.padY / PX_PER_WU - 30 / PX_PER_WU : -g.padY / PX_PER_WU;
-    const centerX = this.form === 'modal' ? 0 : g.padX / PX_PER_WU + innerW / 2;
-    const left = this.form === 'modal' ? centerX - innerW / 2 : g.padX / PX_PER_WU;
+    // 局部原点：anchored = 面板左上；modal = 取景带中心（背板/居中布局都以此为基准）；
+    // dock = 内容顶边（setWidgets 末尾按内容高把整组下推到底沿）
+    const flowTop = this.form === 'modal'
+      ? WORLD_HEIGHT / 2 - g.padY / PX_PER_WU - 30 / PX_PER_WU
+      : (this.form === 'dock' ? 0 : -g.padY / PX_PER_WU);
+    const centerX = (this.form === 'modal' || this.form === 'dock')
+      ? 0 : g.padX / PX_PER_WU + innerW / 2;
+    const left = this.form === 'dock' ? -innerW / 2
+      : (this.form === 'modal' ? centerX - innerW / 2 : g.padX / PX_PER_WU);
 
     if (this.form === 'modal' && !this._backdrop) this._addBackdrop();
 
     let y = flowTop;
     for (const w of widgets) {
       if (w.kind === 'gap') { y -= this._g.rowH.gap / PX_PER_WU; continue; }
-      const h = this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text;
+      // ⚠ size 的语义按 kind 分流：**按钮**的 'sub'/'main' 是"小按钮/主按钮"，
+      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——dock 里曾因此把按钮压成 21px 高，
+      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（用户报"字体太小看不清"）。
+      const isDock = this.form === 'dock';
+      const h = (isDock && w.kind === 'button')
+        ? this._g.rowH[w.size === 'main' ? 'main' : 'button']
+        : (this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text);
       const hWu = h / PX_PER_WU;
       if (w.kind === 'button') {
         const btn = new ButtonObject({
           id: w.id, width: w.width ?? (g.width - g.padX * 2), height: h,
-          bakeButton: this._bakeButton, fontPx: w.fontPx ?? 15,
+          bakeButton: this._bakeButton, fontPx: w.fontPx ?? (g.font?.button ?? 15),
+          // dock（休息房操纵条）：按钮文字与面板正文同口径——白字 + 黑描边
+          labelStyle: isDock ? { color: '#ffffff', stroke: 'rgba(0,0,0,0.9)' } : null,
         });
         btn.setData({ label: w.label, sublabel: w.sublabel, enabled: w.enabled !== false, active: !!w.active });
         btn.placeCenter(centerX, y - hWu / 2);
@@ -118,6 +152,8 @@ export class PanelObject extends THREE.Group {
         this.add(btn);
         this._buttons.set(w.id, btn);
         this._buttonActions.set(w.id, { action: w.action, enabled: w.enabled !== false });
+        // 按钮也可挂 token 热区（如"三选一遗物"的按钮要给遗物效果预览）——Picker 的通用挂钩
+        if (w.token) btn.userData.token = w.token;
         this._picker?.addPickable(btn.pickId, btn, { kind: 'button', space: 'ui' });
         // object 留 null：按钮统一由 _buttons 清理（横向组的瓦片也在同一张表里），避免二次释放
         this._rows.push({ widget: w, object: null, top: y, h: hWu, contentH: hWu });
@@ -134,16 +170,22 @@ export class PanelObject extends THREE.Group {
         this._contentBottom = y;
         continue; // 组高已在此推进
       } else {
+        // dock（场景式操纵条）：文字**统一白色**（读在 3D 场景上，彩色/灰字对比不够）；
+        // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText。
+        // 非 dock：标题白字、正文淡蓝灰（用户定 2026-09-12 的扁平风格——金色只留给金额等
+        // 金钱相关内容，由各面板显式给 tint 覆盖）。
+        const dock = this.form === 'dock';
+        const f = g.font ?? { title: 20, sub: 13, text: 15 };
         const text = new TextBlockObject({
           bakeText: this._bakeText,
-          fontPx: w.kind === 'title' ? 20 : (w.kind === 'sub' ? 13 : 15),
-          tint: w.tint ?? (w.kind === 'title' ? '#ffd75e' : '#cdd6f4'),
+          fontPx: w.kind === 'title' ? f.title : (w.kind === 'sub' ? f.sub : f.text),
+          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#e8eefb' : '#c3cee0')),
         });
         text.setText(w.text ?? '', { maxWidth: innerW });
         // 等比收进行框：烘焙高度由字号决定（fontPx×1.4），可能高于行高，不收敛会压到下一行
         const s = Math.min(1, hWu / text.scale.y, innerW / text.scale.x);
         text.scale.set(text.scale.x * s, text.scale.y * s, 1);
-        if (this.form === 'modal' || w.align === 'center') text.placeCenterTop(centerX, y);
+        if (this.form !== 'anchored' || w.align === 'center') text.placeCenterTop(centerX, y);
         else text.placeLeftTop(left, y);
         text.position.z = Z.CONTENT; // 同按钮：内容一律在背板之上
         this.add(text);
@@ -161,6 +203,24 @@ export class PanelObject extends THREE.Group {
       this._contentBottom = y;
     }
     this._panelHeight = (flowTop - y) + this._g.padY / PX_PER_WU;
+    if (this.form === 'dock') this._placeDock(this._panelHeight);
+  }
+
+  /** dock：内容自上而下排完后，把整组下推到底沿（内容底 = DOCK_BOTTOM），并补一块背板。 */
+  _placeDock(heightWu) {
+    this.position.set(0, DOCK_BOTTOM + heightWu, Z.PANEL);
+    const w = this._g.width / PX_PER_WU;
+    // ⚠ 背板用**单元平面 + 缩放**（不是按内容高建几何）：dock 面板每次快照都会重排，
+    // 若在"已有背板"分支上再缩放一次，尺寸会越刷越小（症状：内容只有一小块黑底）。
+    if (!this._backdrop) {
+      this._backdrop = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
+      );
+      this.add(this._backdrop);
+    }
+    this._backdrop.scale.set(w, heightWu, 1);
+    this._backdrop.position.set(0, -heightWu / 2, Z.BACKDROP);
   }
 
   get heightWu() { return this._panelHeight ?? 0; }
@@ -253,17 +313,24 @@ export class PanelObject extends THREE.Group {
   }
 
   /** 横向组的单项高度（wu）：卡面按缩放，瓦片按给定高。 */
+  /** 网格单项高度（wu）。dock 的卡阵另收一档：操纵条只占屏幕下沿，卡面不能撑半屏。 */
   _itemHeightWu(w) {
     return w.kind === 'cards'
-      ? CARD_HEIGHT * (w.scale ?? CARD_SCALE)
+      ? CARD_HEIGHT * this._gridCardScale(w)
       : (w.tileHeight ?? 96) / PX_PER_WU;
+  }
+
+  /** 卡阵缩放：dock 形态封顶（0.46 ≈ 单卡 16wu 高，三列一行 ≈ 屏幕高度 16%）。 */
+  _gridCardScale(w) {
+    const s = w.scale ?? CARD_SCALE;
+    return this.form === 'dock' ? Math.min(s, 0.46) : s;
   }
 
   /** 网格（瓦片/卡面）：整组在 centerX 居中；末行按自身数量居中；返回行记录。 */
   _buildGrid(w, { y, groupH, centerX, cols, itemH, gapY }) {
     const items = w.items ?? [];
     const isCards = w.kind === 'cards';
-    const cardScale = w.scale ?? CARD_SCALE;
+    const cardScale = this._gridCardScale(w);
     const itemW = isCards ? CARD_WIDTH * cardScale : TILE.width / PX_PER_WU;
     const gap = TILE.gap / PX_PER_WU;
     for (let i = 0; i < items.length; i++) {

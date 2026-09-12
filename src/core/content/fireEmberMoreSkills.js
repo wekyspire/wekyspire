@@ -1,9 +1,10 @@
 // 火灵脉·叠炎组合（续）（FIRE_VEIN_CARDS §2.1 后半 + §2.2）。
-// 自焚（自伤换高伤）/ 焰愈（燃烧换恢复）/ 焚原（死亡传播）/ 镜燃（获得反哺）
+// 自焚（自伤换高伤）/ 焰愈（燃烧换恢复）/ 焚天（燃烧倍增）/ 鬼火（死亡传播）/ 镜燃（获得反哺）
 // + 咏唱四连（燃心决 / 取暖系 / 绝炎 / 火焰披风）。
 //
 // 体系语言：燃烧是叠炎组合的资源——自焚把它当代价、焰愈把它当货币、
-// 焚原与镜燃把它当瘟疫（向场上扩散）、绝炎把它变成不可逆的单向棘轮。
+// 焚天把它当炸药（一次翻倍）、鬼火与镜燃把它当瘟疫（向场上扩散）、
+// 绝炎把它变成不可逆的单向棘轮。
 //
 // 口径备忘（设计稿未细写处的实现决定，均已在对应卡内注释）：
 //   * 「获得燃烧时反哺」按本次增加量（AddEffect payload.stacks > 0）等量镜像；
@@ -11,7 +12,7 @@
 //   * 「免疫消耗和下降」= 全场任何单位的燃烧负层数变更一律 veto。
 
 import { registerSkill } from '../skills/registry.js';
-import { aliveEnemies } from '../state/battleState.js';
+import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -70,15 +71,45 @@ flameHealSkill({ id: 'flameHeal', name: '焰愈', tier: 'C', base: 5, per: 1 });
 flameHealSkill({ id: 'blazingHeal', name: '炽愈', tier: 'B', base: 7, per: 2 });
 flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'A', base: 10, per: 3 });
 
-// ==== 焚原系列（§2.1：死亡传播）==============================================
-// 焚原 B｜敌人死亡时，其燃烧传播给所有敌人。
+// ==== 焚天系列（2026-09-12 设计稿改版：燃烧层数倍增）=========================
+// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），冷却1
+// （星炎无冷却）。作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
+// 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
+// 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
+const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, cooldown = 1 }) => registerSkill({
+  id, name, type: 'fire', tier, series: 'burnDoubler',
+  cost: { mana: 0, actionPoint: ap },
+  charges: cooldown ? { max: 1, cooldownTurns: cooldown } : { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  promotesTo,
+  use(sctx) {
+    for (const unit of allAliveUnits(sctx.battleState, sctx.player)) {
+      const stacks = unit.getEffectStacks('burn');
+      if (stacks > 0) addEffect(sctx, 'burn', stacks * (mult - 1), unit);
+    }
+    return true;
+  },
+  describe: () => `所有/effect{燃烧}层数翻${mult}倍`,
+  battleDescribe: (sctx) => {
+    const total = allAliveUnits(sctx.battleState, sctx.player)
+      .reduce((n, u) => n + u.getEffectStacks('burn'), 0);
+    return `所有/effect{燃烧}层数翻${mult}倍（当前全场${total}层）`;
+  },
+});
+burnDoubler({ id: 'burnBurst', name: '爆燃', tier: 'C', ap: 3, mult: 2, promotesTo: 'burnBurstPlus' });
+burnDoubler({ id: 'burnBurstPlus', name: '焚烧', tier: 'B', ap: 2, mult: 2, promotesTo: 'burnBurstGrand' });
+burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, promotesTo: 'burnBurstStar' });
+burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, cooldown: 0 });
+
+// ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
+// 鬼火 B（咏唱3）｜敌人死亡时，其燃烧传播给所有敌人。
 // 口径：伤害指令只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 registerSkill({
-  id: 'ashField', name: '焚原', type: 'fire', tier: 'B', series: 'ashField',
+  id: 'willOWisp', name: '鬼火', type: 'fire', tier: 'B', series: 'willOWisp',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 3,

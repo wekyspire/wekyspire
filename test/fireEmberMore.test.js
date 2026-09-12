@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js';
 import { BattleDriver } from '../src/core/sdk/driver.js';
+import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { zoneOf } from '../src/core/state/battleState.js';
 import Enemy from '../src/core/state/enemy.js';
 import { DealDamageInstruction } from '../src/core/instructions/combat.js';
@@ -8,7 +9,7 @@ import { AddEffectInstruction } from '../src/core/instructions/effects.js';
 import { ChantTriggerInstruction } from '../src/core/instructions/turn.js';
 import { PLAYER_BASE_HP } from '../src/core/state/player.js';
 
-// ---- 火灵脉·叠炎（续）：自焚 / 焰愈 / 焚原 / 镜燃 / 咏唱（燃心决/取暖/绝炎）----
+// ---- 火灵脉·叠炎（续）：自焚 / 焰愈 / 焚天（倍增）/ 鬼火（死亡传播）/ 镜燃 / 咏唱 ----
 // 全程 BattleDriver 驱动真实结算（不 mock Core）。
 // 燃烧基准行为（effects.js）：己方阵营回合开始受等于层数的穿透伤害后层数 -1。
 
@@ -97,14 +98,14 @@ describe('焰愈系列：燃烧层数转化治疗（1AP 消耗）', () => {
   });
 });
 
-describe('焚原：敌人死亡时燃烧传播（咏唱3）', () => {
+describe('鬼火：敌人死亡时燃烧传播（咏唱3；2026-09-12 由「焚原」改名）', () => {
   it('死亡的敌人身上有燃烧时，等量传播给其余存活敌人', () => {
     const d = new BattleDriver({
-      deck: ['ashField'], enemies: ['slime', 'slime'], seed: 5, config: { initialDraw: 1 },
+      deck: ['willOWisp'], enemies: ['slime', 'slime'], seed: 5, config: { initialDraw: 1 },
     });
     const [a, b] = d.state.enemies;
     d.start();
-    d.play('ashField');
+    d.play('willOWisp');
     expect(d.state.zones.hand[0].isActivated).toBe(true);
 
     d.dispatch(new AddEffectInstruction({ target: a, effectId: 'burn', stacks: 3 }));
@@ -116,11 +117,11 @@ describe('焚原：敌人死亡时燃烧传播（咏唱3）', () => {
 
   it('无燃烧的敌人死亡不传播；场上再无敌人时传播落空并判胜', () => {
     const d = new BattleDriver({
-      deck: ['ashField'], enemies: ['slime'], seed: 5, config: { initialDraw: 1 },
+      deck: ['willOWisp'], enemies: ['slime'], seed: 5, config: { initialDraw: 1 },
     });
     const slime = d.state.enemies[0];
     d.start();
-    d.play('ashField');
+    d.play('willOWisp');
 
     d.dispatch(new DealDamageInstruction({ source: d.player, target: slime, amount: 999 }));
     expect(slime.isDead()).toBe(true); // 无燃烧：无事发生
@@ -259,5 +260,41 @@ describe('火焰披风（2026-09 稿：燃烧换护盾咏唱）', () => {
     d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'burn', stacks: 2 }));
     d.dispatch(new ChantTriggerInstruction()); // P5 等价：正在燃烧 → +9 护盾
     expect(d.player.shield).toBe(9);
+  });
+});
+
+describe('焚天系列（2026-09-12 设计稿改版）：燃烧层数倍增', () => {
+  const burnOf = (u) => u.getEffectStacks('burn');
+
+  it('爆燃（C）：全场燃烧翻倍（敌方与自身一起翻——设计稿字面「所有」）', () => {
+    const d = new BattleDriver({ deck: ['burnBurst'], enemies: ['slime', 'slime'], seed: 5, config: { initialDraw: 1 } });
+    const [a, b] = d.state.enemies;
+    d.start();
+    d.dispatch(new AddEffectInstruction({ target: a, effectId: 'burn', stacks: 3 }));
+    d.dispatch(new AddEffectInstruction({ target: b, effectId: 'burn', stacks: 0 }));
+    d.dispatch(new AddEffectInstruction({ target: d.player, effectId: 'burn', stacks: 2 }));
+    d.play('burnBurst');
+    expect(burnOf(a)).toBe(6);
+    expect(burnOf(b)).toBe(0);            // 没燃烧的不动
+    expect(burnOf(d.player)).toBe(4);     // 自己身上的燃烧同样翻倍（代价面）
+  });
+
+  it('星炎（S）：翻 3 倍；且无冷却', () => {
+    const d = new BattleDriver({ deck: ['burnBurstStar'], enemies: ['slime'], seed: 5, config: { initialDraw: 1 } });
+    const e = d.state.enemies[0];
+    d.start();
+    d.dispatch(new AddEffectInstruction({ target: e, effectId: 'burn', stacks: 4 }));
+    d.play('burnBurstStar');
+    expect(burnOf(e)).toBe(12);
+    expect(getSkillDefinition('burnBurstStar').charges.cooldownTurns).toBe(0);
+  });
+
+  it('阶数越大费用越低（爆燃3AP → 焚烧2AP → 焚天1AP），升阶链完整', () => {
+    const chain = ['burnBurst', 'burnBurstPlus', 'burnBurstGrand', 'burnBurstStar'];
+    const costs = chain.map(id => getSkillDefinition(id).cost.actionPoint);
+    expect(costs).toEqual([3, 2, 1, 1]);
+    expect(getSkillDefinition('burnBurst').promotesTo).toBe('burnBurstPlus');
+    expect(getSkillDefinition('burnBurstPlus').promotesTo).toBe('burnBurstGrand');
+    expect(getSkillDefinition('burnBurstGrand').promotesTo).toBe('burnBurstStar');
   });
 });

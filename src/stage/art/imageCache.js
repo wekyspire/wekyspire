@@ -74,6 +74,12 @@ export class ArtImageCache {
   }
 
   _load(url) {
+    // 无 Image 全局（node / headless 冒烟）：标失败即止，不抛——调用方按"未就绪"处理
+    // （原来直接 new Image() 会在无浏览器环境抛 ReferenceError，把整个舞台带崩）
+    if (typeof Image === 'undefined') {
+      this._cache.set(url, 'error');
+      return;
+    }
     this._cache.set(url, 'loading');
     this._pending.add(url);
     const img = new Image();

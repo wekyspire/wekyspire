@@ -34,7 +34,7 @@ import {
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
-  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect,
+  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   returnToDeckAtTurnEnd, leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
   selected, isBladeCard,
@@ -223,8 +223,10 @@ for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
 }
 
-// 碎铁（斩系列衍生牌，D，消耗）：3伤害。斩落下的铁屑而非刀法（培植/砺刀系不作用于
-// 它），故不带 blade 关键词；只经 AddCard 入场，不入奖励池。
+// 碎铁（斩系列衍生牌，D，消耗）：3伤害。斩落下的铁屑——**仍是刀法牌**（用户 2026-09-12
+// 定：它吃关于刀法牌的一切效果与增益，养刀术/锻刀术/练刀/砺刀系都在其上生效）。判据走
+// `series: 'blade'`（cardKit.isBladeCard），故 keywords 不带 'blade'（页脚不多一个词条）。
+// 只经 AddCard 入场，不入奖励池。
 registerSkill({
   id: 'ironShard', name: '碎铁', type: 'normal', tier: 'D', series: 'blade',
   keywords: ['exhaust'],
@@ -518,8 +520,9 @@ breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', bl
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
 // power 随卡流动、转化 keepPower 延续，是养成轴的近似口径。设计稿未写费用 → 0费。
 
-// 养刀术（C）：咏唱1。激发（发动点亮）时，手中刀法牌伤害 +2（一次性快照——
+// 养刀术（C）：咏唱1。激发（发动点亮）时，手中刀法牌伤害 +3（一次性快照——
 // 之后抽到的刀不吃本次加成；onEnable 在卡回手点亮时调用，自身非刀法牌不在候选内）。
+// 2026-09-12 设计稿：+2 → +3。
 registerSkill({
   id: 'honeBlade', name: '养刀术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
@@ -529,16 +532,17 @@ registerSkill({
   activated: {
     onEnable: (sctx) => {
       for (const card of sctx.battleState.zones.hand) {
-        if (card.uniqueID !== sctx.self.uniqueID && isBladeCard(card)) card.power += 2;
+        if (card.uniqueID !== sctx.self.uniqueID && isBladeCard(card)) gainPower(sctx, card, 3);
       }
     },
   },
-  describe: () => '激发时手中刀法牌伤害+2',
-  battleDescribe: (sctx) => '激发时手中刀法牌伤害+2',
+  describe: () => '激发时手中刀法牌伤害+3',
+  battleDescribe: (sctx) => '激发时手中刀法牌伤害+3',
 });
 
-// 锻刀术（C）：咏唱1。你打出刀法牌时，手中刀法牌伤害 +1（激活期间的常驻被动；
-// 被打出的那张刀已离手，不在加成范围——"手中刀法牌"按字面口径）。
+// 锻刀术（C）：咏唱1。你打出刀法牌时，**所有刀法牌**伤害 +1（激活期间的常驻被动）。
+// 2026-09-12 设计稿：范围由「手中刀法牌」扩到「所有刀法牌」——手牌与牌库一起加
+// （口径同开刃的「所有刀法牌」= hand + deck；打出的那张已离手不在区内）。
 registerSkill({
   id: 'forgingBlade', name: '锻刀术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
@@ -550,14 +554,16 @@ registerSkill({
       when: UseSkillInstruction, phase: 'post',
       filter: (instr) => instr.skill.uniqueID !== sctx.self.uniqueID && isBladeCard(instr.skill),
       react: () => {
-        for (const card of sctx.battleState.zones.hand) {
-          if (isBladeCard(card)) card.power += 1;
+        for (const zone of ['hand', 'deck']) {
+          for (const card of sctx.battleState.zones[zone]) {
+            if (isBladeCard(card)) gainPower(sctx, card, 1);
+          }
         }
       },
     }],
   },
-  describe: () => '你打出刀法牌时，手中刀法牌伤害+1',
-  battleDescribe: (sctx) => '你打出刀法牌时，手中刀法牌伤害+1',
+  describe: () => '你打出刀法牌时，所有刀法牌伤害+1',
+  battleDescribe: (sctx) => '你打出刀法牌时，所有刀法牌伤害+1',
 });
 
 // ==== 开刃系列（斩进阶）========================================================
@@ -698,41 +704,36 @@ registerSkill({
   battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
 });
 
-// 练刀（D，1AP，2026-09 稿：去消耗、先抽1）：抽1，选1张手中刀法牌令其伤害+4，
-// 并将其弃入牌库（deckCraft 锻刀原型同构；power 漂移口径同培植系列）。
-// 无可用性门槛：卡面没写/named{顽固}就不得暗设条件，否则纯负面卡手——
-// 抽1后手中无刀法牌时只当白板抽1收场（不产生选牌请求）。
-registerSkill({
-  id: 'practiceBlade', name: '练刀', type: 'normal', tier: 'D', series: 'blade',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+// 练刀（D/C/B，2026-09-12 设计稿改版）：抽1，**弃掉所有手中刀法牌**，并令它们
+// **本战斗中**伤害 +3（D/C）/ +5（B）。费用 1AP（B 级 0AP），冷却1。
+// 「本战斗中」= runtime.power（跨 zone 持续、战斗结束随 runtime 一起丢弃），
+// 弃牌走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
+// 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽1后手中无刀时纯白板抽1收场。
+const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSkill({
+  id, name: '练刀', type: 'normal', tier, series: 'blade',
+  cost: { mana: 0, actionPoint: ap },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
+  promotesTo,
   use(sctx, stage) {
     if (stage === 0) {
-      drawCards(sctx, 1);                                  // 先抽1（无消耗，回牌库循环用）
-      return false;                                        // 抽牌落地后再选刀
+      drawCards(sctx, 1);                                  // 先抽1（抽到的刀也在强化范围内）
+      return false;                                        // 抽牌落地后再处理刀法牌
     }
-    if (stage === 1) {
-      const blades = sctx.battleState.zones.hand.filter(isBladeCard);   // 自身已离手
-      if (blades.length === 0) return true;   // 抽1后仍无刀可练：直接收尾
-      sctx.self._pick = requestHandSelection(sctx, {
-        count: 1, filter: isBladeCard, reason: '练刀：选1张刀法牌',
-      });
-      return false;
-    }
-    const [uniqueID] = selected(sctx.self._pick);
-    sctx.self._pick = null;
-    const blade = uniqueID
-      && sctx.battleState.zones.hand.find(c => c.uniqueID === uniqueID);
-    if (blade) {
-      blade.power += 4;
-      discardCard(sctx, uniqueID);
+    // 快照手牌再逐张处理（弃牌会改动手牌数组，边遍历边弃会错位）
+    const blades = sctx.battleState.zones.hand.filter(isBladeCard);   // 自身已离手
+    for (const blade of blades) {
+      gainPower(sctx, blade, power);
+      discardCard(sctx, blade.uniqueID);
     }
     return true;
   },
-  describe: () => '抽1，选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
-  battleDescribe: () => '抽1，选1张手中/named{刀法牌}令其伤害+4，并将其弃入牌库',
+  describe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
+  battleDescribe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
 });
+practiceBladeCard('practiceBlade', 'D', 1, 3, 'practiceBladePlus');
+practiceBladeCard('practiceBladePlus', 'C', 1, 3, 'practiceBladeMaster');
+practiceBladeCard('practiceBladeMaster', 'B', 0, 5);
 
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
 // 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
@@ -807,6 +808,30 @@ const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
 });
 swapCleaveCard('quickCleave', '快速花刀', 'C', 1, 'quickCleavePlus');
 swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0);
+
+// 铁雨（B，消耗，设计稿未写费用 → 0费；2026-09-12 设计稿新增）：**打出手中所有的碎铁**。
+// 口径：逐张**嵌套出牌**（UseSkillInstruction —— skill.js 头注声明的能力：技能逻辑直接提交，
+// 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride）。
+// 先快照手牌再逐张打：打出的会离手（pending → 焚毁），边遍历边打会错位。
+registerSkill({
+  id: 'ironRain', name: '铁雨', type: 'normal', tier: 'B', series: 'blade',
+  keywords: ['exhaust'],
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  use(sctx) {
+    const shards = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard');
+    for (const shard of shards) {
+      sctx.kernel.submitInstruction(new UseSkillInstruction({ skill: shard }));
+    }
+    return true;
+  },
+  describe: () => '打出手中所有/card{ironShard}',
+  battleDescribe: (sctx) => {
+    const n = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard').length;
+    return `打出手中所有/card{ironShard}（当前${n}张）`;
+  },
+});
 
 // 快速横刀 C/B（消耗，设计稿未写费用 → 0费）：4/11护盾，/named{抽出}斩。
 // 斩系列的前排防御位搭档：护盾的同时把牌库里的斩链卡拽上手（无斩则抽不出，

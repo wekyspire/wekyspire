@@ -52,37 +52,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 }
 .menu-dialog {
   width: min(420px, 88vw); padding: 20px 26px 18px;
-  background: rgba(10, 14, 26, .96);
-  border: 1px solid #38415e; border-radius: 14px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .04);
+  background: rgba(8, 11, 18, .97);
+  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角 */
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .6);
   animation: menu-dialog-in .18s ease-out both;
 }
 @keyframes menu-dialog-in {
-  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
 .menu-dialog-title {
-  margin: 0 0 8px; font-size: 17px; color: #ffd75e; letter-spacing: .08em;
-  text-shadow: 0 0 14px rgba(255, 215, 94, .22);
+  margin: 0 0 8px; font-size: 17px; color: #eef4ff; letter-spacing: .06em;
 }
-.menu-dialog-message { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: #cdd6f4; }
+.menu-dialog-message { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: #c3cee0; }
 .menu-dialog-input {
   width: 100%; box-sizing: border-box; margin-bottom: 14px;
   padding: 8px 12px; font-size: 14px; color: #eef2ff;
-  background: #171d31; border: 1px solid #4a587f; border-radius: 8px; outline: none;
+  background: #131a29; border: 1px solid #3f5f8c; border-radius: 3px; outline: none;
 }
-.menu-dialog-input:focus { border-color: #ffd75e; }
+.menu-dialog-input:focus { border-color: #8fb6dd; }
 .menu-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .menu-dialog-btn {
-  min-width: 88px; padding: 7px 18px; font-size: 14px; cursor: pointer; border-radius: 8px;
-  transition: filter .15s;
+  min-width: 88px; padding: 7px 18px; font-size: 14px; cursor: pointer; border-radius: 4px;
+  transition: background .15s, border-color .15s;
 }
 .menu-dialog-btn.confirm {
-  background: linear-gradient(180deg, #95601c, #7a4b12);
-  border: 1px solid #b3742a; color: #ffe7b3; letter-spacing: .06em;
+  background: rgba(52, 84, 126, .95);
+  border: 1px solid #8fb6dd; color: #ffffff;
 }
 .menu-dialog-btn.cancel {
-  background: #2c3554; border: 1px solid #56628f; color: #cdd6f4;
+  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c; color: #dbe4f4;
 }
-.menu-dialog-btn:hover { filter: brightness(1.18); }
+.menu-dialog-btn:hover { background: rgba(70, 108, 156, .95); border-color: #a8c9ea; }
 </style>

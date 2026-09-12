@@ -22,6 +22,51 @@ export function paint(geo, color) {
   return geo;
 }
 
+/**
+ * 竖向渐变烘焙修饰器：把顶点色按**件内局部 y** 从 bottom（低处）插值到 top（高处）。
+ * 用途 = 不用灯就做出"上暗下亮/上亮下暗"的体量塑造（灯池只能给整体亮度，给不了上下的差）。
+ * 只改 color 属性，不动材质/几何——与 `paint` 同层级的"烘焙"类修饰器。
+ * @param obj   图元（mesh；需已由 paint 烘过顶点色）
+ * @param top   顶点 y = maxY 处的颜色
+ * @param bottom 顶点 y = minY 处的颜色
+ */
+export function gradeY(obj, top, bottom) {
+  const geo = obj.geometry;
+  const pos = geo.attributes.position;
+  const col = geo.attributes.color;
+  if (!col) throw new Error('primitives: gradeY 需要已有顶点色（先用 kit 图元建件）');
+  const cTop = new THREE.Color(top);
+  const cBot = new THREE.Color(bottom);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = Math.max(1e-4, maxY - minY);
+  for (let i = 0; i < pos.count; i++) {
+    const k = (pos.getY(i) - minY) / span;      // 0 = 底，1 = 顶
+    col.setXYZ(i,
+      cBot.r + (cTop.r - cBot.r) * k,
+      cBot.g + (cTop.g - cBot.g) * k,
+      cBot.b + (cTop.b - cBot.b) * k);
+  }
+  col.needsUpdate = true;
+  return obj;
+}
+
+/**
+ * 顶点色刷**中性白**：`InstancedMesh` + `instanceColor` 路径专用。
+ * 族材质 `vertexColors: true`，实例色与顶点色相乘——几何必须是纯白，最终颜色才完全由
+ * instanceColor 决定（用 P.flameCore 之类"近白"会带上冷偏，彩灯色相会漂）。
+ */
+export function paintNeutral(geo) {
+  const n = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  return geo;
+}
+
 function prim(geo, color, family) {
   if (color === undefined) throw new Error('primitives: color 参数必填（用 P.* token）');
   return new THREE.Mesh(paint(geo, color), materialOf(family));

@@ -281,13 +281,16 @@ function elbowDamageText(sctx, base) {
 
 // 肘击/猛烈肘击：咏唱1（轻压力），每次咏唱触发（每回合 P5）造成 damage 伤。
 // 伤害打 tags:['elbow']——牢大以此识别「肘击卡伤害」。
-function registerElbow({ id, name, tier, damage, promotesTo = null }) {
+// ap/spawnable 可覆写：`fierceElbowFree`（HeLiCoPtEr 变换出来的 0 费形态）用 0 费 +
+// 不进奖励池（只经局内转化获得，同碎铁口径）。
+function registerElbow({ id, name, tier, damage, promotesTo = null, ap = 1, spawnable = true }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
-    cost: { mana: 0, actionPoint: 1 },
+    cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
     promotesTo,
+    canSpawnAsReward: spawnable,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
@@ -308,6 +311,9 @@ function registerElbow({ id, name, tier, damage, promotesTo = null }) {
 registerElbow({ id: 'elbowStrike', name: '肘击', tier: 'D', damage: 4, promotesTo: 'fierceElbow' });
 // 猛烈肘击（C）
 registerElbow({ id: 'fierceElbow', name: '猛烈肘击', tier: 'C', damage: 5 });
+// 猛烈肘击·0 费形态（2026-09-12）：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
+// 的变换目标——同名同形态、只是免费（0AP），且**只经局内转化获得**（不进奖励池/不进抽选）。
+registerElbow({ id: 'fierceElbowFree', name: '猛烈肘击', tier: 'C', damage: 5, ap: 0, spawnable: false });
 
 // 牢大（B）：咏唱1——你的肘击卡伤害翻倍。设计稿费用栏留空 → 费用缺省约定 0 费
 // （代价全部押在咏唱手牌压力与构建上）。实现：PRE 修饰 tags 含 elbow 的伤害 payload。

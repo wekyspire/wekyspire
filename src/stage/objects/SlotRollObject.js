@@ -26,7 +26,7 @@ export class SlotRollObject extends THREE.Group {
     this._t = 0;
     this._running = false;
     this._onDone = null;
-    this._art = new TextBlockObject({ bakeText, fontPx: 40, tint: '#ffd75e' });
+    this._art = new TextBlockObject({ bakeText, fontPx: 40, tint: '#e8eefb' });
     this._art.setText(glyph);
     this.add(this._art);
     this.visible = false;

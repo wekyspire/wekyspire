@@ -96,7 +96,7 @@ describe('槽位：权重和口径（Σcost ≤ relicSlots=3）', () => {
 });
 
 describe('run 级数值修正：从基准重算（回归：逐战叠加）', () => {
-  it('龙鳞 防御 +2：连续两场战斗后仍是 2，不是 4', () => {
+  it('龙鳞碎片 防御 +2：连续两场战斗后仍是 2，不是 4', () => {
     const run = createRun({ seed: 4 });
     grantRelic(run, 'dragonScale');
     equipRelic(run, 'dragonScale');
@@ -325,7 +325,7 @@ describe('战前准备面板：稀有度 / 槽位 / 非槽位式', () => {
     const widgets = buildPrepPanel(snap);
     const labels = widgets.filter(w => w.kind === 'text' || w.kind === 'sub').map(w => w.text);
     expect(labels.some(t => t.includes('槽位 3/3'))).toBe(true);
-    expect(labels.some(t => t.includes('A·3槽') && t.includes('龙鳞'))).toBe(true);
+    expect(labels.some(t => t.includes('A·3槽') && t.includes('龙鳞碎片'))).toBe(true);
     expect(labels.some(t => t.includes('非槽位式（恒生效，不占槽）'))).toBe(true);
     const equipBtn = widgets.find(w => w.id === 'relic:equip:blackMountainRock');
     expect(equipBtn.enabled).toBe(false);
@@ -337,7 +337,7 @@ describe('遗物 tooltip：效果预览', () => {
   it('tooltipModel("relic") 给出名称（稀有度 · 槽位）+ 效果描述', async () => {
     const { tooltipModel } = await import('../src/shell/tooltip.js');
     const m = tooltipModel('relic', { relicId: 'dragonScale' });
-    expect(m.title).toContain('龙鳞');
+    expect(m.title).toContain('龙鳞碎片');
     expect(m.title).toContain('A');        // 稀有度
     expect(m.title).toContain('3 槽');     // 槽位占用
     expect(m.body).toBe('战斗开始时，防御 2。');

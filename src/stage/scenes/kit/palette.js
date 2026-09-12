@@ -42,6 +42,8 @@ const THEMES = {
     potionGreen: 0x4f7a5c,
     potionRed: 0x7a4048,
     potionBlue: 0x46628a,
+    machineRed: 0xa8262c, // 老虎机外壳正红（稍偏暗、纯度高，对标可乐机——全库唯一的例外色，
+                          // 故意跳出'冷调低饱和'：赌具要跳出来）
     ember: 0x9aa8d8,     // 余烬/火星粒子
     // ---- CATALOG2 增补（塔身物件多样化；仍守冷调低饱和） ----
     bread: 0x8a795a,
@@ -87,6 +89,7 @@ const THEMES = {
     potionGreen: 0x4a7058,
     potionRed: 0x8a3844,
     potionBlue: 0x425a84,
+    machineRed: 0xa8262c, // 老虎机外壳正红（见 dungeon 注释）
     ember: 0xb098a8,
     bread: 0x7a6a4e,
     cheese: 0x8a7c56,
@@ -149,4 +152,43 @@ export function shade(c, k) {
   const col = new THREE.Color(c);
   col.lerp(k >= 0 ? WHITE : BLACK, Math.min(1, Math.abs(k)));
   return col.getHex();
+}
+
+/** 灯光去饱和处方（用户 2026-09-11）：k = 去饱和比例，cap = 饱和度上限（HSL 口径），
+ *  blueBias = 冷色（青/蓝/紫）额外多去一档——用户点名的"尤其蓝色光源"。 */
+export const LIGHT_DESAT = Object.freeze({ k: 0.5, cap: 0.3, blueBias: 0.22 });
+
+// 冷色权重：色相 0.5=青 / 0.667=蓝 / 0.75=紫，中心 0.62 半宽 0.28 之外为 0（暖色不动）
+function coolness(h) {
+  const d = Math.min(Math.abs(h - 0.62), Math.abs(h - 0.62 + 1), Math.abs(h - 0.62 - 1));
+  return Math.max(0, 1 - d / 0.28);
+}
+
+/**
+ * **灯光去饱和**（保持亮度的往灰拉）：s' = min(s·(1−k−blueBias·冷色权重), cap)。
+ * 返回**新的 THREE.Color**（要 hex 用 `.getHex()`，要浮点三元组用 `.r/.g/.b`）。
+ *
+ * 起因（用户 2026-09-11）：tone mapping 后场景整体过饱和、明显偏蓝。根因是颜色压在了
+ * **灯**上（月光 0x9db4ec / 反光 0x8298d4 / 战场补光 0x93a5d8 全是高饱和蓝，单位染色底
+ * 也偏蓝）——正确分工是"灯只留轻微色倾向、画面颜色交给材质反照率"。故在**建灯的唯一入口**
+ * 统一去饱和（含 PCG 道具的 `lampColor`，见 rooms/lighting.js 的灯池循环）。
+ * 亮度（HSL 的 l）不动，所以整体明暗不因此变化。
+ */
+export function desatColor(c, { k = LIGHT_DESAT.k, cap = LIGHT_DESAT.cap, blueBias = LIGHT_DESAT.blueBias } = {}) {
+  const col = new THREE.Color(c);
+  const hsl = { h: 0, s: 0, l: 0 };
+  col.getHSL(hsl);
+  if (hsl.s <= 0.001) return col;
+  const lumBefore = 0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b;
+  const kk = Math.min(0.95, k + blueBias * coolness(hsl.h));
+  col.setHSL(hsl.h, Math.min(hsl.s * (1 - kk), cap), hsl.l);
+  // **保持相对亮度**（Rec.709）：HSL 的 l 是 (max+min)/2，不是亮度——蓝去饱和后 l 不变
+  // 但实际亮度会涨（蓝对亮度贡献仅 0.07），月光这种主光一涨整场就变亮、不是我们要的
+  // "只降饱和"。故按去饱和前后的亮度比回缩放。
+  const lumAfter = 0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b;
+  if (lumAfter > 1e-4) {
+    const g = lumBefore / lumAfter;
+    col.setRGB(Math.min(1, col.r * g), Math.min(1, col.g * g), Math.min(1, col.b * g));
+  }
+  return col;
 }

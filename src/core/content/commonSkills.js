@@ -9,9 +9,9 @@ import { registerSkill } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
-import { GainActionPointsInstruction } from '../instructions/resources.js';
+import { GainActionPointsInstruction, GainManaInstruction } from '../instructions/resources.js';
 import {
-  AddCardInstruction, DiscardCardInstruction, MoveCardInstruction,
+  AddCardInstruction, DiscardCardInstruction, MoveCardInstruction, TransformCardInstruction,
 } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 
@@ -246,4 +246,51 @@ registerSkill({
     return true;
   },
   describe: () => '/effect{晕眩}1，/effect{治疗}8',
+});
+
+// ---- 高速魏启罐系列（2026-09-12 设计稿新增）----
+// 与上面「魏启罐」的区别：**即时回蓝**（GainMana，走上限截断）而不是「纳气」（下回合开始整取）。
+// 无费用、无冷却、消耗——纯应急燃料（同阶比纳气罐少 1 点量，换"现在就能用"）。
+const swiftManaJar = (id, name, tier, amount) => registerSkill({
+  id, name, type: 'normal', pack: 'common', tier,
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new GainManaInstruction({ amount }));
+    return true;
+  },
+  describe: () => `获得${amount}魏启`,
+});
+swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
+swiftManaJar('swiftManaJarPlus', '高速大魏启罐', 'A', 4);
+
+// ---- HeLiCoPtEr（A，消耗，2026-09-12 设计稿新增）----
+// 「将所有手牌变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
+// keepPower 延续；与斩链的局内转化同一指令）→ 目标卡 = 肘击系列的免费形态
+// `fierceElbowFree`（0 费咏唱1、P5 随机伤害、伤害带 `elbow` 标记**吃牢大翻倍**，
+// 只在 bodySkills.js 里定义、不进奖励池）。整套牌因此被肘击稀释——放弃体系协同换
+// 「一手法师肘」的整活构筑（牢大 + HeLiCoPtEr 是设计上的梗组合）。
+registerSkill({
+  id: 'helicopter', name: 'HeLiCoPtEr', type: 'normal', pack: 'common', tier: 'A',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    // 快照手牌（变换会把卡暂迁 pending，边遍历边转会错位）。
+    // ⚠ **已激活的咏唱不转化**：激活咏唱发动后回手点亮、常驻手中（如「牢大」），
+    // 把它们一起换掉 = 当场拆掉自己的引擎——而这张牌的梗组合恰恰是「牢大 + 一手法师肘」。
+    const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
+    for (const card of hand) {
+      sctx.kernel.submitInstruction(
+        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'fierceElbowFree' }),
+      );
+    }
+    return true;
+  },
+  describe: () => '将手中未激活的牌变换为0开销/named{猛烈肘击}',
+  battleDescribe: (sctx) => '将手中未激活的牌变换为0开销/named{猛烈肘击}'
+    + `（当前可变换${sctx.battleState.zones.hand.filter(c => !c.isActivated).length}张）`,
 });

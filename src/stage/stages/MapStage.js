@@ -7,22 +7,17 @@ import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
-import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel, buildShopPanel } from '../panels/index.js';
+import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
+import { BubbleLayer } from '../objects/BubbleLayer.js';
+import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
+import { PANEL_BUILDERS } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 
-// 快照 kind → widget builder（一个面板一个；未登记 = 该阶段还没有 Three 面板，
-// 对应 Vue 面板仍在渲染——迁移是逐面板推进的）。form = PanelObject 形态。
-const PANEL_BUILDERS = {
-  prep: { build: buildPrepPanel, form: 'anchored' },
-  reward: { build: buildRewardPanel, form: 'modal' },
-  ascension: { build: buildAscensionPanel, form: 'modal' },
-  room: { build: buildRoomPanel, form: 'modal' },
-  shop: { build: buildShopPanel, form: 'modal' },
-};
+// 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
 // 夜空背景 + 点星 + 右侧塔楼侧视图（只看当前层附近一截——看不到顶底）+ 高亮当前层。
@@ -78,7 +73,14 @@ export class MapStage {
     this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
     this._snap = null;     // 当前面板快照（本地重绘用）
     this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
-    this._cardPicker = null; // 全屏选卡界面（营地/训练场升级用；惰性创建）
+    this._cardPicker = null; // 全屏选卡界面（升级/删卡/焚毁/粉碎共用；惰性创建）
+    this._relicPicker = null; // 全屏选遗物界面（粉碎物品入口；惰性创建）
+    this._pickerConfirm = null; // 当前选卡/选遗物界面的确认回调（按入口切换）
+    this._showcase = null;   // 获得物特写（遗物/药水/奖励到手时播一次；惰性创建）
+    this._bubbles = new BubbleLayer();   // 角色对话/思索泡泡（世界锚点，每帧重投影）
+    this.uiScene.add(this._bubbles);
+    this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
+    this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -157,9 +159,129 @@ export class MapStage {
     this._syncSlotRoll();
   }
 
-  // ---- 全屏选卡界面（营地/训练场「升级一张卡」）----
-  // 按下升级按钮进入：界面渲染**牌组全部卡**（不可升级的置灰），hover 预览升级后的卡面，
-  // 可返回/确认。选卡与开关都是舞台本地交互态（不惊动 core），确认时才上报意图。
+  // ---- 获得物特写（通用组件，用户定 2026-09-11）----
+  // 拿到遗物/药水/奖励时播一次：中央淡入放大（带弹跳）+ 背后上帝光 + 下方三行文本，
+  // 点击任意处退出。**组件在 Stage 层**（objects/ItemShowcaseObject.js），宿主只负责
+  // 创建/转发指针事件/逐帧驱动——数据是纯对象，不读 run 状态。
+  showcaseItem(item) {
+    if (!item) return false;
+    if (!this._showcase) {
+      this._showcase = new ItemShowcaseObject({ onDismiss: () => { /* 退出后保持挂载（复用） */ } });
+      this.uiScene.add(this._showcase);
+      this._showcase.attachPicker(this._picker);
+    }
+    return this._showcase.show(item);
+  }
+
+  /** 特写是否在播（宿主据此吞掉面板输入）。 */
+  get showcasing() { return !!this._showcase?.busy; }
+
+  // ---- 角色对话/思索泡泡（通用接口，用户定 2026-09-11）----
+  // 场景里的角色（商店老板、瑞米、事件 NPC…）异步说话/思索时用：
+  //   sayAtWorld('shopkeeper', { x, y, z }, { text, kind, duration })
+  // 锚点是**世界坐标**，每帧经 StageManager 重投影到 UI 空间——相机转动/推进镜头时
+  // 泡泡跟着角色走。同一 key 重复调用 = 改台词并重新计时（不会叠出两个）。
+  /**
+   * @param key     锚点标识（角色名/单位 id）
+   * @param anchor  { x, y, z }（世界坐标；y 给"头顶高度"）
+   * @param data    { text, kind:'speech'|'thought', duration, tint, width }
+   */
+  sayAtWorld(key, anchor = {}, data = {}) {
+    const a = { x: anchor.x ?? 0, y: anchor.y ?? 0, z: anchor.z ?? 0 };
+    this._bubbleAnchors.set(key, a);
+    const p = this._sm ? this._sm.worldToUI(a.x, a.y, a.z) : { x: a.x, y: a.y };
+    return this._bubbles.say(key, { ...data, x: p.x, y: p.y });
+  }
+
+  /** 撤掉某个（或全部）角色的泡泡，并停止跟随。 */
+  hideBubble(key = null) {
+    this._bubbles.hide(key);
+    if (key == null) this._bubbleAnchors.clear();
+    else this._bubbleAnchors.delete(key);
+  }
+
+  get bubbleKeys() { return this._bubbles.keys; }
+
+  _followBubbles() {
+    if (!this._sm) return;
+    for (const key of this._bubbles.keys) {
+      const a = this._bubbleAnchors.get(key);
+      if (!a) continue;
+      const p = this._sm.worldToUI(a.x, a.y, a.z);
+      this._bubbles.moveTo(key, p.x, p.y);
+    }
+  }
+
+  // ---- 全屏选卡界面（营地/训练场「升级一张卡」、粉碎物品…）----
+  // 按下入口进入：界面渲染候选卡，hover 预览卡面，可返回/确认。选卡与开关都是舞台本地
+  // 交互态（不惊动 core），确认时才上报意图。**确认回调按入口切换**（this._pickerConfirm）
+  // ——同一份界面服务多个入口（升级/删卡/焚毁/粉碎），不必为每个入口各建一个实例。
+  _ensureCardPicker() {
+    if (this._cardPicker) return this._cardPicker;
+    this._cardPicker = new CardScrollPickerObject({
+      bakeFace: this._bakeFace,
+      bakeText: this._pickerBakeText(),
+      bus: this._bus,
+      onCancel: () => { this._pickerFocus = null; this._pickerCancel?.(); },
+      onConfirm: (ids) => this._pickerConfirm?.(ids),
+    });
+    this.uiScene.add(this._cardPicker);
+    return this._cardPicker;
+  }
+
+  /**
+   * 选择界面（选卡/选遗物）用的文本烘焙：**honors fontPx / tint / maxWidth**。
+   * ⚠ 不能拿 `_bakeLabel`：那是牌桌时代给塔楼常驻控件用的壳，把 style/maxWidth 写死，
+   * 传进去的字号与颜色会被丢掉——症状是提示被按错宽度折成三行、稀有度色不生效。
+   */
+  _pickerBakeText() {
+    if (this._pickerBake != null) return this._pickerBake;
+    this._pickerBake = (typeof document === 'undefined')
+      ? null
+      : (text, { fontPx = 16, tint = '#cdd6f4', maxWidth } = {}) => renderRichTextBlock(text, {
+        maxWidth: maxWidth ?? 4000,
+        scale: 3,
+        style: { fontSize: fontPx, lineHeight: Math.round(fontPx * 1.3), color: tint },
+      });
+    return this._pickerBake;
+  }
+
+  /**
+   * 公开入口（宿主编排器用：中奖后的免费指定升级 / 卡包三选一由 Shell 主动唤起）。
+   * 内部实现仍是 `_openUpgradePicker`（面板本地动作同一条路）。
+   */
+  openUpgradePicker(source) { return this._openUpgradePicker(source); }
+
+  /** 卡包三选一（买到即开）：全屏 overlay，**可放弃**（返回 = 放弃，见 panels 的 shop 分支）。 */
+  openShopPackPicker() {
+    const pend = this._snap?.shop?.pending;
+    if (!pend?.cards?.length) return false;
+    const picker = this._ensureCardPicker();
+    this._pickerConfirm = (ids) => this._onIntent?.({ action: 'takeShopCard', defId: ids[0] });
+    this._pickerCancel = () => this._onIntent?.({ action: 'takeShopCard', defId: null });
+    picker.open({
+      title: `${pend.packId} · 卡包`,
+      hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
+      cards: pend.cards.map(c => ({
+        uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+      })),
+      confirmLabel: '加入牌组',
+    });
+    return true;
+  }
+
+  _ensureRelicPicker() {
+    if (this._relicPicker) return this._relicPicker;
+    this._relicPicker = new RelicScrollPickerObject({
+      bakeText: this._pickerBakeText(),   // 按钮走 ButtonObject 自带 bakeButtonFace（别喂文本烘焙）
+      bus: this._bus,
+      onCancel: () => { this._pickerFocus = null; },
+      onConfirm: (ids) => this._pickerConfirm?.(ids),
+    });
+    this.uiScene.add(this._relicPicker);
+    return this._relicPicker;
+  }
+
   _openUpgradePicker(source) {
     // 只展示**可升级**的卡：原来把整副牌组都渲染出来（不可升级的置灰可见），
     // 玩家要在一堆灰卡里找目标（用户 2026-09-11 报）。快照里 enabled 即"有晋升目标"。
@@ -180,33 +302,25 @@ export class MapStage {
               : (this._snap?.bank?.burnCards ?? []))    // bankBurn：焚毁候选（含 S 级豁免过滤）
       .filter(c => c.enabled !== false);
     if (!cards.length) return;
-    if (!this._cardPicker) {
-      this._cardPicker = new CardScrollPickerObject({
-        bakeFace: this._bakeFace,
-        bakeText: this._bakeLabel,
-        bus: this._bus,
-        onCancel: () => this._pickerFocus = null,
-        onConfirm: (ids) => {
-          const uniqueID = ids[0];
-          this._pickerFocus = null;
-          // 升级意图：营地与训练场各有各的入口（语义在 runController 落地）
-          this._onIntent?.(source === 'camp'
-            ? { action: 'campChoose', option: 'upgrade', uniqueID }
-            : source === 'training'
-              ? { action: 'trainingUpgrade', uniqueID }
-              : isBankUpgrade
-                ? { action: 'bankUpgradeOffer', uniqueID }
-                : isGurpasRemove
-                  ? { action: 'gurpasRemove', uniqueID }
-                  : isBossRemove
-                    ? { action: 'bossRemoveCard', uniqueID }
-                    : { action: 'bankBurnOffer', uniqueID });
-        },
-      });
-      this.uiScene.add(this._cardPicker);
-    }
-    this._cardPicker.attachPicker(this._picker);
-    this._cardPicker.open({
+    const picker = this._ensureCardPicker();
+    // 升级意图：营地与训练场各有各的入口（语义在 runController 落地）
+    this._pickerConfirm = (ids) => {
+      const uniqueID = ids[0];
+      this._pickerFocus = null;
+      this._onIntent?.(source === 'camp'
+        ? { action: 'campChoose', option: 'upgrade', uniqueID }
+        : source === 'training'
+          ? { action: 'trainingUpgrade', uniqueID }
+          : isBankUpgrade
+            ? { action: 'bankUpgradeOffer', uniqueID }
+            : isGurpasRemove
+              ? { action: 'gurpasRemove', uniqueID }
+              : isBossRemove
+                ? { action: 'bossRemoveCard', uniqueID }
+                : { action: 'bankBurnOffer', uniqueID });
+    };
+    picker.attachPicker(this._picker);
+    picker.open({
       title: (isGurpasRemove || isBossRemove) ? '选择要删除的卡' : (isBankBurn ? '选择要焚毁的卡' : '选择要升级的卡'),
       hint: (isGurpasRemove || isBossRemove)
         ? '这张牌将从牌库中彻底消失 ｜ 滚轮翻页'
@@ -222,11 +336,48 @@ export class MapStage {
     this._pickerFocus = 'upgrade';
   }
 
+  /**
+   * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
+   * 候选数据由编排器给（Stage 不读 run）：cards 走与升级入口同一份卡面烘焙，
+   * relics 走程序化藏品卡（`objects/RelicScrollPickerObject.js`）。
+   * @returns 是否真的打开了（无候选时 false，编排器据此跳过）
+   */
+  openDevourPicker({ kind, cards = [], relics = [], onPick = null } = {}) {
+    if (kind === 'relic') {
+      if (!relics.length) return false;
+      const picker = this._ensureRelicPicker();
+      this._pickerConfirm = (ids) => { this._pickerFocus = null; onPick?.(ids[0]); };
+      picker.attachPicker(this._picker);
+      picker.open({
+        title: '粉碎哪件遗物？',
+        hint: '喂给老虎机换金币 ｜ 悬停查看效果 ｜ 滚轮翻页（S 级嚼不动）',
+        relics,
+        confirmLabel: '确认粉碎',
+      });
+      this._pickerFocus = 'devourRelic';
+      return true;
+    }
+    if (!cards.length) return false;
+    const picker = this._ensureCardPicker();
+    this._pickerConfirm = (ids) => { this._pickerFocus = null; onPick?.(ids[0]); };
+    picker.attachPicker(this._picker);
+    picker.open({
+      title: '粉碎哪张卡？',
+      hint: '喂给老虎机换金币 ｜ 悬停查看卡面 ｜ 滚轮翻页（诅咒卡另有奖赏）',
+      cards,
+      confirmLabel: '确认粉碎',
+    });
+    this._pickerFocus = 'devourCard';
+    return true;
+  }
+
   get cardPicker() { return this._cardPicker; }
+  get relicPicker() { return this._relicPicker; }
 
   /** 滚轮：选卡界面优先消费（全屏界面，滚轮只作用于它）。 */
   handleWheel(deltaY) {
     if (this._cardPicker?.opened) return this._cardPicker.scrollBy(deltaY / 100);
+    if (this._relicPicker?.opened) return this._relicPicker.scrollBy(deltaY / 100);
     return false;
   }
 
@@ -265,7 +416,8 @@ export class MapStage {
     // 面板本地交互态随之清空：同一面板种类稍后重入时不得带出上次的勾选
     this._panelUi = null;
     this._snap = null;
-    this._cardPicker?.close(); // 面板换了/卸了，选卡界面不该留在屏幕上
+    this._cardPicker?.close(); // 面板换了/卸了，选卡/选遗物界面不该留在屏幕上
+    this._relicPicker?.close();
     if (!this._panel) { this._syncCardArtSub(); return; }
     this.uiScene.remove(this._panel);
     this._panel.dispose();
@@ -279,13 +431,17 @@ export class MapStage {
   // 舞台自身不关心总线来源。
   attachInput({ stageManager, bus } = {}) {
     this._picker = stageManager ? new Picker({ stageManager, bus }) : null;
+    this._sm = stageManager ?? null;
     this._bus = bus ?? null; // 选卡界面的 tooltip 出口（card 整卡预览走同一条浮层）
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
     this._cardPicker?.attachPicker(this._picker);
+    this._relicPicker?.attachPicker(this._picker);
+    this._showcase?.attachPicker(this._picker);
   }
 
   detachInput() {
     this._panel?.attachPicker?.(null);
+    this._showcase?.attachPicker(null);
     this._picker = null;
     this._downHit = null;
   }
@@ -307,7 +463,9 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._showcase?.busy) return;                     // 特写期间吞掉 hover（不弹 tooltip）
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
+    if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
     this._panel?.onHover?.(hit);
   }
 
@@ -326,7 +484,9 @@ export class MapStage {
     const down = this._downHit;
     this._downHit = null;
     if (!down || !hit || down.kind !== hit.kind || down.id !== hit.id) return;
+    if (this._showcase?.busy) { this._showcase.onClick(hit); return; }   // 点击任意处退出
     if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
+    if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
     this._panel?.onClick?.(hit);
   }
 
@@ -360,6 +520,9 @@ export class MapStage {
     this._unsubTick = manager.onTick((dt) => {
       this._statusBar.update(dt);
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
+      this._showcase?.update(dt);        // 获得物特写（自带 in/hold/out 时序）
+      this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
+      this._bubbles.update(dt);
     });
   }
 
@@ -374,6 +537,13 @@ export class MapStage {
     this._unsubCardArt?.();
     this._unsubCardArt = null;
     this._removePanel();
+    this._bubbles.dispose();
+    this._bubbleAnchors.clear();
+    if (this._relicPicker) {
+      this.uiScene.remove(this._relicPicker);
+      this._relicPicker.dispose();
+      this._relicPicker = null;
+    }
     if (this._cardPicker) {
       this.uiScene.remove(this._cardPicker);
       this._cardPicker.dispose();

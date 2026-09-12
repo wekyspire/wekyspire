@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册全部内容（含 commonSkills 纳气卡）
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { getEnemyDefinition } from '../src/core/enemies/registry.js';
+import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { zoneOf, moveCard } from '../src/core/state/battleState.js';
 import { canUseSkill } from '../src/core/skills/helpers.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
@@ -185,5 +186,63 @@ describe('新散卡（2026-09 稿）：早有防备 / 盼盼小面包 / 午休',
     expect(d.player.hp).toBe(hp0);                    // 被晕住：本回合没打过来
     expect(enemy.shield).toBe(0);                     // 也没上盾（行动整个跳过）
     expect(enemy.getEffectStacks('stun')).toBe(0);    // 跳过行动消耗 1 层
+  });
+});
+
+describe('高速魏启罐系列（2026-09-12 设计稿新增）：即时回蓝', () => {
+  it('高速魏启罐（B）：打出立刻获得 2 魏启（纳气是下回合整取，这张是当场到账）', () => {
+    const d = new BattleDriver({ deck: ['swiftManaJar', 'punch'], enemies: [tank()], seed: 5, player: { maxMana: 5 } });
+    d.start();
+    d.player.mana = 0;
+    d.play('swiftManaJar');
+    expect(d.player.mana).toBe(2);
+    expect(d.state.zones.burnt.some(c => c.defId === 'swiftManaJar')).toBe(true);   // 消耗
+  });
+
+  it('高速大魏启罐（A）：获得 4 魏启；仍受上限截断', () => {
+    const d = new BattleDriver({ deck: ['swiftManaJarPlus', 'punch'], enemies: [tank()], seed: 5, player: { maxMana: 3 } });
+    d.start();
+    d.player.mana = 0;
+    d.play('swiftManaJarPlus');
+    expect(d.player.mana).toBe(3);   // 上限 3：4 点被截断
+  });
+});
+
+describe('HeLiCoPtEr（A，2026-09-12 设计稿新增）', () => {
+  it('将所有手牌变换为 0 开销**猛烈肘击**（肘击系列的免费形态，吃牢大翻倍）', () => {
+    const d = new BattleDriver({
+      deck: ['helicopter', 'punch', 'guard', 'punch'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 3 },
+    });
+    d.start();
+    const others = d.state.zones.hand.filter(c => c.defId !== 'helicopter');
+    expect(others.length).toBeGreaterThan(0);
+    d.play('helicopter');
+    const deformed = d.state.zones.hand.filter(c => c.defId === 'fierceElbowFree');
+    expect(deformed).toHaveLength(others.length);              // 全部换绑成免费猛烈肘击
+    const def = getSkillDefinition('fierceElbowFree');
+    expect(def.name).toBe('猛烈肘击');                          // 与既有的同名（玩梗原意）
+    expect(def.cost).toEqual({ mana: 0, actionPoint: 0 });      // 0 开销
+    expect(def.cardMode).toBe('chant');                        // 肘击系列的形态：咏唱1
+    expect(def.canSpawnAsReward).toBe(false);                  // 只经局内转化获得，不进奖励池
+    // 0 费 + 咏唱1：手里全是它也能全部点亮（发动不花 AP）
+    expect(canUseSkill(d.ctx, deformed[0])).toBe(true);
+  });
+
+  it('变换出的猛烈肘击吃牢大翻倍（elbow 标记同一口径）', () => {
+    const d = new BattleDriver({
+      deck: ['helicopter', 'elbowMaster', 'punch', 'punch'],
+      enemies: [tank()], seed: 7, config: { initialDraw: 3, drawPerTurn: 0 },
+    });
+    d.start();
+    toHand(d, 'helicopter');                                   // 起手没摸到就调进手（初始抽牌是随机的）
+    d.play('elbowMaster');                                     // 激活牢大
+    d.play('helicopter');                                      // 手牌 → 0 费猛烈肘击
+    const elbow = d.state.zones.hand.find(c => c.defId === 'fierceElbowFree');
+    d.player.actionPoints = 5;
+    d.play(elbow.uniqueID);                                    // 点亮咏唱（P5 每回合打随机伤害）
+    const hp0 = enemyHp(d);
+    d.endTurn();                                               // 触发 P5：5 伤害 → 牢大翻倍 = 10
+    expect(hp0 - enemyHp(d)).toBe(10);
   });
 });

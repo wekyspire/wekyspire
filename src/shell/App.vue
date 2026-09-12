@@ -22,6 +22,7 @@ import { fitGameFrame } from './frame.js';
 import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
+import SceneWipeOverlay from './overlay/SceneWipeOverlay.vue';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
 
 const canvas = ref(null);
@@ -37,13 +38,26 @@ const saves = ref({ infinite: readSave(false), story: readSave(true) }); // 两�
 
 const stage = computed(() => ctrl.value?.run.gameStage ?? 'prep');
 
-// 全量美术预载：setup 即启动（与 Vue 挂载/舞台初始化并行）。加载界面挡在开始界面
-// 之前——完成才放行（此后所有舞台首拍同步命中素材缓存，无占位闪变）。
+// 全量美术预载：setup 即启动（与 Vue 挂载/舞台初始化并行）。加载界面挡在开始界面之前
+// ——**全部成功才放行**（此后所有舞台首拍同步命中素材缓存，无占位闪变）。
+// ⚠ 失败不放行（用户定 2026-09-12）：终止下载/断网会让 onerror 落定，早期实现照常放行
+// →"掐掉下载也能带着缺图进游戏"；现在失败计数进 `assetFailed`，界面卡住并给重试键。
 const assetsReady = ref(false);
-const assetProgress = ref({ loaded: 0, total: 0 });
-preloadAllArt({
-  onProgress: (loaded, total) => { assetProgress.value = { loaded, total }; },
-}).then(() => { assetsReady.value = true; });
+const assetFailed = ref(0);
+const assetProgress = ref({ loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 });
+function startAssetPreload() {
+  assetsReady.value = false;
+  assetFailed.value = 0;
+  assetProgress.value = { loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 };
+  preloadAllArt({
+    onProgress: (loaded, total) => { assetProgress.value = { ...assetProgress.value, loaded, total }; },
+    onStats: (s) => { assetProgress.value = { ...s }; },
+  }).then((r) => {
+    if (r.failed > 0) { assetFailed.value = r.failed; return; }   // 卡住：只给重试
+    assetsReady.value = true;
+  });
+}
+startAssetPreload();
 
 // 菜单级全局共享 toast：任意菜单级组件 inject('showMenuPopup') 后调用（跨 phase 可用）。
 // 多条 toast 各自 3s 寿命独立消亡；新 toast 从底部进入，旧 toast 被顶起，消亡后其余平滑回落。
@@ -97,12 +111,17 @@ function toTitle() {
   phase.value = 'menu';
 }
 
-// 当前接受指针输入的舞台：战斗层是 BattleStage，其余阶段（prep/reward/room/
-// ascension/end）都是地图舞台上的 Three 面板（原 Vue 面板 DOM 层已迁走）
+// 当前接受指针输入的舞台：战斗层 = BattleStage（**战后奖励也还在这里** —— 奖励 overlay
+// 画在战斗舞台的 uiScene 上，背景保持战斗房间，直到领奖后的切幕中点才换回塔楼）；
+// 休息房 = 场景式 RoomStage（仅赌厅这类有休息房配方的房间才有，占位房间回退 MapStage）；
+// 其余阶段（prep/ascension/end）都是地图舞台上的 Three 面板。
 function activeStage() {
   const c = ctrl.value;
   if (!c) return null;
-  return c.run.gameStage === 'battle' ? c.getBattleStage() : mapStage;
+  const battle = c.getBattleStage();
+  if (battle) return battle;   // 战斗 / 战后奖励：战斗舞台存在期间由它接管指针
+  if (c.run.gameStage === 'room') return c.getRoomStage() ?? mapStage;
+  return mapStage;
 }
 
 function onPointer(type) {
@@ -166,8 +185,10 @@ onBeforeUnmount(() => {
       @pointerup="onPointerUp"
       @wheel="onWheel"
     ></canvas>
-    <!-- 菜单层顶层加载门：全量美术预载完成前挡住一切（最高 z-index），完成才放行开始界面 -->
-    <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />
+    <!-- 菜单层顶层加载门：全量美术预载**全部成功**前挡住一切（最高 z-index）；
+         失败时卡住并给重试（用户定 2026-09-12：不准带缺图进游戏） -->
+    <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" :failed="assetFailed"
+      @retry="startAssetPreload" />
     <!-- 菜单级：开始界面（含 changelog 弹层） -->
     <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />
     <template v-else-if="ctrl">
@@ -178,8 +199,11 @@ onBeforeUnmount(() => {
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>
       <GameMenu v-if="menuOpen" :ctrl="ctrl" @close="menuOpen = false" @toTitle="toTitle" />
-      <!-- cutscene overlay：对话剧本 + 幕间转场，激活时阻塞一切流程（游戏流程手动驱动） -->
+      <!-- cutscene 内容层：对话/CG/渐变剧本，激活时阻塞一切流程（游戏流程手动驱动） -->
       <CutsceneOverlay v-if="ctrl.cutscene.state.mode !== 'idle'" :player="ctrl.cutscene" />
+      <!-- 幕间切幕层（独立于内容层，用户 2026-09-12）：黑幕的**目的地**可以是 3D 舞台、也可以是
+           一段 cutscene——所以它自占一层、盖在内容之上（切幕开始 → 目的地就位 → 切幕结束） -->
+      <SceneWipeOverlay :wipe="ctrl.sceneWipe" />
     </template>
     <!-- 菜单级全局 toast 提示（两 phase 均可用，无阻塞，3s 自然消亡 / × 手动关闭） -->
     <MenuPopup :toasts="menuToasts" @close="dismissMenuToast" />
@@ -200,8 +224,8 @@ html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
 #stage-canvas { display: block; position: absolute; inset: 0; }
 .menu-fab {
   position: fixed; top: 14px; right: 14px; z-index: 25;
-  padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 6px;
-  background: rgba(10, 14, 26, .7); color: #cdd6f4; border: 1px solid #38415e;
+  padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 4px;
+  background: rgba(16, 22, 34, .9); color: #eaf1fb; border: 1px solid #3f5f8c;
 }
-.menu-fab:hover { background: rgba(44, 53, 84, .9); }
+.menu-fab:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
 </style>

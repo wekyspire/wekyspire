@@ -3,27 +3,48 @@ import mitt from 'mitt';
 import { isBossFloor } from '../../core/run/runFlow.js';
 import { CUTSCENE_SCRIPTS } from './scripts.js';
 import { AnimationSequencer } from '../../core/anim/sequencer.js';
+import { createSceneWipe, SCENE_TRANSITION_MS } from './sceneWipe.js';
 
 // CutscenePlayer（Shell 层）：cutscene 分步时间轴播放器。
 // S3 收敛：剧本 step 编译为 sequencer 指令（默认严格串行），与战斗/房间/塔楼
 // 演出共用 run 级同一时钟——跨层定序（终局动画 → 幕间黑幕 → …）无需额外协调。
 // 由游戏流程手动驱动（runController 在进出战斗等节点显式调用），不自动订阅 run 事件。
 //
+// **切幕器与内容播放器分离**（用户定 2026-09-12 的架构修正）：
+//   黑幕（wipe）不再画在本播放器的 overlay 里，而是交给独立的 `sceneWipe` 状态机 +
+//   `SceneWipeOverlay.vue`（自占一层，z 压过内容层）。原因：黑幕的**目的地可以是任何东西**
+//   ——3D 舞台，也可以是一段 cutscene 内容；同层时"切到 cutscene"会退化成
+//   "黑幕播完 → 内容才挂上（突然蹦出来）"。
+//   现在 wipe step 在**全黑中点**调用下一步的 `preStage()`（内容层在黑幕之下就位），
+//   于是揭幕揭开的就是目的地本身：切幕开始 → 目的地就位 → 切幕结束。
+//
 // step 词汇表（可组合，可继续扩展新类型；每类 = 一种指令编译方式）：
 //   { type:'fade', to:0|1, ms }        全屏颜色层渐变（to=1 渐黑 / to=0 渐亮）——定时指令
 //   { type:'wipe', coverMs, revealMs, holdMs?,
-//     direction?, atCover? }           幕间转场：黑幕扫过，全黑中点执行 atCover——
+//     direction?, atCover? }           幕间切幕：黑幕扫过，全黑中点执行 atCover——
 //                                      atCover 可返回 Promise（战场预载）：黑幕保持到
-//                                      兑现才 reveal；holdMs = 揭幕前的额外黑幕停留
+//                                      兑现才 reveal；holdMs = 揭幕前的额外黑幕停留。
+//                                      同时把**下一步的内容**就位（见上）——wipe 后面
+//                                      跟的内容会被"揭开"而不是"事后蹦出"
 //   { type:'image', src, fadeInMs?,
 //     holdMs?, fadeOutMs? }            CG/插图：淡入 → 停留 → 淡出——定时指令
 //   { type:'dialogue', pages }         对话：人工闸门指令（点击翻页，末页回执开闸）
+//                                      page 可带 `choices: [{ id, label, hint?, disabled? }]`
+//                                      ——该页不靠点击推进，必须 `choose(id)`（见下）
 //   { type:'call', fn }                瞬时回调（换舞台/改流程状态等副作用）——自完结指令
 //
-// 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；
-// 阻塞流程 = 流程侧 await play()/sceneTransition() 后再发下一个 run intent。
-// CutsceneOverlay.vue 的 wipe 过渡时长由 step 参数驱动（缺省见 SCENE_TRANSITION_MS）。
-export const SCENE_TRANSITION_MS = Object.freeze({ cover: 750, reveal: 950 });
+// **带选项的对话**（用户定 2026-09-11：粉碎物品入口首次用上 dialogue 层）：
+//   step = { type:'dialogue', pages:[{ speaker, text, choices }], onChoice?(id) }
+//   · 有 choices 的页：overlay 渲染按钮，点按钮 → player.choose(id)（点背板无效）
+//   · 选完 → 回执开闸（与翻页共用同一道闸门），选择同时写进 state.lastChoice
+//   · 调用方 await player.play({ steps:[…] }) 后经 onChoice / 闭包变量读结果
+//   · 选项内容由**调用方按可用内容动态拼**（如"没有可粉碎的卡就不给卡牌选项"）——
+//     层里不做游戏判定，只负责"把选项摆出来并把人选的那个交回去"
+//
+// 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；切幕期间由
+// SceneWipeOverlay 吸收（z 更高）。阻塞流程 = 流程侧 await play()/sceneTransition()
+// 后再发下一个 run intent。
+export { SCENE_TRANSITION_MS };
 
 // 完成回执协议：与 bridge 层同事件名（sequencer 构造注入的 run 级实例已用同名）
 const FINISH_EVENT = 'animation-instruction-finished';
@@ -41,16 +62,20 @@ export const CUTSCENE_TRIGGERS = Object.freeze([
  * @param {object} options
  *   sleep: (ms) => Promise（测试注入；缺省 setTimeout）
  *   sequencer: run 级共享指令队列（缺省自建独立实例——单测/独立使用）
+ *   wipe: 幕间切幕器（`createSceneWipe()`；缺省自建——独立使用时也自洽）。
+ *         宿主（runController）传共享实例，overlay 才能渲染到同一份状态。
  */
-export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
+export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = null } = {}) {
   const wait = sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
   const seq = sequencer || new AnimationSequencer({ bus: mitt(), finishedEvent: FINISH_EVENT });
+  const wipeCtl = wipe ?? createSceneWipe();
   const state = reactive({
     mode: 'idle',      // idle | playing
     script: null,      // 正在播放的剧本 { id?, steps }
     step: null,        // 当前 step（overlay 据此渲染）
     pageIndex: 0,      // dialogue step 页码
     phase: null,       // 多阶段 step 的子阶段：wipe=enter|cover|reveal；image=fadeIn|hold|fadeOut
+    lastChoice: null,  // 最近一次带选项对话的选择 id（调用方也可走 step.onChoice 读）
     flags: {},         // 剧情 flag 状态机（played 标记；未来分支状态扩展位）
   });
   const scripts = new Map(CUTSCENE_SCRIPTS.map(s => [s.id, s]));
@@ -59,14 +84,32 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
                            // 其他层指令无关——共享队列后按 pendingCount 判断会被战斗
                            // 指令卡住，mode 永不回 idle 导致 overlay 常驻阻塞交互）
 
-  const beginStep = (script, step) => { state.script = script; state.step = step; state.phase = null; };
+  // 最近一次"有画面"的 step（fade/image/dialogue）——**退出切幕**要带着它一起盖：
+  // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（用户 2026-09-13 报：事件结果页播完后
+  // 先露出背后的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent），
+  // 故不会把很久以前的旧内容泄进后来的转场；没有可保留内容（面板路径 / 战斗→塔楼）时为 null，
+  // 行为与原来完全一致。`play()` 开头会清掉，保证一部新剧本不会继承上一部的残留。
+  let lastContent = null;
+  const beginStep = (script, step) => {
+    state.script = script; state.step = step; state.phase = null;
+    if (step?.type !== 'wipe') lastContent = step;
+  };
+  /** 取走"刚播完、还没被转场接走"的那一拍内容（取走即清）。 */
+  const takeLastContent = () => { const s = lastContent; lastContent = null; return s; };
 
   // ---- step → 指令编译（时长型走 wait 分段 + 回执；dialogue 等人工闸门） ----
-  function compileStep(script, step) {
+  // nextBox: 一个可变盒子，最终装着**下一步的编译结果**（play() 编译完才填）。
+  // 只有 wipe 用它——见 'wipe' 分支的"目的地就位"。
+  //
+  // 每个内容类 step 都可给 `preStage()`：**在黑幕之下把这一步先摆出来**（不推进时间轴、
+  // 不开闸），于是揭幕揭开的就是这一步的画面。与 start 的差异：preStage 不做"落位一帧
+  // 再起过渡/开闸"这类只该发生一次的事——它是幂等的"摆好姿势"。
+  function compileStep(script, step, nextBox = null) {
     switch (step.type) {
       case 'fade':
         return {
           durationMs: (step.ms ?? 0) + 2000, // 保险丝（前端不回执时兜底推进）
+          preStage() { beginStep(script, step); },
           async start({ id, emit }) {
             beginStep(script, step);
             await wait(step.ms ?? 0);
@@ -81,17 +124,31 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
           // 保险丝覆盖预载等待（atCover Promise 最长约 6s 兜底）+ 揭幕
           durationMs: coverMs + revealMs + holdMs + 8000,
           async start({ id, emit }) {
-            beginStep(script, step);
-            state.phase = 'enter';  // 黑幕屏外待命（无过渡，先落位）
-            await wait(16);         // 让初始 transform 渲染一帧，再起过渡
-            state.phase = 'cover';
+            // ★ 黑幕盖满之前**留着上一拍的画面**：`hold` 是本幕要一起盖住的内容
+            //   （`sceneTransition` 从刚播完的剧本里取来的）；没有就什么都不显示（面板路径、
+            //   战斗→塔楼）。撤内容/换内容的时机在**全黑中点**——玩家看不到这次切换。
+            //   此前这里一上来就 beginStep，于是内容先消失、露出背景，黑幕之后才盖上来
+            //   （用户 2026-09-13 报的节拍错位）。
+            if (step.hold) { state.step = step.hold; state.phase = null; }
+            wipeCtl.begin({ coverMs, revealMs });   // 黑幕由独立切幕层渲染（不在本 overlay 里）
+            await wait(16);         // 让屏外初始 transform 渲染一帧，再起过渡
+            wipeCtl.toCover();
             await wait(coverMs);
-            // 全黑中点：换景/预载。atCover 可返回 Promise（战场预载就绪信号）——
-            // 黑幕保持到兑现才揭幕，避免单位"加载后才显示"的突兀感
+            beginStep(script, step);   // 全黑：现在才把这一拍摆上台面（内容在黑幕之下切换）
+            // ★ 全黑中点：换景/预载/目的地就位。
+            //   · atCover 可返回 Promise（战场预载就绪信号）——黑幕保持到兑现才揭幕；
+            //   · 下一步的内容在这里**就位**（内容层在黑幕之下渲染），于是揭幕揭开的
+            //     就是目的地本身——"切幕开始 → 目的地就位 → 切幕结束"（用户定 2026-09-12）。
+            //     此前 wipe 与内容同层，切到 cutscene 时只能等黑幕播完内容才蹦出来。
             await step.atCover?.();
+            nextBox?.c?.preStage?.();
             if (holdMs > 0) await wait(holdMs); // 揭幕前的额外黑幕停留
-            state.phase = 'reveal';
+            wipeCtl.reveal();
             await wait(revealMs);
+            // 幕布移出屏外后留一帧余量再卸层（CSS 过渡在合成器上可能比定时器晚一拍，
+            // 早卸会看到黑幕被"切断"）；这点延迟不影响任何节拍
+            await wait(80);
+            wipeCtl.end();
             emit(FINISH_EVENT, { id });
           },
         };
@@ -102,6 +159,8 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
         const fadeOutMs = step.fadeOutMs ?? 400;
         return {
           durationMs: fadeInMs + holdMs + fadeOutMs + 2000,
+          // 幕后就位：以 opacity 0 落位（揭幕揭开的是黑，随后自己淡入——不会闪一下再淡出）
+          preStage() { beginStep(script, step); state.phase = 'enter'; },
           async start({ id, emit }) {
             beginStep(script, step);
             state.phase = 'enter';  // 先以 opacity 0 落位一帧，再起淡入过渡
@@ -119,6 +178,9 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       case 'dialogue':
         return {
           durationMs: Infinity, // 人工闸门：只由点击推进，无超时强杀
+          // 幕后就位：对话框直接可读（揭幕揭开的就是这一页）。不开闸——闸门只在
+          // start 时开，所以揭幕期间点它不会误翻页（gate 为 null）。
+          preStage() { beginStep(script, step); state.pageIndex = 0; },
           start({ id, emit }) {
             beginStep(script, step);
             state.pageIndex = 0;
@@ -146,12 +208,16 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
     const script = id ? scripts.get(scriptOrId) : scriptOrId;
     if (!script) return Promise.resolve(); // 未知剧本 id：静默 resolve
 
+    lastContent = null;   // 新剧本不继承上一部的内容残留（转场已在 sceneTransition 里取走）
     if (state.mode === 'idle') state.mode = 'playing';
     activeScripts += 1;
     return new Promise(resolve => {
-      for (const step of script.steps) {
-        const compiled = compileStep(script, step);
-        if (compiled) seq.enqueueInstruction(compiled);
+      // 先整表编译再链接（wipe 需要拿到"下一步"的编译结果做幕后就位）
+      const boxes = script.steps.map(() => ({ c: null }));
+      const compiled = script.steps.map((step, i) => compileStep(script, step, boxes[i + 1] ?? null));
+      compiled.forEach((c, i) => { boxes[i].c = c; });
+      for (const c of compiled) {
+        if (c) seq.enqueueInstruction(c);
       }
       // 尾闸：剧本收尾——resolve + 最后一个剧本结束才回 idle（自完结，同步泵起后续指令）
       seq.enqueueInstruction({
@@ -179,21 +245,43 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
   /** 对话翻页；末页 → 回执开闸推进时间轴下一步 */
   function advance() {
     if (state.step?.type !== 'dialogue' || !gate) return;
+    // 带选项的页不翻页：必须点某个选项（否则会出现"点一下跳过选择"的坑）
+    if (state.step.pages[state.pageIndex]?.choices?.length) return;
     if (state.pageIndex < state.step.pages.length - 1) { state.pageIndex += 1; return; }
     const g = gate;
     gate = null;
     g.emit(FINISH_EVENT, { id: g.id });
   }
 
+  /** 选中当前页的某个选项（带 choices 的对话页专用）：回执开闸 + 记下选择。
+   *  返回 false = 该选项不存在/被禁用（overlay 据此不关闸）。 */
+  function choose(id) {
+    if (state.step?.type !== 'dialogue' || !gate) return false;
+    const page = state.step.pages[state.pageIndex];
+    const opt = page?.choices?.find((c) => c.id === id);
+    if (!opt || opt.disabled) return false;
+    const g = gate;
+    gate = null;
+    state.lastChoice = id;
+    state.step.onChoice?.(id);
+    g.emit(FINISH_EVENT, { id: g.id });
+    return true;
+  }
+
   let transitionBusy = false;
-  /** 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
-   *  转场重叠时退化为直切（不卡流程、不排二次黑幕）。 */
+  /**
+   * 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
+   * 转场重叠时退化为直切（不卡流程、不排二次黑幕）。
+   * `hold` = 刚播完的那一拍内容（若本转场是"某段 cutscene 的退出"）：黑幕会**带着它一起盖下来**，
+   * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（用户 2026-09-13 报的节拍错位）。
+   */
   function sceneTransition(swap = null, { coverMs, revealMs, holdMs } = {}) {
     if (transitionBusy) { swap?.(); return Promise.resolve(); }
     transitionBusy = true;
+    const hold = takeLastContent();
     return play({
       id: '__transition__', // 内联剧本，不入触发规则；played flag 不拦匿名转场
-      steps: [{ type: 'wipe', atCover: swap ?? undefined, ...(coverMs != null ? { coverMs } : {}), ...(revealMs != null ? { revealMs } : {}), ...(holdMs != null ? { holdMs } : {}) }],
+      steps: [{ type: 'wipe', hold, atCover: swap ?? undefined, ...(coverMs != null ? { coverMs } : {}), ...(revealMs != null ? { revealMs } : {}), ...(holdMs != null ? { holdMs } : {}) }],
     }).finally(() => { transitionBusy = false; });
   }
 
@@ -204,5 +292,6 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       .map(t => t.id);
   }
 
-  return { state, play, advance, sceneTransition, pendingTriggers };
+  // wipe：切幕器状态机（宿主把它交给 SceneWipeOverlay 渲染；独立使用时也在这里读到）
+  return { state, play, advance, choose, sceneTransition, pendingTriggers, wipe: wipeCtl };
 }

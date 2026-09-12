@@ -175,7 +175,9 @@ describe('BattleStage 无头联调', () => {
   });
 
   it('选目标卡（冲拳）瞄准：卡留手牌高亮，松手不在敌人身上 = 取消（过线也不打出）', () => {
-    const { bridge, stage } = make();
+    // 两个敌人：只剩一个存活目标时会**按下即出牌**（自动选靶，用户定 2026-09-13），
+    // 这条测的是多目标下的瞄准/取消流程
+    const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch'], 2);
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const slime = bridge.battle.battleState.enemies[0];
@@ -209,7 +211,7 @@ describe('BattleStage 无头联调', () => {
   });
 
   it('拖回手牌区松手 = 取消：牌回锚点，不掉血', () => {
-    const { bridge, stage } = make();
+    const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch'], 2); // 多目标才走瞄准（见上条）
     bridge.start();
     settleHand(stage); // 弹簧收敛到扇形锚点（headless 无帧驱动）
     const slime = bridge.battle.battleState.enemies[0];
@@ -298,6 +300,104 @@ describe('BattleStage 无头联调', () => {
     for (const c of proj1.hand) {
       expect(stage._views.get(c.uniqueID).visualState).not.toBe('highlighted');
     }
+  });
+
+  // 用户定 2026-09-12：动画积压期也能点「结束回合」/「换卡」——按钮可用性按**回合轨道**
+  // （turn.side/count）判定而不是 waitingPlayerInput（后者在出牌结算过程中会被演出节拍
+  // 拍成 false，于是动画没放完按钮就是灰的，玩家只能干等）。
+  it('结束回合在动画积压期可点（后端真的收到）；点完立刻上灰，同回合快照不解锁', () => {
+    const { bridge, stage } = make();
+    bridge.start();
+    settleHand(stage);
+    const base = bridge.getProjection();
+    expect(base.turn).toMatchObject({ side: 'player', count: 1 });
+
+    // ① 模拟"出牌结算中捕获的同步快照"：waitingPlayerInput=false，但仍是玩家回合 → 按钮可用
+    stage._applySnapshot({ ...base, waitingPlayerInput: false });
+    expect(stage._buttons.main.cardData).toMatchObject({ label: '结束回合', enabled: true });
+
+    // ② 点它：意图真的下发到 core（回合推进）——显示还停在"演出积压"的旧快照，但后端收到
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
+    expect(bridge.battle.ctx.battleState.turn.count).toBeGreaterThan(base.turn.count);
+  });
+
+  it('结束回合点完到下一回合之间不再接受第二次点击（前端状态机，后端打桩）', () => {
+    const { bridge, stage } = make();
+    bridge.start();
+    settleHand(stage);
+    const base = bridge.getProjection();
+    let calls = 0;
+    bridge.intents.endTurn = () => { calls += 1; return true; };   // 打桩：只验前端门
+    stage._applySnapshot({ ...base, waitingPlayerInput: false });
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
+    expect(calls).toBe(1);
+    expect(stage._buttons.main.cardData.enabled).toBe(false);
+    // 连点：门已灰 → 不再下发
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
+    expect(calls).toBe(1);
+    // 下一回合快照到来才解锁
+    stage._applySnapshot({ ...base, turn: { side: 'player', count: base.turn.count + 1 } });
+    click(stage, [BUTTON_POSITIONS.main.x, BUTTON_POSITIONS.main.y]);
+    expect(calls).toBe(2);
+  });
+    const { bridge, stage } = make();
+    bridge.start();
+    settleHand(stage);
+    const base = bridge.getProjection();
+    expect(base.turn).toMatchObject({ side: 'player', count: 1 });
+
+    // ① 模拟"出牌结算中捕获的同步快照"：waitingPlayerInput=false，但仍是玩家回合
+    stage._applySnapshot({ ...base, waitingPlayerInput: false });
+    expect(stage._buttons.main.cardData).toMatchObject({ label: '结束回合', enabled: true });
+
+
+  it('结束回合的边界：发牌那一拍（count=0）/ 敌方回合 / 终局都不可点', () => {
+    const { bridge, stage } = make();
+    bridge.start();
+    settleHand(stage);
+    const base = bridge.getProjection();
+    stage._applySnapshot({ ...base, turn: { side: 'player', count: 0 } });
+    expect(stage._buttons.main.cardData.enabled).toBe(false);        // 还没看到牌，不许收尾
+    stage._applySnapshot({ ...base, turn: { side: 'enemy', count: 1 } });
+    expect(stage._buttons.main.cardData.enabled).toBe(false);        // 敌方回合
+    stage._applySnapshot({ ...base, verdict: 'victory' });
+    expect(stage._buttons.main.cardData.enabled).toBe(false);        // 终局演出中
+  });
+
+  it('换卡在动画积压期可用；成功换出后同一节拍内的连点被前端挡下', () => {
+    const { bridge, stage } = make(['punch', 'punch', 'punch', 'punch', 'punch', 'punch']);
+    bridge.start();
+    settleHand(stage);
+    const base = bridge.getProjection();
+    // 动画积压期的快照（waitingPlayerInput=false）：换卡按钮仍可用
+    stage._applySnapshot({ ...base, waitingPlayerInput: false });
+    expect(stage._buttons.swap.cardData).toMatchObject({ enabled: true });
+
+    // 进模式 → 换出第一张
+    click(stage, [BUTTON_POSITIONS.swap.x, BUTTON_POSITIONS.swap.y]);
+    expect(stage._swapMode).toBe(true);
+    const c0 = bridge.getProjection().hand[0];
+    const p0 = stage._views.get(c0.uniqueID).position;
+    click(stage, [p0.x, p0.y, p0.z]);
+    expect(stage._swapLocked).toBe(true);                            // 本拍已锁
+    expect(bridge.getProjection().swapCost).toBe(1);
+
+    // 同一节拍内再想换一张：前端直接不响应（模式即便被手工打开也不提交）
+    stage._setSwapMode(true);
+    const c1 = bridge.getProjection().hand[0];
+    const p1 = stage._views.get(c1.uniqueID).position;
+    click(stage, [p1.x, p1.y, p1.z]);
+    expect(bridge.getProjection().swapCost).toBe(1);                 // 没有被换第二次
+
+    // 下一个同步节拍解锁后可正常再换（费用继续递增）
+    stage._applySnapshot({ ...bridge.getProjection() });
+    expect(stage._swapLocked).toBe(false);
+    stage._setSwapMode(true);
+    const c2 = bridge.getProjection().hand[0];
+    const p2 = stage._views.get(c2.uniqueID).position;
+    click(stage, [p2.x, p2.y, p2.z]);
+    expect(bridge.getProjection().swapCost).toBe(2);
   });
 
   it('换卡模式可再点按钮取消；换卡模式下点手牌不会误触发拖拽', () => {

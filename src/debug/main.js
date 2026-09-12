@@ -116,3 +116,16 @@ refreshCounts();
 
 // 调试钩子（playwright / 控制台用）
 window.__debug = { bridge, stage, stageManager };
+
+// 对话/思索泡泡调试：骑士与第一个敌人各冒一个（两种造型同屏，便于视觉验收）
+window.__bubble = (kind = 'thought', text = null) => {
+  const p = bridge.getProjection();
+  stage.say(p.player.uniqueID, { text: text ?? '我无法掌控更多手牌了！', kind, duration: 8 });
+  const foe = p.enemies?.[0];
+  if (foe) {
+    stage.say(foe.uniqueID, {
+      text: '哼哼，你的手牌太多了吧？', kind: kind === 'thought' ? 'speech' : 'thought', duration: 8,
+    });
+  }
+  return stage.bubbleKeys;
+};

@@ -4,12 +4,25 @@
 // 预设差异 = 主光来源/强度配比/染色口径。火点光由 composeRoom 收集的 fireAnchors 生成。
 
 import * as THREE from 'three';
-import { P } from '../kit/index.js';
+import { P, desatColor } from '../kit/index.js';
 import { FLOOR_Y } from '../dungeon3D.js';
 import { LEFT_WALL_X } from './walls.js';
 
 // 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）
 const FIRE_BASE = 1150;
+
+// ---- 灯光去饱和（用户 2026-09-11：tonemap 后场景过饱和且偏蓝）----
+// 处方在 kit 的 `desatColor`（保持亮度、压饱和度、冷色额外多去一档）。**每个建灯处都过一遍**：
+// 灯只留轻微色倾向，画面颜色交给材质反照率——原来月光/反光/战场补光全是高饱和蓝
+// （0x9db4ec/0x8298d4/0x93a5d8），叠加 tone mapping 后整场读成"蓝"。
+// 单位染色底（preset.tint）也走同一处方：那是"单位受到的照明估计"，同样不该带高饱和蓝。
+const desat = (c) => desatColor(c).getHex();
+const desatRGB = (t) => {
+  const c = desatColor(new THREE.Color(t[0], t[1], t[2]));
+  return [c.r, c.g, c.b];
+};
+// 火：保留更多暖色倾向（幽火仍是幽火，只是不再偏紫）
+const desatFire = (c) => desatColor(c, { k: 0.35, cap: 0.45 }).getHex();
 const FLAME_RATE = 12; // 每火火焰粒子 /秒（同 dungeon3D）
 
 /**
@@ -18,7 +31,7 @@ const FLAME_RATE = 12; // 每火火焰粒子 /秒（同 dungeon3D）
  *   shadow 相机须盖住加高加宽后的左墙 + 房间；bias 防自阴影痤疮。
  */
 function makeMoonlight(intensity) {
-  const moon = new THREE.DirectionalLight(0x9db4ec, intensity);
+  const moon = new THREE.DirectionalLight(desat(0x9db4ec), intensity);
   moon.position.set(LEFT_WALL_X - 145, 145, -29);
   moon.target.position.set(30, FLOOR_Y, 0);
   moon.castShadow = true;
@@ -72,13 +85,69 @@ export const LIGHTING_PRESETS = {
     // 灯池（机器 + 彩灯串）：机器暖金、彩灯串按后面几位彩灯色（colors 轮转，见 lamp 循环）
     lamp: {
       color: 0xffb45a, base: 4200, dist: 140, cap: 8,
-      colors: [0xffb45a, 0xffab52, 0xff8a6a, 0x9ad89a, 0x9ab4e8, 0xffd06a],
+      // 彩灯串的颜色轮转：**暖金 + 嫣红/紫/白**（用户定：不要绿——赌厅是暖调，
+      // 绿光在暖色机器前很突兀）。机器自带显式 lampColor，不占这些轮转位。
+      colors: [0xffb45a, 0xff8a6a, 0xc06a8a, 0x9a8ad8, 0xd8d0e8, 0xffd06a],
     },
     // 焦点布光（zoomin 时）：外围统一压暗 dim + **正面补光**把机器中央屏幕区打亮（setFocus）。
     // base/offset/dist 经 restGallery 实拍 A/B 定：光心在屏幕正前方 ~14（贴太近=整面洗白、
     // 太远=照到整间屋子）；dist 收到 70 让光池只罩机器，别把大厅重新点亮。
     focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
     tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
+  },
+  // 营地·训练场（休息房 2026-09-11）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
+  // 这里的光源是地上的篝火/火盆（火点光基数更高、罩得更远、盏数更多），环境光压到最低
+  // （"暗处围着火"的营地感），再留一道高窗月光做冷暖对比。
+  camp: {
+    hemi: [0x453a34, 0x2a221c, 1.05],
+    moon: 0.6,                           // 高窗透进一点月光：给暖火光做冷暖对比
+    fill: 0.11,
+    bounce: [[100, 100], [80, 88]],      // 地面反弹（火光的地面池之外再垫一层）
+    battleGlow: [0xc9a077, 5600, 185],   // 中景暖补光：撑住"营地是亮的"（低于火、高于环境）
+    centerFill: [0xffbe86, 6200, 180],   // 中央暖光：与火叠成双层暖光池（全场主亮源）
+    fire: { base: FIRE_BASE * 1.0, dist: 155, cap: 10 },    // ★火是主角（基数/距离/盏数全高）
+    lamp: {
+      color: 0xffc07a, base: 2000, dist: 110, cap: 6,
+      // 灯笼串：暖为主，留一点粉紫变化（整圈同色会读成廉价跑马灯）
+      colors: [0xffc07a, 0xffab6a, 0xd8986a, 0xc8a0b8, 0xd8d0e8],
+    },
+    focus: { color: 0xffd9a8, base: 1100, dist: 78, offset: 15, dim: 0.7, rise: 3.0, lift: 0.06 },
+    // 单位染色底同样偏暖（火光照人）：base 暖中性、fireGain 暖橙
+    tint: { base: [0.64, 0.57, 0.5], fireGain: [0.3, 0.2, 0.12], radius: 66 },
+  },
+  // 商店房（休息房 2026-09-12 → 冷白中性改版同日）：**冷白、中性的"机器房"**——用户定
+  // "自动售货机没有被赋予人格，是个纯中立玩意"，打光要冷白为主题、中性，质量对齐调优过的
+  // 赌厅（老虎机/银行机）：环境光压暗做对比度、亮度交给中央冷白光池 + 售货机自己的灯池。
+  // 与赌厅的区别只在色温（冷白 vs 暖金）与机器灯色（中性白 vs 暖金），不做"暖店"基调。
+  shop: {
+    hemi: [0x3c4450, 0x22262c, 0.55],    // 环境光压到赌厅一档（外围暗底，机器才跳出来）
+    moon: 0.1,                           // 室内：只留一道高窄缝的方向感
+    fill: 0.06,
+    bounce: [[64, 88], [48, 78]],        // 地面反弹（冷白灯下的地面池）
+    battleGlow: [0xc2ccd8, 2600, 160],   // 中景冷白补光（中性，不染蓝也不染黄）
+    centerFill: [0xf0f4fa, 5800, 175],   // ★中央光撑亮度：中性冷白顶灯光池
+    fire: { base: FIRE_BASE * 0.3, dist: 125, cap: 4 },   // 烛位是边角点缀（店里不靠火）
+    lamp: {
+      color: 0xe8eef6, base: 2400, dist: 118, cap: 6,
+      // 灯串：冷白/中性为主（灯管的"管"感）；不留暖橙（暖色是赌厅/营地的身份）
+      colors: [0xe8eef6, 0xdce6f0, 0xf2f6fc, 0xd0dae6, 0xe4ecf4],
+    },
+    // 焦点布光（zoomin 看货架）：中性冷白补光——商品/遗物立绘的色相必须读得准，
+    // 暖光会把色相染偏（赌厅的暖金留给赌厅）
+    focus: { color: 0xeaf1f8, base: 1150, dist: 76, offset: 15, dim: 0.72, rise: 3.1, lift: 0.07 },
+    tint: { base: [0.58, 0.61, 0.66], fireGain: [0.2, 0.19, 0.18], radius: 64 },
+    // 售货机正面主光（用户定 2026-09-13）：机器在 (0, FLOOR_Y, -44.5)、面朝 +z。
+    // 为什么必须单配一盏：售货机怼脸走 `setFocus(..., { fill: false })`（柜内货架是 unlit
+    // 自发光，正面补光会把柜内背板照爆），于是"怼脸看货"反而比全景更暗——太暗就是这个缺口。
+    // 补一盏**大而软、略微偏冷的中性白**宽角聚光，从货架正前方压过去；它**不进外围压暗清单**，
+    // 全景与怼脸都是恒定的机器主光。
+    front: {
+      color: 0xe6eefc,        // 略微偏冷的中性白（不是蓝）
+      base: 2050, dist: 60,   // 实测定档：3400 会把玻璃门照成一团白、柜内货架读不出来
+      angle: 0.62, penumbra: 0.92, decay: 1.7,
+      position: [0.8, FLOOR_Y + 7.2, -32.5],
+      target: [0, FLOOR_Y + 3.4, -44.5],
+    },
   },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
   'boss-rim': {
@@ -105,44 +174,59 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const group = new THREE.Group();
   group.name = `lighting:${key}`;
 
-  const hemi = new THREE.HemisphereLight(...preset.hemi);
+  const hemi = new THREE.HemisphereLight(desat(preset.hemi[0]), desat(preset.hemi[1]), preset.hemi[2]);
   group.add(hemi);
 
   const moonlight = makeMoonlight(preset.moon);
   group.add(moonlight, moonlight.target);
 
   if (preset.rim) {
-    const rim = new THREE.DirectionalLight(preset.rim.color, preset.rim.intensity);
+    const rim = new THREE.DirectionalLight(desat(preset.rim.color), preset.rim.intensity);
     rim.position.set(...preset.rim.position);
     rim.target.position.set(...preset.rim.target);
     group.add(rim, rim.target);
   }
 
-  const fill = new THREE.DirectionalLight(0x66779e, preset.fill);
+  const fill = new THREE.DirectionalLight(desat(0x66779e), preset.fill);
   fill.position.set(30, 60, 200);
   group.add(fill);
 
   // 月光落地反弹（假 GI）：两处光池点光——位置离开墙面（贴墙会把挂饰打得过艳，
   // "unlit 壁画刺眼"的病灶），向房间中线收，只打地板光池
   const [bounceA, bounceB] = preset.bounce;
-  const pA = new THREE.PointLight(0x8298d4, bounceA[0], bounceA[1], 1.8);
+  const pA = new THREE.PointLight(desat(0x8298d4), bounceA[0], bounceA[1], 1.8);
   pA.position.set(-10, FLOOR_Y + 6, -12);
-  const pB = new THREE.PointLight(0x8298d4, bounceB[0], bounceB[1], 1.8);
+  const pB = new THREE.PointLight(desat(0x8298d4), bounceB[0], bounceB[1], 1.8);
   pB.position.set(-10, FLOOR_Y + 6, 16);
   group.add(pA, pB);
 
   // 战场主补光（光照焦点）：悬战线中点上空的大点光，物理衰减让战场亮、四周暗。
   // 距离收在 ~195：只罩战场+近墙——收太小全场黑洞，收太大（260=整房）又把墙面洗平
   const [glowColor, glowBase, glowDist = 195] = preset.battleGlow;
-  const battleGlow = new THREE.PointLight(glowColor, glowBase, glowDist, 2.0);
+  const battleGlow = new THREE.PointLight(desat(glowColor), glowBase, glowDist, 2.0);
   battleGlow.position.set(-4, FLOOR_Y + 60, -22);
   group.add(battleGlow);
 
   // 房间中央虚拟光：框住战场中央附近的道具/单位，把玩家注意力收到战区（用户定）
   const [cfColor, cfBase, cfDist] = preset.centerFill;
-  const centerFill = new THREE.PointLight(cfColor, cfBase, cfDist, 2.0);
+  const centerFill = new THREE.PointLight(desat(cfColor), cfBase, cfDist, 2.0);
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
   group.add(centerFill);
+
+  // 机器正面主光（preset.front，目前只有商店房的售货机用）：**不进外围压暗清单**，
+  // 也不随 setFocus 变化——它就是那台机器的恒定主光（怼脸时外围全压暗，机器仍要亮）。
+  // 宽角 + 高半影 = "大而软"，读作从正前方打过来的柔光而不是一束硬聚光。
+  let frontLight = null;
+  if (preset.front) {
+    const f = preset.front;
+    frontLight = new THREE.SpotLight(
+      desat(f.color), f.base, f.dist, f.angle, f.penumbra, f.decay ?? 2.0,
+    );
+    frontLight.position.set(...f.position);
+    frontLight.target.position.set(...f.target);
+    frontLight.castShadow = false;   // 与灯池同口径：机器光不投影，免得自遮挡出硬边
+    group.add(frontLight, frontLight.target);
+  }
 
   // 灯池（`lamp` 锚：机器/招牌/彩灯这类自发光体）：**只出点光、不出火焰粒子**——
   // 与火点光共用同一套处方字段风格（preset.lamp = { color, base, dist, cap }）。
@@ -153,20 +237,22 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     // 颜色：锚自带 color 优先（道具 def 的 lampColor）；否则按 `colors` 轮转（**gain 降序后**
     // 前几个必然留给 gain=1 的机器，彩灯串拿到后面的彩灯色）；再否则预设单色。
     const ring = preset.lamp.colors;
-    lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a, i) => {
+    let ringI = 0;   // 只有"没自带颜色"的锚才吃轮转位（否则显式色会被机器占用而错位）
+    lampAnchors.slice(0, preset.lamp.cap ?? 6).forEach((a) => {
       const base = (preset.lamp.base ?? 900) * (a.gain ?? 1);
-      const color = a.color ?? (ring ? ring[i % ring.length] : (preset.lamp.color ?? P.glowCyan));
+      // ⚠ 这里同时覆盖 **PCG 道具的 lampColor**（a.color）：可放置物体的光源与预设灯同一处方
+      const color = desat(a.color ?? (ring ? ring[ringI++ % ring.length] : (preset.lamp.color ?? P.glowCyan)));
       const light = new THREE.PointLight(color, base, preset.lamp.dist ?? 90, 1.8);
       light.position.set(a.x, a.y, a.z);
       group.add(light);
-      lampLights.push({ light, base });
+      lampLights.push({ light, base, baseColor: new THREE.Color(color) });
     });
   }
 
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
   const torches = [];
   for (const a of fireAnchors.slice(0, preset.fire.cap)) {
-    const light = new THREE.PointLight(P.fireLight, preset.fire.base, preset.fire.dist, 1.8);
+    const light = new THREE.PointLight(desatFire(P.fireLight), preset.fire.base, preset.fire.dist, 1.8);
     light.position.set(a.x, a.y + 3, a.z + 2);
     group.add(light);
     torches.push({
@@ -184,7 +270,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const focusCfg = preset.focus ?? {
     color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08,
   };
-  const focusLight = new THREE.PointLight(focusCfg.color, 0, focusCfg.dist, 2.0);
+  const focusLight = new THREE.PointLight(desat(focusCfg.color), 0, focusCfg.dist, 2.0);
   focusLight.visible = false;
   group.add(focusLight);
   let focusTarget = null;   // Vector3 | null
@@ -203,14 +289,31 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     { light: centerFill, base: cfBase },
   ];
 
-  /** 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。 */
-  function setFocus(target, { strength = 1 } = {}) {
+  // 灯池染色（用户定 2026-09-11）：恶魔 roll 期间整机光照要偏暗红——灯池是静态建的，
+  // 运行期改色走这个句柄（k=0 恢复本色，k=1 全量替换）。**只染灯池**（机器/彩灯串），
+  // 不动中央光/月光（房间基调仍归预设）。
+  const lampTintTarget = new THREE.Color();
+  let lampTintK = 0;
+  function setLampTint(color, k = 1) {
+    if (color != null) lampTintTarget.set(color);
+    lampTintK = THREE.MathUtils.clamp(k, 0, 1);
+  }
+
+  /**
+   * 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。
+   * @param opts.fill false = **只压暗外围、不打正面补光**。售货机需要这一档：它柜内是
+   *   unlit 自发光（补光照不到商品），而走进敞开玻璃柜的补光会把柜内背板照爆
+   *   （用户报"怼脸时柜子中间一团白光"）；但压暗外围仍要，机器才从背景里跳出来。
+   */
+  function setFocus(target, { strength = 1, fill = true } = {}) {
     if (!target) { focusTarget = null; focusWant = 0; return; }
     focusTarget = (target.isVector3
       ? target.clone()
       : new THREE.Vector3(target.x, target.y, target.z));
     focusWant = THREE.MathUtils.clamp(strength, 0, 1);
+    focusFillK = fill ? 1 : 0;
   }
+  let focusFillK = 1;
 
   let time = 0;
   /** 帧驱动：焦点缓动与压暗 + 幽火闪烁 + 火焰粒子发射（同 dungeon3D 口径） */
@@ -221,9 +324,13 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     if (Math.abs(focusWant - focusK) < 0.003) focusK = focusWant;
     const periph = 1 - focusK * (focusCfg.dim ?? 0.72);
     for (const p of peripheral) p.light.intensity = p.base * periph;
-    for (const l of lampLights) l.light.intensity = l.base * periph;
+    for (const l of lampLights) {
+      l.light.intensity = l.base * periph;
+      if (lampTintK > 0.001) l.light.color.copy(l.baseColor).lerp(lampTintTarget, lampTintK);
+      else if (!l.light.color.equals(l.baseColor)) l.light.color.copy(l.baseColor);
+    }
 
-    if (focusK > 0.001 && focusTarget) {
+    if (focusK > 0.001 && focusTarget && focusFillK > 0.5) {
       focusLight.visible = true;
       focusLight.intensity = (focusCfg.base ?? 3600) * focusK;
       focusLight.position.copy(focusTarget);
@@ -257,5 +364,14 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     }
   }
 
-  return { group, torches, moonlight, tint: preset.tint, update, setFocus, focusLight };
+  // 单位染色底（"单位受到的照明估计"）：与灯同一处方去饱和，否则单位整体泛蓝
+  const tint = {
+    base: desatRGB(preset.tint.base),
+    fireGain: desatRGB(preset.tint.fireGain),
+    radius: preset.tint.radius,
+  };
+  return {
+    group, torches, moonlight, tint, update, setFocus, focusLight,
+    setLampTint,   // (color, k) 灯池染色：恶魔 roll 等运行期换风格
+  };
 }

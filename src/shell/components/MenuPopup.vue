@@ -35,10 +35,10 @@ const emit = defineEmits(['close']);
   position: relative; /* × 按钮的定位锚 */
   width: max-content; max-width: min(420px, 86vw);
   padding: 10px 36px 10px 22px; text-align: center;
-  background: rgba(10, 14, 26, .92); border: 1px solid #38415e; border-radius: 10px;
+  background: rgba(8, 11, 18, .94); border: 1px solid #2f3a52; border-radius: 3px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
 }
-.toast-title { font-size: 15px; color: #ffe7b3; }
+.toast-title { font-size: 15px; color: #eef4ff; }
 .toast-text { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
 .toast-close {
   position: absolute; top: 4px; right: 6px;

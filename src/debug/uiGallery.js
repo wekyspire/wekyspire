@@ -18,6 +18,7 @@ import { MapStage } from '../stage/stages/MapStage.js';
 import { createRun, enterBattle, finishBattle, completeRewards } from '../core/run/runFlow.js';
 import { prepSnapshot, rewardSnapshot, ascensionSnapshot, roomSnapshot } from '../core/run/panelSnapshot.js';
 import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
+import { getRelicDefinition } from '../core/relics/registry.js';
 import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
 import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
 import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
@@ -109,7 +110,10 @@ const push = () => {
     ap: run.player.maxActionPoints, apMax: run.player.maxActionPoints,
     mana: run.player.mana, manaMax: run.player.maxMana,
     money: run.player.money, hp: run.player.hp, maxHp: run.player.maxHp,
-    relics: run.player.equippedRelics.map(id => ({ id, name: id, icon: null, usesLeft: null })),
+    // name 传**遗物定义名**（不是 id）：顶端资源栏的遗物槽按名字查立绘（assets/relics/）
+    relics: run.player.equippedRelics.map(id => ({
+      id, name: getRelicDefinition(id)?.name ?? id, icon: null, usesLeft: null,
+    })),
     remi: { present: true, hp: 15 },
   });
   info.textContent = `面板 ${PANEL} ｜ 阶段 ${run.gameStage} ｜ 层 ${run.floor}/${run.totalFloors} ｜ 种子 ${run.seed}`;
@@ -175,10 +179,55 @@ push();
 if (opt('picker', '0') === '1' && (run.currentRoom === 'camp' || run.currentRoom === 'training')) {
   mapStage._onPanelAction({ action: 'openUpgradePicker', source: run.currentRoom, local: true });
 }
+// ?relicPicker=1 直接打开全屏选遗物界面（正常要进老虎机「粉碎」才见得到）
+if (opt('relicPicker', '0') === '1') {
+  const ids = run.player.equippedRelics.concat(
+    ['hardBaguette', 'northMountainRock', 'dragonScale', 'mountainSpringPot'],
+  ).filter((id, i, a) => a.indexOf(id) === i && getRelicDefinition(id));
+  mapStage._ensureRelicPicker().attachPicker(mapStage._picker);
+  mapStage._relicPicker.open({
+    title: '粉碎哪件遗物？',
+    hint: '陈列页：只为验收候选卡排版（遗物立绘 + 名字 + 描述）',
+    relics: ids.map((id) => {
+      const def = getRelicDefinition(id);
+      return { id, name: def.name ?? id, rarity: def.rarity ?? 'C', desc: def.description ?? '' };
+    }),
+    confirmLabel: '确认粉碎',
+  });
+}
+
 // ?shop=1 直接打开售货机（需 ?floor= 命中商店层，如 floor=4）
 if (opt('shop', '0') === '1' && run.shop) {
   mapStage._onPanelAction({ action: 'openShop', local: true });
 }
+
+// ?showcase=relic|potion|coin 直接播一次获得物特写（不用玩到真拿到东西那一步）
+const SHOWCASE_SAMPLES = {
+  relic: {},
+  relicReal: {   // 走真遗物定义（名称/描述/立绘全真）——遗物特写的验收样本
+    title: '山泉壶',
+    desc: '遗物 · C 级 · 非槽位式',
+    effect: '休息处休息时，额外恢复5点血。',
+    artKey: '山泉壶',
+    tint: 0x8d97b5,
+  },
+  potion: {
+    title: '恢复药剂', artKey: 'potion_heal', tint: 0xd06a7a,
+    desc: '味道像掺了铁锈的糖水。',
+    effect: '立即恢复 15% 最大生命。',
+  },
+  coin: {
+    title: '金币大奖', tint: 0xffd06a,
+    desc: '老虎机把所有家底都吐了出来。',
+    effect: '获得 40 金币。',
+  },
+};
+window.__showcase = (item) => mapStage.showcaseItem(item ?? SHOWCASE_SAMPLES.relic);
+window.__uiStage = mapStage;   // 调试句柄（查组件状态/手动驱动）
+window.__uiRun = () => run;    // 样本 run（改状态后调 __uiPush() 重推快照）
+window.__uiPush = () => push();
+const SHOW = opt('showcase', '');
+if (SHOW && SHOWCASE_SAMPLES[SHOW]) mapStage.showcaseItem(SHOWCASE_SAMPLES[SHOW]);
 
 // ---- 指针接线（与 App.vue 同一套调用） ----
 const local = (e) => {

@@ -25,8 +25,8 @@ import {
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
-import { slotView, devourableRelics, devourableCards } from './rooms/slotMachine.js';
-import { canBuy, isShopFloor } from './rooms/shop.js';
+import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } from './rooms/slotMachine.js';
+import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
@@ -182,15 +182,20 @@ export function roomSnapshot(run, extra = {}) {
   const p = run.player;
   const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
 
-  // 售货机（与房间并存，不占房间名额）：商店层才给货架；卡包开出的三选一挂起时优先呈现
+  // 售货机（商店房 = room === 'shop'）：货架 + 卡包开出的三选一挂起时优先呈现
   if (isShopFloor(run.floor) && run.shop) {
     snap.shop = {
       floor: run.shop.floor,
       discount: run.shop.discount,
       broken: !!run.shop.broken, // 故事模式：瑞米被打跑 → 货架不完整（附道歉文案）
       items: run.shop.items.map((it, index) => ({
-        index, kind: it.kind, label: it.label, sub: it.sub ?? '',
+        index, kind: it.kind,
+        name: it.name ?? it.label,          // 短名（货架 billboard 的面板名）
+        label: it.label, sub: it.sub ?? '',
+        effect: it.effect ?? it.sub ?? '',  // 获得演出的"具体作用"行
         relicId: it.relicId ?? null, // 遗物货：供 hover 效果预览
+        // 非遗物货的 hover 文本说明（药水/苹果/卡包）：core 侧算好纯文本，Stage 只负责弹
+        tip: it.relicId ? null : shopItemTip(run, it),
         price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
       })),
       pending: run.shopPending ? {
@@ -274,8 +279,20 @@ export function roomSnapshot(run, extra = {}) {
       majorChance: view.majorChance,
       minorChance: view.minorChance,
       devour: { progress: view.devourProgress, every: view.devourEvery, ready: view.devourReady },
-      // 演出进行中：{ id, prize }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）
-      spinning: anim ? { id: anim.id, prize: anim.prize?.kind ?? null } : null,
+      // 离房安慰奖（拉了 ≥2 次杆且没中奖）：**只下发"欠着"与可选项的文本**，
+      // 领不领、什么时候领由流程侧决定（点「继续前进」时才进演出）
+      gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
+        id: g.id, name: g.name, desc: g.desc, effect: g.effect, tint: g.tint,
+      })) : null,
+      // 演出进行中：{ id, tier, kind }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）。
+      // ⚠ **tier 才是转轮灯效/落面的输入**（'major'/'minor'/'none'）；kind 只是奖项种类
+      // （moneySmall/heal/…）。早期只下发 kind，导致 rig 收到未知档位 → 落面退化成随机、
+      // 中奖灯效走 none 档（用户报"中了却没什么动静"的真凶）
+      spinning: anim ? {
+        id: anim.id,
+        tier: anim.prize?.tier ?? 'none',
+        kind: anim.prize?.kind ?? null,
+      } : null,
       lastSpin,
       // 待处理产出：原始载荷原样带上，表现文案由 Stage 侧翻译（与战后奖励同一分工）
       pending: pending ? {
@@ -305,6 +322,8 @@ export function roomSnapshot(run, extra = {}) {
   }
 
   if (room === 'event') {
+    // 事件房：内容与结算都在 core（event.js），Shell 播幕间时自己取 eventView 播片——
+    // 这里只留"结果载荷"供调试/兜底观察（面板已不做事件交互，见 panels 的 event 分支）
     snap.event = { result: extra.eventResult ?? null };
     return snap;
   }

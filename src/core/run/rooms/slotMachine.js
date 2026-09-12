@@ -31,6 +31,7 @@ export const SLOT = Object.freeze({
   minorBase: 0.18, minorStep: 0.07,   // 小奖概率（未中即累加，中奖重置）
   majorBase: 0.02, majorStep: 0.02,   // 大奖概率
   devourEvery: 7,     // 每累积这么多次 roll 可吞噬一次
+  giftAfterPulls: 2,  // 拉过这么多次杆仍颗粒无收 → 离房时送安慰奖（可乐/鸡腿二选一）
   // 档内权重（文档只给了档概率，档内分配是调参位）
   minorWeights: {
     moneySmall: 20, heal: 16, pack: 16, highCard: 10,
@@ -49,6 +50,32 @@ export const SLOT = Object.freeze({
   moneySmall: [10, 30],
   moneyBig: [200, 400],
   healPct: 0.12,
+});
+
+/**
+ * 离房安慰奖（SLOT_MACHINE.md §老虎机）：**进房后拉了 2 次以上杆且一次都没中奖**，
+ * 离开房间时老虎机送一份「可乐 / 鸡腿」二选一。效果文本是唯一事实源（面板、场景演出、
+ * 获得物特写都读它）；颜色等表现由 Stage 侧自己定。
+ */
+export const SLOT_GIFTS = Object.freeze({
+  cola: {
+    id: 'cola',
+    name: '可乐',
+    desc: '「就算没中奖，也总得喝点什么。」',
+    effect: '恢复 4 生命；下一场战斗开始时额外恢复 1 魏启。',
+    tint: 0xc0392b,          // 占位美术的色块/特写底色（唯一事实源，场景与面板共用）
+    heal: 4,
+    manaBonus: 1,
+  },
+  chicken: {
+    id: 'chicken',
+    name: '鸡腿',
+    desc: '「机器烤的，别问它怎么烤的。」',
+    effect: '恢复 9 生命；最大生命 +1。',
+    tint: 0xd9a05b,
+    heal: 9,
+    maxHp: 1,
+  },
 });
 
 const intIn = (range, rng) => range[0] + Math.floor(rng.next() * (range[1] - range[0] + 1));
@@ -75,6 +102,33 @@ export const devourReady = (run) => devourProgress(run) >= SLOT.devourEvery;
 /** 待结算的产出（roll 出来的东西挂在这里，等玩家领取或放弃）。 */
 export const slotPending = (run) => run.slotPending ?? null;
 
+/**
+ * 离房安慰奖是否欠着：**本房拉过 2 次以上杆且一次都没中奖**、且还没领过。
+ * 只在"要离开房间"时兑现（见 takeSlotGift）——所以它是 leave 流程的一环，不是 pending 产出。
+ */
+export function slotGiftDue(run) {
+  const st = run.slot;
+  if (!st || st.floor !== run.floor) return false;   // 没摸过机器 / 不是本层那台
+  if (st.giftTaken) return false;
+  return (st.pulls ?? 0) >= SLOT.giftAfterPulls && !st.won;
+}
+
+/**
+ * 领安慰奖（二选一）。返回 { gift, healed, maxHp, manaBonus }（供 UI 播"获得动画"）；
+ * 不欠或选择非法时返回 null（不改状态）。
+ */
+export function takeSlotGift(run, choice) {
+  const gift = SLOT_GIFTS[choice];
+  if (!gift || !slotGiftDue(run)) return null;
+  const p = run.player;
+  const before = p.hp;
+  p.hp = Math.min(p.maxHp, p.hp + (gift.heal ?? 0));
+  if (gift.maxHp) p.maxHp += gift.maxHp;         // 「最大生命 +1」：只抬上限，不白送 1 点当前血
+  if (gift.manaBonus) run.pendingManaBonus = (run.pendingManaBonus ?? 0) + gift.manaBonus;
+  run.slot.giftTaken = true;
+  return { gift, healed: p.hp - before, maxHp: gift.maxHp ?? 0, manaBonus: gift.manaBonus ?? 0 };
+}
+
 /** 当前机器概览（UI/CLI 用；纯读）。 */
 export function slotView(run) {
   const st = slotState(run);
@@ -83,7 +137,8 @@ export function slotView(run) {
     cost,
     rolls: st.rolls,
     freeRolls: run.slotFreeRolls ?? 0,
-    canSpin: (run.slotFreeRolls ?? 0) > 0 || run.player.money >= cost,
+    // 恶魔 roll 挂着时机器切到恶魔形态、不能拉杆（spinSlot 同款守卫）
+    canSpin: !run.bank?.pendingRoll && ((run.slotFreeRolls ?? 0) > 0 || run.player.money >= cost),
     majorChance: Math.min(1, SLOT.majorBase + SLOT.majorStep * st.sinceMajor),
     minorChance: (() => {
       const major = Math.min(1, SLOT.majorBase + SLOT.majorStep * st.sinceMajor);
@@ -249,12 +304,15 @@ function makePrize(run, tier) {
 export function spinSlot(run) {
   if (run.currentRoom !== 'slot') throw new Error('当前不在老虎机房');
   if (run.slotPending) throw new Error('上一次的产出还没处理（领取或放弃）');
+  // 恶魔 roll 挂着时机器是"恶魔形态"：先把词条选了（钱已经到手，不能拿钱跑）
+  if (run.bank?.pendingRoll) throw new Error('先处理恶魔 roll（在机器上选一个词条）');
 
   const free = (run.slotFreeRolls ?? 0) > 0;
   const cost = spinCost(run);
   // 校验全部通过后才落状态：失败的 roll 不改动任何东西（含机器瞬态初始化）
   if (!free && run.player.money < cost) throw new Error(`金币不足（本次 ${cost}）`);
   const st = slotState(run);
+  st.pulls = (st.pulls ?? 0) + 1;   // 每次拉杆都算（安慰奖门禁看它，免费 roll 也算拉了杆）
   if (free) run.slotFreeRolls -= 1;
   else run.player.money -= cost;
 
@@ -277,6 +335,7 @@ export function spinSlot(run) {
     // 未中奖不是"产出"：不挂 pending，玩家可以立刻再拉杆（headless 试玩 report-r1-A 缺陷#5）
     return { tier: 'none', kind: 'nothing', cost };
   }
+  st.won = true;   // 本房中过奖 → 不再给离房安慰奖
   if (tier === 'major') { st.sinceMajor = 0; st.sinceMinor += 1; }
   else { st.sinceMinor = 0; st.sinceMajor += 1; }
 

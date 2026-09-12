@@ -7,6 +7,7 @@ import {
   TOTAL_FLOORS, FLOORS_PER_CHAPTER,
 } from '../src/core/run/runFlow.js';
 import { RunDriver } from '../src/core/run/runDriver.js';
+import { isShopFloor } from '../src/core/run/rooms/shop.js';
 import { chooseSkillReward } from '../src/core/run/rewards.js';
 import { ASCENSION_PLACEHOLDER, totalLeino } from '../src/core/run/ascension.js';
 
@@ -34,13 +35,14 @@ describe('塔结构与楼层表（RUN_DESIGN §1/§4）', () => {
     for (const f of [2, 6, 14, 18]) expect(roomOfFloor(f, createRng(1))).toBe('campTraining'); // 4N-2
   });
 
-  it('Boss 层无奖励房；自由楼层只在 事件/老虎机 之间随机', () => {
+  it('Boss 层无奖励房；自由楼层只在 事件/老虎机 之间随机（商店层固定商店房）', () => {
     const rng = createRng(1);
     expect(roomOfFloor(11, rng)).toBeNull();
     const kinds = new Set();
     for (const f of [1, 3, 4, 7, 8, 12, 15, 16, 20]) {
       const room = roomOfFloor(f, rng);
-      expect(['slot', 'event']).toContain(room);
+      // 商店层（4/8/15/19…）整层是商店房（用户定 2026-09-12）；其余自由楼层随机 slot/event
+      expect(isShopFloor(f) ? 'shop' : ['slot', 'event']).toContain(room);
       kinds.add(room);
     }
     expect(kinds.size).toBeGreaterThan(0);

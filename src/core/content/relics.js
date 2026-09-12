@@ -359,7 +359,7 @@ registerRelic({
 // ---- run 级数值修正（从 baseStats 重算，见 prep.refreshRunModifiers）----
 
 registerRelic({
-  id: 'dragonScale', name: '龙鳞', rarity: 'A', cost: 3,
+  id: 'dragonScale', name: '龙鳞碎片', rarity: 'A', cost: 3,
   description: '战斗开始时，防御 2。',
   runModifiers: { defense: 2 },
 });

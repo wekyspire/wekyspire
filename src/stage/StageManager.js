@@ -9,6 +9,7 @@
 // 显示假设：游玩分辨率固定 16:9（1920x1080，z=0 世界宽 ≈177.8），不做其它比例适配。
 
 import * as THREE from 'three';
+import { applyToneMapping, DEFAULT_TONE_MODE } from './scenes/volumetricMoon.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
@@ -63,6 +64,13 @@ export class StageManager {
       CAMERA_LOOK_AT.z + Math.cos(az) * Math.cos(el) * this._cameraDistance,
     );
     this._camera.lookAt(CAMERA_LOOK_AT.x, CAMERA_LOOK_AT.y, CAMERA_LOOK_AT.z);
+    // 基准机位快照：世界相机只在这里落位一次，之后由舞台各自动它（战斗受击震荡、
+    // 休息房聚焦机器）。任何改过机位的舞台**结束时必须 restoreBaseCamera()**，
+    // 否则塔楼/战斗层会带着变形的取景。
+    this._cameraBase = {
+      position: this._camera.position.clone(),
+      quaternion: this._camera.quaternion.clone(),
+    };
     // UI 专用相机（uiScene pass）：正交正视——卡牌/按钮/图标/资源点的布局坐标
     // 与屏幕线性映射，不吃任何透视畸变（z 只决定前后层，不改投影大小/位置）。
     // 与渲染同理，UI 对象的拾取/拖拽映射也必须走这台相机（Picker 按 space 路由）。
@@ -97,6 +105,11 @@ export class StageManager {
   attach(canvas) {
     this._renderer = this._createRenderer({ canvas });
     this._renderer?.setPixelRatio?.(this._devicePixelRatio());
+    // 色调映射（直渲路径：塔楼层/无 composer 回退）：与体积光 composer 的合成 shader
+    // 用同一条曲线（Khronos PBR Neutral，保色相）——否则彩灯/火光高光会被逐通道裁成白团。
+    // 渲染进 RT 时 three 不套 tone mapping（getParameters 按 renderTarget 判定），
+    // 故 composer 路径不会双重映射，两处各管一条路。
+    applyToneMapping(this._renderer, null, DEFAULT_TONE_MODE, 1);
     // 阴影贴图（月光穿窗投影用；假 renderer 无 shadowMap，单测跳过）
     if (this._renderer.shadowMap) {
       this._renderer.shadowMap.enabled = true;
@@ -139,6 +152,16 @@ export class StageManager {
     this._stage?.composeResize?.(width, height); // 后处理链 RT 跟随（如体积光 composer）
   }
 
+  /** 世界相机的基准机位（只读快照；相机不在场景图内，直接拷 position/quaternion）。 */
+  get cameraBase() { return this._cameraBase; }
+
+  /** 还原世界相机到基准机位（借用过机位的舞台退出时调）。 */
+  restoreBaseCamera() {
+    if (!this._cameraBase) return;
+    this._camera.position.copy(this._cameraBase.position);
+    this._camera.quaternion.copy(this._cameraBase.quaternion);
+  }
+
   /** 屏幕像素 → 指定 z 平面上的世界坐标（射线与 z=planeZ 平面求交，任意相机通用）。
    *  cam 缺省世界相机；牌桌 UI 空间传 this.uiCamera。 */
   screenToWorld(px, py, planeZ = 0, cam = this._camera) {
@@ -152,6 +175,16 @@ export class StageManager {
     const t = (planeZ - ray.origin.z) / ray.direction.z;
     const p = ray.at(t, new THREE.Vector3());
     return { x: p.x, y: p.y };
+  }
+
+  /**
+   * 世界坐标 → **UI 空间坐标**（uiCamera 的 z=uiZ 平面）：把 UI 元素锚到世界物体上的
+   * 唯一换算（单位头顶的读数文字、对话泡泡都走它）。视口未就绪时退化为原坐标（headless）。
+   */
+  worldToUI(wx, wy, wz = 0, uiZ = 70) {
+    if (!this._viewWidth || !this._viewHeight) return { x: wx, y: wy };
+    const px = this.worldToScreen(wx, wy, wz, this._camera);
+    return this.screenToWorld(px.x, px.y, uiZ, this._uiCamera);
   }
 
   /** 世界坐标 → 屏幕像素（测试/调试逆映射）。cam 缺省世界相机；UI 空间传 uiCamera。 */

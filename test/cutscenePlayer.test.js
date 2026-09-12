@@ -157,13 +157,15 @@ describe('多段时间轴：fade → image → dialogue → call 组合编排', 
 });
 
 describe('wipe（幕间转场）：时间轴与阻塞', () => {
+  // ⚠ 切幕器与内容播放器已拆开（用户定 2026-09-12）：黑幕状态在 player 的**独立** wipe 状态机里
+  // （`p.wipe.state`），由 SceneWipeOverlay 渲染；`p.state.phase` 只剩 image 的子阶段。
   it('时间轴：enter → cover（时长后）→ 全黑中点 atCover → reveal → idle', async () => {
     const timeline = [];
     const p = createCutscenePlayer({
-      sleep: (ms) => { timeline.push(`sleep:${ms}@${p.state.phase}`); return Promise.resolve(); },
+      sleep: (ms) => { timeline.push(`sleep:${ms}@${p.wipe.state.phase}`); return Promise.resolve(); },
     });
     let swappedAt = null;
-    await p.sceneTransition(() => { swappedAt = p.state.phase; });
+    await p.sceneTransition(() => { swappedAt = p.wipe.state.phase; });
 
     // 一帧落位 → cover 段 → atCover → reveal 段
     expect(timeline[0]).toBe('sleep:16@enter');
@@ -171,7 +173,8 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
     expect(timeline[2]).toBe(`sleep:${SCENE_TRANSITION_MS.reveal}@reveal`);
     expect(swappedAt).toBe('cover'); // 换景发生在全黑段（cover 结束时刻）
     expect(p.state.mode).toBe('idle');
-    expect(p.state.phase).toBe(null);
+    expect(p.wipe.state.active).toBe(false);
+    expect(p.wipe.state.phase).toBe(null);
   });
 
   it('无 swap 也可安全播放；转场重叠时退化为直切', async () => {
@@ -181,7 +184,7 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
     await Promise.resolve();
     await p.sceneTransition(() => { direct = true; }); // 重叠 → 直切 swap
     expect(direct).toBe(true);
-    expect(p.state.phase).toBe('enter'); // 首次转场仍在进行
+    expect(p.wipe.state.phase).toBe('enter'); // 首次转场仍在进行
     void first;
   });
 
@@ -203,9 +206,13 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
   });
 
   it('wipe 作为剧本内嵌 step：可与 fade/image/dialogue 组合成复杂 cutscene', async () => {
-    const timeline = [];
+    const rec = [];
     const p = createCutscenePlayer({
-      sleep: (ms) => { timeline.push(`${p.state.step.type}@${p.state.phase}:${ms}`); return Promise.resolve(); },
+      // 记录 sleep 时"正在走的内容 step × 黑幕阶段"两个维度
+      sleep: (ms) => {
+        rec.push({ step: p.state.step?.type ?? null, phase: p.wipe.state.phase });
+        return Promise.resolve();
+      },
     });
     let swapped = false;
     await p.play({
@@ -219,21 +226,62 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
       ],
     });
     expect(swapped).toBe(true);
-    const types = timeline.map(t => t.split('@')[0]);
-    expect(types).toEqual([
-      'fade',
-      'image', 'image', 'image', 'image',
-      'image', 'image', 'image', 'image',
-      'wipe', 'wipe', 'wipe',
-      'fade',
-    ]);
+    // 内容层（黑幕之外的节拍）顺序不变：fade → image×8 → fade
+    expect(rec.filter(r => r.phase === null).map(r => r.step))
+      .toEqual(['fade', 'image', 'image', 'image', 'image', 'image', 'image', 'image', 'image', 'fade']);
+    // 黑幕阶段按 enter → cover → reveal 推进（切幕器状态机，独立于内容层）
+    const wipePhases = rec.filter(r => r.phase !== null).map(r => r.phase);
+    expect(wipePhases[0]).toBe('enter');
+    expect(wipePhases).toContain('cover');
+    expect(wipePhases.at(-1)).toBe('reveal');
+    // 全黑中点已把下一段内容（fade）就位——揭幕揭开的是它
+    expect(rec.find(r => r.phase === 'reveal').step).toBe('fade');
     expect(p.state.mode).toBe('idle');
+  });
+
+  it('黑幕之后的对话在**揭幕前**就位（回归：切幕播完内容才蹦出来）', async () => {
+    const seen = [];
+    const p = createCutscenePlayer({
+      sleep: () => {
+        const w = p.wipe.state;
+        // 每次等待都记一条：黑幕阶段 + 此时内容层正在显示的 step
+        seen.push({ phase: w.phase, active: w.active, step: p.state.step?.type ?? null, page: p.state.pageIndex });
+        return Promise.resolve();
+      },
+    });
+    let choiceAt = null;
+    const done = p.play({
+      id: '__evt__',
+      steps: [
+        { type: 'wipe' },
+        {
+          type: 'dialogue',
+          pages: [{ speaker: '旁白', text: '……' }, { speaker: '旁白', text: '选吧', choices: [{ id: 'a', label: 'A' }] }],
+          onChoice: (id) => { choiceAt = id; },
+        },
+      ],
+    });
+    await flush(8);
+    // ★ 回归点：黑幕**揭幕段**（reveal）时，内容层已经挂在 dialogue 上、停在第 0 页——
+    //   揭幕揭开的就是对话本身（旧实现：内容层要等黑幕播完才挂上 → 内容突然蹦出来）
+    const revealRec = seen.find(s => s.phase === 'reveal');
+    expect(revealRec).toBeTruthy();
+    expect(revealRec.step).toBe('dialogue');
+    expect(revealRec.page).toBe(0);
+    // 剧本走完：两页翻过 → 选项页 choose
+    p.advance();
+    p.advance();
+    p.choose('a');
+    await done;
+    expect(choiceAt).toBe('a');
+    expect(p.state.mode).toBe('idle');
+    expect(p.wipe.state.active).toBe(false);
   });
 
   it('atCover 返回 Promise（战场预载）：黑幕保持到兑现才 reveal；holdMs 追加停留', async () => {
     const timeline = [];
     const p = createCutscenePlayer({
-      sleep: (ms) => { timeline.push(`sleep:${ms}@${p.state.phase}`); return Promise.resolve(); },
+      sleep: (ms) => { timeline.push(`sleep:${ms}@${p.wipe.state.phase}`); return Promise.resolve(); },
     });
     let resolvePreload = null;
     const preloadDone = new Promise(r => { resolvePreload = r; });
@@ -245,12 +293,12 @@ describe('wipe（幕间转场）：时间轴与阻塞', () => {
     );
     // 微任务推进到 atCover 之后：reveal 尚未开始（黑幕等待预载）
     await flush(8);
-    revealedBeforeResolve = p.state.phase;
+    revealedBeforeResolve = p.wipe.state.phase;
     expect(revealedBeforeResolve).toBe('cover'); // 预载未兑现：仍处全黑段
 
     resolvePreload(); // 预载完成
     await transition;
-    expect(p.state.phase).toBe(null);
+    expect(p.wipe.state.active).toBe(false);
     // holdMs 生效：atCover 兑现后先追加黑幕停留再 reveal
     expect(timeline).toContain('sleep:120@cover');
     expect(p.state.mode).toBe('idle');

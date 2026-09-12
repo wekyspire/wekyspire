@@ -94,3 +94,79 @@ Debuff列表
     失望：下一场战斗中，从第4回合开始，每回合结束时受到7伤害。
     出血：下一场战斗中，战斗开始时，伤残1。
     失眠：下一场战斗中，前2回合，魏启不会自动回复。
+## 恶魔 roll 的演出与"粉碎物品"入口（2026-09-11 用户定，进行中）
+
+**已完成：粉碎物品全链（机器端 + 面板端）**
+- **机器正面两件**（`props/slotMachine.js` + `interactive/slotMachineRig.js`）：操作台与腰线
+  之间的正面空档里，左半是**投料口**（暗腔可点热区 `pickId='slot:crusher'` + 上下两排金牙
+  锯齿，上牙按镜像反绕——单面材质下原会被背面剔除），右半是**计数器**面板。
+- **翻牌式计数器**（用户定：不要"能量条"读法）：rig 自绘 canvas，两张卡（当前值 / 上限）
+  各分上下两片叶子 + 中缝，数字变化时上叶折叠落下 → 新叶落下（0.44s，`FLAP_DUR`）；
+  进度满时卡面转金并脉动。
+- **预算回本**：一圈彩灯 + 三颗锁定指示灯改两个 `InstancedMesh` + `instanceColor`
+  （14 mesh/840 顶点 → 2 mesh/120 顶点），几何顶点色走新增的 kit `paintNeutral`（纯白，
+  颜色全由实例色决定）→ 本资产 **17 mesh / 2954 顶点**，`budget` 例外已撤销。
+- **粉碎演出**：`rig.crush()` = 上下牙交错咬合（`jaw.scale.y` 绕口心）+ 口内闪红 +
+  机壳剧震 + 16 枚金币抛物迸出（rig 自建的 InstancedMesh，不进资产预算）。
+  rig 接口：`setDevour({progress,every,ready})` / `devourReady()` / `crush()` /
+  `crusherTargets()` / `pickNameOf()`；`isBusy()` 含粉碎。
+- **dialogue 层首次接入**：`cutscenePlayer` 的 dialogue step 支持
+  `pages[].choices = [{id,label,hint?,disabled?}]` + `step.onChoice(id)`；
+  `player.choose(id)` 回执开闸（**带选项的页不响应点背板翻页**），选择也写进
+  `state.lastChoice`。Overlay 渲染成整行按钮（左侧标签 + 右侧小字提示）。
+- **两个全屏选择界面**：抽出共用骨架 **`stage/objects/ScrollPickerObject.js`**
+  （背板/标题/提示/滚动带/滚动条/选中态/确认可用性/返回/tooltip/拾取登记），
+  `CardScrollPickerObject` 与新的 **`RelicScrollPickerObject`** 都只回答"一件候选长什么样"。
+  遗物候选是程序化"藏品卡"（无美术资源）：稀有度色描边 + 徽标 + 名字 + 换行描述。
+  ⚠ 选择界面的文本必须走 `MapStage._pickerBakeText()`（honors fontPx/tint/maxWidth），
+  不能用 `_bakeLabel`（那个把 style/maxWidth 写死，字号与颜色会被丢掉）。
+- **编排**（`runController.openDevourFlow`）：面板「粉碎物品…」→ `requestDevour` 意图 →
+  对话问「粉碎什么？」（选项按可粉碎内容**动态隐藏**）→ 全屏选卡/选遗物 →
+  `devourSlot` 结算 → 金币获得特写（`ItemShowcaseObject`）。面板不再平铺候选按钮墙。
+- 调试门：restGallery 聚焦后点机身投料口即粉碎（`__devour(n)` / `__crush()`）；
+  uiGallery 的 `__uiRun()/__uiPush()/__uiStage.openDevourPicker(...)` 可单独调界面。
+
+**已完成：中奖即走获得演出（2026-09-12 用户定）**
+- 转轮停稳、结果揭示那一刻，编排器**直接唤起诉求获得特写**（`ItemShowcaseObject`）：标题 = 奖项文案
+  （`slotPrizeText`），副标题 = "老虎机 · 小奖/★ 大奖"，作用行 = 收下/放弃的说明。
+- **点任意处 = 收下**；**点「跳过」= 放弃这份产出**（`skippable` 参数 → `onSkip → declineSlotPrize`）。
+  需要"选一张"的奖项（卡多选一/遗物三选一）收下后仍在操纵条候选里选；大奖「免费指定升级」收下后
+  自动开全屏选卡界面。
+- 操纵条里**不再有「领取」键**（旧实现的"干巴巴一个领取按钮"没有获得感）——只保留「放弃」兜底。
+- 产出照样总是可以放弃（与文档口径一致）；未处理产出时不能拉杆。
+
+**已完成：离房安慰奖（可乐 / 鸡腿二选一，2026-09-12）**
+- 触发：进房后**拉过 ≥2 次杆且一次都没中奖**（`run.slot.pulls/won`）→ 点「继续前进」时兑现
+  （不是 pending 产出，是 leave 流程的一环）。core：`slotGiftDue` / `takeSlotGift` / `SLOT_GIFTS`
+  （名称/描述/效果文本的唯一事实源）。效果：可乐 = 恢复 4 生命 + **下一场战斗开始时额外恢复 1 魏启**
+  （`run.pendingManaBonus`，由 battleRoot 在"魏启置上限一半"之后消费即清）；鸡腿 = 恢复 9 生命 + 最大生命 +1。
+- 演出（用户定）：点「继续前进」→ 相机推到**出料口** → 机器吐出两件 billboard（暂用纯色块 +
+  白字黑边标签占位，`objects/GiftChoiceObject.js`）→ 点选其一（选中件朝镜头飞出、另一件缩没）→
+  上行 `slotTakeGift` → 结算 + **获得物特写**（通用组件）。占位房间走面板上的两个按钮，同一结算入口。
+
+**已完成：恶魔 roll 交互流（2026-09-12 用户定，全链闭环）**
+- 触发：银行机**超额取款**（黄 15 / 红 40 / 黑 90 金）→ core 立刻入账并挂 `run.bank.pendingRoll`
+  （三个**不同**词条，种子化洗牌；黑色级已通过过的词条移出池子）。
+- 演出（`RoomStage._syncDemonRoll` 的状态机，dt 驱动，不用定时器）：
+  **① 视角立刻切到老虎机**（玩家此刻站在银行机面板前）→ ② `rig.demonEnter()` 关闸 → 换恶魔盘
+  → 开闸，同时 `lighting.setLampTint(暗红, 1)` 把机器灯池染红 → ③ **自动开转**
+  （`rig.pull({ tier: 'none' })`，恶魔 roll 不是中奖，不亮中奖灯）→ ④ 停稳后机器身前弹出
+  **三张词条卡片**（`objects/ChoiceBillboardObject.js`：色块 billboard + 名字 + 词条等级 +
+  逐个自动收缩放，点选其一）→ ⑤ `rig.demonExit()` 换回普通盘 + 灯效复原 → ⑥ 镜头回银行机。
+- 词条文本：卡片只印名字与等级（`浑浑噩噩 / 黑色级`），**完整描述在操纵面板里**（三行只读）
+  ——比 hover tooltip 稳（不用悬停就能读全，也不依赖 tooltipHub 的 token 类型）。
+- 结算（core `chooseDemonDebuff`）：立即类（掉血/焚卡/降级）就地生效、永久类走 `baseStats`、
+  跨战斗类进 `run.pendingDebuffs`（战斗开始时折入 `battleState.debuffs`，战后每场 -1）；
+  黑色级通过 → 记 `blackCleared` 并把 `lockout` 置 1（**下次见到银行机不再允许超额取款**）。
+- **奖励特写**：退场回执 `demonAnimDone` 之后播「+N 金币 / 银行机超额取款 / 代价：词条名」，
+  顺序刻意排在退场之后（特写盖住退场演出就白做了）。
+- 守卫：恶魔 roll 挂着时**不能拉杆**（`spinSlot` 抛错 + 快照 `canSpin=false`）、
+  **不能离房**（「继续前进」压暗 + 点了拉回老虎机并冒泡泡）——钱已经到手，不能拿钱跑。
+- 存档：`run.bank`（存款/连击/黑名单/待选词条/附赠操作）与 `run.pendingDebuffs` 一并落盘
+  （2026-09-12 补：原先不存档会把存款吞掉）。
+
+**待做**
+1. **恶魔盘素材 / 词条卡美术**：真素材到位后换 `rig.swapReels()` 的取图与词条卡的色块
+   （现为占位暗红盘 + 按等级分色的纯色卡）。
+2. **机身投料口直达**：房间层已接（点投料口 → 进度满即 `requestDevour`），
+   但**面板入口**仍是主路径；将来把投料口做成"随时可点，不满给进度提示"。

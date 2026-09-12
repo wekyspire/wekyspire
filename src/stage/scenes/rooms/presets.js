@@ -450,6 +450,7 @@ const CASINO = {
     // 地毯：机器前的"赌位"（rugWorn = cloth/quarters，作构图件压地面）
     { id: 'rugWorn', x: -12.5, z: -40, ry: 0.1, scale: 1.6 },
     { id: 'rugWorn', x: 12.5, z: -40, ry: -0.1, scale: 1.6 },
+    // ⚠ 售货机**不在这里**：它只出现在商店房（SHOP_FLOORS，独立房间 'shop' + shop 配方）
   ],
   // 交互锚点契约（主流程接线用）：设施在房间内的位置与朝向 + UI 安全区比例
   anchors: {
@@ -463,18 +464,238 @@ const CASINO = {
   fog: { color: 0x1b1219, near: 165, far: 345 },   // 暖暗雾（冷蓝会把"华丽赌厅"拉回地牢）
 };
 
+// ============================================================================
+// 营地 · 训练场（休息房 2026-09-11）：**第一间"非机器"场景式休息房**。
+//   · 两个交互物 = 房间的两个部分：**篝火（营地）** 与 **训练桩（训练场）**——
+//     点谁推近看谁，各自的操纵面板下沿停靠（RoomStage 按 interactives 的 name 分发）。
+//   · 布光走 `camp` 预设：火光主导（火是主角，盏数多/基数高）+ 一道高窗月光做冷暖对比。
+//   · 构图：左半营地（篝火/吊锅/铺盖/木箱）、右半演武（训练桩/铁砧/武器架/箭靶），
+//     中轴留给一张长桌（过道感），前景（UI 安全区）只留压边大件。
+// ============================================================================
+const CAMP = {
+  id: 'camp',
+  theme: 'dungeon',
+  lighting: 'camp',
+  room: { scale: 0.88 },   // 比要塞大厅亲密一档（围着火的空间）
+  grading: { exposure: 1.09, tint: [1.06, 1.0, 0.92] },   // 暖调（火光照场）
+  // 室内营地：无大窗，只留高窄缝透一线月光（与 camp 预设的 moon 0.55 呼应）
+  wall: {
+    windows: [],
+    slits: [{ x: -10, y: 58 }, { x: 22, y: 60 }],
+    brickChance: 0.28,
+  },
+  wallSkin: {
+    spalls: 1,
+    holes: 0, holeChance: 0, backHoleChance: 0,
+    bites: 1, biteChance: 0.3, backBiteChance: 0.12,
+  },
+  // 地面基本平整（道具/铺盖要躺得稳）：只留一点起伏与苔斑，不开盆地/高台/裂缝
+  floor: { slabCount: 8, mossChance: 0.14, patches: 4, terrain: { amp: 4, basins: 0, platforms: 0, fissures: 0, slopes: 1 } },
+  facade: {
+    structureProb: 0.3,
+    structureOverlapProb: 0.3,
+    decorProb: { high: 0.26, mid: 0.5, low: 0.26 },
+    // 兵营/居室味（挂甲、铺盖、帘幕）压过宗教与墓穴；**灯串权重抬高**（营地的暖光串）
+    tags: { barrack: 2.2, quarters: 2.0, generic: 1.4, chapel: 0.3, crypt: 0.2, festoon: 2.4 },
+  },
+  scatter: {
+    tags: {
+      quarters: 2.4, barrack: 1.6, furniture: 2.0, container: 1.6,
+      lightSource: 1.6, generic: 1.2, rubble: 0.6, decal: 0.8, wood: 1.2,
+    },
+    scale: 2.1,
+    bands: {
+      back: { cell: 16, density: 0.46 },
+      left: { cell: 17, density: 0.42 },
+      right: { cell: 17, density: 0.42 },
+      mid: { cell: 22, density: 0.3 },      // 两区之间要留过道
+      midRight: { cell: 24, density: 0.26 },
+      fgLeft: { cell: 30, density: 0.04 },  // 前景 = UI 安全区：只留压边大件
+      fgRight: { cell: 30, density: 0.04 },
+      front: { cell: 30, density: 0.05 },
+    },
+  },
+  // 撒印：干草/灰烬/足迹为主（营地地面的"住人痕迹"）
+  decals: { count: 18, tags: { decal: 3, wood: 1.2, rubble: 1 } },
+  ceiling: { chandeliers: 0 },   // 营地不吊灯：光是地上的火 + 墙上的灯串
+  bigSilhouettes: ['wardrobeTall', 'crateStack', 'barrelStack', 'columnRound'],
+  clusters: 3,      // 营地的"住人杂物堆"比赌厅多
+  breakers: 2,
+  maintenance: 0.55,
+  // 外围固定火源：两盏落地烛台（边角暖点，不参与撑亮度）
+  fires: [
+    { id: 'candleStand', x: -26, z: -43, scale: 1.2 },
+    { id: 'candleStand', x: 25.5, z: -47.5, scale: 1.2 },   // 右烛台外移，给售货机让位
+  ],
+  // 构图定点：**两个交互物** + 各自的功能陈设。整组压到背墙前（z≈-45），前景留空给面板。
+  guaranteed: [
+    // —— 左：营地部分（篝火）——
+    { id: 'brazierFire', x: -14, z: -45, ry: 0.08, scale: 2.3, live: true, name: 'camp' },
+    { id: 'cauldronWitch', x: -17.6, z: -43.6, ry: 0.4, scale: 1.35 },  // 火边大锅（营地伙食）
+    { id: 'kettleTripod', x: -11.4, z: -46.6, ry: -0.4, scale: 1.4 },   // 吊锅（也是火光）
+    { id: 'logPile', x: -18.8, z: -47.4, ry: -0.3, scale: 1.5 },        // 柴堆
+    { id: 'bedRoll', x: -9.6, z: -42.4, ry: 0.35, scale: 1.3 },         // 铺盖×4（围火睡）
+    { id: 'bedRoll', x: -18.4, z: -41.2, ry: -0.25, scale: 1.3 },
+    { id: 'bedRoll', x: -22.4, z: -43.4, ry: 0.9, scale: 1.3 },
+    { id: 'bedRoll', x: -13.4, z: -39.4, ry: 1.25, scale: 1.3 },
+    { id: 'strawBedding', x: -8.2, z: -46.4, ry: 0.2, scale: 1.7 },     // 干草铺
+    { id: 'stoolSquare', x: -11.6, z: -41.6, ry: 0.5, scale: 1.2 },     // 火边三张凳
+    { id: 'stoolSquare', x: -16.4, z: -46.2, ry: -0.5, scale: 1.2 },
+    { id: 'stoolSquare', x: -17.2, z: -40.2, ry: 0.2, scale: 1.2 },
+    { id: 'crateStack', x: -6.6, z: -48.4, ry: 0.3, scale: 1.35 },      // 营地货箱
+    // —— 右：训练部分（训练桩）——
+    { id: 'trainingDummy', x: 14, z: -45, ry: -0.1, scale: 2.6, live: true, name: 'training' },
+    { id: 'anvilIron', x: 8.8, z: -43.2, ry: 0.6, scale: 1.6 },         // 铁砧
+    { id: 'weaponRack', x: 19.6, z: -44.8, ry: -0.4, scale: 1.7 },      // 武器架
+    { id: 'arrowTarget', x: 23.2, z: -47.8, ry: -0.5, scale: 1.5 },     // 箭靶
+    { id: 'spearBundle', x: 17.4, z: -41.6, ry: 0.25, scale: 1.45 },    // 长矛捆
+    { id: 'shieldStack', x: 22, z: -42.6, ry: -0.2, scale: 1.5 },       // 盾堆
+    { id: 'toolRackSmith', x: 5.8, z: -47.4, ry: 0.45, scale: 1.5 },    // 工具板
+    { id: 'benchWood', x: 13.6, z: -40.4, ry: 0.1, scale: 1.4 },        // 演武场边的长凳
+    { id: 'crossedSwords', x: 17.2, z: -47.4, ry: 0.5, scale: 1.3 },    // 交叉剑（演武标记）
+    { id: 'spikesGround', x: 10.4, z: -47.8, ry: 0.2, scale: 1.2 },     // 抗性训练桩
+    // —— 中轴：长桌（两区之间的过道感）+ 两条凳 ——
+    { id: 'tableWood', x: 0, z: -49, ry: 0, scale: 1.3 },
+    { id: 'stoolSquare', x: -3.2, z: -48, ry: 0.4, scale: 1.1 },
+    { id: 'stoolSquare', x: 3.2, z: -48, ry: -0.4, scale: 1.1 },
+    // 落地灯笼：两区外侧的柔和灯池（灯笼串走 facade 的 festoon 权重，见上）
+    { id: 'lanternFloor', x: -24.5, z: -45.5, ry: 0.3, scale: 1.1 },
+    { id: 'lanternFloor', x: 24.5, z: -45.5, ry: -0.3, scale: 1.1 },
+    // ⚠ 售货机不在这里：只出现在商店房（独立房间 'shop' + shop 配方）
+  ],
+  // 交互锚点契约（RoomStage 按 name 分发面板）：篝火 = 营地部分、训练桩 = 训练部分
+  anchors: {
+    camp: { x: -14, z: -45, ry: 0.08 },
+    training: { x: 14, z: -45, ry: -0.1 },
+    table: { x: 0, z: -49, ry: 0 },
+    uiSafe: { bottomRatio: 0.42 },
+  },
+  compositionDecal: null,
+  fog: { color: 0x241a14, near: 170, far: 360 },   // 暖暗雾（营地的火烟感）
+};
+
+// ============================================================================
+// 商店房（休息房 2026-09-12）：**一间比战斗房空旷的补给货房**，瑞米维护的售货机摆在固定位置。
+//   · 用户定的构图口径：「布置上跟普通的战斗房间差别不是很大，但物品少一些、相对空旷一点，
+//     售货机摆在固定的位置」——货架区（售货机 + 柜台 + 补给货架）压成背墙前一簇，
+//     撒布密度全线压低、前景留白给底部操纵条；
+//   · 主售货机走 `guaranteed` + `live`（claim 掉红线、登记进 room.interactives）——**必须在
+//     guaranteed 里**：动态生成的点位不会被 claim，撒布件会与机身重叠（赌厅那台的老病灶）；
+//   · `anchors.shop2` 是**第二台**的首选位（只在货架超出一台容量时由 RoomStage 生成，
+//     故事模式瑞米等级高时才有 5 件）；生成时会先避让已占红线；
+//   · 布光走 `shop` 预设：暖白灯下"亮堂的店"（比赌厅干净、比营地亮），售货机自带灯池。
+// ============================================================================
+const SHOP = {
+  id: 'shop',
+  theme: 'dungeon',
+  lighting: 'shop',
+  room: { scale: 0.84 },   // 货房比要塞大厅亲密（空间收缩把背墙拉近、售货机占比更大）
+  grading: { exposure: 1.1, tint: [0.99, 1.0, 1.02] },   // 冷白中性（机器的灯，不是烛火/暖店）
+  // 室内：无大窗，只留一道高窄缝（夜里透一线光，读作"这层有人打理"）
+  wall: {
+    windows: [],
+    slits: [{ x: 12, y: 58 }],
+    brickChance: 0.3,
+  },
+  wallSkin: {
+    spalls: 2,
+    holes: 0, holeChance: 0, backHoleChance: 0,   // 室内：不破洞（漏光会破坏"亮堂的店"）
+    bites: 1, biteChance: 0.3, backBiteChance: 0.1,
+  },
+  // 地面平整（机器/货堆要站得稳）：地形特征全关，只留石板错位与少量苔斑
+  floor: { slabCount: 7, mossChance: 0.08, patches: 2, terrain: { amp: 0, basins: 0, platforms: 0, fissures: 0, slopes: 0 } },
+  facade: {
+    structureProb: 0.22,          // 空：墙面结构比赌厅/营地都稀
+    structureOverlapProb: 0.3,
+    decorProb: { high: 0.2, mid: 0.46, low: 0.3 },
+    // 居室/储物味（挂画/帘幕/货牌）压过军事与宗教；灯串低权重（店里是灯管不是彩灯）
+    tags: { quarters: 2.0, generic: 1.4, chapel: 0.3, crypt: 0.2, festoon: 0.6 },
+  },
+  scatter: {
+    tags: {
+      container: 2.6, quarters: 2.0, furniture: 1.6, generic: 1.2,
+      lightSource: 1.2, rubble: 0.3, decal: 0.4, stone: 0.3, wood: 1.0,
+    },
+    scale: 2.0,
+    bands: {
+      back: { cell: 16, density: 0.38 },
+      left: { cell: 17, density: 0.38 },
+      right: { cell: 17, density: 0.36 },
+      // 中景（售货机两侧的空处）比赌厅/营地稀一档——用户要的"物品少一些、相对空旷"，
+      // 但不能空成毛坯房：留一点家具/货箱当尺度参照
+      mid: { cell: 22, density: 0.24 },
+      midRight: { cell: 24, density: 0.2 },
+      // 前景带 = UI 安全区：只放压边大件，密度压到最低（操纵条会盖住这里）
+      fgLeft: { cell: 30, density: 0.03 },
+      fgRight: { cell: 30, density: 0.03 },
+      front: { cell: 30, density: 0.03 },
+    },
+  },
+  // 撒印：木屑/货单/零钱（货房的地面痕迹），比赌厅/营地都少
+  decals: { count: 10, tags: { decal: 2, wood: 1.4, metal: 0.8, quarters: 1 } },
+  ceiling: { chandeliers: 1 },   // 一盏吊灯（店里的顶光）
+  bigSilhouettes: ['crateStack', 'barrelStack', 'wardrobeTall', 'pantryShelf'],
+  clusters: 2,
+  breakers: 1,
+  maintenance: 0.4,
+  // 外围固定火源：三盏烛台/烛架（边角暖点，不参与撑亮度——店里的光是灯管与灯池）。
+  // ⚠ 坐标**不能落在战场走廊**里（走廊是 28×28 的硬 keepout，火源挪不出来会吃红线违例）：
+  // 右半后区（x 10~29、z -35~-63）整片都在走廊内，故三盏都放在左侧与中轴偏后。
+  fires: [
+    { id: 'candleStand', x: -22.5, z: -46, scale: 1.15 },
+    { id: 'candleStand', x: -28, z: -38, scale: 1.1 },
+    { id: 'candelabraFloor', x: -5.5, z: -49.4, scale: 1.2 },
+  ],
+  // 构图定点：**主售货机**（交互物）+ 补给货架/柜台/货堆。整组压在背墙前（z≈-44.5），
+  // 前景留空（UI 安全区）。右侧 x∈[10,17] 是**第二台售货机的预留位**（anchors.shop2），
+  // 撒布件不会落在那里（没 claim，但也没放定点件——留白就是留位）。
+  guaranteed: [
+    // live: true = 可动组件（不进静态合批，登记进 room.interactives 由 rig 驱动动画 + 挂 billboard 货品）
+    { id: 'vendingMachine', x: 0, z: -44.5, ry: 0, scale: 2.2, live: true, name: 'shop' },
+    // 柜台（店主要站的地方）+ 柜台后的补给货架、钱箱——"这是一间有人打理的店"
+    { id: 'tableLong', x: -13.5, z: -47, ry: 0.12, scale: 1.35 },
+    { id: 'stoolSquare', x: -13.5, z: -43.4, ry: 0.3, scale: 1.15 },
+    { id: 'chestTreasure', x: -18.5, z: -45, ry: 0.35, scale: 1.2 },
+    { id: 'pantryShelf', x: -20.5, z: -48.4, ry: 0.42, scale: 1.5 },
+    { id: 'cupboardClosed', x: -23.6, z: -45.6, ry: 0.25, scale: 1.35 },
+    { id: 'bottleCase', x: -9.4, z: -47.6, ry: 0.5, scale: 1.25 },
+    // 右后：备货（桶/袋/箱）——刻意避开 x∈[10,17] 的第二台售货机位
+    { id: 'barrelStack', x: 18.8, z: -47.6, ry: 0.3, scale: 1.2 },
+    { id: 'flourSack', x: 19.6, z: -44, ry: 0.2, scale: 1.3 },
+    { id: 'crateStack', x: 21.4, z: -49, ry: -0.3, scale: 1.3 },
+    { id: 'crateStack', x: -17.4, z: -41.6, ry: -0.25, scale: 1.3 },
+    // 落地灯笼：两侧的柔和灯池（灯管感，与 shop 布光的 lamp 通道呼应）
+    { id: 'lanternFloor', x: -25.5, z: -44.4, ry: 0.3, scale: 1.15 },
+    { id: 'lanternFloor', x: 25.5, z: -44.4, ry: -0.3, scale: 1.15 },
+  ],
+  // 交互锚点契约（RoomStage 按 name 分发面板）：售货机 = 商店
+  anchors: {
+    shop: { x: 0, z: -44.5, ry: 0 },
+    // 第二台售货机（货架 > 4 件时的溢出柜）：右墙边、朝向房间中线
+    shop2: { x: 13.5, z: -44.5, ry: -0.02, scale: 2.2 },
+    counter: { x: -13.5, z: -47, ry: 0.12 },
+    // UI 安全区：屏幕下缘起的比例（操纵条会覆盖这一带，构图不在此放精细件）
+    uiSafe: { bottomRatio: 0.42 },
+  },
+  compositionDecal: null,
+  fog: { color: 0x14171c, near: 175, far: 360 },   // 中性冷灰雾（与冷白机器光同基调）
+};
+
 export const RECIPES = Object.freeze({
   fortress: FORTRESS, palace: PALACE, manor: MANOR, library: LIBRARY,
   boss: BOSS, mezzanine: MEZZANINE,
   casino: CASINO,   // 休息房（老虎机 / 银行机）
+  camp: CAMP,       // 休息房（营地 · 训练场）
+  shop: SHOP,       // 休息房（瑞米维护的售货机：商店房）
 });
 
 /**
  * 休息房 → 配方映射（用户定 2026-09-11：休息阶段也用 PCG 房间，不再纯 UI）。
- * 本阶段只声明映射与锚点；主流程接线（runController 切场景 + 面板叠加）在下一阶段。
  */
 export const REST_RECIPES = Object.freeze({
-  slot: 'casino',   // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
+  slot: 'casino',           // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
+  campTraining: 'camp',     // 营地 · 训练场合并房（篝火 = 营地、训练桩 = 训练）
+  shop: 'shop',             // 商店房（SHOP.md §一：瑞米维护的售货机）
 });
 
 /** 取休息房配方 id；未登记的房间类型返回 null（调用方回退纯 UI）。 */

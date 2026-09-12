@@ -16,16 +16,16 @@ const run = props.ctrl.run;
 <style scoped>
 .panel {
   position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 20;
-  background: rgba(10, 14, 26, .92); border: 1px solid #38415e; border-radius: 10px;
-  padding: 26px 44px; color: #cdd6f4; font-family: sans-serif; text-align: center;
+  background: rgba(8, 11, 18, .94); border: 1px solid #2f3a52; border-radius: 3px;
+  padding: 26px 44px; color: #dbe4f4; font-family: sans-serif; text-align: center;
 }
-h2 { margin: 0 0 10px; font-size: 28px; }
-h2.victory { color: #ffd75e; }
-h2.defeat { color: #ff7875; }
+h2 { margin: 0 0 10px; font-size: 28px; color: #eef4ff; }
+h2.victory { color: #cfe6ff; }   /* 扁平冷色（金色只留金钱相关内容，用户定 2026-09-12） */
+h2.defeat { color: #ff8f88; }
 p { color: #9aa3c0; font-size: 13px; }
 button {
-  margin-top: 12px; padding: 8px 26px; background: #7a4b12; color: #ffe7b3;
-  border: 1px solid #b3742a; border-radius: 6px; cursor: pointer; font-size: 15px;
+  margin-top: 12px; padding: 8px 26px; background: rgba(16, 22, 34, .92); color: #eaf1fb;
+  border: 1px solid #3f5f8c; border-radius: 4px; cursor: pointer; font-size: 15px;
 }
-button:hover { background: #95601c; }
+button:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
 </style>
