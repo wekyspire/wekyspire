@@ -209,7 +209,7 @@ describe('高速魏启罐系列（2026-09-12 设计稿新增）：即时回蓝',
 });
 
 describe('HeLiCoPtEr（A，2026-09-12 设计稿新增）', () => {
-  it('将所有手牌变换为 0 开销强力肘击，且变形后立刻能打', () => {
+  it('将所有手牌变换为 0 开销**猛烈肘击**（肘击系列的免费形态，吃牢大翻倍）', () => {
     const d = new BattleDriver({
       deck: ['helicopter', 'punch', 'guard', 'punch'],
       enemies: [tank()], seed: 5, config: { initialDraw: 3 },
@@ -218,18 +218,31 @@ describe('HeLiCoPtEr（A，2026-09-12 设计稿新增）', () => {
     const others = d.state.zones.hand.filter(c => c.defId !== 'helicopter');
     expect(others.length).toBeGreaterThan(0);
     d.play('helicopter');
-    const deformed = d.state.zones.hand.filter(c => c.defId === 'powerElbow');
-    expect(deformed).toHaveLength(others.length);              // 全部换绑
-    for (const c of deformed) {
-      expect(costOf('powerElbow')).toEqual({ mana: 0, actionPoint: 0 });   // 0 开销
-    }
-    // 变形后的肘击可直接打出（0 费 + 有伤害）
+    const deformed = d.state.zones.hand.filter(c => c.defId === 'fierceElbowFree');
+    expect(deformed).toHaveLength(others.length);              // 全部换绑成免费猛烈肘击
+    const def = getSkillDefinition('fierceElbowFree');
+    expect(def.name).toBe('猛烈肘击');                          // 与既有的同名（玩梗原意）
+    expect(def.cost).toEqual({ mana: 0, actionPoint: 0 });      // 0 开销
+    expect(def.cardMode).toBe('chant');                        // 肘击系列的形态：咏唱1
+    expect(def.canSpawnAsReward).toBe(false);                  // 只经局内转化获得，不进奖励池
+    // 0 费 + 咏唱1：手里全是它也能全部点亮（发动不花 AP）
+    expect(canUseSkill(d.ctx, deformed[0])).toBe(true);
+  });
+
+  it('变换出的猛烈肘击吃牢大翻倍（elbow 标记同一口径）', () => {
+    const d = new BattleDriver({
+      deck: ['helicopter', 'elbowMaster', 'punch', 'punch'],
+      enemies: [tank()], seed: 7, config: { initialDraw: 3, drawPerTurn: 0 },
+    });
+    d.start();
+    toHand(d, 'helicopter');                                   // 起手没摸到就调进手（初始抽牌是随机的）
+    d.play('elbowMaster');                                     // 激活牢大
+    d.play('helicopter');                                      // 手牌 → 0 费猛烈肘击
+    const elbow = d.state.zones.hand.find(c => c.defId === 'fierceElbowFree');
+    d.player.actionPoints = 5;
+    d.play(elbow.uniqueID);                                    // 点亮咏唱（P5 每回合打随机伤害）
     const hp0 = enemyHp(d);
-    const el = deformed[0];
-    d.player.actionPoints = 3;
-    d.play(el.uniqueID);
-    expect(enemyHp(d)).toBeLessThan(hp0);
+    d.endTurn();                                               // 触发 P5：5 伤害 → 牢大翻倍 = 10
+    expect(hp0 - enemyHp(d)).toBe(10);
   });
 });
-
-const costOf = (id) => getSkillDefinition(id).cost;

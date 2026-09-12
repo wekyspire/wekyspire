@@ -14,7 +14,6 @@ import {
   AddCardInstruction, DiscardCardInstruction, MoveCardInstruction, TransformCardInstruction,
 } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { attackDamage, resolvedDamageText } from './cardKit.js';
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
 
@@ -268,24 +267,11 @@ swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
 swiftManaJar('swiftManaJarPlus', '高速大魏启罐', 'A', 4);
 
 // ---- HeLiCoPtEr（A，消耗，2026-09-12 设计稿新增）----
-// 「将所有手牌变换为 0 开销强力肘击」：逐张 TransformCardInstruction（换绑 defId，
-// keepPower 延续；与斩链的局内转化同一指令）。变换后的肘击留在牌组里循环——
-// 代价是整套牌被肘击稀释（放弃体系协同换即时爆发），这是「ヘリコプター」式的整活卡。
-// ⚠ 强力肘击的伤害设计稿没给数值 → 常量放这里，调参改一处。
-const POWER_ELBOW_DAMAGE = 8;
-registerSkill({
-  id: 'powerElbow', name: '强力肘击', type: 'normal', pack: 'common', tier: 'A',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  canSpawnAsReward: false,   // 只由 HeLiCoPtEr 变换而来，不进奖励池（同碎铁口径）
-  use(sctx) {
-    attackDamage(sctx, POWER_ELBOW_DAMAGE);
-    return true;
-  },
-  describe: () => `${POWER_ELBOW_DAMAGE}伤害`,
-  battleDescribe: (sctx) => resolvedDamageText(sctx, POWER_ELBOW_DAMAGE),
-});
+// 「将所有手牌变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
+// keepPower 延续；与斩链的局内转化同一指令）→ 目标卡 = 肘击系列的免费形态
+// `fierceElbowFree`（0 费咏唱1、P5 随机伤害、伤害带 `elbow` 标记**吃牢大翻倍**，
+// 只在 bodySkills.js 里定义、不进奖励池）。整套牌因此被肘击稀释——放弃体系协同换
+// 「一手法师肘」的整活构筑（牢大 + HeLiCoPtEr 是设计上的梗组合）。
 registerSkill({
   id: 'helicopter', name: 'HeLiCoPtEr', type: 'normal', pack: 'common', tier: 'A',
   cost: { mana: 0, actionPoint: 1 },
@@ -293,15 +279,18 @@ registerSkill({
   cardMode: 'normal',
   keywords: ['exhaust'],
   use(sctx) {
-    // 快照手牌（变换会把卡暂迁 pending，边遍历边转会错位）
-    const hand = [...sctx.battleState.zones.hand];
+    // 快照手牌（变换会把卡暂迁 pending，边遍历边转会错位）。
+    // ⚠ **已激活的咏唱不转化**：激活咏唱发动后回手点亮、常驻手中（如「牢大」），
+    // 把它们一起换掉 = 当场拆掉自己的引擎——而这张牌的梗组合恰恰是「牢大 + 一手法师肘」。
+    const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
     for (const card of hand) {
       sctx.kernel.submitInstruction(
-        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'powerElbow' }),
+        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'fierceElbowFree' }),
       );
     }
     return true;
   },
-  describe: () => '将所有手牌变换为0开销强力肘击',
-  battleDescribe: (sctx) => `将所有手牌变换为0开销强力肘击（当前${sctx.battleState.zones.hand.length}张）`,
+  describe: () => '将手中未激活的牌变换为0开销/named{猛烈肘击}',
+  battleDescribe: (sctx) => '将手中未激活的牌变换为0开销/named{猛烈肘击}'
+    + `（当前可变换${sctx.battleState.zones.hand.filter(c => !c.isActivated).length}张）`,
 });
