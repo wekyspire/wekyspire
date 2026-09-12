@@ -209,6 +209,39 @@ function execRemove(S, t) {
 }
 
 // ---- 战斗动作 ----
+// 打不出的原因逐项排查（why 指令与 play 失败报错共用同一实现，两处不得漂移）——
+// 第 7 轮 P0 试玩：萌新拿到「无法打出（费用/条件不满足）」完全不知道是哪一项失败，
+// 而冷却类失败本来就有具体文案；条件类失败（完美/顽固/咏唱压力）必须同样点名。
+function unusableReasons(S, rt) {
+  const bs = S.battle.battleState;
+  const hand = bs.zones.hand;
+  const def = defOf(rt);
+  const pl = S.run.player;
+  const freeToggle = def.cardMode === 'chant' && rt.isActivated;
+  const manaCost = def.cost?.mana ?? 0;
+  const apCost = def.cost?.actionPoint ?? 0;
+  const reasons = [];
+  if (rt.remainingUses <= 0) reasons.push('充能耗尽（冷却中）');
+  if (def.cardMode === 'chant' && rt.isActivated && def.keywords?.includes('anchored')) reasons.push('锁定：不可主动解除');
+  if (def.cardMode === 'chant' && !rt.isActivated && !chantActivationLegal(S.battle.ctx, rt, def)) {
+    reasons.push(`激活后手牌压力超限（加权会变成 >${pl.maxHandSize}）`);
+  }
+  if (def.canUse && !def.canUse(makeSkillCtx(S.battle.ctx, rt))) {
+    let whyCustom = '卡面自定义条件不满足（卡面「不可用」条件）';
+    if (def.canUse.isPerfectCondition) {
+      // 完美条件：点名左侧第一张不可打出的压位卡（否则玩家只能从手牌顺序反推）
+      const selfI = hand.findIndex(c => c.uniqueID === rt.uniqueID);
+      const blockerI = hand.slice(0, selfI).findIndex(c => !canUseSkill(S.battle.ctx, c));
+      if (blockerI >= 0) whyCustom = `完美条件不满足：左侧第 ${blockerI + 1} 张〈${defOf(hand[blockerI]).name}〉不可打出`;
+    }
+    reasons.push(whyCustom);
+  }
+  if (!freeToggle && manaCost !== 'X' && pl.mana < manaCost) reasons.push(`魏启不足（需 ${manaCost}，有 ${pl.mana}）`);
+  if (!freeToggle && apCost !== 'X' && pl.actionPoints < apCost) reasons.push(`AP 不足（需 ${apCost}，有 ${pl.actionPoints}）`);
+  if (def.targetMode === 'enemy' && !bs.enemies.some(e => !e.isDead())) reasons.push('需要敌方目标，但场上无存活敌人');
+  return reasons;
+}
+
 function execBattle(S, cmd, t) {
   const run = S.run;
   const stage = run.gameStage;
@@ -236,25 +269,7 @@ function execBattle(S, cmd, t) {
       if (def.cardMode === 'chant') {
         L.push(`  咏唱: ${rt.isActivated ? '已激活' : '未激活'}｜加权手牌 ${effectiveHandCount(bs)} / 上限 ${pl.maxHandSize}`);
       }
-      const reasons = [];
-      if (rt.remainingUses <= 0) reasons.push('充能耗尽（冷却中）');
-      if (def.cardMode === 'chant' && rt.isActivated && def.keywords?.includes('anchored')) reasons.push('锁定：不可主动解除');
-      if (def.cardMode === 'chant' && !rt.isActivated && !chantActivationLegal(S.battle.ctx, rt, def)) {
-        reasons.push(`激活后手牌压力超限（加权会变成 >${pl.maxHandSize}）`);
-      }
-      if (def.canUse && !def.canUse(makeSkillCtx(S.battle.ctx, rt))) {
-        let whyCustom = '卡面自定义条件不满足（卡面「不可用」条件）';
-        if (def.canUse.isPerfectCondition) {
-          // 完美条件：点名左侧第一张不可打出的压位卡（否则玩家只能从手牌顺序反推）
-          const selfI = hand.findIndex(c => c.uniqueID === rt.uniqueID);
-          const blockerI = hand.slice(0, selfI).findIndex(c => !canUseSkill(S.battle.ctx, c));
-          if (blockerI >= 0) whyCustom = `完美条件不满足：左侧第 ${blockerI + 1} 张〈${defOf(hand[blockerI]).name}〉不可打出`;
-        }
-        reasons.push(whyCustom);
-      }
-      if (!freeToggle && manaCost !== 'X' && pl.mana < manaCost) reasons.push(`魏启不足（需 ${manaCost}，有 ${pl.mana}）`);
-      if (!freeToggle && apCost !== 'X' && pl.actionPoints < apCost) reasons.push(`AP 不足（需 ${apCost}，有 ${pl.actionPoints}）`);
-      if (def.targetMode === 'enemy' && !bs.enemies.some(e => !e.isDead())) reasons.push('需要敌方目标，但场上无存活敌人');
+      const reasons = unusableReasons(S, rt);
       L.push(reasons.length ? `  → 原因: ${reasons.join('；')}`
         : (ok ? '  → 逐项检查都通过，可以直接打出' : '  → 常见原因都不成立：可能是能力/已激活咏唱卡的放行钩子未覆盖'));
       S.lastOutcome = L.join('\n');
@@ -277,7 +292,11 @@ function execBattle(S, cmd, t) {
         ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
       // 指定目标已死：引擎会回落到首个存活敌人（cardKit.enemyTarget）——静默改打很坑，明确告知
       const deadTargetNote = target?.isDead() ? `（指定目标「${target.name}」已死，实际打向首个存活敌人）` : '';
-      if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) throw new Error('无法打出（费用/条件不满足）');
+      if (!playerUseSkill(battle, skill.uniqueID, target?.uniqueID ?? null)) {
+        const rs = unusableReasons(S, skill);
+        throw new Error(rs.length ? `无法打出：${rs.join('；')}`
+          : '无法打出（费用/条件不满足；用 why <卡名> 逐项排查）');
+      }
       S.lastOutcome = `打出 ${name}${note}${deadTargetNote}`;
       if (isBattleFinished(battle)) settleBattle(S);
       return;

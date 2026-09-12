@@ -101,11 +101,11 @@ export function createRunCutsceneFlows(ctx) {
         hint: `突破${meta.label}`,
       };
     }),
-    { id: 'skip', label: '跳过（改记 1 点体修等级）', hint: '不选灵脉，精进体修' },
+    { id: 'skip', label: '跳过（改记 1 点体修等级，生命上限 +3）', hint: '不选灵脉，精进体修' },
   ];
   /** 选择之后的结果页（一句话确认，数字读实时 run）。 */
   const ascensionResultPage = (id) => (id === 'skip'
-    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等级 ${run.player.bodyLevel ?? 0}。）` }
+    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等级 ${run.player.bodyLevel ?? 0}，生命上限 +3。）` }
     : {
       speaker: '旁白',
       text: `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`

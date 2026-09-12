@@ -60,7 +60,11 @@ const noRecord = pureView || action.startsWith('preview');
 let S;
 try {
   S = freshState(data.seed);
-  for (const a of data.actions) { exec(S, a); if (TRACE) traceLine(S, a); }
+  // 回放失败必须指出是第几个动作（第 7 轮 H：裸错误「当前不在战斗阶段」无从定位脱节动作）
+  for (let i = 0; i < data.actions.length; i++) {
+    try { exec(S, data.actions[i]); if (TRACE) traceLine(S, data.actions[i]); }
+    catch (err) { throw new Error(`回放第 ${i + 1}/${data.actions.length} 个动作「${data.actions[i]}」失败：${err.message}`); }
+  }
   if (!pureView) exec(S, action);
 } catch (err) {
   console.error(`✗ ${err.message}`);

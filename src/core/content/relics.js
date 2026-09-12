@@ -12,6 +12,7 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getEffectDefinition } from '../effects/registry.js';
 import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
 import { isBossFloor } from '../run/runFlow.js';
+import { effectiveHandCount } from '../skills/helpers.js';
 
 // 遗物内容（RELICS.md 2026-09-10 第一批：只上「不需要新机制」的那些，见 todos/ 记录）。
 //
@@ -793,11 +794,13 @@ registerRelic({
   }],
 });
 
-// 胀满的背包（C·1槽）——超载轴：超载上限 +2（回合内抽牌爆发空间 5→7）。
+// 胀满的背包（C·1槽）——容量轴：手牌上限 +1，超载上限 +2（回合内抽牌爆发空间 5→7）。
+// 第 7 轮裁决：原「仅超载 +2」DOA（超载区结构不可达），加手牌上限 +1 成常驻收益。
 registerRelic({
   id: 'bulgingPack', name: '胀满的背包', rarity: 'C', cost: 1,
-  description: '超载上限 +2。',
+  description: '手牌上限 +1，超载上限 +2。',
   flavor: '塞得下，就都是你的',
+  runModifiers: { maxHandSize: 1 },
   onBattleStart(ctx) {
     ctx.battleState.overloadBonus = (ctx.battleState.overloadBonus ?? 0) + 2;
   },
@@ -818,11 +821,12 @@ registerRelic({
   }],
 });
 
-// 火中取栗（B·1槽）——自燃博弈轴：每当你获得燃烧时，获得等量一半（向下取整）的护盾。
+// 火中取栗（B·1槽）——自燃博弈轴：每当你获得燃烧时，获得等量的护盾。
 // 「与燃烧博弈，收益与风险并存」的新玩具——自燃变盾，和亲和/防火形成三角。
+// 第 7 轮裁决：半额转盾 dud（自燃流全是负收益），改全额——自燃变盾才成立。
 registerRelic({
   id: 'chestnutFromFire', name: '火中取栗', rarity: 'B', cost: 1,
-  description: '每当你获得燃烧时，获得等量一半（向下取整）的护盾。',
+  description: '每当你获得燃烧时，获得等量的护盾。',
   flavor: '敢伸手，才有栗子吃',
   subscriptions: () => [{
     when: AddEffectInstruction,
@@ -831,7 +835,7 @@ registerRelic({
       && (instr.payload?.stacks ?? instr.stacks ?? 0) > 0,
     react: (instr, c) => c.kernel.submitInstruction(new GainShieldInstruction({
       target: c.player,
-      amount: Math.floor((instr.payload?.stacks ?? instr.stacks) / 2),
+      amount: instr.payload?.stacks ?? instr.stacks,
     }), instr),
   }],
 });
@@ -846,16 +850,18 @@ registerRelic({
   },
 });
 
-// 松鼠的囤积（C·1槽）——留存轴：玩家回合结束时若手牌 ≤ 2，下回合抽牌 +1。
+// 松鼠的囤积（C·1槽）——留存轴：玩家回合结束时若加权手牌 ≤ 3，下回合抽牌 +1。
 // 打空流的另一条腿（能打就打空，空了多抽一张）。
+// 第 7 轮裁决：按张数 ≤2 太苛刻（咏唱加权下几乎不触发），改加权口径 ≤3；
+// 文案说清「多抽 = 占用超载空间顶过容量拿牌」（E 报告：按字面读成「手牌上限 +1」是误读）。
 registerRelic({
   id: 'squirrelHoard', name: '松鼠的囤积', rarity: 'C', cost: 1,
-  description: '你的回合结束时，若手牌不多于 2 张，下回合抽牌 +1。',
+  description: '你的回合结束时，若加权手牌不多于 3 张，下回合多抽 1 张（可顶过手牌上限）。',
   flavor: '藏起来的，才算数',
   subscriptions: () => [{
     when: PlayerTurnEndInstruction,
     phase: 'post',
-    filter: (instr, c) => c.battleState.zones.hand.length <= 2,
+    filter: (instr, c) => effectiveHandCount(c.battleState) <= 3,
     react: (instr, c) => {
       c.battleState.turnDrawBonus = (c.battleState.turnDrawBonus ?? 0) + 1;
     },

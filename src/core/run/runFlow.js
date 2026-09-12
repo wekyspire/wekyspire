@@ -7,8 +7,9 @@ import { ascensionReady } from './ascension.js';
 import { ensureShopStock, isShopFloor } from './rooms/shop.js';
 import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
 import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
-import { activeRelics } from './prep.js';
+import { activeRelics, grantRelic } from './prep.js';
 import { getRelicDefinition } from '../relics/registry.js';
+import { draftRelic } from '../relics/draft.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -20,6 +21,12 @@ export const FLOORS_PER_CHAPTER = 11;               // 10 普通层 + 1 Boss 层
 export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * 4; // 44 层 = 4 章
 
 export const isBossFloor = (floor) => floor % FLOORS_PER_CHAPTER === 0;
+// Boss 掉落遗物的稀有度带（按章爬坡；数组 = 池内等概率并集）——第 7 轮裁决定案：
+// 设计稿的「Boss 掉遗物」从未实装，遗物实际来源只剩老虎机/商店/古尔帕斯，
+// 正常局一局只见 0-2 件（遗物系统对玩家不可见）。Boss 掉落是结构修复而非加餐。
+export const BOSS_RELIC_RARITY = Object.freeze({
+  11: ['C', 'B'], 22: ['B'], 33: ['B', 'A'], 44: ['A'],
+});
 // 训练房固定 4N-2 层（2/6/10…42）——首进阶落在第 2 层，玩家快速特化进入真正的初始卡组。
 // 优先级：Boss 层（22）无房间，Boss 战前一层（10）营地保底顶替训练房（细则见 §9）。
 export const isTrainingFloor = (floor) => !isBossFloor(floor) && floor % 4 === 2;
@@ -107,6 +114,10 @@ export function finishBattle(run, verdict, battle = null) {
     if (isBossFloor(run.floor)) {
       run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
       run.player.hp = run.player.maxHp; // 章间休整：HP 回满
+      // Boss 掉落遗物：抽取走 draft.js 统一 SDK（权重/门禁/驱重/池空兜底集中一处，
+      // Boss 掉落只是又一个调用方）；特写由 Shell 的拥有集差分自动兜，这里不声明演出。
+      const relicId = draftRelic(run, { rarity: BOSS_RELIC_RARITY[run.floor] ?? null });
+      if (relicId) grantRelic(run, relicId);
     }
     run.gameStage = 'reward';
     spawnRewards(run);

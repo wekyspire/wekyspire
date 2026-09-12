@@ -365,10 +365,10 @@ function registerPlayCountChant({ id, name, tier, every, promotesTo = null }) {
   });
 }
 
-// 借力（C）
-registerPlayCountChant({ id: 'leverage', name: '借力', tier: 'C', every: 6, promotesTo: 'redirect' });
+// 借力（C）——第 7 轮裁决：每 6→5 张抽 1（权重 3 的代价下每 6 张抽 1 纯亏，无人点亮）
+registerPlayCountChant({ id: 'leverage', name: '借力', tier: 'C', every: 5, promotesTo: 'redirect' });
 // 化劲（B）
-registerPlayCountChant({ id: 'redirect', name: '化劲', tier: 'B', every: 5, promotesTo: 'taiji' });
+registerPlayCountChant({ id: 'redirect', name: '化劲', tier: 'B', every: 4, promotesTo: 'taiji' });
 // 太极（A）
 registerPlayCountChant({ id: 'taiji', name: '太极', tier: 'A', every: 4 });
 

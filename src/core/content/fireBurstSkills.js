@@ -113,7 +113,8 @@ registerSkill({
 function burstChantCard({ id, name, tier, base, perMana }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'burst',
-    cost: { mana: 4, actionPoint: 0 },
+    // 第 7 轮裁决：发动费 4→2 魏启（4 费点亮一张无即时收益的咏唱 = 整回合空转，没人点）
+    cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable

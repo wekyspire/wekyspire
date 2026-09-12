@@ -604,6 +604,9 @@ registerEnemy({
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
+        // 互盾拆除（第 7 轮裁决）：守卫的光环不罩其他守卫——双守卫互相举盾叠出的
+        // 防雪球让「先杀支援」的考题失效（支援比输出手还硬）；自己仍吃自己的盾。
+        if (e !== actx.unit && e.defId === 'palaceGuard') continue;
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 6 }));
       }
     } else {
@@ -613,7 +616,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6' }
+    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6（不罩其他守卫）' }
     : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
 });
 
@@ -666,7 +669,10 @@ registerEnemy({
     unit._lastHp = unit.hp;   // 行动末尾记账（含本回合举盾/受击后的最新值）
   },
   getIntention: (unit) => {
-    const lost = (unit._lastHp ?? unit.hp) - unit.hp;
+    // 预告计入自身回合开始的燃烧 tick（行动前结算）：燃烧锁死下它必然龟缩，
+    // 不预告龟缩会让玩家白留防御牌/错估输出窗（第 7 轮 B 报告的信息缺失）。
+    // act 时 tick 已落进 hp，无需此项；这只是「预告时点」的口径补正。
+    const lost = (unit._lastHp ?? unit.hp) - unit.hp + unit.getEffectStacks('burn');
     return lost >= 8
       ? { kinds: ['defend'], note: '受创≥8：龟缩，自身护盾+12' }
       : { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack'), note: '受创≥8 时改为龟缩举盾' };
