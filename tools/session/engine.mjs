@@ -12,12 +12,12 @@
 // 子模块：format.mjs（中文文本）/ addressing.mjs（编号+卡名寻址）/ render.mjs（状态渲染）/
 // files.mjs（会话文件）。动作解释器按阶段拆成 exec* 小函数，exec 只做分发。
 import '../../src/core/content/index.js'; // 内容登记（副作用 import，必须在建 run 之前）
-import Player, { PLAYER_BASE_HP } from '../../src/core/state/player.js';
+import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../../src/core/state/player.js';
 import { createSkillRuntime } from '../../src/core/state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../../src/core/content/bodySkills.js';
 import { createRecordingPresenter } from '../../src/core/presenter.js';
 import { canUseSkill, makeSkillCtx, effectiveHandCount, chantActivationLegal } from '../../src/core/skills/helpers.js';
-import { getSkillDefinition } from '../../src/core/skills/registry.js';
+import { getSkillDefinition, allSkills, hasSkill } from '../../src/core/skills/registry.js';
 import { getEffectDefinition } from '../../src/core/effects/registry.js';
 import { getAbilityDefinition } from '../../src/core/abilities/registry.js';
 import { getRelicDefinition, allRelics } from '../../src/core/relics/registry.js';
@@ -65,7 +65,7 @@ import {
  *        （直播端在此发 battle:begin 并挂流式 tap）
  */
 export function freshState(seed, { makePresenter = null, onBattle = null } = {}) {
-  const run = createRun({ seed, player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3 }) });
+  const run = createRun({ seed, player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }) });
   run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
   run.player.abilities = [];
   const S = { run, battle: null, lastOutcome: '', presenter: null, onBattle };
@@ -242,7 +242,16 @@ function execBattle(S, cmd, t) {
       if (def.cardMode === 'chant' && !rt.isActivated && !chantActivationLegal(S.battle.ctx, rt, def)) {
         reasons.push(`激活后手牌压力超限（加权会变成 >${pl.maxHandSize}）`);
       }
-      if (def.canUse && !def.canUse(makeSkillCtx(S.battle.ctx, rt))) reasons.push('卡面自定义条件不满足（卡面「不可用」条件）');
+      if (def.canUse && !def.canUse(makeSkillCtx(S.battle.ctx, rt))) {
+        let whyCustom = '卡面自定义条件不满足（卡面「不可用」条件）';
+        if (def.canUse.isPerfectCondition) {
+          // 完美条件：点名左侧第一张不可打出的压位卡（否则玩家只能从手牌顺序反推）
+          const selfI = hand.findIndex(c => c.uniqueID === rt.uniqueID);
+          const blockerI = hand.slice(0, selfI).findIndex(c => !canUseSkill(S.battle.ctx, c));
+          if (blockerI >= 0) whyCustom = `完美条件不满足：左侧第 ${blockerI + 1} 张〈${defOf(hand[blockerI]).name}〉不可打出`;
+        }
+        reasons.push(whyCustom);
+      }
       if (!freeToggle && manaCost !== 'X' && pl.mana < manaCost) reasons.push(`魏启不足（需 ${manaCost}，有 ${pl.mana}）`);
       if (!freeToggle && apCost !== 'X' && pl.actionPoints < apCost) reasons.push(`AP 不足（需 ${apCost}，有 ${pl.actionPoints}）`);
       if (def.targetMode === 'enemy' && !bs.enemies.some(e => !e.isDead())) reasons.push('需要敌方目标，但场上无存活敌人');
@@ -837,7 +846,29 @@ function execDev(S, t) {
     S.lastOutcome = `[dev] 生命/魏启回满（HP ${run.player.hp}/${run.player.maxHp}）`;
     return;
   }
-  throw new Error('dev 子命令：relic <id> | relics <id,id,...> | listed | money <n> | heal');
+  if (what === 'card' || what === 'cards') {
+    // dev card <defId|卡名> / dev cards <逗号列表>：把卡直接塞进构筑（覆盖局取样用——
+    // 如完美卡 B 阶起步，正常局前期抽不到，见第 6 轮 C 报告）。按 defId 精确、
+    // 否则按卡名全等匹配（同名不同 def 视为歧义报错）。
+    const tokens = String(b ?? '').split(',').map(x => x.trim()).filter(Boolean);
+    if (!tokens.length) throw new Error('用法：dev card <defId|卡名> 或 dev cards <id1,id2,...>');
+    const resolveCard = (tok) => {
+      if (hasSkill(tok)) return tok; // 注意：注册表 get 未命中直接抛错，判定只能走 has
+      const hits = allSkills().filter(d => d.name === tok);
+      if (hits.length === 1) return hits[0].id;
+      if (hits.length > 1) throw new Error(`卡名「${tok}」有多个 def：${hits.map(d => d.id).join(' ')}——请用 defId`);
+      throw new Error(`没有这张卡：${tok}（用 defId 或准确卡名）`);
+    };
+    const added = [];
+    for (const tok of tokens) {
+      const defId = resolveCard(tok);
+      run.player.deck.push(createSkillRuntime(defId));
+      added.push(getSkillDefinition(defId)?.name ?? defId);
+    }
+    S.lastOutcome = `[dev] 构筑 +${added.length}：${added.join('、')}（现 ${run.player.deck.length} 张）`;
+    return;
+  }
+  throw new Error('dev 子命令：relic <id> | relics <id,id,...> | listed | card <defId|卡名> | cards <列表> | money <n> | heal');
 }
 
 // ---- 遗物：装卸与主动使用（核心 API 见 run/prep.js）----

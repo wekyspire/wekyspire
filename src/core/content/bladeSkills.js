@@ -569,9 +569,11 @@ registerSkill({
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术（C，0费）：咏唱1。咏唱触发（P5）时若手牌少于 2（物理张数——激活咏唱驻手
-// 是物理事实，实际含义即"手里只剩它自己"），斩进阶，此卡焚毁（焚毁先经离手熄灭，
-// 激活订阅随 owner 注销）。
+// 含刃术（C，0费）：咏唱1。咏唱触发（P5）时若手牌少于 4（物理张数），斩进阶，此卡
+// 焚毁（焚毁先经离手熄灭，激活订阅随 owner 注销）。
+// 条件 2026-09-13 改：原「手牌少于 2」（手里只剩它自己）是旧抽 2 体系的设计——抽到
+// 容量 7 的时代要求清空整只手，第 6 轮试玩实测永不触发。「少于 4」= 打空大半个手牌
+// 可达成，保留「与刀独处」的触发幻想。
 registerSkill({
   id: 'edgeBreath', name: '含刃术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
@@ -581,7 +583,7 @@ registerSkill({
   activated: {
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      filter: (instr, ctx) => ctx.battleState.zones.hand.length < 2,
+      filter: (instr, ctx) => ctx.battleState.zones.hand.length < 4,
       react: (instr, ctx) => {
         advanceSlashChain(sctx, instr);
         ctx.kernel.submitInstruction(
@@ -589,8 +591,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '手牌少于2时斩进阶，此卡/named{焚毁}',
-  battleDescribe: (sctx) => '手牌少于2时斩进阶，此卡/named{焚毁}',
+  describe: () => '手牌少于4时斩进阶，此卡/named{焚毁}',
+  battleDescribe: (sctx) => '手牌少于4时斩进阶，此卡/named{焚毁}',
 });
 
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿

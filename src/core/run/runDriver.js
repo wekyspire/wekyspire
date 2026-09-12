@@ -1,4 +1,4 @@
-import Player, { PLAYER_BASE_HP } from '../state/player.js';
+import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../state/player.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 import { createNullPresenter } from '../presenter.js';
@@ -58,7 +58,7 @@ export class RunDriver {
     this.run = createRun({
       seed, profile,
       ...(totalFloors !== undefined ? { totalFloors } : {}),
-      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3, ...player }),
+      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP, ...player }),
     });
     this.run.player.deck = deck.map(id => createSkillRuntime(id));
     this.run.player.abilities = abilities;

@@ -126,7 +126,7 @@ export function projectBattle(battle) {
     // P9 超载尾弃预告：此刻点结束回合会被弃掉的手牌（uniqueID 列表，尾部在前）。
     // BattleStage 在回合结束按钮 hover 时给这些卡打「将弃」标记——算法与核心清理
     // 共用 pickOverflowVictims（helpers.js），两处不得各自实现
-    overflowVictims: pickOverflowVictims(battleState.zones.hand, handLimitOf(ctx)),
+    overflowVictims: pickOverflowVictims(battleState.zones.hand, handLimitOf(ctx), battleState),
     // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts
     counts: {
       deck: battleState.zones.deck.length,

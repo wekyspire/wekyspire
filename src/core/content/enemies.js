@@ -589,3 +589,234 @@ registerEnemy({
     ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
     : { kinds: ['defend', 'buff'], note: '缩壳：自身护盾6，回复4' }),
 });
+
+// ============ 第二~四章补池（2026-09-13 总策划批次，设计稿 tmp/design-monsters-wave1.mjs）============
+// 断档诊断：章2 新敌仅 4 只、章3 仅 2 只、章4 为 0，精英只有章1两只——「粪怪堆积」的
+// 根因是池子厚度而非单怪设计。本波按场景配方主题补池：章2=宫殿 / 章3=衰败庄园 / 章4=大图书馆。
+
+// ⑱ 宫廷守卫（章2·阵型谜题：全体友军护盾）——「先杀支援还是顶着群体盾硬打输出手」的
+// 目标优先级考题。与腐苔球（奶轴支援）错开：它是盾轴支援，护盾会被回合清零（T2），
+// 所以必须每两拍重新举盾——它的存活本身就是对面防线的续航。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 7, floorMin: 12, floorMax: 24 },
+  id: 'palaceGuard', name: '宫廷守卫',
+  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      for (const e of aliveEnemies(actx.battleState)) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 6 }));
+      }
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 7 + actx.unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6' }
+    : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
+});
+
+// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军蓄势2（它自己脆，给玩家一拍反应窗），
+// 此后攻5。杀得快等于白赚，杀不掉全队滚雪球——与雪狼开局虚弱镜像：一个压玩家，一个抬敌人。
+registerEnemy({
+  difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 22 },
+  id: 'herald', name: '传令官',
+  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16 }),
+  act(actx) {
+    if (actx.unit.actionIndex === 0) {
+      for (const e of aliveEnemies(actx.battleState)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: e, effectId: 'focus', stacks: 2,
+        }));
+      }
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 5 + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => (unit.actionIndex === 0
+    ? { kinds: ['buff'], note: '全体友军蓄势+2（攻击+2）' }
+    : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') }),
+});
+
+// ⑳ 大理石哨兵（章2·防线锚：受创龟缩）——行动时比较当前 hp 与「自己上次行动结束时的
+// hp」（_lastHp，每次 act 末尾记账，首拍缺省 = 当前 hp）：受创 ≥ 8 → 龟缩举盾 12 不攻击；
+// 否则攻 9。谜题 = 输出节奏分配：一轮爆发 ≥8 = 用伤害买它一回合沉默（但溢出伤害打在
+// 盾上）；控制每轮 ≤7 = 它一直攻，吃伤害换输出窗口。
+// ※ 为什么不用「有无盾」做分支（2026-09-13 用户指正）：T2 铁律——盾在持有者回合开始
+// 清零，轮到敌方行动的时点盾恒为 0，「有盾→攻/无盾→举盾」会退化成永不攻击的肉桩。
+// hp 差值是唯一无需新引擎/新订阅的可读状态；燃烧·中毒 tick 也计入受创（语义通：
+// 被折磨痛了同样会缩）。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 8, floorMin: 14, floorMax: 26 },
+  id: 'marbleSentinel', name: '大理石哨兵',
+  createUnit: () => new Enemy({ defId: 'marbleSentinel', name: '大理石哨兵', maxHp: 26, defense: 2 }),
+  act(actx) {
+    const { unit } = actx;
+    const lost = (unit._lastHp ?? unit.hp) - unit.hp;   // 自上次行动以来的受创
+    if (lost >= 8) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 9 + unit.getStat('attack'),
+      }));
+    }
+    unit._lastHp = unit.hp;   // 行动末尾记账（含本回合举盾/受击后的最新值）
+  },
+  getIntention: (unit) => {
+    const lost = (unit._lastHp ?? unit.hp) - unit.hp;
+    return lost >= 8
+      ? { kinds: ['defend'], note: '受创≥8：龟缩，自身护盾+12' }
+      : { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack'), note: '受创≥8 时改为龟缩举盾' };
+  },
+});
+
+// ㉑ 贪杯鬼（章3·滚雪球）：喝酒（自愈 5 + 力量 1）×2 → 醉拳 12，三拍循环。
+// 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是蓄势，
+// 贪杯鬼是自愈+力量双轴）。
+registerEnemy({
+  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 36 },
+  id: 'tippler', name: '贪杯鬼',
+  createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30 }),
+  act(actx) {
+    const phase = actx.unit.actionIndex % 3;
+    if (phase < 2) {
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 5 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'strength', stacks: 1,
+      }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 12 + actx.unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 3 < 2
+    ? { kinds: ['buff'], note: '喝酒：自愈5，力量+1' }
+    : { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack'), note: '醉拳' }),
+});
+
+// ㉒ 庄园主（章3 精英·召唤主题：大史莱姆退役后接班）——四拍循环：
+// 攻9 → 召唤仆人（场上无仆人且有空位）→ 攻13 → 自身盾8。
+// 仆人护主（给它盾5）——先杀仆人还是抢主人，是每回合的账。
+registerEnemy({
+  difficulty: { base: 7, min: 6, max: 9, floorMin: 23, floorMax: 32, elite: true },
+  id: 'manorLord', name: '庄园主',
+  createUnit: () => new Enemy({ defId: 'manorLord', name: '庄园主', maxHp: 60 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const phase = unit.actionIndex % 4;
+    if (phase === 1) {
+      const noServant = !aliveEnemies(bs).some(e => e.defId === 'footmanImp');
+      const hasSlot = bs.enemies.length < (bs.config?.maxEnemies ?? 4);
+      if (noServant && hasSlot) {
+        actx.kernel.submitInstruction(new UnitSpawnInstruction({
+          unit: getEnemyDefinition('footmanImp').createUnit(),
+          source: unit,
+        }));
+        return;
+      }
+      // 仆从已就位：召唤拍退化为攻击拍
+    }
+    if (phase === 3) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player,
+      amount: (phase === 2 ? 13 : 9) + unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit, battleState) => {
+    const phase = unit.actionIndex % 4;
+    if (phase === 1) {
+      const noServant = !aliveEnemies(battleState).some(e => e.defId === 'footmanImp');
+      const hasSlot = battleState.enemies.length < (battleState.config?.maxEnemies ?? 4);
+      if (noServant && hasSlot) return { kinds: ['summon'], note: '召唤仆人' };
+      return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
+    }
+    if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 13 + unit.getStat('attack') };
+    return { kinds: ['defend'], note: '自身护盾+8' };
+  },
+});
+
+// 庄园仆从（召唤物，不进生成池：无 difficulty 元数据 = 通配/精英池都取不到它——
+// 「difficulty 缺失视为不可生成」的生成器防御口径）。护主 ↔ 攻4 两拍。
+registerEnemy({
+  id: 'footmanImp', name: '庄园仆从',
+  createUnit: () => new Enemy({ defId: 'footmanImp', name: '庄园仆从', maxHp: 12 }),
+  act(actx) {
+    if (actx.unit.actionIndex % 2 === 0) {
+      const master = aliveEnemies(actx.battleState).find(e => e.defId === 'manorLord');
+      if (master) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: master, amount: 5 }));
+        return;
+      }
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 4 + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit, battleState) => {
+    const master = aliveEnemies(battleState).find(e => e.defId === 'manorLord');
+    return (unit.actionIndex % 2 === 0 && master)
+      ? { kinds: ['defend', 'buff'], note: '护主：庄园主护盾+5' }
+      : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') };
+  },
+});
+
+// ㉓ 禁书守卫（章4·终章防线锚）——攻10 → 全体友军盾12 → 攻14 三拍循环。
+// 宫廷守卫的终章上位：数值跨档 + 自身 3 防御面板，群体盾更厚。
+registerEnemy({
+  difficulty: { base: 8, min: 7, max: 11, floorMin: 34, floorMax: 43 },
+  id: 'tomeWarden', name: '禁书守卫',
+  createUnit: () => new Enemy({ defId: 'tomeWarden', name: '禁书守卫', maxHp: 40, defense: 3 }),
+  act(actx) {
+    const phase = actx.unit.actionIndex % 3;
+    if (phase === 1) {
+      for (const e of aliveEnemies(actx.battleState)) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 }));
+      }
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player,
+      amount: (phase === 0 ? 10 : 14) + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => {
+    const phase = unit.actionIndex % 3;
+    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+12' };
+    return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 10 : 14) + unit.getStat('attack') };
+  },
+});
+
+// ㉔ 蛀书虫（章4·群狼小件：连击）——攻2×3 → 攻6 两拍循环。
+// 连击逼「单发大盾」以外的对策（多段吃盾次数多），嗡嗡虫的终章上位。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 7, floorMin: 34, floorMax: 43 },
+  id: 'bookWorm', name: '蛀书虫',
+  createUnit: () => new Enemy({ defId: 'bookWorm', name: '蛀书虫', maxHp: 14 }),
+  act(actx) {
+    const atk = actx.unit.getStat('attack');
+    if (actx.unit.actionIndex % 2 === 0) {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: actx.unit, target: actx.player, amount: 2 + atk,
+        }));
+      }
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 6 + atk,
+      }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    return unit.actionIndex % 2 === 0
+      ? { kinds: ['attack'], hits: 3, damage: 2 + atk }
+      : { kinds: ['attack'], hits: 1, damage: 6 + atk };
+  },
+});

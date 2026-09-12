@@ -383,9 +383,12 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，抽1牌`,
   });
 }
-firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 8, promotesTo: 'firstArrow' });
-firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 12, promotesTo: 'firstFireBall' });
-firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 17 });
+firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 5, promotesTo: 'firstArrow' });
+firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 9, promotesTo: 'firstFireBall' });
+firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 13 });
+// 数值（2026-09-13 第 6 轮试玩后 nerfed：原 8/12/17）：0 魏启 0 AP + 抽 1 + 固有 = 零资源
+// 白打，三位 agent 一致评为版本最优（C 一局 4 张开局白送 32 伤）。削到 5/9/13 后仍保有
+// 「免费开路 + 滤牌」的先发身份，但不再是一抓即赢的比率。升阶 delta 保持 +4。
 
 // ====================================================================
 // §1.1 散卡·忍耐（燃烧受伤转魏启）

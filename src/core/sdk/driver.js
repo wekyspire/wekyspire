@@ -1,4 +1,4 @@
-import Player, { PLAYER_BASE_HP } from '../state/player.js';
+import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../state/player.js';
 import { createRunState } from '../state/runState.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { createRecordingPresenter } from '../presenter.js';
@@ -30,7 +30,7 @@ export class BattleDriver {
   } = {}) {
     this.presenter = createRecordingPresenter();
     const runState = createRunState({
-      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3, ...player }),
+      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP, ...player }),
     });
     runState.player.deck = deck.map(d => {
       if (typeof d === 'string') return createSkillRuntime(d);

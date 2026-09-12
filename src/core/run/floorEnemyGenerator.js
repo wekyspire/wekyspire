@@ -81,6 +81,14 @@ const TEMPLATES = [
   { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
+  // —— 第二~四章主题编队（2026-09-13 总策划批次，与新敌补池同波，设计卡 tmp/design-monsters-wave1.mjs）——
+  // 章2 宫殿：阵型互动（群体盾支援 + 开场蓄势 + 受创龟缩）
+  { id: 'palaceGuard', name: '宫廷卫队', minFloor: 12, maxFloor: 21, slots: [{ fixed: 'palaceGuard' }, {}] },
+  { id: 'honorGuard', name: '仪仗队', minFloor: 14, maxFloor: 21, slots: [{ fixed: 'herald' }, { fixed: 'palaceGuard' }, {}] },
+  // 章3 庄园：滚雪球主题（喝酒双鬼， budget 核对 min 10 ≤ 13 / max 18 ≥ 16）
+  { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
+  // 章4 图书馆：防线锚 + 群狼连击（min 15 ≤ 17 / max 25 ≥ 21）
+  { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
   { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, {}] },
   { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, {}] },

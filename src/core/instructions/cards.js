@@ -117,7 +117,7 @@ export class DiscardCardInstruction extends BattleInstruction {
 // 弃置 = 回牌库底（Z2 非消耗离手口径），从最尾端开始逐张——FIFO 循环序因此确定可规划。
 export class DiscardOverflowInstruction extends BattleInstruction {
   execute(ctx) {
-    const victims = pickOverflowVictims(ctx.battleState.zones.hand, handLimitOf(ctx));
+    const victims = pickOverflowVictims(ctx.battleState.zones.hand, handLimitOf(ctx), ctx.battleState);
     for (const uniqueID of victims) {
       ctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID }), this);
     }

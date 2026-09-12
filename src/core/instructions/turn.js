@@ -104,7 +104,11 @@ export class PlayerTurnInstruction extends BattleInstruction {
           // 囤牌自动被课税。config.drawPerTurn 是"每回合抽牌数上限"调参旋钮——
           // 99 ≈ 必抽满（新制），调小退化为"固定抽 N"旧制，A/B 试玩同一条代码路径
           const room = handLimitOf(ctx) - effectiveHandCount(ctx.battleState);
-          const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room) - penalty);
+          // turnDrawBonus：遗物/效果给的「下回合抽牌 +N」（松鼠的囤积：尾手 ≤2 时记 1），
+          // 加在 room 上 = 可以顶过容量抽（占用超载空间、当回合有效），随取用清零
+          const bonus = ctx.battleState.turnDrawBonus ?? 0;
+          ctx.battleState.turnDrawBonus = 0;
+          const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room + bonus) - penalty);
           if (count > 0) {
             ctx.kernel.submitInstruction(
               new DrawCardsInstruction({ count, reason: 'turnStart' }), this);

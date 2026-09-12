@@ -78,8 +78,8 @@ function rollStock(run) {
 
   // 恢复药剂：总是有且只有一件
   items.push(makeItem('potion', {
-    id: 'potion', name: '恢复药剂', label: '恢复药剂', sub: '恢复 15% 生命上限',
-    effect: '恢复 15% 生命上限',
+    id: 'potion', name: '恢复药剂', label: '恢复药剂', sub: '恢复 25% 生命上限',
+    effect: '恢复 25% 生命上限',
     price: SHOP_PRICE.potion,
   }));
 
@@ -211,7 +211,7 @@ export function buyShopItem(run, index) {
   switch (it.kind) {
     case 'potion': {
       const p = run.player;
-      p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.15));
+      p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.25));
       return { kind: 'potion', healed: true };
     }
     case 'apple': {

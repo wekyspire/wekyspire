@@ -37,4 +37,4 @@ export const HELP = `动作表（按当前阶段）：
 ※ 老虎机未中奖不产生产出：act spin 未中奖可直接再拉，不需要 claim/drop。
 ※ why <手牌#>|<卡名>（只读）：逐项定位「这张牌为什么打不出」——费用/充能冷却/咏唱压力/自定义条件/目标。
 ※ dev（**仅覆盖局用**，正常局不要用；用了必须在报告里标注）：dev relic <id> | dev relics <id,id,..>
-   | dev listed（全部遗物 id + 效果） | dev money <n> | dev heal`;
+   | dev listed（全部遗物 id + 效果） | dev card <defId|卡名> | dev cards <逗号列表>（塞卡进构筑） | dev money <n> | dev heal`;

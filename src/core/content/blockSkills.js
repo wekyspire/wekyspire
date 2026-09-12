@@ -67,6 +67,9 @@ function perfectReady(sctx) {
   }
   return true;
 }
+// 标记：headless 的 why 诊断按此识别完美条件、点名左侧压位卡（第 6 轮 A 建议——
+// 「只报自定义条件不满足，玩家要自己反推是哪张」）
+perfectReady.isPerfectCondition = true;
 
 // 精准一击（精准系列 D）：完美。24 伤害。promotesTo 精心一击（C）。
 // 2026-09-13 用户定：完美是战术挑战——条件不动、payoff 增强（挑战与机遇并存；
@@ -79,7 +82,7 @@ registerSkill({
   promotesTo: 'carefulStrike',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 24);
+    attackDamage(sctx, 24, { tags: ['perfect'] }); // tags：架势镜等完美轴效果统一识别口径
     return true;
   },
   describe: () => '/named{完美}。24伤害',
@@ -95,7 +98,7 @@ registerSkill({
   promotesTo: 'foldWillow',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 17);
+    attackDamage(sctx, 17, { tags: ['perfect'] });
     return true;
   },
   describe: () => '/named{完美}。17伤害',
@@ -110,8 +113,8 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 15);
-    attackDamage(sctx, 15);
+    attackDamage(sctx, 15, { tags: ['perfect'] });
+    attackDamage(sctx, 15, { tags: ['perfect'] });
     return true;
   },
   describe: () => '/named{完美}。15伤害×2',
@@ -129,7 +132,7 @@ const hitStrike = (id, name, tier, per, promotesTo = null) => registerSkill({
   canUse: perfectReady,
   use(sctx, stage) {
     if (stage === 0) {
-      beginHitProbe(sctx, attackDamage(sctx, 24));
+      beginHitProbe(sctx, attackDamage(sctx, 24, { tags: ['perfect'] }));
       return false; // 挂起一拍：等伤害子节点完整落地后再读探针
     }
     if (hitLanded(sctx)) gainBlock(sctx, per);

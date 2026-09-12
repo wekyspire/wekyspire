@@ -1,5 +1,6 @@
 import { getRelicDefinition, hasRelic, allRelics } from '../relics/registry.js';
 import { isDraftable, FILLER_RELIC_ID } from '../relics/draft.js';
+import { PLAYER_BASE_AP } from '../state/player.js';
 
 // 战前准备阶段（RUN_DESIGN §4.5）：prep 阶段的遗物装卸与主动使用。
 // 遭遇预告 = run.encounter（createRun/advanceFloor 已按 seed+floor 确定性生成）。
@@ -81,7 +82,7 @@ export function refreshRunModifiers(run, battleState = null) {
     for (const k of Object.keys(patch)) patch[k] += battleState.modifiers[k] ?? 0;
   }
   p.maxMana = (base.maxMana ?? 3) + patch.maxMana;
-  p.maxActionPoints = (base.maxActionPoints ?? 3) + patch.maxActionPoints;
+  p.maxActionPoints = (base.maxActionPoints ?? PLAYER_BASE_AP) + patch.maxActionPoints;
   p.attack = (base.attack ?? 0) + patch.attack;
   p.defense = (base.defense ?? 0) + patch.defense;
   p.maxHandSize = (base.maxHandSize ?? 7) + patch.maxHandSize;

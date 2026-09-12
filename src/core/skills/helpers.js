@@ -60,9 +60,10 @@ export function handLimitOf(ctx) {
 
 // 超载上限 = 容量 + 5（2026-09-13 两级手牌口径，用户定：7 容量 + 12 超载起步）。
 // 回合内的抽牌效果可以把手牌顶过容量、直到超载；超载空间当回合有效、不过夜。
+// overloadBonus：遗物给的额外超载余量（胀满的背包，挂 battleState、随战斗消失）。
 export const OVERLOAD_HEADROOM = 5;
 export function overloadLimitOf(ctx) {
-  return handLimitOf(ctx) + OVERLOAD_HEADROOM;
+  return handLimitOf(ctx) + OVERLOAD_HEADROOM + (ctx.battleState?.overloadBonus ?? 0);
 }
 
 // 单卡的手牌压力权重：激活咏唱 = 咏唱值（缺省 1——2026-09-13 权重分档，用户定：
@@ -71,31 +72,41 @@ export function handWeightOf(card) {
   return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 1) : 1;
 }
 
+// 共鸣石折扣（battleState.chantWeightDiscount，遗物挂载、随战斗消失）：
+// 激活咏唱的权重 -discount（最低 1）。一切加权口径（抽牌/尾弃/激活合法性）统一走这里。
+function chantWeightOf(card, battleState) {
+  const w = handWeightOf(card);
+  if (!card.isActivated) return w;
+  const discount = battleState?.chantWeightDiscount ?? 0;
+  return discount > 0 ? Math.max(1, w - discount) : w;
+}
+
 // 加权手牌数（抽牌满手判定 / 咏唱发动合法性共用口径）
 export function effectiveHandCount(battleState) {
-  return battleState.zones.hand.reduce((n, c) => n + handWeightOf(c), 0);
+  return battleState.zones.hand.reduce((n, c) => n + chantWeightOf(c, battleState), 0);
 }
 
 // P9 超载尾弃的对象枚举（核心清理与前端「将弃」预告共用同一算法，两处不得漂移）：
 // 从手牌尾部（最新到的卡）向前枚举，**跳过激活咏唱**（豁免——付费点亮的咏唱
 // 不得被系统掐灭，用户定 2026-09-13），直到加权手牌数 ≤ 容量。
 // 返回 uniqueID 数组，尾部在前——弃置顺序即数组顺序（最右最先回牌库底，FIFO 确定）。
-export function pickOverflowVictims(hand, capacity) {
-  let total = hand.reduce((n, c) => n + handWeightOf(c), 0);
+export function pickOverflowVictims(hand, capacity, battleState = null) {
+  let total = hand.reduce((n, c) => n + chantWeightOf(c, battleState), 0);
   const victims = [];
   for (let i = hand.length - 1; i >= 0 && total > capacity; i--) {
     const card = hand[i];
     if (card.isActivated) continue;
     victims.push(card.uniqueID);
-    total -= handWeightOf(card);
+    total -= chantWeightOf(card, battleState);
   }
   return victims;
 }
 
-// 咏唱发动合法性：激活后（自身权重 1 → chantWeight）加权手牌数 ≤ 上限。
+// 咏唱发动合法性：激活后（自身权重 1 → chantWeight，共鸣石折扣后）加权手牌数 ≤ 上限。
 // 卡在手牌中调用（结算中的卡已离手，先放回再算）。
 export function chantActivationLegal(ctx, self, def = getSkillDefinition(self.defId)) {
-  const weight = def.chantWeight ?? 1;
+  const discount = ctx.battleState?.chantWeightDiscount ?? 0;
+  const weight = Math.max(1, (def.chantWeight ?? 1) - discount);
   return effectiveHandCount(ctx.battleState) + weight - 1 <= handLimitOf(ctx);
 }
 

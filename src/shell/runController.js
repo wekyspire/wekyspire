@@ -1,7 +1,7 @@
 import { reactive, markRaw } from 'vue';
 import mitt from 'mitt';
 import AnimationSequencer from '../core/anim/sequencer.js';
-import Player, { PLAYER_BASE_HP } from '../core/state/player.js';
+import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../core/state/player.js';
 import { createSkillRuntime } from '../core/state/skillRuntime.js';
 import {
   createRun, enterBattle, finishBattle, completeRewards, completeRoom,
@@ -146,7 +146,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const isStory = save?.storyMode ?? storyMode; // 读档优先用存档自身的模式
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
-    player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3 }),
+    player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
   }));
   if (save) restoreFromSave(run, save);
   else {
