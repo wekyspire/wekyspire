@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
+import { sharedRelicArtCache } from '../art/relicArt.js';
 
 const SLOT = 4.0;   // 单个遗物槽边长（世界单位）
 const GAP = 0.9;    // 槽间距
@@ -149,7 +150,9 @@ function disposeSubtree(root) {
   root.parent?.remove(root);
 }
 
-// 遗物槽烘焙：圆角方块 + 特征字居中 + 剩余次数金色角标（node 无 document 退化为纯色块）
+// 遗物槽烘焙：圆角方块底 + **遗物立绘**（`assets/relics/<遗物名>`，预载已 warm，
+// 首拍同步命中）+ 剩余次数金色角标；素材缺席（headless / 新遗物美术未到）回落
+// def.icon 或名称首字的特征字（node 无 document 退化为纯色块）。
 function makeRelicSlot(relic) {
   const slot = new THREE.Group();
   slot.name = `relic:${relic.id}`;
@@ -185,13 +188,23 @@ function bakeRelicSlot(relic, sizePx) {
   ctx.strokeStyle = relic.tint ?? 'rgba(138, 148, 184, 0.75)';
   ctx.lineWidth = 2 * S;
   ctx.stroke();
-  // 图形字（def.icon 优先，回落名称首字）；美术图到位后改为贴图
-  const glyph = relic.icon || (relic.name ?? '?').slice(0, 1);
-  ctx.fillStyle = '#dde3f5';
-  ctx.font = `bold ${W * 0.42}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(glyph, W / 2, W * 0.46);
+  // 遗物立绘（等比 contain 放进内框）；没有素材才回落特征字（def.icon 优先，再回落名称首字）
+  const art = sharedRelicArtCache.get(relic.name ?? '');
+  if (art?.width) {
+    const pad = W * 0.06;
+    const box = W - pad * 2;
+    const k = Math.min(box / art.width, box / art.height);
+    const w = art.width * k;
+    const h = art.height * k;
+    ctx.drawImage(art, (W - w) / 2, (W - h) / 2, w, h);
+  } else {
+    const glyph = relic.icon || (relic.name ?? '?').slice(0, 1);
+    ctx.fillStyle = '#dde3f5';
+    ctx.font = `bold ${W * 0.42}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, W / 2, W * 0.46);
+  }
   // 剩余次数角标（右下）
   if (relic.usesLeft != null) {
     ctx.fillStyle = '#ffd75e';

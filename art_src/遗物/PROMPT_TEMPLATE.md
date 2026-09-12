@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | 接口 | `POST {BASE}/v1/images/edits` | multipart 表单 |
 | 参考图 | `image` 字段**重复 3 次** | 依次为北山岩/超硬法棍/龙鳞碎片；数组写法 `image[]` 会 422 |
-| `model` | `openai/gpt-image-2.5-flare` | 也可用 `-sunburst`，实测两者行为一致 |
+| `model` | `openai/gpt-image-2.5-sunburst` | **定稿**（2026-09-11 用户选型）；`-flare` 出图更死板、完成度更高，已弃用 |
 | `size` | `1024x1024` | 与手绘参考一致 |
 | `quality` | `high` | **不传默认是 `low`**，必须显式传 |
 | `background` | `transparent` | 实测有效：输出 PNG 自带 alpha，**无需再抠图** |
@@ -86,7 +86,7 @@
 
 两个引擎共用本模板；产物按用途分在 `art_src/遗物/` 下的子目录。
 
-**gpt-image-2.5（`tmp/relic_batch.py`，中继 `https://api-o.jeremyguo.space/v1`）**
+**gpt-image-2.5（`tmp/relic_batch.py`，中继 `https://api-o.jeremyguo.space/v1`，模型 `-sunburst`）**
 
 ```bash
 cd tmp
@@ -119,9 +119,27 @@ ARK_API_KEY=... python relic_seedream.py --only 号角 --bg chroma --size 1K
 
 | 目录 | 内容 |
 | --- | --- |
-| `out/_look_ab/` | **留白描述 + 定稿模板**（当前推荐） |
+| `out/` | **sunburst + 留白描述 + 定稿模板**（当前出图位；含 `_模型对比_flare_vs_sunburst.jpg`） |
+| `out/_look_ab/` | flare 时代的留白描述版（对照） |
 | `out/_oldlook/` | 改写前的详细描述版（原模板），留作对照 |
 | `out/_v1_oldprompt/` | 最早的旧【画风】措辞产物 |
 | `out/_style_ab/` | 【画风】措辞 v3/v4/v5 变体（含 `_风格对比_v2v3v4v5.jpg`） |
 | `out/_priority_ab/` | 强提示句两种位置（含 `_对比.jpg`） |
 | `out_seedream/` | seedream 引擎产物（含 `_引擎对比_号角.jpg`） |
+
+### 入库命名（2026-09-12 实装）
+
+素材直接进 `src/assets/relics/<遗物名>.webp`（q90 保 alpha），**key = core 注册的 `name`**。
+名字三处必须一致（文档条目名 / core 的 `name` / 素材文件名）——2026-09-12 已把 core 的 `龙鳞`
+统一成文档名 `龙鳞碎片`（`id: dragonScale` 不变），此后不再有例外。
+
+`阿瓦凡`、`复仇者 AT-01` 有立绘但**游戏内还没有对应遗物**（未注册），暂不入库。
+
+### 模型选型实测（2026-09-11，同描述同模板、各 6 件）
+
+`-sunburst` 优于 `-flare`，两个指标都占优：**细节更简**（物体内边缘密度普遍低 2–7，天青石 20.6→15.3）、
+**构图更准**（高度占比 63–67%；flare 多在 52–61%，有几件低于 55% 下限）。代价是慢一倍
+（单张约 100s vs 40s）——全量 51 件约需 85 分钟。
+
+残留问题：**"长剑 / 比人还高"这类描述会把物体顶出 70% 上限**（阿瓦凡 76%、海神戟 91%，两个模型都如此）。
+需要的话在【构图】段补一句尺寸上限的强调即可（未改，等确认）。
