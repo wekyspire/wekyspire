@@ -33,7 +33,7 @@ import {
   devourSlot, devourableRelics, devourableCards, devourReady, slotView,
   takeSlotGift, SLOT_GIFTS,
 } from '../core/run/rooms/slotMachine.js';
-import { playEvent } from '../core/run/rooms/event.js';
+import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
   chooseAscension, LEINO_DIMENSIONS,
@@ -45,6 +45,7 @@ import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
 import { createCutscenePlayer } from './overlay/cutscenePlayer.js';
+import { eventArtUrlNamed } from './overlay/eventArt.js';
 import { recordSave } from './saves.js';
 
 export { RunEvents };
@@ -367,7 +368,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRewards(run);
     if (run.gameStage === 'room') { slot.lastSpin = null; slot.anim = null; eventRoom.result = null; } // 进新房清上一房瞬态
     notify();
-    void maybeEnterRestScene();   // 落到有休息房配方的房间 → 幕间黑幕切进房间场景
+    enterRoomPresentation();   // 进房后的演出派发：事件房播幕间 / 有配方的房切场景
   }
 
   // ---- 场景式休息房（第一间 = 赌厅 casino，用户定 2026-09-11）----
@@ -397,6 +398,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     await cutscene.sceneTransition(doSwap, { holdMs: 220 });
     return true;
   }
+  /**
+   * 进房后的**演出派发**（阶段迁移落进 'room' 后调用一次）：
+   *   · 事件房 → 播事件幕间（cutscene：CG + 对话 + 选项；不做 3D 场景，用户定 2026-09-12）
+   *   · 有休息房配方的房间 → 幕间黑幕切进房间场景（RoomStage）
+   *   · 其余（无配方）→ 留在塔楼层 + 占位面板
+   * 两条路各自幂等（事件已在播/场景已切都不重复）。
+   */
+  function enterRoomPresentation() {
+    if (run.gameStage !== 'room') return;
+    if (run.currentRoom === 'event') { void playEventScene(); return; }
+    void maybeEnterRestScene();
+  }
+
   /** 有配方且当前不在房间场景时进入（幂等：并发/重复调用只切一次）。 */
   async function maybeEnterRestScene() {
     if (restEntering || roomStage || run.gameStage !== 'room' || !restRecipeFor(run.currentRoom)) return false;
@@ -727,11 +741,55 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
     void exitRestRoomScene();
   }
-  function triggerEvent() {
-    if (run.gameStage !== 'room' || run.currentRoom !== 'event' || eventRoom.result) return; // 已探索不重复结算
-    eventRoom.result = playEvent(run);
-    notify();
+  // ---- 随机事件（用户定 2026-09-12：**不做 3D 场景，也不用旧 UI 面板**）----
+  // 事件 = 对话 + 选项 + 逻辑：进房即播一段**幕间**——背景 CG（占位美术，见 overlay/eventArt.js）
+  // + 普通对话 → 摆出选项（`cutscene` 的 dialogue step 原生支持 choices）→ 玩家选 → core 结算
+  // → 接着播结果页 → 离房回塔楼（事件房没有场景舞台，一直在 MapStage 上，不切景）。
+  // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
+  let eventPlaying = false;
+  async function playEventScene() {
+    if (run.gameStage !== 'room' || run.currentRoom !== 'event') return false;
+    if (eventPlaying || run.roomData?.eventResolved) return false;
+    eventPlaying = true;
+    try {
+      const view = eventView(run);              // 确定性抽事件（记进 roomData，重绘不重抽）
+      const bg = eventArtUrlNamed(view.art ?? view.id, view.name);
+      let res = null;
+      await cutscene.play({
+        steps: [
+          { type: 'wipe' },                     // 幕间黑幕：把塔楼层推到幕后
+          {
+            type: 'dialogue', bg,
+            pages: [
+              ...view.pages,
+              { speaker: view.name, text: '你要怎么做？', choices: view.choices },
+            ],
+            onChoice: (id) => { res = resolveEvent(run, id); },   // 同步结算（选完即落账）
+          },
+        ],
+      });
+      notify();                                 // 金币/生命变化先反映到塔楼状态栏
+      if (!res) return false;                   // 没选就退出（异常路径：不结算也不离房）
+      await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: res.pages }] });
+      eventRoom.result = res;
+      completeRoom(run);                        // 事件房到此结束 → 推进楼层
+      notify();
+      return true;
+    } catch (err) {
+      // 兜底：幕间出问题也不能把玩家卡在事件房里（用默认选项结算后离房）
+      console.warn('[event]', err?.message ?? err);
+      try {
+        if (!run.roomData?.eventResolved) resolveEvent(run, eventView(run).choices[0]?.id ?? null);
+        if (run.gameStage === 'room') completeRoom(run);
+      } catch { /* 已经结算过/已离房：忽略 */ }
+      notify();
+      return false;
+    } finally {
+      eventPlaying = false;
+    }
   }
+  /** 面板安全阀 / 测试入口（正常路径由进房自动触发）。 */
+  function triggerEvent() { void playEventScene(); }
   function leaveEvent() {
     if (run.gameStage !== 'room') return;
     completeRoom(run);
@@ -859,6 +917,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     startBattle, claimReward, chooseRewardPack,
     trainingUpgrade, trainingDrawRoll, trainingDraw, trainingSkip,
     campChoose, leaveRoom, bankDo, gurpasDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
+    playEventScene,                 // 显式播事件幕间（正常路径由进房自动触发；幂等）
+    enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）
+    eventView: () => eventView(run),                 // 事件读取（内容与逻辑在 core；测试/调试可用）
+    resolveEvent: (id) => resolveEvent(run, id),     // 事件结算（只允许一次）
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     equip, unequip, useRelic,
   };

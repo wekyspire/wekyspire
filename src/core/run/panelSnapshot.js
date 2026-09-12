@@ -320,6 +320,8 @@ export function roomSnapshot(run, extra = {}) {
   }
 
   if (room === 'event') {
+    // 事件房：内容与结算都在 core（event.js），Shell 播幕间时自己取 eventView 播片——
+    // 这里只留"结果载荷"供调试/兜底观察（面板已不做事件交互，见 panels 的 event 分支）
     snap.event = { result: extra.eventResult ?? null };
     return snap;
   }

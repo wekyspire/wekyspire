@@ -82,16 +82,22 @@ describe('房间瞬态清理', () => {
     expect(ctrl.eventRoom.result).toBeNull();
   });
 
-  it('事件房重复探索不重复结算', () => {
+  // 2026-09-12：随机事件改成「对话 + 选项 + 逻辑」的幕间播片——不再有同步的"探索"面板动作。
+  // 这里断言新的读取/结算契约：抽事件确定性（同一次遇到不重抽、不再消耗 rng）、只结算一次。
+  it('事件房：抽事件确定性 + 只结算一次', () => {
     const ctrl = createRunController({ seed: 42 });
     ctrl.run.gameStage = 'room';       // 直接构造事件房（房间调度本身见 runFlow.test.js）
     ctrl.run.currentRoom = 'event';
-    ctrl.triggerEvent();
-    expect(ctrl.eventRoom.result).toBeTruthy();
-    const afterFirst = ctrl.run.rng.getState();
-    ctrl.triggerEvent(); // 二次探索被拦：不重复消耗 rng、不重复入账
-    expect(ctrl.run.rng.getState()).toBe(afterFirst);
-    expect(ctrl.eventRoom.result.eventId).toBeTruthy();
+    const view = ctrl.eventView();
+    expect(view.id).toBeTruthy();
+    expect(view.choices.length).toBeGreaterThan(0);
+    expect(view.pages.length).toBeGreaterThan(0);
+    const afterPick = ctrl.run.rng.getState();
+    expect(ctrl.eventView().id).toBe(view.id);        // 再取：同一件事
+    expect(ctrl.run.rng.getState()).toBe(afterPick);  // 且不再消耗 rng
+    const res = ctrl.resolveEvent(view.choices[0].id);
+    expect(res.eventId).toBe(view.id);
+    expect(() => ctrl.resolveEvent(view.choices[0].id)).toThrow(/已经结算/);
   });
 
   it('老虎机 roll：逻辑先行、回执后揭示产出、伪回执拒绝、产出未处理不可再抽', () => {

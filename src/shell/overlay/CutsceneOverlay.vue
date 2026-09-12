@@ -45,8 +45,10 @@ const wipeDur = computed(() => {
       :style="{ transitionDuration: cgDur + 'ms' }" :src="step.src" alt="">
 
     <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步。
-         该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸） -->
-    <div v-else-if="page" class="dialogue" @click="player.advance()">
+         该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸）。
+         `step.bg` = **幕间背景 CG**（随机事件用）：常驻在对话层之下，遮罩压得浅一些 -->
+    <div v-else-if="page" class="dialogue" :class="{ 'has-bg': !!step.bg }" @click="player.advance()">
+      <img v-if="step.bg" class="bgimg" :src="step.bg" alt="">
       <div class="box">
         <div class="speaker">{{ page.speaker }}</div>
         <div class="text">{{ page.text }}</div>
@@ -112,6 +114,14 @@ const wipeDur = computed(() => {
 .cg.fadeOut { opacity: 0; }
 
 .dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(4, 6, 14, .72); }
+/* 带幕间 CG 的对话：图铺满、压一层浅遮罩（仍要读得清字，但让背景看得见） */
+.dialogue.has-bg { background: rgba(4, 6, 14, .45); }
+.dialogue .bgimg {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  /* 图在文字层之下；box 自带不透明底，不靠遮罩也读得清 */
+  z-index: 0;
+}
+.dialogue .box { z-index: 1; }
 .box {
   position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
   width: min(720px, 82vw); background: rgba(12, 16, 30, .95);

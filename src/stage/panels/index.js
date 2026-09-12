@@ -242,11 +242,6 @@ const prizeText = (p) => ({
   card: `获得卡牌：${p.defId}`,
   relic: `获得遗物：${p.relicId}`,
 }[p.type] ?? '……');
-const eventText = (r) => ({
-  moneyBag: `捡到钱袋：金币 +${r.money}`,
-  spring: `治愈泉：回复 ${r.heal} 点生命`,
-}[r.eventId] ?? '迷雾散去，什么也没留下。');
-
 /**
  * 「升级一张卡」入口（训练场/营地共用）：按一下进入**全屏选卡界面**
  * （本动作由舞台本地消化——界面里的卡来自快照的 upgradeCards；确认时才把选中的卡上报 core）。
@@ -385,14 +380,14 @@ export function buildRoomPanel(snap) {
   }
 
   if (snap.room === 'event') {
-    const e = snap.event ?? {};
-    if (!e.result) {
-      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
-      w.push({ kind: 'button', id: 'event:explore', width: 240, label: '探索', action: { action: 'triggerEvent' } });
-    } else {
-      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: eventText(e.result) });
-      w.push({ kind: 'button', id: 'event:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveEvent' } });
-    }
+    // 随机事件已改成**幕间播片**（cutscene 的 CG + 对话 + 选项，用户定 2026-09-12）：
+    // 事件房没有场景舞台、也不再走面板交互——进房即自动播（runController.playEventScene）。
+    // 这里只留一句话与一个**安全阀**入口（万一没自动播起来，玩家还能手动触发，不会被卡住）。
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
+    w.push({
+      kind: 'button', id: 'event:play', width: 260, size: 'sub',
+      label: '看看发生了什么', action: { action: 'triggerEvent' },
+    });
     return w;
   }
 

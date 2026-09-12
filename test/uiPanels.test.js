@@ -728,18 +728,15 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     run.slotPending = null;
   });
 
-  it('事件房：探索前只给探索键，探索后给结果与离开', () => {
+  // 2026-09-12：随机事件改成**幕间播片**（cutscene 的 CG + 对话 + 选项，用户定），
+  // 事件房不再走面板交互——面板只剩一句话与一个**安全阀**入口（万一场间没自动播起来）。
+  it('事件房：面板不再承载事件交互，只剩安全阀入口', () => {
     const run = roomRun('event', 85);
     const panel = new PanelObject({ form: 'modal' });
     panel.setWidgets('room', buildRoomPanel(panelSnapshot(run, {})));
-    expect(panel.buttons.some(b => b.pickId === 'event:explore')).toBe(true);
+    expect(panel.buttons.some(b => b.pickId === 'event:play')).toBe(true);
+    expect(panel.buttons.some(b => b.pickId === 'event:explore')).toBe(false);
     expect(panel.buttons.some(b => b.pickId === 'event:leave')).toBe(false);
-
-    const snap = panelSnapshot(run, { eventResult: { eventId: 'moneyBag', money: 15 } });
-    panel.setWidgets('room', buildRoomPanel(snap));
-    expect(panel.buttons.some(b => b.pickId === 'event:leave')).toBe(true);
-    const texts = panel._rows.filter(r => r.widget.text).map(r => r.widget.text);
-    expect(texts.some(t => t.includes('15'))).toBe(true);
     panel.dispose();
   });
 });
