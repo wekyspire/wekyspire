@@ -13,16 +13,16 @@
 import * as THREE from 'three';
 import { TextBlockObject } from './TextBlockObject.js';
 import { ButtonObject } from './ButtonObject.js';
-import { PANEL_ABOVE_Z } from './PanelObject.js';
+import { OVERLAY_Z } from './PanelObject.js';
 import { EventNames } from '../../bridge/events.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
 export const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 export const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
 
-// 必须高于休息面板（其内容在世界 z = PANEL+CONTENT；见 PanelObject.PANEL_ABOVE_Z）——
-// 营地/训练场/老虎机的入口都是从模态面板里打开的，低于它就会被面板背板盖住。
-export const PICKER_Z = { BACKDROP: PANEL_ABOVE_Z, CONTENT: PANEL_ABOVE_Z + 2 };
+// 全屏模态覆盖层：高于休息面板（其内容在世界 z = PANEL+CONTENT），**也高于舞台的常驻按钮**
+// （「继续前进」在 PANEL_ABOVE_Z + 2）——否则那枚按钮会画在遮罩之上，看起来还能点。见 OVERLAY_Z。
+export const PICKER_Z = { BACKDROP: OVERLAY_Z, CONTENT: OVERLAY_Z + 2 };
 
 // 布局（世界单位）：标题带 / 滚动区带 / 底部按钮带。两个子类共用同一套带位，
 // 只有"单件尺寸与列数"不同（由 open 参数给）。

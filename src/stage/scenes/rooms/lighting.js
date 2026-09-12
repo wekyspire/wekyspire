@@ -136,6 +136,18 @@ export const LIGHTING_PRESETS = {
     // 暖光会把色相染偏（赌厅的暖金留给赌厅）
     focus: { color: 0xeaf1f8, base: 1150, dist: 76, offset: 15, dim: 0.72, rise: 3.1, lift: 0.07 },
     tint: { base: [0.58, 0.61, 0.66], fireGain: [0.2, 0.19, 0.18], radius: 64 },
+    // 售货机正面主光（用户定 2026-09-13）：机器在 (0, FLOOR_Y, -44.5)、面朝 +z。
+    // 为什么必须单配一盏：售货机怼脸走 `setFocus(..., { fill: false })`（柜内货架是 unlit
+    // 自发光，正面补光会把柜内背板照爆），于是"怼脸看货"反而比全景更暗——太暗就是这个缺口。
+    // 补一盏**大而软、略微偏冷的中性白**宽角聚光，从货架正前方压过去；它**不进外围压暗清单**，
+    // 全景与怼脸都是恒定的机器主光。
+    front: {
+      color: 0xe6eefc,        // 略微偏冷的中性白（不是蓝）
+      base: 2050, dist: 60,   // 实测定档：3400 会把玻璃门照成一团白、柜内货架读不出来
+      angle: 0.62, penumbra: 0.92, decay: 1.7,
+      position: [0.8, FLOOR_Y + 7.2, -32.5],
+      target: [0, FLOOR_Y + 3.4, -44.5],
+    },
   },
   // Boss 血色侧逆光：主光来自敌后右上的血色 rim，月光低压、雾重（雾参数走配方）
   'boss-rim': {
@@ -200,6 +212,21 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const centerFill = new THREE.PointLight(desat(cfColor), cfBase, cfDist, 2.0);
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
   group.add(centerFill);
+
+  // 机器正面主光（preset.front，目前只有商店房的售货机用）：**不进外围压暗清单**，
+  // 也不随 setFocus 变化——它就是那台机器的恒定主光（怼脸时外围全压暗，机器仍要亮）。
+  // 宽角 + 高半影 = "大而软"，读作从正前方打过来的柔光而不是一束硬聚光。
+  let frontLight = null;
+  if (preset.front) {
+    const f = preset.front;
+    frontLight = new THREE.SpotLight(
+      desat(f.color), f.base, f.dist, f.angle, f.penumbra, f.decay ?? 2.0,
+    );
+    frontLight.position.set(...f.position);
+    frontLight.target.position.set(...f.target);
+    frontLight.castShadow = false;   // 与灯池同口径：机器光不投影，免得自遮挡出硬边
+    group.add(frontLight, frontLight.target);
+  }
 
   // 灯池（`lamp` 锚：机器/招牌/彩灯这类自发光体）：**只出点光、不出火焰粒子**——
   // 与火点光共用同一套处方字段风格（preset.lamp = { color, base, dist, cap }）。

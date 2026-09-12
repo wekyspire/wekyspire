@@ -34,6 +34,15 @@ const Z = { PANEL: 60, BACKDROP: 80, CONTENT: 81 };
  */
 export const PANEL_ABOVE_Z = Z.PANEL + Z.CONTENT + 10;
 
+/**
+ * **全屏模态覆盖层**（获得演出、全屏选卡/选遗物）的 z 基准。
+ * 必须高于舞台自身的常驻按钮——「继续前进」挂在 PANEL_ABOVE_Z + 2，随投影机位浮动；
+ * 覆盖层若只到 PANEL_ABOVE_Z，那枚按钮就画在遮罩之**上**，看起来"还能点"
+ * （用户 2026-09-13 报：获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
+ * < 模态覆盖层；覆盖层内部再各自往上排（背板 → 主体 → 文本 → 按钮）。
+ */
+export const OVERLAY_Z = PANEL_ABOVE_Z + 8;
+
 // 两种形态的几何（逻辑像素；沿用原 Vue 面板的观感尺寸）
 const FORMS = {
   anchored: {

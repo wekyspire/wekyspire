@@ -18,21 +18,22 @@
 // 内有效，show 时传入；缺省只有"点任意处关闭"的旧语义）。本组件只负责"把出口摆出来"，
 // 放弃/收下的游戏语义由调用方（Shell 编排器）决定。
 //
-// 层次约定：全屏遮罩 = 面板层之上（PANEL_ABOVE_Z），与 CardScrollPickerObject 同级；
+// 层次约定：全屏遮罩走 `OVERLAY_Z`（**高于"继续前进"这类常驻按钮**，与 CardScrollPickerObject
+// 同级）——压不住常驻按钮的话，按钮会画在半透明遮罩之上、看起来还能点（用户 2026-09-13 报）；
 // 输入走 Picker（自己登记全屏 dismiss 热区 + 跳过按钮热区），宿主只需把指针事件转发进来。
 //
 // 纯 Stage 层：不读 Core/Bridge；数据由调用方以纯对象传入（名称/描述/作用/素材 key/tint）。
 
 import * as THREE from 'three';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
-import { PANEL_ABOVE_Z } from './PanelObject.js';
+import { OVERLAY_Z } from './PanelObject.js';
 import { bakeBoldText } from './textBakers.js';
 import { sharedPropArtCache } from '../art/propArt.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
-const Z = { BACKDROP: PANEL_ABOVE_Z, RAYS: PANEL_ABOVE_Z + 2, ITEM: PANEL_ABOVE_Z + 4, TEXT: PANEL_ABOVE_Z + 5, BUTTON: PANEL_ABOVE_Z + 6 };
+const Z = { BACKDROP: OVERLAY_Z, RAYS: OVERLAY_Z + 2, ITEM: OVERLAY_Z + 4, TEXT: OVERLAY_Z + 5, BUTTON: OVERLAY_Z + 6 };
 const DISMISS_ID = 'showcase:dismiss';
 const SKIP_ID = 'showcase:skip';
 
@@ -144,6 +145,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._raysTex = null;
     this._baked = [];       // 本件烘出来的纹理（换内容时释放）
     this._onDismissShow = null;  // 本次 show 的出口回调（点击任意处 = 收下/关闭）
+    this._autoDismissMs = 0;     // 本次 show 的自动收下时长（0 = 等点击）
     this._onSkipShow = null;     // 本次 show 的「跳过」出口（放弃产出）
     this._build();
   }
@@ -263,6 +265,8 @@ export class ItemShowcaseObject extends THREE.Group {
    *   artKey: 素材 key（assets/items|props，可空 → 色块代替）
    *   tint:   色块/托底色（可空 → 金）
    *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
+   *   autoDismissMs: >0 时停住这一时长后**自动收下**（售货机购买：出完货即自动收货，
+   *                  不给一套"点击收货"的 UI，用户定 2026-09-13）；缺省 0 = 等点击
    *   onDismiss / onSkip: 两个出口的回调（点任意处 / 点跳过；仅本次 show 有效）
    */
   show(item = {}) {
@@ -272,6 +276,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._phase = 'in';
     this._t = 0;
     this.visible = true;
+    this._autoDismissMs = Math.max(0, Number(item.autoDismissMs) || 0);
     this._onDismissShow = item.onDismiss ?? null;
     this._onSkipShow = item.onSkip ?? null;
     if (this._skipBtn) this._skipBtn.visible = !!item.skippable;
@@ -351,6 +356,8 @@ export class ItemShowcaseObject extends THREE.Group {
       this._item.position.y = ART.y + Math.sin(this._t * 1.1) * 0.35;
       this._rays.rotation.z += dt * 0.08;
       this._rays.material.opacity = 0.78 + Math.sin(this._t * 1.9) * 0.08;
+      // 自动收下（售货机购买）：停够时长即走"点任意处收下"那条出口，玩家不用动手
+      if (this._autoDismissMs > 0 && this._t * 1000 >= this._autoDismissMs) this.dismiss('dismiss');
     } else if (this._phase === 'out') {
       const t = Math.min(1, this._t / T_OUT);
       const e = 1 - Math.pow(1 - t, 2);               // 快速收束

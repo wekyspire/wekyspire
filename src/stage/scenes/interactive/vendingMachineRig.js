@@ -115,7 +115,7 @@ function bakeCard(item, artTex) {
   fitText(ctx, name, { fontPx: 30, maxW: W - 30 });
   ctx.strokeText(name, W / 2, 224);
   ctx.fillText(name, W / 2, 224);
-  // ③ 价格（**买不起 = 红字**，用户定）
+  // ③ 价格（**买不起 = 红字**已经说清"钱不够"，不另加「金币不足」小字——用户定 2026-09-13）
   const price = `${item.price} 金`;
   fitText(ctx, price, { fontPx: 54, maxW: W - 30 });
   ctx.lineWidth = 7;
@@ -123,15 +123,6 @@ function bakeCard(item, artTex) {
   ctx.strokeText(price, W / 2, 296);
   ctx.fillStyle = afford ? PRICE_OK : PRICE_NO;
   ctx.fillText(price, W / 2, 296);
-  // ④ 买不起：价格下面再补一行小字（红），点一下的反馈才读得懂
-  if (!afford) {
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-    ctx.fillStyle = PRICE_NO;
-    fitText(ctx, '金币不足', { fontPx: 22, maxW: W - 40 });
-    ctx.strokeText('金币不足', W / 2, 334);
-    ctx.fillText('金币不足', W / 2, 334);
-  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;

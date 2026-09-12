@@ -24,7 +24,7 @@ import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import {
-  bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
+  bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn, DEMON_DEBUFFS,
 } from '../core/run/rooms/bank.js';
 import {
   buyGurpas, takeGurpasCard, sellGurpasRelic, removeCardAtGurpas,
@@ -256,6 +256,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'room') roomScenePending = false;
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
     const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）
+    // 战后奖励**画在战斗舞台上**（用户定 2026-09-12）：战斗结束后不换舞台，奖励 overlay 直接
+    // 盖在战斗房间前；"战斗房 → 塔楼"的场景切换在**领奖后的切幕中点**完成（见 afterRewardToFloor）。
+    // 无战斗舞台（headless/降级）时自然落到塔楼层（mapStage）——行为与旧版一致。
+    if (run.gameStage === 'reward') battleStage?.setPanel?.(snap);
+    else battleStage?.setPanel?.(null);
     mapStage?.setPanel?.(roomPresentedOnScene() ? null : snap);
     roomStage?.setPanel?.(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
@@ -323,6 +328,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         battleStage = new BattleStage({
           bridge, stageManager, displayModel, scene: sceneId, sceneSeed: `${seed}:room:${run.floor}`,
         });
+        // 战后奖励面板落在战斗舞台上（用户定 2026-09-12）：意图出口与塔楼层同一套
+        battleStage.setPanelIntentHandler?.(dispatchPanelIntent);
         stageManager.setStage(battleStage);
       }
       bridge.start();
@@ -343,23 +350,16 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     })().finally(() => { battlePending = false; });
   }
 
-  // 退场（用户定 2026-09-12 调整节拍）：**先落战后奖励、不切幕** —— 奖励 overlay 立刻盖上来
-  // （塔楼舞台先在幕后摆好，但没有黑幕）；领完/跳过奖励后（claimReward）才切幕回塔楼、
-  // 播"楼层 clear（当前层高亮块长出）"动画。原实现顺序相反（先黑幕回塔楼再开奖励）。
+  // 退场（用户定 2026-09-12 调整节拍）：**先落战后奖励、不切幕、也不换舞台** ——
+  // 奖励 overlay 直接盖在**战斗房间**上（面板由战斗舞台承载，见 notify 的 reward 分支）；
+  // 领完/跳过奖励后（claimReward → afterRewardToFloor）才切幕，并在**黑幕中点**把舞台
+  // 换成塔楼层、播"楼层 clear（当前层高亮块长出）"动画。
   function endBattle(result, bridge) {
     finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
     battleBridge = null;
-    if (stageManager && mapStage) {
-      mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画留到领奖之后
-      stageManager.setStage(mapStage);               // 瞬切（无幕）：奖励 overlay 由塔楼舞台承载
-      battleStage?.dispose();                        // 先换台再释放（onExit 语义完整）
-    } else {
-      battleStage?.dispose();
-    }
-    battleStage = null;
     // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
-    // 于是爬塔动画播完才看到战后的血量/金币。这里在黑幕中就先把状态推给地图舞台
-    notify();   // 推 reward 面板 → 奖励 overlay 即刻可交互
+    // 于是爬塔动画播完才看到战后的血量/金币。这里在战斗舞台上先把状态推上去。
+    notify();   // 推 reward 面板（落在战斗舞台）→ 奖励 overlay 即刻可交互，背景仍是战斗房间
   }
 
   /**
@@ -368,9 +368,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    * 阶段迁移（completeRewards）已在 claimReward 里完成，这里只做呈现与演出。
    */
   async function afterRewardToFloor() {
-    // ① 切幕：黑幕中点把奖励 overlay 换成新阶段的面板（房间/战前准备），揭幕即塔楼
-    if (stageManager) await cutscene.sceneTransition(() => notify());
-    else notify();
+    // ① 切幕：**黑幕中点**换舞台（战斗房 → 塔楼）+ 收起奖励 overlay、换上新阶段面板；
+    //    揭幕露出的是塔楼（此前战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）
+    if (stageManager) await cutscene.sceneTransition(swapBattleToMap);
+    else swapBattleToMap();
     // ② 楼层 clear：当前层高亮块自下而上长出（同一队列串行，黑幕已揭）
     if (stageManager && mapStage) {
       await awaitFloorArrive(runSequencer, mapStage, {
@@ -458,6 +459,21 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    *   在前端状态必然经历一瞬"旧场景 + 新快照"（面板突变/取景突变）的场合，只有把同步
    *   压进黑幕里才能让那些 invalid 中转帧完全不被看见。
    */
+  /**
+   * 把**战斗舞台**换回塔楼（不排幕）：战后奖励领完后由切幕中点调用——战斗舞台随换台释放
+   * （它的 uiScene 上挂着奖励面板，一并回收）。
+   */
+  function swapBattleToMap() {
+    if (stageManager && mapStage) {
+      mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画随后播
+      stageManager.setStage(mapStage);
+    }
+    battleStage?.dispose();   // 换台后释放（onExit 语义完整）
+    battleStage = null;
+    syncMapStatus();          // 面板/状态栏：随后 notify 推新阶段快照
+    notify();
+  }
+
   /** 把房间舞台换回塔楼（不排幕）：奖励/进阶等"多段演出"共用同一段换台代码。 */
   function swapRoomToMap() {
     if (stageManager && mapStage) {
@@ -536,35 +552,51 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   // 合并房的主动离房（单房由动作自动离房，不需要这个）
   // ---- 恶魔 roll（银行机超额取款）----
-  // 演出顺序 = 视角切到老虎机 → 关闸换恶魔盘（灯池染红）→ 自动转 → **三张词条卡片三选一**
-  // → 退场换回普通盘 → **奖励特写**（那笔超额取款的金币）。场景那半在 RoomStage 的状态机里，
-  // 这里只记"选完词条后要播什么"，等场景回执 demonAnimDone 再播（否则特写会盖住退场演出）。
+  // 演出顺序 = 视角切到老虎机 → 关闸换恶魔盘（灯池染红）→ 自动转 → **在转盘上点一根盘
+  // 承受词条**（转出来的那一面就是诅咒本身；悬停出 tooltip）→ 退场换回普通盘 →
+  // **获得演出**（先"获得"这个词条，再报那笔超额取款的金币）。场景那半在 RoomStage 的
+  // 状态机里，这里只记"选完词条后要播什么"，等场景回执 demonAnimDone 再播（否则特写会盖住退场演出）。
   const DEMON_TIER_LABEL = { yellow: '黄色级', red: '红色级', black: '黑色级' };
-  let demonRewardShow = null;   // { gold, tier, name }
+  const DEMON_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
+  let demonRewardShow = null;   // { gold, tier, name, desc }
   let demonFuse = null;         // 兜底：场景没回执（无场景/被拆）也要把特写放出来
   function bankDemonPick(id) {
     const pr = run.bank?.pendingRoll;
     const gold = pr?.gold ?? 0;
+    // ⚠ run 侧的 pendingRoll.options 是 **id 数组**（展开成对象只发生在快照里），
+    // 所以词条描述要从定义表取，不能从 pr.options 里找对象
+    const def = DEMON_DEBUFFS[id] ?? null;
     const res = chooseDemonDebuff(run, id);
-    demonRewardShow = { gold, tier: res.tier, name: res.name };
+    demonRewardShow = { gold, tier: res.tier, name: res.name, desc: def?.desc ?? '' };
     const inScene = !!roomStage && run.currentRoom === 'slot';
     if (!inScene) { showDemonReward(); return res; }
     clearTimeout(demonFuse);
     demonFuse = setTimeout(() => { demonFuse = null; showDemonReward(); }, 6000);
     return res;
   }
+  /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
+   *  金币那拍**不再写"代价：xxx"**（用户定 2026-09-13：上一拍刚演过，纯冗余）。 */
   function showDemonReward() {
     clearTimeout(demonFuse);
     demonFuse = null;
     const p = demonRewardShow;
     demonRewardShow = null;
     if (!p) return false;
-    return !!panelStage()?.showcaseItem?.({
-      title: `+${p.gold} 金币`,
-      desc: '银行机超额取款',
-      effect: `代价：${p.name}（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
-      artKey: 'gold',   // 无素材时组件烘"金币堆"占位（用户要的观感）
-      tint: 0xffd75e,
+    const stage = panelStage();
+    if (!stage?.showcaseItem) return false;
+    return !!stage.showcaseItem({
+      title: p.name,
+      desc: `恶魔词条 · ${DEMON_TIER_LABEL[p.tier] ?? p.tier}`,
+      effect: p.desc,
+      tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
+      autoDismissMs: 1900,
+      onDismiss: () => panelStage()?.showcaseItem?.({
+        title: `+${p.gold} 金币`,
+        desc: '银行机超额取款',
+        artKey: 'gold',   // 无素材时组件烘"金币堆"占位（用户要的观感）
+        tint: 0xffd75e,
+        autoDismissMs: 1700,
+      }),
     });
   }
 
@@ -710,7 +742,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function reportSlotAnimDone(reportId) { return slotFinish?.(reportId) ?? false; }
 
   // 离房安慰奖（SLOT_MACHINE.md：拉了 ≥2 次杆没中奖 → 送可乐/鸡腿二选一）：
-  // 场景端播完"吐出→点选→飞出"后上行到这里结算，再播一次获得物特写（获得动画）。
+  // 场景端播完"吐出→点选→飞出"后上行到这里结算，再播一次获得物特写（获得动画），
+  // **然后自动把"离房"接着走完**（用户定 2026-09-13）：触发点就是玩家点「继续前进」，
+  // 整条链是"离房 → 机器凑上来吐货 → 二选一 → 获得演出 → 离房切幕"，中间不需要玩家再点一次。
   const GIFT_TINT = { cola: 0xc0392b, chicken: 0xd9a05b };
   function slotTakeGift(choice) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
@@ -721,6 +755,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     panelStage()?.showcaseItem?.({
       title: g.name, desc: g.desc, effect: g.effect,
       tint: GIFT_TINT[choice] ?? 0xffd75e,
+      autoDismissMs: 1800,
+      onDismiss: () => leaveRoom(),
     });
   }
 
@@ -820,7 +856,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     return true;
   }
   const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e };
-  /** 买到手的那件东西的特写（遗物交给全局差分：素材与描述口径都在那边）。 */
+  /** 买到手的那件东西的特写（遗物交给全局差分：素材与描述口径都在那边）。
+   *  出货演出播完即**自动收下**（用户定 2026-09-13）：机器那边已经演过一遍"出货"，
+   *  这里只是把到手的那件亮一下，不需要玩家再点一次"收货"——操纵条里也不另设收货 UI。 */
   function shopShowcase(p) {
     if (!p) return false;
     if (p.kind === 'relic') return flushRelicShowcase();
@@ -829,10 +867,12 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     const pack = p.kind === 'pack';
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: pack ? '瑞米的自动售货机 · 卡包' : '瑞米的自动售货机',
+      desc: pack ? '售货机 · 卡包' : '售货机',
       effect: p.effect ?? '',
       artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
+      // 卡包停久一点：看完就**自动开包**（全屏三选一，可放弃）——整条购买链不需要玩家点任何一下
+      autoDismissMs: pack ? 2100 : 1700,
       // 卡包：获得演出看完**自动开包**（全屏三选一，可放弃；见 openShopPackPicker）
       onDismiss: pack ? () => panelStage()?.openShopPackPicker?.() : null,
     });

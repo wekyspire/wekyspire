@@ -111,13 +111,15 @@ function toTitle() {
   phase.value = 'menu';
 }
 
-// 当前接受指针输入的舞台：战斗层 = BattleStage；休息房 = 场景式 RoomStage（仅赌厅这类
-// 有休息房配方的房间才有，占位房间回退 MapStage）；其余阶段（prep/reward/ascension/end）
-// 都是地图舞台上的 Three 面板（原 Vue 面板 DOM 层已迁走）。
+// 当前接受指针输入的舞台：战斗层 = BattleStage（**战后奖励也还在这里** —— 奖励 overlay
+// 画在战斗舞台的 uiScene 上，背景保持战斗房间，直到领奖后的切幕中点才换回塔楼）；
+// 休息房 = 场景式 RoomStage（仅赌厅这类有休息房配方的房间才有，占位房间回退 MapStage）；
+// 其余阶段（prep/ascension/end）都是地图舞台上的 Three 面板。
 function activeStage() {
   const c = ctrl.value;
   if (!c) return null;
-  if (c.run.gameStage === 'battle') return c.getBattleStage();
+  const battle = c.getBattleStage();
+  if (battle) return battle;   // 战斗 / 战后奖励：战斗舞台存在期间由它接管指针
   if (c.run.gameStage === 'room') return c.getRoomStage() ?? mapStage;
   return mapStage;
 }

@@ -10,7 +10,6 @@
 
 import * as THREE from 'three';
 import { P, shade } from '../kit/index.js';
-import { bakeBoldText } from '../../objects/textBakers.js';
 
 const TINT = {
   deposit: P.glowCyan,
@@ -21,26 +20,62 @@ const TINT = {
 export function createBankMachineRig({ object, parts, seed = 'bank' }) {
   /** 屏幕正文烘焙（宿主可随时改文本，如按快照显示存款额）。 */
   function bakeScreen(text) {
-    if (!screen || typeof document === 'undefined') return;
-    const baked = bakeBoldText(text, { fontPx: 40, tint: '#dff6ff', stroke: 'rgba(8, 22, 32, 0.9)' });
-    screen.material.map?.dispose?.();
-    screen.material.map = baked.texture;
-    screen.material.needsUpdate = true;
+    if (!screenText || typeof document === 'undefined') return;
+    // 画布比例 = 屏面比例（1.25:0.72），文字居中；长了自动缩到 ~82% 屏宽内。
+    const W = 1024, H = 590;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    let fontPx = H * 0.44;
+    ctx.font = `bold ${fontPx}px sans-serif`;
+    const tw = ctx.measureText(text).width;
+    const maxW = W * 0.82;
+    if (tw > maxW) fontPx = Math.max(24, fontPx * (maxW / tw));
+    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(4, fontPx * 0.16);
+    ctx.strokeStyle = 'rgba(6, 20, 30, 0.92)';
+    ctx.strokeText(text, W / 2, H / 2);
+    ctx.fillStyle = '#dff6ff';
+    ctx.fillText(text, W / 2, H / 2);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    const old = screenText.material.map;
+    screenText.material.map = texture;
+    screenText.material.needsUpdate = true;
+    old?.dispose?.();
   }
 
   const body = parts?.body ?? object;
   const screen = parts?.screen ?? null;
   const scanline = parts?.scanline ?? null;
   const bulbs = parts?.bulbs ?? [];
-  // 资产侧只有 kit 共享材质；屏幕/扫描线/指示灯的逐帧改色由 rig 持独立材质
+  // 资产侧只有 kit 共享材质；屏幕/扫描线/指示灯的逐帧改色由 rig 持独立材质。
+  //
+  // 屏幕正文走**专用贴片**，不是把字烘在屏幕盒子上（用户 2026-09-13 报"zoom-out 字体
+  // z-fighting、zoom-in 完全看不见余额"的成因）：屏幕是 BoxGeometry，同一张贴图会铺满
+  // 六个面（侧面把字压成条纹、正反面在远景抢深度），且贴图背景透明而盒子材质不透明时
+  // 整屏会被背景吃掉。改为：盒子只当发光底（呼吸/闪烁照旧），文字另挂一张与屏面同比例、
+  // `transparent` 的 PlaneGeometry 贴片——项目里烘焙文本的通行做法（顶端栏/按钮同款）。
+  let screenText = null;
   if (screen) {
     screen.material = new THREE.MeshBasicMaterial({ color: P.glowCyan });
-    // 屏幕正文：粗体文本烘到纹理上（道具只登记 screenText，执行在 Stage 侧）。
+    screen.material.color.setRGB(0.85, 0.95, 1.0);
+    const p = screen.geometry.parameters;   // BoxGeometry 的 { width, height, depth }
+    screenText = new THREE.Mesh(
+      new THREE.PlaneGeometry(p.width * 0.94, p.height * 0.94),
+      new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false }),
+    );
+    screenText.name = 'screenText';
+    // 贴片只贴前表面一点点；depthTest 关掉后不参与深度竞争，扫描线扫过也不会把它切掉
+    screenText.position.z = p.depth / 2 + 0.01;
+    screenText.renderOrder = 3;
+    screen.add(screenText);
     // 冷光由 unlit 材质 + 冷色灯池给；文本本身不发光，只随屏幕一起明灭。
-    if (typeof document !== 'undefined' && screen.userData?.screenText) {
-      bakeScreen(screen.userData.screenText);
-      screen.material.color.setRGB(0.85, 0.95, 1.0);
-    }
+    if (typeof document !== 'undefined') bakeScreen(screen.userData?.screenText ?? '');
   }
   if (scanline) scanline.material = new THREE.MeshBasicMaterial({ color: shade(P.glowCyan, -0.5) });
   for (const b of bulbs) b.material = new THREE.MeshBasicMaterial({ color: shade(P.silver, -0.4) });

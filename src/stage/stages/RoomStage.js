@@ -235,6 +235,11 @@ export class RoomStage {
     this._statusBar = new PlayerStatusObject({ bakeLabel: mkBake, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
+    // 立绘晚到补挂（与塔楼层/战场同源同款）：漏这一步的症状是「休息房里玩家与瑞米的
+    // 头像都是空圆」（用户 2026-09-13 报赌博层头像失踪）。素材通常已预载就绪，先挂一次；
+    // 未就绪则由 addOnLoad 回调补挂（水晶/金币的晚到补挂走 PlayerStatusObject 自己的订阅）。
+    this._unsubArt = this._unitArt?.addOnLoad(() => this._applyAvatar());
+    this._applyAvatar();
     this._topBar = new TopResourceBarObject({ bakeLabel: mkBake });
     this.uiScene.add(this._topBar);
     this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
@@ -274,6 +279,14 @@ export class RoomStage {
     if (hp != null && maxHp != null) this._statusBar.setPlayerHp(hp, maxHp);
     if (relics) this._topBar.setRelics(relics);
     if (remi) this._statusBar.setRemi(remi);
+  }
+
+  /** 挂骑士/瑞米头像立绘（与 MapStage._applyAvatar 同源同款）。 */
+  _applyAvatar() {
+    const img = this._unitArt?.getFile('knight_avatar.png');
+    if (img) this._statusBar.setAvatar(img, { crop: 'full', mirror: true });
+    const remiImg = this._unitArt?.getFile('remi_avatar.png');
+    if (remiImg) this._statusBar.setRemiAvatar(remiImg);
   }
 
   // ---- 全屏选择界面 / 获得物特写（与 MapStage 同名同义：宿主按"当前舞台"调用）----
@@ -463,7 +476,7 @@ export class RoomStage {
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
     if (this._gift?.active) { this._gift.onHover(hit); return; }   // 安慰奖演出中：只认两件货
-    if (this._demon?.cards?.active) { this._demon.cards.onHover(hit); return; }   // 恶魔词条三选一
+    // 恶魔 roll 选择阶段：转轮自己的 tooltip token 由 Picker 发（此处不吞 hover）
     if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
@@ -496,7 +509,6 @@ export class RoomStage {
     const down = this._downHit;
     this._downHit = null;
     if (this._gift?.active) { const id = this._gift.pickIndexOf(hit); if (id) this._gift.choose(id); return; }
-    if (this._demon?.cards?.active) { const id = this._demon.cards.pickIndexOf(hit); if (id) this._demon.cards.choose(id); return; }
     if (this._showcase?.busy) { this._showcase.onClick(hit); return; }        // 点任意处退出特写
     if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
@@ -536,13 +548,15 @@ export class RoomStage {
 
   dispose() {
     this.onExit();
+    this._unsubArt?.();
+    this._unsubArt = null;
     this._composer?.dispose();
     this._composer = null;
     this.composeScene = null;
     this.composeResize = null;
     this._bubbles.dispose();
     this._removeGift();
-    this._removeDemonCards();
+    this._disarmDemonChoice();
     this._continue.dispose();
     this._cardPicker?.dispose();
     this._cardPicker = null;
@@ -669,6 +683,12 @@ export class RoomStage {
   }
 
   _activate(hit) {
+    // 恶魔 roll 选择阶段：点**转轮本身**即承受那根盘对应的词条（转出来的就是诅咒）
+    if (hit?.kind === 'token' && this._demon?.phase === 'choose' && hit.id?.startsWith('room:demon:')) {
+      const pick = this._demon.picks?.find(p => p.id === hit.id);
+      if (pick) this._onIntent?.({ action: 'bankPick', id: pick.optionId });
+      return;
+    }
     if (!hit || hit.kind === 'background') {
       this._panel?.onClick?.(hit);
       this._focusMachine(null);   // 点房间空白处 = 收起机器面板
@@ -715,8 +735,9 @@ export class RoomStage {
    * **离房安慰奖演出**（用户定 2026-09-12）：点「继续前进」且快照里欠着安慰奖时，
    * ① 相机推到**出料口**；② 机器"吐出"两件 billboard（可乐/鸡腿，暂无美术 = 纯色块 + 白字）；
    * ③ 点选其一 → 选中件朝镜头飞出、另一件缩没；④ 播完上行 `slotTakeGift`（宿主结算 +
-   * 播获得物特写）。演完由快照（gift 变 null）自然收尾，玩家再点「继续前进」即离房。
-   * @returns 是否已接手这次点击（true = 别离房）
+   * 播获得物特写，**并自动把这次离房接着走完**——用户定 2026-09-13：领取不进任何 UI，
+   * 面板里既没有进度也没有按钮，玩家点一次「继续前进」就把整条链走到底）。
+   * @returns 是否已接手这次点击（true = 别离房，等演出与获得特写跑完由宿主离房）
    */
   _playGift() {
     const items = this._snap?.slot?.gift;
@@ -1122,8 +1143,7 @@ export class RoomStage {
     this._syncVending();
     this._syncBank();
     this._syncDemonRoll();
-    // 奖励没领完就压暗「继续前进」（合并房两部分 / 恶魔 roll / 卡包待选；点了给泡泡并拉镜头）
-    this._continue.setDim(this._pendingRoomDuty() ? 0.4 : 1);
+    // 「继续前进」的明度在 _tick 里逐帧算（模态覆盖层/房间欠账两档），这里不再重复设置
     const s = this._snap?.slot;
     const rig = this._rigs.get('slot');
     if (!s || !rig) return;
@@ -1145,12 +1165,13 @@ export class RoomStage {
     }, 120);
   }
 
-  /** 银行机屏幕文本：显示**存款额**（道具侧写死的「余额 0」会与顶端金币数打架）。 */
+  /** 银行机屏幕文本：**恒显示储蓄额度**（存款额），不是玩家携带的金币——机器讲的是
+   * 账户余额，携带金币在顶端资源行。存款为 0 时也要显示「存款 0」。 */
   _syncBank() {
     const bk = this._snap?.bank;
     const rig = this._rigs.get('bank');
     if (!bk || !rig?.setScreen) return;
-    rig.setScreen(bk.deposit > 0 ? `存款 ${bk.deposit}` : `余额 ${this._snap.money ?? 0}`);
+    rig.setScreen(`存款 ${bk.deposit ?? 0}`);
   }
 
   // ================= 内部：恶魔 roll（银行机超额取款的代价）=================
@@ -1174,7 +1195,7 @@ export class RoomStage {
       phase: 'enter', started: false,
       gold: pr.gold, tier: pr.tier,
       options: (pr.options ?? []).map(o => ({ id: o.id, name: o.name, desc: o.desc, tier: o.tier })),
-      cards: null,
+      picks: null,     // 选择阶段挂上的转轮热区 [{ id, optionId }]
     };
     // ① 视角立刻切到老虎机（玩家此刻站在银行机面板前）——推到位的回调里机器才开始关闸换盘
     if (this._focused !== 'slot') this._focusMachine('slot');
@@ -1183,7 +1204,7 @@ export class RoomStage {
     this._rigs.get('slot')?.setDemonStyle?.(1);
   }
 
-  /** 帧驱动相位推进：enter（关闸换盘）→ spin（自动开转）→ choose（卡片等点选）→ exit（换回普通盘）。 */
+  /** 帧驱动相位推进：enter（关闸换盘）→ spin（自动开转）→ choose（转轮上等点选）→ exit（换回普通盘）。 */
   _stepDemonRoll(dt) {
     const d = this._demon;
     if (!d) return;
@@ -1202,10 +1223,10 @@ export class RoomStage {
       }
       if (rig.isBusy()) return;
       d.phase = 'choose';
-      this._spawnDemonChoice(d);
+      this._armDemonChoice(d);
     } else if (d.phase === 'exit') {
       if (!d.started) {
-        this._removeDemonCards();
+        this._disarmDemonChoice();
         if (rig.isBusy() || !rig.demonExit?.()) return;
         d.started = true;
         return;
@@ -1219,35 +1240,66 @@ export class RoomStage {
     }
   }
 
-  /** 三张词条卡片：机器身前一排（名字 + 词条等级副标题，色块按等级分色），点选即承受。 */
-  _spawnDemonChoice(d) {
+  /**
+   * 恶魔 roll 的选择：**轮盘本身就是选项**（用户定 2026-09-13）。
+   * 三根转轮各认一个词条——"轮盘转出来的东西就是诅咒本身"，所以悬停转轮弹该词条的 tooltip、
+   * 点转轮即承受。此前是机器身前另浮出三张卡片，与转盘割裂，操纵条里又列一遍同样的信息
+   * （用户报"重复呈现"）。取景用 `_focusMachine('slot')` 的怼脸机位（slotSubject 已框住转轮窗），
+   * 不再另拉一次相机。
+   */
+  _armDemonChoice(d) {
     const machine = this._markers.find(m => m.name === 'slot')?.entry;
-    if (!machine || !d.options.length) return;
-    d.cards = new ChoiceBillboardObject({
-      items: d.options.map(o => ({
-        id: o.id, name: o.name,
-        sub: DEMON_TIER_NAME[o.tier] ?? '',
-        tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
-      })),
-      size: 3.2,
-      gap: 3.6,     // 三张一排：间距收一点，取景才不会贴边（总宽 = 2×gap + 卡宽）
-      onPick: (id) => { this._onIntent?.({ action: 'bankPick', id }); },
+    const reels = this._rigs.get('slot')?.demonTargets?.() ?? [];
+    if (!machine || !reels.length || !this._picker) return;
+    const s = machine.scale ?? 1;
+    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
+    // 机器"正面"平面沿 fwd 的距离：转轮鼓在机柜里，压边框/镜片都挡在它前面，
+    // 所以隐形拾取面必须整体放到**整机最前沿之外**，否则射线先打到机身（kind:'machine'）。
+    const bb = new THREE.Box3().setFromObject(machine.object);
+    const size = bb.getSize(new THREE.Vector3());
+    const center = bb.getCenter(new THREE.Vector3());
+    const halfAlong = (Math.abs(size.x * fwd.x) + Math.abs(size.z * fwd.z)) / 2;
+    d.picks = [];
+    reels.forEach((reel, i) => {
+      const o = d.options[i];
+      if (!o) return;
+      const rel = reel.getWorldPosition(new THREE.Vector3()).sub(center);
+      const lateral = rel.addScaledVector(fwd, -rel.dot(fwd));   // 垂直分量（含竖直），保住转轮的左右/高低
+      const at = center.clone().add(lateral).addScaledVector(fwd, halfAlong + 0.9 * s);
+      // 与转轮同宽（单格 cellW≈0.8）不越界；透明面不参与视觉——用 opacity 0 而不是
+      // visible:false，因为 Picker 会把 invisible 的对象滤掉（那就永远点不到了）。
+      const proxy = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.78 * s, 1.15 * s),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      );
+      proxy.name = `demonPick:${i}`;
+      proxy.position.copy(at);
+      proxy.lookAt(at.clone().add(fwd));
+      proxy.userData.token = {
+        type: 'item',
+        payload: {
+          title: o.name,
+          body: `${o.desc}（恶魔词条 · ${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
+          tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
+        },
+      };
+      this._room?.group.add(proxy);
+      const id = `room:demon:${i}`;
+      this._picker.addPickable(id, proxy, { kind: 'demon' });
+      d.picks.push({ id, optionId: o.id, proxy });
     });
-    const { spot, dist, fwd } = this._billboardStage(machine, d.cards.totalWidth);
-    d.cards.position.copy(spot);
-    this._room?.group.add(d.cards);
-    d.cards.attachPicker(this._picker);
-    const position = spot.clone().addScaledVector(fwd, dist);
-    const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
-    this._startCamTween({ position, quaternion: new THREE.Quaternion().setFromRotationMatrix(m) }, 0.5, null);
   }
 
-  _removeDemonCards() {
+  /** 撤掉转轮热区（含 tooltip token 与隐形拾取面）——选择阶段结束/退场都要走，否则空热区还能点到。 */
+  _disarmDemonChoice() {
     const d = this._demon;
-    if (!d?.cards) return;
-    this._room?.group.remove(d.cards);
-    d.cards.dispose();
-    d.cards = null;
+    for (const p of d?.picks ?? []) {
+      this._picker?.removePickable(p.id);
+      p.proxy?.parent?.remove(p.proxy);
+      p.proxy?.geometry?.dispose();
+      p.proxy?.material?.dispose();
+    }
+    if (d) d.picks = null;
   }
 
   /**
@@ -1342,10 +1394,17 @@ export class RoomStage {
       }
     }
     this._stepDemonRoll(dt);
+    // 「继续前进」的明度：获得演出/全屏选择界面是**模态覆盖层**，期间这枚常驻按钮必须明显不可用。
+    // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点
+    // （用户 2026-09-13 报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
+    // 卡包待选 / 强绑抓牌）压到 0.4，正常为 1。放帧驱动是因为演出起止不走快照。
+    this._continue.setDim(
+      this._showcase?.busy || this._cardPicker?.opened || this._relicPicker?.opened ? 0.18
+        : (this._pendingRoomDuty() ? 0.4 : 1),
+    );
     this._continue.update(dt);
     this._showcase?.update(dt);
     this._gift?.update(dt, this._sm?.camera ?? null);   // 安慰奖 billboard 面向相机 + 浮动
-    this._demon?.cards?.update(dt, this._sm?.camera ?? null);   // 恶魔词条卡片同理
     for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
       const entry = this._markers.find(m => m.name === key)?.entry;
       if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));

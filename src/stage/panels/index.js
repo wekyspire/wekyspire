@@ -230,7 +230,7 @@ const ROOM_META = {
   campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
   gurpas: { name: '古尔帕斯之店', glyph: '🏪', hint: '旧魏启大陆的物件——她只收 A/S 级遗物' },
   slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
-  shop: { name: '商店房', glyph: '🧃', hint: '瑞米维护的自动售货机——点击货架上的商品直接购买' },
+  shop: { name: '商店房', glyph: '🧃', hint: '售货机——点击货架上的商品直接购买' },
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
 
@@ -409,7 +409,7 @@ function roomHeader(w, snap, title = null) {
   if (snap.shop) {
     w.push({
       kind: 'button', id: 'room:shop', width: 300, size: 'sub',
-      label: `自动售货机（持有 ${snap.money} 金币）`,
+      label: `售货机（持有 ${snap.money} 金币）`,
       action: { action: 'openShop', local: true },
     });
   }
@@ -514,19 +514,10 @@ function slotWidgets(w, snap, { sceneChoice = false } = {}) {
         label: '粉碎物品…', action: { action: 'requestDevour' },
       });
     }
-    // 离房安慰奖（拉了 ≥2 次杆一次没中）：可乐/鸡腿二选一。场景式房间走机器"吐出"演出再选，
-    // 这里是占位面板的入口（两条路最终都上行 slotTakeGift，结算同一处）
-    if (s.gift?.length) {
-      w.push({ kind: 'gap' });
-      w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '老虎机往你怀里塞了点东西——二选一：' });
-      for (const g of s.gift) {
-        w.push({
-          kind: 'button', id: `slot:gift:${g.id}`, width: 460, size: 'sub',
-          label: `${g.name}｜${g.effect}`,
-          action: { action: 'slotTakeGift', choice: g.id },
-        });
-      }
-    }
+    // 离房安慰奖（拉了 ≥2 次杆一次没中）**完全不进 UI**（用户定 2026-09-13）：它既不是进度
+    // 也不是可领取项——玩家点「继续前进」离房时，机器自己凑上来吐可乐/鸡腿让你二选一
+    // （场景演出见 RoomStage._playGift），领完自动续上离房切幕。面板里既不提示也不给按钮，
+    // 免得把"离房"这件事拆成"先在面板里领东西、再点一次继续"两步。
 }
 
 /**
@@ -539,18 +530,19 @@ function demonRollWidgets(w, pr, sceneChoice) {
   w.push({ kind: 'title', text: '😈 恶魔 roll', align: 'center' });
   w.push({
     kind: 'sub', align: 'center', tint: '#cfe0f5',
-    text: `超额取款已入账 ${pr.gold} 金——${sceneChoice ? '在老虎机上点一张卡片' : ''}选一个词条承受：`,
+    text: `超额取款已入账 ${pr.gold} 金——`
+      + (sceneChoice ? '在轮盘上选一个词条承受（悬停看效果）' : '选一个词条承受：'),
   });
+  // 场景路径**不再列词条**（用户定 2026-09-13）：那三个词条就是转盘停下来的三面，悬停转轮
+  // 出 tooltip，操纵条里再抄一遍纯属重复。无场景的占位路径（gallery/headless 降级）没有转盘
+  // 可点，才需要这里的按钮兜底，否则那条路会卡死。
+  if (sceneChoice) return true;
   for (const o of pr.options) {
-    if (sceneChoice) {
-      w.push({ kind: 'text', align: 'center', tint: '#ff8a80', text: `・${o.name}：${o.desc}` });
-    } else {
-      w.push({
-        kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
-        label: `${o.name}：${o.desc}`,
-        action: { action: 'bankPick', id: o.id },
-      });
-    }
+    w.push({
+      kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
+      label: `${o.name}：${o.desc}`,
+      action: { action: 'bankPick', id: o.id },
+    });
   }
   return true;
 }
@@ -755,7 +747,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     return w;
   }
 
-  w.push({ kind: 'title', text: '自动售货机', align: 'center' });
+  w.push({ kind: 'title', text: '售货机', align: 'center' });
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
     text: `持有 ${snap.money} 金币`
@@ -827,3 +819,18 @@ const getRelicRarity = (id) => getRelicDefinition(id)?.rarity ?? 'C';
 
 /** 升级目标名（选卡界面/升级行用）。 */
 function getSkillDefinitionSafe(id) { return getSkillDefinition(id); }
+
+/**
+ * 快照 kind → widget builder + PanelObject 形态（**所有舞台共用一份**：
+ * 塔楼层 MapStage、战斗层 BattleStage（战后奖励）、房间层 RoomStage 的 dock 面板各取所需）。
+ * 未登记 kind = 该阶段没有 Three 面板（目前 stage='end' 由 Vue 的 EndPanel 接管）。
+ */
+export const PANEL_BUILDERS = Object.freeze({
+  prep: { build: buildPrepPanel, form: 'anchored' },
+  reward: { build: buildRewardPanel, form: 'modal' },
+  ascension: { build: buildAscensionPanel, form: 'modal' },
+  room: { build: buildRoomPanel, form: 'modal' },
+  // 售货机在塔楼层的占位视图（场景式商店房走 RoomStage 的 dock 面板）：这里没有 3D 货架，
+  // 所以要带购买按钮（`buttons: true`），否则降级路径上买不了东西
+  shop: { build: (snap) => buildShopPanel(snap, { buttons: true }), form: 'modal' },
+});

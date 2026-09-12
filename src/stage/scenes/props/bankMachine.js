@@ -56,14 +56,16 @@ export default {
       0, sy, bzZ - 0.1));
     g.add(K.put(K.box({ color: shade(P.iron, -0.30), size: [1.32, 0.8, 0.06], family: 'metal' }),
       0, sy, bzZ + 0.02));                                // 凹腔底（屏就贴在它前面一点）
-    // 屏幕与扫描线：kit 图元（unlit 顶点色）；**材质由 rig 换成独立实例**后逐帧驱动
+    // 屏幕与扫描线：kit 图元（unlit 顶点色）；**材质由 rig 换成独立实例**后逐帧驱动。
+    // 扫描线必须整体浮在屏面之前（本地 z 间距 ≥ 屏厚一半 + 自身一半），否则两个盒子互相
+    // 穿插，重叠带会 z-fighting（用户 2026-09-13 报的"字体 z-fighting"里有一半是它）。
     const screen = K.put(K.box({ color: P.glowCyan, size: [1.25, 0.72, 0.05], family: 'unlit' }),
       0, sy, bzZ + 0.09);
     screen.userData.animRole = 'screen';
-    screen.userData.screenText = '余额 0';   // rig 用 bakeBoldText 烘上去 + 闪烁
+    screen.userData.screenText = '存款 0';   // rig 用 bakeBoldText 烘上去 + 闪烁
     g.add(screen);
     const scanline = K.put(K.box({ color: shade(P.glowCyan, -0.5), size: [1.25, 0.1, 0.05], family: 'unlit' }),
-      0, sy - 0.32, bzZ + 0.12);
+      0, sy - 0.32, bzZ + 0.17);
     scanline.userData.animRole = 'scanline';
     g.add(scanline);
 

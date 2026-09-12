@@ -10,25 +10,14 @@ import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
 import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
-import { buildPrepPanel, buildRewardPanel, buildAscensionPanel, buildRoomPanel, buildShopPanel } from '../panels/index.js';
+import { PANEL_BUILDERS } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 
-// 快照 kind → widget builder（一个面板一个）。四个休息阶段面板已全部迁完，
-// 未登记 kind = 该阶段没有 Three 面板（目前 stage='end' 由 Vue 的 EndPanel 接管）。
-// form = PanelObject 形态（anchored = 贴边常驻，modal = 居中遮罩模态）。
-const PANEL_BUILDERS = {
-  prep: { build: buildPrepPanel, form: 'anchored' },
-  reward: { build: buildRewardPanel, form: 'modal' },
-  ascension: { build: buildAscensionPanel, form: 'modal' },
-  room: { build: buildRoomPanel, form: 'modal' },
-  // 售货机在塔楼层的占位视图（场景式商店房走 RoomStage 的 dock 面板）：这里没有 3D 货架，
-  // 所以要带购买按钮（`buttons: true`），否则降级路径上买不了东西
-  shop: { build: (snap) => buildShopPanel(snap, { buttons: true }), form: 'modal' },
-};
+// 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
 // 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
 // 夜空背景 + 点星 + 右侧塔楼侧视图（只看当前层附近一截——看不到顶底）+ 高亮当前层。

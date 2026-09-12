@@ -42,6 +42,9 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
 import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
+import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
+import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
+import { PANEL_BUILDERS } from '../panels/index.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -193,7 +196,7 @@ export class BattleStage {
     this._altObj = null;        // 当前处于 Shift 详情态的卡视图（至多一张）
     this._shiftDown = false;    // Shift 键盘态（window 监听驱动；单测直接调 setShiftDown）
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
-    this._aiming = null;       // 选目标卡（targetMode 'enemy'）瞄准中 { id }：卡留手牌，箭头指指针
+    this._aiming = null;       // 选目标卡（targetMode 'enemy'/'ally'）瞄准中 { id, mode }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
     this._inputSelection = [];
     // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
@@ -269,6 +272,21 @@ export class BattleStage {
     }
     this._buttonSigs = {};
     this._swapMode = false; // 换卡模式：点换卡按钮进入，手牌高亮，点一张手牌换出
+    // ---- 战后奖励面板宿主（用户定 2026-09-12）----
+    // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
+    // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
+    // 场景切换被黑幕盖住（此前是战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）。
+    this._panel = null;      // PanelObject（modal 形态：全屏背板 + 居中内容）
+    this._panelSnap = null;  // 当前快照（存在即"面板模态中"：吞掉一切指针）
+    this._onPanelIntent = null; // 面板意图上行出口（runController 注入，与 MapStage 同契约）
+    this._cardPicker = null;    // 全屏选卡（战后奖励的 Boss 删卡机会入口；惰性建）
+    this._pickerConfirm = null;
+    // 「结束回合」的**已点过**标记（用户定 2026-09-12）：动画积压期也允许点结束回合
+    // （后端其实是同步结算完的，只是在放动画），点完立刻上灰，直到**下一回合开始**的
+    // 快照落定才解锁——避免"动画没放完就点不动按钮，只能干等"。
+    this._endTurnRequested = false;
+    this._turnKey = null;   // `${side}:${count}`：变化 = 换回合（解锁上面的标记）
+    this._swapLocked = false; // 换卡刚提交：挡同一节拍内的连续点击（下次 sync 解锁）
 
     // 选目标瞄准箭头（杀戮尖塔式）：UI pass 覆盖层，指针追随物，不进队列/注册表
     this._arrow = new TargetingArrowObject();
@@ -326,6 +344,14 @@ export class BattleStage {
     if (snapshot.seq != null && snapshot.seq < this._snapshotSeq) return;
     if (snapshot.seq != null) this._snapshotSeq = snapshot.seq;
     this._snapshot = snapshot;
+    // 换回合（含"新回合开始"）：解锁「结束回合」的已点标记——这就是用户定的口径
+    // 「点完之后，到前端收到下一回合开始之前都不能再点」里的解锁点
+    const key = `${snapshot.turn?.side ?? '?'}:${snapshot.turn?.count ?? -1}`;
+    if (key !== this._turnKey) {
+      this._turnKey = key;
+      this._endTurnRequested = false;
+    }
+    this._swapLocked = false;   // 每个状态同步节拍解锁换卡（挡的是同一节拍内的连点）
     this.reconcile();
   }
 
@@ -724,12 +750,94 @@ export class BattleStage {
     });
   }
 
+  // ========== 战后奖励面板宿主（与 MapStage 同名同契约，供 runController 统一下行快照）==========
+  /** 面板意图上行出口（runController 注入：Stage 只上报「谁被点了」）。 */
+  setPanelIntentHandler(fn) { this._onPanelIntent = fn; }
+
+  /** 快照下行：kind 变化才重建 PanelObject；未登记的 kind 收起面板。 */
+  setPanel(snap) {
+    const entry = snap && PANEL_BUILDERS[snap.kind];
+    if (!entry) { this._removePanel(); return; }
+    if (!this._panel || this._panel.kind !== snap.kind) {
+      this._removePanel();
+      this._panel = new PanelObject({
+        form: entry.form,
+        onIntent: (a) => this._onPanelAction(a),
+        bakeFace: this._bakeFace,
+      });
+      this.uiScene.add(this._panel);
+    }
+    this._panelSnap = snap;
+    this._panel.attachPicker(this.picker);
+    this._panel.setWidgets(snap.kind, entry.build(snap));
+  }
+
+  get panel() { return this._panel; }
+  /** 面板按钮可用性查询（与 MapStage 同名：测试/宿主可读）。 */
+  _buttonActionsOf(id) { return this._panel?._buttonActions?.get(id) ?? null; }
+
+  /** 面板动作分流：`local: true` 的由本舞台消化（选卡界面），其余上行给 runController。 */
+  _onPanelAction(action) {
+    if (!action) return;
+    if (action.local) {
+      if (action.action === 'openUpgradePicker') { this._openPanelCardPicker(action.source); return; }
+      return;
+    }
+    this._onPanelIntent?.(action);
+  }
+
+  /**
+   * 战后奖励里的「使用删卡机会」（Boss 层）：与塔楼层同一套全屏选卡界面，
+   * 候选 = 快照的 cardRemoval.removeCards（整副牌组），确认后上行 bossRemoveCard。
+   */
+  _openPanelCardPicker(source) {
+    if (source !== 'bossRemove') return false;
+    const cards = (this._panelSnap?.cardRemoval?.removeCards ?? []).filter(c => c.enabled !== false);
+    if (!cards.length) return false;
+    if (!this._cardPicker) {
+      this._cardPicker = new CardScrollPickerObject({
+        bakeFace: this._bakeFace,
+        bus: this._bus,
+        onConfirm: (ids) => this._pickerConfirm?.(ids),
+      });
+      this.uiScene.add(this._cardPicker);
+    }
+    this._pickerConfirm = (ids) => this._onPanelIntent?.({ action: 'bossRemoveCard', uniqueID: ids[0] });
+    this._cardPicker.attachPicker(this.picker);
+    this._cardPicker.open({
+      title: '选择要移除的卡',
+      hint: 'Boss 奖励 · 从牌组中永久移除一张 ｜ 滚轮翻页',
+      cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId })),
+      confirmLabel: '确认移除',
+    });
+    return true;
+  }
+
+  _removePanel() {
+    this._cardPicker?.dispose();
+    this._cardPicker = null;
+    if (!this._panel) return;
+    this.uiScene.remove(this._panel);
+    this._panel.dispose();
+    this._panel = null;
+    this._panelSnap = null;
+  }
+
   _syncButtons(proj) {
     const pending = proj.pendingInput?.request ?? null;
+    // 「在玩家的回合里」：**按回合轨道判定而非 waitingPlayerInput**（用户定 2026-09-12）。
+    // waitingPlayerInput 是"内核当下是否挂着玩家回合的 WAIT"——一次出牌的结算过程中
+    // 会瞬间为 false（演出节拍捕获的快照因此把它拍成 false），于是**动画积压期按钮是灰的**，
+    // 玩家打完牌想收尾只能干等动画放完。改用 turn.side/count（整回合稳定不变）+ 已点标记：
+    //   · count ≥ 1 才认（开局发牌那一拍 count=0，不给你"还没看到牌就把回合结束掉"）；
+    //   · 点过结束回合 → 立刻上灰，直到下一回合的快照落定才解锁；
+    //   · verdict 置位（终局演出中）后不再可点。
+    const inPlayerTurn = proj.turn?.side === 'player' && (proj.turn?.count ?? 0) >= 1
+      && proj.verdict == null;
 
     // 主按钮：结束回合；结算期退化为确认/选择提示
     let label = '结束回合';
-    let enabled = proj.waitingPlayerInput && !pending;
+    let enabled = inPlayerTurn && !pending && !this._endTurnRequested;
     if (this._pick) {
       const n = this._pick.selection.length;
       const { min, max } = this._pick;
@@ -743,10 +851,13 @@ export class BattleStage {
     }
     this._setButtonState('main', { label, enabled });
 
-    // 换卡模式只在自由行动窗存活：窗口关闭（结算输入/回合外）自动退出
-    if (!proj.waitingPlayerInput || pending) this._swapMode = false;
+    // 换卡模式只在玩家的自由行动窗存活：窗口关闭（结算输入/回合外）自动退出
+    if (!inPlayerTurn || pending) this._swapMode = false;
     const cost = proj.swapCost;
-    const canSwap = proj.waitingPlayerInput && !pending && proj.hand.length > 0
+    // 换卡同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
+    // canSwapCard 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害），
+    // 连点防御落在**换出提交**那一侧（见 `_swapLocked`）
+    const canSwap = inPlayerTurn && !pending && proj.hand.length > 0
       && proj.player.actionPoints >= cost;
     this._setButtonState('swap', {
       label: '换卡', sublabel: `⚡${cost}`, enabled: canSwap, active: this._swapMode,
@@ -1536,7 +1647,7 @@ export class BattleStage {
       const world = this._worldAt(x, y, ARROW_Z);
       this._arrow.update(obj.position, world);
       const hit = this.picker.pick(x, y, { kinds: ['unit'] });
-      const targetId = this._targetableEnemyId(hit);
+      const targetId = this._targetableAimId(hit, this._aiming.mode);
       this._setDragTarget(targetId);
       this._arrow.setTargetValid(!!targetId);
       return;
@@ -1552,12 +1663,16 @@ export class BattleStage {
       return;
     }
     const hit = this.picker.hover(x, y);
+    // 面板模态中（战后奖励）：hover 只给面板（背板之外的战场物件不再响应）
+    if (this._panel) { this._panel.onHover(hit); return; }
     this._setOverCard(hit);
   }
 
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
+    if (this._cardPicker?.opened) return; // 全屏选卡（战后删卡机会）
+    if (this._panel) return;         // 面板模态中：只走面板自己的点按（不拖牌/不瞄准）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
     const hit = this.picker.pick(x, y);
@@ -1576,15 +1691,21 @@ export class BattleStage {
       // 于后端（动画积压期）时，玩家看到什么就是什么，不可能"抢先"后端出牌
       const displayPlayable = this._views.get(hit.id)?.visualState !== 'disabled';
       if (displayPlayable && this.bridge.intents.canPlayCard(hit.id)) {
-        // 按投影 targetMode 分流：选目标卡进瞄准（卡留手牌），免目标卡旧式拖拽（卡随指针）
+        // 按投影 targetMode 分流：选目标卡进瞄准（卡留手牌），免目标卡旧式拖拽（卡随指针）。
+        // **可选目标只剩一个时不进瞄准**：退化成免目标卡的拖拽交互（拖过出牌线即打出，
+        // 目标自动取那唯一的候选人）——用户定 2026-09-13：单目标也**不要**"点一下就出牌"，
+        // 出牌手势必须一致（"点按"在手牌里没有语义，误触代价太大）。
         const targetMode = proj?.hand.find(c => c.uniqueID === hit.id)?.targetMode ?? 'none';
-        if (targetMode === 'enemy') {
-          this._aiming = { id: hit.id };
+        const solo = (targetMode === 'enemy' || targetMode === 'ally')
+          ? this._soloTargetId(targetMode) : null;
+        if (targetMode !== 'none' && !solo) {
+          this._aiming = { id: hit.id, mode: targetMode };
           this._arrow.show(this._views.get(hit.id).position);
           this._arrow.setTargetValid(false);
           this._layoutAndTrack(); // 瞄准卡高亮 + 撑开两侧
         } else {
-          this._dragging = { id: hit.id, moved: false };
+          // 免目标卡，或"选目标卡但只有一个候选人"：拖拽出牌（soloTarget 在松手时补上目标）
+          this._dragging = { id: hit.id, moved: false, soloTarget: solo };
           this.animator.enterDragging(hit.id);
         }
       }
@@ -1600,6 +1721,9 @@ export class BattleStage {
       if (!this._viewer.ownsHit(this.picker.pick(x, y))) this._closeViewer();
       return;
     }
+    // 全屏选卡 / 面板模态：只由它们自己处理点击（背板外的战场物件一律不响应）
+    if (this._cardPicker?.opened) { this._cardPicker.onClick(this.picker.pick(x, y)); return; }
+    if (this._panel) { this._panel.onClick(this.picker.pick(x, y)); return; }
     const proj = this._snapshot;
     const pending = proj?.pendingInput?.request ?? null;
 
@@ -1623,7 +1747,7 @@ export class BattleStage {
     if (this._aiming) {
       const { id } = this._aiming;
       const hit = this.picker.pick(x, y, { kinds: ['unit'] });
-      const targetId = this._targetableEnemyId(hit);
+      const targetId = this._targetableAimId(hit, this._aiming.mode);
       this._cancelAiming();
       if (targetId && this._views.get(id)?.visualState !== 'disabled') {
         this.bridge.intents.playCard(id, targetId);
@@ -1632,16 +1756,20 @@ export class BattleStage {
     }
 
     if (this._dragging) {
-      const { id } = this._dragging;
+      const { id, soloTarget } = this._dragging;
       this._dragging = null;
       this._setDragTarget(null);
       const world = this._worldAt(x, y, 30); // 出牌线判定与拖拽同深
-      // 松手点在存活敌人身上 → 指定目标打出；否则过出牌线 → 默认目标打出。
+      // 松手点在存活敌人身上 → 指定目标打出；否则**过出牌线**才打出（与免目标卡同一条闸）。
+      // `soloTarget`（选目标卡但场上只有一个候选人）只在过线时补上目标——不能拿它当"已指定
+      // 目标"用，否则原地松手也会出牌，又变回"点一下就打出"了。
       // 显示态门：拖拽中途被节拍压灰的卡不提交（回原位），防"认知先于动画节拍"的误操作
       const hit = this.picker.pick(x, y, { kinds: ['unit'], excludeIds: [id] });
-      const targetId = this._targetableEnemyId(hit);
+      const droppedOn = this._targetableEnemyId(hit);
+      const pastLine = world.y > PLAY_LINE_Y;
+      const targetId = droppedOn ?? soloTarget ?? null;
       const displayPlayable = this._views.get(id)?.visualState !== 'disabled';
-      const played = displayPlayable && (targetId || world.y > PLAY_LINE_Y)
+      const played = displayPlayable && (droppedOn || pastLine)
         && this.bridge.intents.playCard(id, targetId);
       if (!played) this.animator.enterIdle(id); // 弹簧收养：从松手位平滑滑回锚点
       return;
@@ -1659,21 +1787,32 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'card' && this._swapMode) {
-      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（显示灰/咏唱/费用不足）保持模式
+      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（显示灰/咏唱/费用不足）保持模式。
+      // `_swapLocked`：成功换出后本同步节拍内不再接受换卡——前端防御连续快速点击
+      // （后端 canSwapCard 也拦，但那会让"点了没反应"难以解释，这里直接不响应）
+      if (this._swapLocked) return;
       if (this._views.get(hit.id)?.visualState !== 'disabled' && this.bridge.intents.canSwapCard(hit.id)) {
-        this.bridge.intents.swapCard(hit.id);
+        if (this.bridge.intents.swapCard(hit.id)) this._swapLocked = true;
         this._setSwapMode(false);
       }
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:main') {
-      // 显示态门：按钮面为灰（非等待输入/结算期未就绪）时不分发任何意图——
+      // 显示态门：按钮面为灰（结算期未就绪/终局/已点过结束回合）时不分发任何意图——
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
       if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
-      else this.bridge.intents.endTurn();
+      else {
+        // 结束回合（用户定 2026-09-12）：点完**立刻**上灰（不等 sync 节拍），直到下一回合
+        // 开始；后端同步结算，所以动画积压期点也不会丢意图。下发失败（回合已过/终局）
+        // 则回滚标记，避免按钮假死
+        this._endTurnRequested = true;
+        const ok = this.bridge.intents.endTurn();
+        if (!ok) this._endTurnRequested = false;
+        this._syncButtons(this._snapshot);
+      }
       this._inputSelection = [];
       return;
     }
@@ -1706,11 +1845,35 @@ export class BattleStage {
     this._updatePendingPips();
   }
 
+  // 拖牌/瞄准可指定的目标池：按显示态快照取（尸体不算；'none' 等模式回空池）。
+  // 显示态即玩家看到的东西——节拍积压期也不会选中已经倒下的单位。
+  _targetPool(mode) {
+    const pool = mode === 'enemy' ? this._snapshot?.enemies
+      : mode === 'ally' ? this._snapshot?.allies
+        : null;
+    return (pool ?? []).filter(u => !u.isDead);
+  }
+
   // 拖牌目标：pick 命中存活敌人才作数（尸体/友方/玩家不算；按显示状态快照判定）
   _targetableEnemyId(hit) {
     if (hit?.kind !== 'unit') return null;
-    const alive = (this._snapshot?.enemies ?? []).some(e => e.uniqueID === hit.id && !e.isDead);
-    return alive ? hit.id : null;
+    return this._targetPool('enemy').some(u => u.uniqueID === hit.id) ? hit.id : null;
+  }
+
+  // 瞄准目标：按当前瞄准模式取池（enemy → 敌方 / ally → 友方）
+  _targetableAimId(hit, mode) {
+    if (hit?.kind !== 'unit') return null;
+    return this._targetPool(mode).some(u => u.uniqueID === hit.id) ? hit.id : null;
+  }
+
+  /**
+   * 目标选择模式下的**唯一候选**：恰有一个存活目标时返回它的 uniqueID，否则 null。
+   * 用途：① 单目标时把选目标卡退化成免目标卡的拖拽交互（松手时自动补上这个目标）；
+   * ② 判断是否需要进入瞄准流程（多目标才需要）。
+   */
+  _soloTargetId(mode) {
+    const pool = this._targetPool(mode);
+    return pool.length === 1 ? pool[0].uniqueID : null;
   }
 
   // 目标标注：最多一个单位高亮，随拖拽移动切换/清除
@@ -1802,6 +1965,7 @@ export class BattleStage {
   }
 
   dispose() {
+    this._removePanel();
     this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);

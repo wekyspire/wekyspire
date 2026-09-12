@@ -693,6 +693,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crush,
     /** 可点热区（宿主射线拾取用）：投料口暗腔 + 计数器面板。 */
     crusherTargets: () => [throat, counter].filter(Boolean),
+    /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */
+    demonTargets: () => reels.filter(Boolean),
     /** 热区 → 语义名（宿主派发意图用）：'crusher' = 投料口，'counter' = 计数器。 */
     pickNameOf: (obj) => {
       if (obj === throat) return 'crusher';
