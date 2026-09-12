@@ -12,27 +12,24 @@
 // 数据边界（THREE_UI_MIGRATION 铁律）：本舞台**不读 run 状态**——面板走 `setPanel(snap)`
 // 下行快照、点击走 `setPanelIntentHandler` 上行意图、状态栏走 `setStatus`。机器 rig 的输入
 // 只有"后端已定的结果"（拉杆落面/档位），rig 自己完成动画，播完回执 slotAnimDone。
+//
+// **机器逻辑已按机器下沉到 `stage/machines/`**（老虎机/售货机/银行机/合并房陈设各一个模块）：
+// 本舞台只做通用舞台机制（相机聚焦机械/浮标/面板停靠/拾取主干/状态栏/逐帧骨架），
+// 不认识任何具体机器——**加新机器只改 machines/**（加一个模块文件 + 在 machines/index.js 登记一行）。
 
 import * as THREE from 'three';
 import { getScene } from '../scenes/index.js';
-import { getProp } from '../scenes/props/index.js';
-import { createRng } from '../scenes/kit/scatter.js';
 import { FLOOR_Y } from '../scenes/dungeon3D.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
-import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
-import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
-import { createVendingMachineRig } from '../scenes/interactive/vendingMachineRig.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { ContinueButtonObject } from '../objects/ContinueButtonObject.js';
 import { MachineMarkerObject } from '../objects/MachineMarkerObject.js';
-import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
-import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
-import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
-import { buildSlotPanel, buildBankPanel, buildCampPartPanel, buildTrainingPartPanel, buildShopPanel } from '../panels/index.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
-import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
+import { createStagePickerKit } from '../stagePickerKit.js';
+import { playCardGrantFlight } from '../cardGrantFlight.js';
+import { MACHINE_FACTORIES } from '../machines/index.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -42,120 +39,16 @@ import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
-// 交互物 name → 该物件的操纵面板（**加房间只加一行数据**：配方里给 live 件 `name`，
-// 这里登记对应面板 builder；RoomStage 不做任何房间/机器判断）。
-const PANEL_OF = {
-  slot: (snap) => buildSlotPanel(snap, { sceneChoice: true }),
-  bank: (snap) => buildBankPanel(snap, { sceneChoice: true }),
-  // 合并房（营地·训练场）：**点谁开谁的面板**（用户定 2026-09-12 修正）——篝火只给营地选项、
-  // 训练桩只给训练选项。早期版本两件都开同一份"营地+训练"合并面板，用户报"点了没区别、
-  // 交互物形同虚设"；两件东西各司其职，玩家点哪件就知道自己在处理哪半边。
-  camp: buildCampPartPanel,
-  training: buildTrainingPartPanel,
-  shop: buildShopPanel,     // 售货机（主柜）：点机身直接开货架面板（不再是房间表头上的一个按钮）
-  shop2: buildShopPanel,    // 溢出柜（货架 > 4 件时才有）：同一份货架面板（数据是全局的）
-};
 
 // 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
 // fracH = 物件占可视高比例；bottom = 物件底边离屏底的比例（其余下沿留给停靠面板）；
 // pad = 横向装得下时的余量。距离与视轴下移都由这几个比例**反解**（不手调 margin）。
-// 默认一套适用所有尺寸（距离自适应），个别物件要贴脸/退远时按 kind 覆盖。
+// 默认一套适用所有尺寸（距离自适应），个别物件要贴脸/退远时由**机器模块的 focusOf** 覆盖。
 const FOCUS_DEFAULT = { fracH: 0.50, bottom: 0.46, pad: 0.92 };
 
-/**
- * 老虎机的取景主体（用户 2026-09-12：**点击后要"屏幕怼脸"**）：只框**三根转轮窗口 + 拉杆**
- * （口径同 restGallery 的 focusMachine——这两件是这台机器的"脸"），不含底座/招牌/操作台，
- * 于是机器顶到脸上、上下自然出画。其它交互物仍按整件包围盒取景（默认）。
- */
-function slotSubject(entry) {
-  const reels = entry.parts?.reels ?? [];
-  const mid = reels[Math.floor(reels.length / 2)];
-  if (!mid) return null;
-  const c = mid.getWorldPosition(new THREE.Vector3());
-  const a = reels[0].getWorldPosition(new THREE.Vector3());
-  const b = reels[reels.length - 1].getWorldPosition(new THREE.Vector3());
-  const cell = Math.abs(a.x - b.x) / Math.max(1, reels.length - 1);
-  let halfW = (Math.abs(a.x - b.x) + cell * 1.35) * 0.5;   // 窗口宽 + 单格余量
-  let halfH = cell * 1.05 * 0.5;                            // 窗口高
-  const lever = entry.parts?.leverPivot ?? null;
-  if (lever) {                                              // 拉杆是侧面极限件，必须入画
-    const lb = new THREE.Box3().setFromObject(lever);
-    halfW = Math.max(halfW, Math.abs(lb.max.x - c.x), Math.abs(c.x - lb.min.x));
-    halfH = Math.max(halfH, Math.abs(lb.max.y - c.y), Math.abs(c.y - lb.min.y));
-  }
-  // 投料口/计数器（吞噬入口 + 进度）在下半身：不框进来就会被底部操纵条盖住 →
-  // 向下扩到它们（横向本来就在窗口宽度内，不会把主体拉宽）
-  const crusher = entry.parts?.crusher ?? null;
-  if (crusher) {
-    for (const o of Object.values(crusher)) {
-      if (!o?.isObject3D) continue;
-      const cb = new THREE.Box3().setFromObject(o);
-      halfH = Math.max(halfH, Math.abs(c.y - cb.min.y));
-    }
-  }
-  return new THREE.Box3(
-    new THREE.Vector3(c.x - halfW, c.y - halfH, c.z - 2),
-    new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 2),
-  );
-}
-/** 取一件物的**上段**（火盆/火焰这种"脸在上半身"的物件）：从高度份额 `from` 到顶。 */
-function upperSubject(entry, from = 0.35, topPad = 0.22) {
-  const box = new THREE.Box3().setFromObject(entry.object);
-  const size = box.getSize(new THREE.Vector3());
-  const c = box.getCenter(new THREE.Vector3());
-  // ⚠ 顶面留余量：火焰粒子是**场景粒子**（不在道具包围盒里），不留白会把火苗切在画外
-  const topY = box.max.y + size.y * topPad;
-  return new THREE.Box3(
-    new THREE.Vector3(c.x - size.x / 2, box.min.y + size.y * from, c.z - size.z / 2),
-    new THREE.Vector3(c.x + size.x / 2, topY, c.z + size.z / 2),
-  );
-}
-function bowlSubject(entry) { return upperSubject(entry, 0.42); }
-
-// 单件取景覆盖：老虎机怼脸（fracH>0.5 = 主体占屏更大）；其余交互物走默认整件取景
-const FOCUS_OF = {
-  // 怼脸处方：主体（转轮窗 + 拉杆 + 下半身的投料口/计数器）占屏 0.88，底边抬到 0.26
-  // ——窗口顶到上缘、操作区露在操纵条之上（操纵条占屏幕下沿 ~25%）
-  slot: { fracH: 0.88, bottom: 0.26, pad: 0.92, subject: slotSubject },
-  // 售货机同样怼脸（用户定 2026-09-12：点售货机要看清货架上的商品与价格）：
-  // 主体 = **货架区开口**（不含底座/操作列/顶牌），底边抬到操纵条之上（两排货 + 价格全露出来）
-  vending: { fracH: 0.62, bottom: 0.36, pad: 0.95, subject: vendingSubject },
-  // 篝火（营地·训练场的交互物）：主体 = **火盆 + 火焰**（不含三足）——整件取景时腿占了半屏，
-  // 火苗顶到画外；换成"看火"，机器一般怼近一点（用户定 2026-09-12 的交互节奏）
-  camp: { fracH: 0.6, bottom: 0.38, pad: 0.9, subject: bowlSubject },
-};
-
-/**
- * 售货机的取景主体：**货架区开口**（cards 立在托盘上，卡片顶沿再留一点余量）。
- * 取景只框"玻璃柜里的货"——整机取景会让货架缩得太小、价格读不出来（怼脸的意义就在这）。
- * 机器带 ry/缩放，故用机身的局部→世界换算，不手算朝向。
- */
-function vendingSubject(entry) {
-  const bay = entry.parts?.bay;
-  if (!bay) return null;
-  const s = entry.scale ?? 1;
-  const c = entry.object.localToWorld(new THREE.Vector3(bay.x, bay.y, bay.z));
-  const halfW = (bay.w / 2) * s + 0.5;
-  const halfH = (bay.h / 2) * s + 0.3;
-  return new THREE.Box3(
-    new THREE.Vector3(c.x - halfW, c.y - halfH, c.z - 3),
-    new THREE.Vector3(c.x + halfW, c.y + halfH, c.z + 3),
-  );
-}
-// 恶魔 roll（银行机超额取款的代价）：灯池染暗红 + 词条卡片按等级分色（占位美术）
-const DEMON_LAMP = 0x9a2432;
-const DEMON_TIER_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
-const DEMON_TIER_NAME = { yellow: '黄色级', red: '红色级', black: '黑色级' };
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
 // 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
-
-/** 拉杆结果的落面：中奖让三根一致（读得出"中了"），未中奖随机——后端只给档位，没有符号概念。 */
-function symbolsForTier(tier) {
-  if (tier === 'major') return [1, 1, 1];   // 三个 7
-  if (tier === 'minor') return [0, 0, 0];   // 三个樱桃
-  return null;                              // 未中奖：随机面
-}
 
 export class RoomStage {
   /**
@@ -178,25 +71,18 @@ export class RoomStage {
     this._sm = stageManager;
     this._snap = snap;
     this._onIntent = null;
+    this._runSequencer = null;  // run 级动画队列（runController 后置注入：得卡演出指令化）
+    this._grantBusy = false;    // 「择卡得卡」演出进行中：吞掉点击（见 _activate/_onPanelAction）
     this._picker = null;
     this._bus = bus;
     this._panel = null;          // 下沿停靠的机器操作面板（惰性建）
     this._panelKind = null;      // 当前面板对应的机器（null = 收起）
     this._focused = null;        // 聚焦的机器名
     this._hoverName = null;      // 当前 hover 的交互物名（聚焦时恒 null，见 handlePointerMove）
-    this._campNudged = false;    // 「还没在火边歇过」的提示只弹一次（再点继续即离房）
     this._downHit = null;
-    this._cardPicker = null;    // 全屏选卡（升级/焚毁；惰性建）
-    this._relicPicker = null;   // 全屏选遗物（粉尘/粉碎；惰性建）
-    this._showcase = null;      // 获得物特写（金币大奖等；惰性建）
-    this._pickerConfirm = null; // 当前选择界面的确认回调（按入口切换）
-    this._pickerCancel = null;  // 当前选择界面的取消/跳过回调（缺省无动作；卡包三选一用它"放弃"）
     this._pickIds = [];
-    this._goodsPickIds = new Set();  // 商品卡拾取 id（随货架增删对账）
     this._t = 0;
-    this._slotSpinId = null;
-    this._slotPoll = null;
-    this._camTween = null;   // { from, to, t, dur, then }：推近/拉远的机位补间     // 正在播的拉杆轮次 id（防重绘重播）
+    this._camTween = null;   // { from, to, t, dur, then }：推近/拉远的机位补间
     this._unsubTick = null;
 
     // ---- 3D 房间（PCG 配方；与战斗房同一 composeRoom 契约）----
@@ -220,6 +106,37 @@ export class RoomStage {
     // ---- 机器 rig + 头顶浮标（可点：浮标比机器大得多，远景也点得中）----
     this._rigs = new Map();      // name -> rig
     this._markers = [];          // { name, entry, marker(箭头浮标), hover }
+    // ---- 机器模块（machines/：每台机器的 rig/取景/面板/拾取/演出/义务门都归它的模块）----
+    // RoomStage 只做通用舞台机制；加新机器 = machines/index.js 登记一行。
+    // ctx 全部箭头晚绑定（与 runController 拆域同律）：模块构造时舞台可能还没就位（无 picker/无相机）。
+    const machineCtx = {
+      snap: () => this._snap,
+      room: () => this._room,
+      sceneDef: () => this._sceneDef,
+      picker: () => this._picker,
+      bubbles: () => this._bubbles,
+      camera: () => this._sm?.camera ?? null,
+      sm: () => this._sm,
+      markers: () => this._markers,
+      rigs: () => this._rigs,
+      focused: () => this._focused,
+      panelKind: () => this._panelKind,
+      recipe: this.recipe,
+      intent: (a) => this._onIntent?.(a),
+      focusMachine: (n) => this._focusMachine(n),
+      focusPoseFor: (n) => this._focusPoseFor(n),
+      openPanel: (n) => this._openPanel(n),
+      startCamTween: (to, dur, then) => this._startCamTween(to, dur, then),
+      entryOf: (name) => this._markers.find(m => m.name === name)?.entry ?? null,
+      addPickable: (id, obj, opts) => { if (this._picker) { this._picker.addPickable(id, obj, opts); this._pickIds.push(id); } },
+      removePickable: (id) => { this._picker?.removePickable(id); const i = this._pickIds.indexOf(id); if (i >= 0) this._pickIds.splice(i, 1); },
+      uiAnchorOf: (e, l) => this._uiAnchorOf(e, l),
+      midAnchorOf: (e, l) => this._midAnchorOf(e, l),
+      addInteractive: (name, entry) => this._addInteractive(name, entry),
+    };
+    this._machines = MACHINE_FACTORIES.map(f => f(machineCtx));
+    this._moduleOfKind = {};     // entry.kind -> 机器模块（rig 创建/取景/面板归口）
+    for (const m of this._machines) for (const k of m.kinds ?? []) this._moduleOfKind[k] = m;
     this._buildInteractives();
 
     // ---- UI：状态栏 + 顶端资源行 + 继续前进按钮 ----
@@ -231,6 +148,19 @@ export class RoomStage {
     this._bakeFace = (typeof document !== 'undefined')
       ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
       : null;
+    // 全屏选卡/选遗物界面 + 获得物特写：三舞台共用套件（stagePickerKit.js）——
+    // 与塔楼层/战斗层是**同一份实现**（此前这里抄了一份，文案与来源还在漂移）。
+    // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙是按值传进去的，早建会让候选卡面隐身）；
+    // bus 传 getter：房间舞台的总线可能在 attachInput 里才注入，而界面是惰性创建的。
+    this._pickerKit = createStagePickerKit({
+      uiScene: this.uiScene,
+      getPicker: () => this._picker,
+      bakeFace: this._bakeFace,
+      bus: () => this._bus,
+      onIntent: (a) => this._onIntent?.(a),
+      getSequencer: () => this._runSequencer,
+      getAnchor: () => this._deckAnchor(),
+    });
     const mkBake = this._bakeLabel;
     this._statusBar = new PlayerStatusObject({ bakeLabel: mkBake, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
@@ -244,8 +174,6 @@ export class RoomStage {
     this.uiScene.add(this._topBar);
     this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
     this.uiScene.add(this._bubbles);
-    this._gift = null;                   // 安慰奖二选一演出件（惰性；见 _playGift）
-    this._demon = null;                  // 恶魔 roll 状态机（见 _stepDemonRoll）
     this._continue = new ContinueButtonObject();
     this._continue.position.set(CONTINUE_POS.x, CONTINUE_POS.y, PANEL_ABOVE_Z + 2);
     this._continue.setEnabled(true);   // 拾取登记在 attachInput（此时可能还没 Picker）
@@ -260,6 +188,12 @@ export class RoomStage {
 
   setPanelIntentHandler(fn) { this._onIntent = fn; }
 
+  /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
+  setRunSequencer(seq) { this._runSequencer = seq ?? null; }
+
+  /** 得卡演出的收编锚点：玩家状态栏（房间里没有牌库图标，卡收向"玩家"即入组）。 */
+  _deckAnchor() { return { x: PLAYER_STATUS_POS.x + 10, y: PLAYER_STATUS_POS.y, z: PLAYER_STATUS_POS.z }; }
+
   /** 房间面板快照下行（notify 每次都推）：存下 + 按需重绘已打开的机器面板。 */
   setPanel(snap) {
     // ⚠ 只认**房间快照**：离房时编排器会先推一份新阶段的快照（prep/…），若照单全收，
@@ -268,7 +202,7 @@ export class RoomStage {
     if (!snap || snap.kind !== 'room') return;
     this._snap = snap;
     if (this._panelKind) this._renderPanel();
-    this._syncSlotFromSnapshot();
+    for (const m of this._machines) m.sync?.(snap);   // 各机器按快照同步（spin/货架/屏幕/恶魔起止）
   }
 
   /** 状态栏（与塔楼层同物同位，编排器每次阶段迁移后推）。 */
@@ -289,165 +223,32 @@ export class RoomStage {
     if (remiImg) this._statusBar.setRemiAvatar(remiImg);
   }
 
-  // ---- 全屏选择界面 / 获得物特写（与 MapStage 同名同义：宿主按"当前舞台"调用）----
-  // ⚠ 与 MapStage 的这两段是同构的（选卡/选遗物/特写三件套）。后续可抽 `StagePickerKit`
-  // 让两个舞台共用一份；眼下房间层只用到 slot/bank 三个来源，故先就地实现，不动已验证的塔楼路径。
-  /** 选择界面文本烘焙：honors fontPx/tint/maxWidth（不能用状态栏那套固定 style 的烘焙）。 */
-  _pickerBakeText() {
-    if (this._pickerBake !== undefined) return this._pickerBake;
-    this._pickerBake = (typeof document === 'undefined')
-      ? null
-      : (text, { fontPx = 16, tint = '#cdd6f4', maxWidth } = {}) => renderRichTextBlock(text, {
-        maxWidth: maxWidth ?? 4000,
-        scale: 3,
-        style: { fontSize: fontPx, lineHeight: Math.round(fontPx * 1.3), color: tint },
-      });
-    return this._pickerBake;
-  }
+  // ---- 全屏选择界面 / 获得物特写（实现已抽 stagePickerKit，与塔楼层/战斗层共用一份）----
+  // 本舞台只保留对外同名转发（宿主按"当前舞台"调用，签名不变）：来源表/意图/文案都在 kit 里，
+  // 候选取自当前房间快照（`this._snap`）。来源：camp / training / slot / bankUpgrade / bankBurn。
 
   /**
    * 打开「选卡」界面；source 决定候选与确认后上行的意图。
-   * 房间层来源：营地上级 / 训练升级 / 老虎机免费升级 / 银行升级 / 银行焚毁。
-   * ⚠ 候选必须按 source 取对应快照段——曾经一律读 `snap.slot.upgradeCards`，
+   * ⚠ 候选按 source 取对应快照段（kit 的 UPGRADE_SOURCES）——曾经一律读 `snap.slot.upgradeCards`，
    * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
    */
-  openUpgradePicker(source) {
-    const snap = this._snap;
-    const CARDS_OF = {
-      camp: () => snap?.camp?.upgradeCards,
-      training: () => snap?.training?.upgradeCards,
-      bankUpgrade: () => snap?.bank?.upgradeCards,
-      bankBurn: () => snap?.bank?.burnCards,
-      slot: () => snap?.slot?.upgradeCards,
-    };
-    const cards = (CARDS_OF[source]?.() ?? []).filter(c => c.enabled !== false);
-    if (!cards.length) return false;
-    if (!this._cardPicker) {
-      this._cardPicker = new CardScrollPickerObject({
-        bakeFace: this._bakeFace,
-        bakeText: this._pickerBakeText(),
-        bus: this._bus,
-        onCancel: () => { this._pickerCancel?.(); },
-        onConfirm: (ids) => this._pickerConfirm?.(ids),
-      });
-      this.uiScene.add(this._cardPicker);
-    }
-    const INTENT_OF = {
-      camp: (uniqueID) => ({ action: 'campChoose', option: 'upgrade', uniqueID }),
-      training: (uniqueID) => ({ action: 'trainingUpgrade', uniqueID }),
-      bankUpgrade: (uniqueID) => ({ action: 'bankUpgradeOffer', uniqueID }),
-      bankBurn: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
-      slot: (uniqueID) => ({ action: 'slotPickUpgrade', uniqueID }),
-    };
-    this._pickerConfirm = (ids) => {
-      const intent = INTENT_OF[source]?.(ids[0]);
-      if (intent) this._onIntent?.(intent);
-    };
-    this._pickerCancel = null;   // 升级/焚毁：返回 = 收起界面（不做放弃）
-    this._cardPicker.attachPicker(this._picker);
-    this._cardPicker.open({
-      title: source === 'bankBurn' ? '选择要焚毁的卡' : '选择要升级的卡',
-      hint: source === 'bankBurn'
-        ? '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页'
-        : '悬停查看升级后的卡面 ｜ 滚轮翻页',
-      cards: cards.map(c => ({
-        uniqueID: c.uniqueID, defId: c.defId, view: c.view, enabled: c.enabled, tipDefId: c.tipDefId,
-      })),
-      confirmLabel: source === 'bankBurn' ? '确认焚毁' : '确认升级',
-    });
-    return true;
-  }
+  openUpgradePicker(source) { return this._pickerKit.openUpgradePicker(source, this._snap); }
 
   /**
    * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开，用户定 2026-09-12）。
    * **可放弃**：确认 = 选中的卡入组；返回 = 放弃这个卡包（钱已花，选择权在玩家）。
    */
-  openShopPackPicker() {
-    const pend = this._snap?.shop?.pending;
-    if (!pend?.cards?.length) return false;
-    if (!this._cardPicker) {
-      this._cardPicker = new CardScrollPickerObject({
-        bakeFace: this._bakeFace,
-        bakeText: this._pickerBakeText(),
-        bus: this._bus,
-        onCancel: () => { this._pickerCancel?.(); },
-        onConfirm: (ids) => this._pickerConfirm?.(ids),
-      });
-      this.uiScene.add(this._cardPicker);
-    }
-    this._pickerConfirm = (ids) => this._onIntent?.({ action: 'takeShopCard', defId: ids[0] });
-    this._pickerCancel = () => this._onIntent?.({ action: 'takeShopCard', defId: null });
-    this._cardPicker.attachPicker(this._picker);
-    this._cardPicker.open({
-      title: `${pend.packId} · 卡包`,
-      hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
-      cards: pend.cards.map(c => ({
-        uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
-      })),
-      confirmLabel: '加入牌组',
-    });
-    return true;
-  }
+  openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
 
   /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
-  openDevourPicker({ kind, cards = [], relics = [], onPick = null } = {}) {
-    if (kind === 'relic') {
-      if (!relics.length) return false;
-      if (!this._relicPicker) {
-        this._relicPicker = new RelicScrollPickerObject({
-          bakeText: this._pickerBakeText(),
-          bus: this._bus,
-          onConfirm: (ids) => this._pickerConfirm?.(ids),
-        });
-        this.uiScene.add(this._relicPicker);
-      }
-      this._pickerConfirm = (ids) => onPick?.(ids[0]);
-      this._relicPicker.attachPicker(this._picker);
-      this._relicPicker.open({
-        title: '粉碎哪件遗物？',
-        hint: '喂给老虎机换金币 ｜ 悬停查看效果 ｜ 滚轮翻页（S 级嚼不动）',
-        relics,
-        confirmLabel: '确认粉碎',
-      });
-      return true;
-    }
-    if (!cards.length) return false;
-    if (!this._cardPicker) {
-      this._cardPicker = new CardScrollPickerObject({
-        bakeFace: this._bakeFace,
-        bakeText: this._pickerBakeText(),
-        bus: this._bus,
-        onCancel: () => { this._pickerCancel?.(); },
-        onConfirm: (ids) => this._pickerConfirm?.(ids),
-      });
-      this.uiScene.add(this._cardPicker);
-    }
-    this._pickerConfirm = (ids) => onPick?.(ids[0]);
-    this._pickerCancel = null;   // 粉碎没有"放弃"出口（返回 = 收起界面）
-    this._cardPicker.attachPicker(this._picker);
-    this._cardPicker.open({
-      title: '粉碎哪张卡？',
-      hint: '喂给老虎机换金币 ｜ 悬停查看卡面 ｜ 滚轮翻页（诅咒卡另有奖赏）',
-      cards,
-      confirmLabel: '确认粉碎',
-    });
-    return true;
-  }
+  openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
 
   /** 获得物特写（通用组件：有素材用素材，没有就拿色块代替）。 */
-  showcaseItem(item) {
-    if (!item) return false;
-    if (!this._showcase) {
-      this._showcase = new ItemShowcaseObject();
-      this.uiScene.add(this._showcase);
-      this._showcase.attachPicker(this._picker);
-    }
-    return this._showcase.show(item);
-  }
+  showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
 
-  get showcasing() { return !!this._showcase?.busy; }
-  get cardPicker() { return this._cardPicker; }
-  get relicPicker() { return this._relicPicker; }
+  get showcasing() { return this._pickerKit.showcasing; }
+  get cardPicker() { return this._pickerKit.cardPicker; }
+  get relicPicker() { return this._pickerKit.relicPicker; }
 
   /** 当前聚焦的机器名（调试/测试）。 */
   get focusedMachine() { return this._focused; }
@@ -462,24 +263,28 @@ export class RoomStage {
     this._sm = stageManager ?? this._sm;
     this._bus = bus ?? null;
     this._registerPickables();
+    // 选卡/选遗物/特写也要重连到（可能刚换过的）拾取器：它们惰性创建，重连不补会把
+    // 界面登记到旧 Picker 上（点击/hover 全落空）。
+    this._pickerKit.attachPicker(this._picker);
   }
 
   detachInput() {
     for (const id of this._pickIds ?? []) this._picker?.removePickable(id);
     this._pickIds = [];
+    this._pickerKit.attachPicker(null);
     this._picker = null;
     this._downHit = null;
+    for (const m of this._machines) m.pickerChanged?.();   // 各机器复位自己的拾取簿记
   }
 
   handlePointerMove(x, y) {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
-    if (this._gift?.active) { this._gift.onHover(hit); return; }   // 安慰奖演出中：只认两件货
+    // 各机器的吞掉型 hover（安慰奖演出中只认两件货）
+    for (const m of this._machines) if (m.handleHover?.(hit)) return;
     // 恶魔 roll 选择阶段：转轮自己的 tooltip token 由 Picker 发（此处不吞 hover）
-    if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
-    if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
-    if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
+    if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     const name = this._focused ? null : this._machineOf(hit);
     // zoom-in（已聚焦某台）期间不响应 hover：hover 放大/提亮是**全景下的可交互暗示**
     // （"这东西能点"），推近之后玩家已经在跟它交互了，再跟着鼠标缩放只会让人以为画面在抖
@@ -487,9 +292,8 @@ export class RoomStage {
     this._hoverName = name;
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
     for (const m of this._markers) m.hover = (m.name === name);   // 箭头浮标 hover 提亮
-    // 售货机商品卡：悬停抬起 + 盘子提亮（点下去就是买；下标全局唯一，各 rig 只认自己的）
-    const gi = this._goodsIndexOf(hit);
-    for (const rig of this._rigs.values()) rig.setGoodsHover?.(gi);
+    // 各机器的通知型 hover（售货机商品卡：悬停抬起 + 盘子提亮；下标全局唯一，各 rig 只认自己的）
+    for (const m of this._machines) m.hover?.(hit);
     this._continue.setHovered(hit?.id === this._continue.pickId);
     this._panel?.onHover?.(hit);   // 面板按钮/卡面 hover（缺席 = 无面板）
   }
@@ -508,10 +312,9 @@ export class RoomStage {
     const hit = this._picker.pick(x, y);
     const down = this._downHit;
     this._downHit = null;
-    if (this._gift?.active) { const id = this._gift.pickIndexOf(hit); if (id) this._gift.choose(id); return; }
-    if (this._showcase?.busy) { this._showcase.onClick(hit); return; }        // 点任意处退出特写
-    if (this._cardPicker?.opened) { this._cardPicker.onClick(hit); return; }
-    if (this._relicPicker?.opened) { this._relicPicker.onClick(hit); return; }
+    // 各机器的 pointerUp 点选（先于 pickerKit 路由）：安慰奖演出中选一件货
+    for (const m of this._machines) if (m.handlePointerUp?.(hit)) return;
+    if (this._pickerKit.routeClick(hit)) return;   // 特写点任意处退出 / 全屏界面接管
     if (down && hit && down.kind === hit.kind && down.id === hit.id) {
       this._activate(hit);
       return;
@@ -521,9 +324,7 @@ export class RoomStage {
   }
 
   handleWheel(deltaY) {
-    if (this._cardPicker?.opened) return this._cardPicker.scrollBy(deltaY / 100);
-    if (this._relicPicker?.opened) return this._relicPicker.scrollBy(deltaY / 100);
-    return false;
+    return this._pickerKit.handleWheel(deltaY);
   }
 
   onEnter(manager) {
@@ -535,8 +336,7 @@ export class RoomStage {
   onExit() {
     this._unsubTick?.();
     this._unsubTick = null;
-    clearInterval(this._slotPoll);
-    this._slotPoll = null;
+    for (const m of this._machines) m.onExit?.();   // 各机器停掉自己的定时器/演出
     this._camTween = null;
     clearTimeout(this._camFuse);
     this._camFuse = null;
@@ -555,15 +355,9 @@ export class RoomStage {
     this.composeScene = null;
     this.composeResize = null;
     this._bubbles.dispose();
-    this._removeGift();
-    this._disarmDemonChoice();
+    for (const m of this._machines) m.dispose?.();   // 各机器收尾（onExit 已调过，模块自身幂等）
     this._continue.dispose();
-    this._cardPicker?.dispose();
-    this._cardPicker = null;
-    this._relicPicker?.dispose();
-    this._relicPicker = null;
-    this._showcase?.dispose();
-    this._showcase = null;
+    this._pickerKit.dispose();   // 选卡/选遗物/特写（未创建的实例无事发生）
     this._removePanel();
     for (const m of this._markers) m.marker?.dispose?.();
     this._statusBar.dispose();
@@ -580,17 +374,11 @@ export class RoomStage {
     for (const [name, entry] of interactives) this._addInteractive(name, entry);
   }
 
-  /** 登记一件交互物：机器类（有 parts/kind）才建 rig；普通陈设只要浮标 + 拾取 + 推近。 */
+  /** 登记一件交互物：机器类（由机器模块的 createRig 决定）才建 rig；普通陈设只要浮标 + 拾取 + 推近。 */
   _addInteractive(name, entry) {
     {
-      const rig = entry.kind === 'slot' ? createSlotMachineRig({ object: entry.object, parts: entry.parts })
-        : entry.kind === 'bank' ? createBankMachineRig({ object: entry.object, parts: entry.parts })
-          : entry.kind === 'vending' ? createVendingMachineRig({
-            object: entry.object, parts: entry.parts,
-            // 出货演出播完 → 回执宿主（宿主再播"物品到手"的获得特写；演出顺序不能被特写盖掉）
-            onDispensed: (index) => this._onIntent?.({ action: 'shopAnimDone', index }),
-          })
-            : null;
+      // rig 的创建归口到机器模块（没有 createRig 的陈设 = 无 rig，只有浮标 + 聚焦）
+      const rig = this._moduleOfKind[entry.kind]?.createRig?.(entry) ?? null;
       if (rig) this._rigs.set(name, rig);
       // 无 rig 件的 hover 放大基准（配方的 scale 已烘进 object.scale，这里存一份当基准）
       entry.baseScale = entry.object.scale.x || 1;
@@ -611,7 +399,6 @@ export class RoomStage {
   _registerPickables() {
     if (!this._picker) return;
     this._pickIds = [];
-    this._goodsPickIds = new Set();
     for (const m of this._markers) {
       const id = `room:machine:${m.name}`;
       this._picker.addPickable(id, m.marker, { kind: 'machine' });
@@ -621,58 +408,11 @@ export class RoomStage {
       this._picker.addPickable(`room:body:${m.name}`, m.entry.parts?.pickBody ?? m.entry.object, { kind: 'machine' });
       this._pickIds.push(`room:body:${m.name}`);
     }
-    // 老虎机正面的**投料口/计数器**热区（rig 给的可点件）：点它就是"粉碎物品"入口
-    const slotRig = this._rigs.get('slot');
-    (slotRig?.crusherTargets?.() ?? []).forEach((obj, i) => {
-      const id = `room:crusher:${i}`;
-      this._picker.addPickable(id, obj, { kind: 'machine' });
-      this._pickIds.push(id);
-    });
-    this._syncGoodsPickables();
     this._picker.addPickable(this._continue.pickId, this._continue, { kind: 'button', space: 'ui' });
     this._pickIds.push(this._continue.pickId);
     this._panel?.attachPicker(this._picker);
-  }
-
-  /**
-   * 商品卡拾取登记（**增量对账**）：货架随快照增删（买到货、换层），登记表也要跟着变——
-   * 卖掉的卡片必须立刻从 Picker 摘掉，否则空货位还能点到（"点了没反应"）。
-   */
-  _syncGoodsPickables() {
-    if (!this._picker) return;
-    const want = new Map();
-    for (const rig of this._rigs.values()) {
-      for (const t of rig?.goodsTargets?.() ?? []) want.set(`room:goods:${t.index}`, t.object);
-    }
-    for (const id of [...this._goodsPickIds]) {
-      if (want.has(id)) continue;
-      this._picker.removePickable(id);
-      this._goodsPickIds.delete(id);
-      const i = this._pickIds.indexOf(id);
-      if (i >= 0) this._pickIds.splice(i, 1);
-    }
-    for (const [id, object] of want) {
-      if (this._goodsPickIds.has(id)) continue;
-      this._picker.addPickable(id, object, { kind: 'goods' });
-      this._goodsPickIds.add(id);
-      this._pickIds.push(id);
-    }
-  }
-
-  /** hit → 商品卡下标（kind 'goods' 或遗物 token 热区都算）。 */
-  _goodsIndexOf(hit) {
-    const id = hit?.id;
-    if (typeof id !== 'string' || !id.startsWith('room:goods:')) return null;
-    const n = Number(id.slice('room:goods:'.length));
-    return Number.isFinite(n) ? n : null;
-  }
-
-  /** 这件货属于哪台机器（溢出柜时的货架切片靠它区分；点哪台推近哪台）。 */
-  _goodsOwner(index) {
-    for (const [name, rig] of this._rigs) {
-      if ((rig.goodsTargets?.() ?? []).some(t => t.index === index)) return name;
-    }
-    return null;
+    // 各机器登记专属拾取（老虎机的投料口热区 / 售货机的商品卡……）
+    for (const m of this._machines) m.registerPickables?.();
   }
 
   /** hit → 机器名（浮标或本体任一命中）。 */
@@ -683,46 +423,20 @@ export class RoomStage {
   }
 
   _activate(hit) {
-    // 恶魔 roll 选择阶段：点**转轮本身**即承受那根盘对应的词条（转出来的就是诅咒）
-    if (hit?.kind === 'token' && this._demon?.phase === 'choose' && hit.id?.startsWith('room:demon:')) {
-      const pick = this._demon.picks?.find(p => p.id === hit.id);
-      if (pick) this._onIntent?.({ action: 'bankPick', id: pick.optionId });
-      return;
-    }
+    if (this._grantBusy) return;   // 得卡演出中：吞掉一切点击（机器/继续键/面板都先让路）
+    // 各机器的吞掉型点击（恶魔词条 / 投料口 / 商品卡）：命中即消化
+    for (const m of this._machines) if (m.handleClick?.(hit)) return;
     if (!hit || hit.kind === 'background') {
       this._panel?.onClick?.(hit);
       this._focusMachine(null);   // 点房间空白处 = 收起机器面板
       return;
     }
     if (hit.id === this._continue.pickId) {
-      // 「继续前进」的**义务门**：只有"钱已到手 / 升级已发生"的欠账才硬拦（恶魔 roll、卡包待选、
-      // 强绑抓牌）——不处理完不许走。营地的休整是**可选收益**（训练同理，用户定 2026-09-12：
-      // 不做也能走）：第一次点继续只给一句提示泡泡（"还没在火边歇过呢"），**再点一次即离房**
-      // （软提示而非硬拦——玩家想省下这层收益是他的自由，不能被按着头点）。
-      const duty = this._pendingRoomDuty();
-      if (duty === 'demon') { this._nudgeDemonRoll(); return; }
-      if (duty === 'shop') { this._nudgeShopPending(); return; }
-      if (duty === 'forced') { this._nudgeForcedPick(); return; }
-      if (duty === 'camp' && !this._campNudged) { this._campNudged = true; this._nudgeCampRest(); return; }
-      // 还欠着离房安慰奖（拉了 ≥2 次杆没中奖）→ 先吐出可乐/鸡腿让你选，选完再离房
-      if (this._playGift()) return;
+      // 「继续前进」的**义务门**（**由各机器模块自报**：恶魔 roll / 卡包待选 / 强绑抓牌是硬拦，
+      // 营地的休整是软提示——第一次点继续只给一句提示泡泡，**再点一次即离房**）。
+      // 先问各机器是否接管这次点击（拉回镜头提示 / 播离房安慰奖），都没接管才真的离房。
+      for (const m of this._machines) if (m.onContinue?.()) return;
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
-      return;
-    }
-    // 售货机商品卡：点 = 买。**但没怼脸时先推近**——远景里机器中央就是货架，第一次点它
-    // 若直接成交，玩家连商品名与价格都没看清（用户定的节奏：先 zoom in 看货，再点选购买）
-    const gi = this._goodsIndexOf(hit);
-    if (gi != null) {
-      const owner = this._goodsOwner(gi);
-      if (owner && this._focused !== owner) { this._focusMachine(owner); return; }
-      this._buyGoods(gi);
-      return;
-    }
-    // 投料口：进度满 = 直接进"粉碎物品"链（对话 → 选卡/遗物）；没满就先聚焦机器（看得出还差几次）
-    if (hit.id?.startsWith('room:crusher:')) {
-      const rig = this._rigs.get('slot');
-      if (rig?.devourReady?.()) { this._onIntent?.({ action: 'requestDevour' }); return; }
-      this._focusMachine('slot');
       return;
     }
     const name = this._machineOf(hit);
@@ -731,201 +445,14 @@ export class RoomStage {
   }
 
   /**
-  /**
-   * **离房安慰奖演出**（用户定 2026-09-12）：点「继续前进」且快照里欠着安慰奖时，
-   * ① 相机推到**出料口**；② 机器"吐出"两件 billboard（可乐/鸡腿，暂无美术 = 纯色块 + 白字）；
-   * ③ 点选其一 → 选中件朝镜头飞出、另一件缩没；④ 播完上行 `slotTakeGift`（宿主结算 +
-   * 播获得物特写，**并自动把这次离房接着走完**——用户定 2026-09-13：领取不进任何 UI，
-   * 面板里既没有进度也没有按钮，玩家点一次「继续前进」就把整条链走到底）。
-   * @returns 是否已接手这次点击（true = 别离房，等演出与获得特写跑完由宿主离房）
-   */
-  _playGift() {
-    const items = this._snap?.slot?.gift;
-    if (!Array.isArray(items) || !items.length) return false;
-    if (this._gift) return true;                       // 已在演：吞掉重复点击
-    const machine = this._markers.find(m => m.name === 'slot')?.entry;
-    if (!machine) return false;
-    // 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
-    // 且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
-    const { spot, dist, fwd } = this._billboardStage(machine, items.length * 3.0 + 4.35);
-    const position = spot.clone().addScaledVector(fwd, dist);
-    const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
-    this._startCamTween(
-      { position, quaternion: new THREE.Quaternion().setFromRotationMatrix(m) },
-      0.5,
-      () => this._spawnGift(items, spot),
-    );
-    // 演出期间抑制机器常驻抖动（怼脸看细节）
-    for (const rig of this._rigs.values()) rig.setFocus?.(false);
-    return true;
-  }
-
-  /**
-   * 机器前"摆一排 billboard"的取景处方（安慰奖两件 / 恶魔词条三张共用）：
-   * @returns { spot, dist, fwd } spot = 卡片组的中心落点（机器腰高、身前 6.5），
-   *   dist = 相机距离（**按卡片组总宽反解**：三张一排比两张宽，不按宽度退远会切边），
-   *   fwd = 机器朝向（相机沿它后退）。
-   */
-  _billboardStage(machine, totalW) {
-    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
-    const mbox = new THREE.Box3().setFromObject(machine.object);
-    const mid = mbox.getCenter(new THREE.Vector3());
-    const spot = new THREE.Vector3(machine.x, mid.y + 0.5, machine.z).addScaledVector(fwd, 6.5);
-    const vFov = THREE.MathUtils.degToRad(this._sm?.camera?.fov ?? 24);
-    const aspect = this._sm?.camera?.aspect || (16 / 9);
-    const distW = (totalW * 1.18) / (2 * Math.tan(vFov / 2) * aspect);
-    const dist = Math.max(18, distW, mbox.getSize(new THREE.Vector3()).y * 1.15);
-    return { spot, dist, fwd };
-  }
-
-  /** 生成两件占位货（机器腰高、身前；每一件面向相机漂浮），并登记拾取。 */
-  _spawnGift(items, spot) {
-    if (this._gift) return;
-    this._gift = new ChoiceBillboardObject({
-      items: items.map(it => ({ id: it.id, name: it.name, sub: it.effect, tint: it.tint })),
-      size: 3.0,
-      onPick: (id) => {
-        this._onIntent?.({ action: 'slotTakeGift', choice: id });
-        this._removeGift(0.5);
-      },
-    });
-    this._gift.position.copy(spot);
-    this._room?.group.add(this._gift);
-    this._gift.attachPicker(this._picker);
-  }
-
-  _removeGift() {
-    if (!this._gift) return;
-    this._room?.group.remove(this._gift);
-    this._gift.dispose();
-    this._gift = null;
-  }
-
-  /**
-   * 房里**还欠着的事**（null = 可以离房）：'camp' | 'demon' | 'shop' | 'forced'。
-   * 语义分两档：
-   *   · **硬拦**（'demon' / 'shop' / 'forced'）——钱已到手或升级已发生，不处理完不许走；
-   *   · **软提示**（'camp'）——休整是可选收益（训练同理，用户定 2026-09-12），
-   *     第一次点「继续前进」只弹一句泡泡，再点一次就放行（`_activate` 里的 `_campNudged`）。
+   * 房里**还欠着的事**（null = 可以离房）：由各**机器模块自报**（`pendingDuty`）。
+   * 语义分两档（硬拦 / 软提示）由模块自己定义与提示，本舞台只做聚合：
+   *   · **硬拦**（如 'demon' / 'shop' / 'forced'）——钱已到手或升级已发生，不处理完不许走；
+   *   · **软提示**（如 'camp'）——休整是可选收益（训练同理，用户定 2026-09-12），
+   *     第一次点「继续前进」只弹一句泡泡，再点一次就放行（各模块自己记"提示过没有"）。
    */
   _pendingRoomDuty() {
-    const snap = this._snap;
-    if (!snap) return null;
-    if (snap.bank?.pendingRoll) return 'demon';                  // 超额取款的钱已经进袋了
-    if (snap.shop?.pending) return 'shop';                       // 卡包买到即开，还没挑牌
-    if (snap.training?.forced) return 'forced';                  // 升级后的强绑抓牌
-    if (snap.room !== 'campTraining') return null;
-    const c = snap.camp ?? {};
-    if (!c.used && (c.options?.length ?? 0) > 0) return 'camp';
-    return null;
-  }
-
-  /** 恶魔 roll 未选就想走：钱已经到手，先把词条领了——镜头拉回老虎机 + 泡泡。 */
-  _nudgeDemonRoll() {
-    if (this._focused !== 'slot') this._focusMachine('slot');
-    const entry = this._markers.find(m => m.name === 'slot')?.entry;
-    if (!entry) return;
-    this._bubbles.say('room:demon', {
-      ...this._midAnchorOf(entry, 1.5),
-      text: '恶魔 roll 还没选词条呢。',
-      kind: 'thought',
-      duration: 2.6,
-      tint: 0xff9a9a,
-    });
-  }
-
-  /** 还没在火边歇过就想走：把镜头拉回**篝火**并给一句泡泡（训练不做无妨，不再拦）。 */
-  _nudgeCampRest() {
-    const name = this._markers.some(m => m.name === 'camp') ? 'camp' : 'training';
-    const entry = this._markers.find(m => m.name === name)?.entry;
-    if (entry && this._focused !== name) this._focusMachine(name);
-    else if (entry) this._openPanel(name);
-    if (!entry) return;
-    this._bubbles.say('room:campHint', {
-      ...this._midAnchorOf(entry, 1.5),
-      text: '还没在火边歇过呢。',
-      kind: 'thought',
-      duration: 2.6,
-      tint: 0xffe0b0,
-    });
-  }
-
-  /** 强绑抓牌未领时点「继续前进」：把镜头拉到训练桩并冒一句泡泡（"先挑卡"）——比"按钮没反应"清楚。 */
-  _nudgeForcedPick() {
-    const target = this._markers.find(m => m.name === 'training') ? 'training' : this._focused;
-    if (target) this._focusMachine(target);
-    const entry = this._markers.find(m => m.name === 'training')?.entry;
-    const anchor = entry ?? this._markers[0]?.entry;
-    if (anchor) {
-      this._bubbles.say('room:hint', {
-        ...this._midAnchorOf(anchor, 1.5),
-        text: '还没把挑好的卡放进牌组呢。',
-        kind: 'thought',
-        duration: 2.6,
-        tint: 0xe8ecfa,
-      });
-    }
-  }
-
-  /** 卡包三选一未选就想走：镜头拉回售货机 + 打开货架面板（金币已扣，选择不能丢）。 */
-  _nudgeShopPending() {
-    const name = this._markers.some(m => m.name === 'shop') ? 'shop' : 'shop2';
-    const entry = this._markers.find(m => m.name === name)?.entry;
-    if (!entry) return;
-    if (this._focused === name) this._openPanel(name);
-    else this._focusMachine(name);
-    // 提示挂在**货架下沿**（怼脸取景里机器顶在画外；挂机器顶上的话玩家看不到）
-    this._bubbles.say('room:pack', {
-      ...this._vendingHintAnchor(entry),
-      text: '卡包里还有一张没挑呢。',
-      kind: 'thought',
-      duration: 2.4,
-      tint: 0xffe6ad,
-    });
-  }
-
-  /** 售货机提示泡泡的 UI 锚点：货架区**下沿**（怼脸时机器顶在画外，挂顶上等于没挂）。 */
-  _vendingHintAnchor(entry) {
-    const bay = entry?.parts?.bay;
-    const sm = this._sm;
-    if (!bay || !entry || !sm?.worldToUI) return this._uiAnchorOf(entry ?? {}, 4);
-    const p = entry.object.localToWorld(new THREE.Vector3(bay.x, bay.y - bay.h / 2 + 0.4, bay.z));
-    return sm.worldToUI(p.x, p.y, p.z);
-  }
-
-  /** 点商品卡：买得起 → 上行购买意图；买不起 → 盘子摇头 + 一句泡泡（不是"点了没反应"）。 */
-  _buyGoods(index) {
-    const it = this._snap?.shop?.items?.[index];
-    if (!it || it.sold) return false;
-    if (!it.affordable) {
-      for (const rig of this._rigs.values()) rig.deny?.();
-      // 泡泡挂在**被点的那件货**上方（不是机器顶）：怼脸取景里机器顶在画外，
-      // 挂在机器顶上的提示玩家根本看不到（"点了没反应"的老毛病）
-      const obj = this._goodsObject(index);
-      const sm = this._sm;
-      const at = (obj && sm?.worldToUI)
-        ? (() => { const w = obj.getWorldPosition(new THREE.Vector3()); return sm.worldToUI(w.x, w.y + 1.9, w.z); })()
-        : this._uiAnchorOf(this._markers.find(m => m.name === 'shop')?.entry ?? {}, 4);
-      this._bubbles.say('room:money', {
-        x: at.x, y: at.y,
-        text: `还差 ${Math.max(0, it.price - (this._snap.money ?? 0))} 金……`,
-        kind: 'thought',
-        duration: 2.2,
-        tint: 0xff9a9a,
-      });
-      return false;
-    }
-    this._onIntent?.({ action: 'buyShopItem', index });
-    return true;
-  }
-
-  /** 某件货的卡片根对象（泡泡挂点/调试用）。 */
-  _goodsObject(index) {
-    for (const rig of this._rigs.values()) {
-      const t = (rig.goodsTargets?.() ?? []).find(x => x.index === index);
-      if (t) return t.object;
-    }
-    return null;
+    return this._machines.some(m => m.pendingDuty?.(this._snap));
   }
 
   /** 世界锚点 → UI 空间（泡泡/文字挂在物件上方）。 */
@@ -965,25 +492,19 @@ export class RoomStage {
       return;
     }
     const p = new THREE.Vector3(entry.x, this._focusLightY(entry), entry.z);
-    // 售货机：**只压暗外围、不打正面补光**——柜内商品是 unlit 自发光（补光照不到），
-    // 而打进敞开玻璃柜的补光会把柜内背板照爆（怼脸时柜子中间一团白光，把两排货糊掉）
-    this._room?.lighting?.setFocus?.(p, entry.kind === 'vending' ? { fill: false } : { strength: 1 });
+    // 各机器的焦点补光覆盖（售货机：**只压暗外围、不打正面补光**——柜内商品是 unlit 自发光）
+    const light = this._moduleOfKind[entry.kind]?.focusLightOf?.(entry);
+    this._room?.lighting?.setFocus?.(p, light?.fill === false ? { fill: false } : { strength: 1 });
     this._startCamTween(this._focusPose(entry, p), ZOOM_MS, () => {
       if (this._focused === name) this._openPanel(name);   // 推到位才开面板
     });
   }
 
-  /** 机器取景中心（世界坐标）：机身包围盒中段（不含悬浮浮标）。 */
-  _machineMidY(entry) {
-    const box = new THREE.Box3().setFromObject(entry.object);
-    return box.min.y + (box.max.y - box.min.y) * 0.5;
-  }
-
-  /** 焦点补光的高度：售货机压到**下半身**（出货口一带）——光心落在货架之下，柜内背板不被照爆。 */
+  /** 焦点补光的高度（由机器模块覆盖；售货机压到**下半身**——光心落在货架之下，柜内背板不被照爆）。 */
   _focusLightY(entry) {
     const box = new THREE.Box3().setFromObject(entry.object);
     const h = box.max.y - box.min.y;
-    return box.min.y + h * (entry.kind === 'vending' ? 0.22 : 0.5);
+    return box.min.y + h * (this._moduleOfKind[entry.kind]?.focusLightOf?.(entry)?.y ?? 0.5);
   }
 
   /** 全景基准机位（StageManager 构造时那套）。 */
@@ -1006,7 +527,7 @@ export class RoomStage {
    */
   _focusPose(entry, center) {
     const cam = this._sm?.camera;
-    const cfg = { ...FOCUS_DEFAULT, ...(FOCUS_OF[entry.kind] ?? {}) };
+    const cfg = { ...FOCUS_DEFAULT, ...(this._moduleOfKind[entry.kind]?.focusOf?.(entry) ?? {}) };
     const bb = cfg.subject?.(entry) ?? new THREE.Box3().setFromObject(entry.object);
     const size = bb.getSize(new THREE.Vector3());
     const c = bb.getCenter(new THREE.Vector3());
@@ -1051,8 +572,12 @@ export class RoomStage {
 
   // ================= 内部：面板 =================
 
+  /** 打开某台机器的停靠面板（name = 交互物名；没有对应机器面板则收起）。 */
   _openPanel(name) {
-    if (!name || !PANEL_OF[name]) { this._panelKind = null; this._removePanel(); return; }
+    // 面板 builder 归口到机器模块（entry.kind → 模块）：名字不是交互物 / 该机器没有面板 = 收起
+    const entry = this._markers.find(m => m.name === name)?.entry;
+    const mod = entry ? this._moduleOfKind[entry.kind] : null;
+    if (!name || !mod?.panel) { this._panelKind = null; this._removePanel(); return; }
     this._panelKind = name;
     this._renderPanel();
   }
@@ -1069,15 +594,12 @@ export class RoomStage {
   }
 
   /**
-   * 播一次**粉碎演出**（编排器在吞噬结算后调用）：把镜头拉回老虎机（粉碎口在下半身，
-   * 玩家可能正看着别的机器/面板）→ rig 咬合 + 迸币。纯表现，不影响结算。
+   * 播一次**粉碎演出**（编排器在吞噬结算后调用）：转发给实现了 playCrush 的机器模块
+   * （老虎机：把镜头拉回粉碎口 + rig 咬合迸币）。纯表现，不影响结算。
    */
   playCrush() {
-    const rig = this._rigs.get('slot');
-    if (!rig?.crush) return false;
-    if (this._focused !== 'slot') this._focusMachine('slot');
-    this._startCamTween(this._focusPoseFor('slot'), 0.45, () => rig.crush());
-    return true;
+    for (const m of this._machines) { if (m.playCrush?.()) return true; }
+    return false;
   }
 
   /** 取某台交互物的聚焦机位（无则 null）。 */
@@ -1098,7 +620,7 @@ export class RoomStage {
     if (!this._panel) {
       this._panel = new PanelObject({
         form: 'dock',
-        onIntent: (a) => this._onPanelAction(a),
+        onIntent: (a, info) => this._onPanelAction(a, info),
         // 卡面烘焙与战场/塔楼层同源（pending 的卡阵、选卡界面都要真卡面，不能没有）
         bakeFace: this._bakeFace,
         // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
@@ -1109,10 +631,12 @@ export class RoomStage {
     }
     // 停靠面板只放"这台机器能做的事"：**不再给「返回房间」按钮**——点面板外的房间空白处
     // 即拉远回全景（用户定 2026-09-12：推近后的退出口应当是"点别处"，UI 里多一个返回键既
-    // 占地方又和底部操纵条的语义打架）。
-    const build = this._panelKind === 'shop' ? buildShopPanel : PANEL_OF[this._panelKind];
-    if (!build) { this._panelKind = null; this._removePanel(); return; }
-    this._panel.setWidgets(this._panelKind, build(snap));
+    // 占地方又和底部操纵条的语义打架）。widgets 由该机器模块的 panel builder 产出。
+    const entry = this._markers.find(m => m.name === this._panelKind)?.entry;
+    const mod = entry ? this._moduleOfKind[entry.kind] : null;
+    const widgets = mod?.panel?.(this._panelKind, snap) ?? null;
+    if (!widgets) { this._panelKind = null; this._removePanel(); return; }
+    this._panel.setWidgets(this._panelKind, widgets);
     this._panel.attachPicker(this._picker);
   }
 
@@ -1124,8 +648,8 @@ export class RoomStage {
   }
 
   /** 面板动作分流：本地动作（开选卡界面…）自己消化，其余原样上行。 */
-  _onPanelAction(action) {
-    if (!action) return;
+  _onPanelAction(action, info) {
+    if (!action || this._grantBusy) return;
     if (action.local) {
       if (action.action === 'openShop') { this.openShop(); return; }
       if (action.action === 'closeShop') { this._openPanel(this._focused); return; }
@@ -1133,241 +657,24 @@ export class RoomStage {
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       return;
     }
+    // 得卡标记（老虎机卡多选一 / 训练抓牌）：摘下被点的卡 → 收起操纵条 → 播「择卡得卡」
+    // 演出（脉冲→飞向玩家状态栏，sequencer 指令化）→ 落袋才上行意图。
+    // 操纵条整体 _removePanel 而不是藏起：dock 非模态不吞指针（点击由 _grantBusy 守），
+    // 且 setPanel → _renderPanel 只在新快照到达时整份重建，不存在"隐形面板被重绘"的坑。
+    if (action.grantCard && info?.pickId && this._panel) {
+      const entry = this._panel.takeCard(info.pickId);
+      if (entry) {
+        this._grantBusy = true;
+        this.uiScene.add(entry.object);      // 面板组在原点：局部坐标即世界坐标
+        this._removePanel();
+        playCardGrantFlight({
+          card: entry.object, target: this._deckAnchor(), sequencer: this._runSequencer,
+          onDone: () => { this._grantBusy = false; this._onIntent?.(action); },
+        });
+        return;
+      }
+    }
     this._onIntent?.(action);
-  }
-
-  // ================= 内部：拉杆演出（演出即结果揭示的闸门）=================
-
-  /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
-  _syncSlotFromSnapshot() {
-    this._syncVending();
-    this._syncBank();
-    this._syncDemonRoll();
-    // 「继续前进」的明度在 _tick 里逐帧算（模态覆盖层/房间欠账两档），这里不再重复设置
-    const s = this._snap?.slot;
-    const rig = this._rigs.get('slot');
-    if (!s || !rig) return;
-    // 计数器（翻牌）与进度满的"嘴张开"直接由快照驱动
-    if (s.devour) rig.setDevour?.(s.devour);
-    const spinning = s.spinning ?? null;
-    if (!spinning) { this._slotSpinId = null; return; }
-    if (spinning.id === this._slotSpinId) return;   // 同一轮已开播（重绘不重播）
-    this._slotSpinId = spinning.id;
-    const tier = spinning.tier ?? 'none';   // 'major' | 'minor' | 'none'（不是奖项种类）
-    rig.pull({ tier, symbols: symbolsForTier(tier) });
-    clearInterval(this._slotPoll);
-    this._slotPoll = setInterval(() => {
-      if (rig.isBusy()) return;
-      clearInterval(this._slotPoll);
-      this._slotPoll = null;
-      this._slotSpinId = null;
-      this._onIntent?.({ action: 'slotAnimDone', id: spinning.id });
-    }, 120);
-  }
-
-  /** 银行机屏幕文本：**恒显示储蓄额度**（存款额），不是玩家携带的金币——机器讲的是
-   * 账户余额，携带金币在顶端资源行。存款为 0 时也要显示「存款 0」。 */
-  _syncBank() {
-    const bk = this._snap?.bank;
-    const rig = this._rigs.get('bank');
-    if (!bk || !rig?.setScreen) return;
-    rig.setScreen(`存款 ${bk.deposit ?? 0}`);
-  }
-
-  // ================= 内部：恶魔 roll（银行机超额取款的代价）=================
-  // 用户定 2026-09-12：超额取款 → **视角立刻切到老虎机** → 机器切恶魔形态（关闸 → 换暗红盘
-  // → 开闸，灯池同时染暗红）→ 自动开转 → 停稳后弹出三张词条卡片 → 点选其一 → 退场
-  // （换回普通盘、灯效复原）→ 回银行机并回执宿主播"奖励到手"特写（那笔超额取款的金币）。
-  // 状态机由 _tick 推进（dt 驱动，与所有演出同一时基；不用定时器，免得被 rAF 节流坑）。
-  _syncDemonRoll() {
-    const pr = this._snap?.bank?.pendingRoll ?? null;
-    const rig = this._rigs.get('slot');
-    if (!rig) return;
-    if (pr && !this._demon) this._startDemonRoll(pr);
-    else if (!pr && this._demon) {
-      // 词条已选（快照里 pendingRoll 没了）→ 退场。若卡片还挂着（占位面板按钮选的）先收掉
-      if (this._demon.phase !== 'exit') { this._demon.phase = 'exit'; this._demon.started = false; }
-    }
-  }
-
-  _startDemonRoll(pr) {
-    this._demon = {
-      phase: 'enter', started: false,
-      gold: pr.gold, tier: pr.tier,
-      options: (pr.options ?? []).map(o => ({ id: o.id, name: o.name, desc: o.desc, tier: o.tier })),
-      picks: null,     // 选择阶段挂上的转轮热区 [{ id, optionId }]
-    };
-    // ① 视角立刻切到老虎机（玩家此刻站在银行机面板前）——推到位的回调里机器才开始关闸换盘
-    if (this._focused !== 'slot') this._focusMachine('slot');
-    // ② 灯池染暗红 + 机器进恶魔风格（换盘本身由 demonEnter 的"关闸 → 换盘 → 开闸"时序做）
-    this._room?.lighting?.setLampTint?.(DEMON_LAMP, 1);
-    this._rigs.get('slot')?.setDemonStyle?.(1);
-  }
-
-  /** 帧驱动相位推进：enter（关闸换盘）→ spin（自动开转）→ choose（转轮上等点选）→ exit（换回普通盘）。 */
-  _stepDemonRoll(dt) {
-    const d = this._demon;
-    if (!d) return;
-    const rig = this._rigs.get('slot');
-    if (!rig) { this._demon = null; return; }
-    if (d.phase === 'enter') {
-      if (!d.started) { if (rig.isBusy() || !rig.demonEnter?.()) return; d.started = true; return; }
-      if (rig.isBusy()) return;
-      d.phase = 'spin'; d.started = false;
-    } else if (d.phase === 'spin') {
-      if (!d.started) {
-        // 恶魔 roll 不是中奖：tier 'none'（不亮中奖灯），三根盘各落一面
-        if (!rig.pull({ tier: 'none', symbols: null })) return;
-        d.started = true;
-        return;
-      }
-      if (rig.isBusy()) return;
-      d.phase = 'choose';
-      this._armDemonChoice(d);
-    } else if (d.phase === 'exit') {
-      if (!d.started) {
-        this._disarmDemonChoice();
-        if (rig.isBusy() || !rig.demonExit?.()) return;
-        d.started = true;
-        return;
-      }
-      if (rig.isBusy()) return;
-      rig.setDemonStyle?.(0);
-      this._room?.lighting?.setLampTint?.(null, 0);
-      this._demon = null;
-      if (this._markers.some(m => m.name === 'bank')) this._focusMachine('bank');   // 回到取钱的那台
-      this._onIntent?.({ action: 'demonAnimDone' });                                // 宿主播奖励特写
-    }
-  }
-
-  /**
-   * 恶魔 roll 的选择：**轮盘本身就是选项**（用户定 2026-09-13）。
-   * 三根转轮各认一个词条——"轮盘转出来的东西就是诅咒本身"，所以悬停转轮弹该词条的 tooltip、
-   * 点转轮即承受。此前是机器身前另浮出三张卡片，与转盘割裂，操纵条里又列一遍同样的信息
-   * （用户报"重复呈现"）。取景用 `_focusMachine('slot')` 的怼脸机位（slotSubject 已框住转轮窗），
-   * 不再另拉一次相机。
-   */
-  _armDemonChoice(d) {
-    const machine = this._markers.find(m => m.name === 'slot')?.entry;
-    const reels = this._rigs.get('slot')?.demonTargets?.() ?? [];
-    if (!machine || !reels.length || !this._picker) return;
-    const s = machine.scale ?? 1;
-    const fwd = new THREE.Vector3(Math.sin(machine.ry ?? 0), 0, Math.cos(machine.ry ?? 0));
-    // 机器"正面"平面沿 fwd 的距离：转轮鼓在机柜里，压边框/镜片都挡在它前面，
-    // 所以隐形拾取面必须整体放到**整机最前沿之外**，否则射线先打到机身（kind:'machine'）。
-    const bb = new THREE.Box3().setFromObject(machine.object);
-    const size = bb.getSize(new THREE.Vector3());
-    const center = bb.getCenter(new THREE.Vector3());
-    const halfAlong = (Math.abs(size.x * fwd.x) + Math.abs(size.z * fwd.z)) / 2;
-    d.picks = [];
-    reels.forEach((reel, i) => {
-      const o = d.options[i];
-      if (!o) return;
-      const rel = reel.getWorldPosition(new THREE.Vector3()).sub(center);
-      const lateral = rel.addScaledVector(fwd, -rel.dot(fwd));   // 垂直分量（含竖直），保住转轮的左右/高低
-      const at = center.clone().add(lateral).addScaledVector(fwd, halfAlong + 0.9 * s);
-      // 与转轮同宽（单格 cellW≈0.8）不越界；透明面不参与视觉——用 opacity 0 而不是
-      // visible:false，因为 Picker 会把 invisible 的对象滤掉（那就永远点不到了）。
-      const proxy = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.78 * s, 1.15 * s),
-        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
-      );
-      proxy.name = `demonPick:${i}`;
-      proxy.position.copy(at);
-      proxy.lookAt(at.clone().add(fwd));
-      proxy.userData.token = {
-        type: 'item',
-        payload: {
-          title: o.name,
-          body: `${o.desc}（恶魔词条 · ${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
-          tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
-        },
-      };
-      this._room?.group.add(proxy);
-      const id = `room:demon:${i}`;
-      this._picker.addPickable(id, proxy, { kind: 'demon' });
-      d.picks.push({ id, optionId: o.id, proxy });
-    });
-  }
-
-  /** 撤掉转轮热区（含 tooltip token 与隐形拾取面）——选择阶段结束/退场都要走，否则空热区还能点到。 */
-  _disarmDemonChoice() {
-    const d = this._demon;
-    for (const p of d?.picks ?? []) {
-      this._picker?.removePickable(p.id);
-      p.proxy?.parent?.remove(p.proxy);
-      p.proxy?.geometry?.dispose();
-      p.proxy?.material?.dispose();
-    }
-    if (d) d.picks = null;
-  }
-
-  /**
-   * 售货机同步（**商店房 'shop' = 一整间货房**，用户定 2026-09-12）：
-   *   · 主柜来自配方（`guaranteed` + `live`，name='shop'）——定点、被 claim，撒布件不会压到它；
-   *   · 货架超过一台的容量（4 件，故事模式瑞米等级高时 5 件）→ 在 `anchors.shop2` 生成**溢出柜**
-   *     （只此一路是动态生成：锚点位没有 claim，故生成前先避让已占红线，见 `_freeSpot`）；
-   *   · 库存按机器**切片**下发（index 用全局货架下标——购买/拾取都用它）；
-   *   · 卡包买到即开：三选一挂起时把面板顶到前面来（金币已扣，选择不能丢）。
-   */
-  _syncVending() {
-    const shop = this._snap?.shop ?? null;
-    if (!shop) return false;                       // 非商店房：不生成、不显示
-    const items = shop.items ?? [];
-    const cap = Math.max(1, this._rigs.get('shop')?.state?.capacity ?? 4);
-    const machines = Math.max(1, Math.ceil(items.length / cap));
-    for (let i = 0; i < machines; i++) {
-      const name = i === 0 ? 'shop' : `shop${i + 1}`;
-      if (!this._markers.some(m => m.name === name) && !this._spawnShopMachine(name, i)) break;
-      const rig = this._rigs.get(name);
-      rig?.setStock(items.slice(i * cap, (i + 1) * cap));
-      rig?.setDisplay(`余额 ${this._snap.money ?? 0}`);
-    }
-    this._syncGoodsPickables();
-    if (shop.pending && this._panelKind !== 'shop') this._openPanel('shop');
-    return true;
-  }
-
-  /**
-   * 按配方的锚点生成一台售货机（`index` 0 = 主柜位 shop、1 = 溢出柜位 shop2）。
-   * 只用于**溢出柜**：主柜在配方 guaranteed 里（被 claim）。溢出柜位没有 claim，故先算一个
-   * 不与已摆件重叠的落点（`_freeSpot`）；锚点缺失 → 放弃生成（宁可少一台，不重叠）。
-   */
-  _spawnShopMachine(name, index = 1) {
-    const anchors = this._sceneDef?.anchors ?? {};
-    const a = index === 0 ? anchors.shop : (anchors[`shop${index + 1}`] ?? anchors.shop2);
-    if (!a || !this._room) return false;
-    const def = getProp('vendingMachine');
-    const scale = a.scale ?? 1;
-    const fp = def.footprint ?? { x: 3.2, z: 2.4 };
-    const spot = this._freeSpot(a.x, a.z, fp.x * scale, fp.z * scale);
-    const obj = def.build({ rng: createRng(`${this.recipe}:shop:${name}`) });
-    obj.position.set(spot.x, FLOOR_Y, spot.z);     // 与配方摆件同一地平面（FLOOR_Y）
-    obj.rotation.y = a.ry ?? 0;
-    obj.scale.setScalar(scale);
-    obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    this._room.group.add(obj);
-    this._addInteractive(name, {
-      object: obj, kind: obj.userData.interactive ?? 'vending',
-      x: spot.x, z: spot.z, ry: a.ry ?? 0, scale,
-      parts: obj.userData.parts ?? null,
-    });
-    return true;
-  }
-
-  /** 在 (x,z) 附近找一个不与房间已摆件重叠的落点（原始位优先，其次沿 ±x/±z 退让）。 */
-  _freeSpot(x, z, w, d) {
-    const list = this._room?.placements ?? [];
-    const hit = (cx, cz) => list.some((p) => !p.floating && !p.onWall && !p.hosted
-      && cx - w / 2 < p.x + (p.fx ?? 1) && cx + w / 2 > p.x - (p.fx ?? 1)
-      && cz - d / 2 < p.z + (p.fz ?? 1) && cz + d / 2 > p.z - (p.fz ?? 1));
-    if (!hit(x, z)) return { x, z };
-    for (const step of [5, 10, 16, 22]) {
-      for (const [dx, dz] of [[-step, 0], [step, 0], [0, -step], [0, step], [-step, -step], [step, step]]) {
-        if (!hit(x + dx, z + dz)) return { x: x + dx, z: z + dz };
-      }
-    }
-    return { x, z };
   }
 
   // ================= 内部：逐帧 =================
@@ -1393,18 +700,18 @@ export class RoomStage {
         m.entry.object.scale.setScalar(base * (1 + 0.035 * k));
       }
     }
-    this._stepDemonRoll(dt);
+    // 各机器的帧驱动（恶魔相位机 / 安慰奖 billboard 面向相机 + 浮动）
+    for (const m of this._machines) m.tick?.(dt);
     // 「继续前进」的明度：获得演出/全屏选择界面是**模态覆盖层**，期间这枚常驻按钮必须明显不可用。
     // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点
     // （用户 2026-09-13 报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
     // 卡包待选 / 强绑抓牌）压到 0.4，正常为 1。放帧驱动是因为演出起止不走快照。
     this._continue.setDim(
-      this._showcase?.busy || this._cardPicker?.opened || this._relicPicker?.opened ? 0.18
+      this._pickerKit.uiBusy ? 0.18
         : (this._pendingRoomDuty() ? 0.4 : 1),
     );
     this._continue.update(dt);
-    this._showcase?.update(dt);
-    this._gift?.update(dt, this._sm?.camera ?? null);   // 安慰奖 billboard 面向相机 + 浮动
+    this._pickerKit.update(dt);
     for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
       const entry = this._markers.find(m => m.name === key)?.entry;
       if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));

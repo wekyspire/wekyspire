@@ -88,7 +88,12 @@ export class UseSkillInstruction extends BattleInstruction {
             for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
               ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
             }
-            ctx.presenter?.chantToggled?.({ skill: this.skill, on: true, reason: 'played' });
+            // 激发演出描述符随节拍过线：有激发能力（activated 块）的卡点亮时播卡体演出——
+            // 具体动画由卡自己决定（activated.anim），缺省放缩脉冲（数值缺省由表现层补全）
+            ctx.presenter?.chantToggled?.({
+              skill: this.skill, on: true, reason: 'played',
+              anim: def.activated ? (def.activated.anim ?? { kind: 'pulse' }) : null,
+            });
           }
         } else if (def.keywords?.includes('exhaust')) {
           // 消耗卡（含咏唱解除）：→ 焚毁区

@@ -39,6 +39,7 @@ import { campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER } from '../../
 import { playEvent } from '../../src/core/run/rooms/event.js';
 import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
+  slotGiftDue, takeSlotGift,
 } from '../../src/core/run/rooms/slotMachine.js';
 import { buyShopItem, takeShopCard } from '../../src/core/run/rooms/shop.js';
 import {
@@ -185,6 +186,7 @@ export function exec(S, raw) {
       return execBattle(S, cmd, t);
     case 'pack': case 'take': case 'skip': return execReward(S, cmd, t);
     case 'act': return execRoom(S, t);
+    case 'remove': return execRemove(S, t);
     case 'dim': case 'seed': case 'reroll': case 'ability': return execAscension(S, cmd, t);
     case 'preview': return execPreview(S, t);
     case 'dev': return execDev(S, t);
@@ -192,6 +194,17 @@ export function exec(S, raw) {
     case 'next': return execNext(S);
     default: throw new Error(`未知动作：${cmd}（help 查看动作表）`);
   }
+}
+
+// ---- Boss 奖励删卡（pendingCardRemoval 的 headless 出口；Shell 侧 = runMachines.bossRemoveCard）----
+function execRemove(S, t) {
+  const run = S.run;
+  if (!(run.pendingCardRemoval > 0)) throw new Error('当前没有可用的删卡机会（Boss 层胜利奖励）');
+  if (run.gameStage === 'battle') throw new Error('战斗中不能删卡');
+  const card = run.player.deck[resolveHandStrict(run.player.deck, t[1], t[2], '构筑卡')];
+  const name = removeCardAtGurpas(run, card.uniqueID);
+  run.pendingCardRemoval -= 1;
+  S.lastOutcome = `删卡：「${name}」已从牌库彻底抹掉（剩余删卡机会 ${run.pendingCardRemoval}）`;
 }
 
 // ---- 战斗动作 ----
@@ -477,10 +490,20 @@ function execRoomTraining(S, t, trainDone) {
     if (gateErr) throw new Error(gateErr);
     const before = defOf(card).name;
     trainUpgrade(run, card.uniqueID);
-    S.lastOutcome = `升级：${before} → ${defOf(card).name}（训练场，接下来强制三选一抓牌）`;
+    // 强绑候选直接列出（与 act draw 同口径：不许盲选）
+    const names = run.roomData.drawChoices
+      .map((id, i) => `${i + 1}.${getSkillDefinition(id)?.name ?? id}`).join(' ');
+    S.lastOutcome = `升级：${before} → ${defOf(card).name}（训练场，强制三选一抓牌：${names}）`;
     return;
   }
-  if (a === 'draw') { trainDrawChoices(run); S.lastOutcome = '训练抓牌候选已生成'; return; }
+  if (a === 'draw') {
+    trainDrawChoices(run);
+    // 候选直接列出（此前只回执"已生成"，玩家只能盲选编号、靠报错反推）
+    const names = run.roomData.drawChoices
+      .map((id, i) => `${i + 1}.${getSkillDefinition(id)?.name ?? id}`).join(' ');
+    S.lastOutcome = `训练抓牌候选已生成：${names}`;
+    return;
+  }
   if (a === 'take') {
     const choices = run.roomData?.drawChoices ?? [];
     const defId = resolveChoiceStrict(choices, b, t[3], '抓牌候选',
@@ -568,9 +591,11 @@ function execRoomSlot(S, t) {
   }
   if (a === 'devour') {
     const arg = t[3] ?? null;
+    // 卡牌分支先把构筑行号/卡名解析成运行时卡（devourSlot 按 uniqueID 匹配，
+    // 直接传行号永远找不到——与上方 upgrade 分支同一套记法）
     const res = devourSlot(run, b === 'relic'
       ? { kind: 'relic', relicId: arg }
-      : { kind: 'card', uniqueID: num(arg) });
+      : { kind: 'card', uniqueID: run.player.deck[resolveHandStrict(run.player.deck, arg, t[4], '构筑卡')]?.uniqueID });
     S.lastOutcome = `吞噬${b}：+${res.gold}金币${res.freeRoll ? '（下次 roll 免费）' : ''}`;
     return;
   }
@@ -616,13 +641,24 @@ function execRoomSlot(S, t) {
     throw new Error('银行机动作：act bank deposit [金额] | withdraw | overdraft <yellow|red|black>'
       + ' | pick <词条id> | upgrade <构筑#> <卡名> | burn <构筑#> <卡名>');
   }
+  if (a === 'gift') {
+    // 离房安慰奖（真游戏里点「继续前进」被吞去强制二选一，不能跳过）：headless 显式领取
+    const out = takeSlotGift(run, b);
+    if (!out) throw new Error('当前没有待领取的安慰奖（本房拉满次数且全程未中奖才欠）');
+    S.lastOutcome = `安慰奖「${out.gift.name}」：+${out.healed} 生命`
+      + (out.maxHp ? '、最大生命 +1' : '')
+      + (out.manaBonus ? `、下场战斗额外 +${out.manaBonus} 魏启` : '');
+    return;
+  }
   if (a === 'skip') { // 不拉杆直接走：老虎机期望为负时这是最高频操作，不该逼玩家换用 next
+    // 安慰奖欠着时不许直接走（对齐真游戏：继续前进每次都被吞去演二选一）
+    if (slotGiftDue(run)) throw new Error('老虎机的安慰奖还没领取：act gift <cola|chicken>');
     completeRoom(run); S.roomDone = false;
     S.lastOutcome = '跳过老虎机（未拉杆）离开房间';
     return;
   }
   throw new Error('老虎机动作：act spin / act claim <#|id> / act drop / act devour relic <遗物id>'
-    + ' / act devour card <构筑#>｜不拉杆离开用 act skip（或 next）');
+    + ' / act devour card <构筑#> / act gift <cola|chicken>｜不拉杆离开用 act skip（或 next）');
 }
 
 // 事件房
@@ -825,6 +861,8 @@ function execNext(S) {
   if (stage === 'room') {
     // 训练强绑尾款未领不允许离场（UI 契约：forced 状态只给三选一不给跳过）
     if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取：act take <#>');
+    // 老虎机安慰奖欠着不允许离场（真游戏：点继续前进每次都被吞去强制二选一，不能跳过）
+    if (slotGiftDue(run)) throw new Error('老虎机的安慰奖还没领取：act gift <cola|chicken>');
     completeRoom(run); S.roomDone = false; S.lastOutcome = '离开房间'; return;
   }
   throw new Error(`当前阶段无需 next（${stageCn(stage)}）`);

@@ -132,10 +132,14 @@ export default class BattleKernel {
         continue;
       }
 
-      // 已完成且子节点全部结算：弹出
+      // 已完成且子节点全部结算：弹出。**终局检查挂在弹出点**（而不是完成那一刻）——
+      // 死亡触发的亡语、POST 反应提交的都是"已完成节点的子节点"，必须先结算完再判胜负；
+      // 若在完成点判，"最后一杀"会让 abort 把刚挂上的亡语子节点连同整棵子树一起拆掉
+      // （爆囊【引线】在击杀最后一个敌人时爆炸被吞的病灶）。
       if (top._isCompleted) {
         this.stack.pop();
         this.currentInstruction = this.stack.length ? this.stack[this.stack.length - 1] : null;
+        this._afterInstructionCompleted(ctx);
         continue;
       }
 
@@ -166,9 +170,9 @@ export default class BattleKernel {
       if (r === true) {
         top._isCompleted = true;
         this.tracer?.({ type: 'complete', instr: top });
-        // 弹出前先结算全部 POST 反应（作为本节点的子节点追加）
+        // 弹出前先结算全部 POST 反应（作为本节点的子节点追加）；
+        // 终局检查不在这里——见上方弹出分支的注释。
         this._runPhaseSubscriptions(top, 'post', ctx);
-        this._afterInstructionCompleted(ctx);
         continue;
       }
       // false：多阶段，留栈进入下一 stage

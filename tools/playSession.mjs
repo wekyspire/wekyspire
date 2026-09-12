@@ -23,8 +23,10 @@ export const HELP = `动作表（按当前阶段）：
   奖励: pack <#|体修|火|通用> | take <候选#> <卡名> | take <卡名> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw
         | act take <候选#> <卡名> | act skipdraw | act skip | act play | next
-        | act spin | act claim <#|id> [卡名] | act drop | act devour relic <id> | act devour card <构筑#>
+        | act spin | act claim <#|id> [卡名] | act drop | act devour relic <id> | act devour card <构筑#> [卡名]
+        | act gift <cola|chicken>（老虎机安慰奖：本房拉满次数且全程未中奖时欠着，领了才能离房）
         | act shop buy <#> | act shop claim <#|defId> [卡名]（售货机与房间并存，不消耗房间行动）
+  删卡: remove <构筑#> [卡名]（Boss 层胜利奖励的删卡机会，战斗外随时可用）
   预览: preview up <构筑#>（升阶前后对比，只读）
   进阶: dim 火|跳过（首次点亮火系：获赠点火+火弹术+体系能力「火灵脉」，再开种子九选三；
         跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>

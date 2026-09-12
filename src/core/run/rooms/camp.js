@@ -17,7 +17,7 @@ export function campOptions(run) {
   return opts;
 }
 
-// 休整：玩家 50% 生命 + 全部魏启 + 瑞米全部状态（占位：瑞米每场战斗按满血出战）
+// 休整：玩家 35% 生命 + 全部魏启 + 瑞米全部状态（占位：瑞米每场战斗按满血出战）
 // 每房一次的营地动作守卫（合并房里训练部分有自己的计时，互不干扰）
 function markCampUsed(run) {
   if (run.roomData?.campUsed) throw new Error('本房的营地动作已经用过了');

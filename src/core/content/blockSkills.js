@@ -68,7 +68,7 @@ function perfectReady(sctx) {
   return true;
 }
 
-// 精准一击（精准系列 D）：完美。23 伤害。promotesTo 精心一击（C）。
+// 精准一击（精准系列 D）：完美。17 伤害。promotesTo 精心一击（C）。
 registerSkill({
   id: 'perfectStrike', name: '精准一击', type: 'normal', tier: 'D', series: 'block',
   cost: { mana: 0, actionPoint: 2 },

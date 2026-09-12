@@ -524,7 +524,9 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') };
     }
     const fuse = unit.getEffectStacks('blastFuse');
-    return { kinds: ['debuff'], note: `引线：死亡时对玩家造成 ${6 + 3 * (fuse + 1)} 伤害` };
+    // 预览口径 = 此刻击杀的爆炸（6+3×当前引线）——引线是爆囊自己行动时才 +1，
+    // 玩家在己方回合看到意图的决策窗口里，多算一层会高估 3 点代价
+    return { kinds: ['debuff'], note: `引线：死亡时对玩家造成 ${6 + 3 * fuse} 伤害` };
   },
 });
 

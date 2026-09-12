@@ -45,6 +45,10 @@ export function render(S) {
       }).join(' / '));
     L.push('  → relic equip|unequip <遗物id>（仅 prep；非槽位式不用装备）｜ relics 查看全部遗物效果说明');
   }
+  // Boss 奖励删卡机会：全阶段可见（此前 headless 没有任何入口，攒了也看不见）
+  if (run.pendingCardRemoval > 0) {
+    L.push(`⧉ Boss 奖励：可删卡 ${run.pendingCardRemoval} 次（remove <构筑#> [卡名]）`);
+  }
 
   const stage = run.gameStage;
   if (stage === 'battle' && S.battle) renderBattle(S, L);
@@ -125,12 +129,18 @@ function renderReward(S, L) {
 function renderRoom(S, L) {
   const run = S.run;
   const room = run.currentRoom;
-  L.push(S.roomDone
+  // 合并房（campTraining）两部分独立计时：完成态看 run.roomData 的双旗标，不看
+  // S.roomDone——它是单旗标，任一部分动作都会置位，按它早退会把另一部分的动作入口
+  // 连同强绑抓牌候选一起藏掉（"先休整后训练 → 候选不可见、显示已完成"的病灶）
+  const roomDone = room === 'campTraining'
+    ? (!!run.roomData?.campUsed && !!run.roomData?.trained)
+    : S.roomDone;
+  L.push(roomDone
     ? '状态：本房间动作已完成 → next 离开（售货机不受限，仍可 act shop buy）'
     : '状态：房间动作未完成（可选动作见下）');
   // 售货机与房间**并存**（不占房间名额）：任何房间都可能同层有货架
   if (run.shop) renderRoomShop(S, L);
-  if (S.roomDone) {
+  if (roomDone) {
     // 状态行已在段首统一给出（report-r1-A 缺陷#8：避免有的房间给提示、有的不给）
     return;
   }

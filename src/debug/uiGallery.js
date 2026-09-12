@@ -180,19 +180,18 @@ if (opt('picker', '0') === '1' && (run.currentRoom === 'camp' || run.currentRoom
   mapStage._onPanelAction({ action: 'openUpgradePicker', source: run.currentRoom, local: true });
 }
 // ?relicPicker=1 直接打开全屏选遗物界面（正常要进老虎机「粉碎」才见得到）
+// 走舞台公开入口（openDevourPicker 的 relic 分支）——选遗物界面只有这一个真实来源，
+// 造物走同一条路才能验收真实排版（标题/提示也一并照实）。
 if (opt('relicPicker', '0') === '1') {
   const ids = run.player.equippedRelics.concat(
     ['hardBaguette', 'northMountainRock', 'dragonScale', 'mountainSpringPot'],
   ).filter((id, i, a) => a.indexOf(id) === i && getRelicDefinition(id));
-  mapStage._ensureRelicPicker().attachPicker(mapStage._picker);
-  mapStage._relicPicker.open({
-    title: '粉碎哪件遗物？',
-    hint: '陈列页：只为验收候选卡排版（遗物立绘 + 名字 + 描述）',
+  mapStage.openDevourPicker({
+    kind: 'relic',
     relics: ids.map((id) => {
       const def = getRelicDefinition(id);
       return { id, name: def.name ?? id, rarity: def.rarity ?? 'C', desc: def.description ?? '' };
     }),
-    confirmLabel: '确认粉碎',
   });
 }
 

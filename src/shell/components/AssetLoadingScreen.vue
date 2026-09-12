@@ -15,11 +15,16 @@ const props = defineProps({
 });
 const emit = defineEmits(['retry']);
 
-const pct = computed(() =>
-  props.progress.total > 0
-    ? Math.round((props.progress.loaded / props.progress.total) * 100)
-    : 0,
-);
+// 进度条按**下载体积**驱动（用户定 2026-09-13：按张数时大量小图瞬间刷满、大图干等，观感像坏了）：
+// 字节来自 HEAD 探测，个别条目探测缺席会让字节停在 9x%——故"全部落定"强制 100%；
+// 整段探测失败（totalBytes=0）退化为按张数。
+const pct = computed(() => {
+  const p = props.progress;
+  const loaded = p.loaded ?? 0;
+  if (p.total > 0 && loaded >= p.total) return 100;
+  if (p.totalBytes > 0) return Math.min(100, Math.round(((p.loadedBytes ?? 0) / p.totalBytes) * 100));
+  return p.total > 0 ? Math.round((loaded / p.total) * 100) : 0;
+});
 
 const fmtBytes = (n) => {
   if (!n || n < 0) return '—';
@@ -65,7 +70,7 @@ const etaText = computed(() => {
     <div class="al-title">魏启尖塔</div>
     <div class="al-bar"><div class="al-fill" :style="{ width: pct + '%' }"></div></div>
     <div class="al-text">
-      加载美术资源… {{ progress.loaded }} / {{ progress.total }}
+      加载美术资源… {{ progress.loaded ?? 0 }} / {{ progress.total }}
       <span v-if="sizeText"> ｜ {{ sizeText }}</span>
     </div>
     <div class="al-sub">
