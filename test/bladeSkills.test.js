@@ -372,28 +372,28 @@ describe('快速花刀/快速横刀（2026-09 稿散卡）', () => {
 });
 
 describe('回旋斩系列：牌库末抽牌', () => {
-  it('回旋斩：7伤害，从牌库末抽1', () => {
+  it('回旋斩：10伤害，从牌库末抽1', () => {
     const d = new BattleDriver({ deck: ['cycloneSlash', 'punch', 'punch', 'punch', 'guard', 'guard'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'cycloneSlash');
     const bottom = d.state.zones.deck.at(-1);
     const hp0 = enemyHp(d);
     d.play('cycloneSlash');
-    expect(hp0 - enemyHp(d)).toBe(7);
+    expect(hp0 - enemyHp(d)).toBe(10);
     expect(zoneOf(d.state, bottom.uniqueID)).toBe('hand');   // 牌库末 → 手
   });
 
-  it('回旋爆斩：11伤害，从牌库末抽3', () => {
+  it('回旋爆斩：10伤害，从牌库末抽2', () => {
     const d = new BattleDriver({
       deck: ['cycloneBurst', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard'],
       enemies: [tank()], seed: 5,
     });
     d.start();
     toHand(d, 'cycloneBurst');
-    const bottoms = d.state.zones.deck.slice(-3);
+    const bottoms = d.state.zones.deck.slice(-2);
     const hp0 = enemyHp(d);
     d.play('cycloneBurst');
-    expect(hp0 - enemyHp(d)).toBe(11);
+    expect(hp0 - enemyHp(d)).toBe(10);
     for (const c of bottoms) expect(zoneOf(d.state, c.uniqueID)).toBe('hand');
   });
 
@@ -411,7 +411,7 @@ describe('回旋斩系列：牌库末抽牌', () => {
 });
 
 describe('飞刀系列：邻牌献祭', () => {
-  it('飞刀：顽固需两侧有牌；12伤害并弃两侧', () => {
+  it('飞刀：顽固需两侧有牌；14伤害并弃两侧', () => {
     const d = new BattleDriver({ deck: ['flyingDagger', 'punch', 'guard', 'punch'], enemies: [tank()], seed: 5 });
     d.start();
     toHand(d, 'flyingDagger');
@@ -419,7 +419,7 @@ describe('飞刀系列：邻牌献祭', () => {
     const [left, right] = [d.state.zones.hand[0], d.state.zones.hand[2]];
     const hp0 = enemyHp(d);
     d.play('flyingDagger');
-    expect(hp0 - enemyHp(d)).toBe(12);
+    expect(hp0 - enemyHp(d)).toBe(14);
     expect(zoneOf(d.state, left.uniqueID)).toBe('deck');
     expect(zoneOf(d.state, right.uniqueID)).toBe('deck');
     expect(fd.currentCooldown).toBe(1);            // 冷却1
@@ -437,8 +437,8 @@ describe('飞刀系列：邻牌献祭', () => {
     expect(canUseSkill(d.ctx, fd)).toBe(true);    // 两侧有牌
   });
 
-  it('强力飞刀 20 / 绝灭飞刀 32 伤害', () => {
-    for (const [id, dmg] of [['heavyDagger', 20], ['annihilateDagger', 32]]) {
+  it('强力飞刀 22 / 绝灭飞刀 32 伤害', () => {
+    for (const [id, dmg] of [['heavyDagger', 22], ['annihilateDagger', 32]]) {
       const d = new BattleDriver({ deck: [id, 'punch', 'guard', 'punch'], enemies: [tank()], seed: 5 });
       d.start();
       toHand(d, id);
@@ -640,13 +640,13 @@ describe('培植系列：养刀（power 漂移）', () => {
     expect(blade.power).toBe(3);                          // 刀法牌 +3
     expect(punch.power).toBe(0);                          // 非刀法不动
     expect(d.state.zones.hand.some(c => c.defId === 'honeBlade' && c.isActivated)).toBe(true);
-    // power 已入算式：回旋斩 7 + 3 = 10
+    // power 已入算式：回旋斩 10 + 3 = 13（2026-09-13 稿：回旋斩 7→10）
     const rt = d.state.zones.hand.find(c => c.defId === 'cycloneSlash');
     rt.remainingUses = 1;
     rt.currentCooldown = 0;
     const hp0 = enemyHp(d);
     d.play(rt.uniqueID);
-    expect(hp0 - enemyHp(d)).toBe(10);
+    expect(hp0 - enemyHp(d)).toBe(13);
   });
 
   it('锻刀术：咏唱1，打出刀法牌时**所有**刀法牌+1（手牌与牌库都吃；2026-09-12 稿）', () => {
@@ -824,7 +824,7 @@ describe('开刃系列：斩进阶', () => {
     expect(zoneOf(d.state, findCard(d, 'practiceBlade').uniqueID)).toBe('deck');
   });
 
-  it('练刀 B 阶（练刀·大师）：0AP，且强化量为 +5', () => {
+  it('练刀 B 阶（练刀·大师）：0AP，强化量 +6（与 C 同量；B 的跃迁在费用）', () => {
     const d = new BattleDriver({
       deck: ['practiceBladeMaster', 'cycloneSlash', 'punch', 'punch'],
       enemies: [tank()], seed: 5, config: { initialDraw: 3 },
@@ -833,7 +833,7 @@ describe('开刃系列：斩进阶', () => {
     const slash = toHand(d, 'cycloneSlash');
     expect(getSkillDefinition('practiceBladeMaster').cost.actionPoint).toBe(0);
     d.play('practiceBladeMaster');
-    expect(slash.power).toBe(5);
+    expect(slash.power).toBe(6);
   });
 
   it('铁雨：打出手中所有碎铁（逐张嵌套出牌）', () => {
@@ -893,7 +893,10 @@ describe('刀法咏唱：抽弃循环', () => {
     d.play('bladeHeart');
     d.endTurn();
     expect(d.pendingInput?.request.kind).toBe('selectCards');
-    expect(d.pendingInput.request.count).toBe(2);
+    // 请求形状统一为 min/max（旧 count 口径已废）＋多选自动进覆盖层，见 cardKit 注释
+    expect(d.pendingInput.request.min).toBe(2);
+    expect(d.pendingInput.request.max).toBe(2);
+    expect(d.pendingInput.request.picker).toBe('overlay');
     const victims = d.state.zones.hand.filter(c => c.uniqueID !== heart.uniqueID).slice(0, 2);
     d.respond(victims.map(c => c.uniqueID));
     for (const v of victims) expect(zoneOf(d.state, v.uniqueID)).toBe('deck');

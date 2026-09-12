@@ -68,7 +68,7 @@ function buildRun() {
     r.storyMode = opt('story', '0') === '1';
     r.player.money = Number(opt('money', '20'));
     ensureShopStock(r);
-    roomUi = { slot: { anim: null, lastSpin: null }, eventResult: null };
+    roomUi = { slot: { anim: null, lastSpin: null } };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
     // 进阶事件：进 ascension 阶段；?offering=1 直接走到种子包（火灵脉首次 0→1）
@@ -151,7 +151,7 @@ mapStage.setPanelIntentHandler((intent) => {
       else if (a === 'slotDevourRelic') devourSlot(run, { kind: 'relic', relicId: intent.relicId });
       else if (a === 'slotDevourCard') devourSlot(run, { kind: 'card', uniqueID: intent.uniqueID });
       else if (a === 'leaveSlot') completeRoom(run);
-      else if (a === 'triggerEvent') roomUi.eventResult = playEvent(run);
+      else if (a === 'triggerEvent') playEvent(run);
       else if (a === 'buyShopItem') buyShopItem(run, intent.index);
       else if (a === 'takeShopCard') takeShopCard(run, intent.defId);
       else if (a === 'leaveEvent') completeRoom(run);

@@ -24,6 +24,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     rewards: null,               // 战后奖励 { money, skillChoices, chosenSkill }（reward 阶段，rewards.js 填充/清空）
     currentRoom: null,           // 当前奖励房类型（'training'|'slot'|'camp'|'event'）
     roomData: null,              // 当前奖励房临时数据（如训练抓牌候选；离房时清空）
+    eventFlags: {},              // 剧情旗标（事件内容用 setFlag 写；故事模式的分支记忆，随存档留存）
     pendingCardRemoval: 0,       // 待使用的删卡机会（Boss 奖励，§2.1）
     relicUses: {},               // 主动遗物剩余次数 { relicId: uses }（§4.5）
     shop: null,                  // 售货机当层货架 { floor, discount, items[] }（SHOP.md §一；非商店层为 null）

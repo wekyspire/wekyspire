@@ -464,20 +464,22 @@ registerSkill({
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
 
-// 肾上腺素（体修套牌 C）：0 开销消耗卡——获得 1AP 并抽 1 牌。应急节奏阀，
-// 消耗属性保证不沉淀循环（打出即焚，套牌越打越薄）。
+// 肾上腺素（体修套牌 C，2026-09-13 稿）：0 开销消耗卡——获得 1AP 并抽 **2** 牌（原抽 1）。
+// 应急节奏阀，消耗属性保证不沉淀循环（打出即焚，套牌越打越薄）。
+// **兼列通用卡**（`pack: 'common'`，见 COMMON_CARDS.md）：体修基础能力白送 1 张（在起始卡组里），
+// 之后可经通用注入再抽到——基础能力「获得1张额外肾上腺素」里的"额外"指的就是这张。
 registerSkill({
-  id: 'adrenaline', name: '肾上腺素', type: 'normal', tier: 'C', series: 'fist',
+  id: 'adrenaline', name: '肾上腺素', type: 'normal', pack: 'common', tier: 'C', series: 'fist',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   keywords: ['exhaust'],
   use(sctx) {
     sctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }));
-    drawCards(sctx, 1);
+    drawCards(sctx, 2);
     return true;
   },
-  describe: () => '获得1行动点，抽1牌',
+  describe: () => '获得1行动点，抽2牌',
 });
 
 // 情况不对（起始套牌泛用保险 D）：固有消耗卡——弃全手牌抽等量，鬼抽时的整体重调。

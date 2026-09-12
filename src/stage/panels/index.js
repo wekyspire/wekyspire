@@ -766,22 +766,27 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
       text: '瑞米：“上次逃得太狼狈了，嘿嘿……忘记补货了……”',
     });
   }
-  for (const it of shop.items) {
-    const tag = it.kind === 'relic' ? '[遗物]' : it.kind === 'pack' ? '[卡包]' : it.kind === 'apple' ? '[苹果]' : '[补给]';
-    w.push({
-      kind: 'text', align: 'center',
-      tint: it.sold ? '#5d6584' : (it.affordable ? undefined : '#8a6a6a'),
-      text: `${tag} ${it.label} ｜ ${it.price} 金` + (it.sold ? '（已售出）' : ''),
-      // 遗物货 hover 出效果预览（买之前能看清是什么）
-      ...(it.relicId ? { token: { type: 'relic', payload: { relicId: it.relicId } } } : {}),
-    });
-    if (!it.sold && buttons) {
+  // 商品**已经在 3D 货柜里**（billboard + 价签，可直接点买）——场景版（dock 操纵条）不再把
+  // 货柜内容复述一遍列表（用户 2026-09-13 报："下方UI又把货柜内的物品描述了一遍，很蠢"）。
+  // 只有无场景的占位版（standalone，眼前没有 3D 货架）才需要列表 + 购买按钮作为唯一入口。
+  if (buttons) {
+    for (const it of shop.items) {
+      const tag = it.kind === 'relic' ? '[遗物]' : it.kind === 'pack' ? '[卡包]' : it.kind === 'apple' ? '[苹果]' : '[补给]';
       w.push({
-        kind: 'button', id: `shop:buy:${it.index}`, width: 240, size: 'sub',
-        label: it.affordable ? `购买（${it.price} 金）` : '金币不足',
-        enabled: it.affordable,
-        action: { action: 'buyShopItem', index: it.index },
+        kind: 'text', align: 'center',
+        tint: it.sold ? '#5d6584' : (it.affordable ? undefined : '#8a6a6a'),
+        text: `${tag} ${it.label} ｜ ${it.price} 金` + (it.sold ? '（已售出）' : ''),
+        // 遗物货 hover 出效果预览（买之前能看清是什么）
+        ...(it.relicId ? { token: { type: 'relic', payload: { relicId: it.relicId } } } : {}),
       });
+      if (!it.sold) {
+        w.push({
+          kind: 'button', id: `shop:buy:${it.index}`, width: 240, size: 'sub',
+          label: it.affordable ? `购买（${it.price} 金）` : '金币不足',
+          enabled: it.affordable,
+          action: { action: 'buyShopItem', index: it.index },
+        });
+      }
     }
   }
   w.push({ kind: 'gap' });

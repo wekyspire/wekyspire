@@ -35,6 +35,8 @@ import {
   takeSlotGift, SLOT_GIFTS,
 } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
+import { createRunContext } from '../core/run/runContext.js';
+import { createRunPresenter, showcaseItemOf } from './runPresenter.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
   chooseAscension, ascensionReady, LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
@@ -124,6 +126,7 @@ function restoreFromSave(run, save) {
   };
   Object.assign(run.remi, save.remi);
   run.pendingCardRemoval = save.pendingCardRemoval;
+  run.eventFlags = { ...(save.eventFlags ?? {}) }; // 旧档无此字段 → 空旗标
   run.relicUses = { ...save.relicUses };
   run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;
   run.shopPending = save.shopPending ? { ...save.shopPending, choices: [...save.shopPending.choices] } : null;
@@ -168,10 +171,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
-  // 房间层舞台侧瞬态（不进 core run）：老虎机演出播放态 + 事件结算结果。
+  // 房间层舞台侧瞬态（不进 core run）：老虎机演出播放态。
   // 面板快照经 panelExtras() 一并下行（roomSnapshot 的 extra 入参）。
   const slot = reactive({ lastSpin: null, anim: null }); // anim: { id, prize } 播放中（roll 动画）
-  const eventRoom = reactive({ result: null });
+  // run 级表现上下文：core 内容（事件/剧情）想演出就走它声明意图（见 runPresenter.js）。
+  // presenter 只排队，由 flushRunPresentations() 在安全时机（揭幕后）统一播。
+  const runPresenter = createRunPresenter();
+  const runCtx = createRunContext(run, { presenter: runPresenter });
   let battleStage = null;
   let roomStage = null;   // 场景式休息房舞台（仅 gameStage==='room' 且有配方时存在）
   const log = reactive([]);  // 战斗日志（Shell 展示用）
@@ -211,8 +217,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage?.statusBar.setPlayerHp(run.player.hp, run.player.maxHp);
     battleStage?.statusBar.setRemi(remiView());
   };
-  // 面板快照的舞台侧瞬态：老虎机演出播放态与事件结果不在 core run 里（见 roomSnapshot 注释）
-  const panelExtras = () => ({ slot, eventResult: eventRoom.result });
+  // 面板快照的舞台侧瞬态：老虎机演出播放态不在 core run 里（见 roomSnapshot 注释）
+  const panelExtras = () => ({ slot });
   // ---- 获得遗物特写（用户定 2026-09-12）----
   // 遗物获取路径很多（奖励选包 / 商店货架 / 老虎机奖品 / 古尔帕斯 / 事件…），逐个接线必漏；
   // 这里统一在 notify 那一拍做**拥有集差分**：动作跑完后多出来的遗物 = 刚到手，播一次特写
@@ -397,7 +403,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     chooseSkillReward(run, defId);
     completeRewards(run);
     if (run.gameStage === 'room') {
-      slot.lastSpin = null; slot.anim = null; eventRoom.result = null; // 进新房清上一房瞬态
+      slot.lastSpin = null; slot.anim = null; // 进新房清上一房瞬态
       // 将要用幕间/房间场景呈现的房间：先置"待呈现"，notify 与切幕之间塔楼层不再铺房间面板
       if (run.currentRoom === 'event' || restRecipeFor(run.currentRoom)) roomScenePending = true;
     }
@@ -574,6 +580,16 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     demonFuse = setTimeout(() => { demonFuse = null; showDemonReward(); }, 6000);
     return res;
   }
+  /**
+   * 词条附赠的"**立马**做一件事"（浑浑噩噩=免费升级一张 / 忘却=自选焚毁一张）：
+   * 演出播完直接开全屏选卡界面——不再要求玩家回头去银行机面板里点那个按钮。
+   * 关掉选卡界面不消费 offer（面板里的按钮仍在，可稍后再来）。
+   */
+  function openBankOfferPicker() {
+    const offer = run.bank?.offers?.[0] ?? null;
+    if (offer === 'upgrade') panelStage()?.openUpgradePicker?.('bankUpgrade');
+    else if (offer === 'burn') panelStage()?.openUpgradePicker?.('bankBurn');
+  }
   /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
    *  金币那拍**不再写"代价：xxx"**（用户定 2026-09-13：上一拍刚演过，纯冗余）。 */
   function showDemonReward() {
@@ -596,6 +612,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         artKey: 'gold',   // 无素材时组件烘"金币堆"占位（用户要的观感）
         tint: 0xffd75e,
         autoDismissMs: 1700,
+        // 两拍都演完 → 有"立马做一件事"的附赠就直接开选卡界面（用户定 2026-09-13）
+        onDismiss: openBankOfferPicker,
       }),
     });
   }
@@ -895,12 +913,18 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 用户 2026-09-12 报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
   // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
   let eventPlaying = false;
+  /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
+  function flushRunPresentations() {
+    for (const intent of runPresenter.drain()) {
+      panelStage()?.showcaseItem?.(showcaseItemOf(intent));
+    }
+  }
   async function playEventScene() {
     if (run.gameStage !== 'room' || run.currentRoom !== 'event') return false;
     if (eventPlaying || run.roomData?.eventResolved) return false;
     eventPlaying = true;
     try {
-      const view = eventView(run);              // 确定性抽事件（记进 roomData，重绘不重抽）
+      const view = eventView(run, runCtx);      // 确定性抽事件（记进 roomData，重绘不重抽）
       const bg = eventArtUrlNamed(view.art ?? view.id, view.name);
       let res = null;
       await cutscene.play({
@@ -912,36 +936,28 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
               ...view.pages,
               { speaker: view.name, text: '你要怎么做？', choices: view.choices },
             ],
-            onChoice: (id) => { res = resolveEvent(run, id); },   // 同步结算（选完即落账）
+            // 同步结算（选完即落账）：效果由事件内容**主动施加**（core/run/runEffects.js），
+            // 这里拿到的只有结果页与一份"发生了什么"的流水——Shell 不解释效果。
+            onChoice: (id) => { res = resolveEvent(run, id, runCtx); },
           },
         ],
       });
       notify();                                 // 金币/生命变化先反映到塔楼状态栏
       if (!res) return false;                   // 没选就退出（异常路径：不结算也不离房）
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: res.pages }] });
-      eventRoom.result = res;
       // 退出切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
       // 黑幕盖住 → 阶段迁移 + 塔楼刷新 → 揭幕；获得演出排在揭幕之后（不然会被黑幕吞掉半截）。
       await exitSceneAfterCutscene(() => { completeRoom(run); notify(); });
-      if (res.money > 0) {
-        // 获得演出：事件给的钱也要"到手那一拍"（用户定 2026-09-12：大多时候获得都该走获得演出，
-        // 否则只是面板上的数字悄悄变了，没有获得感）。治疗类不打断叙事，故只给金币播。
-        panelStage()?.showcaseItem?.({
-          title: `+${res.money} 金币`,
-          desc: `事件 · ${view.name}`,
-          effect: '金币已经落进你的钱袋（关闭后继续行程）',
-          artKey: 'gold',
-          tint: 0xffd75e,
-        });
-      }
+      flushRunPresentations();                  // 揭幕后播"到手那一拍"（内容在选中的那一拍声明的）
       return true;
     } catch (err) {
       // 兜底：幕间出问题也不能把玩家卡在事件房里（用默认选项结算后离房）
       console.warn('[event]', err?.message ?? err);
       try {
-        if (!run.roomData?.eventResolved) resolveEvent(run, eventView(run).choices[0]?.id ?? null);
+        if (!run.roomData?.eventResolved) resolveEvent(run, eventView(run, runCtx).choices[0]?.id ?? null, runCtx);
         if (run.gameStage === 'room') completeRoom(run);
       } catch { /* 已经结算过/已离房：忽略 */ }
+      runPresenter.clear();                     // 异常路径不补演出
       notify();
       return false;
     } finally {
@@ -1123,11 +1139,12 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage = null;
     roomStage?.dispose();
     roomStage = null;
+    runPresenter.clear();   // 挂起的表现意图属于这一局：离局即弃
     runSequencer.cancelAll();
   }
 
   return {
-    run, runBus, log, slot, eventRoom, cutscene,
+    run, runBus, log, slot, cutscene, runCtx,
     sceneWipe,                      // 幕间切幕器（独立一层，App.vue 的 SceneWipeOverlay 渲染）
     sequencer: runSequencer, animBus, dispose,
     LEINO_DIMENSIONS, SLOT,
@@ -1156,8 +1173,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     campChoose, leaveRoom, bankDo, gurpasDo, spin, reportSlotAnimDone, leaveSlot, triggerEvent, leaveEvent,
     playEventScene,                 // 显式播事件幕间（正常路径由进房自动触发；幂等）
     enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）
-    eventView: () => eventView(run),                 // 事件读取（内容与逻辑在 core；测试/调试可用）
-    resolveEvent: (id) => resolveEvent(run, id),     // 事件结算（只允许一次）
+    eventView: () => eventView(run, runCtx),                 // 事件读取（内容与逻辑在 core；测试/调试可用）
+    resolveEvent: (id) => resolveEvent(run, id, runCtx),     // 事件结算（只允许一次；效果由内容主动施加）
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
     playAscensionScene,             // 进阶幕间（正常路径由 leaveRoom 接棒；调试/测试可用）
     equip, unequip, useRelic,

@@ -106,8 +106,9 @@
   * 深入分支：**拔刀术**，反转斩系列卡牌特性，令其在手中冷却，在牌库中衰败。【未实现】
 * 咏唱：**刀法**系列回合开始时抽并自选2牌丢弃。【未实现】
   * 深入分支：**刃心**系列能自由切换手牌牌序。【未实现】
-* 精英能力：**刀客**，换卡开销不超过3。【已验证·原型：swapCostCap=3，test/swapCard.test.js】
-* 大师能力：**刀圣**，换卡开销不超过2。【已验证·同刀客 cap 机制，test/swapCard.test.js】
+* 精英能力：**刀客**，换卡开销不超过 1。【已实现：`content/abilities.js` bladeMaster（onBattleStart 设 `swapCostCap`）】
+* 大师能力：**刀圣**，每打出一张刀法牌抽 1。【已实现：`content/abilities.js` bladeSaint（UseSkillInstruction post 订阅，isBladeCard 判据）】
+  * 数值以 `BODY_CULTIVATION_CARDS.md §2.5` 为准（2026-09-13 改：原「刀客 cap 3 / 刀圣 cap 2」已废——大师位改成抽牌引擎，不再叠费用上限）。
 #### 拆组合
 **格挡**
 拆组合和拳与刀联动，侧重防御、体系功能性补全，一般不在核心地位，但如果开发得当也能造成不俗的伤害。

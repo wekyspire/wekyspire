@@ -394,8 +394,11 @@ describe('遗物 tooltip：效果预览', () => {
       if (s?.shop?.items?.some(it => it.relicId)) snap = s;
     }
     expect(snap).toBeTruthy();
-    // 面板构建后遗物货行应带 token
-    const widgets = buildShopPanel(snap);
+    // 面板构建后遗物货行应带 token。
+    // ⚠ 只有**无场景的占位版**（standalone）才在面板里列商品；场景版（dock 操纵条）的商品
+    // 列表与 tooltip 都在 3D 货柜的 billboard 上（vendingMachineRig 的 tile token），
+    // 面板不再复述一遍（用户 2026-09-13 定）。
+    const widgets = buildShopPanel(snap, { standalone: true });
     const relicRow = widgets.find(w => w.token);
     expect(relicRow).toBeTruthy();
     expect(relicRow.token.payload.relicId).toBeTruthy();

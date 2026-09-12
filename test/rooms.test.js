@@ -8,7 +8,8 @@ import {
 import { chooseSkillReward } from '../src/core/run/rewards.js';
 import { CAMP_PLACEHOLDER, campOptions, campRest, campRecoverRemi, campUpgrade } from '../src/core/run/rooms/camp.js';
 import { SLOT, spinCost, spinSlot, takeSlotPrize } from '../src/core/run/rooms/slotMachine.js';
-import { EVENT_SCRIPTS, playEvent } from '../src/core/run/rooms/event.js';
+import { playEvent } from '../src/core/run/rooms/event.js';
+import { allEvents } from '../src/core/events/registry.js';
 
 // 测试用晋升链（本文件独立模块注册表）
 const noop = { use: () => true, describe: () => '测试卡' };
@@ -117,7 +118,7 @@ describe('老虎机（§4.2，权重占位）', () => {
 describe('事件房（§4 占位脚本）', () => {
   it('房间校验 + 事件确定性执行', () => {
     expect(() => playEvent(inRoom('camp'))).toThrow(/不在事件房/);
-    const known = EVENT_SCRIPTS.map(s => s.eventId ?? s.id);
+    const known = allEvents().map(s => s.id);
     for (let seed = 1; seed <= 10; seed++) {
       const run = inRoom('event', { seed });
       const money = run.player.money;

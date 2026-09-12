@@ -198,7 +198,6 @@ export class BattleStage {
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
     this._aiming = null;       // 选目标卡（targetMode 'enemy'/'ally'）瞄准中 { id, mode }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
-    this._inputSelection = [];
     // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
     // 战斗内「选卡牌集」覆盖层（request.picker === 'overlay'）：手牌来源接管既有实例，
     // 其它区来源按投影新建；见 _openPick/_closePick
@@ -271,6 +270,8 @@ export class BattleStage {
       this._buttons[key] = btn;
     }
     this._buttonSigs = {};
+    this._btnData = {};   // 每个按钮最近一次的数据（悬停态变化时据此重烘）
+    this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
     this._swapMode = false; // 换卡模式：点换卡按钮进入，手牌高亮，点一张手牌换出
     // ---- 战后奖励面板宿主（用户定 2026-09-12）----
     // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
@@ -846,8 +847,9 @@ export class BattleStage {
       enabled = n >= min && n <= max;   // 到 min 即可提交（「至多 N」的上限由收集侧封顶）
     } else if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
     else if (pending?.kind?.startsWith('select')) {
-      if ((pending.count ?? 1) > 1) { label = `确认(${this._inputSelection.length}/${pending.count})`; enabled = this._inputSelection.length === pending.count; }
-      else { label = '选择目标'; enabled = false; }
+      // 多选（max>1）一律走覆盖层（`_pick` 分支在上，见 _openPick）；落到这里的只可能是
+      // 单手牌点选 —— 无按钮语义，点牌即应答（min/max 是规范字段，勿再读已废弃的 count）
+      label = '选择目标'; enabled = false;
     }
     this._setButtonState('main', { label, enabled });
 
@@ -864,14 +866,20 @@ export class BattleStage {
     });
   }
 
-  // 按钮数据签名去抖：内容不变不重烘（牌面烘焙有 canvas 成本）
+  // 按钮数据/悬停签名去抖：内容不变不重烘（牌面烘焙有 canvas 成本）。
+  // `data` 缺省 = 复用上一次的数据（悬停态变化时只改 active，不必让调用方重算整套数据）。
   _setButtonState(key, data) {
-    const sig = JSON.stringify(data);
+    if (data) this._btnData[key] = data;
+    const base = this._btnData[key];
+    if (!base) return;
+    const hover = !!this._btnHover[key];
+    const sig = JSON.stringify({ ...base, hover });
     if (this._buttonSigs[key] === sig) return;
     this._buttonSigs[key] = sig;
     const btn = this._buttons[key];
-    btn.setCard(data);
-    btn.setVisualState(data.enabled ? 'normal' : 'disabled');
+    // 悬停 → 按钮面走 active 主题（与面板按钮 hover 同一条路）；disabled 主题优先，灰按钮不亮
+    btn.setCard({ ...base, active: !!base.active || hover });
+    btn.setVisualState(base.enabled ? 'normal' : 'disabled');
   }
 
   _setSwapMode(on) {
@@ -1635,6 +1643,7 @@ export class BattleStage {
     // 与手牌同链路），但屏蔽瞄准/拖拽等战斗交互
     if (this._viewer.opened) {
       const hit = this.picker.hover(x, y);
+      this._syncButtonHover(null);
       // 卡面 token（富文本/S 标）视作仍在悬浮所属卡：画廊抬升不中断（与手牌同语义）
       this._viewer.setHovered(this._viewer.ownsHit(hit) ? hit.id : null);
       this._setOverCard(hit);
@@ -1642,6 +1651,7 @@ export class BattleStage {
     }
     // 瞄准模式：卡留手牌不动，箭头从卡牌延伸到指针；掠过存活敌人 → 高亮 + 箭头变色
     if (this._aiming) {
+      this._syncButtonHover(null);
       const obj = this._views.get(this._aiming.id);
       if (!obj) { this._cancelAiming(); return; } // 卡在瞄准中离场（异常路径）：收尾
       const world = this._worldAt(x, y, ARROW_Z);
@@ -1653,6 +1663,7 @@ export class BattleStage {
       return;
     }
     if (this._dragging) {
+      this._syncButtonHover(null);
       const world = this._worldAt(x, y, 30); // 与拖拽卡同深（z=30），防透视视差
       const obj = this._views.get(this._dragging.id);
       if (obj) obj.position.set(world.x, world.y, 30);
@@ -1664,8 +1675,30 @@ export class BattleStage {
     }
     const hit = this.picker.hover(x, y);
     // 面板模态中（战后奖励）：hover 只给面板（背板之外的战场物件不再响应）
-    if (this._panel) { this._panel.onHover(hit); return; }
+    if (this._panel) { this._panel.onHover(hit); this._syncButtonHover(null); return; }
+    // 全屏选卡（战后删卡机会）：悬浮交它（候选卡抬起 + 卡面 hover）
+    if (this._cardPicker?.opened) { this._cardPicker.onHover?.(hit, x, y); this._syncButtonHover(null); return; }
+    this._syncButtonHover(hit);
     this._setOverCard(hit);
+  }
+
+  /**
+   * 战斗常驻按钮（结束回合 / 换卡）的悬停态。这两枚是**直接挂在舞台上**的 CardObject，
+   * 不像休息房面板按钮那样走 `PanelObject.onHover → ButtonObject.setHovered` —— 漏喂就完全
+   * 没有 hover 反馈（用户 2026-09-13 报"结束回合和换卡没有 hover 效果"）。悬停走按钮面的
+   * active 主题（淡蓝底），与整套 `bakeButtonFace` 按钮同一套语言；传 null 清空
+   * （模态/拖拽/瞄准期间不该留高亮）。
+   */
+  _syncButtonHover(hit) {
+    const id = hit?.kind === 'button' ? hit.id : null;
+    this._setButtonHover('main', id === 'btn:main');
+    this._setButtonHover('swap', id === 'btn:swap');
+  }
+
+  _setButtonHover(key, on) {
+    if (!!this._btnHover[key] === on) return;
+    this._btnHover[key] = on;
+    this._setButtonState(key);   // 用缓存的上一次数据重烘（hover 已进签名）
   }
 
   handlePointerDown(x, y) {
@@ -1803,7 +1836,6 @@ export class BattleStage {
       if (!this._buttons.main.cardData?.enabled) return;
       if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
-      else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
       else {
         // 结束回合（用户定 2026-09-12）：点完**立刻**上灰（不等 sync 节拍），直到下一回合
         // 开始；后端同步结算，所以动画积压期点也不会丢意图。下发失败（回合已过/终局）
@@ -1813,19 +1845,14 @@ export class BattleStage {
         if (!ok) this._endTurnRequested = false;
         this._syncButtons(this._snapshot);
       }
-      this._inputSelection = [];
       return;
     }
     if (hit.kind === 'card' && pending?.kind?.startsWith('select')) {
+      // 手牌单选：点牌即应答。多选不在这里（已由 _pick 覆盖层接管，见 _openPick——
+      // 「逐张累加再点确认」的私有通道已删，它只认旧 count 字段，是二重花刀卡死的根因）
       if (!pending.candidates || pending.candidates.includes(hit.id)) {
-        if ((pending.count ?? 1) === 1) {
-          this.bridge.interaction.respond([hit.id]);
-        } else {
-          const i = this._inputSelection.indexOf(hit.id);
-          if (i >= 0) this._inputSelection.splice(i, 1);
-          else if (this._inputSelection.length < pending.count) this._inputSelection.push(hit.id);
-          this.reconcile(); // 刷新按钮计数
-        }
+        const lo = pending.min ?? 1; const hi = pending.max ?? lo;
+        if (lo === 1 && hi === 1) this.bridge.interaction.respond([hit.id]);
       }
     }
   }

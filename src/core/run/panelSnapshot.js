@@ -172,10 +172,10 @@ export function ascensionSnapshot(run) {
 /**
  * 奖励房（房间层·模态面板）：训练场 / 营地 / 老虎机 / 事件房。
  *
- * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { anim, lastSpin }, eventResult }`。
- * 它们由 Shell 的 runController 持有（老虎机演出播放态 / 事件结算结果），核心拿不到——
+ * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { anim, lastSpin } }`。
+ * 它由 Shell 的 runController 持有（老虎机演出播放态），核心拿不到——
  * 但本函数仍是纯函数（只由入参决定输出，无副作用）。四房共用同一快照外壳：
- * `room` 决定形态，`training` / `camp` / `slot` / `event` 各带自己的载荷。
+ * `room` 决定形态，`training` / `camp` / `slot` 各带自己的载荷（事件房走幕间，无快照载荷）。
  */
 export function roomSnapshot(run, extra = {}) {
   const room = run.currentRoom;
@@ -321,13 +321,7 @@ export function roomSnapshot(run, extra = {}) {
     return snap;
   }
 
-  if (room === 'event') {
-    // 事件房：内容与结算都在 core（event.js），Shell 播幕间时自己取 eventView 播片——
-    // 这里只留"结果载荷"供调试/兜底观察（面板已不做事件交互，见 panels 的 event 分支）
-    snap.event = { result: extra.eventResult ?? null };
-    return snap;
-  }
-
+  // 事件房无面板载荷：Shell 播幕间（cutscene），内容与效果都在 core（core/events + runEffects）
   return snap;
 }
 
