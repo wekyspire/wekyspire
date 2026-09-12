@@ -162,13 +162,15 @@ export class PanelObject extends THREE.Group {
         continue; // 组高已在此推进
       } else {
         // dock（场景式操纵条）：文字**统一白色**（读在 3D 场景上，彩色/灰字对比不够）；
-        // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText
+        // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText。
+        // 非 dock：标题白字、正文淡蓝灰（用户定 2026-09-12 的扁平风格——金色只留给金额等
+        // 金钱相关内容，由各面板显式给 tint 覆盖）。
         const dock = this.form === 'dock';
         const f = g.font ?? { title: 20, sub: 13, text: 15 };
         const text = new TextBlockObject({
           bakeText: this._bakeText,
           fontPx: w.kind === 'title' ? f.title : (w.kind === 'sub' ? f.sub : f.text),
-          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#ffd75e' : '#cdd6f4')),
+          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#e8eefb' : '#c3cee0')),
         });
         text.setText(w.text ?? '', { maxWidth: innerW });
         // 等比收进行框：烘焙高度由字号决定（fontPx×1.4），可能高于行高，不收敛会压到下一行

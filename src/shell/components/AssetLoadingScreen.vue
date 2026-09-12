@@ -1,48 +1,109 @@
 <script setup>
 // 菜单层顶层加载界面：全量美术预载（assetManifest.preloadAllArt）的进度门。
-// App.vue 在预载完成前渲染本组件并扣住开始界面——加载没完成进不了开始界面。
+// App.vue 在预载**全部成功**前渲染本组件并扣住开始界面。
+// ⚠ 失败不放行（用户定 2026-09-12）：终止下载/断网导致 onerror 时，进度**卡住**并给出
+// 失败提示与重试键——早期 onerror 只计数就 resolve，于是"掐掉下载也能进游戏"（缺图跑）。
 // position:fixed 锚定 #game-frame（transform 包含块），z-index 压过一切菜单级 UI。
+// 视觉：扁平（白字淡蓝按钮、细描边、小圆角）——与全局 UI 风格一致。
 import { computed } from 'vue';
 
 const props = defineProps({
-  // { loaded, total }：每张素材落定一次（App.vue 侧持有并透传）
+  // { loaded, total, loadedBytes, totalBytes, elapsedMs, failed }
   progress: { type: Object, default: () => ({ loaded: 0, total: 0 }) },
+  // 失败项数（>0 = 卡在加载界面，只给重试）
+  failed: { type: Number, default: 0 },
 });
+const emit = defineEmits(['retry']);
 
 const pct = computed(() =>
   props.progress.total > 0
     ? Math.round((props.progress.loaded / props.progress.total) * 100)
     : 0,
 );
+
+const fmtBytes = (n) => {
+  if (!n || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+};
+
+// 总大小 / 已下载（HEAD 探测拿到 Content-Length 才有值；拿不到退化为"按张数"）
+const sizeText = computed(() => {
+  const { loadedBytes = 0, totalBytes = 0 } = props.progress;
+  if (!totalBytes) return null;
+  return `${fmtBytes(loadedBytes)} / ${fmtBytes(totalBytes)}`;
+});
+// 平均网速（自开始预载起算；字节未知时为 null）
+const speedText = computed(() => {
+  const { loadedBytes = 0, elapsedMs = 0 } = props.progress;
+  if (!loadedBytes || elapsedMs < 300) return null;
+  const bps = loadedBytes / (elapsedMs / 1000);
+  if (bps < 1024) return `${bps.toFixed(0)} B/s`;
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
+  return `${(bps / 1024 / 1024).toFixed(1)} MB/s`;
+});
+// 剩余时间：优先按字节算；字节未知则按"张数 × 平均单张耗时"估算
+const etaText = computed(() => {
+  const { loaded = 0, total = 0, loadedBytes = 0, totalBytes = 0, elapsedMs = 0 } = props.progress;
+  if (elapsedMs < 500 || loaded >= total) return null;
+  let ms = null;
+  if (totalBytes > 0 && loadedBytes > 0) {
+    const speed = loadedBytes / elapsedMs;                 // bytes/ms
+    ms = speed > 0 ? (totalBytes - loadedBytes) / speed : null;
+  } else if (loaded > 0) {
+    ms = (elapsedMs / loaded) * (total - loaded);
+  }
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `约 ${s} 秒` : `约 ${Math.floor(s / 60)} 分 ${s % 60} 秒`;
+});
 </script>
 
 <template>
   <div class="asset-loading" role="status" aria-label="资源加载中">
     <div class="al-title">魏启尖塔</div>
     <div class="al-bar"><div class="al-fill" :style="{ width: pct + '%' }"></div></div>
-    <div class="al-text">加载美术资源… {{ progress.loaded }} / {{ progress.total }}</div>
+    <div class="al-text">
+      加载美术资源… {{ progress.loaded }} / {{ progress.total }}
+      <span v-if="sizeText"> ｜ {{ sizeText }}</span>
+    </div>
+    <div class="al-sub">
+      <span v-if="speedText">{{ speedText }}</span>
+      <span v-if="speedText && etaText"> ｜ </span>
+      <span v-if="etaText">剩余 {{ etaText }}</span>
+    </div>
+    <!-- 失败：不放行（用户定 2026-09-12——掐断下载不得进入游戏），给重试 -->
+    <div v-if="failed > 0" class="al-fail">
+      <div class="al-fail-text">资源加载失败 {{ failed }} 项——请检查网络后重试</div>
+      <button class="al-retry" type="button" @click="emit('retry')">重试</button>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .asset-loading {
   position: fixed; inset: 0; z-index: 100;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   background: #05070d;
   font-family: 'Microsoft YaHei', Arial, sans-serif;
 }
-.al-title {
-  font-size: 44px; letter-spacing: 10px; color: #ffe7b3;
-  text-shadow: 0 2px 14px rgba(255, 200, 100, .28);
-}
+.al-title { font-size: 44px; letter-spacing: 10px; color: #eef4ff; }
 .al-bar {
-  width: min(380px, 62%); height: 10px; border-radius: 5px;
-  background: #171d2e; border: 1px solid #2c3654; overflow: hidden;
+  width: min(380px, 62%); height: 8px; border-radius: 2px;
+  background: #131a29; border: 1px solid #2f3a52; overflow: hidden;
 }
 .al-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #5b9fe6, #8ecdf5);
+  height: 100%; background: #4d78ad;   /* 扁平：纯色填充（无渐变自发光） */
   transition: width .15s ease;
 }
-.al-text { font-size: 13px; color: #9aa3c0; letter-spacing: 1px; }
+.al-text { font-size: 13px; color: #c3cee0; letter-spacing: 1px; }
+.al-sub { font-size: 12px; color: #7d87a8; min-height: 16px; letter-spacing: .5px; }
+.al-fail { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 6px; }
+.al-fail-text { font-size: 13px; color: #ff8f88; }
+.al-retry {
+  padding: 6px 26px; font-size: 14px; cursor: pointer; border-radius: 4px;
+  background: rgba(16, 22, 34, .92); color: #eaf1fb; border: 1px solid #3f5f8c;
+}
+.al-retry:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
 </style>

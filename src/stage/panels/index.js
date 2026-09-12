@@ -14,7 +14,8 @@ const withLabels = (view) => (view
 
 // 灵脉维度的表现配置（配色/字槽）：core 只给 id 与等级，画成什么样属表现层。
 // 素材到位后把 glyph 换成美术图即可（与旧面板 .dim-icon「美术到位替换」同一处）。
-const DIM_META = {
+// 导出：进阶幕间（runController.playAscensionScene）的对话选项也用这份文案，两处不漂移。
+export const DIM_META = {
   fire: { label: '火灵脉', glyph: '炎', color: '#e85a5a' },
   wood: { label: '木灵脉', glyph: '木', color: '#4aa56e' },
   air: { label: '空灵脉', glyph: '风', color: '#5aa2e8' },
@@ -61,7 +62,7 @@ export function buildPrepPanel(snap) {
     const tag = r.rarity ? `${r.rarity}·${r.cost}槽` : `${r.cost}槽`;
     const suffix = r.equipped ? '（已装备）' : '';
     w.push({
-      kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#ffd75e' : undefined,
+      kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#cfe0f5' : undefined,
       token: { type: 'relic', payload: { relicId: r.id } }, // hover 出效果预览
     });
     if (r.equipped) {
@@ -279,7 +280,8 @@ export function buildRoomPanel(snap) {
 
   if (snap.room === 'training') {
     const t = snap.training ?? {};
-    // 候选抉择中（升级后的强制尾款 / 退化模式已开局）：差别只在有无跳过
+    // 候选抉择中（升级后的强制尾款 / 退化模式已开局）：**都不给跳过**（用户定 2026-09-12：
+    // 训练本身可以不做的——直接离开房间即可，面板里再放"跳过"是重复出口）
     if (t.choices?.length) {
       w.push({
         kind: 'sub', align: 'center', tint: '#9aa3b8',
@@ -292,20 +294,16 @@ export function buildRoomPanel(snap) {
           action: { action: 'trainingDraw', defId: c.defId },
         })),
       });
-      if (!t.forced) {
-        w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingDraw', defId: null } });
-      }
       return w;
     }
     if (t.mode === 'upgrade') {
       w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '免费升级一张卡（完成后须再择一张加入牌组）：' });
       w.push(upgradeButton('training'));
-      w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
+      w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（不想训练就直接离开房间）' });
       return w;
     }
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '暂无可升级的卡牌，本次改为抓一张（可跳过）。' });
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '暂无可升级的卡牌，本次改为抓一张。' });
     w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌', action: { action: 'trainingDrawRoll' } });
-    w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
     return w;
   }
 
@@ -340,7 +338,7 @@ export function buildRoomPanel(snap) {
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: `持有 ${g.money} 金币 ｜ 她只收 A/S 级遗物` });
     // 买到即开的卡包：优先占屏（三选一）
     if (g.pendingPackCards?.length) {
-      w.push({ kind: 'sub', align: 'center', tint: '#ffd75e', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
+      w.push({ kind: 'sub', align: 'center', tint: '#cfe0f5', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
       w.push({
         kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
         items: g.pendingPackCards.map(c => ({
@@ -438,7 +436,7 @@ function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     const pd = s.pending;
     if (pd) {
       w.push({ kind: 'gap' });
-      w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#ffd75e' : '#cdd6f4',
+      w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#e8eefb' : '#c3cee0',
         text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
       if (pd.relicChoices?.length) {
         for (const r of pd.relicChoices) {
@@ -465,17 +463,12 @@ function slotWidgets(w, snap, { sceneChoice = false } = {}) {
           action: { action: 'openUpgradePicker', source: 'slot', local: true },
         });
       }
-      // 需要"选一个"的产出不给领取键（点候选即领取）；其余给 领取/放弃
-      const needsPick = (pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0;
-      if (!needsPick) {
-        w.push({
-          kind: 'button', id: 'slot:take', width: 220, size: 'sub', label: '领取',
-          action: { action: 'slotTake' },
-        });
-      }
+      // 需要"选一个"的产出不给领取键（点候选即领取）；**其余产出也不给"领取"键**——
+      // 中奖即自动唤起获得演出（用户定 2026-09-12：领取必须是获得演出，不是操纵条里一个
+      // 干巴巴的按钮）。这里只留「放弃」兜底（演出被跳过/已关闭时仍能处理掉这份产出）。
       w.push({
         kind: 'button', id: 'slot:decline', width: 220, size: 'sub',
-        label: needsPick ? '全部放弃' : '放弃',
+        label: (pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0 ? '全部放弃' : '放弃',
         action: { action: 'slotDecline' },
       });
       return w;
@@ -483,7 +476,7 @@ function slotWidgets(w, snap, { sceneChoice = false } = {}) {
 
     if (s.needsCardPick) {
       w.push({ kind: 'gap' });
-      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: '免费指定升级：请选择一张卡' });
+      w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: '免费指定升级：请选择一张卡' });
       w.push({
         kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
         label: '选择要免费升级的卡',
@@ -495,7 +488,7 @@ function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     if (s.spinning) {
       w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '🎰 …' });
     } else if (s.lastSpin) {
-      w.push({ kind: 'text', align: 'center', tint: '#ffd75e', text: slotPrizeText(s.lastSpin) });
+      w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: slotPrizeText(s.lastSpin) });
     }
     w.push({
       kind: 'button', id: 'slot:spin', width: 260, size: 'main',
@@ -545,7 +538,7 @@ function demonRollWidgets(w, pr, sceneChoice) {
   w.push({ kind: 'gap' });
   w.push({ kind: 'title', text: '😈 恶魔 roll', align: 'center' });
   w.push({
-    kind: 'sub', align: 'center', tint: '#c9a86a',
+    kind: 'sub', align: 'center', tint: '#cfe0f5',
     text: `超额取款已入账 ${pr.gold} 金——${sceneChoice ? '在老虎机上点一张卡片' : ''}选一个词条承受：`,
   });
   for (const o of pr.options) {
@@ -652,31 +645,28 @@ export function buildBankPanel(snap, opts = {}) {
 function trainingWidgets(w, snap) {
   const t = snap.training ?? {};
   if (t.choices?.length) {
-      w.push({
-        kind: 'sub', align: 'center', tint: '#9aa3b8',
-        text: t.forced ? '升级完成！必须择一张加入牌组：' : '择一张加入牌组：',
-      });
-      w.push({
-        kind: 'cards', idPrefix: 'train', cols: 3, scale: 0.8,
-        items: t.choicesCards.map(x => ({
-          defId: x.defId, view: withLabels(x.view),
-          action: { action: 'trainingDraw', defId: x.defId },
-        })),
-      });
-      if (!t.forced) {
-        w.push({ kind: 'button', id: 'train:skip', label: '跳过', width: 220, size: 'sub', action: { action: 'trainingDraw', defId: null } });
-      }
-    } else if (!t.done && t.mode === 'upgrade') {
-      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：免费升级一张卡（完成后须再择一张加入牌组）：' });
-      w.push(upgradeButton('training'));
-      w.push({ kind: 'button', id: 'train:skip', label: '跳过训练', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
-    } else if (!t.done) {
-      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：暂无可升级的卡牌，改为抓一张（可跳过）。' });
-      w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌', action: { action: 'trainingDrawRoll' } });
-      w.push({ kind: 'button', id: 'train:skip', label: '跳过训练', width: 220, size: 'sub', action: { action: 'trainingSkip' } });
-    } else {
-      w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练部分：本房已完成' });
-    }
+    w.push({
+      kind: 'sub', align: 'center', tint: '#9aa3b8',
+      text: t.forced ? '升级完成！必须择一张加入牌组：' : '择一张加入牌组：',
+    });
+    w.push({
+      kind: 'cards', idPrefix: 'train', cols: 3, scale: 0.8,
+      items: t.choicesCards.map(x => ({
+        defId: x.defId, view: withLabels(x.view),
+        action: { action: 'trainingDraw', defId: x.defId },
+      })),
+    });
+  } else if (!t.done && t.mode === 'upgrade') {
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：免费升级一张卡（完成后须再择一张加入牌组）：' });
+    w.push(upgradeButton('training'));
+    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（不想训练就直接点「继续前进」离开）' });
+  } else if (!t.done) {
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练：暂无可升级的卡牌，改为抓一张。' });
+    w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌', action: { action: 'trainingDrawRoll' } });
+    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（不想训练就直接点「继续前进」离开）' });
+  } else {
+    w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练部分：本房已完成' });
+  }
 }
 
 /** 营地部分（休整 / 找回瑞米 / 免费升级一张）：占位房间与场景式房间共用。 */
@@ -692,6 +682,24 @@ export function buildCampPanel(snap) {
   const w = [];
   roomHeader(w, snap, '🔥 营地');
   campWidgets(w, snap);
+  return w;
+}
+
+/**
+ * **场景式房间：点篝火开的面板**（用户定 2026-09-12）——只有营地部分。
+ * 与训练桩的面板（buildTrainingPartPanel）**必须区分开**：两件交互物各管半边，
+ * 点哪件处理哪半边（早期两件都开合并面板 = 交互物形同虚设，用户报"点了没区别"）。
+ */
+export function buildCampPartPanel(snap) {
+  const w = [];
+  campWidgets(w, snap);
+  return w;
+}
+
+/** **场景式房间：点训练桩开的面板**——只有训练部分。 */
+export function buildTrainingPartPanel(snap) {
+  const w = [];
+  trainingWidgets(w, snap);
   return w;
 }
 
@@ -734,16 +742,15 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   const shop = snap.shop ?? { items: [], pending: null };
   const w = [];
 
-  // 卡包三选一（买到即开，金币已扣）：必须选一张才收尾
+  // 卡包三选一（买到即开，金币已扣）：**走全屏选卡 overlay**（用户定 2026-09-12：
+  // "不要塞在操纵条里"），操纵条只留一个兜底入口（overlay 已自动打开，这里是安全阀）。
+  // 三选一**可放弃**：overlay 的「返回」= 放弃这个卡包（钱已花，选择权在你）。
   if (shop.pending) {
     w.push({ kind: 'title', text: `卡包 · ${shop.pending.packId}`, align: 'center' });
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组：' });
+    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组（不想要就放弃）' });
     w.push({
-      kind: 'cards', idPrefix: 'shopPack', cols: 3, scale: 0.8,
-      items: shop.pending.cards.map(c => ({
-        defId: c.defId, view: withLabels(c.view),
-        action: { action: 'takeShopCard', defId: c.defId },
-      })),
+      kind: 'button', id: 'shop:openPack', width: 300, size: 'main',
+      label: '打开卡包选择', action: { action: 'openShopPack', local: true },
     });
     return w;
   }
@@ -759,7 +766,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   // 把货架挤到操纵条下面去；占位版（standalone）没有 3D 货架，才需要按钮。
   w.push({
     kind: 'sub', align: 'center', tint: '#77809a',
-    text: buttons ? '选择要买的商品：' : '点击货架上的商品直接购买（买不起的价格标红）',
+    text: buttons ? '选择要买的商品：' : '点击货架上的商品直接购买（买不起的价格标红）｜点面板外可拉远',
   });
   if (shop.broken) {
     w.push({
@@ -786,12 +793,11 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     }
   }
   w.push({ kind: 'gap' });
-  w.push(standalone
-    ? { kind: 'button', id: 'shop:leaveRoom', width: 220, size: 'sub', label: '离开', action: { action: 'leaveRoom' } }
-    : {
-      kind: 'button', id: 'shop:leave', width: 220, size: 'sub', label: '离开售货机',
-      action: { action: 'closeShop', local: true },
-    });
+  if (standalone) {
+    w.push({ kind: 'button', id: 'shop:leaveRoom', width: 220, size: 'sub', label: '离开', action: { action: 'leaveRoom' } });
+  }
+  // 场景版（dock 操纵条）：**不给「离开售货机/返回房间」按钮**——点面板外的房间空白处
+  // 即拉远回全景（与所有机器面板同一套退出口，用户定 2026-09-12）
   return w;
 }
 

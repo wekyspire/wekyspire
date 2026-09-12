@@ -109,7 +109,7 @@ export class ScrollPickerObject extends THREE.Group {
       new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.9 }),
     ), { y: UI_CAMERA_LOOK_AT_Y, z: Z.BACKDROP });
 
-    this._addText(title, { y: LAYOUT.titleY, fontPx: 22, tint: '#ffd75e', center: true });
+    this._addText(title, { y: LAYOUT.titleY, fontPx: 22, tint: '#e8eefb', center: true });
     if (hint) this._addText(hint, { y: LAYOUT.hintY, fontPx: 13, tint: '#9aa3b8', center: true });
 
     // ---- 候选网格（先排位，再按滚动位置摆） ----
@@ -275,7 +275,7 @@ export class ScrollPickerObject extends THREE.Group {
     };
     this._bar.thumb = this._addNode(new THREE.Mesh(
       new THREE.PlaneGeometry(LAYOUT.barW + 0.28, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffd75e, transparent: true, opacity: 0.45 }),
+      new THREE.MeshBasicMaterial({ color: 0x7fa9d4, transparent: true, opacity: 0.5 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
   }

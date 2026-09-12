@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import '../src/core/content/index.js'; // 注册全部内容（含 commonSkills 纳气卡）
 import { BattleDriver } from '../src/core/sdk/driver.js';
 import { getEnemyDefinition } from '../src/core/enemies/registry.js';
+import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { zoneOf, moveCard } from '../src/core/state/battleState.js';
 import { canUseSkill } from '../src/core/skills/helpers.js';
 import { AddEffectInstruction } from '../src/core/instructions/effects.js';
@@ -187,3 +188,48 @@ describe('新散卡（2026-09 稿）：早有防备 / 盼盼小面包 / 午休',
     expect(enemy.getEffectStacks('stun')).toBe(0);    // 跳过行动消耗 1 层
   });
 });
+
+describe('高速魏启罐系列（2026-09-12 设计稿新增）：即时回蓝', () => {
+  it('高速魏启罐（B）：打出立刻获得 2 魏启（纳气是下回合整取，这张是当场到账）', () => {
+    const d = new BattleDriver({ deck: ['swiftManaJar', 'punch'], enemies: [tank()], seed: 5, player: { maxMana: 5 } });
+    d.start();
+    d.player.mana = 0;
+    d.play('swiftManaJar');
+    expect(d.player.mana).toBe(2);
+    expect(d.state.zones.burnt.some(c => c.defId === 'swiftManaJar')).toBe(true);   // 消耗
+  });
+
+  it('高速大魏启罐（A）：获得 4 魏启；仍受上限截断', () => {
+    const d = new BattleDriver({ deck: ['swiftManaJarPlus', 'punch'], enemies: [tank()], seed: 5, player: { maxMana: 3 } });
+    d.start();
+    d.player.mana = 0;
+    d.play('swiftManaJarPlus');
+    expect(d.player.mana).toBe(3);   // 上限 3：4 点被截断
+  });
+});
+
+describe('HeLiCoPtEr（A，2026-09-12 设计稿新增）', () => {
+  it('将所有手牌变换为 0 开销强力肘击，且变形后立刻能打', () => {
+    const d = new BattleDriver({
+      deck: ['helicopter', 'punch', 'guard', 'punch'],
+      enemies: [tank()], seed: 5, config: { initialDraw: 3 },
+    });
+    d.start();
+    const others = d.state.zones.hand.filter(c => c.defId !== 'helicopter');
+    expect(others.length).toBeGreaterThan(0);
+    d.play('helicopter');
+    const deformed = d.state.zones.hand.filter(c => c.defId === 'powerElbow');
+    expect(deformed).toHaveLength(others.length);              // 全部换绑
+    for (const c of deformed) {
+      expect(costOf('powerElbow')).toEqual({ mana: 0, actionPoint: 0 });   // 0 开销
+    }
+    // 变形后的肘击可直接打出（0 费 + 有伤害）
+    const hp0 = enemyHp(d);
+    const el = deformed[0];
+    d.player.actionPoints = 3;
+    d.play(el.uniqueID);
+    expect(enemyHp(d)).toBeLessThan(hp0);
+  });
+});
+
+const costOf = (id) => getSkillDefinition(id).cost;

@@ -31,6 +31,10 @@ export const EventNames = {
   ANIM_CARD_SHOWCASE: 'anim:card-showcase', // 结算宾语入结算区展示（原位 → 场中央）
   ANIM_CARD_TRANSFORMED: 'anim:card-transformed',
   ANIM_CARD_SWAPPED: 'anim:card-swapped',
+  // 卡牌威力提升（power 增加）：卡面一次放缩脉冲，表示"这张牌的状态变了"。
+  // 公共节拍——养刀术/锻刀术/练刀/火光爆发等任何会改 runtime.power 的效果都走它
+  // （presenter.cardPowerUp，见 core/content/cardKit.gainPower）。
+  ANIM_CARD_POWER_UP: 'anim:card-power-up',
   // 状态同步节拍：前端**显示状态**只在此时推进（快照在 start 时拉取，合并此前全部变更）。
   // 精髓（老版设计）：后端状态与前端显示状态是两套状态；显示状态不随后端即时变，
   // 而由本指令在动画队列中按节拍应用——因此"先播受伤动画再扣血""卡牌飞进坟堆数字才+1"
@@ -75,5 +79,6 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_CARD_SHOWCASE]: 2500,
   [EventNames.ANIM_CARD_TRANSFORMED]: 3000,
   [EventNames.ANIM_CARD_SWAPPED]: 2500,
+  [EventNames.ANIM_CARD_POWER_UP]: 2000,   // 放缩脉冲 ~130ms + 回位；非阻塞语义（见 BattleStage 节拍）
   [EventNames.ANIM_STATE_SYNC]: 2000,   // 实际时长≈0（Stage 应用快照即回 finish），兜底同理
 };

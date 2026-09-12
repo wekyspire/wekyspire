@@ -1,9 +1,10 @@
 <script setup>
-// cutscene overlay（统一）：按播放器当前 step 渲染对应图层，全屏阻塞。
-// step 词汇表见 cutscenePlayer.js 头注；过渡时长由 step 参数驱动：
-//   wipe 缺省取 SCENE_TRANSITION_MS；image 缺省 fadeIn/fadeOut 400ms。
+// cutscene **内容层**：按播放器当前 step 渲染 fade / image / dialogue，全屏阻塞。
+// ⚠ 幕间黑幕（wipe）**不在这里**——它是独立的一层（`SceneWipeOverlay.vue` + `sceneWipe.js`），
+// 因为黑幕是"场景切换"的呈现、目的地可以是任何东西（包括本层的内容）；同层会导致
+// "黑幕播完内容才蹦出来"（用户 2026-09-12 报的架构问题）。
+// step 词汇表见 cutscenePlayer.js 头注；image 过渡时长由 step 参数驱动（缺省 fadeIn/out 400ms）。
 import { computed } from 'vue';
-import { SCENE_TRANSITION_MS } from './cutscenePlayer.js';
 
 const props = defineProps({ player: { type: Object, required: true } });
 const state = computed(() => props.player.state);
@@ -19,14 +20,6 @@ const cgDur = computed(() => {
   if (state.value.phase === 'fadeOut') return s.fadeOutMs ?? 400;
   return 0;
 });
-// wipe 过渡时长跟随当前子阶段（cover/reveal；参数与播放器编译侧同源缺省）
-const wipeDur = computed(() => {
-  const s = step.value;
-  if (s?.type !== 'wipe') return 0;
-  if (state.value.phase === 'cover') return s.coverMs ?? SCENE_TRANSITION_MS.cover;
-  if (state.value.phase === 'reveal') return s.revealMs ?? SCENE_TRANSITION_MS.reveal;
-  return 0;
-});
 </script>
 
 <template>
@@ -35,18 +28,12 @@ const wipeDur = computed(() => {
     <div v-if="step?.type === 'fade'" class="fade" :class="step.to >= 1 ? 'toBlack' : 'toClear'"
       :style="{ animationDuration: step.ms + 'ms' }"></div>
 
-    <!-- wipe：自右向左的渐变黑幕（enter 落位 → cover 盖屏[atCover 换景/预载] → reveal 露出）；
-         时长由 step 参数驱动（缺省同 SCENE_TRANSITION_MS），atCover 等待预载期间黑幕保持 -->
-    <div v-else-if="step?.type === 'wipe'" class="wipe" :class="state.phase"
-      :style="{ transitionDuration: wipeDur + 'ms' }"></div>
-
     <!-- image：CG/插图（enter 落位 → fadeIn 淡入 → hold 停留 → fadeOut 淡出；缺省各 400ms） -->
     <img v-else-if="step?.type === 'image'" class="cg" :class="state.phase"
       :style="{ transitionDuration: cgDur + 'ms' }" :src="step.src" alt="">
 
     <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步。
-         该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸）。
-         `step.bg` = **幕间背景 CG**（随机事件用）：常驻在对话层之下，遮罩压得浅一些 -->
+         该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸） -->
     <div v-else-if="page" class="dialogue" :class="{ 'has-bg': !!step.bg }" @click="player.advance()">
       <img v-if="step.bg" class="bgimg" :src="step.bg" alt="">
       <div class="box">
@@ -80,30 +67,7 @@ const wipeDur = computed(() => {
 @keyframes fadeToBlack { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeToClear { from { opacity: 1; } to { opacity: 0; } }
 
-/* 黑幕：宽 130vw（左 30vw 渐变软边 + 100vw 实体），transform 位移三段
-   enter  屏外右侧待命：[100vw, 230vw]
-   cover  实体盖满全屏：[-30vw, 100vw]（此中点换景）
-   reveal 完全移出左侧：[-130vw, 0]（新场景自右缘露出） */
-.wipe {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 130vw;
-  background: linear-gradient(to right, rgba(4, 6, 14, 0) 0%, #04060e 23%);
-  will-change: transform;
-}
-.wipe.enter { transform: translateX(100vw); }
-/* 时长由内联 transitionDuration 驱动（step 参数），这里只定缓动曲线 */
-.wipe.cover {
-  transform: translateX(-30vw);
-  transition-property: transform;
-  transition-timing-function: cubic-bezier(.55, .06, .85, .35);
-}
-.wipe.reveal {
-  transform: translateX(-130vw);
-  transition-property: transform;
-  transition-timing-function: cubic-bezier(.15, .55, .3, .97);
-}
-
-/* CG：全屏等比覆盖；opacity 三段（enter 落位无过渡；fadeIn/fadeOut 时长由内联 style 给，
-   缺省 .4s 见 cutscenePlayer.js execStep('image')） */
+/* CG：全屏等比覆盖；opacity 三段（enter 落位无过渡；fadeIn/fadeOut 时长由内联 style 给） */
 .cg {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   transition-property: opacity; transition-timing-function: ease;
@@ -113,34 +77,30 @@ const wipeDur = computed(() => {
 .cg.hold { opacity: 1; }
 .cg.fadeOut { opacity: 0; }
 
-.dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(4, 6, 14, .72); }
-/* 带幕间 CG 的对话：图铺满、压一层浅遮罩（仍要读得清字，但让背景看得见） */
-.dialogue.has-bg { background: rgba(4, 6, 14, .45); }
-.dialogue .bgimg {
-  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-  /* 图在文字层之下；box 自带不透明底，不靠遮罩也读得清 */
-  z-index: 0;
-}
-.dialogue .box { z-index: 1; }
+/* 对话框（用户定 2026-09-12：**黑色半透明 flat 框**，除按钮外不滥用圆角） */
+.dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(4, 6, 14, .55); }
+.dialogue.has-bg { background: rgba(4, 6, 14, .38); }
+.bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 .box {
   position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
-  width: min(720px, 82vw); background: rgba(12, 16, 30, .95);
-  border: 1px solid #55618a; border-radius: 10px; padding: 18px 26px;
+  width: min(720px, 82vw); z-index: 1;
+  background: rgba(6, 8, 14, .82); border: 1px solid #2f3a52; border-radius: 2px; padding: 18px 26px;
 }
-.speaker { color: #ffd75e; font-size: 15px; margin-bottom: 8px; }
+.speaker { color: #cfe0f5; font-size: 15px; margin-bottom: 8px; }
 .text { color: #e6ecff; font-size: 17px; line-height: 1.7; min-height: 30px; }
 .hint { text-align: right; color: #6a7394; font-size: 12px; margin-top: 10px; }
 
-/* 选项按钮（带 choices 的对话页）：整行按钮 + 右侧小字提示；禁用项置灰不可点 */
+/* 选项按钮（带 choices 的对话页）：整行按钮 + 右侧小字提示；禁用项置灰不可点。
+   按钮保留圆角（用户定：除按钮外不滥用圆角），走"白字淡蓝"扁平风格 */
 .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .choices button {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   width: 100%; padding: 11px 16px; text-align: left; cursor: pointer;
-  background: rgba(24, 32, 53, .92); color: #ffe08a;
-  border: 1px solid #55658a; border-radius: 8px;
+  background: rgba(18, 24, 38, .92); color: #dfe9f8;
+  border: 1px solid #33507a; border-radius: 4px;
   font: 600 15px/1.4 sans-serif; transition: background .12s ease, border-color .12s ease;
 }
-.choices button:hover:not(:disabled) { background: #232f4d; border-color: #7d8cb8; }
+.choices button:hover:not(:disabled) { background: rgba(34, 48, 74, .95); border-color: #4d78ad; }
 .choices button:disabled { opacity: .42; cursor: default; }
 .choices .hint2 { color: #8d97b5; font-size: 12px; font-weight: 400; }
 </style>

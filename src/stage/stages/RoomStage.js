@@ -30,7 +30,7 @@ import { RelicScrollPickerObject } from '../objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from '../objects/ItemShowcaseObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
-import { buildSlotPanel, buildBankPanel, buildCampTrainingPanel, buildShopPanel } from '../panels/index.js';
+import { buildSlotPanel, buildBankPanel, buildCampPartPanel, buildTrainingPartPanel, buildShopPanel } from '../panels/index.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
 import { Picker } from '../picker/Picker.js';
@@ -47,10 +47,11 @@ const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const PANEL_OF = {
   slot: (snap) => buildSlotPanel(snap, { sceneChoice: true }),
   bank: (snap) => buildBankPanel(snap, { sceneChoice: true }),
-  // 合并房（营地·训练场）：**点篝火或训练桩都开同一份面板**（营地选项 + 训练选项一起给，
-  // 用户定 2026-09-12）——两个部分同处一室，不该让玩家来回点两件东西找入口
-  camp: buildCampTrainingPanel,
-  training: buildCampTrainingPanel,
+  // 合并房（营地·训练场）：**点谁开谁的面板**（用户定 2026-09-12 修正）——篝火只给营地选项、
+  // 训练桩只给训练选项。早期版本两件都开同一份"营地+训练"合并面板，用户报"点了没区别、
+  // 交互物形同虚设"；两件东西各司其职，玩家点哪件就知道自己在处理哪半边。
+  camp: buildCampPartPanel,
+  training: buildTrainingPartPanel,
   shop: buildShopPanel,     // 售货机（主柜）：点机身直接开货架面板（不再是房间表头上的一个按钮）
   shop2: buildShopPanel,    // 溢出柜（货架 > 4 件时才有）：同一份货架面板（数据是全局的）
 };
@@ -182,11 +183,14 @@ export class RoomStage {
     this._panel = null;          // 下沿停靠的机器操作面板（惰性建）
     this._panelKind = null;      // 当前面板对应的机器（null = 收起）
     this._focused = null;        // 聚焦的机器名
+    this._hoverName = null;      // 当前 hover 的交互物名（聚焦时恒 null，见 handlePointerMove）
+    this._campNudged = false;    // 「还没在火边歇过」的提示只弹一次（再点继续即离房）
     this._downHit = null;
     this._cardPicker = null;    // 全屏选卡（升级/焚毁；惰性建）
     this._relicPicker = null;   // 全屏选遗物（粉尘/粉碎；惰性建）
     this._showcase = null;      // 获得物特写（金币大奖等；惰性建）
     this._pickerConfirm = null; // 当前选择界面的确认回调（按入口切换）
+    this._pickerCancel = null;  // 当前选择界面的取消/跳过回调（缺省无动作；卡包三选一用它"放弃"）
     this._pickIds = [];
     this._goodsPickIds = new Set();  // 商品卡拾取 id（随货架增删对账）
     this._t = 0;
@@ -221,6 +225,12 @@ export class RoomStage {
     // ---- UI：状态栏 + 顶端资源行 + 继续前进按钮 ----
     this._unitArt = unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null);
     this._bakeLabel = bakeLabel || defaultBakeLabel();
+    // 卡面烘焙（与战场/塔楼层同源）：**全屏选卡界面也必须拿到它**——漏传的症状是
+    // "候选卡一张都看不到、但 hover 预览正常"（预览走 tooltip 的 DOM 卡面，不经过这里；
+    // 用户 2026-09-12 报"篝火处升级选卡界面卡牌隐身"的真凶）。面板与选卡界面共用这一份。
+    this._bakeFace = (typeof document !== 'undefined')
+      ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
+      : null;
     const mkBake = this._bakeLabel;
     this._statusBar = new PlayerStatusObject({ bakeLabel: mkBake, unitArt: this._unitArt });
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
@@ -247,7 +257,11 @@ export class RoomStage {
 
   /** 房间面板快照下行（notify 每次都推）：存下 + 按需重绘已打开的机器面板。 */
   setPanel(snap) {
-    this._snap = snap ?? null;
+    // ⚠ 只认**房间快照**：离房时编排器会先推一份新阶段的快照（prep/…），若照单全收，
+    // 已打开的机器面板会用错快照重绘一次（用户报"点继续后营地 UI 突变了一下"——那一帧
+    // 正是营地面板拿 prep 快照重绘的结果，随后才被幕间黑幕盖住）。非房间快照一律忽略。
+    if (!snap || snap.kind !== 'room') return;
+    this._snap = snap;
     if (this._panelKind) this._renderPanel();
     this._syncSlotFromSnapshot();
   }
@@ -297,9 +311,10 @@ export class RoomStage {
     if (!cards.length) return false;
     if (!this._cardPicker) {
       this._cardPicker = new CardScrollPickerObject({
+        bakeFace: this._bakeFace,
         bakeText: this._pickerBakeText(),
         bus: this._bus,
-        onCancel: () => { /* 收起即可，面板还在 */ },
+        onCancel: () => { this._pickerCancel?.(); },
         onConfirm: (ids) => this._pickerConfirm?.(ids),
       });
       this.uiScene.add(this._cardPicker);
@@ -315,6 +330,7 @@ export class RoomStage {
       const intent = INTENT_OF[source]?.(ids[0]);
       if (intent) this._onIntent?.(intent);
     };
+    this._pickerCancel = null;   // 升级/焚毁：返回 = 收起界面（不做放弃）
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
       title: source === 'bankBurn' ? '选择要焚毁的卡' : '选择要升级的卡',
@@ -325,6 +341,37 @@ export class RoomStage {
         uniqueID: c.uniqueID, defId: c.defId, view: c.view, enabled: c.enabled, tipDefId: c.tipDefId,
       })),
       confirmLabel: source === 'bankBurn' ? '确认焚毁' : '确认升级',
+    });
+    return true;
+  }
+
+  /**
+   * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开，用户定 2026-09-12）。
+   * **可放弃**：确认 = 选中的卡入组；返回 = 放弃这个卡包（钱已花，选择权在玩家）。
+   */
+  openShopPackPicker() {
+    const pend = this._snap?.shop?.pending;
+    if (!pend?.cards?.length) return false;
+    if (!this._cardPicker) {
+      this._cardPicker = new CardScrollPickerObject({
+        bakeFace: this._bakeFace,
+        bakeText: this._pickerBakeText(),
+        bus: this._bus,
+        onCancel: () => { this._pickerCancel?.(); },
+        onConfirm: (ids) => this._pickerConfirm?.(ids),
+      });
+      this.uiScene.add(this._cardPicker);
+    }
+    this._pickerConfirm = (ids) => this._onIntent?.({ action: 'takeShopCard', defId: ids[0] });
+    this._pickerCancel = () => this._onIntent?.({ action: 'takeShopCard', defId: null });
+    this._cardPicker.attachPicker(this._picker);
+    this._cardPicker.open({
+      title: `${pend.packId} · 卡包`,
+      hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
+      cards: pend.cards.map(c => ({
+        uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+      })),
+      confirmLabel: '加入牌组',
     });
     return true;
   }
@@ -354,13 +401,16 @@ export class RoomStage {
     if (!cards.length) return false;
     if (!this._cardPicker) {
       this._cardPicker = new CardScrollPickerObject({
+        bakeFace: this._bakeFace,
         bakeText: this._pickerBakeText(),
         bus: this._bus,
+        onCancel: () => { this._pickerCancel?.(); },
         onConfirm: (ids) => this._pickerConfirm?.(ids),
       });
       this.uiScene.add(this._cardPicker);
     }
     this._pickerConfirm = (ids) => onPick?.(ids[0]);
+    this._pickerCancel = null;   // 粉碎没有"放弃"出口（返回 = 收起界面）
     this._cardPicker.attachPicker(this._picker);
     this._cardPicker.open({
       title: '粉碎哪张卡？',
@@ -417,7 +467,11 @@ export class RoomStage {
     if (this._showcase?.busy) return;                       // 特写期间吞掉 hover
     if (this._cardPicker?.opened) { this._cardPicker.onHover(hit, x, y); return; }
     if (this._relicPicker?.opened) { this._relicPicker.onHover(hit, x, y); return; }
-    const name = this._machineOf(hit);
+    const name = this._focused ? null : this._machineOf(hit);
+    // zoom-in（已聚焦某台）期间不响应 hover：hover 放大/提亮是**全景下的可交互暗示**
+    // （"这东西能点"），推近之后玩家已经在跟它交互了，再跟着鼠标缩放只会让人以为画面在抖
+    // （用户定 2026-09-12）。故聚焦时统一喂 null，机器 rig 与浮标都不进入 hover 态。
+    this._hoverName = name;
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
     for (const m of this._markers) m.hover = (m.name === name);   // 箭头浮标 hover 提亮
     // 售货机商品卡：悬停抬起 + 盘子提亮（点下去就是买；下标全局唯一，各 rig 只认自己的）
@@ -524,6 +578,9 @@ export class RoomStage {
           })
             : null;
       if (rig) this._rigs.set(name, rig);
+      // 无 rig 件的 hover 放大基准（配方的 scale 已烘进 object.scale，这里存一份当基准）
+      entry.baseScale = entry.object.scale.x || 1;
+      entry._hoverK = 0;
       // 头顶浮标 = **一枚跳动的发光箭头**（用户定 2026-09-12：去掉地面光圈与光柱，只留箭头）。
       // ⚠ y 必须落在房间地平（FLOOR_Y）上：道具都摆在 FLOOR_Y 平面，浮标写 y=0 会飘到半空
       // （30 世界单位的悬空，与机器读作两件东西）；箭尖指着机器顶上方一点点，
@@ -618,14 +675,15 @@ export class RoomStage {
       return;
     }
     if (hit.id === this._continue.pickId) {
-      // 合并房（营地·训练场）：**两部分的奖励都处理完才能走**（用户定 2026-09-12）——
-      // 没在火边歇过 / 没把训练做完就点继续，这里把人拉回火堆并给一句提示，
-      // 免得玩家一路点过去把这一层的收益漏掉（两部分都恒有可做的动作，不会卡死）
+      // 「继续前进」的**义务门**：只有"钱已到手 / 升级已发生"的欠账才硬拦（恶魔 roll、卡包待选、
+      // 强绑抓牌）——不处理完不许走。营地的休整是**可选收益**（训练同理，用户定 2026-09-12：
+      // 不做也能走）：第一次点继续只给一句提示泡泡（"还没在火边歇过呢"），**再点一次即离房**
+      // （软提示而非硬拦——玩家想省下这层收益是他的自由，不能被按着头点）。
       const duty = this._pendingRoomDuty();
-      if (duty === 'camp' || duty === 'training') { this._nudgeCampTraining(duty); return; }
       if (duty === 'demon') { this._nudgeDemonRoll(); return; }
       if (duty === 'shop') { this._nudgeShopPending(); return; }
       if (duty === 'forced') { this._nudgeForcedPick(); return; }
+      if (duty === 'camp' && !this._campNudged) { this._campNudged = true; this._nudgeCampRest(); return; }
       // 还欠着离房安慰奖（拉了 ≥2 次杆没中奖）→ 先吐出可乐/鸡腿让你选，选完再离房
       if (this._playGift()) return;
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
@@ -723,9 +781,11 @@ export class RoomStage {
   }
 
   /**
-   * 房里**还欠着的事**（null = 可以离房）：'camp' | 'training' | 'demon' | 'shop' | 'forced'。
-   * 判定刻意保守（只认"确实有可做/必须做的"）：营地恒有"休整"、训练恒有终止动作，
-   * 恶魔 roll 与卡包三选一都是**钱已到手**的选择题——不选完不许走，但都有明确的出口。
+   * 房里**还欠着的事**（null = 可以离房）：'camp' | 'demon' | 'shop' | 'forced'。
+   * 语义分两档：
+   *   · **硬拦**（'demon' / 'shop' / 'forced'）——钱已到手或升级已发生，不处理完不许走；
+   *   · **软提示**（'camp'）——休整是可选收益（训练同理，用户定 2026-09-12），
+   *     第一次点「继续前进」只弹一句泡泡，再点一次就放行（`_activate` 里的 `_campNudged`）。
    */
   _pendingRoomDuty() {
     const snap = this._snap;
@@ -734,17 +794,9 @@ export class RoomStage {
     if (snap.shop?.pending) return 'shop';                       // 卡包买到即开，还没挑牌
     if (snap.training?.forced) return 'forced';                  // 升级后的强绑抓牌
     if (snap.room !== 'campTraining') return null;
-    const t = snap.training ?? {};
-    if (t.choices?.length || !t.done) return 'training';
     const c = snap.camp ?? {};
     if (!c.used && (c.options?.length ?? 0) > 0) return 'camp';
     return null;
-  }
-
-  /** 合并房旧名（保留给内部语义：返回 'camp' | 'training' | null）。 */
-  _pendingCampTraining() {
-    const d = this._pendingRoomDuty();
-    return (d === 'camp' || d === 'training') ? d : null;
   }
 
   /** 恶魔 roll 未选就想走：钱已经到手，先把词条领了——镜头拉回老虎机 + 泡泡。 */
@@ -761,21 +813,16 @@ export class RoomStage {
     });
   }
 
-  /** 没做完就想走：把镜头拉回**篝火**（两部分的入口都在它那份面板里）并给一句泡泡。 */
-  _nudgeCampTraining(part) {
+  /** 还没在火边歇过就想走：把镜头拉回**篝火**并给一句泡泡（训练不做无妨，不再拦）。 */
+  _nudgeCampRest() {
     const name = this._markers.some(m => m.name === 'camp') ? 'camp' : 'training';
     const entry = this._markers.find(m => m.name === name)?.entry;
     if (entry && this._focused !== name) this._focusMachine(name);
     else if (entry) this._openPanel(name);
     if (!entry) return;
-    const t = this._snap?.training ?? {};
-    const c = this._snap?.camp ?? {};
-    const campLeft = !c.used && (c.options?.length ?? 0) > 0;
-    const trainLeft = !t.done || !!t.forced;
     this._bubbles.say('room:campHint', {
       ...this._midAnchorOf(entry, 1.5),
-      text: (campLeft && trainLeft) ? '火边还有事没做完呢。'
-        : part === 'camp' ? '还没在火边歇过呢。' : '训练还没做完呢。',
+      text: '还没在火边歇过呢。',
       kind: 'thought',
       duration: 2.6,
       tint: 0xffe0b0,
@@ -1032,23 +1079,19 @@ export class RoomStage {
         form: 'dock',
         onIntent: (a) => this._onPanelAction(a),
         // 卡面烘焙与战场/塔楼层同源（pending 的卡阵、选卡界面都要真卡面，不能没有）
-        bakeFace: (typeof document !== 'undefined')
-          ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
-          : null,
+        bakeFace: this._bakeFace,
         // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
         // widget 各自的 tint 在 dock 形态下被忽略（见 PanelObject 的 dock 分支）
         bakeText: this._dockBakeText(),
       });
       this.uiScene.add(this._panel);
     }
-    // 停靠面板第一行恒为「返回房间」（拉远回全景）：推近后的操作 UI 自带退出口
-    const back = [{
-      kind: 'button', id: 'room:back', width: 220, size: 'sub',
-      label: '← 返回房间', action: { action: 'backToRoom', local: true },
-    }];
+    // 停靠面板只放"这台机器能做的事"：**不再给「返回房间」按钮**——点面板外的房间空白处
+    // 即拉远回全景（用户定 2026-09-12：推近后的退出口应当是"点别处"，UI 里多一个返回键既
+    // 占地方又和底部操纵条的语义打架）。
     const build = this._panelKind === 'shop' ? buildShopPanel : PANEL_OF[this._panelKind];
     if (!build) { this._panelKind = null; this._removePanel(); return; }
-    this._panel.setWidgets(this._panelKind, [...back, ...build(snap)]);
+    this._panel.setWidgets(this._panelKind, build(snap));
     this._panel.attachPicker(this._picker);
   }
 
@@ -1059,14 +1102,14 @@ export class RoomStage {
     this._panel = null;
   }
 
-  /** 面板动作分流：本地动作（开售货机 / 开选卡界面…）自己消化，其余原样上行。 */
+  /** 面板动作分流：本地动作（开选卡界面…）自己消化，其余原样上行。 */
   _onPanelAction(action) {
     if (!action) return;
     if (action.local) {
-      if (action.action === 'backToRoom') { this._focusMachine(null); return; }
       if (action.action === 'openShop') { this.openShop(); return; }
       if (action.action === 'closeShop') { this._openPanel(this._focused); return; }
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
+      if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       return;
     }
     this._onIntent?.(action);
@@ -1287,6 +1330,16 @@ export class RoomStage {
     for (const m of this._markers) {
       m.marker.setHighlight(m.name === this._focused || !!m.hover);
       m.marker.update(dt);
+      // 无 rig 的陈设交互物（篝火/训练桩）的 hover 反馈：整体轻微放大——老虎机/银行机/售货机
+      // 由各自 rig 做同类反馈，这里给"没有 rig 的可交互物"补上同一套可交互暗示（用户定 2026-09-12）。
+      // zoom-in 时 _hoverName 恒 null，故自然不会缩放（该反馈只属于全景）。
+      if (!this._rigs.has(m.name)) {
+        const want = this._hoverName === m.name ? 1 : 0;
+        const k = (m.entry._hoverK ?? 0) + (want - (m.entry._hoverK ?? 0)) * Math.min(1, dt * 9);
+        m.entry._hoverK = k;
+        const base = m.entry.baseScale ?? 1;
+        m.entry.object.scale.setScalar(base * (1 + 0.035 * k));
+      }
     }
     this._stepDemonRoll(dt);
     this._continue.update(dt);

@@ -8,11 +8,18 @@
 //   ③ 停住 hold，下方依次浮出文本：名称（粗体）/ 斜体描述 / 具体作用；
 //   ④ **点击屏幕任意处**退出：物品缩小并淡出、文字消失（快速）。
 //
-// 素材：`assets/items/<key>.*`（退化到 `assets/props/<key>.*`）；**没有素材就用色块**
+// 素材：`assets/items/<key>.*`（退化到 `assets/props/<key>.*`，再退化到遗物立绘
+// `assets/relics/<key>.*`——遗物特写的 key 就是遗物名）；**都没有就用色块**
 // （tint 色块 + 描边 + 名称首字），所以内容侧没图也能先用起来。
 //
+// **可跳过奖励**（用户定 2026-09-12）：`show({ …, skippable: true })` 时界面下方多一个
+// 「跳过」按钮——"可跳过"的东西是**还没到手**的产出（老虎机奖项、买到即开的卡包…），
+// 点跳过 = 放弃它；点别处 = 收下。两个出口分别回调 `onSkip` / `onDismiss`（同一次 show
+// 内有效，show 时传入；缺省只有"点任意处关闭"的旧语义）。本组件只负责"把出口摆出来"，
+// 放弃/收下的游戏语义由调用方（Shell 编排器）决定。
+//
 // 层次约定：全屏遮罩 = 面板层之上（PANEL_ABOVE_Z），与 CardScrollPickerObject 同级；
-// 输入走 Picker（自己登记全屏 dismiss 热区），宿主只需把指针事件转发进来。
+// 输入走 Picker（自己登记全屏 dismiss 热区 + 跳过按钮热区），宿主只需把指针事件转发进来。
 //
 // 纯 Stage 层：不读 Core/Bridge；数据由调用方以纯对象传入（名称/描述/作用/素材 key/tint）。
 
@@ -21,11 +28,13 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PANEL_ABOVE_Z } from './PanelObject.js';
 import { bakeBoldText } from './textBakers.js';
 import { sharedPropArtCache } from '../art/propArt.js';
+import { sharedRelicArtCache } from '../art/relicArt.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
-const Z = { BACKDROP: PANEL_ABOVE_Z, RAYS: PANEL_ABOVE_Z + 2, ITEM: PANEL_ABOVE_Z + 4, TEXT: PANEL_ABOVE_Z + 5 };
+const Z = { BACKDROP: PANEL_ABOVE_Z, RAYS: PANEL_ABOVE_Z + 2, ITEM: PANEL_ABOVE_Z + 4, TEXT: PANEL_ABOVE_Z + 5, BUTTON: PANEL_ABOVE_Z + 6 };
 const DISMISS_ID = 'showcase:dismiss';
+const SKIP_ID = 'showcase:skip';
 
 // 时序（秒）：淡入（含弹跳）→ 停住 → 淡出
 const T_IN = 0.62;
@@ -40,8 +49,43 @@ function easeOutBack(t, k = 1.7) {
   return 1 + (k + 1) * u * u * u + k * u * u;
 }
 
-/** 放射光束贴图（程序化烘焙：中心亮、向外的锥形光条 + 柔和衰减）。 */
-function bakeGodRays(size = 512, spokes = 18) {
+/**
+ * 占位美术（没有素材时的程序化贴图）：
+ *   'gold' → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
+ *            获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
+ *   其它 key → null（退回 tint 色块）
+ * headless（无 document）返回 null。
+ */
+function bakePlaceholderArt(key) {
+  if (key !== 'gold' || typeof document === 'undefined') return null;
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const coin = (x, y, r) => {
+    // 币身（圆柱侧面）+ 币面 + 高光
+    ctx.fillStyle = '#b8862a';
+    ctx.beginPath(); ctx.ellipse(x, y + r * 0.5, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8b53c';
+    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8a6118'; ctx.lineWidth = r * 0.14;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 0.66, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,246,214,0.55)';
+    ctx.beginPath(); ctx.ellipse(x - r * 0.3, y - r * 0.2, r * 0.3, r * 0.16, -0.4, 0, Math.PI * 2); ctx.fill();
+  };
+  // 后排两摞
+  for (const [bx, n] of [[S * 0.34, 3], [S * 0.66, 4]]) {
+    for (let i = 0; i < n; i++) coin(bx, S * 0.62 - i * 16, 44);
+  }
+  // 前排两枚散币
+  coin(S * 0.26, S * 0.76, 40);
+  coin(S * 0.75, S * 0.78, 38);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** 放射光束贴图（程序化烘焙：中心亮、向外的锥形光条 + 柔和衰减）。 */function bakeGodRays(size = 512, spokes = 18) {
   // node/headless 无 canvas：返回 null，调用方跳过光束层（特写其余部分照常）
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
@@ -84,19 +128,23 @@ export class ItemShowcaseObject extends THREE.Group {
    * @param {object} options
    *   onDismiss(): 退出回调（宿主据此清焦点/继续流程）
    *   bakeLine: 可选的外部文本烘焙（缺省用内置的 bakeBoldText）
-   *   art: 可选的外部取图函数 (key) => THREE.Texture|null（缺省查 item/prop 素材表）
+   *   art: 可选的外部取图函数 (key) => THREE.Texture|null（缺省查 道具图/遗物图 两张表）
    */
   constructor({ onDismiss = null, art = null } = {}) {
     super();
     this.name = 'itemShowcase';
     this.visible = false;
     this._onDismiss = onDismiss;
-    this._artOf = art ?? ((key) => sharedPropArtCache.getTexture(key));
+    // 缺省取图：道具图（items/props）→ 遗物立绘（relics）——遗物特写的 key 就是遗物名，
+    // 所以两个舞台的宿主都不必为遗物另传 art 函数。
+    this._artOf = art ?? ((key) => sharedPropArtCache.getTexture(key) ?? sharedRelicArtCache.getTexture(key));
     this._picker = null;
     this._phase = 'idle';   // idle | in | hold | out
     this._t = 0;
     this._raysTex = null;
     this._baked = [];       // 本件烘出来的纹理（换内容时释放）
+    this._onDismissShow = null;  // 本次 show 的出口回调（点击任意处 = 收下/关闭）
+    this._onSkipShow = null;     // 本次 show 的「跳过」出口（放弃产出）
     this._build();
   }
 
@@ -162,6 +210,28 @@ export class ItemShowcaseObject extends THREE.Group {
       this.add(mesh);
       this._lines.push(mesh);
     }
+
+    // ⑤ 「跳过」按钮（skippable 才显形；文字一次性烘死，开关只切 visible）
+    const skipPlate = new THREE.Mesh(
+      new THREE.PlaneGeometry(17, 6.2),
+      new THREE.MeshBasicMaterial({ color: 0x1a2236, transparent: true, opacity: 0.85 }),
+    );
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 }),
+    );
+    if (typeof document !== 'undefined') {
+      const out = bakeBoldText('跳过 ▸', { fontPx: 20, tint: '#e6ecff' });
+      this._baked.push(out.texture);
+      label.material.map = out.texture;
+      label.scale.set(out.width * 0.1, out.height * 0.1, 1);
+    }
+    label.position.z = 0.06;
+    this._skipBtn = new THREE.Group();
+    this._skipBtn.position.set(0, TEXT.effectY - 7.5, Z.BUTTON);
+    this._skipBtn.add(skipPlate, label);
+    this._skipBtn.visible = false;
+    this.add(this._skipBtn);
   }
 
   /** 换一行文本：烘焙 → 贴到对应行（宽度/高度按烘焙像素换算世界单位）。 */
@@ -192,6 +262,8 @@ export class ItemShowcaseObject extends THREE.Group {
    *   effect: 具体作用（药水=喝下后的效果；金币之类=名称+效果）
    *   artKey: 素材 key（assets/items|props，可空 → 色块代替）
    *   tint:   色块/托底色（可空 → 金）
+   *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
+   *   onDismiss / onSkip: 两个出口的回调（点任意处 / 点跳过；仅本次 show 有效）
    */
   show(item = {}) {
     // ⚠ 千万别往 Object3D 上塞 `pivot`：three 的 `updateMatrix()` 会把 `this.pivot`
@@ -200,11 +272,15 @@ export class ItemShowcaseObject extends THREE.Group {
     this._phase = 'in';
     this._t = 0;
     this.visible = true;
+    this._onDismissShow = item.onDismiss ?? null;
+    this._onSkipShow = item.onSkip ?? null;
+    if (this._skipBtn) this._skipBtn.visible = !!item.skippable;
     this._setLine('title', item.title ?? '');
     this._setLine('desc', item.desc ?? '');
     this._setLine('effect', item.effect ?? '');
-    // 物品图：有素材用素材，没有就用 tint 色块（"没有就拿色块代替"）
-    const tex = item.artKey ? this._artOf(item.artKey) : null;
+    // 物品图：有素材用素材；没有就用程序化占位（金币堆）/ tint 色块（"没有就拿色块代替"）
+    let tex = item.artKey ? this._artOf(item.artKey) : null;
+    if (!tex && item.artKey) tex = this._placeholderOf(item.artKey);
     const tint = new THREE.Color(item.tint ?? 0xffe6ad);
     if (tex) {
       this._art.material.map = tex;
@@ -223,11 +299,19 @@ export class ItemShowcaseObject extends THREE.Group {
     return true;
   }
 
-  /** 点击任意处 / 程序化关闭：进入快速淡出。 */
-  dismiss() {
+  /** 程序化占位美术（按 key 缓存复用；无占位则 null → 退回 tint 色块）。 */
+  _placeholderOf(key) {
+    if (!this._placeholders) this._placeholders = new Map();
+    if (!this._placeholders.has(key)) this._placeholders.set(key, bakePlaceholderArt(key));
+    return this._placeholders.get(key);
+  }
+
+  /** 点击任意处 / 程序化关闭：进入快速淡出。reason 决定收尾回调（'dismiss' | 'skip'）。 */
+  dismiss(reason = 'dismiss') {
     if (this._phase === 'idle' || this._phase === 'out') return false;
     this._phase = 'out';
     this._t = 0;
+    this._closeReason = reason;
     return true;
   }
 
@@ -237,6 +321,9 @@ export class ItemShowcaseObject extends THREE.Group {
     this._art.material.opacity = k;
     this._rays.material.opacity = 0.85 * k;
     for (const m of this._lines) m.material.opacity = k;
+    if (this._skipBtn) {
+      for (const m of this._skipBtn.children) m.material.opacity = (m === this._skipBtn.children[0] ? 0.85 : 0.95) * k;
+    }
   }
 
   _applyTransform(k) {
@@ -274,7 +361,13 @@ export class ItemShowcaseObject extends THREE.Group {
       if (t >= 1) {
         this._phase = 'idle';
         this.visible = false;
-        this._onDismiss?.();
+        const reason = this._closeReason ?? 'dismiss';
+        this._closeReason = null;
+        const cb = reason === 'skip' ? this._onSkipShow : this._onDismissShow;
+        this._onDismissShow = null;
+        this._onSkipShow = null;
+        cb?.();
+        this._onDismiss?.();   // 构造期给的可选统一回调（缺省无动作）
       }
     }
     return true;
@@ -285,20 +378,26 @@ export class ItemShowcaseObject extends THREE.Group {
     if (!picker) return;
     // 全屏热区：点击任意处退出（与 CardScrollPickerObject 同一套 Picker 通道）
     picker.addPickable(DISMISS_ID, this._back, { kind: 'button', space: 'ui' });
+    // 「跳过」按钮热区（不可见时 Picker 的 visible 守卫使其不可命中）
+    if (this._skipBtn) picker.addPickable(SKIP_ID, this._skipBtn, { kind: 'button', space: 'ui' });
   }
 
-  /** 指针抬起命中（宿主转发）：命中遮罩 = 点击任意处。 */
+  /** 指针抬起命中（宿主转发）：命中跳过键 = 放弃；命中遮罩 = 点击任意处。 */
   onClick(hit) {
     if (!this.busy) return false;
+    if (hit?.id === SKIP_ID) return this.dismiss('skip');
     if (hit?.id !== DISMISS_ID) return false;
-    return this.dismiss();
+    return this.dismiss('dismiss');
   }
 
   dispose() {
     for (const m of this._lines) m.material.map?.dispose?.();
     this._baked.forEach((t) => t.dispose?.());
+    for (const t of (this._placeholders?.values() ?? [])) t?.dispose?.();
+    this._placeholders?.clear();
     this._raysTex?.dispose?.();
-    this._art.material.map?.dispose?.();
+    // ⚠ 不 dispose this._art.material.map：物品/遗物图取自 sharedPropArtCache /
+    // sharedRelicArtCache（进程级共享纹理），舞台拆掉时释放会把下次特写打成黑块。
     this.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   }
 }

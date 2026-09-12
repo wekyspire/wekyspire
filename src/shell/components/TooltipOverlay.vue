@@ -25,12 +25,12 @@ const s = tooltipState;
 <style scoped>
 .tooltip {
   position: fixed; z-index: 45; max-width: 260px;
-  background: rgba(8, 12, 24, .92); border: 1px solid #46507a; border-radius: 6px;
+  background: rgba(8, 11, 18, .95); border: 1px solid #2f3a52; border-radius: 3px;
   padding: 8px 12px; color: #dde; font-size: 13px; line-height: 1.5;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
   pointer-events: none;
 }
-.tooltip b { color: #ffd; }
+.tooltip b { color: #eef4ff; }
 /* 整卡预览宿主：去 max-width 文本约束，卡宽固定 200（与 tooltip.js CARD_PREVIEW_SIZE 同步） */
 .tooltip.is-card { max-width: none; padding: 8px; }
 .tip-card { width: 200px; }

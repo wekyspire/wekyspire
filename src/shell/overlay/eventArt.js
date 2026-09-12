@@ -15,6 +15,7 @@ const EVENT_ART = indexArtUrls(
 const HUES = {
   moneyBag: [40, 26],    // 暖金 → 暗棕
   spring: [176, 205],    // 泉水的青 → 冷蓝
+  ascension: [24, 268],  // 进阶：火种橙 → 夜紫（与"灵力汇聚"的基调一致）
 };
 const DEFAULT_HUE = [258, 232];   // 未知事件：偏紫的夜色
 

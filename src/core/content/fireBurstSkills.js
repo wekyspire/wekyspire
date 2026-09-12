@@ -19,7 +19,7 @@ import { applyBattleModifier } from '../run/prep.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
-  drawCards, burnCard, requestHandSelection, selected,
+  drawCards, burnCard, requestHandSelection, selected, gainPower,
 } from './cardKit.js';
 
 // ====================================================================
@@ -92,7 +92,7 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
     attackDamage(sctx, 8);
-    sctx.self.power += 12;
+    gainPower(sctx, sctx.self, 12);   // 本拍结算完再+12：本次打出不享受（公共放缩节拍走 gainPower）
     return true;
   },
   describe: () => '8伤害，/named{蓄热}（伤害+12）',

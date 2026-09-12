@@ -668,11 +668,12 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     expect(panel._buttonActions.has('train:skip')).toBe(false); // 强绑尾款不给跳过
     panel.dispose();
 
-    // 非强制时可跳过
+    // 非强制（退化抓牌）**同样不给跳过**：用户定 2026-09-12——训练本就可以不做，
+    // 直接离开房间即可，面板里再放"跳过"是重复出口
     run.roomData = { drawChoices: ['punch'], forced: false };
     const p2 = new PanelObject({ form: 'modal' });
     p2.setWidgets('room', buildRoomPanel(panelSnapshot(run)));
-    expect(p2._buttonActions.get('train:skip').enabled).toBe(true);
+    expect(p2._buttonActions.has('train:skip')).toBe(false);
     p2.dispose();
     run.roomData = null;
   });
@@ -713,14 +714,15 @@ describe('roomSnapshot + 房间面板（四房）+ 老虎机揭示闸门', () =>
     expect(snap.slot.spinning.id).toBe('a1');
     expect(panel._buttonActions.get('slot:spin').enabled).toBe(false);
 
-    // 产出挂起：显示奖项文案 + 领取/放弃，且不能继续抽
+    // 产出挂起：显示奖项文案 + 放弃兜底（**没有"领取"键**——中奖直接唤起获得演出，
+    // 用户 2026-09-12），且不能继续抽
     run.slotPending = { tier: 'minor', kind: 'moneySmall', money: 22 };
     snap = panelSnapshot(run, { slot: { anim: null, lastSpin: null } });
     expect(snap.slot.pending.money).toBe(22);
     panel.setWidgets('room', buildRoomPanel(snap));
     const texts = panel._rows.filter(r => r.widget.text).map(r => r.widget.text);
     expect(texts.some(t => t.includes('22'))).toBe(true);
-    expect(panel._buttonActions.get('slot:take').enabled).toBe(true);
+    expect(panel._buttonActions.get('slot:take')).toBeUndefined();
     expect(panel._buttonActions.get('slot:decline').enabled).toBe(true);
     // 处理完才能再抽：产出挂起时干脆不渲染拉杆
     expect(panel._buttonActions.get('slot:spin')).toBeUndefined();

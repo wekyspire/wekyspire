@@ -144,6 +144,9 @@ export function createBridgePresenter({
         ...p, cardView: projectCard?.(p.card) ?? null,
       });
     },
+    // 威力提升（power 增加）：效果类次序——先播卡面放缩脉冲（读作"这张牌变强了"），
+    // 再 sync 让卡面文本/伤害数字跟上（battleDescribe 读 power，同源不漂移）。
+    cardPowerUp: (p) => { anim(EventNames.ANIM_CARD_POWER_UP, p); syncState(); },
 
     // ---- 离场类：先离场飞行动画，后 sync（飞进坟堆数字才+1） ----
     cardDiscarded: (p) => { anim(EventNames.ANIM_CARD_DISCARDED, p); syncState(); },

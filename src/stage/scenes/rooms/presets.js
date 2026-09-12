@@ -590,7 +590,7 @@ const SHOP = {
   theme: 'dungeon',
   lighting: 'shop',
   room: { scale: 0.84 },   // 货房比要塞大厅亲密（空间收缩把背墙拉近、售货机占比更大）
-  grading: { exposure: 1.12, tint: [1.03, 1.01, 0.97] },   // 干净暖白（店里的灯，不是烛火）
+  grading: { exposure: 1.1, tint: [0.99, 1.0, 1.02] },   // 冷白中性（机器的灯，不是烛火/暖店）
   // 室内：无大窗，只留一道高窄缝（夜里透一线光，读作"这层有人打理"）
   wall: {
     windows: [],
@@ -678,7 +678,7 @@ const SHOP = {
     uiSafe: { bottomRatio: 0.42 },
   },
   compositionDecal: null,
-  fog: { color: 0x1a1612, near: 175, far: 360 },   // 暖暗雾（比赌厅淡一档：店里更亮）
+  fog: { color: 0x14171c, near: 175, far: 360 },   // 中性冷灰雾（与冷白机器光同基调）
 };
 
 export const RECIPES = Object.freeze({

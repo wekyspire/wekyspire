@@ -9,11 +9,12 @@ import { registerSkill } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
-import { GainActionPointsInstruction } from '../instructions/resources.js';
+import { GainActionPointsInstruction, GainManaInstruction } from '../instructions/resources.js';
 import {
-  AddCardInstruction, DiscardCardInstruction, MoveCardInstruction,
+  AddCardInstruction, DiscardCardInstruction, MoveCardInstruction, TransformCardInstruction,
 } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
+import { attackDamage, resolvedDamageText } from './cardKit.js';
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
 
@@ -246,4 +247,61 @@ registerSkill({
     return true;
   },
   describe: () => '/effect{晕眩}1，/effect{治疗}8',
+});
+
+// ---- 高速魏启罐系列（2026-09-12 设计稿新增）----
+// 与上面「魏启罐」的区别：**即时回蓝**（GainMana，走上限截断）而不是「纳气」（下回合开始整取）。
+// 无费用、无冷却、消耗——纯应急燃料（同阶比纳气罐少 1 点量，换"现在就能用"）。
+const swiftManaJar = (id, name, tier, amount) => registerSkill({
+  id, name, type: 'normal', pack: 'common', tier,
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new GainManaInstruction({ amount }));
+    return true;
+  },
+  describe: () => `获得${amount}魏启`,
+});
+swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
+swiftManaJar('swiftManaJarPlus', '高速大魏启罐', 'A', 4);
+
+// ---- HeLiCoPtEr（A，消耗，2026-09-12 设计稿新增）----
+// 「将所有手牌变换为 0 开销强力肘击」：逐张 TransformCardInstruction（换绑 defId，
+// keepPower 延续；与斩链的局内转化同一指令）。变换后的肘击留在牌组里循环——
+// 代价是整套牌被肘击稀释（放弃体系协同换即时爆发），这是「ヘリコプター」式的整活卡。
+// ⚠ 强力肘击的伤害设计稿没给数值 → 常量放这里，调参改一处。
+const POWER_ELBOW_DAMAGE = 8;
+registerSkill({
+  id: 'powerElbow', name: '强力肘击', type: 'normal', pack: 'common', tier: 'A',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  canSpawnAsReward: false,   // 只由 HeLiCoPtEr 变换而来，不进奖励池（同碎铁口径）
+  use(sctx) {
+    attackDamage(sctx, POWER_ELBOW_DAMAGE);
+    return true;
+  },
+  describe: () => `${POWER_ELBOW_DAMAGE}伤害`,
+  battleDescribe: (sctx) => resolvedDamageText(sctx, POWER_ELBOW_DAMAGE),
+});
+registerSkill({
+  id: 'helicopter', name: 'HeLiCoPtEr', type: 'normal', pack: 'common', tier: 'A',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  keywords: ['exhaust'],
+  use(sctx) {
+    // 快照手牌（变换会把卡暂迁 pending，边遍历边转会错位）
+    const hand = [...sctx.battleState.zones.hand];
+    for (const card of hand) {
+      sctx.kernel.submitInstruction(
+        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'powerElbow' }),
+      );
+    }
+    return true;
+  },
+  describe: () => '将所有手牌变换为0开销强力肘击',
+  battleDescribe: (sctx) => `将所有手牌变换为0开销强力肘击（当前${sctx.battleState.zones.hand.length}张）`,
 });

@@ -46,7 +46,7 @@ describe('preloadAllArt 统一预载', () => {
     expect(stageN + cardN).toBeLessThan(r.total); // cutscenes/images 等其余素材存在且不入缓存
   });
 
-  it('单张失败不阻塞：计入 failed，整体仍落定；warm 进共享缓存后 getFile 同步命中', async () => {
+  it('失败的图计入 failed 且预热缺席（加载门据此**卡住不放行**——用户定 2026-09-12）', async () => {
     class HalfFail {
       set src(url) {
         queueMicrotask(() => (url.includes('cards') ? this.onerror?.() : this.onload?.()));
@@ -60,7 +60,7 @@ describe('preloadAllArt 统一预载', () => {
     });
     expect(r.failed).toBeGreaterThan(0);
     expect(r.total).toBe(ART_MANIFEST.length);
-    // 预载成果已 warm：不发起异步加载、同步拿到图（舞台首拍零占位的依据）
+    // 成功的那些已 warm：不发起异步加载、同步拿到图（舞台首拍零占位的依据）
     expect(stageCache.getFile('unit_player_front.png')).toBeInstanceOf(HalfFail);
   });
 });

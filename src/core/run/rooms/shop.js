@@ -15,7 +15,10 @@
 import { draftRelic } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
 import { allRelics, getRelicDefinition } from '../../relics/registry.js';
-import { availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK } from '../rewards.js';
+import {
+  availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK,
+  packCardPool, tierWeight,
+} from '../rewards.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 
 // 商店房楼层（每章两次；已避开训练层 4N-2、Boss 层 11N 与 Boss 前营地层）
@@ -159,6 +162,38 @@ export const canBuy = (run, index) => {
   return !!it && !it.sold && run.player.money >= it.price;
 };
 
+// 等阶显示序（概率分布行用）
+const TIER_ORDER = ['D', 'C', 'B', 'A', 'S'];
+
+/**
+ * 货品的 hover 说明（纯文本 tooltip 载荷 { title, body }）。
+ * 恢复药剂/苹果这类没有卡面的东西 **必须**有说明，否则玩家不知道买了会怎样（用户定 2026-09-12）；
+ * 卡包则给出「随机 3 张 + 概率分布」——分布按 reward 的等阶加权口径实算（tierWeight 归一），
+ * 与开包时的真实抽取同源，不写死数字。
+ */
+export function shopItemTip(run, it) {
+  if (!it) return null;
+  if (it.kind === 'pack' && it.packId) {
+    const cap = maxRewardTier(run, it.packId);
+    const pool = packCardPool(run, it.packId, cap);
+    const byTier = new Map();
+    for (const d of pool) {
+      const w = tierWeight(d, cap);
+      if (w > 0 && !byTier.has(d.tier)) byTier.set(d.tier, w);
+    }
+    const total = [...byTier.values()].reduce((s, w) => s + w, 0);
+    const dist = TIER_ORDER.filter(t => byTier.has(t))
+      .map(t => `${t} 级 ${Math.round((byTier.get(t) / total) * 100)}%`)
+      .join(' ｜ ');
+    return {
+      title: it.name ?? '卡包',
+      body: `包含随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡牌，按当前灵脉等级出卡`
+        + (dist ? `。概率分布：${dist}。` : '。') + '买到即开，可三选一（也可以放弃）。',
+    };
+  }
+  return { title: it.name ?? it.label ?? '', body: it.effect ?? it.sub ?? '' };
+}
+
 /**
  * 购买（SHOP.md：买到即开/即得）。扣费与发货同步完成，失败不改状态。
  * 卡包不直接给卡——挂起 `run.shopPending`（包内三选一），由 takeShopCard 收尾。
@@ -199,12 +234,16 @@ export function buyShopItem(run, index) {
   }
 }
 
-/** 开包三选一的收尾：把选中的卡加入牌组并清挂起。 */
-export function takeShopCard(run, defId) {
+/**
+ * 开包三选一的收尾：把选中的卡加入牌组并清挂起。
+ * `defId = null` = **放弃这个卡包**（用户定 2026-09-12：三选一必须可以放弃——开出来的三张
+ * 都不想要是玩家的正当选择；钱已经花了，放弃只是不要牌，不退款）。
+ */
+export function takeShopCard(run, defId = null) {
   const pending = run.shopPending;
   if (!pending) throw new Error('当前没有待选择的卡包');
-  if (!pending.choices.includes(defId)) throw new Error(`卡不在候选里：${defId}`);
-  run.player.deck.push(createSkillRuntime(defId));
+  if (defId != null && !pending.choices.includes(defId)) throw new Error(`卡不在候选里：${defId}`);
+  if (defId != null) run.player.deck.push(createSkillRuntime(defId));
   run.shopPending = null;
   return run;
 }

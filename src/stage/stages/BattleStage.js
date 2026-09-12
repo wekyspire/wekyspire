@@ -1035,6 +1035,11 @@ export class BattleStage {
       this._pulseCard(payload?.skill?.uniqueID, delta < 0 ? 0xc87070 : 0x66ff99);
       return finish();
     }
+    // 卡牌威力提升（公共节拍）：卡面放缩脉冲 —— 手牌里由弹簧层收养后自然弹回锚点，
+    // 展示/结算位的卡自己补间回原位。同时叠一层金色加色闪光（fx 层）。
+    if (type === EventNames.ANIM_CARD_POWER_UP) {
+      return this._cardPowerBeat(payload, finish);
+    }
 
     const target = this._findAnimTarget(payload);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
@@ -1422,6 +1427,27 @@ export class BattleStage {
 
   _pulseCard(id, color) {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
+  }
+
+  /**
+   * 卡牌**威力提升**节拍（公共动画：任何改 runtime.power 的效果都走它）：
+   * 卡面放缩脉冲（放大 1.22 → 回程）+ 金色加色闪光，表示"这张牌的状态变了"。
+   * 手牌的缩放归弹簧层所有：先让 animator 接管放大（弹簧让位），播完交还弹簧
+   * ——从放大位平滑弹回锚点，天然带一点回弹；展示/结算位的卡自己补间回原位。
+   */
+  _cardPowerBeat(payload, finish) {
+    const id = payload?.card?.uniqueID ?? payload?.uniqueID ?? null;
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) return finish();
+    this._pulseCard(id, 0xffd34c);
+    const s0 = view.scale.x || 1;
+    this.animator.animate(id, { scale: s0 * 1.22 }, {
+      durationMs: 130,
+      onComplete: () => {
+        if (this.model.getZone(id) === 'hand') { finish(); return; } // 交还弹簧层（自动弹回）
+        this.animator.animate(id, { scale: s0 }, { durationMs: 120, onComplete: finish });
+      },
+    });
   }
 
   // 护盾破碎演出：蓝白碎粒自血条处迸射——只在伤害节拍里被驱动（吸收击穿护盾的

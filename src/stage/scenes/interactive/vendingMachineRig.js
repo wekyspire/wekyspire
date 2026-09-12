@@ -34,9 +34,6 @@ const CARD_PX = { w: 256, h: 360 };
 
 const PRICE_OK = '#ffd75e';      // 买得起：金
 const PRICE_NO = '#ff6060';      // 买不起：红（用户定）
-const PLATE = 'rgba(10,14,24,0.8)';
-const PLATE_EDGE_OK = 'rgba(255,214,110,0.95)';
-const PLATE_EDGE_NO = 'rgba(255,96,96,0.95)';
 
 /** three 的调色板 token 是**数值** hex（`shade` 返回 number）——canvas 的 fillStyle 只吃字符串。 */
 const cssHex = (n) => `#${(n >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
@@ -68,7 +65,10 @@ function fitText(ctx, text, { fontPx, maxW, weight = 'bold' }) {
 }
 
 /**
- * 烘一张商品卡：托盘 + 美术图（或占位色块）+ 名称 + 价格。
+ * 烘一张商品卡：商品图（或占位色块）+ 名称 + 价格。
+ * ⚠ **不加底板、不加边框**（用户定 2026-09-12）：美术素材自带 alpha，售货机柜内色彩干净、
+ * 没有可辨认性问题——加一层深色货盘/描边只会把"立在货架上的实物"读成一张 UI 卡片。
+ * 文字直接浮在图下方（黑描边保证在亮柜内也读得清）。
  * @returns {{texture, canvas}|null} 无 document（node/headless）→ null
  */
 function bakeCard(item, artTex) {
@@ -79,22 +79,15 @@ function bakeCard(item, artTex) {
   canvas.height = H;
   const ctx = canvas.getContext('2d');
   const afford = item.affordable !== false;
-  // ① 货盘（深色半透明 + 描边：买得起金边、买不起红边）
-  roundRect(ctx, 8, 8, W - 16, H - 16, 18);
-  ctx.fillStyle = PLATE;
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = afford ? PLATE_EDGE_OK : PLATE_EDGE_NO;
-  ctx.stroke();
-  // ② 商品图（有美术用美术；没有就色块 + 一个字，占位阶段也读得出是什么）
-  const AX = 26, AY = 26, AW = W - 52, AH = 168;
+  // ① 商品图（有美术用美术；没有就色块 + 一个字，占位阶段也读得出是什么）
+  const AX = 10, AY = 8, AW = W - 20, AH = 186;
   const img = artTex?.image ?? null;
   if (img) {
     const k = Math.min(AW / img.width, AH / img.height);
     const dw = img.width * k, dh = img.height * k;
     ctx.drawImage(img, AX + (AW - dw) / 2, AY + (AH - dh) / 2, dw, dh);
   } else {
-    roundRect(ctx, AX + AW * 0.2, AY + 8, AW * 0.6, AH - 16, 14);
+    roundRect(ctx, AX + AW * 0.22, AY + 10, AW * 0.56, AH - 20, 12);
     ctx.fillStyle = cssHex(shade(tintOfKind(item.kind), -0.05));
     ctx.fill();
     ctx.lineWidth = 3;
@@ -111,7 +104,7 @@ function bakeCard(item, artTex) {
     ctx.strokeText(g, W / 2, AY + AH / 2);
     ctx.fillText(g, W / 2, AY + AH / 2);
   }
-  // ③ 名称（白字黑边；太长就缩字号）
+  // ② 名称（白字黑边；太长就缩字号）
   const name = item.name ?? item.label ?? '';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -119,23 +112,23 @@ function bakeCard(item, artTex) {
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.lineWidth = 5;
   ctx.fillStyle = '#ffffff';
-  fitText(ctx, name, { fontPx: 30, maxW: W - 44 });
-  ctx.strokeText(name, W / 2, 232);
-  ctx.fillText(name, W / 2, 232);
-  // ④ 价格（**买不起 = 红字**，用户定）
+  fitText(ctx, name, { fontPx: 30, maxW: W - 30 });
+  ctx.strokeText(name, W / 2, 224);
+  ctx.fillText(name, W / 2, 224);
+  // ③ 价格（**买不起 = 红字**，用户定）
   const price = `${item.price} 金`;
-  fitText(ctx, price, { fontPx: 54, maxW: W - 48 });
+  fitText(ctx, price, { fontPx: 54, maxW: W - 30 });
   ctx.lineWidth = 7;
   ctx.strokeStyle = 'rgba(0,0,0,0.92)';
-  ctx.strokeText(price, W / 2, 300);
+  ctx.strokeText(price, W / 2, 296);
   ctx.fillStyle = afford ? PRICE_OK : PRICE_NO;
-  ctx.fillText(price, W / 2, 300);
-  // ⑤ 买不起：价格下面再补一行小字（红），点一下的反馈才读得懂
+  ctx.fillText(price, W / 2, 296);
+  // ④ 买不起：价格下面再补一行小字（红），点一下的反馈才读得懂
   if (!afford) {
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(0,0,0,0.9)';
     ctx.fillStyle = PRICE_NO;
-    fitText(ctx, '金币不足', { fontPx: 22, maxW: W - 60 });
+    fitText(ctx, '金币不足', { fontPx: 22, maxW: W - 40 });
     ctx.strokeText('金币不足', W / 2, 334);
     ctx.fillText('金币不足', W / 2, 334);
   }
@@ -271,9 +264,11 @@ export function createVendingMachineRig({
       const tile = ensureTile(s, slotDef);
       tile.index = it.index;
       tile.item = it;
-      // 遗物货挂 token 热区：悬停出**遗物效果 tooltip**（与面板里的遗物行同一挂钩）
+      // hover 说明：遗物货走遗物效果预览（与面板遗物行同一挂钩）；药水/苹果/卡包走
+      // core 算好的 `tip` 文本（无卡面/立绘的东西必须有说明——用户定 2026-09-12）
       tile.root.userData.token = it.relicId
-        ? { type: 'relic', payload: { relicId: it.relicId } } : null;
+        ? { type: 'relic', payload: { relicId: it.relicId } }
+        : (it.tip ? { type: 'item', payload: it.tip } : null);
       tile.root.visible = !st.seq || st.seq.index !== tile.index;
       refreshTile(tile);
     }

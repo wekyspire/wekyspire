@@ -1,5 +1,6 @@
 // ButtonObject：可点击按钮（UI pass 空间）——烘焙按钮面 + 三态 + Picker 注册。
-// 与战斗侧按钮同语言（bakeButtonFace 三态：enabled 蓝钢金边 / active 翠绿 / disabled 深灰），
+// 与战斗侧按钮同语言（bakeButtonFace 三态：enabled 深底白字淡蓝边 / active 淡蓝底 / disabled 深灰；
+// 用户定 2026-09-12：UI 走白字淡蓝按钮的扁平风格，去自体发光与金色大字），
 // 但抽成独立对象：战斗侧那颗按钮的接线锁在 BattleStage 内部，休息阶段面板需要可复用形态。
 //
 // 交互模型：本对象只负责**视觉与拾取注册**，点击语义由宿主面板按 pickableId 路由

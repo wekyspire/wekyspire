@@ -8,6 +8,7 @@
 //            缺省按显示名反查（卡面富文本 markup 以显示名为载体——烘焙即快照，
 //            名字匹配与卡面上印的文本天然一致，这是有意为之的快照语义）
 //   relic    遗物效果预览：名称（稀有度 · 槽位）+ 效果描述
+//   item     通用文本说明（无卡面/立绘的东西：售货机的药水/卡包等）——payload { title, body, tint? }
 //   card     卡牌整卡预览：按 id 反查（markup 只存 id，印出的名字永远等于定义名）；
 //            模型带 cardPreview { skillId, params }，TooltipOverlay 渲染 CardFacePreview
 //            （应用前口径 describe，params 经 ctx.params 透传插值）
@@ -28,6 +29,7 @@ export function tooltipModel(kind, payload = {}) {
     case 'effect': return effectModel(payload);
     case 'card': return cardModel(payload);
     case 'relic': return relicModel(payload);
+    case 'item': return { title: payload.title ?? '', body: payload.body ?? '', tint: payload.tint };
     case 'named': return namedModel(payload);
     case 'intention': return intentionModel(payload);
     case 'shift': return { title: payload.name ?? '', body: '' };

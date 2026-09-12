@@ -208,7 +208,7 @@ describe('售货机界面（与房间并存，不占房间名额）', () => {
     expect(buildRoomPanel(panelSnapshot(off, {})).find(w => w.id === 'room:shop')).toBeUndefined();
   });
 
-  it('打开/关闭售货机：同一份快照下的本地视图切换，不重建面板、不动 core', () => {
+  it('打开售货机：同一份快照下的本地视图切换，不重建面板、不动 core；**不给返回键**（点面板外拉远）', () => {
     const run = shopRun({ seed: 11, money: 200 });
     const stage = new MapStage({});
     const intents = [];
@@ -222,10 +222,9 @@ describe('售货机界面（与房间并存，不占房间名额）', () => {
     expect(stage.panel).toBe(panelRef);                          // 面板对象没重建
     expect(stage.panel.kind).toBe('shop');                       // 视图切到售货机
     expect(intents).toHaveLength(0);                             // 不惊动 core
-    expect(stage._buttonActionsOf('shop:leave')).toBeTruthy();
-
-    stage._panel.onClick({ kind: 'button', id: 'shop:leave' });
-    expect(stage.panel.kind).toBe('room');
+    // 用户 2026-09-12 定：售货机面板不再给「离开售货机」键（"返回房间"按钮的同类），
+    // 退出口统一为"点面板外的房间空白处"（RoomStage._focusMachine(null)）
+    expect(stage._buttonActionsOf('shop:leave').action).toBeFalsy();
     stage.dispose();
   });
 
@@ -253,7 +252,7 @@ describe('售货机界面（与房间并存，不占房间名额）', () => {
     s2.dispose();
   });
 
-  it('卡包待选：售货机面板切换为三选一卡面，点卡上报 takeShopCard', () => {
+  it('卡包待选：操纵条只留「打开卡包选择」入口（三选一走全屏 overlay，可放弃）', () => {
     let run = null;
     for (let seed = 1; seed <= 30 && !run; seed++) {
       const r = shopRun({ seed, money: 400 });
@@ -264,13 +263,16 @@ describe('售货机界面（与房间并存，不占房间名额）', () => {
     const snap = panelSnapshot(run, {});
     expect(snap.shop.pending).toBeTruthy();
 
+    // 用户 2026-09-12：三选一不再铺在操纵条里（塞进 UI 没获得感）——操纵条给一个本地动作
+    // 入口，真正的选择走全屏 CardScrollPickerObject（确认 = 入组，返回 = 放弃卡包）
     const widgets = buildShopPanel(snap);
-    const cardsWidget = widgets.find(w => w.kind === 'cards');
-    expect(cardsWidget.items).toHaveLength(3);
+    const openBtn = widgets.find(w => w.id === 'shop:openPack');
+    expect(openBtn.action.local).toBe(true);
+    expect(widgets.find(w => w.kind === 'cards')).toBeUndefined();
 
     const panel = new PanelObject({ form: 'modal', onIntent: () => {} });
     panel.setWidgets('shop', widgets);
-    expect(panel._cards).toHaveLength(3);
+    expect(panel._buttonActions.get('shop:openPack').action.local).toBe(true);
     panel.dispose();
   });
 });

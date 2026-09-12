@@ -19,6 +19,7 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
 import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
+import { slotPrizeText, DIM_META } from '../stage/panels/index.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
@@ -36,7 +37,7 @@ import {
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { buyShopItem, takeShopCard } from '../core/run/rooms/shop.js';
 import {
-  chooseAscension, LEINO_DIMENSIONS,
+  chooseAscension, ascensionReady, LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
 } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
@@ -45,6 +46,7 @@ import { DisplayModel } from '../bridge/displayModel.js';
 import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
 import { createCutscenePlayer } from './overlay/cutscenePlayer.js';
+import { createSceneWipe } from './overlay/sceneWipe.js';
 import { eventArtUrlNamed } from './overlay/eventArt.js';
 import { recordSave } from './saves.js';
 
@@ -242,10 +244,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
   mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
+  // 该房间是否由**幕间/房间场景**呈现（事件幕间 or 有休息房配方）——呈现中塔楼层**不渲染房间面板**：
+  // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕随后
+  // 才盖住（用户 2026-09-12 报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
+  // 不用"有配方"直接推断——无舞台/占位路径仍要把面板留给塔楼层。
+  let roomScenePending = false;   // 进房演出待/在切换（进房那一刻由 claimReward 置位）
+  const roomPresentedOnScene = () => run.gameStage === 'room' && !!stageManager
+    && (roomScenePending || !!roomStage)
+    && (run.currentRoom === 'event' || !!restRecipeFor(run.currentRoom));
   const notify = () => {
+    if (run.gameStage !== 'room') roomScenePending = false;
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
     const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）
-    mapStage?.setPanel?.(snap);
+    mapStage?.setPanel?.(roomPresentedOnScene() ? null : snap);
     roomStage?.setPanel?.(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
@@ -267,14 +278,22 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   };
 
   // ---- cutscene（游戏流程手动驱动：对话剧本 + 幕间转场）----
-  // S3：剧本 step 编译为 run sequencer 指令——与战斗/房间/塔楼演出同一时钟
-  const cutscene = createCutscenePlayer({ sequencer: runSequencer });
-  // 按当前 run 状态查触发规则并逐条播放（幂等；阻塞靠流程侧 await）
+  // S3：剧本 step 编译为 run sequencer 指令——与战斗/房间/塔楼演出同一时钟。
+  // **切幕器独立于内容播放器**（用户定 2026-09-12）：`sceneWipe` 由 cutscene 播放器驱动、
+  // 由 App.vue 的 SceneWipeOverlay 渲染——黑幕的**目的地**可以是 3D 舞台，也可以是一段
+  // cutscene 内容（事件房：切幕开始 → 对话/CG 就位 → 切幕结束）。
+  const sceneWipe = createSceneWipe();
+  const cutscene = createCutscenePlayer({ sequencer: runSequencer, wipe: sceneWipe });
+  // 按当前 run 状态查触发规则并逐条播放（幂等；阻塞靠流程侧 await）。返回实际播放条数——
+  // 调用方据此决定要不要补一道"退出切幕"（没播剧本就别多等一次黑幕）。
   const playPendingCutscenes = async () => {
     const ctx = { stage: run.gameStage, floor: run.floor, storyMode: run.storyMode };
+    let played = 0;
     for (const id of cutscene.pendingTriggers(ctx)) {
       await cutscene.play(id);
+      played += 1;
     }
+    return played;
   };
   playPendingCutscenes(); // 开场剧本（故事模式 prep 第 1 层；肉鸽模式/读档不命中）
 
@@ -324,35 +343,45 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     })().finally(() => { battlePending = false; });
   }
 
-  // 退场：幕间转场（全黑中点回写 run + 切回地图）→ 塔楼抵达动画（同队列串行）→ 战后剧本
+  // 退场（用户定 2026-09-12 调整节拍）：**先落战后奖励、不切幕** —— 奖励 overlay 立刻盖上来
+  // （塔楼舞台先在幕后摆好，但没有黑幕）；领完/跳过奖励后（claimReward）才切幕回塔楼、
+  // 播"楼层 clear（当前层高亮块长出）"动画。原实现顺序相反（先黑幕回塔楼再开奖励）。
   function endBattle(result, bridge) {
-    const doSwap = () => {
-      finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）
-      battleBridge = null;
-      if (stageManager && mapStage) {
-        mapStage.setFloor(run.floor, run.totalFloors); // 黑幕后即落位；高亮生长由抵达动画接管
-        stageManager.setStage(mapStage);
-      }
-      battleStage?.dispose(); // 战斗舞台随退场释放（此前引用滞留至下一场被静默覆盖）
-      battleStage = null;
-      // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
-      // 于是爬塔动画播完才看到战后的血量/金币。这里在黑幕中就先把状态推给地图舞台
-      // （只刷状态栏/资源行，不动面板、不触发存档与预载）。
-      syncMapStatus();
-    };
-    (async () => {
-      if (stageManager) await cutscene.sceneTransition(doSwap);
-      else doSwap(); // headless/无舞台：直切
-      // 塔楼抵达（S5）：排在黑幕 reveal 之后（同一队列串行），当前层高亮块长出；
-      // 等待语义与两道保险丝见 awaitFloorArrive 的注释（曾因漏 resolve 卡死战后链条）
-      if (stageManager && mapStage) {
-        await awaitFloorArrive(runSequencer, mapStage, {
-          floor: run.floor, totalFloors: run.totalFloors,
-        });
-      }
-      await playPendingCutscenes(); // reward 阶段命中项（Boss 层 = postBoss）
-      notify();
-    })();
+    finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
+    battleBridge = null;
+    if (stageManager && mapStage) {
+      mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画留到领奖之后
+      stageManager.setStage(mapStage);               // 瞬切（无幕）：奖励 overlay 由塔楼舞台承载
+      battleStage?.dispose();                        // 先换台再释放（onExit 语义完整）
+    } else {
+      battleStage?.dispose();
+    }
+    battleStage = null;
+    // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
+    // 于是爬塔动画播完才看到战后的血量/金币。这里在黑幕中就先把状态推给地图舞台
+    notify();   // 推 reward 面板 → 奖励 overlay 即刻可交互
+  }
+
+  /**
+   * 奖励环节收尾（claimReward 之后）：切幕 → 塔楼 → **楼层 clear 动画** → 战后剧本 → 进房。
+   * 节拍要点（用户定 2026-09-12）：玩家点完领取/跳过，才把奖励 overlay 收掉并揭幕塔楼；
+   * 阶段迁移（completeRewards）已在 claimReward 里完成，这里只做呈现与演出。
+   */
+  async function afterRewardToFloor() {
+    // ① 切幕：黑幕中点把奖励 overlay 换成新阶段的面板（房间/战前准备），揭幕即塔楼
+    if (stageManager) await cutscene.sceneTransition(() => notify());
+    else notify();
+    // ② 楼层 clear：当前层高亮块自下而上长出（同一队列串行，黑幕已揭）
+    if (stageManager && mapStage) {
+      await awaitFloorArrive(runSequencer, mapStage, {
+        floor: run.floor, totalFloors: run.totalFloors,
+      });
+    }
+    // ③ 战后剧本（Boss 层 = postBoss）→ 幕间退出也切幕（cutscene 与场景同待遇）
+    const played = await playPendingCutscenes();
+    if (played && stageManager) await exitSceneAfterCutscene(() => notify());
+    // ④ 进房演出（事件幕间 / 有配方的房切场景；无房 = 留在战前准备）
+    enterRoomPresentation();
   }
 
   // ---- reward ----
@@ -366,9 +395,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'reward') return; // 防迟到重复点击
     chooseSkillReward(run, defId);
     completeRewards(run);
-    if (run.gameStage === 'room') { slot.lastSpin = null; slot.anim = null; eventRoom.result = null; } // 进新房清上一房瞬态
-    notify();
-    enterRoomPresentation();   // 进房后的演出派发：事件房播幕间 / 有配方的房切场景
+    if (run.gameStage === 'room') {
+      slot.lastSpin = null; slot.anim = null; eventRoom.result = null; // 进新房清上一房瞬态
+      // 将要用幕间/房间场景呈现的房间：先置"待呈现"，notify 与切幕之间塔楼层不再铺房间面板
+      if (run.currentRoom === 'event' || restRecipeFor(run.currentRoom)) roomScenePending = true;
+    }
+    // 奖励环节结束 → 切幕回塔楼 → clear 动画 → 战后剧本 → 进房（节拍见 afterRewardToFloor）
+    void afterRewardToFloor();
   }
 
   // ---- 场景式休息房（第一间 = 赌厅 casino，用户定 2026-09-11）----
@@ -394,6 +427,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
       stageManager.setStage(roomStage);
       syncMapStatus();   // 状态栏/资源行进房先落位（不等 notify）
+      roomScenePending = false;   // 场景已就位：抑制交给 roomStage 这个条件接管
     };
     await cutscene.sceneTransition(doSwap, { holdMs: 220 });
     return true;
@@ -417,20 +451,41 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     restEntering = true;
     try { return await enterRestRoomScene(); } finally { restEntering = false; }
   }
-  /** 离开房间场景：黑幕中点换回塔楼层（地图舞台的层位先摆好，揭幕即到位）。 */
-  async function exitRestRoomScene() {
-    if (!roomStage) return false;
-    const doSwap = () => {
-      if (stageManager && mapStage) {
-        mapStage.setFloor(run.floor, run.totalFloors);
-        stageManager.setStage(mapStage);
-      }
-      roomStage?.dispose();
-      roomStage = null;
-      syncMapStatus();
-    };
+  /**
+   * 离开房间场景：黑幕中点换回塔楼层。
+   * @param beforeSwap 在**黑幕盖住之后**执行（核心阶段迁移 + notify 都放这里）——这是用户
+   *   2026-09-12 定的节拍：先起幕间切幕演出，再同步 state、转移场景，最后揭幕。
+   *   在前端状态必然经历一瞬"旧场景 + 新快照"（面板突变/取景突变）的场合，只有把同步
+   *   压进黑幕里才能让那些 invalid 中转帧完全不被看见。
+   */
+  /** 把房间舞台换回塔楼（不排幕）：奖励/进阶等"多段演出"共用同一段换台代码。 */
+  function swapRoomToMap() {
+    if (stageManager && mapStage) {
+      mapStage.setFloor(run.floor, run.totalFloors);
+      stageManager.setStage(mapStage);
+    }
+    roomStage?.dispose();
+    roomStage = null;
+    syncMapStatus();
+  }
+
+  async function exitRestRoomScene(beforeSwap = null) {
+    const doSwap = () => { beforeSwap?.(); swapRoomToMap(); };
+    if (!roomStage) { doSwap(); return false; }   // 无场景（占位路径/无舞台）：同步直落
     if (stageManager) await cutscene.sceneTransition(doSwap);
     else doSwap();
+    return true;
+  }
+
+  /**
+   * **cutscene 退出回舞台**的切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
+   * 黑幕盖住 → beforeSwap（阶段迁移/面板刷新）→ 揭幕（揭开的就是刷新后的舞台）。
+   * 与 exitRestRoomScene 的区别：**不换舞台**——目的地就是当前舞台本身，cutscene 内容层收起即露出。
+   * 无舞台（headless）时同步直落（不排黑幕，不影响逻辑）。
+   */
+  async function exitSceneAfterCutscene(beforeSwap = null) {
+    if (stageManager) await cutscene.sceneTransition(beforeSwap ?? undefined);
+    else beforeSwap?.();
     return true;
   }
 
@@ -456,6 +511,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
   function trainingSkip() {
+    // ⚠ 面板已不再提供「跳过训练」键（用户定 2026-09-12：训练本就可不做，直接离开即可）。
+    // 入口保留给 headless/测试（跳过 = 记一次训练但不拿牌）。
     if (run.gameStage !== 'room' || trainingLocked()) return; // 已在抉择中 → 必须走对应选择
     skipTraining(run);
     maybeLeaveRoom();
@@ -506,6 +563,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       title: `+${p.gold} 金币`,
       desc: '银行机超额取款',
       effect: `代价：${p.name}（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
+      artKey: 'gold',   // 无素材时组件烘"金币堆"占位（用户要的观感）
       tint: 0xffd75e,
     });
   }
@@ -554,11 +612,52 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   function leaveRoom() {
     if (run.gameStage !== 'room') return;
-    completeRoom(run);   // 强绑抓牌未领时由核心抛错拦截
-    notify();
-    void exitRestRoomScene();   // 主动离开休息室 → 幕间黑幕回塔楼
+    if (run.roomData?.forced) return;   // 强绑抓牌未领：不让走（核心也会拦，这里先不给动作）
+    // 训练达标 → 离开即进进阶事件：**由进阶幕间接棒这段切幕**（黑幕中点做迁移 + 换台，
+    // 揭幕揭开的就是进阶对话）——若先揭幕回塔楼再开进阶幕，会闪一下塔楼（用户定 2026-09-12）
+    if ((run.currentRoom === 'campTraining' || run.currentRoom === 'training') && ascensionReady(run)) {
+      void playAscensionScene({ fromRoom: true });
+      return;
+    }
+    // 节拍：幕间黑幕先起 → 黑幕中点做阶段迁移（completeRoom + notify）→ 揭幕时已是塔楼新层。
+    // 迁移若发生在黑幕之前，玩家会看到"营地面板/取景突然变成塔楼"的一帧（用户报过的突变）。
+    void exitRestRoomScene(() => { completeRoom(run); notify(); });
   }
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
+  /**
+   * 中奖落定 → **直接唤起获得演出**（用户定 2026-09-12）：产出不再由操纵条里的「领取」按钮
+   * 处理（"没有获得感"）。点任意处 = 收下（需要选一张的奖项：随后在面板/全屏选卡里选；
+   * 免费指定升级：随后自动开选卡界面）；点「跳过」= 放弃这份产出。
+   * 一次产出只播一次（按对象身份去重；领取/放弃后 pending 清空，自然复位）。
+   */
+  let shownSlotPrize = null;
+  function maybeShowSlotPrize() {
+    const p = run.slotPending;
+    if (!p) { shownSlotPrize = null; return false; }
+    if (p === shownSlotPrize) return false;
+    shownSlotPrize = p;
+    const stage = panelStage();
+    if (!stage?.showcaseItem) return false;
+    const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
+    const freeUpgrade = p.upgrade?.kind === 'free';
+    const major = p.tier === 'major';
+    stage.showcaseItem({
+      title: slotPrizeText(p),
+      desc: `老虎机 · ${major ? '★ 大奖' : '小奖'}`,
+      effect: needsPick ? '收下之后，在候选里选一张带走'
+        : freeUpgrade ? '收下之后，选择要免费升级的卡'
+          : '点任意处收下 ｜ 点「跳过」放弃这份产出',
+      artKey: p.money != null ? 'gold' : null,   // 金币奖 → 组件烘"金币堆"占位
+      tint: major ? 0xffd75e : 0xd8e2f4,
+      skippable: true,
+      onSkip: () => slotDecline(),
+      onDismiss: () => {
+        if (freeUpgrade) { slotTake(null); panelStage()?.openUpgradePicker?.('slot'); }
+        else if (!needsPick) slotTake(null);
+      },
+    });
+    return true;
+  }
   function spin() { // 可重复消费（每次扣费/消耗免费 roll）；roll 动画经 run sequencer 串行编排
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
     if (run.slotPending) return; // 上一次产出还没处理
@@ -575,6 +674,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           slotFinish = null;
           // 揭示后必须重推面板快照：面板是**快照驱动**的（漏掉它的症状＝永远停在「转动中」）
           notify();
+          maybeShowSlotPrize();   // 中奖即唤起获得演出（放弃/收下都在那个演出里）
           emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
           return true;
         };
@@ -670,6 +770,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           title: `+${res.gold} 金币`,
           desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡' : '老虎机满意地嚼碎了那件遗物',
           effect: res.freeRoll ? '它还额外吐了一次免费拉杆' : '金币已经落进你的钱袋',
+          artKey: 'gold',
           tint: 0xffd75e,
         });
       },
@@ -683,8 +784,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'room' || !run.shop) return;
     const it = run.shop.items?.[index];
     const res = buyShopItem(run, index);
-    // 卡包不计入（买到即开走面板三选一，没有"一件物品到手"的画面）
-    shopPendingShow = (it && it.kind !== 'pack')
+    // 买到的东西都要"到手那一拍"：卡包也走获得演出（展示卡包图 → 演完自动开包），
+    // 与药水/遗物同一条链（用户定 2026-09-12：购买必须走获得演出）
+    shopPendingShow = it
       ? { index, kind: it.kind, name: it.name, effect: it.effect, relicId: it.relicId ?? null }
       : null;
     // 场景里真的有这张卡片才会播出货演出 → 有回执；没有就当场播特写（headless/降级路径）
@@ -717,34 +819,40 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     shopShowcase(p);
     return true;
   }
-  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a };
+  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e };
   /** 买到手的那件东西的特写（遗物交给全局差分：素材与描述口径都在那边）。 */
   function shopShowcase(p) {
     if (!p) return false;
     if (p.kind === 'relic') return flushRelicShowcase();
-    return !!panelStage()?.showcaseItem?.({
+    const stage = panelStage();
+    if (!stage?.showcaseItem) return false;
+    const pack = p.kind === 'pack';
+    return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: '来自瑞米的自动售货机',
+      desc: pack ? '瑞米的自动售货机 · 卡包' : '瑞米的自动售货机',
       effect: p.effect ?? '',
-      artKey: p.kind,                       // assets/items|props：potion / apple（没素材就色块）
+      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
+      // 卡包：获得演出看完**自动开包**（全屏三选一，可放弃；见 openShopPackPicker）
+      onDismiss: pack ? () => panelStage()?.openShopPackPicker?.() : null,
     });
   }
   function shopTakeCard(defId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
-    takeShopCard(run, defId);
+    takeShopCard(run, defId);   // defId = null → 放弃这个卡包（choice 不够好时的出口）
     notify();
   }
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
-    completeRoom(run);
-    notify();
-    void exitRestRoomScene();
+    if (run.roomData?.forced) return;
+    void exitRestRoomScene(() => { completeRoom(run); notify(); });   // 同 leaveRoom：迁移压进黑幕
   }
   // ---- 随机事件（用户定 2026-09-12：**不做 3D 场景，也不用旧 UI 面板**）----
   // 事件 = 对话 + 选项 + 逻辑：进房即播一段**幕间**——背景 CG（占位美术，见 overlay/eventArt.js）
   // + 普通对话 → 摆出选项（`cutscene` 的 dialogue step 原生支持 choices）→ 玩家选 → core 结算
-  // → 接着播结果页 → 离房回塔楼（事件房没有场景舞台，一直在 MapStage 上，不切景）。
+  // → 接着播结果页 → **切幕**回塔楼（事件房没有场景舞台，一直在 MapStage 上）。
+  // 进出都是幕间：进 = wipe step 后面的对话被"揭开"（切幕开始 → 事件画面就位 → 切幕结束，
+  // 用户 2026-09-12 报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
   // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
   let eventPlaying = false;
   async function playEventScene() {
@@ -757,7 +865,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       let res = null;
       await cutscene.play({
         steps: [
-          { type: 'wipe' },                     // 幕间黑幕：把塔楼层推到幕后
+          { type: 'wipe' },                     // 幕间切幕：黑幕盖住 → 事件画面在幕后就位 → 揭开
           {
             type: 'dialogue', bg,
             pages: [
@@ -772,8 +880,20 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       if (!res) return false;                   // 没选就退出（异常路径：不结算也不离房）
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: res.pages }] });
       eventRoom.result = res;
-      completeRoom(run);                        // 事件房到此结束 → 推进楼层
-      notify();
+      // 退出切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
+      // 黑幕盖住 → 阶段迁移 + 塔楼刷新 → 揭幕；获得演出排在揭幕之后（不然会被黑幕吞掉半截）。
+      await exitSceneAfterCutscene(() => { completeRoom(run); notify(); });
+      if (res.money > 0) {
+        // 获得演出：事件给的钱也要"到手那一拍"（用户定 2026-09-12：大多时候获得都该走获得演出，
+        // 否则只是面板上的数字悄悄变了，没有获得感）。治疗类不打断叙事，故只给金币播。
+        panelStage()?.showcaseItem?.({
+          title: `+${res.money} 金币`,
+          desc: `事件 · ${view.name}`,
+          effect: '金币已经落进你的钱袋（关闭后继续行程）',
+          artKey: 'gold',
+          tint: 0xffd75e,
+        });
+      }
       return true;
     } catch (err) {
       // 兜底：幕间出问题也不能把玩家卡在事件房里（用默认选项结算后离房）
@@ -786,6 +906,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       return false;
     } finally {
       eventPlaying = false;
+      roomScenePending = false;
+      // 未结算就退出（异常/无选择）→ 事件房还在：把面板（安全阀）还给塔楼层，别让玩家卡死
+      if (run.gameStage === 'room' && run.currentRoom === 'event') notify();
     }
   }
   /** 面板安全阀 / 测试入口（正常路径由进房自动触发）。 */
@@ -796,24 +919,97 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
   }
 
-  // ---- ascension ----
+  // ---- ascension（**进阶 = cutscene + dialogue**，用户定 2026-09-12）----
+  // 形态：训练达标离开营地房 → 与房间迁移**同一段切幕**（黑幕中点迁移 + 换台，揭幕揭开的就是
+  // 进阶对话）→ 旁白 + 「择维度」选项（对话选项，非面板）→ 结果页 → （首次 0→1）九选三面板收尾
+  // → 结束时切幕回塔楼。美术：占位 CG，真素材丢 `src/assets/images/events/ascension.webp` 自动顶替。
+  let ascensionPlaying = false;
+  /** 进阶选项（对话 choices）：所有可选维度 + 跳过（改记 1 点体修等级）。 */
+  const ascensionChoices = () => [
+    ...LEINO_DIMENSIONS.map((id) => {
+      const meta = DIM_META[id] ?? { label: id };
+      return {
+        id,
+        label: `${meta.glyph ?? ''}${meta.label}（等级 ${run.player.leino?.[id] ?? 0}）`,
+        hint: `突破${meta.label}`,
+      };
+    }),
+    { id: 'skip', label: '跳过（改记 1 点体修等级）', hint: '不选灵脉，精进体修' },
+  ];
+  /** 选择之后的结果页（一句话确认，数字读实时 run）。 */
+  const ascensionResultPage = (id) => (id === 'skip'
+    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等级 ${run.player.bodyLevel ?? 0}。）` }
+    : {
+      speaker: '旁白',
+      text: `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
+        + `生命回复 ${ASCENSION_PLACEHOLDER.healAmount} 点，魏启上限 +${ASCENSION_PLACEHOLDER.manaGain}。）`,
+    });
+
+  /**
+   * 播进阶幕间。
+   * @param fromRoom true = 从营地房直接接棒（黑幕中点做 completeRoom + 换台）；
+   *                 false = 已在 ascension 阶段（调试/兜底）只做转场。
+   */
+  async function playAscensionScene({ fromRoom = false } = {}) {
+    // fromRoom：调用时阶段仍是 'room'（迁移在黑幕中点做）——所以守卫按来源分流
+    if (ascensionPlaying) return false;
+    if (!fromRoom && run.gameStage !== 'ascension') return false;
+    ascensionPlaying = true;
+    try {
+      const bg = eventArtUrlNamed('ascension', '进阶');
+      let picked = null;
+      await cutscene.play({
+        steps: [
+          {
+            type: 'wipe',
+            // 从房间来：全黑中点做阶段迁移 + 换台（房间→塔楼），揭幕揭开的就是进阶对话
+            atCover: fromRoom ? () => { completeRoom(run); swapRoomToMap(); notify(); } : undefined,
+          },
+          {
+            type: 'dialogue', bg,
+            pages: [
+              { speaker: '旁白', text: '塔层的灵力在此汇聚，经脉里的火种轻轻跳动。' },
+              { speaker: '旁白', text: '择一条主维度突破——或就此收手，把心思留给身体。', choices: ascensionChoices() },
+            ],
+            onChoice: (id) => {
+              picked = id;
+              chooseAscension(run, id === 'skip' ? null : id);   // 同步结算（恢复/魏启上限/首解锁赠礼）
+              notify();   // 种子包挂起时把九选三面板推到幕后就位
+            },
+          },
+        ],
+      });
+      if (!picked) return false;                      // 未选择（异常路径）：留在 ascension 阶段
+      await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
+      if (run.cardOffering) return true;              // 九选三面板收尾（chooseSeedCards 里再切幕）
+      await exitSceneAfterCutscene(() => notify());   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
+      return true;
+    } finally {
+      ascensionPlaying = false;
+    }
+  }
+
+  /** 面板兜底路径（正常由 playAscensionScene 的对话选项走）：选了维度后同样要"收尾切幕"。 */
   function chooseAscensionDimension(dimension) {
     if (run.gameStage !== 'ascension') return;
     chooseAscension(run, dimension);
     notify();
+    if (!run.cardOffering) void exitSceneAfterCutscene(() => notify());
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
   function skipAscension() {
     if (run.gameStage !== 'ascension' || run.cardOffering) return;
     chooseAscension(run, null);
     notify();
+    void exitSceneAfterCutscene(() => notify());
   }
 
-  // 种子包：九选三 + 一次刷新（首次 0→1 时挂起）
+  // 种子包：九选三 + 一次刷新（首次 0→1 时挂起）；确认后进阶结束 → 切幕回塔楼
   function chooseSeedCards(defIds) {
     if (run.gameStage !== 'ascension' || !run.cardOffering) return;
     chooseSeedCardsCore(run, defIds);
     notify();
+    void exitSceneAfterCutscene(() => notify());
   }
   function rerollSeedOffering() {
     if (run.gameStage !== 'ascension' || !run.cardOffering) return;
@@ -892,6 +1088,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   return {
     run, runBus, log, slot, eventRoom, cutscene,
+    sceneWipe,                      // 幕间切幕器（独立一层，App.vue 的 SceneWipeOverlay 渲染）
     sequencer: runSequencer, animBus, dispose,
     LEINO_DIMENSIONS, SLOT,
     slotView: () => slotView(run),
@@ -922,6 +1119,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     eventView: () => eventView(run),                 // 事件读取（内容与逻辑在 core；测试/调试可用）
     resolveEvent: (id) => resolveEvent(run, id),     // 事件结算（只允许一次）
     chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
+    playAscensionScene,             // 进阶幕间（正常路径由 leaveRoom 接棒；调试/测试可用）
     equip, unequip, useRelic,
   };
 }

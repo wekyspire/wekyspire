@@ -233,7 +233,7 @@ export class MapStage {
       bakeFace: this._bakeFace,
       bakeText: this._pickerBakeText(),
       bus: this._bus,
-      onCancel: () => { this._pickerFocus = null; },
+      onCancel: () => { this._pickerFocus = null; this._pickerCancel?.(); },
       onConfirm: (ids) => this._pickerConfirm?.(ids),
     });
     this.uiScene.add(this._cardPicker);
@@ -255,6 +255,30 @@ export class MapStage {
         style: { fontSize: fontPx, lineHeight: Math.round(fontPx * 1.3), color: tint },
       });
     return this._pickerBake;
+  }
+
+  /**
+   * 公开入口（宿主编排器用：中奖后的免费指定升级 / 卡包三选一由 Shell 主动唤起）。
+   * 内部实现仍是 `_openUpgradePicker`（面板本地动作同一条路）。
+   */
+  openUpgradePicker(source) { return this._openUpgradePicker(source); }
+
+  /** 卡包三选一（买到即开）：全屏 overlay，**可放弃**（返回 = 放弃，见 panels 的 shop 分支）。 */
+  openShopPackPicker() {
+    const pend = this._snap?.shop?.pending;
+    if (!pend?.cards?.length) return false;
+    const picker = this._ensureCardPicker();
+    this._pickerConfirm = (ids) => this._onIntent?.({ action: 'takeShopCard', defId: ids[0] });
+    this._pickerCancel = () => this._onIntent?.({ action: 'takeShopCard', defId: null });
+    picker.open({
+      title: `${pend.packId} · 卡包`,
+      hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
+      cards: pend.cards.map(c => ({
+        uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+      })),
+      confirmLabel: '加入牌组',
+    });
+    return true;
   }
 
   _ensureRelicPicker() {

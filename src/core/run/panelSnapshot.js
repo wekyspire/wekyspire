@@ -26,7 +26,7 @@ import { getAbilityDefinition } from '../abilities/registry.js';
 import { trainingMode } from './rooms/training.js';
 import { campOptions } from './rooms/camp.js';
 import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } from './rooms/slotMachine.js';
-import { canBuy, isShopFloor } from './rooms/shop.js';
+import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
 import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
@@ -194,6 +194,8 @@ export function roomSnapshot(run, extra = {}) {
         label: it.label, sub: it.sub ?? '',
         effect: it.effect ?? it.sub ?? '',  // 获得演出的"具体作用"行
         relicId: it.relicId ?? null, // 遗物货：供 hover 效果预览
+        // 非遗物货的 hover 文本说明（药水/苹果/卡包）：core 侧算好纯文本，Stage 只负责弹
+        tip: it.relicId ? null : shopItemTip(run, it),
         price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
       })),
       pending: run.shopPending ? {

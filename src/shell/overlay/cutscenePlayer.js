@@ -3,18 +3,29 @@ import mitt from 'mitt';
 import { isBossFloor } from '../../core/run/runFlow.js';
 import { CUTSCENE_SCRIPTS } from './scripts.js';
 import { AnimationSequencer } from '../../core/anim/sequencer.js';
+import { createSceneWipe, SCENE_TRANSITION_MS } from './sceneWipe.js';
 
 // CutscenePlayer（Shell 层）：cutscene 分步时间轴播放器。
 // S3 收敛：剧本 step 编译为 sequencer 指令（默认严格串行），与战斗/房间/塔楼
 // 演出共用 run 级同一时钟——跨层定序（终局动画 → 幕间黑幕 → …）无需额外协调。
 // 由游戏流程手动驱动（runController 在进出战斗等节点显式调用），不自动订阅 run 事件。
 //
+// **切幕器与内容播放器分离**（用户定 2026-09-12 的架构修正）：
+//   黑幕（wipe）不再画在本播放器的 overlay 里，而是交给独立的 `sceneWipe` 状态机 +
+//   `SceneWipeOverlay.vue`（自占一层，z 压过内容层）。原因：黑幕的**目的地可以是任何东西**
+//   ——3D 舞台，也可以是一段 cutscene 内容；同层时"切到 cutscene"会退化成
+//   "黑幕播完 → 内容才挂上（突然蹦出来）"。
+//   现在 wipe step 在**全黑中点**调用下一步的 `preStage()`（内容层在黑幕之下就位），
+//   于是揭幕揭开的就是目的地本身：切幕开始 → 目的地就位 → 切幕结束。
+//
 // step 词汇表（可组合，可继续扩展新类型；每类 = 一种指令编译方式）：
 //   { type:'fade', to:0|1, ms }        全屏颜色层渐变（to=1 渐黑 / to=0 渐亮）——定时指令
 //   { type:'wipe', coverMs, revealMs, holdMs?,
-//     direction?, atCover? }           幕间转场：黑幕扫过，全黑中点执行 atCover——
+//     direction?, atCover? }           幕间切幕：黑幕扫过，全黑中点执行 atCover——
 //                                      atCover 可返回 Promise（战场预载）：黑幕保持到
-//                                      兑现才 reveal；holdMs = 揭幕前的额外黑幕停留
+//                                      兑现才 reveal；holdMs = 揭幕前的额外黑幕停留。
+//                                      同时把**下一步的内容**就位（见上）——wipe 后面
+//                                      跟的内容会被"揭开"而不是"事后蹦出"
 //   { type:'image', src, fadeInMs?,
 //     holdMs?, fadeOutMs? }            CG/插图：淡入 → 停留 → 淡出——定时指令
 //   { type:'dialogue', pages }         对话：人工闸门指令（点击翻页，末页回执开闸）
@@ -30,10 +41,10 @@ import { AnimationSequencer } from '../../core/anim/sequencer.js';
 //   · 选项内容由**调用方按可用内容动态拼**（如"没有可粉碎的卡就不给卡牌选项"）——
 //     层里不做游戏判定，只负责"把选项摆出来并把人选的那个交回去"
 //
-// 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；
-// 阻塞流程 = 流程侧 await play()/sceneTransition() 后再发下一个 run intent。
-// CutsceneOverlay.vue 的 wipe 过渡时长由 step 参数驱动（缺省见 SCENE_TRANSITION_MS）。
-export const SCENE_TRANSITION_MS = Object.freeze({ cover: 750, reveal: 950 });
+// 阻塞语义：mode !== 'idle' 期间 CutsceneOverlay 全屏吸收一切交互；切幕期间由
+// SceneWipeOverlay 吸收（z 更高）。阻塞流程 = 流程侧 await play()/sceneTransition()
+// 后再发下一个 run intent。
+export { SCENE_TRANSITION_MS };
 
 // 完成回执协议：与 bridge 层同事件名（sequencer 构造注入的 run 级实例已用同名）
 const FINISH_EVENT = 'animation-instruction-finished';
@@ -51,10 +62,13 @@ export const CUTSCENE_TRIGGERS = Object.freeze([
  * @param {object} options
  *   sleep: (ms) => Promise（测试注入；缺省 setTimeout）
  *   sequencer: run 级共享指令队列（缺省自建独立实例——单测/独立使用）
+ *   wipe: 幕间切幕器（`createSceneWipe()`；缺省自建——独立使用时也自洽）。
+ *         宿主（runController）传共享实例，overlay 才能渲染到同一份状态。
  */
-export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
+export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = null } = {}) {
   const wait = sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
   const seq = sequencer || new AnimationSequencer({ bus: mitt(), finishedEvent: FINISH_EVENT });
+  const wipeCtl = wipe ?? createSceneWipe();
   const state = reactive({
     mode: 'idle',      // idle | playing
     script: null,      // 正在播放的剧本 { id?, steps }
@@ -73,11 +87,18 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
   const beginStep = (script, step) => { state.script = script; state.step = step; state.phase = null; };
 
   // ---- step → 指令编译（时长型走 wait 分段 + 回执；dialogue 等人工闸门） ----
-  function compileStep(script, step) {
+  // nextBox: 一个可变盒子，最终装着**下一步的编译结果**（play() 编译完才填）。
+  // 只有 wipe 用它——见 'wipe' 分支的"目的地就位"。
+  //
+  // 每个内容类 step 都可给 `preStage()`：**在黑幕之下把这一步先摆出来**（不推进时间轴、
+  // 不开闸），于是揭幕揭开的就是这一步的画面。与 start 的差异：preStage 不做"落位一帧
+  // 再起过渡/开闸"这类只该发生一次的事——它是幂等的"摆好姿势"。
+  function compileStep(script, step, nextBox = null) {
     switch (step.type) {
       case 'fade':
         return {
           durationMs: (step.ms ?? 0) + 2000, // 保险丝（前端不回执时兜底推进）
+          preStage() { beginStep(script, step); },
           async start({ id, emit }) {
             beginStep(script, step);
             await wait(step.ms ?? 0);
@@ -93,16 +114,24 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
           durationMs: coverMs + revealMs + holdMs + 8000,
           async start({ id, emit }) {
             beginStep(script, step);
-            state.phase = 'enter';  // 黑幕屏外待命（无过渡，先落位）
-            await wait(16);         // 让初始 transform 渲染一帧，再起过渡
-            state.phase = 'cover';
+            wipeCtl.begin({ coverMs, revealMs });   // 黑幕由独立切幕层渲染（不在本 overlay 里）
+            await wait(16);         // 让屏外初始 transform 渲染一帧，再起过渡
+            wipeCtl.toCover();
             await wait(coverMs);
-            // 全黑中点：换景/预载。atCover 可返回 Promise（战场预载就绪信号）——
-            // 黑幕保持到兑现才揭幕，避免单位"加载后才显示"的突兀感
+            // ★ 全黑中点：换景/预载/目的地就位。
+            //   · atCover 可返回 Promise（战场预载就绪信号）——黑幕保持到兑现才揭幕；
+            //   · 下一步的内容在这里**就位**（内容层在黑幕之下渲染），于是揭幕揭开的
+            //     就是目的地本身——"切幕开始 → 目的地就位 → 切幕结束"（用户定 2026-09-12）。
+            //     此前 wipe 与内容同层，切到 cutscene 时只能等黑幕播完内容才蹦出来。
             await step.atCover?.();
+            nextBox?.c?.preStage?.();
             if (holdMs > 0) await wait(holdMs); // 揭幕前的额外黑幕停留
-            state.phase = 'reveal';
+            wipeCtl.reveal();
             await wait(revealMs);
+            // 幕布移出屏外后留一帧余量再卸层（CSS 过渡在合成器上可能比定时器晚一拍，
+            // 早卸会看到黑幕被"切断"）；这点延迟不影响任何节拍
+            await wait(80);
+            wipeCtl.end();
             emit(FINISH_EVENT, { id });
           },
         };
@@ -113,6 +142,8 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
         const fadeOutMs = step.fadeOutMs ?? 400;
         return {
           durationMs: fadeInMs + holdMs + fadeOutMs + 2000,
+          // 幕后就位：以 opacity 0 落位（揭幕揭开的是黑，随后自己淡入——不会闪一下再淡出）
+          preStage() { beginStep(script, step); state.phase = 'enter'; },
           async start({ id, emit }) {
             beginStep(script, step);
             state.phase = 'enter';  // 先以 opacity 0 落位一帧，再起淡入过渡
@@ -130,6 +161,9 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       case 'dialogue':
         return {
           durationMs: Infinity, // 人工闸门：只由点击推进，无超时强杀
+          // 幕后就位：对话框直接可读（揭幕揭开的就是这一页）。不开闸——闸门只在
+          // start 时开，所以揭幕期间点它不会误翻页（gate 为 null）。
+          preStage() { beginStep(script, step); state.pageIndex = 0; },
           start({ id, emit }) {
             beginStep(script, step);
             state.pageIndex = 0;
@@ -160,9 +194,12 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
     if (state.mode === 'idle') state.mode = 'playing';
     activeScripts += 1;
     return new Promise(resolve => {
-      for (const step of script.steps) {
-        const compiled = compileStep(script, step);
-        if (compiled) seq.enqueueInstruction(compiled);
+      // 先整表编译再链接（wipe 需要拿到"下一步"的编译结果做幕后就位）
+      const boxes = script.steps.map(() => ({ c: null }));
+      const compiled = script.steps.map((step, i) => compileStep(script, step, boxes[i + 1] ?? null));
+      compiled.forEach((c, i) => { boxes[i].c = c; });
+      for (const c of compiled) {
+        if (c) seq.enqueueInstruction(c);
       }
       // 尾闸：剧本收尾——resolve + 最后一个剧本结束才回 idle（自完结，同步泵起后续指令）
       seq.enqueueInstruction({
@@ -232,5 +269,6 @@ export function createCutscenePlayer({ sleep = null, sequencer = null } = {}) {
       .map(t => t.id);
   }
 
-  return { state, play, advance, choose, sceneTransition, pendingTriggers };
+  // wipe：切幕器状态机（宿主把它交给 SceneWipeOverlay 渲染；独立使用时也在这里读到）
+  return { state, play, advance, choose, sceneTransition, pendingTriggers, wipe: wipeCtl };
 }

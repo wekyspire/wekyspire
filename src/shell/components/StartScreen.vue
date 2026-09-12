@@ -182,28 +182,26 @@ onBeforeUnmount(() => {
 .save-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .save-title { font-size: 12px; letter-spacing: 3px; color: #7d87a8; }
 .save-empty { font-size: 13px; color: #5d6584; padding: 4px 0; }
+/* 标题：白字（不再金色发光大字——用户定 2026-09-12 的扁平风格） */
 .title {
-  margin: 0; font-size: 54px; letter-spacing: 8px; color: #ffe7b3;
-  text-shadow: 0 2px 18px rgba(255, 180, 80, .35), 0 0 40px rgba(255, 140, 40, .2);
+  margin: 0; font-size: 54px; letter-spacing: 8px; color: #eef4ff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .55);
 }
-.subtitle { font-size: 24px; letter-spacing: 4px; color: #9ad0ff; vertical-align: super; }
-.dev-banner {
-  font-size: 22px; font-weight: bold; color: #ff3b30; letter-spacing: 4px;
-  text-shadow: 0 0 14px rgba(255, 59, 48, .5);
-}
+.subtitle { font-size: 24px; letter-spacing: 4px; color: #9fc0e8; vertical-align: super; }
+.dev-banner { font-size: 22px; font-weight: bold; color: #ff6b63; letter-spacing: 4px; }
+/* 主按钮：白字 + 淡蓝描边 + 深底（扁平，无渐变发光） */
 .main-btn-rogue, .main-btn-story, .continue-btn {
-  font-family: inherit; font-size: 18px; color: #fff; cursor: pointer;
-  padding: 10px 44px; border-radius: 10px;
-  background: #6b421a; border: 2px solid #c78f3a;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
-  transition: filter .15s, transform .15s;
+  font-family: inherit; font-size: 18px; color: #eaf1fb; cursor: pointer;
+  padding: 10px 44px; border-radius: 5px;
+  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c;
+  transition: background .15s, border-color .15s, transform .15s;
 }
 
-.main-btn:hover, .continue-btn:hover { filter: brightness(1.2); transform: translateY(-1px); }
-.continue-btn { font-size: 14px; padding: 7px 30px; background: #2c3554; border-color: #56628f; }
+.main-btn-rogue:hover, .main-btn-story:hover, .continue-btn:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+.continue-btn { font-size: 14px; padding: 7px 30px; }
 .save-info { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
-.story-toggle { margin-top: 14px; color: #fff; font-size: 14px; display: flex; gap: 8px; align-items: center; }
-.story-toggle input { accent-color: #b3742a; width: 15px; height: 15px; cursor: pointer; }
+.story-toggle { margin-top: 14px; color: #eaf1fb; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.story-toggle input { accent-color: #4d78ad; width: 15px; height: 15px; cursor: pointer; }
 .story-toggle label { cursor: pointer; }
 .swing-fade-enter-active, .swing-fade-leave-active { transition: opacity .35s ease, transform .35s ease; }
 .swing-fade-enter-from { opacity: 0; transform: translateY(14px); }
@@ -214,7 +212,6 @@ onBeforeUnmount(() => {
 <style>
 .snow-layer .flake {
   position: absolute; top: -24px; color: #fff; pointer-events: none;
-  text-shadow: 0 0 6px rgba(255, 255, 255, .8);
   animation: snow-fall linear forwards;
 }
 @keyframes snow-fall {
