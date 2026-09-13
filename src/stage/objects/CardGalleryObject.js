@@ -95,6 +95,15 @@ export class CardGalleryObject extends THREE.Group {
         bakeFace: this._bakeFace,
       });
       obj.setCard(cardProj);
+      // 牌库查看器同样给出冷却进度（用户定 2026-09-13）：盖纱 + 剩余拍数徽章，与手牌同语言；
+      // 仅 deck 区展示（焚毁区卡已彻底离场，残留计时无意义）
+      if (zone === 'deck') {
+        const max = cardProj.charges?.max ?? Infinity;
+        if ((cardProj.remainingUses ?? max) < max) {
+          const decayed = (cardProj.currentCooldown ?? 0) > (cardProj.charges?.cooldownTurns ?? 0);
+          obj.fx.setCooling(decayed ? 'decayed' : 'cooling', cardProj.currentCooldown ?? 0);
+        }
+      }
       const entry = { id: CARD_ID(cardProj.uniqueID), obj, x, y, baseScale: scale, hovered: false, t: 0 };
       obj.position.set(x, y, CARD_Z);
       obj.scale.set(scale, scale, 1);
@@ -130,7 +139,7 @@ export class CardGalleryObject extends THREE.Group {
     this._bg = null;
   }
 
-  /** 帧驱动：悬浮抬升包络（进入/离开平滑衔接，两端速度为零）。 */
+  /** 帧驱动：悬浮抬升包络（进入/离开平滑衔接，两端速度为零）+ 各卡特效层（冷却盖纱呼吸）。 */
   update(dt) {
     if (!this._opened) return;
     const k = 1 - Math.exp(-HOVER.rate * dt);
@@ -140,6 +149,7 @@ export class CardGalleryObject extends THREE.Group {
       const s = e.baseScale * (1 + (HOVER.scale - 1) * e.t);
       e.obj.scale.set(s, s, 1);
       e.obj.position.set(e.x, e.y + HOVER.liftY * e.t, CARD_Z + HOVER.liftZ * e.t);
+      e.obj.updateFx(dt); // 盖纱呼吸必需：不走这拍 veil 会停在材质默认 opacity=1 糊满牌面
     }
   }
 

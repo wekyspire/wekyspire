@@ -600,11 +600,12 @@ export class BattleStage {
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
-      // 冷却态盖纱（特效层持久指示）：充能未满=冷却中青纱；冷却被衰败推深（超定义基准）=衰败红纱
+      // 冷却态盖纱（特效层持久指示）：充能未满=冷却中青纱；冷却被衰败推深（超定义基准）=衰败红纱；
+      // 附冷却剩余拍数徽章（用户定 2026-09-13：冷却进度必须在牌面上看得见）
       const max = card.charges?.max ?? Infinity;
       const cooling = card.remainingUses < max;
       const decayed = cooling && card.currentCooldown > (card.charges?.cooldownTurns ?? 0);
-      view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null));
+      view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null), card.currentCooldown ?? 0);
     }
   }
 
@@ -1208,14 +1209,16 @@ export class BattleStage {
       return finish();
     }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
-    // 卡在牌库（视图不在手）时改在牌库图标上播（回合扫掠的库中卡 / 斩的入库冷却都落这里）；
-    // 队列定序保证入库那拍紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。
+    // ⚠ 判据必须是「视图可见」（= 卡在手牌），不是 _views 是否命中——牌库中的卡视图保留
+    // 但 visible=false，打在它上面的脉冲肉眼不可见（2026-09-13 用户报障：斩弃回牌库看不到
+    // 冷却动画，脉冲全喂给了隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍
+    // 紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。
     // 立即 finish——non-blocking，不占队列节拍
     if (type === EventNames.ANIM_COOLDOWN_TICK) {
       const delta = payload?.delta ?? 1;
       const id = payload?.skill?.uniqueID ?? null;
       const view = id != null ? this._views.get(id) : null;
-      if (view) {
+      if (view?.visible) {
         this._pulseCard(id, delta < 0 ? 0xc87070 : 0x66ff99);
       } else if (delta > 0) {
         this._pulseDeckPile(0x66ff99); // 反向（衰败）只可能在手牌，无退路需求
