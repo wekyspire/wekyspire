@@ -3,6 +3,7 @@ import { resetTurnHistory, aliveAllies, aliveEnemies } from '../state/battleStat
 import { DrawCardsInstruction, DiscardOverflowInstruction } from './cards.js';
 import { effectiveHandCount, handLimitOf } from '../skills/helpers.js';
 import { AddEffectInstruction } from './effects.js';
+import { SweepSkillCooldownInstruction } from './skill.js';
 import { GainManaInstruction } from './resources.js';
 import { DealDamageInstruction } from './combat.js';
 import AIActInstruction, { refreshIntentions } from './aiAct.js';
@@ -92,8 +93,8 @@ export class PlayerTurnInstruction extends BattleInstruction {
           ctx.kernel.submitInstruction(
             new AddEffectInstruction({ target: ctx.player, effectId: 'stun', stacks: -1 }), this);
         }
-        // （2026-09-13 起回合开始不再扫掠冷却——一切冷却仅在进入牌库时发生，
-        //   钩子与落点见 skill.js tickCooldownOnEnterDeck）
+        // 冷却推进（P2）：回合开始对手牌与牌库中计时未尽的卡各推进 1 拍
+        ctx.kernel.submitInstruction(new SweepSkillCooldownInstruction(), this);
         return false;
       case 2:
         // 首回合不抽牌：起手牌由 PreBattle 的 initialDraw 发放

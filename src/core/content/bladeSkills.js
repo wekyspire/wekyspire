@@ -171,15 +171,18 @@ function advanceSlashChain(sctx, parentInstr = null) {
 
 // ==== 斩系列（局内进阶链，全游戏最高单伤）======================================
 // 【斩】（NAMED.md）：不可被焚毁（被焚毁时以回牌库取代之）；发动后进阶（转化到链上
-//   下一阶，keepPower 延续强化）。冷却走全游戏统一口径——**仅在进入牌库时推进 1 拍**
-//   （打出回牌库底 / 弃回 / 焚毁 veto 回库统一走入库钩子；手中攥着与回合开始均不
-//   走表，砺刀/花刀是唯二的手中直达手段）。洗入3碎铁是链上每阶共有的效果
-//   （设计稿单行表述 + 链条只改伤害/冷却/等阶）。
+//   下一阶，keepPower 延续强化）。冷却 = 全局回合扫掠（P2 每回合 1 拍）+ **斩专属
+//   词条特效「此卡入库时冷却」**（cooldownOnEnterDeck：打出回牌库底 / 弃回 /
+//   焚毁 veto 回库，每次入库额外推进 1 拍，2026-09-13 用户定）。砺刀/花刀是手中
+//   直达加速手段。洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改
+//   伤害/冷却/等阶）。
 const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade', ...(slow ? ['slowStart'] : [])],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: cd },
+  // 斩专属词条特效：每次进入牌库时冷却推进 1 拍（skill.js tickCooldownOnEnterDeck 只认此旗标）
+  cooldownOnEnterDeck: true,
   cardMode: 'normal', targetMode: 'enemy',
   // 局内进阶链走 battlePromotesTo（局内转化专用字段）——斩不可局外晋升
   // （营地/训练场的 promoteCard 只认 promotesTo，对斩链天然不可见）
@@ -198,8 +201,8 @@ const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => regi
   },
   subscriptions: (sctx) => [{
     // 【斩】不可焚毁：PRE 否决焚毁，以「回牌库」取代（veto replacements 插入父节点）；
-    // 入库代价 = 没收充能、重新全程冷却——冷却推进由入库钩子统一接管（回库那拍
-    // 立即走 1）；冷却中的卡保持原计时（钩子照走那 1 拍）。
+    // 入库代价 = 没收充能、重新全程冷却；斩的词条特效让 veto 带出的 MoveCard 入库那拍
+    // 立即推进 1 拍；冷却中的卡保持原计时（钩子照走那 1 拍）。
     when: BurnCardInstruction, phase: 'pre',
     filter: (instr) => instr.uniqueID === sctx.self.uniqueID,
     react: (instr, ctx) => {
@@ -636,10 +639,9 @@ registerSkill({
 });
 
 // ==== 深入卡（砺刀系：手中刀的冷却管理）========================================
-// 手中刀法牌冷却 N：SkillCooldownInstruction 定向直达，不经入库钩子——
-// 这正是斩系列「只在牌库冷却」（入库冷却制）的手中补救手段；满充能的刀无处推进、静默落空。
-// 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜——
-// 回库那一刻入库钩子照常走 1 拍）。
+// 手中刀法牌冷却 N：SkillCooldownInstruction 定向直达，不等回合扫掠——刀法体系的
+// 手中加速手段；满充能的刀无处推进、静默落空。
+// 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜）。
 const whetCard = (id, name, tier, delta, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['transient'],

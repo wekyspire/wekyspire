@@ -111,7 +111,7 @@ export class UseSkillInstruction extends BattleInstruction {
           // FIFO 循环：非消耗卡打出/解除咏唱后一律回牌库底（无弃牌堆，压力随离手释放）
           moveCard(ctx.battleState, this.skill.uniqueID, 'deck');
           ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'deck' });
-          tickCooldownOnEnterDeck(ctx, this.skill); // 入库冷却（一切冷却仅在入库时发生）
+          tickCooldownOnEnterDeck(ctx, this.skill); // 入库冷却（斩专属特性，见函数头注）
         }
         // 出牌结算落地后刷新全体 AI 意图（读场面状态的意图，如哨兵受创龟缩，
         // 只在回合边界刷会让玩家看着上一拍的预告出牌——第 7 轮 B 报告的信息缺失）
@@ -195,8 +195,8 @@ function findAliveUnit(ctx, uniqueID) {
   return unit && !unit.isDead() ? unit : null;
 }
 
-// 定向冷却推进：单卡推进/倒退 N 格（delta 可被 PRE 修饰）。正 = 充能推进（入库钩子、猛拳
-// 「每打 1 牌冷却 1」等卡内加速），负 = 衰败（斩系反向）。
+// 定向冷却推进：单卡推进/倒退 N 格（delta 可被 PRE 修饰）。正 = 充能推进（回合开始扫掠、
+// 斩的入库冷却、猛拳「每打 1 牌冷却 1」等卡内加速），负 = 衰败（斩系反向）。
 // 状态变更全在指令树内，可被 PRE veto/修饰。满充能（计时已尽）正向无处推进、
 // 满充能衰败无处分反：静默落空、不播报。
 export class SkillCooldownInstruction extends BattleInstruction {
@@ -233,13 +233,34 @@ export class SkillCooldownInstruction extends BattleInstruction {
   }
 }
 
-// 入库冷却钩子（2026-09-13 用户定：**一切冷却仅在进入牌库时发生**——回合开始扫掠已废）。
-// 计时未尽的卡每次进入牌库推进 1 拍（满充能/计时已尽无处推进，静默跳过）。
-// 冷却节拍因此 = 牌库循环速度（薄牌库与抽牌循环 = 快冷却）；砺刀/猛拳类定向直达不受影响。
+// 自然冷却扫掠（回合开始，2026-09-13 用户定恢复）：对 cooldownZones（默认 hand/deck）
+// 内计时未尽的每张卡，展开一枚定向 SkillCooldownInstruction（delta 1）子节点——
+// 冷却路径与卡牌效果（加速/衰败）完全同源，单卡推进可被 PRE 逐卡 veto/修饰。
+// pending（结算区）不在默认集合：正在结算的卡不推进冷却。
+export class SweepSkillCooldownInstruction extends BattleInstruction {
+  execute(ctx) {
+    for (const [zoneName, arr] of Object.entries(ctx.battleState.zones)) {
+      for (const skill of arr) {
+        const def = getSkillDefinition(skill.defId);
+        const zones = def.cooldownZones ?? ['hand', 'deck'];
+        if (!zones.includes(zoneName)) continue;
+        const max = def.charges?.max ?? Infinity;
+        const cd = def.charges?.cooldownTurns ?? 0;
+        if (cd === 0 || skill.remainingUses >= max || skill.currentCooldown <= 0) continue;
+        ctx.kernel.submitInstruction(new SkillCooldownInstruction({ skill, delta: 1 }), this);
+      }
+    }
+    return true;
+  }
+}
+
+// 入库冷却钩子——**斩的专属特性**（2026-09-13 用户再裁：入库冷却不再是全局规则，
+// 只有带 cooldownOnEnterDeck 词条的卡（斩链）在每次进入牌库时推进 1 拍）。
 // 落点 = 三条入库指令：UseSkill 收尾回库 / DiscardCard / MoveCard（toZone deck）。
 export function tickCooldownOnEnterDeck(ctx, card) {
   if (!card) return;
   const def = getSkillDefinition(card.defId);
+  if (!def.cooldownOnEnterDeck) return;
   const max = def.charges?.max ?? Infinity;
   if ((def.charges?.cooldownTurns ?? 0) === 0) return;
   if (card.remainingUses >= max || card.currentCooldown <= 0) return;

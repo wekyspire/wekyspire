@@ -1208,8 +1208,8 @@ export class BattleStage {
       return finish();
     }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
-    // 卡已入库（视图不在手）时改在牌库图标上播——入库冷却制下这是主落点（用户定 2026-09-13）；
-    // 队列定序保证它紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一拍。
+    // 卡在牌库（视图不在手）时改在牌库图标上播（回合扫掠的库中卡 / 斩的入库冷却都落这里）；
+    // 队列定序保证入库那拍紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。
     // 立即 finish——non-blocking，不占队列节拍
     if (type === EventNames.ANIM_COOLDOWN_TICK) {
       const delta = payload?.delta ?? 1;
@@ -1650,7 +1650,7 @@ export class BattleStage {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
   }
 
-  // 牌库图标脉冲（入库冷却节拍的落点：绿色粒子 + 图标缩放弹跳一拍）。
+  // 牌库图标脉冲（库中卡冷却节拍的落点：绿色粒子 + 图标缩放弹跳一拍）。
   _pulseDeckPile(color) {
     const pile = this._piles?.deck;
     if (!pile) return;

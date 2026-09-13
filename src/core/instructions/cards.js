@@ -108,7 +108,7 @@ export class DiscardCardInstruction extends BattleInstruction {
     ctx.battleState.history.turn.discarded += 1;
     ctx.battleState.history.battle.discarded += 1;
     ctx.presenter?.cardDiscarded?.({ card });
-    tickCooldownOnEnterDeck(ctx, card); // 入库冷却（一切冷却仅在入库时发生）
+    tickCooldownOnEnterDeck(ctx, card); // 入库冷却（斩专属特性，见 skill.js 钩子头注）
     return true;
   }
 }
@@ -147,7 +147,7 @@ export class MoveCardInstruction extends BattleInstruction {
     const card = moveCard(ctx.battleState, this.uniqueID, toZone, { index: toZone === this.toZone ? this.index : null });
     this.result = { card, toZone };
     ctx.presenter?.cardMoved?.({ card, toZone });
-    // 入库冷却：仅「从非牌库区进入牌库」算一次进入（牌库内搬移/换序不算）
+    // 入库冷却（斩专属特性）：仅「从非牌库区进入牌库」算一次进入（牌库内搬移/换序不算）
     if (toZone === 'deck' && fromZone !== 'deck') tickCooldownOnEnterDeck(ctx, card);
     return true;
   }

@@ -266,7 +266,8 @@ function execBattle(S, cmd, t) {
       // 冷却只在「充能耗尽」时才是阻塞原因（满充能卡预置的计时是无意义残留，不展示，免误导）
       L.push(`  充能: 剩余 ${rt.remainingUses}`
         + (rt.remainingUses <= 0 && rt.currentCooldown > 0
-          ? `，冷却剩 ${rt.currentCooldown} 拍（仅回到牌库时推进 1 拍）` : ''));
+          ? `，冷却剩 ${rt.currentCooldown} 拍（每回合开始推进 1 拍`
+            + `${def.cooldownOnEnterDeck ? '；此卡入库时再推进 1 拍' : ''}）` : ''));
       if (def.cardMode === 'chant') {
         const _bd = handBreakdown(bs);
         const _cap = pl.chantCapacity ?? 1;
