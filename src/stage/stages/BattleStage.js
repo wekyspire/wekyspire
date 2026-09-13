@@ -1285,10 +1285,10 @@ export class BattleStage {
     if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
     this._displayCard = { id };
     this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
-      durationMs: 180,
+      durationMs: 70,
       onComplete: () => {
         this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
-          delayMs: 380,
+          delayMs: 100,
           onComplete: () => {
             this._displayCard = null;
             finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
@@ -1450,7 +1450,7 @@ export class BattleStage {
         count: 24, color: 0xff6a3d, speed: 22, size: 1.6, z: unit.position.z,
       });
       this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 10, color: 0xffd9a0, speed: 30, ttl: 0.4, size: 1.1, z: unit.position.z,
+        count: 10, color: 0xffd9a0, speed: 30, ttl: 0.8, size: 1.1, z: unit.position.z,
       });
       // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
       const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
@@ -1473,7 +1473,7 @@ export class BattleStage {
         ease: 'power1.in',
         onComplete: () => {
           this.animator.animate(id, { x: x0 }, {
-            durationMs: 220,
+            durationMs: 120,
             onComplete: () => {
               unit.restoreColor?.();
               finish();
@@ -1484,7 +1484,7 @@ export class BattleStage {
       return;
     }
     // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
-    this.animator.animate(unit.uniqueID, {}, { delayMs: 220, onComplete: finish });
+    this.animator.animate(unit.uniqueID, {}, { delayMs: 80, onComplete: finish });
   }
 
   // 单位入场演出（召唤，用户定 2026-08）：与死亡倾倒同轴的语言反演——
