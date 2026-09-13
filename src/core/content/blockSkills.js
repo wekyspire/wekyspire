@@ -226,12 +226,13 @@ registerSkill({
 // ==== 盾系列（自保补全）========================================================
 // 盾（D）已在 skills.js（guard）；promotesTo 链 guard→solidShield 由 skills.js 侧接线。
 
-// 坚固盾（盾系列 C）：8 护盾。
+// 坚固盾（盾系列 C）：8 护盾。promotesTo 强化盾（C——设计稿表内同列次阶，同阶数值梯）。
 registerSkill({
   id: 'solidShield', name: '坚固盾', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
+  promotesTo: 'reinforcedShield',
   use(sctx) {
     gainShield(sctx, 8);
     return true;
@@ -239,7 +240,7 @@ registerSkill({
   describe: () => '8护盾',
 });
 
-// 强化盾（盾系列 C，并行支线）：8 护盾 + 1 层格挡。
+// 强化盾（盾系列 C，链顶）：8 护盾 + 1 层格挡。
 registerSkill({
   id: 'reinforcedShield', name: '强化盾', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },

@@ -245,12 +245,14 @@ registerSkill({
 // 选牌弃：N 段护盾 + 选 K 张手牌丢弃（结算期选牌：段0请求，段1读应答弃牌）。
 // 自身已离手（pending），选牌候选即其余手牌；空手则跳过请求。
 // 仍是刀法牌（blade 关键词）——练刀/培植/砺刀系的作用域不变。
-const cleaveCard = (id, name, tier, shield, hits, picks) => registerSkill({
+// 阶梯（设计稿表）：花刀→二重花刀→（乱舞系）银刀乱舞；完美花刀是分叉散卡不进链。
+const cleaveCard = (id, name, tier, shield, hits, picks, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
+  promotesTo,
   use(sctx, stage) {
     if (stage === 0) {
       for (let i = 0; i < hits; i++) gainShield(sctx, shield);
@@ -270,18 +272,19 @@ const cleaveCard = (id, name, tier, shield, hits, picks) => registerSkill({
   describe: () => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
   battleDescribe: (sctx) => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
 });
-cleaveCard('handCleave', '花刀', 'C', 8, 1, 1);
-cleaveCard('doubleCleave', '二重花刀', 'C', 8, 2, 2);
+cleaveCard('handCleave', '花刀', 'C', 8, 1, 1, 'doubleCleave');
+cleaveCard('doubleCleave', '二重花刀', 'C', 8, 2, 2, 'silverDance');
 cleaveCard('perfectCleave', '完美花刀', 'B', 14, 1, 1);
 
 // 乱舞（银刀/风暴）：丢弃所有无法打出的手牌，每张 N 护盾。快照打出那一刻的卡手牌
 // （弃牌触发的呼吸抽牌不会中途扩大范围）。
-const danceCard = (id, name, tier, per) => registerSkill({
+const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
+  promotesTo,
   use(sctx) {
     for (const card of stuckHandCards(sctx)) {
       discardCard(sctx, card.uniqueID);
@@ -295,7 +298,7 @@ const danceCard = (id, name, tier, per) => registerSkill({
     return `丢弃所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
   },
 });
-danceCard('silverDance', '银刀乱舞', 'B', 8);
+danceCard('silverDance', '银刀乱舞', 'B', 8, 'stormDance');
 danceCard('stormDance', '风暴刀舞', 'A', 13);
 
 // 优雅刀舞（B）：丢弃所有无法打出的手牌，每张获得 1 层格挡（伤害换防御的分叉位）。
