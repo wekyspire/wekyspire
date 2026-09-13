@@ -167,7 +167,7 @@ function renderRoomShop(S, L) {
       L.push(`  遗物包待选（${run.shopPending.rarity} 级，三选一，可放弃）:`);
       run.shopPending.choices.forEach((id, i) => {
         const def = getRelicDefinition(id);
-        L.push(`    [${i}] 【${def?.name ?? id}】（${def?.rarity ?? 'C'} 级，`
+        L.push(`    [${i + 1}] 【${def?.name ?? id}】（${def?.rarity ?? 'C'} 级，`
           + `${def?.nonSlot ? '非槽位式' : `占 ${def?.cost ?? 0} 槽`}）${def?.description ?? ''}`);
       });
       L.push('  → act shop claim <#> 选择 / act shop claim -1 放弃');

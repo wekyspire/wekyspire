@@ -13,11 +13,14 @@
 
 import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
+import BattleInstruction from '../kernel/BattleInstruction.js';
+import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
+import { BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
-import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText } from './cardKit.js';
+import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest } from './cardKit.js';
 
 // ==== 自焚系列（§2.1：自伤换高伤）============================================
 // 玩火 D / 引焰 C / 焚灭 B：0 费攻击（设计稿未写费用 = 免费，battle.md §7.2 缺省约定），
@@ -40,9 +43,9 @@ function selfImmolate({ id, name, tier, base, burn }) {
   });
 }
 
-selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 11, burn: 2 });
-selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 16, burn: 3 });
-selfImmolate({ id: 'immolate', name: '焚灭', tier: 'B', base: 23, burn: 5 });
+selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 12, burn: 2 });
+selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 17, burn: 3 });
+selfImmolate({ id: 'immolate', name: '焚灭', tier: 'B', base: 24, burn: 5 });
 
 // ==== 焰愈系列（§2.1：燃烧换恢复）============================================
 // 焰愈 C / 炽愈 B / 涅槃 A：1AP 消耗，治疗量 = 基础值 + 自身燃烧层数 × 每层加成。
@@ -266,6 +269,64 @@ registerSkill({
   describe: () => '若你正在燃烧，获得9护盾',
   battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
 });
+
+// 炼化/炼解 C/B｜咏唱1（2026-09-13 用户新文档新增）：每回合 P5 选 1 张手牌焚毁，
+// 获得 1/2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
+// 火系两条「每回合变现」轴：高热烧自己，炼化烧手牌。选牌请求走 cardKit 唯一
+// 形状（min/max 1/1）；空手时不发起请求（空集守卫，静默落空）。选到激活态的
+// 咏唱卡也照烧（含引擎自身——烧自己=立即止损，与刀法咏唱的选弃口径一致）。
+class BurnHandForManaInstruction extends BattleInstruction {
+  constructor({ mana = 1, reason = null } = {}, opts = {}) {
+    super(opts);
+    this.mana = mana;
+    this.reason = reason;
+  }
+
+  execute(ctx) {
+    switch (this._stage) {
+      case 0: {
+        const request = buildCardSelectionRequest(ctx, {
+          source: 'hand', min: 1, max: 1, reason: this.reason,
+        });
+        if (!request) return true; // 空手：无事发生
+        this._ask = new AwaitPlayerInputInstruction({ request });
+        ctx.kernel.submitInstruction(this._ask, this);
+        return false;
+      }
+      default: {
+        const ids = this._ask.result?.selection ?? [];
+        for (const id of ids) {
+          ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: id }), this);
+        }
+        if (ids.length > 0) {
+          ctx.kernel.submitInstruction(
+            new GainManaInstruction({ amount: this.mana * ids.length }), this);
+        }
+        return true;
+      }
+    }
+  }
+}
+const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
+  id, name, type: 'fire', tier, series: 'fireChant',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 1,
+  promotesTo,
+  use() { return true; },
+  activated: {
+    subscriptions: () => [{
+      when: ChantTriggerInstruction, phase: 'post',
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new BurnHandForManaInstruction({ mana, reason: `${name}：选1张手牌焚毁，获得${mana}魏启` }),
+        instr),
+    }],
+  },
+  describe: () => `选1张手牌焚毁，获得${mana}魏启`,
+  battleDescribe: (sctx) => `选1张手牌焚毁，获得${mana}魏启`,
+});
+smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'C', mana: 1, promotesTo: 'smeltCardPlus' });
+smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'B', mana: 2 });
 
 // 绝炎 A｜1AP，咏唱3（2026-09-13 权重分档：少量强卡 3-4 咏），任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
