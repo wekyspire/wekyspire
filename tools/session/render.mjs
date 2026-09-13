@@ -31,7 +31,12 @@ export function render(S) {
     ? `（+${p.actionPoints - p.maxActionPoints} 来自本回合临时加成，非上限）` : '';
   L.push(`玩家: HP ${p.hp}/${p.maxHp} 护盾${p.shield} 魏启 ${p.mana}/${p.maxMana} AP ${p.actionPoints}/${p.maxActionPoints}${apNote} 金币 ${p.money} | 灵脉 火${p.leino.fire} 体修${p.bodyLevel ?? 0} | 训练 ${p.trainingCount} 进阶 ${p.ascensionCount}/${ASCENSION_PLACEHOLDER.maxAscensions}`);
   if (p.effects?.length) L.push(`玩家效果: ${effectsText(p)}`);
-  if (p.abilities.length) L.push(`能力: ${p.abilities.join(' ')}`);
+  if (p.abilities.length) {
+    L.push(`能力: ${p.abilities.map(id => {
+      const d = getAbilityDefinition(id);
+      return d ? `${d.name}「${d.description}」` : id;
+    }).join('；')}`);
+  }
   // 遗物：背包全量 + 槽位占用（槽位是**权重和**口径 Σcost ≤ relicSlots；非槽位式恒生效、不需装备）
   if (p.relics?.length) {
     const cost = (id) => { const d = getRelicDefinition(id); return d?.nonSlot ? 0 : (d?.cost ?? 1); };
@@ -334,7 +339,8 @@ function renderAscension(S, L) {
     L.push(`能力候选:`);
     run.ascensionOffer.forEach((id, i) => {
       const def = getAbilityDefinition(id);
-      L.push(`  [${i + 1}] ${def?.name ?? id}「${plain(def?.describe?.() ?? '')}」`);
+      const tag = def?.grade === 'master' ? '大师' : '精英';
+      L.push(`  [${i + 1}] 【${tag}】${def?.name ?? id}「${def?.description ?? ''}」`);
     });
     L.push(`→ ability <#|skip>`);
   }

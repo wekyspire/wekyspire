@@ -816,11 +816,14 @@ function execAscension(S, cmd, t) {
   // ability
   const offer = run.ascensionOffer;
   if (!offer) throw new Error('当前没有能力候选');
-  if (a === 'skip' || a === '跳过') chooseAscensionAbility(run, null);
-  else {
+  if (a === 'skip' || a === '跳过') {
+    chooseAscensionAbility(run, null);
+    S.lastOutcome = '跳过能力授予（能力池保留，下次进阶再择）';
+  } else {
     const id = offer[idxOk(num(a), offer.length, '能力')];
     chooseAscensionAbility(run, id);
-    S.lastOutcome = `获得能力：${id}`;
+    const def = getAbilityDefinition(id);
+    S.lastOutcome = `获得能力：【${def?.grade === 'master' ? '大师' : '精英'}】${def?.name ?? id}「${def?.description ?? ''}」`;
   }
 }
 
