@@ -353,16 +353,24 @@ registerAbility({
   },
 });
 
-// ---- 获赠：空灵脉（战斗开始 闪避1+抽1）----
+// ---- 获赠：空灵脉（T1 回合开始闪避1 + 战斗开始抽1）----
+// 闪避必须等 T1 回合开始的 POST 再上：闪避蒸发订阅挂在同一时点，战斗开始直接上
+// 会被 T1 回合开始立刻蒸发（从未有机会挡刀——2026-09-14 冒烟抓出的白嫖 bug）。
 registerAbility({
   id: 'airVein', name: '空灵脉',
-  description: '战斗开始时，获得闪避1，抽1牌。',
+  description: '第一回合开始时，获得闪避1；战斗开始时，抽1牌。',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'dodge', stacks: 1,
-    }));
     ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: '空灵脉' }));
   },
+  subscriptions: () => [{
+    when: PlayerTurnStartInstruction, phase: 'post',
+    filter: (instr, c) => c.battleState.turn.count === 1,
+    react: (instr, c) => {
+      c.kernel.submitInstruction(new AddEffectInstruction({
+        target: c.player, effectId: 'dodge', stacks: 1,
+      }), instr);
+    },
+  }],
 });
 
 // ---- 木·生息 精英 **茁壮**：你的治疗量 +2（ApplyHeal PRE 流水线，目标为你）----

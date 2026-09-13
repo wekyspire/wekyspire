@@ -176,6 +176,61 @@ registerRelic({
   }],
 });
 
+// 木灵脉专属（2026-09-14 随木体系落地补簇；门禁与卡包同一口径）
+registerRelic({
+  id: 'poisonIvyVial', name: '毒藤瓶', rarity: 'C', cost: 1, requires: { leino: 'wood', min: 1 },
+  description: '战斗开始时，赋予所有敌人中毒 2。',
+  flavor: '瓶口的藤蔓还活着，时不时往里缩一缩',
+  // 对标埃文石（A·群敌虚弱1）：群毒2 = 每敌 3 点延迟伤害，C 档一口闷
+  onBattleStart(ctx) {
+    for (const e of ctx.battleState.enemies) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: e, effectId: 'poison', stacks: 2 }));
+    }
+  },
+});
+
+registerRelic({
+  id: 'hardwoodBadge', name: '硬木盾徽', rarity: 'B', cost: 1, requires: { leino: 'wood', min: 1 },
+  description: '战斗开始时，获得荆棘 2。',
+  flavor: '别用拳头打招呼',
+  // 对标针鼠荆棘3（一次性）：常驻荆棘2，反伤随受击次数兑现
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: ctx.player, effectId: 'thorns', stacks: 2,
+    }));
+  },
+});
+
+// 空灵脉专属（闪避类效果必须挂 T1 回合开始 POST——战斗开始直接上会被蒸发，见 abilities.js airVein）
+registerRelic({
+  id: 'windChime', name: '风铃', rarity: 'B', cost: 1, requires: { leino: 'air', min: 1 },
+  description: '第一回合开始时，获得闪避 2。',
+  flavor: '风还没到，它先响了',
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
+    react: (instr, c) => {
+      c.kernel.submitInstruction(new AddEffectInstruction({
+        target: c.player, effectId: 'dodge', stacks: 2,
+      }), instr);
+    },
+  }],
+});
+
+registerRelic({
+  id: 'willowFluff', name: '柳絮', rarity: 'C', cost: 1, requires: { leino: 'air', min: 1 },
+  description: '第一回合开始时，抽 1 张牌。',
+  flavor: '它落进你手里之前，谁也不知道它会落进谁手里',
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
+    react: (instr, c) => c.kernel.submitInstruction(
+      new DrawCardsInstruction({ count: 1, reason: '柳絮' }), instr),
+  }],
+});
+
 // ---- 回合节奏 ----
 
 registerRelic({
