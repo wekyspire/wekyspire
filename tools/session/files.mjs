@@ -26,5 +26,8 @@ export function readSession(name) {
 
 export function writeSession(name, data) {
   fs.mkdirSync(sessionDir, { recursive: true });
-  fs.writeFileSync(sessionPath(name), JSON.stringify(data, null, 2));
+  // 原子写（tmp+rename）：读侧不再可能拿到半个文件
+  const tmpFile = `${sessionPath(name)}.tmp-${process.pid}`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+  fs.renameSync(tmpFile, sessionPath(name));
 }

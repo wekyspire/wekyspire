@@ -73,8 +73,22 @@ try {
   process.exit(1);
 }
 if (!noRecord) {
-  data.actions.push(action);
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  // 乐观并发守卫（X3 巡检实报：多 agent 并行时两个进程读同一快照、各自追加后互相
+  // 覆盖/动作错序——「未下发的动作入档」。写入前重读文件核对动作序列未变，
+  // 变了就拒绝写入；写盘走 tmp+rename 原子替换，读侧不再可能看到半个文件）。
+  const before = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const beforeActions = Array.isArray(before.actions) ? before.actions : [];
+  if (before.seed !== data.seed
+    || beforeActions.length !== data.actions.length
+    || beforeActions.some((a, i) => a !== data.actions[i])) {
+    console.error('✗ 会话在回放期间被另一个进程改写了（并发写冲突）——本次动作未入档。'
+      + '请重新执行该动作（不要并行调用同一会话）。');
+    process.exit(1);
+  }
+  before.actions.push(action);
+  const tmpFile = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmpFile, JSON.stringify(before, null, 2));
+  fs.renameSync(tmpFile, file);
 }
 if (action === 'help') console.log(HELP);
 else if (action === 'deck') console.log(renderDeck(S));
