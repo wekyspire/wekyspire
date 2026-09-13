@@ -477,6 +477,12 @@ function execRoom(S, t) {
   if (room === 'gurpas') return execRoomGurpas(S, t);
   if (room === 'slot') return execRoomSlot(S, t);
   if (room === 'event') return execRoomEvent(S, t);
+  // 商店房：房间本体无动作，全部交互在售货机（X2 巡检实报：兜底「未知房间类型：shop」
+  // 泄露内部枚举名且误导——shop 是合法房型，只是没有 act 动作）
+  if (room === 'shop') {
+    throw new Error(`商店房没有「act ${a}」——货架在售货机：act shop buy <#> 购买`
+      + '｜act shop claim <#> 卡包/遗物包三选一｜离开：next');
+  }
   throw new Error(`未知房间类型：${room}`);
 }
 

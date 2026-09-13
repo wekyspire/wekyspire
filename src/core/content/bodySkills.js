@@ -4,7 +4,9 @@
 //   * 体修卡全走 AP（无魏启），type 'normal'（体修灰卡面）；
 //   * 伤害统一走「基数 + 攻击面板 + power」语言（cardKit.attackAmount / attackDamage）；
 //   * 设计稿费用栏留空的卡按 battle.md 费用缺省约定免费（0 费）；
-//   * 【后手】= 作为手牌最后一张打出（NAMED.md），判定统一走 cardKit.isLastHandCardAtPlay；
+//   * 【后手】= 手牌最后的非激活卡打出（激活咏唱驻手不挡，2026-09-13 用户定），
+//     判定统一走 cardKit.isLastHandCardAtPlay；
+//   * 【先手】= 本回合打出的第一张牌（敏捷连击系判据），判定统一走 cardKit.isFirstPlayThisTurn；
 //   * 咏唱触发效果 = activated.subscriptions 订阅 ChantTriggerInstruction(post)（P5 挂载点）。
 
 import { registerSkill } from '../skills/registry.js';
@@ -17,7 +19,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
   dealDamage, drawCards, drawToHandLimit, addCard, randomAliveEnemy,
-  handIndex, isLastHandCardAtPlay,
+  isLastHandCardAtPlay, isFirstPlayThisTurn,
 } from './cardKit.js';
 
 // ==== 1. 真拳系列（基石：纯伤害直线升级，A 阶跃迁为无任何资源消耗）====
@@ -93,7 +95,10 @@ registerCollapseFist({ id: 'boomFist', name: '轰拳', tier: 'B', damage: 24, pr
 // 崩拳（崩拳系列 A）
 registerCollapseFist({ id: 'collapseFist', name: '崩拳', tier: 'A', damage: 36 });
 
-// ==== 3. 敏捷连击系列（位置敏感抽牌：最左端 = 领跑奖励）====
+// ==== 3. 敏捷连击系列（先手抽牌：本回合第一张打出 = 领跑奖励）====
+// 2026-09-13 改版：判据从「最左端打出」改为【先手】——最左端被抽牌顺序与激活咏唱驻左
+// 卡死（玩家不可控），先手是时序判据完全可控；且每回合天然限触发一次（第一张只有一张），
+// 数值因此不动。咏唱发动也是一次打出、会抢先手位 = 真实顺序抉择。
 
 function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null }) {
   registerSkill({
@@ -104,12 +109,12 @@ function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null })
     promotesTo,
     use(sctx) {
       attackDamage(sctx, damage);
-      // 最左端打出（出牌时点口径，handIndexAtPlay 捕获）才有抽牌奖励
-      if (handIndex(sctx) === 0) drawCards(sctx, draw);
+      // 先手（本回合第一张打出，UseSkill stage 1 捕获口径）才有抽牌奖励
+      if (isFirstPlayThisTurn(sctx)) drawCards(sctx, draw);
       return true;
     },
-    describe: () => `${damage}伤害；最左端打出时抽${draw}牌`,
-    battleDescribe: (sctx) => (handIndex(sctx) === 0
+    describe: () => `${damage}伤害；/named{先手}：抽${draw}`,
+    battleDescribe: (sctx) => (isFirstPlayThisTurn(sctx)
       ? `${resolvedDamageText(sctx, damage)}，抽${draw}牌`
       : resolvedDamageText(sctx, damage)),
   });

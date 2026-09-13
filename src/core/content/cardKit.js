@@ -46,12 +46,26 @@ export function handIndex(sctx) {
   return handIndexAtPlay(sctx);
 }
 
-// 【后手】：此牌作为手牌最后一张打出。结算中自身已离手（pending），手牌为空即成立；
-// 预览态（canUse/battleDescribe）自身仍在手，手牌恰为自身这一张即成立。
+// 【后手】：此牌作为手牌最后的非激活卡打出（2026-09-13 用户拍板「唯一非激活卡」口径）——
+// 激活咏唱是早已打出过的引擎，驻手不算「还没出的牌」，不挡后手；未激活咏唱仍是真实手牌，
+// 照样卡位。邻牌等物理位置语义不吃这套豁免（飞刀献祭照旧，用户划线）。
+// 结算中自身已离手（pending），其余手牌全为激活咏唱（或空）即成立；
+// 预览态（canUse/battleDescribe）自身仍在手，除自身外全为激活咏唱即成立。
 export function isLastHandCardAtPlay(sctx) {
   const hand = sctx.battleState.zones.hand;
-  if (sctx.handIndexAtPlay != null) return hand.length === 0;
-  return hand.length === 1 && hand[0].uniqueID === sctx.self.uniqueID;
+  if (sctx.handIndexAtPlay != null) return hand.every(c => c.isActivated);
+  return hand.every(c => c.isActivated || c.uniqueID === sctx.self.uniqueID);
+}
+
+// 【先手】：此牌作为本回合打出的第一张牌（敏捷连击系判据，2026-09-13 用户拍板）——
+// 位置不可控变时序可控；每回合天然限触发一次（「第一张」只有一张），数值因此无需下调。
+// 咏唱发动也是一次打出，会抢先手位=真实顺序抉择。
+// 结算读 UseSkill stage 1 捕获（嵌套出牌时母卡已占 pending 坑，不算第一张）；
+// 预览态读实时计数（本回合未出牌且无卡在结算区即成立）。
+export function isFirstPlayThisTurn(sctx) {
+  if (sctx.firstPlayThisTurn != null) return sctx.firstPlayThisTurn;
+  return sctx.battleState.history.turn.played === 0
+    && sctx.battleState.zones.pending.length === 0;
 }
 
 // ---- 指令组合原语（全部返回被提交的指令，便于命中探针/断言）----

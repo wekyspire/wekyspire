@@ -50,6 +50,9 @@ export class UseSkillInstruction extends BattleInstruction {
         // 出牌时点手位捕获（结算中自身已离手，位置类语义只能读这一刻；回手落位同用）
         this._handIndexAtPlay = ctx.battleState.zones.hand
           .findIndex(c => c.uniqueID === this.skill.uniqueID);
+        // 先手捕获：本回合首张打出 = 此前无出牌计数且结算区无卡（嵌套出牌时母卡已占坑）
+        this._firstPlayThisTurn = ctx.battleState.history.turn.played === 0
+          && ctx.battleState.zones.pending.length === 0;
         // 打出已激活咏唱 = 免费解除：离手前先熄（播报/注销订阅在 deactivateChant 内）；
         // 解除目标随行（终止类群伤的软指定：选定目标恒最后命中）
         if (this._chantOff) deactivateChant(ctx, this.skill, 'played',
@@ -59,6 +62,7 @@ export class UseSkillInstruction extends BattleInstruction {
           skill: this.skill,
           target: this.targetUniqueID ? findAliveUnit(ctx, this.targetUniqueID) : null,
           handIndexAtPlay: this._handIndexAtPlay,
+          firstPlayThisTurn: this._firstPlayThisTurn,
         }), this);
         return false;
       }
@@ -158,12 +162,14 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
 // target：玩家指定的目标单位（存活校验已在提交前完成；可为 null——技能走默认选靶）。
 // handIndexAtPlay：出牌时点手位（UseSkill stage 1 捕获；结算中自身已离手进 pending，
 // 位置类语义经 helpers.handIndexAtPlay/handNeighborsAtPlay 读这一刻；canUse/预览路径无此字段）。
+// firstPlayThisTurn：出牌时点「本回合首张打出」捕获（先手判据；预览路径为 null，实时推算）。
 export class ActivateSkillInstruction extends BattleInstruction {
-  constructor({ skill, target = null, handIndexAtPlay = null }, opts = {}) {
+  constructor({ skill, target = null, handIndexAtPlay = null, firstPlayThisTurn = null }, opts = {}) {
     super(opts);
     this.skill = skill;
     this.target = target;
     this.handIndexAtPlay = handIndexAtPlay;
+    this.firstPlayThisTurn = firstPlayThisTurn;
     this._skillStage = 0;
   }
 
@@ -171,6 +177,7 @@ export class ActivateSkillInstruction extends BattleInstruction {
     const sctx = makeSkillCtx(ctx, this.skill);
     sctx.target = this.target;
     sctx.handIndexAtPlay = this.handIndexAtPlay;
+    sctx.firstPlayThisTurn = this.firstPlayThisTurn;
     const done = sctx.def.use ? sctx.def.use(sctx, this._skillStage) : true;
     if (done === false) {
       this._skillStage += 1;
