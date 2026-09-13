@@ -291,6 +291,12 @@ function execBattle(S, cmd, t) {
       const { skill, note } = pickHandCard(hand, a, b, byIndex);
       const name = defOf(skill).name; // 先取名字：结算内斩等转化会就地改写 defId
       const targetArg = byIndex ? t[3] : b; // 只给卡名的写法里，第二个参数就是目标
+      // 非目标卡带数字是高频误输（C/D 两组试玩双报）：旧行为把数字当敌人编号解析，
+      // 越界报错让玩家以为语法错了——先按卡面 targetMode 拦下，给出正确写法
+      if (targetArg != null && defOf(skill).targetMode !== 'enemy') {
+        const bare = [a, byIndex ? b : null].filter(x => x != null).join(' ');
+        throw new Error(`「${name}」不吃目标参数（此卡无需指定敌方目标）——直接 play ${bare} 即可`);
+      }
       const target = targetArg != null
         ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
       // 指定目标已死：引擎会回落到首个存活敌人（cardKit.enemyTarget）——静默改打很坑，明确告知
@@ -1015,7 +1021,15 @@ function execNext(S) {
     if (run.bank?.pendingRoll) throw new Error('恶魔 roll 的词条还没承受：先选一个词条');
     // 售货机卡包/遗物包三选一挂着不允许离场（GUI：点继续前进会被拉回货架）
     if (run.shopPending) throw new Error('卡包/遗物包还没选完：act shop claim <#>（-1 放弃）');
-    completeRoom(run); S.roomDone = false; S.lastOutcome = '离开房间'; return;
+    // 营地休整软提示（对齐前端 campTraining.onContinue：第一次点继续只提示，再点一次才离房）
+    // ⚠ 必须作为**成功动作**入档而非抛错：replay 全量重放只重演入档动作——抛错不入档，
+    // 重放时「第二次 next」会退化成「第一次」被再拦一次（行为漂移）
+    if (run.currentRoom === 'campTraining' && !run.roomData?.campUsed && !S.campNudged) {
+      S.campNudged = true;
+      S.lastOutcome = '🔥 还没在火边歇过呢（营地休整未用：act rest 恢复约 35% 生命；再 next 一次直接离房）';
+      return;
+    }
+    completeRoom(run); S.roomDone = false; S.campNudged = false; S.lastOutcome = '离开房间'; return;
   }
   throw new Error(`当前阶段无需 next（${stageCn(stage)}）`);
 }
