@@ -31,6 +31,7 @@ import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
+import { CapacityBeadsObject } from '../objects/CapacityBeadsObject.js';
 import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
@@ -258,6 +259,12 @@ export class BattleStage {
       this.animator.register(`pile:${key}`, pile);
     }
 
+    // 手牌容量灯珠（批次 13，用户定 2026-09-13）：手牌扇下方居中一排——
+    // 最左咏唱容量珠（蓝），其余手牌珠（绿=普通/黄=溢出咏唱/灰=空）；数据=投影 handCapacity
+    this._capacityBeads = new CapacityBeadsObject();
+    this._capacityBeads.position.set(8, -56.5, 5);
+    this.uiScene.add(this._capacityBeads);
+
     this._buttons = {};
     for (const [key, pos] of Object.entries(BUTTON_POSITIONS)) {
       const btn = new CardObject({
@@ -406,6 +413,7 @@ export class BattleStage {
     const remi = proj.allies.find(a => a.defId === 'remi');
     this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
+    this._capacityBeads.setValue(proj.handCapacity); // 灯珠（批次 13）：与投影同口径，旧快照无此字段时静默跳过
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
@@ -2158,6 +2166,7 @@ export class BattleStage {
     this._arrow.dispose();
     this._bubbles.dispose();
     this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
+    this._capacityBeads.dispose();
     this._topBar.dispose();
     this.shake.dispose();      // 相机精确回基位（防偏移泄漏给下一舞台）
     this._vignette.dispose();
