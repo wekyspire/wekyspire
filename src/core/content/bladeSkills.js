@@ -745,6 +745,66 @@ practiceBladeCard('practiceBlade', 'D', 1, 3, 'practiceBladePlus');       // D�
 practiceBladeCard('practiceBladePlus', 'C', 1, 6, 'practiceBladeMaster');  // C：+6（威力跃迁）
 practiceBladeCard('practiceBladeMaster', 'B', 0, 6);                       // B：+6 / 0AP（费用跃迁）
 
+// ==== 纯净度构筑件（2026-09-13 批次 4：斩链的「局内纯净」answers）================
+// 斩链痛点：洗入的碎铁与非刀杂卡稀释牌库，斩越打越难抽。这两张是构筑侧的解：
+// 拭刃烧手换抽（本场焚毁 = 局内纯净），相刀定向捞刀。都是「处理牌」——series 'blade'
+// 故仍是刀法牌（吃养刀/锻刀/砺刀系作用域），keywords 不带 'blade'（页脚不多词条，
+// 与碎铁/出鞘同例）。0 费但全部冷却 1（数值意识铁律：彻底 0 开销卡默认冷却 1，
+// 用户定 2026-09-13）。
+
+// 拭刃（C，0费，冷却1）：焚毁手中所有非刀法牌，每焚毁 1 张抽 1。
+// 数值对标：练刀 D（1AP 抽1+洗回强化）——拭刃不强化不产数值，只换手+提纯，
+// 0 费是「烧掉手牌」这个代价换来的；一次性换整只手故定 C。
+// 发动卡自身已离手（pending），手牌扫描天然不含自身；斩链卡是刀法牌天然免疫
+// （「斩不可焚毁」双保险用不上）。焚毁逐张提交（各自的焚毁反应照常触发），
+// 抽牌统一押后——先烧出空间再抽，§7.3 手牌上限按烧完后的手牌计。
+registerSkill({
+  id: 'wipeBlade', name: '拭刃', type: 'normal', tier: 'C', series: 'blade',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'none',
+  use(sctx) {
+    const targets = sctx.battleState.zones.hand.filter(c => !isBladeCard(c));
+    for (const card of targets) burnCard(sctx, card.uniqueID);
+    if (targets.length) drawCards(sctx, targets.length);
+    return true;
+  },
+  describe: () => '/named{焚毁}手中所有非/named{刀法牌}，每焚毁1张抽1',
+  battleDescribe: (sctx) => {
+    const n = sctx.battleState.zones.hand.filter(c => !isBladeCard(c)).length;
+    return `/named{焚毁}手中所有非/named{刀法牌}（当前${n}张），每焚毁1张抽1`;
+  },
+});
+
+// 相刀（B，0费，冷却1）：翻牌库顶至多 5 张，其中首张刀法牌入手，其余落牌库底。
+// 数值对标：出鞘 B（0费消耗，斩进阶+抽斩）——相刀不进阶、检索面放宽到任意刀法牌、
+// 且可循环（冷却1而非消耗），故同样定 B。翻牌决策在发动时按牌库快照一次算定
+// （落底不改动未翻的牌），逐张提交 MoveCardInstruction 让前端看得见翻牌节拍；
+// 满手时入手自动改落牌库（§7.3，MoveCardInstruction 内建）。
+registerSkill({
+  id: 'seekBlade', name: '相刀', type: 'normal', tier: 'B', series: 'blade',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'none',
+  use(sctx) {
+    const peek = sctx.battleState.zones.deck.slice(0, 5);   // 牌库顶 = index 0
+    for (const card of peek) {
+      if (isBladeCard(card)) {
+        moveCardTo(sctx, card.uniqueID, 'hand');
+        break;   // 翻出首张刀法牌即止——其后的牌未曾翻开、原地不动
+      }
+      moveCardTo(sctx, card.uniqueID, 'deck');              // 落牌库底（数组尾），相对序保持
+    }
+    return true;
+  },
+  describe: () => '翻牌库顶至多5张，首张/named{刀法牌}入手，其余落牌库底',
+  battleDescribe: (sctx) => {
+    const hit = sctx.battleState.zones.deck.slice(0, 5).find(isBladeCard);
+    return `翻牌库顶至多5张，首张/named{刀法牌}入手，其余落牌库底`
+      + `（顶5张内${hit ? `有「${getSkillDefinition(hit.defId).name}」` : '无刀'}）`;
+  },
+});
+
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
 // 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
 // ChantDrawDiscardInstruction 链式挂在触发指令树下）。设计稿未写费用——刀法 B 按

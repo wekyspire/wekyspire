@@ -81,6 +81,14 @@ const UPGRADE_SOURCES = {
     title: '选择要删除的卡', confirmLabel: '确认删除',
     hint: '这张牌将从牌库中彻底消失 ｜ 滚轮翻页',
   },
+  ascensionRemove: {
+    // 跳过进阶的删卡反哺（用户定 2026-09-13）：与 Boss 奖励同一计数器/同一结算，
+    // 仅文案不同——title 用户钦定「删一张卡」；「返回」只收起界面（不删也行）。
+    cards: (s) => s?.cardRemoval?.removeCards,
+    intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
+    title: '删一张卡', confirmLabel: '确认删除',
+    hint: '体修精进的赠礼：这张牌将从牌库中彻底消失（也可以不删）｜ 滚轮翻页',
+  },
 };
 
 // 选卡快照段 → 界面的候选条目形状（保持各入口原有的字段口径）

@@ -45,9 +45,9 @@ export function render(S) {
       }).join(' / '));
     L.push('  → relic equip|unequip <遗物id>（仅 prep；非槽位式不用装备）｜ relics 查看全部遗物效果说明');
   }
-  // Boss 奖励删卡机会：全阶段可见（此前 headless 没有任何入口，攒了也看不见）
+  // 删卡机会：全阶段可见（Boss 奖励 / 跳过进阶反哺共用同一计数器；此前 headless 没有入口）
   if (run.pendingCardRemoval > 0) {
-    L.push(`⧉ Boss 奖励：可删卡 ${run.pendingCardRemoval} 次（remove <构筑#> [卡名]）`);
+    L.push(`⧉ 删卡机会 ×${run.pendingCardRemoval}（remove <构筑#> [卡名]，不用则保留）`);
   }
 
   const stage = run.gameStage;

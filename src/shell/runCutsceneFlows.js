@@ -101,11 +101,11 @@ export function createRunCutsceneFlows(ctx) {
         hint: `突破${meta.label}`,
       };
     }),
-    { id: 'skip', label: '跳过（改记 1 点体修等级，生命上限 +3）', hint: '不选灵脉，精进体修' },
+    { id: 'skip', label: '跳过（体修等阶 +1，生命上限 +3，可删一张卡）', hint: '不选灵脉，精进体修' },
   ];
   /** 选择之后的结果页（一句话确认，数字读实时 run）。 */
   const ascensionResultPage = (id) => (id === 'skip'
-    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等级 ${run.player.bodyLevel ?? 0}，生命上限 +3。）` }
+    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等阶 ${run.player.bodyLevel ?? 0}，生命上限 +3。此刻起，你还可以从牌库中删去一张卡。）` }
     : {
       speaker: '旁白',
       text: `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
@@ -150,6 +150,10 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
       if (run.cardOffering) return true;              // 九选三面板收尾（chooseSeedCards 里再切幕）
       await lifecycle.exitSceneAfterCutscene(() => ctx.notify());   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
+      // 跳过进阶的删卡反哺（用户定 2026-09-13）：揭幕后就地开全屏删卡界面（title「删一张卡」）。
+      // 可跳过——「返回」只收起界面，机会经 prep 面板的「使用删卡机会」按钮长期保留。
+      // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
+      if (picked === 'skip') ctx.panelStage?.()?.openUpgradePicker?.('ascensionRemove');
       return true;
     } finally {
       ascensionPlaying = false;

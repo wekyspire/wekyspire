@@ -769,7 +769,7 @@ function execAscension(S, cmd, t) {
   const a = t[1];
   if (cmd === 'dim') {
     if (run.gameStage !== 'ascension') throw new Error('当前不在进阶事件');
-    if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修隐藏等级+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）`; }
+    if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修等阶+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1，删卡机会+1——remove <构筑#> [卡名] 使用，不用则保留）`; }
     else if (a === '火' || a === 'fire') {
       const first = run.player.leino.fire === 0;
       chooseAscension(run, 'fire');

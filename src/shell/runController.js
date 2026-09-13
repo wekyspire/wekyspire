@@ -297,6 +297,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     run, runCtx, runPresenter, cutscene, showcase,
     notify: () => notify(),
     setRoomScenePending: (v) => { roomScenePending = v; },
+    panelStage: () => panelStage(),   // 跳过进阶收尾的删卡界面挂点（晚绑定，同 showcase）
     lifecycle: {
       completeRoom: () => completeRoom(run),
       completeRoomAndNotify: () => { completeRoom(run); notify(); },
