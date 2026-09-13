@@ -424,3 +424,63 @@ shieldedOffense / bladeUnity / bladeSoul。
   绿/黄/灰三态）。
 - 冒烟：批次 13 脚本——等价性（W=0..5 各组合抽牌数 vs 旧口径）、发动合法性、
   尾弃、背包 7、cap 参数化变更、projection 字段、render 文本。
+
+## 批次 13 实施清单（2026-09-13 调研勘定，收工后照此施工）
+
+### 改动点全清单（调用点已穷举，无遗漏）
+1. **参数落地**：
+   - `state/player.js`：构造加 `this.chantCapacity = opts.chantCapacity ?? 1`；`maxHandSize` 缺省 7→6；baseStats 收录 chantCapacity。
+   - `run/prep.js refreshRunModifiers`：patch 表加 `chantCapacity: 0`，重算 `p.chantCapacity = (base.chantCapacity ?? 1) + patch.chantCapacity`；`maxHandSize` 缺省 7→6。applyBattleModifier 的 modifiers 白名单加 chantCapacity（**空系战斗内钩子**，与 maxHandSize 同款通道）。
+   - `state/battleState.js` modifiers 初始表加 chantCapacity: 0。
+2. **helpers.js 口径改造（核心）**：
+   - `handLimitOf` 兜底 7→6；新增 `chantCapacityOf(ctx) = ctx.player.chantCapacity ?? 1`。
+   - **签名决策：`effectiveHandCount(battleState)` → `effectiveHandCount(ctx)`**——全部 5 个调用点都有 ctx 在手，收 ctx 杜绝「漏传 cap 静默回退 1」类 bug。新口径 = 普通张数 + max(0, W−cap)（W = 共鸣石折扣后权重和，正交不变）。
+   - `pickOverflowVictims(hand, ctx)`：签名同样改收 ctx；total 用新口径，capacity = handLimitOf(ctx)，循环逻辑不变（仍跳过激活咏唱）。
+   - **⚠ 坑①`chantActivationLegal` 必须重写为「激活后口径直算」**：`(normal−1) + max(0, W+weight−cap) ≤ handLimitOf(ctx)`。现行 `effective + weight − 1 ≤ limit` 在 cap>0 时对**第一张咏唱**（W=0）紧 1——容量兜住的 weight 被公式误算成手牌占用，等于无咏唱构筑被「囤牌税」双重征收（用户定等价性 = 含咏唱构筑零漂移、仅无咏唱构筑 −1，激活门槛不该再吃 −1）。验证：W≥1 时新旧公式同值（normal+W+weight ≤ 8）；W=0 weight=1 时新公式 normal ≤ 7（超载线内即可点亮第一张），旧近似 normal ≤ 6（错）。
+   - `overloadLimitOf` 不动（cards.js:19/51 超载门自动继承新口径，语义自洽）。
+3. **连带卡对齐**：
+   - **⚠ 坑②「以有胜无」（blockSkills haveWithout）条件 `>=6` → `>=5`，描述「不少于6张」→「不少于5张」**：新上限 6 下满手打出、结算中此卡离手 hand=5，`>=6` 永不成立=直接删卡；>=5 恢复「满手触发」原语义（旧版上限 7 满手剩 6 ≥ 6）。
+   - **松鼠的囤积（relics.js:866，≤3 抽+1）不动**：新口径仅轻微变松，且「溢出才算占用」更贴合打空流定位——列观察位，文案「加权手牌」含义随新定义自然演化。
+4. **projection.js**：129 行 overflowVictims 调用签名同步；新增 `handCapacity: { max, chantCap, normalUsed, chantCapUsed: min(W,cap), chantOverflowUsed: max(0,W−cap) }`（灯珠与 headless 文本同源）。
+5. **headless 指示（用户要求「足够指示文本」）**：
+   - render.mjs:89 手牌行改容量分解：`手牌 普通4+咏唱溢出2/6｜咏唱容量 1/1`（字段取自同一 helpers 口径，勿另算）。
+   - engine.mjs:270 why 命令的咏唱行同步分解。
+   - **待输入引导突出**（A1 裁决）：pendingInput 时把 `in <候选#> [卡名]` 从底部 4 命令长行摘出、紧跟候选行单独一行「→ 应答：in …」。
+6. **前端灯珠指示器（用户规格原话）**：战斗页底部一排小灯珠——最左 cap 颗蓝色珠=咏唱容量（占用点亮/灰），其余 maxHandSize 颗手牌珠：绿=普通占用、黄=溢出的激活咏唱占用、灰=空；超载无指示器。数据 = projection.handCapacity。落点：BattleStage 底部 HUD 新增 CapacityBeads 物件（实施时选位，参考现有资源条锚点）。
+
+### 冒烟清单（tmp/smoke-batch13.mjs，实施时新写）
+- 等价性：W=0..5 × 普通 0..6 网格，断言新口径与旧口径（limit 7）在 W≥1 时完全同值、W=0 时恰 −1。
+- 激活合法性：第一张咏唱（W=0）满手 6 + 超载 1 = 7 张时可点亮（坑①回归）；第二张起等价旧门槛。
+- 尾弃：溢出枚举在新口径下的 victims 正确（含 cap 兜住不弃、溢出部分跳激活咏唱）。
+- 背包 7（maxHandSize+1 遗物）与 cap 参数化（runModifiers 加 chantCapacity 的遗物/空系钩子路径）。
+- 以有胜无：满手 6 打出触发格挡（坑②回归）。
+- projection.handCapacity 字段齐、数值与 helpers 口径一致；render 文本含容量分解。
+
+## 批次 12 实施清单（2026-09-13 调研勘定，与批次 13 同批施工）
+
+1. **bodySkills.js 武学数值**：registerDrawDamageChant 三阶 1/2/4 → 2/4/6（novice/adept/peerless，
+   describe 与 react 同源改，勿只改一处）。
+2. **abilities.js 四个新能力**（模板 = 拳师/武者段，subscriptions 闭包模式）：
+   - `parryFist` 挡拆 elite：UseSkillInstruction post、filter 全 true → GainShieldInstruction({target: ctx.player, amount: 1})。咏唱发动也过 UseSkillInstruction → 天然含发动（冒烟 C 验证 3 出牌+1 发动=4 盾）。
+   - `shieldedOffense` 以攻为守 master：DealDamageInstruction post、filter `instr.source === ctx.player && instr.result?.dealt > 0` → +1 盾（combat.js:56 result.dealt 已确认；source=null 的燃烧/反伤不触发）。
+   - `bladeUnity` 人刀一体 elite：PlayerTurnEndInstruction post → 盾量 = zones.deck.filter(isBladeCard).length ×1；filter 排除 `abilities.includes('bladeSoul')`（同线排他，武者/武帝惯例）。
+   - `bladeSoul` 人刀一心 master：同款 ×2，无排他（上位）。
+3. **ascension.js ABILITY_POOLS.body**：elite 加 'parryFist','bladeUnity'；master 加 'shieldedOffense','bladeSoul'。
+4. **刀客文案**：description '换卡开销不超过 1。' → '弃卡开销不超过 1。'（机制已是 dump，仅文案对齐）。
+5. 冒烟 = tmp/smoke-batch12.mjs（已备妥，六组 A 数值/B 注册授予/C 挡拆/D 以攻为守/E 人刀/F 文案）。
+
+## 批次 14：D− 初始卡移出奖励池（2026-09-13 用户拍板）
+
+> 用户原话：「拳、盾、D级的抱头不加入卡包可开出卡的列表。这些卡实际上是D-牌，正常D级牌都被他们强不少。这也是杀戮尖塔类似的设计，玩家前期无论拿什么卡都能提升强度」。
+
+- **定稿**：punch 拳 / guard 盾 / duckHead 抱头 三张定义各加 `canSpawnAsReward: false`。
+  复用既有通道（packCardPool 排除项，relicCards 同款先例）——卡包三选一 / 训练房抓牌 /
+  商店 / 老虎机卡牌产出 一切走 packCardPool 的口自动全排除，无需逐处改。
+- **影响面复核**：初始卡组不受影响（开局自带不走卡池）；晋升链不受影响（拳→快拳走
+  promotesTo 局外晋升）；体修包 D 档排除后剩 8 张构筑件（敏捷连击/蓄力/肘击/假动作/斩/
+  飞刀/练刀/精准一击），D 档不空、TIER_WEIGHTS 权重自然全部落正常 D 卡。
+- **设计效应**：开包期望强度上升（移除废牌而非加强单卡，不触数值包络）；对 P0 死亡谷
+  （6-9 层）有缓解——萌新开什么都是构筑件。与通用注入「门禁 B 以上剔除 D」的
+  「出现即有价值」原则一脉相承。
+- **冒烟**：packCardPool('body') 不含 punch/guard/duckHead；createRun 初始卡组仍含三张；
+  初始卡组外的获得路径（训练抓牌并集）同样不含。
