@@ -36,7 +36,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
-  returnToDeckAtTurnEnd, leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
+  leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
   buildCardSelectionRequest, selected, isBladeCard,
 } from './cardKit.js';
 
@@ -491,30 +491,34 @@ sheathCard('hiddenEdge', '潜锋', 'B', 23, 2);
 sheathCard('sheathEdge', '藏锋', 'A', 48, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
-// 打出即获得同名「呼吸」效果（content/effects.js：弃牌 POST 监听 + 回合末自清，
-// 生命周期与效果实例绑定——被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，
-// 同样计入；打出自身不是弃牌（pending→burnt 的消耗路径）。
-const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, fleeting = true }) => registerSkill({
+// 纯消耗（整战一次）：打出即焚毁、**焚毁彻底离场不回**（2026-09-13 用户定基本约定，
+// 原「消耗+短暂=回合末从焚毁区回库」形态废除）。打出即获得同名「呼吸」效果
+// （content/effects.js：弃牌 POST 监听 + 回合末自清，生命周期与效果实例绑定——
+// 被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，同样计入；
+// 打出自身不是弃牌（pending→burnt 的消耗路径）。
+// 阶梯：C 纯抽 / B 抽+格挡1力量1 / A 抽+格挡2力量2（B→A 翻倍，潜锋23→藏锋48 的包络内；
+// 三阶同为整战一次，阶差全在效果强度）。
+const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, promotesTo = null }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
-  keywords: fleeting ? ['exhaust', 'transient'] : ['exhaust'],
+  keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  promotesTo,
   use(sctx) {
-    if (fleeting) returnToDeckAtTurnEnd(sctx);   // 【短暂】：焚毁后回合结束回牌库
     addEffect(sctx, effectId, 1);
     return true;
   },
   describe: () => '本回合每弃1牌：抽1牌'
-    + (block > 0 ? '，格挡1' : '')
-    + (strength > 0 ? '，力量1' : ''),
+    + (block > 0 ? `，格挡${block}` : '')
+    + (strength > 0 ? `，力量${strength}` : ''),
   battleDescribe: () => '本回合每弃1牌：抽1牌'
-    + (block > 0 ? '，/effect{格挡}1' : '')
-    + (strength > 0 ? '，/effect{力量}1' : ''),
+    + (block > 0 ? `，/effect{格挡}${block}` : '')
+    + (strength > 0 ? `，/effect{力量}${strength}` : ''),
 });
-breathCard('breath', '呼吸', 'C', { effectId: 'breath' });
-breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, strength: 1 });
-breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 1, strength: 1, fleeting: false });
+breathCard('breath', '呼吸', 'C', { effectId: 'breath', promotesTo: 'warriorBreath' });
+breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, strength: 1, promotesTo: 'perfectBreath' });
+breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 2, strength: 2 });
 
 // ==== 培植系列（养刀）==========================================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
@@ -658,17 +662,16 @@ whetCard('whetstone', '砺刀', 'C', 1, 'honeEdgeMid');
 whetCard('honeEdgeMid', '磨锋', 'B', 2, 'razorEdge');
 whetCard('razorEdge', '展锐', 'A', 3);
 
-// 开刃（A，设计稿未写费用 → 0费，短暂+消耗）：所有刀法牌即刻冷却——手牌与牌库中
+// 开刃（A，设计稿未写费用 → 0费，消耗）：所有刀法牌即刻冷却——手牌与牌库中
 // 的刀充能回满、计时清零（焚毁区的刀已离场不在范围）。deckCraft.test.js 的原型
 // 只作用于手牌，此处按设计稿字面「所有」扩到牌库。直改充能标量与原型同范式。
 registerSkill({
   id: 'honeEdge', name: '开刃', type: 'normal', tier: 'A', series: 'blade', deep: 'blade',
-  keywords: ['exhaust', 'transient'],
+  keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
-    returnToDeckAtTurnEnd(sctx);   // 短暂+消耗：焚毁后回合结束回牌库
     for (const zoneName of ['hand', 'deck']) {
       for (const card of sctx.battleState.zones[zoneName]) {
         if (!isBladeCard(card)) continue;
@@ -679,10 +682,10 @@ registerSkill({
     return true;
   },
   describe: () => '所有刀法牌即刻冷却',
-  battleDescribe: () => '/named{短暂}。所有刀法牌即刻冷却',
+  battleDescribe: () => '所有刀法牌即刻冷却',
 });
 
-// 斩灭（A，2AP，消耗+短暂）：你的下一次刀法牌伤害变为固定伤害（F2：跳过修正与防御）。
+// 斩灭（A，2AP，消耗）：你的下一次刀法牌伤害变为固定伤害（F2：跳过修正与防御）。
 // 近似实现（任务口径）：once PRE 订阅把「下一次玩家来源的、发生在刀法牌结算内」的
 // 伤害指令直改 instr.fixed = true（fixed 不在 payload 白名单，走指令字段直改；execute
 // 读 this.amount = 构造时的完整值，天然丢弃此前 PRE 修饰——与"跳过修正步"语义一致）。
@@ -692,12 +695,11 @@ registerSkill({
 // 「伤害类型改写」收编为正式管线。
 registerSkill({
   id: 'annihilatingEdge', name: '斩灭', type: 'normal', tier: 'A', series: 'blade', deep: 'blade',
-  keywords: ['exhaust', 'transient'],
+  keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
-    returnToDeckAtTurnEnd(sctx);   // 短暂+消耗：焚毁后回合结束回牌库
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'pre', window: 'once',
       filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
@@ -708,7 +710,7 @@ registerSkill({
     return true;
   },
   describe: () => '你的下一次刀法牌伤害变为固定伤害',
-  battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
+  battleDescribe: () => '你的下一次刀法牌伤害变为固定伤害',
 });
 
 // 练刀（D/C/B，2026-09-13 设计稿定稿）：抽1，**将手中所有刀法牌洗回牌库底**，并令它们

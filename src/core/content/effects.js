@@ -363,9 +363,11 @@ registerEffect({
 
 // ==== 呼吸系列（刀系·弃牌回补）==================================================
 // 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层
-// （武者/完美另加格挡与力量各层数层）。正面增益：监听器生命周期与效果实例绑定
-// （首获挂载 / 扣尽注销），敌方清除增益时随层数一并拆除；回合末自行消散
+// （武者/完美另加格挡与力量，每层各 potency 层）。正面增益：监听器生命周期与效果实例
+// 绑定（首获挂载 / 扣尽注销），敌方清除增益时随层数一并拆除；回合末自行消散
 // （提交 -全部层数 → 过零自动注销订阅）。换牌（R3）内部走弃牌指令，同样触发。
+// 呼吸卡本体是纯消耗、整战一次（2026-09-13 用户定：焚毁彻底离场，原短暂回库废除）——
+// 阶梯 C 纯抽 / B 抽+格挡1力量1 / A 抽+格挡2力量2，阶差全在 potency。
 
 // 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
 const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
@@ -377,11 +379,11 @@ const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
   }), instr),
 });
 
-function registerBreathEffect({ id, name, enhanced }) {
+function registerBreathEffect({ id, name, potency = 0 }) {
   registerEffect({
     id, type: 'buff', stacking: 'count', name,
-    description: enhanced
-      ? '本回合内每弃 1 张牌：抽 1 张牌、获得格挡与力量各 1 层（每层各 1）。回合结束时消散。'
+    description: potency > 0
+      ? `本回合内每弃 1 张牌：抽 1 张牌、获得格挡与力量各 ${potency} 层（每层各 ${potency}）。回合结束时消散。`
       : '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
     icon: '🌬️',
     color: 'green',
@@ -393,21 +395,21 @@ function registerBreathEffect({ id, name, enhanced }) {
         const stacks = unit.getEffectStacks(id);
         if (stacks <= 0) return;
         ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: stacks }), instr);
-        if (enhanced) {
+        if (potency > 0) {
           ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: unit, effectId: 'block', stacks,
+            target: unit, effectId: 'block', stacks: stacks * potency,
           }), instr);
           ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: unit, effectId: 'strength', stacks,
+            target: unit, effectId: 'strength', stacks: stacks * potency,
           }), instr);
         }
       },
     }, clearsAtPlayerTurnEnd(id)(unit)],
   });
 }
-registerBreathEffect({ id: 'breath', name: '呼吸', enhanced: false });
-registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', enhanced: true });
-registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', enhanced: true });
+registerBreathEffect({ id: 'breath', name: '呼吸' });
+registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', potency: 1 });
+registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', potency: 2 });
 
 // 治疗（EFFECTS.md 2026-09 新增）：回合开始时恢复层数点生命，失去所有层数——
 // 与再生的区别是整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。

@@ -152,12 +152,10 @@ export function breakAllBlock(sctx, target = sctx.player) {
   return stacks;
 }
 
-// 【短暂】：出牌时登记一次性回合结束回库（消耗卡焚毁后照常回牌库）
-/**
- * 【短暂】非消耗形态：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，
- * 抽到不打出也不许"攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态；
- * **消耗**+短暂（打出即焚毁、回合末再回库）走 returnToDeckAtTurnEnd。
- */
+// 【短暂】：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，抽到不打出也不许
+// "攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态。
+// ⚠ 短暂只有「在手」这一种形态（2026-09-13 用户定基本约定：焚毁即彻底离场，无例外）
+// ——原「消耗+短暂=焚毁后回合末回库」形态（returnToDeckAtTurnEnd）已废除。
 export function leaveHandAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
   return {
@@ -166,16 +164,6 @@ export function leaveHandAtTurnEnd(sctx) {
     react: (instr, ctx) => ctx.kernel.submitInstruction(
       new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
   };
-}
-
-export function returnToDeckAtTurnEnd(sctx) {
-  const uniqueID = sctx.self.uniqueID;
-  sctx.kernel.addSubscription({
-    when: PlayerTurnEndInstruction, phase: 'post', window: 'once',
-    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'burnt',
-    react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
-  });
 }
 
 // 【快速咏唱】：提前触发一次咏唱节拍（P5 挂载点复用）
