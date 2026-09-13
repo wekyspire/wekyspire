@@ -33,7 +33,9 @@ export const PACKS = Object.freeze({
 });
 
 // 通用卡注入：概率 + 保底计数（run.commonPity 累计未注入次数，达 pity 必注入）
-export const COMMON_INJECT = Object.freeze({ chance: 0.3, pity: 4 });
+// 2026-09-13 用户定 30%→45%：R9 三连「新内容 0 观测」的曝光率加码（门禁过深，
+// 通用件是跨体系构筑的胶水，先让玩家看得见）。
+export const COMMON_INJECT = Object.freeze({ chance: 0.45, pity: 4 });
 
 // 卡定义归属的卡包：显式 pack 字段优先（通用灰卡标 'common'），否则按 type 归维度
 export function packOf(def) {
@@ -208,7 +210,9 @@ export function chooseRewardPack(run, packId) {
 
 // 训练房抓牌：从**所有已解锁卡包的并集**抽 3（各包按各自门禁 + 各自等阶加权），
 // 并同样注入通用卡。门禁取已解锁卡包中的最高档，供通用池筛选。
-export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount) {
+// 训练房抓牌候选 = 战后三选一 +1（2026-09-13 用户定：曝光率加码——训练房是
+// 「已解锁卡包并集」的定向窗口，候选多一张让新内容更容易被看见；战后开包不变）。
+export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount + 1) {
   const picks = rollWeighted(
     run, spawnableCardPool(run),
     def => tierWeight(def, maxRewardTier(run, packOf(def))), // 每卡按所属包的门禁加权

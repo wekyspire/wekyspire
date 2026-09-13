@@ -196,16 +196,8 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
   },
 });
 
-// 控火术：灭 C —— 驱散目标 9 层燃烧（负层数扣减；不足 9 层则清空，负溢出无害）。
-registerFireControlPair('fireControlExtinguish', '控火术：灭', 'C', 3, 'enemy', {
-  use(sctx) {
-    const target = enemyTarget(sctx);
-    if (!target) return true;
-    addEffect(sctx, 'burn', -9, target);
-    return true;
-  },
-  describe: () => '驱散目标9层/effect{燃烧}',
-});
+// 控火术：灭 已于 2026-09-13 按用户新文档删除（拍板：驱散敌方燃烧与叠炎主轴背道而驰，
+// 清燃烧的正向出口由控火术：收/爆/聚 承担，自身泄压由新卡「灭火」承担）。
 
 // 控火术：灼 B（2026-09 由 C 改 B）—— 下次你发动的攻击：每造成 3 伤害，赋予目标燃烧 1。
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
@@ -339,16 +331,17 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'A', 6, 'enemy',
   describe: () => '场上所有/effect{燃烧}迁移至目标',
 });
 
-// ==== 火墙系列（D → C → B：火系的即时格挡补缺）==================================
+// ==== 火墙系列（火盾 D → 火墙 C → 火壁 B：火系的即时格挡补缺）==================
 // 第 8 轮裁决新增（R8-C 与第 7 轮 D 跨轮复现的死因：火系输出碾压、但卡包里**盾牌 0 张**，
 // 所有防御都长在自燃转盾上、需要提前铺，被突袭时一张即时大盾都没有）。
 // 设计口径：单卡补洞，不动燃烧框架（火系框架冻结铁律）；「有燃烧再加成」奖励铺过自燃的
 // 火系构筑。数值（用户 2026-09-13 定）：**基础低、燃烧加成高**——无燃烧只是 7 盾白板
-// （对标 D 阶盾），有燃烧才是火系专属大盾（14/18/18）；全阶冷却 1（彻底 0 开销卡必须
+// （对标 D 阶盾），有燃烧才是火系专属大盾；全阶冷却 1（彻底 0 开销卡必须
 // 谨慎：B 阶 0 费盾不冷却 = 每回合白嫖盾墙）。费用跃迁放 B 阶（与练刀同一跃迁语言）。
-function fireWallCard({ id, tier, ap, shield, bonus, promotesTo = null }) {
+// 2026-09-13 改名（用户新文档：相邻等阶异名=机制质变点，B 阶加成提至 +15）。
+function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
-    id, name: '火墙', type: 'fire', tier, series: 'fireWall',
+    id, name, type: 'fire', tier, series: 'fireWall',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
@@ -362,9 +355,9 @@ function fireWallCard({ id, tier, ap, shield, bonus, promotesTo = null }) {
       + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
   });
 }
-fireWallCard({ id: 'fireWall', tier: 'D', ap: 1, shield: 7, bonus: 7, promotesTo: 'fireWallPlus' });
-fireWallCard({ id: 'fireWallPlus', tier: 'C', ap: 1, shield: 7, bonus: 11, promotesTo: 'fireWallMaster' });
-fireWallCard({ id: 'fireWallMaster', tier: 'B', ap: 0, shield: 7, bonus: 11 });
+fireWallCard({ id: 'fireWall', name: '火盾', tier: 'D', ap: 1, shield: 7, bonus: 7, promotesTo: 'fireWallPlus' });
+fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'C', ap: 1, shield: 7, bonus: 11, promotesTo: 'fireWallMaster' });
+fireWallCard({ id: 'fireWallMaster', name: '火壁', tier: 'B', ap: 0, shield: 7, bonus: 15 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，
@@ -408,6 +401,6 @@ registerSkill({
     addCard(sctx, defId, { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}一张0费控火术入手（九种之中随机）',
-  battleDescribe: () => '/named{发现}一张0费控火术入手（九种之中随机）',
+  describe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
+  battleDescribe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
 });

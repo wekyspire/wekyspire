@@ -1,19 +1,20 @@
 // 火灵脉·爆炎组合 + 通用散卡（FIRE_VEIN_CARDS §1、§3）。
-// 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·放手一搏
-// + 通用（火源归一/火墙/含焰术/膨胀/火焰精通/火焰眷顾）。
+// 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·背水一战·放手一搏
+// + 通用（火源归一/含焰术/膨胀/灭火/火焰精通/火焰眷顾）。
 //
 // 数值口径备注（全文件通用）：
 // - 攻击类卡伤害走 F1 面板轨（基数 + 攻击 + power），battleDescribe 一律经
 //   resolvedDamageText 干跑真实修正管线（A5 所见即所算）；设计稿数字为基数。
 // - 「燃烧」作为无目标写法的代价/副作用语言时默认**自施**（爆炎体系的燃烧
-//   是代价而非输出，与高热系列、膨胀、火墙一致）。
+//   是代价而非输出，与高热系列、膨胀一致）。
 // - 设计稿未写费用 = 0 费；未写咏唱值的咏唱卡按默认咏唱2（helpers.handWeightOf 兜底）。
 
 import { registerSkill, getSkillDefinition } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
+import BattleInstruction from '../kernel/BattleInstruction.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction } from '../instructions/cards.js';
+import { DrawCardsInstruction, BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
 import { applyBattleModifier } from '../run/prep.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
@@ -170,8 +171,8 @@ function condenseFlameCard({ id, name, tier, naqi, burnPerX, promotesTo }) {
   });
 }
 condenseFlameCard({ id: 'flameBirth', name: '焰生', tier: 'C', naqi: 1, burnPerX: 3, promotesTo: 'flameSurge' });
-condenseFlameCard({ id: 'flameSurge', name: '焰涌', tier: 'B', naqi: 3, burnPerX: 3, promotesTo: 'flameCondense' });
-condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 5, burnPerX: 4 });
+condenseFlameCard({ id: 'flameSurge', name: '焰涌', tier: 'B', naqi: 2, burnPerX: 3, promotesTo: 'flameCondense' });
+condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 4, burnPerX: 4 });
 
 // ====================================================================
 // §1.1 高热系列（回蓝：每回合咏唱触发 纳气 + 自施燃烧；消耗咏唱）
@@ -468,16 +469,17 @@ registerSkill({
   describe: () => '每张坟墓中的卡牌提供1魏启，抽3',
 });
 
-// 放手一搏（A，消耗）：焚毁所有手牌（结算中自身已离手，手中即其余卡），
-// 每张回复 2 魏启，抽3。
+// 背水一战（B，消耗，2026-09-13 用户新文档新增）：焚毁所有未激活咏唱的手牌，
+// 每张回复 2 魏启，抽3。已激活的咏唱卡豁免——点亮的咏唱是构筑引擎本身，
+// 烧引擎换蓝等于自拆台（旧版放手一搏的全烧口径下放到 B 阶时收的口子）。
 registerSkill({
-  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth',
+  id: 'lastStand', name: '背水一战', type: 'fire', tier: 'B', series: 'depth',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   keywords: ['exhaust'],
   use(sctx) {
-    const hand = [...sctx.battleState.zones.hand];
+    const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
     for (const c of hand) burnCard(sctx, c.uniqueID);
     if (hand.length > 0) {
       sctx.kernel.submitInstruction(new GainManaInstruction({ amount: hand.length * 2 }));
@@ -485,7 +487,49 @@ registerSkill({
     drawCards(sctx, 3);
     return true;
   },
-  describe: () => '焚毁所有手牌，每张回复2魏启，抽3',
+  describe: () => '焚毁所有未激活咏唱的手牌，每张回复2魏启，抽3',
+  battleDescribe: (sctx) => {
+    const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
+    return `焚毁${n}张手牌：回复${n * 2}魏启，抽3`;
+  },
+});
+
+// 放手一搏（A，消耗，2026-09-13 用户新文档重做）：先抽 5 补手，再焚毁牌库中
+// 所有卡，每张回 2 魏启。裸奔不加保护窗（拍板：烧完牌库本身就是玩法——空库后
+// 无牌可抽，回蓝必须在烧完前变现为杀伤）。两阶段指令：抽牌先结算完再数牌库
+// 余量（手牌上限截断 / 牌库不足 5 张时，余量以抽完后为准，不许按打出时点预估）。
+class AllInInstruction extends BattleInstruction {
+  execute(ctx) {
+    switch (this._stage) {
+      case 0:
+        ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 5 }), this);
+        return false;
+      default: {
+        const deck = [...ctx.battleState.zones.deck];
+        for (const c of deck) {
+          ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: c.uniqueID }), this);
+        }
+        if (deck.length > 0) {
+          ctx.kernel.submitInstruction(new GainManaInstruction({ amount: deck.length * 2 }), this);
+        }
+        return true;
+      }
+    }
+  }
+}
+registerSkill({
+  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  use(sctx) {
+    sctx.kernel.submitInstruction(new AllInInstruction());
+    return true;
+  },
+  describe: () => '抽5，焚毁牌库中所有卡，每张回复2魏启',
+  battleDescribe: (sctx) =>
+    `抽5，焚毁牌库中所有卡（现存${sctx.battleState.zones.deck.length}张），每张回复2魏启`,
 });
 
 // ====================================================================
@@ -517,30 +561,8 @@ registerSkill({
   describe: () => '吸纳场上所有单位的/effect{燃烧}，每层获得3护盾',
 });
 
-// 火墙（C，4魏启，消耗）：阻挡玩家的下一次攻击，自身燃烧3。
-// 「下一次攻击」判定近似：敌方来源、目标为玩家、非燃烧/中毒等环境标记的伤害指令
-// ——PRE veto 整枚指令（被取消的结算无联动，A4），once 窗口触发即注销。
-// 燃烧3为打出时点的自施代价（副作用语言，与文件头口径一致）。
-registerSkill({
-  id: 'fireWall', name: '火墙', type: 'fire', tier: 'C', series: 'common',
-  cost: { mana: 4, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'none',
-  keywords: ['exhaust'],
-  use(sctx) {
-    sctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'pre', window: 'once',
-      filter: (instr) => instr.target === sctx.player
-        && instr.source?.side === 'enemy'
-        && !instr.tags?.includes('burn')
-        && !instr.tags?.includes('poison'),
-      react: (instr, ctx) => ctx.kernel.veto(instr, 'fireWall'),
-    });
-    addEffect(sctx, 'burn', 3);
-    return true;
-  },
-  describe: () => '阻挡下一次攻击，自身/effect{燃烧}3',
-});
+// 旧「火墙」（C，4魏启，阻挡下一次攻击）已于 2026-09-13 删除：其 id/卡名与
+// 火墙链（火盾 D/火墙 C/火壁 B，见 fireEmberSkills.js）撞车，且新文档 §3.1 已将其除名。
 
 // 含焰术（C，消耗）：防火1（效果 id 'fireproof'：燃烧结算跳过伤害，层数-1）。
 registerSkill({
@@ -570,6 +592,24 @@ registerSkill({
     return true;
   },
   describe: () => '手牌上限+1，自身/effect{燃烧}5',
+});
+
+// 灭火（C，消耗，2026-09-13 用户新文档新增）：驱散自身所有燃烧。
+// 玩火体系的紧急泄压阀——与控火术：扰（燃烧转盾变现）互补：扰是把火变现，
+// 灭火是纯保命（0 费但消耗，清完不附带任何后续防护；对标含焰术防火1只挡一次跳伤）。
+registerSkill({
+  id: 'douseFlame', name: '灭火', type: 'fire', tier: 'C', series: 'common',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  use(sctx) {
+    const stacks = sctx.player.getEffectStacks('burn');
+    if (stacks > 0) addEffect(sctx, 'burn', -stacks);
+    return true;
+  },
+  describe: () => '驱散自身所有/effect{燃烧}',
+  battleDescribe: (sctx) => `驱散自身所有/effect{燃烧}（当前${sctx.player.getEffectStacks('burn')}层）`,
 });
 
 // ====================================================================
