@@ -321,12 +321,13 @@ registerSkill({
 
 // ==== 回旋斩系列（牌库末）======================================================
 // 牌库末抽牌（from:'bottom'）：与牌库顶抽牌形成一对规划语言——牌库两头都是取牌口。
-const cycloneCard = (id, name, tier, damage, count, cd) => registerSkill({
+const cycloneCard = (id, name, tier, damage, count, cd, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: cd === 0 ? { max: Infinity, cooldownTurns: 0 } : { max: 1, cooldownTurns: cd },
   cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
   use(sctx) {
     attackDamage(sctx, damage);
     drawCards(sctx, count, { from: 'bottom' });
@@ -335,8 +336,8 @@ const cycloneCard = (id, name, tier, damage, count, cd) => registerSkill({
   describe: () => `${damage}伤害，从牌库末抽${count}牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，从牌库末抽${count}牌`,
 });
-cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1);      // 2026-09-13 稿：7→10 伤害
-cycloneCard('cycloneBurst', '回旋爆斩', 'B', 10, 2, 1);    // 2026-09-13 稿：11/抽3 → 10/抽2
+cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1, 'cycloneBurst');   // 2026-09-13 稿：7→10 伤害
+cycloneCard('cycloneBurst', '回旋爆斩', 'B', 10, 2, 1, 'perfectCyclone'); // 2026-09-13 稿：11/抽3 → 10/抽2
 cycloneCard('perfectCyclone', '完美回斩', 'A', 15, 2, 0);   // 机制跃迁：无冷却
 
 // ==== 飞刀系列（邻牌献祭）======================================================
@@ -350,12 +351,13 @@ function bothSidesPresent(sctx) {
 }
 
 // 弃两侧基型（飞刀/强力飞刀/绝灭飞刀）：伤害 + 丢弃两侧牌。
-const sideDaggerCard = (id, name, tier, damage) => registerSkill({
+const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
   canUse: bothSidesPresent,
   use(sctx) {
     attackDamage(sctx, damage);
@@ -367,8 +369,8 @@ const sideDaggerCard = (id, name, tier, damage) => registerSkill({
   describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
-sideDaggerCard('flyingDagger', '飞刀', 'D', 14);        // 2026-09-13 稿：12→14
-sideDaggerCard('heavyDagger', '强力飞刀', 'C', 22);      // 2026-09-13 稿：20→22
+sideDaggerCard('flyingDagger', '飞刀', 'D', 14, 'heavyDagger');        // 2026-09-13 稿：12→14
+sideDaggerCard('heavyDagger', '强力飞刀', 'C', 22, 'annihilateDagger'); // 2026-09-13 稿：20→22
 sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 32);
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
@@ -626,12 +628,13 @@ registerSkill({
 // 这正是斩系列「只在牌库冷却」（入库冷却制）的手中补救手段；满充能的刀无处推进、静默落空。
 // 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜——
 // 回库那一刻入库钩子照常走 1 拍）。
-const whetCard = (id, name, tier, delta) => registerSkill({
+const whetCard = (id, name, tier, delta, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['transient'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
+  promotesTo,
   subscriptions: (sctx) => [leaveHandAtTurnEnd(sctx)],
   use(sctx) {
     for (const card of sctx.battleState.zones.hand) {
@@ -648,8 +651,8 @@ const whetCard = (id, name, tier, delta) => registerSkill({
     return `手中刀法牌冷却${delta}${cooling.length > 0 ? `（冷却中${cooling.length}张）` : ''}`;
   },
 });
-whetCard('whetstone', '砺刀', 'C', 1);
-whetCard('honeEdgeMid', '磨锋', 'B', 2);
+whetCard('whetstone', '砺刀', 'C', 1, 'honeEdgeMid');
+whetCard('honeEdgeMid', '磨锋', 'B', 2, 'razorEdge');
 whetCard('razorEdge', '展锐', 'A', 3);
 
 // 开刃（A，设计稿未写费用 → 0费，短暂+消耗）：所有刀法牌即刻冷却——手牌与牌库中
