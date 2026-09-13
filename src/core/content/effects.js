@@ -127,7 +127,11 @@ registerEffect({
   subscriptions: (unit) => [{
     when: DealDamageInstruction,
     phase: 'post',
-    filter: (instr) => instr.target === unit && instr.source && !instr.source.isDead(),
+    // 荆棘反伤本身（tags 含 'thorns'）不再触发荆棘——否则双方互持荆棘时反伤互为
+    // 攻击源无限递归（d-blade 试玩实报：玩家荆棘1 × 针鼠荆棘3 互弹 15 轮直到玩家
+    // 暴毙，期间回合结构完全停摆）。这就是上方约定的连锁策略：荆棘不连锁。
+    filter: (instr) => instr.target === unit && instr.source && !instr.source.isDead()
+      && !(instr.tags ?? []).includes('thorns'),
     react: (instr, ctx) => {
       const stacks = unit.getEffectStacks('thorns');
       if (stacks <= 0) return;

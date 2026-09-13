@@ -834,18 +834,23 @@ function execAscension(S, cmd, t) {
   const a = t[1];
   if (cmd === 'dim') {
     if (run.gameStage !== 'ascension') throw new Error('当前不在进阶事件');
+    // 维度别名表（与 PACK_ALIAS 同款本地化层；wood/air 内容 2026-09 已进 core，
+    // 此处早先只接了 fire，d-wood 试玩实报「木维度不存在」）
+    const DIM_ALIAS = { 火: 'fire', fire: 'fire', 木: 'wood', wood: 'wood', 空: 'air', air: 'air', 风: 'air' };
+    const DIM_LABEL = { fire: '火灵脉', wood: '木灵脉', air: '空灵脉' };
     if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修等阶+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1，删卡机会+1——remove <构筑#> [卡名] 使用，不用则保留）`; }
-    else if (a === '火' || a === 'fire') {
-      const first = run.player.leino.fire === 0;
-      chooseAscension(run, 'fire');
-      const grant = first ? FIRST_ASCENSION_GRANT.fire : null;
+    else if (DIM_ALIAS[a]) {
+      const dim = DIM_ALIAS[a];
+      const first = (run.player.leino[dim] ?? 0) === 0;
+      chooseAscension(run, dim);
+      const grant = first ? FIRST_ASCENSION_GRANT[dim] : null;
       const grantText = grant
         ? `；获赠 ${grant.cards.map(id => getSkillDefinition(id)?.name ?? id).join('+')}`
           + (grant.ability ? `+体系能力「${getAbilityDefinition(grant.ability)?.name}」` : '')
         : '';
-      S.lastOutcome = `火灵脉 +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）${grantText}`;
+      S.lastOutcome = `${DIM_LABEL[dim]} +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）${grantText}`;
     }
-    else throw new Error('dim 火 | dim 跳过');
+    else throw new Error('dim 火 | dim 木 | dim 空 | dim 跳过');
     return;
   }
   if (cmd === 'seed') {
