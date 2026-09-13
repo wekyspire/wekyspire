@@ -484,3 +484,30 @@ shieldedOffense / bladeUnity / bladeSoul。
   「出现即有价值」原则一脉相承。
 - **冒烟**：packCardPool('body') 不含 punch/guard/duckHead；createRun 初始卡组仍含三张；
   初始卡组外的获得路径（训练抓牌并集）同样不含。
+
+## 批次 15：能力授予双铁律（2026-09-13 用户拍板）
+
+> 用户原话：「大师能力必须在已有其前置精英能力后才能拿，相同能力无法领取第二次」。
+
+- **病灶核实**：①`abilityOffering`（ascension.js:93）lv≥3 直接推 master 全池、零前置校验——属实；
+  ②`chooseAscensionAbility`（:252）push 前只验「在候选中」不验「未持有」——offering 末行
+  虽过滤已持有，授予入口本身无防御（FIRST_ASCENSION_GRANT 入口 :228 倒是有 includes 校验，
+  两处不一致）。
+- **前置映射**（从同线排他/覆盖注释推定，全 9 对）：
+  火——聚爆→起手式（爆发放大）、避火术→避焰决（烈焰亲和同族）、灼脉→炎魔（燃烧轴）、
+  吹火者→吞日者（溢出魏启，注释已明覆盖）；
+  体——拳师→拳王、刀客→刀圣、武者→武帝、挡拆→以攻为守、人刀一体→人刀一心（后两对
+  随批次 12 落地时一并加字段）。
+- **实施**：
+  1. abilities.js 9 个大师 def 各加 `requires: '<前置eliteId>'`（内容自声明，同 deep/
+     canSpawnAsReward 惯例）；
+  2. ascension.js abilityOffering：master 池加过滤「def.requires 未持有则不推」
+     （getAbilityDefinition 反查）；
+  3. chooseAscensionAbility push 前加 `includes → throw`（玩家抉择重复是异常，抛错暴露；
+     与 grant 入口的静默跳过有别——grant 是系统赠送不算异常）。
+- **不追溯**：旧局已拿大师未持精英的存档不动。
+- **冒烟**：offering 不含前置未就绪的大师、前置就绪后大师出现、已持有能力不再入候选、
+  choose 已持有 id 抛错。
+- **议题（不随本批修）**：abilityOffering 的体修门禁只看 bodyLevel——卡包门禁已按 R10
+  裁决反哺 max(bodyLevel, bestLeino)，能力授予没跟上，灵脉流永远拿不到体修能力候选。
+  待用户拍板是否同样反哺。
