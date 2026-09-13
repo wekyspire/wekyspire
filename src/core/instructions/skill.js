@@ -96,7 +96,7 @@ export class UseSkillInstruction extends BattleInstruction {
             for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
               ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
             }
-            // 激发演出描述符随节拍过线：有激发能力（activated 块）的卡点亮时播卡体演出——
+            // 激活演出描述符随节拍过线：有激活能力（activated 块）的卡点亮时播卡体演出——
             // 具体动画由卡自己决定（activated.anim），缺省放缩脉冲（数值缺省由表现层补全）
             ctx.presenter?.chantToggled?.({
               skill: this.skill, on: true, reason: 'played',

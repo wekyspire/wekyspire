@@ -520,9 +520,9 @@ breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', bl
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
 // power 随卡流动、转化 keepPower 延续，是养成轴的近似口径。设计稿未写费用 → 0费。
 
-// 养刀术（C）：咏唱1。激发（发动点亮）时，手中刀法牌伤害 +3（一次性快照——
-// 之后抽到的刀不吃本次加成；onEnable 在卡回手点亮时调用，自身非刀法牌不在候选内）。
-// 2026-09-12 设计稿：+2 → +3。
+// 养刀术（C）：咏唱1。触发（=咏唱触发 P5；用户定 2026-09-13 术语：激活=打出点亮入态、
+// 触发=每回合 P5，「激发」一词废弃不用）时手中刀法牌伤害 +3（每拍一次性快照——
+// 之后抽到的刀不吃本次加成；自身非刀法牌不在候选内）。2026-09-12 设计稿：+2 → +3。
 registerSkill({
   id: 'honeBlade', name: '养刀术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
@@ -530,14 +530,17 @@ registerSkill({
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
-    onEnable: (sctx) => {
-      for (const card of sctx.battleState.zones.hand) {
-        if (card.uniqueID !== sctx.self.uniqueID && isBladeCard(card)) gainPower(sctx, card, 3);
-      }
-    },
+    subscriptions: (sctx) => [{
+      when: ChantTriggerInstruction, phase: 'post',
+      react: () => {
+        for (const card of sctx.battleState.zones.hand) {
+          if (card.uniqueID !== sctx.self.uniqueID && isBladeCard(card)) gainPower(sctx, card, 3);
+        }
+      },
+    }],
   },
-  describe: () => '激发时手中刀法牌伤害+3',
-  battleDescribe: (sctx) => '激发时手中刀法牌伤害+3',
+  describe: () => '触发时手中刀法牌伤害+3',
+  battleDescribe: (sctx) => '触发时手中刀法牌伤害+3',
 });
 
 // 锻刀术（C）：咏唱1。你打出刀法牌时，**所有刀法牌**伤害 +1（激活期间的常驻被动）。

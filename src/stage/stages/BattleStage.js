@@ -1191,8 +1191,8 @@ export class BattleStage {
     // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
     // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
     // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）。
-    // 发动点亮且卡带激发能力（载荷 anim 描述符，core 按 def.activated 判定）时，
-    // 先在展示位播激发演出再放行——「这张卡被点亮了」要看得见。
+    // 发动点亮且卡带激活能力（载荷 anim 描述符，core 按 def.activated 判定）时，
+    // 先在展示位播激活演出再放行——「这张卡被点亮了」要看得见。
     if (type === EventNames.ANIM_CHANT_TOGGLED) {
       const id = payload?.skill?.uniqueID ?? null;
       const release = () => {
@@ -1685,7 +1685,7 @@ export class BattleStage {
   }
 
   /**
-   * 咏唱**激发**节拍（数据驱动的卡体点亮演出）：发动点亮的咏唱卡在展示位播完自身
+   * 咏唱**激活**节拍（数据驱动的卡体点亮演出）：发动点亮的咏唱卡在展示位播完自身
    * 演出后才回扇形。动画种类由卡自己决定（presenter 载荷 anim 描述符；core 在
    * def.activated.anim 缺省时给 { kind: 'pulse' }——"一般会实现为放缩"），数值
    * 缺省由本层补全（演出参数是表现层调参位，卡只声明它想覆盖的部分）。

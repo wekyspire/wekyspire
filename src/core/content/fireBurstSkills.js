@@ -120,7 +120,7 @@ function burstChantCard({ id, name, tier, base, perMana }) {
     cardMode: 'chant', chantWeight: 1,
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable
     activated: {
-      // 激发演出自定（火焰橙——默认是金色脉冲，见 BattleStage _chantActivateBeat）
+      // 激活演出自定（火焰橙——默认是金色脉冲，见 BattleStage _chantActivateBeat）
       anim: { color: 0xff9a3d },
       onEnable: (sctx) => { sctx.self.burstPool = 0; },
       subscriptions: (sctx) => [{
