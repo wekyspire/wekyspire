@@ -184,8 +184,10 @@ const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => regi
   // 局内进阶链走 battlePromotesTo（局内转化专用字段）——斩不可局外晋升
   // （营地/训练场的 promoteCard 只认 promotesTo，对斩链天然不可见）
   battlePromotesTo: nextId ?? null,
-  // 斩（D）可入池作为链条起点；进阶卡只经局内转化获得，永不洗入奖励卡包
-  canSpawnAsReward: tier === 'D',
+  // 全链（含链首斩）不进奖励卡包（2026-09-13 用户定：斩与拳/盾/抱头同为 D− 初始卡，
+  // 开局自带见 BODY_STARTER_DECK——开包即提升，初始卡不占奖励位）；
+  // 进阶卡只经局内转化获得。canSpawnAsReward 同时被奖励池/种子包/古尔帕斯货架排除
+  canSpawnAsReward: false,
   use(sctx) {
     // 先进阶后伤害：进阶是结算内的簿记，放前面保证即便伤害击杀终局截断也已落定。
     // 发动卡自身已离手（pending），findSlashCard 看不见它——自我进阶直接对 self 转化。
