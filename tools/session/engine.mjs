@@ -481,6 +481,17 @@ function execRoom(S, t) {
 }
 
 // 售货机（与任何房间并存，不消耗房间行动）：buy <#> 购买 / claim <#|id> 卡包或遗物包三选一
+// 购买回执的人话化（X1 巡检实报：原样 JSON.stringify(res) 泄漏原始结构）
+function buyOutcomeText(res) {
+  switch (res?.kind) {
+    case 'potion': return '生命恢复 25% 上限';
+    case 'apple': return '苹果到手（瑞米的最爱）';
+    case 'pack': return '卡包到手——三选一';
+    case 'relicPack': return '遗物包到手——三选一';
+    case 'relic': return `遗物到手${res.relicId ? `：【${getRelicDefinition(res.relicId)?.name ?? res.relicId}】` : ''}`;
+    default: return res?.kind ?? '成交';
+  }
+}
 function execRoomShop(S, t) {
   const run = S.run;
   const [, , b] = t;
@@ -495,14 +506,14 @@ function execRoomShop(S, t) {
       // 遗物包三选一（2026-09-13 用户定：替代旧的随机单件遗物）
       const lines = run.shopPending.choices.map((id, i) => {
         const rdef = getRelicDefinition(id);
-        return `  ${i}｜【${rdef?.name ?? id}】（${rdef?.rarity ?? 'C'} 级，`
+        return `  ${i + 1}｜【${rdef?.name ?? id}】（${rdef?.rarity ?? 'C'} 级，`
           + `${rdef?.nonSlot ? '非槽位式' : `占 ${rdef?.cost ?? 0} 槽`}）${rdef?.description ?? ''}`;
       });
       S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：遗物包到手，三件中挑一件（可放弃）\n`
         + lines.join('\n')
         + '\n（用 act shop claim <#> 选择 / act shop claim -1 放弃）';
     } else {
-      S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
+      S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${buyOutcomeText(res)}`
         + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '');
     }
     return;
@@ -619,7 +630,7 @@ function execRoomGurpas(S, t) {
     const it = ensureGurpasStock(run).items[idx];
     if (!it) throw new Error(`货架上没有这一件：${t[3]}`);
     const res = buyGurpas(run, idx);
-    S.lastOutcome = `购买「${it.label}」(-${it.price}金)：${JSON.stringify(res)}`
+    S.lastOutcome = `购买「${it.label}」(-${it.price}金)：${buyOutcomeText(res)}`
       + (res.kind === 'pack' ? '（用 act gurpas claim <#> 选卡）' : '');
     return;
   }
