@@ -343,12 +343,14 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'A', 6, 'enemy',
 // 第 8 轮裁决新增（R8-C 与第 7 轮 D 跨轮复现的死因：火系输出碾压、但卡包里**盾牌 0 张**，
 // 所有防御都长在自燃转盾上、需要提前铺，被突袭时一张即时大盾都没有）。
 // 设计口径：单卡补洞，不动燃烧框架（火系框架冻结铁律）；「有燃烧再加成」奖励铺过自燃的
-// 火系构筑，但不强制（无燃烧也是一张及格的 D 阶盾）。费用跃迁放 B 阶（与练刀同一跃迁语言）。
+// 火系构筑。数值（用户 2026-09-13 定）：**基础低、燃烧加成高**——无燃烧只是 7 盾白板
+// （对标 D 阶盾），有燃烧才是火系专属大盾（14/18/18）；全阶冷却 1（彻底 0 开销卡必须
+// 谨慎：B 阶 0 费盾不冷却 = 每回合白嫖盾墙）。费用跃迁放 B 阶（与练刀同一跃迁语言）。
 function fireWallCard({ id, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
     id, name: '火墙', type: 'fire', tier, series: 'fireWall',
     cost: { mana: 0, actionPoint: ap },
-    charges: { max: Infinity, cooldownTurns: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
@@ -360,9 +362,9 @@ function fireWallCard({ id, tier, ap, shield, bonus, promotesTo = null }) {
       + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
   });
 }
-fireWallCard({ id: 'fireWall', tier: 'D', ap: 1, shield: 8, bonus: 4, promotesTo: 'fireWallPlus' });
-fireWallCard({ id: 'fireWallPlus', tier: 'C', ap: 1, shield: 12, bonus: 6, promotesTo: 'fireWallMaster' });
-fireWallCard({ id: 'fireWallMaster', tier: 'B', ap: 0, shield: 12, bonus: 6 });
+fireWallCard({ id: 'fireWall', tier: 'D', ap: 1, shield: 7, bonus: 7, promotesTo: 'fireWallPlus' });
+fireWallCard({ id: 'fireWallPlus', tier: 'C', ap: 1, shield: 7, bonus: 11, promotesTo: 'fireWallMaster' });
+fireWallCard({ id: 'fireWallMaster', tier: 'B', ap: 0, shield: 7, bonus: 11 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，

@@ -592,8 +592,12 @@ export function composeRoom(recipeId, seed = 'dev') {
     });
     claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
     if (live) {
+      // 交互 kind 三级口径：①道具自报（userData.interactive——专用机器件，件本身即机器）；
+      // ②**配方指派**（g.kind——通用装饰件被配方拎出来当交互物用，如篝火=营地、训练桩=训练；
+      //   装饰件不能全局自报 interactive，否则会被静态合批跳过、在别的房间里凭空消失）；
+      // ③兜底 = 道具 id。
       interactives.set(g.name ?? g.id, {
-        object: obj, def, kind: obj.userData.interactive ?? g.id,
+        object: obj, def, kind: obj.userData.interactive ?? g.kind ?? g.id,
         x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
       });
     }

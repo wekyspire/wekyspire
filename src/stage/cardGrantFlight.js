@@ -2,7 +2,8 @@
 //
 // 背景（用户 2026-09-13 报）：战后奖励三选一选完卡毫无反馈——面板直接消失进切幕，
 // 卡静悄悄进牌组。本组件给出统一的两拍语言：
-//   ① 选中脉冲：chosen 卡放大 + 金色卡面闪光（「就是这张」的一拍）；
+//   ① 选中脉冲：**只放缩**（「就是这张」的一拍；不打金色闪光——用户同日报：
+//      金闪与升级特效撞语言，耀眼到像 bug，闪光类语言专属升级/power 变化）；
 //   ② 收编飞行：贝塞尔弧线飞向收编锚点 + 途中缩小 + 尾段淡出 + 中段微倾
 //      （同 BattleStage._cardFlight/_addCardBeat 的飞行语言），落位销毁。
 // 整段作为**一条指令挂上 animation sequencer**（宿主注入，可空 = 直接播），与后续的
@@ -18,7 +19,7 @@ import gsap from 'gsap';
 import { EventNames } from '../bridge/events.js';
 
 export const CARD_GRANT_TIMING = Object.freeze({
-  pulseMs: 300,   // 选中脉冲（放大 + 闪光）
+  pulseMs: 300,   // 选中脉冲（只放缩——无金色闪光）
   flyMs: 540,     // 收编飞行
 });
 const TOTAL_MS = CARD_GRANT_TIMING.pulseMs + CARD_GRANT_TIMING.flyMs;
@@ -55,11 +56,12 @@ export function playCardGrantFlight({ card, target, sequencer = null, onDone = n
     // 兜底：tween 链断裂（异常/外部清场）也不吞上行——意图延迟可以，丢失不行
     const safety = setTimeout(settle, TOTAL_MS + 400);
 
-    // ① 选中脉冲：放大 + 金色卡面闪光（得卡的"一拍"）
+    // ① 选中脉冲：只放缩、**不打金色卡面闪光**（用户 2026-09-13 报：金色脉冲与卡牌升级
+    // 特效撞语言，"过于明显和耀眼、看起来反而像是有 bug"——得卡的一拍留给放缩 + 飞行，
+    // 闪光类语言从此专属「升级/power 变化」）。
     const s0 = card.scale.x || 1;
-    card.fx?.pulse?.({ color: 0xffd34c, durationMs: CARD_GRANT_TIMING.pulseMs + 260, scale: 1.5 });
     tweens.push(gsap.to(card.scale, {
-      x: s0 * 1.28, y: s0 * 1.28,
+      x: s0 * 1.18, y: s0 * 1.18,
       duration: CARD_GRANT_TIMING.pulseMs / 1000, ease: 'back.out(2)',
       onComplete: fly,
     }));

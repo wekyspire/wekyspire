@@ -95,7 +95,6 @@ function rollStock(run) {
     ['relicB', 14],
     ...(wantApple ? [['apple', 8]] : []),
   ];
-  let packPicked = false;
 
   while (items.length < slots && kinds.length) {
     const total = kinds.reduce((s, [, w]) => s + w, 0);
@@ -104,8 +103,11 @@ function rollStock(run) {
     for (const [k, w] of kinds) { roll -= w; if (roll < 0) { kind = k; break; } }
 
     if (kind === 'pack') {
-      if (packPicked) continue;             // 一柜只放一个卡包
+      // 一柜只放一个卡包：中过就从候选里摘掉（⚠ 必须是摘除而不是 continue——
+      // kinds 只剩 pack 时 continue 就是死循环，货架件数 > 1+非遗包候选数 时必现）
+      kinds.splice(kinds.findIndex(([k]) => k === 'pack'), 1);
       const packs = availablePacks(run).map(p => p.id);
+      if (!packs.length) continue;            // 无可用卡包：这一档轮空
       const packId = packs[Math.floor(rng.next() * packs.length)];
       const packName = PACKS[packId]?.name ?? packId;
       items.push(makeItem('pack', {
@@ -114,7 +116,6 @@ function rollStock(run) {
         sub: '买到即开，包内三选一', effect: '买到即开，包内三选一',
         price: packPrice(run, packId, rng),
       }));
-      packPicked = true;
     } else if (kind === 'apple') {
       items.push(makeItem('apple', {
         id: 'apple', name: '瑞米最爱的苹果', label: '瑞米最爱的苹果',
