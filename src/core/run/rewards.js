@@ -1,4 +1,4 @@
-import { allSkills } from '../skills/registry.js';
+import { allSkills, getSkillDefinition } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 
 // 战后奖励（RUN_DESIGN §1 + 2026-09 卡包化）：
@@ -68,14 +68,27 @@ export function maxRewardTier(run, packId = 'body') {
   return 'C';
 }
 
-// 单包卡池：包归属 + 该体系等阶门禁 + 排除 S/Z 与 canSpawnAsReward=false。
+// 深入卡门禁（设计稿：精英能力解锁子体系卡池，**深入卡仅在该子体系精英能力到手后**
+// 进入奖励池）。卡 def 以 `deep: '<子体系>'` 标注；大师能力不开门禁（门禁只看精英）。
+export const DEEP_GATES = Object.freeze({
+  burst: Object.freeze(['pyroBlast', 'fireWard']), // 爆炎深入：回响烈焰/背水一战/放手一搏
+  fist: Object.freeze(['boxer']),                  // 拳深入：万变拳/假动作…
+  blade: Object.freeze(['bladeMaster']),           // 刀深入：练刀/开刃/斩灭…
+});
+export function deepGateOpen(run, def) {
+  if (!def?.deep) return true;
+  return (DEEP_GATES[def.deep] ?? []).some(id => run?.player?.abilities?.includes(id));
+}
+
+// 单包卡池：包归属 + 该体系等阶门禁 + 排除 S/Z 与 canSpawnAsReward=false + 深入卡门禁。
 // capTier 可覆写门禁（通用注入跟随所开卡包的上限）。
 export function packCardPool(run, packId = 'body', capTier = null) {
   const cap = TIER_RANK[capTier ?? maxRewardTier(run, packId)];
   return allSkills().filter(def =>
     packOf(def) === packId
     && def.canSpawnAsReward !== false && def.tier !== 'S' && def.tier !== 'Z'
-    && (TIER_RANK[def.tier] ?? Infinity) <= cap);
+    && (TIER_RANK[def.tier] ?? Infinity) <= cap
+    && deepGateOpen(run, def));
 }
 
 // 通用注入池：跟随所开卡包门禁。门禁达 B 以上时剔除 D 级通用卡（后期 D 卡是废牌，
@@ -107,9 +120,10 @@ export function tierWeight(def, capTier) {
   return TIER_WEIGHTS[offset];
 }
 
-// 加权不放回抽取（走 run rng，确定性）。按**档位**（权重值分组）先掷档位、再在档内均匀
+// 加权不放回抽取（走 run rng，确定性）。按**档位**（权重值分组）先掷档位、再在档内
 // 取卡——档级概率恒为 20/55/25，与池内各等阶卡数无关（卡数只影响档内哪张，不影响档间比例）。
-function rollWeighted(run, defs, weightOf, count) {
+// affinityOf 可选：档内选卡的权重函数（子体系亲和，见 SERIES_AFFINITY）；缺省 = 档内均匀。
+function rollWeighted(run, defs, weightOf, count, affinityOf = null) {
   const classes = new Map(); // 档位权重 -> 该档剩余卡
   for (const def of defs) {
     const w = weightOf(def);
@@ -129,11 +143,45 @@ function rollWeighted(run, defs, weightOf, count) {
     }
     if (chosenW == null) chosenW = [...classes.keys()].at(-1);
     const group = classes.get(chosenW);
-    const i = run.rng.int(0, group.length - 1); // 档内均匀取一张
+    let i;
+    if (affinityOf) { // 档内亲和加权取一张
+      let sum = 0;
+      const ws = group.map(d => { const aw = Math.max(0, affinityOf(d)); sum += aw; return aw; });
+      let rr = run.rng.next() * sum;
+      i = ws.findIndex(aw => { rr -= aw; return rr <= 0; });
+      if (i < 0) i = group.length - 1;
+    } else {
+      i = run.rng.int(0, group.length - 1); // 档内均匀取一张
+    }
     picks.push(group.splice(i, 1)[0]);
     if (!group.length) classes.delete(chosenW); // 档抽空 → 整档移出，后续按剩余档归一
   }
   return picks;
+}
+
+// ---- 子体系亲和加权（2026-09-13 用户定，「中期子体系大成」定向探索）----
+// 开包/训练抽卡时，与玩家牌组**同 series** 的卡出率提升：每张同 series 持卡 +35%，
+// 至多计 4 张（峰值 ×2.4——档内 5 卡时目标卡从 20% 提到约 37%，定向但不碾压多样性）。
+// 只作用于体系包抽取的档内选卡；**通用注入不受影响**（injectCommon 不走 rollWeighted）；
+// 无 series 的卡恒 ×1。确定性：亲和计数只读牌组，抽取仍走 run.rng。
+export const SERIES_AFFINITY = Object.freeze({ perCard: 0.35, maxCount: 4 });
+
+/** 牌组的 series 分布（亲和计数器，一次开包算一份共用）。 */
+function seriesCounts(run) {
+  const counts = new Map();
+  for (const rt of run?.player?.deck ?? []) {
+    const s = getSkillDefinition(rt.defId)?.series;
+    if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** 单卡亲和权重：1 + perCard × min(同 series 持卡数, maxCount)。 */
+export function seriesAffinityWeight(run, def, counts = null) {
+  const series = def?.series;
+  if (!series) return 1;
+  const c = counts ?? seriesCounts(run);
+  return 1 + SERIES_AFFINITY.perCard * Math.min(c.get(series) ?? 0, SERIES_AFFINITY.maxCount);
 }
 
 // 可开卡包：体修恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
@@ -160,10 +208,13 @@ export function spawnableCardPool(run = null) {
   return out;
 }
 
-// 包内抽 3 选 1 候选（走 run rng，确定性；不重复；等阶加权见 TIER_WEIGHTS）
+// 包内抽 3 选 1 候选（走 run rng，确定性；不重复；等阶加权见 TIER_WEIGHTS；
+// 档内按子体系亲和加权，见 SERIES_AFFINITY）
 export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLDER.skillChoiceCount) {
   const cap = maxRewardTier(run, packId);
-  return rollWeighted(run, packCardPool(run, packId), def => tierWeight(def, cap), count)
+  const counts = seriesCounts(run);
+  return rollWeighted(run, packCardPool(run, packId), def => tierWeight(def, cap), count,
+    def => seriesAffinityWeight(run, def, counts))
     .map(def => def.id);
 }
 
@@ -221,10 +272,12 @@ export function chooseRewardPack(run, packId) {
 // 训练房抓牌候选 = 战后三选一 +1（2026-09-13 用户定：曝光率加码——训练房是
 // 「已解锁卡包并集」的定向窗口，候选多一张让新内容更容易被看见；战后开包不变）。
 export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount + 1) {
+  const counts = seriesCounts(run);
   const picks = rollWeighted(
     run, spawnableCardPool(run),
     def => tierWeight(def, maxRewardTier(run, packOf(def))), // 每卡按所属包的门禁加权
     count,
+    def => seriesAffinityWeight(run, def, counts), // 档内子体系亲和（与开包同口径）
   ).map(def => def.id); // 先取 id：注入会原地替换元素
   const caps = availablePacks(run).map(p => TIER_RANK[maxRewardTier(run, p.id)]);
   const capTier = Object.keys(TIER_RANK).find(t => TIER_RANK[t] === Math.max(...caps)) ?? 'C';

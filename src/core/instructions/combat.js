@@ -10,7 +10,7 @@ import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
 // 为空（伤害不可被 PRE 改写），但结算仍可被 veto（防火"跳过结算"）。中毒等环境伤害用。
 // minHp 地板：经 getStat('minHp') 读轨（不灭等效果的 statModifiers 提供），默认 0。
 export class DealDamageInstruction extends BattleInstruction {
-  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [] }, opts = {}) {
+  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [], skill = null }, opts = {}) {
     super(opts);
     this.source = source;       // Unit | null（环境伤害等无来源）
     this.target = target;       // Unit
@@ -18,6 +18,7 @@ export class DealDamageInstruction extends BattleInstruction {
     this.basePierce = pierce;
     this.fixed = fixed;
     this.tags = tags;
+    this.skill = skill;         // 造成此伤害的卡牌 runtime（dealDamage 透传；环境/敌方直造为 null）
   }
 
   get modifiablePayload() { return this.fixed ? [] : ['damage', 'pierce']; }

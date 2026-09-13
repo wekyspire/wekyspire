@@ -100,13 +100,16 @@ const TEMPLATES = [
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
 // 第二波（2026-09-13）：22 层骑士长（阵型结业考）、33 层饕餮领主（滚雪球结业考）上岗；
 // 第三波（2026-09-13）：44 层塔心（孤身巨石三阶段体力考）上岗，pyro 占位卸任。
+// 第四波（2026-09-13，用户设计）：11 层改为**火主题 Boss 三候选池**——燃焰术士（重做）/
+// 卡达斯/MEFM-1，每场 Boss 战由战斗种子确定性抽一只（同一层重打 = 同一只）。
+// 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
 // 自 22 层起每个 Boss 必带燃烧交互纹理
 //（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
 //  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环）。
 const BOSS_OF_FLOOR = Object.freeze({
-  11: 'pyro', 22: 'knightCommander', 33: 'gluttonLord', 44: 'towerHeart',
+  11: ['pyro', 'kardas', 'mefm1'], 22: 'knightCommander', 33: 'gluttonLord', 44: 'towerHeart',
 });
-const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR));
+const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 
 // 精英层排期（确定性，好记好测）：每章第 6、9 层（6/9、17/20、28/31、39/42）。
 // 2026-09 试玩后从 5/8 后挪：开局多一层普通战铺垫，再碰精英。
@@ -157,7 +160,8 @@ export function generateEncounter(run) {
   const rng = createRng(deriveBattleSeed(run.seed, floor) ^ 0x5EED); // 与旧 encounter 派生错开
   if (isBossFloor(floor)) {
     const chapter = floor / FLOORS_PER_CHAPTER - 1;
-    const bossId = BOSS_OF_FLOOR[floor] ?? 'pyro';
+    const entry = BOSS_OF_FLOOR[floor] ?? 'pyro';
+    const bossId = Array.isArray(entry) ? rng.pick(entry) : entry; // 候选池：战斗种子定抽
     const bossDef = getEnemyDefinition(bossId);
     const d = Math.min(BOSS_DIFFICULTY[chapter], bossDef.difficulty.max);
     return [descriptorOf(bossId, d)];

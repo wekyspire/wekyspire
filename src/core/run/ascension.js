@@ -74,9 +74,37 @@ export function ascensionReady(run) {
     && run.player.trainingCount >= need;
 }
 
-// 能力授予候选（占位）：授予池最小化为空；达标标准与池内容见 §9，后续替换。
-export function abilityOffering(_run) {
-  return [];
+// 能力授予池（2026-09-13 实装，设计稿 FIRE_VEIN_CARDS §1.4/§2.3 + BODY §1.4/§2.5/§3.4）：
+//   灵脉 2 级 → 该维度**精英**池；3 级 → **大师**池；体修看隐藏 bodyLevel（同门槛）。
+// 每次进阶至多授予一项（对话选择制）；已持有的不再出现，同池其余能力留给后续进阶
+// 慢慢取（设计：一局后期约可解锁两个子体系卡池——想多取就得多投入进阶机会）。
+const ABILITY_POOLS = Object.freeze({
+  fire: Object.freeze({
+    elite: Object.freeze(['pyroBlast', 'fireWard', 'scorchVein', 'fireBlower']),
+    master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
+  }),
+  body: Object.freeze({
+    elite: Object.freeze(['boxer', 'bladeMaster', 'warrior']),
+    master: Object.freeze(['champion', 'bladeSaint', 'warEmperor']),
+  }),
+});
+
+// 能力授予候选：按当前修为聚合「已达标且未持有」的能力（授予幕间据此出选项）。
+export function abilityOffering(run) {
+  const p = run?.player;
+  if (!p) return [];
+  const out = [];
+  for (const dim of LEINO_DIMENSIONS) {
+    const pool = ABILITY_POOLS[dim];
+    if (!pool) continue;
+    const lv = p.leino?.[dim] ?? 0;
+    if (lv >= 2) out.push(...pool.elite);
+    if (lv >= 3) out.push(...pool.master);
+  }
+  const bodyLv = p.bodyLevel ?? 0;
+  if (bodyLv >= 2) out.push(...ABILITY_POOLS.body.elite);
+  if (bodyLv >= 3) out.push(...ABILITY_POOLS.body.master);
+  return [...new Set(out)].filter(id => !p.abilities.includes(id));
 }
 
 // ---- 种子包（首次 0→1）----

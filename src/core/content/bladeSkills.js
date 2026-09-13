@@ -658,7 +658,7 @@ whetCard('razorEdge', '展锐', 'A', 3);
 // 的刀充能回满、计时清零（焚毁区的刀已离场不在范围）。deckCraft.test.js 的原型
 // 只作用于手牌，此处按设计稿字面「所有」扩到牌库。直改充能标量与原型同范式。
 registerSkill({
-  id: 'honeEdge', name: '开刃', type: 'normal', tier: 'A', series: 'blade',
+  id: 'honeEdge', name: '开刃', type: 'normal', tier: 'A', series: 'blade', deep: 'blade',
   keywords: ['exhaust', 'transient'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -687,7 +687,7 @@ registerSkill({
 // （现网内容里格挡减半等订阅注册在前、执行在前，不受影响）——modifier 系统落地时应把
 // 「伤害类型改写」收编为正式管线。
 registerSkill({
-  id: 'annihilatingEdge', name: '斩灭', type: 'normal', tier: 'A', series: 'blade',
+  id: 'annihilatingEdge', name: '斩灭', type: 'normal', tier: 'A', series: 'blade', deep: 'blade',
   keywords: ['exhaust', 'transient'],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -718,7 +718,7 @@ registerSkill({
 // 把主力斩当废牌丢了两次，R8-A）。
 // 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽1后手中无刀时纯白板抽1收场。
 const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSkill({
-  id, name: '练刀', type: 'normal', tier, series: 'blade',
+  id, name: '练刀', type: 'normal', tier, series: 'blade', deep: 'blade',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',

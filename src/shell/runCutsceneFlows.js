@@ -14,7 +14,9 @@ import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import {
   chooseAscension, LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
   chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
+  chooseAscensionAbility,
 } from '../core/run/ascension.js';
+import { getAbilityDefinition } from '../core/abilities/registry.js';
 import { DIM_META } from '../stage/panels/index.js';
 import { eventArtUrlNamed } from './overlay/eventArt.js';
 
@@ -113,6 +115,44 @@ export function createRunCutsceneFlows(ctx) {
     });
 
   /**
+   * 能力授予幕间（精英/大师能力，2026-09-13 实装）：进阶结算挂起 ascensionOffer 时播。
+   * 选项 = 候选能力（【精英】/【大师】前缀 + 名字与描述）+ 「暂且不取」；
+   * 选定即 chooseAscensionAbility 同步结算（null = 跳过，能力池下次进阶还会再出）。
+   */
+  async function playAbilityOfferScene(bg) {
+    if (!run.ascensionOffer?.length) return false;
+    let picked = null;
+    const options = run.ascensionOffer.map((id) => {
+      const def = getAbilityDefinition(id);
+      const tag = def.grade === 'master' ? '大师' : '精英';
+      return { id, label: `【${tag}】${def.name}——${def.description}`, hint: '授予此能力' };
+    });
+    options.push({ id: 'skip', label: '暂且不取（能力池保留，下次进阶再择）', hint: '跳过能力授予' });
+    await cutscene.play({
+      steps: [{
+        type: 'dialogue', bg,
+        pages: [
+          { speaker: '旁白', text: '突破的余韵未散，一缕新的「法」在识海里成形。' },
+          { speaker: '旁白', text: '择一项能力纳入道基——', choices: options },
+        ],
+        onChoice: (id) => { picked = id; },
+      }],
+    });
+    chooseAscensionAbility(run, picked && picked !== 'skip' ? picked : null);
+    ctx.notify();
+    if (picked && picked !== 'skip') {
+      const def = getAbilityDefinition(picked);
+      await cutscene.play({
+        steps: [{
+          type: 'dialogue', bg,
+          pages: [{ speaker: '旁白', text: `（${def.name}已入道基：${def.description}）` }],
+        }],
+      });
+    }
+    return true;
+  }
+
+  /**
    * 播进阶幕间。
    * @param fromRoom true = 从营地房直接接棒（黑幕中点做 completeRoom + 换台）；
    *                 false = 已在 ascension 阶段（调试/兜底）只做转场。
@@ -148,6 +188,7 @@ export function createRunCutsceneFlows(ctx) {
       });
       if (!picked) return false;                      // 未选择（异常路径）：留在 ascension 阶段
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
+      if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
       if (run.cardOffering) return true;              // 九选三面板收尾（chooseSeedCards 里再切幕）
       await lifecycle.exitSceneAfterCutscene(() => ctx.notify());   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
       // 跳过进阶的删卡反哺（用户定 2026-09-13）：揭幕后就地开全屏删卡界面（title「删一张卡」）。
@@ -165,22 +206,32 @@ export function createRunCutsceneFlows(ctx) {
     if (run.gameStage !== 'ascension') return;
     chooseAscension(run, dimension);
     ctx.notify();
-    if (!run.cardOffering) void lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    void (async () => {
+      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
+      if (!run.cardOffering) await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    })();
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
   function skipAscension() {
     if (run.gameStage !== 'ascension' || run.cardOffering) return;
     chooseAscension(run, null);
     ctx.notify();
-    void lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    void (async () => {
+      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
+      await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    })();
   }
 
   // 种子包：九选三 + 一次刷新（首次 0→1 时挂起）；确认后进阶结束 → 切幕回塔楼
+  // （选定后 proceedAfterLevelUp 可能挂起能力授予 → 先播授予幕间再切幕）
   function chooseSeedCards(defIds) {
     if (run.gameStage !== 'ascension' || !run.cardOffering) return;
     chooseSeedCardsCore(run, defIds);
     ctx.notify();
-    void lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    void (async () => {
+      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
+      await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+    })();
   }
   function rerollSeedOffering() {
     if (run.gameStage !== 'ascension' || !run.cardOffering) return;

@@ -57,11 +57,12 @@ export function isLastHandCardAtPlay(sctx) {
 // ---- 指令组合原语（全部返回被提交的指令，便于命中探针/断言）----
 
 // 造成伤害。amount 已是最终数值（攻击卡请先过 attackAmount）。
+// 伤害指令携带 skill 引用（sctx.self）——「第一张火灵脉攻击牌」之类的能力按它反查卡定义。
 export function dealDamage(sctx, amount, {
   target = null, pierce = false, fixed = false, tags = [], source = sctx.player,
 } = {}) {
   const instr = new DealDamageInstruction({
-    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags,
+    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self,
   });
   sctx.kernel.submitInstruction(instr);
   return instr;

@@ -420,7 +420,7 @@ registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 4 }
 // （DumpCardsInstruction 树）不吃这份免费；打出 0AP 卡不产生消耗指令，免费保留至
 // 下一张有费用的卡（宽容口径）。
 registerSkill({
-  id: 'wildFist', name: '万变拳', type: 'normal', tier: 'B', series: 'fist',
+  id: 'wildFist', name: '万变拳', type: 'normal', tier: 'B', series: 'fist', deep: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 2 },
   cardMode: 'normal',
@@ -439,7 +439,7 @@ registerSkill({
 // 洗入 2 「虚无」（升阶只涨抽牌数，噪音量不变）。
 // 过牌换稀释：短期手牌质量提升，牌库被虚无污染（虚无 0 费打出即焚，白吃一手节奏）。
 const feintCard = ({ id, tier, draw, promotesTo }) => registerSkill({
-  id, name: '假动作', type: 'normal', tier, series: 'fist',
+  id, name: '假动作', type: 'normal', tier, series: 'fist', deep: 'fist',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',

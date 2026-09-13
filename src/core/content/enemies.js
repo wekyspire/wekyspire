@@ -7,7 +7,7 @@ import {
 } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UnitSpawnInstruction } from '../instructions/units.js';
-import { aliveEnemies } from '../state/battleState.js';
+import { aliveEnemies, aliveAllies } from '../state/battleState.js';
 
 // 敌人定义总集。约定：
 //   * 行动序列固定循环，按 unit.actionIndex 取模分支；行动即提交指令，无特判；
@@ -82,35 +82,237 @@ registerEnemy({
     : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '自身护盾+5' }),
 });
 
-// ② 带效果联动的小 Boss：每第三次行动给玩家上 2 层燃烧，其余时间攻 10
+// ② 11 层 Boss · 燃焰术士（章1 火主题 Boss 池之一，2026-09-13 用户重做稿）：
+// 一阶段四拍：盾6+塞1灼伤 → 燃烧5+攻6 → 攻6+塞1灼伤 → 攻20。灼伤是状态牌
+// （无法打出，回合结束在手牌中受 2 伤——塞牌库随机位，抽到手上才开始计时）。
+// 转段：战斗超 10 回合或血量跌至 80 以下——首拍空转（蓄力），随后四拍循环：
+// 全场燃烧7（含自己）→ 攻10+盾10 → 消耗全场燃烧每层回 2 血 → 攻10+盾10。
+// 机智点：它给自己也点燃烧、再靠「消耗燃烧回血」闭环——玩家的叠炎既是在烧它、
+// 也是在给它备血包（引爆窗口 = 燃烧7 刚挂上、回血拍未到的一拍）。
 registerEnemy({
-  difficulty: { base: 8, min: 8, max: 18, floorMin: 11, floorMax: 44 },
+  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 30 }),
+  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 45 }),
   act(actx) {
-    if (actx.unit.actionIndex % 3 === 2) {
+    const { unit, battleState: bs } = actx;
+    if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {
+      unit._phase2 = true; unit._phaseBeat = 0; // 转段首拍空转（蓄力）
+      return;
+    }
+    const atk = unit.getStat('attack');
+    if (!unit._phase2) {
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'burnWound', toZone: 'deck', index: 'random' }));
+      } else if (beat === 1) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'burn', stacks: 5 }));
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 6 + atk }));
+      } else if (beat === 2) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 6 + atk }));
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'burnWound', toZone: 'deck', index: 'random' }));
+      } else {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 20 + atk }));
+      }
+      return;
+    }
+    const beat = (unit._phaseBeat ?? 0) % 4;
+    unit._phaseBeat = (unit._phaseBeat ?? 0) + 1;
+    if (beat === 0) {
+      for (const u of aliveEnemies(bs)) { // 全场 = 敌方（自己）+ 玩家与盟友
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: u, effectId: 'burn', stacks: 7 }));
+      }
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'burn', stacks: 2,
-      }));
+        target: actx.player, effectId: 'burn', stacks: 7 }));
+      for (const a of aliveAllies(bs)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: a, effectId: 'burn', stacks: 7 }));
+      }
+    } else if (beat === 2) {
+      // 消耗全场所有燃烧，每层回复 2 血（自身闭环：烧自己 → 吃回）
+      let total = 0;
+      for (const u of [unit, ...aliveEnemies(bs).filter(e => e !== unit), actx.player, ...aliveAllies(bs)]) {
+        const s = u.getEffectStacks('burn');
+        if (s > 0) {
+          total += s;
+          actx.kernel.submitInstruction(new AddEffectInstruction({
+            target: u, effectId: 'burn', stacks: -s }));
+        }
+      }
+      if (total > 0) {
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: total * 2 }));
+      }
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 10 + actx.unit.getStat('attack'),
-      }));
+        source: unit, target: actx.player, amount: 10 + atk }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
     }
   },
-  getIntention: (unit) => (unit.actionIndex % 3 === 2
-    ? { kinds: ['debuff'], note: '赋予玩家燃烧2' }
-    : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
+  getIntention: (unit, bs) => {
+    if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {
+      return { kinds: ['buff'], note: '二阶段蓄力：下回合起全场点燃' };
+    }
+    const atk = unit.getStat('attack');
+    if (!unit._phase2) {
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) return { kinds: ['defend', 'debuff'], note: '护盾+6，塞1张灼伤入你牌库' };
+      if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '赋予燃烧5' };
+      if (beat === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '塞1张灼伤入你牌库' };
+      return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '重击' };
+    }
+    const beat = (unit._phaseBeat ?? 0) % 4;
+    if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧7（含它自己）' };
+    if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复2血' };
+    return { kinds: ['attack', 'defend'], hits: 1, damage: 10 + atk, note: '自身护盾+10' };
+  },
 });
 
-// ②′ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 波 2 上岗 2026-09-13）
+// ②′ 11 层 Boss · 卡达斯（章1 火主题 Boss 池之一，2026-09-13 用户设计；
+// lore：魏启大陆「魔物爆发」——周期性出现的狂躁魔化古姆拉，S 级「死亡魔兽」，
+// 獠牙利爪电离空气产生等离子体，魏启储能于肌体）。
+// 开场自带炎魔1+暴怒1（暴怒：受伤时获得层数层力量，回合开始清零——打它越狠它越痛）。
+// 一阶段四拍：攻5×2 → 攻5×3 → 攻18+暴怒1 → 防10。
+// 转段：血量跌至 50 以下的行动拍——回血25+暴怒2，结束回合（嘶吼），进二阶段。
+// 二阶段三拍：攻10×2+暴怒2 → 攻8×3+暴怒2 → 攻30+暴怒2。
+registerEnemy({
+  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
+  id: 'kardas', name: '卡达斯',
+  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 27 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'flameDemon', stacks: 1 }));
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'rage', stacks: 1 }));
+  },
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    const hit = (n, amount) => {
+      for (let i = 0; i < n; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: amount + atk }));
+      }
+    };
+    const rageUp = (stacks) => actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'rage', stacks }));
+    if (!unit._phase2 && unit.hp < 50) { // 转段拍：回血25+暴怒2，不攻
+      unit._phase2 = true; unit._phaseBeat = 0;
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 25 }));
+      rageUp(2);
+      return;
+    }
+    if (!unit._phase2) {
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) hit(2, 5);
+      else if (beat === 1) hit(3, 5);
+      else if (beat === 2) { hit(1, 18); rageUp(1); }
+      else actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+      return;
+    }
+    const beat = (unit._phaseBeat ?? 0) % 3;
+    unit._phaseBeat = (unit._phaseBeat ?? 0) + 1;
+    if (beat === 0) { hit(2, 10); rageUp(2); }
+    else if (beat === 1) { hit(3, 8); rageUp(2); }
+    else { hit(1, 30); rageUp(2); }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (!unit._phase2) {
+      if (unit.hp < 50) return { kinds: ['buff'], note: '嘶吼：回复25血、暴怒2，进入二阶段' };
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 5 + atk };
+      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 5 + atk };
+      if (beat === 2) return { kinds: ['attack', 'buff'], hits: 1, damage: 18 + atk, note: '暴怒1' };
+      return { kinds: ['defend'], note: '自身护盾+10' };
+    }
+    const beat = (unit._phaseBeat ?? 0) % 3;
+    if (beat === 0) return { kinds: ['attack', 'buff'], hits: 2, damage: 10 + atk, note: '暴怒2' };
+    if (beat === 1) return { kinds: ['attack', 'buff'], hits: 3, damage: 8 + atk, note: '暴怒2' };
+    return { kinds: ['attack', 'buff'], hits: 1, damage: 30 + atk, note: '撕碎：暴怒2' };
+  },
+});
+
+// ②″ 11 层 Boss · MEFM-1（章1 火主题 Boss 池之一，2026-09-13 用户设计；
+// lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击减半）。
+// 一阶段三拍：攻3×2 → 攻3×3 → 炎魔1+格挡1（积焰）。
+// 转段：血量跌至 80 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
+// 二阶段：首拍获得炎魔2，随后 攻2×3 → 攻2×4 交替（积焰已久的点燃海）。
+registerEnemy({
+  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
+  id: 'mefm1', name: 'MEFM-1',
+  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 47 }),
+  onBattleStart(ctx, unit) {
+    unit.defense += 4; // 铁壳（基础防御轨，P2 故障时失去）
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'block', stacks: 2 }));
+  },
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    const hit = (n, amount) => {
+      for (let i = 0; i < n; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: amount + atk }));
+      }
+    };
+    if (!unit._phase2 && unit.hp < 80) { // 转段拍：失去铁壳，故障空转
+      unit._phase2 = true; unit._phaseBeat = 0;
+      unit.defense = Math.max(0, unit.defense - 4);
+      return;
+    }
+    if (!unit._phase2) {
+      const beat = unit.actionIndex % 3;
+      if (beat === 0) hit(2, 3);
+      else if (beat === 1) hit(3, 3);
+      else {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'flameDemon', stacks: 1 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'block', stacks: 1 }));
+      }
+      return;
+    }
+    const beat = (unit._phaseBeat ?? 0);
+    unit._phaseBeat = beat + 1;
+    if (beat === 0) { // 二阶段首拍：炎魔2（点火完成）
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'flameDemon', stacks: 2 }));
+      return;
+    }
+    hit(beat % 2 === 1 ? 3 : 4, 2);
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (!unit._phase2) {
+      if (unit.hp < 80) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
+      const beat = unit.actionIndex % 3;
+      if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 3 + atk };
+      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
+      return { kinds: ['buff'], note: '积焰：炎魔1、格挡1' };
+    }
+    if ((unit._phaseBeat ?? 0) === 0) return { kinds: ['buff'], note: '点火完成：炎魔2' };
+    const beat = unit._phaseBeat ?? 0;
+    return { kinds: ['attack'], hits: beat % 2 === 1 ? 3 : 4, damage: 2 + atk, note: '点燃海' };
+  },
+});
+
+// ②‴ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 波 2 上岗 2026-09-13）
 // 护驾：首拍召集 2 名宫廷侍从（Boss 生成器只产单 Boss，随从只能 act 内召；首拍不攻
-//   = 给玩家一个先手窗）；侍从在侧时只「督战」（全体蓄势1，不亲自攻击），且每回合
-//   自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从在侧时火焰近不了身；
+//   = 给玩家一个先手窗）；**侍从 ≥2 时**才「督战」（全体蓄势1，不亲自攻击），且每回合
+//   自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从环伺时火焰近不了身；
 //   亲征形态失去净化 = 给火系留「先清侍从再引爆」的输出窗，对物理系无感）。
-// 亲征（侍从全灭）：攻12 → 攻12 → 盾10 三拍循环；每隔一拍行动结束，若场上仍无侍从
-//   且有 ≥2 空位，重新召集 1 名（回护驾形态）。
+// 亲征（侍从不足 2）：攻12 → 攻12 → 盾10 三拍循环；每隔一拍行动结束，若侍从 <2
+//   且有 ≥2 空位，重新召集 1 名（凑回护驾形态）。
 // 考试点：目标优先级（清侍从 vs 抢 Boss）+ 爆发窗口管理（亲征三拍是输出窗）。
+// 2026-09-13 修复：护驾门槛 some→≥2（旧版留 1 侍从即可定式——骑士长永不攻击，
+// 玩家杀到剩 1 个后白打 Boss）；召集同步放宽到 <2，1 侍从时也会被补齐。
 registerEnemy({
   difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
   id: 'knightCommander', name: '宫殿骑士长',
@@ -124,7 +326,8 @@ registerEnemy({
       }
       return;
     }
-    if (aliveEnemies(bs).some(e => e.defId === 'courtSquire')) {
+    const squires = aliveEnemies(bs).filter(e => e.defId === 'courtSquire').length;
+    if (squires >= 2) {
       // 护驾：督战（全体蓄势1）+ 自我净化（燃烧减半，向下取整）
       for (const e of aliveEnemies(bs)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -146,18 +349,18 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
     }
-    // 隔回合重新召集 1 名侍从（回护驾形态）
+    // 隔回合重新召集 1 名侍从（侍从 <2 才补，凑回护驾形态）
     unit._recall = !unit._recall;
     const twoSlots = aliveEnemies(bs).length <= (bs.config?.maxEnemies ?? 4) - 2;
-    if (unit._recall && twoSlots) {
+    if (unit._recall && squires < 2 && twoSlots) {
       actx.kernel.submitInstruction(new UnitSpawnInstruction({
         unit: getEnemyDefinition('courtSquire').createUnit(), source: unit }));
     }
   },
   getIntention: (unit, battleState) => {
     if (unit.actionIndex === 0) return { kinds: ['summon'], note: '召集 2 名宫廷侍从' };
-    if (aliveEnemies(battleState).some(e => e.defId === 'courtSquire')) {
-      return { kinds: ['buff'], note: '督战：全体蓄势1；侍从在侧时每回合燃烧减半' };
+    if (aliveEnemies(battleState).filter(e => e.defId === 'courtSquire').length >= 2) {
+      return { kinds: ['buff'], note: '督战：全体蓄势1；侍从≥2时每回合燃烧减半' };
     }
     const phase = (unit._duelIndex ?? 0) % 3;
     if (phase < 2) {

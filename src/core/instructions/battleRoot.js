@@ -1,6 +1,6 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import { cloneSkillRuntime } from '../state/skillRuntime.js';
-import { moveCard } from '../state/battleState.js';
+import { moveCard, aliveEnemies } from '../state/battleState.js';
 import { enterBattle } from '../skills/helpers.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
@@ -82,6 +82,12 @@ export class PreBattleInstruction extends BattleInstruction {
         for (const sub of def.subscriptions?.(ctx) ?? []) {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
+      }
+      // 敌人开场效果（2026-09-13：Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
+      // def.onBattleStart(ctx, unit)：订阅型效果必须经 AddEffectInstruction 入列（走正常
+      // 挂载管线），只有 shield/defense 这类标量才适合直改字段。
+      for (const unit of aliveEnemies(battleState)) {
+        getEnemyDefinition(unit.defId)?.onBattleStart?.(ctx, unit);
       }
 
       // 玩家最后攻击目标追踪（瑞米索敌口径：跟随主角最后攻击过的敌人）。

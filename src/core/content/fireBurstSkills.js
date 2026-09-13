@@ -454,7 +454,7 @@ registerSkill({
 // 回响烈焰（B，消耗）：每张坟墓（zones.burnt）中的卡提供 1 魏启，抽3。
 // 计数时点 = 打出时（自身尚未落位，不把自己算进去）。
 registerSkill({
-  id: 'echoingFlames', name: '回响烈焰', type: 'fire', tier: 'B', series: 'depth',
+  id: 'echoingFlames', name: '回响烈焰', type: 'fire', tier: 'B', series: 'depth', deep: 'burst',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -473,7 +473,7 @@ registerSkill({
 // 每张回复 2 魏启，抽3。已激活的咏唱卡豁免——点亮的咏唱是构筑引擎本身，
 // 烧引擎换蓝等于自拆台（旧版放手一搏的全烧口径下放到 B 阶时收的口子）。
 registerSkill({
-  id: 'lastStand', name: '背水一战', type: 'fire', tier: 'B', series: 'depth',
+  id: 'lastStand', name: '背水一战', type: 'fire', tier: 'B', series: 'depth', deep: 'burst',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -518,7 +518,7 @@ class AllInInstruction extends BattleInstruction {
   }
 }
 registerSkill({
-  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth',
+  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth', deep: 'burst',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',

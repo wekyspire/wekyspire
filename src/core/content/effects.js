@@ -221,6 +221,47 @@ registerEffect({
   }],
 });
 
+// 暴怒（卡达斯体系效果，2026-09-13 用户定）：受伤时获得等同**当前层数**的力量；
+// 己方回合开始时层数清零（力量不清——压力设计：打它越狠，它下一拍越痛，
+// 但层数不跨回合复利）。读 result.dealt（护盾/防御吸收后的实际生命损失）；
+// 固定伤害（燃烧跳伤）不算「被打」——它只回应真正的攻击。
+registerEffect({
+  id: 'rage',
+  type: 'buff',
+  stacking: 'count',
+  name: '暴怒',
+  description: '受伤时获得等同层数的力量；己方回合开始时层数清零。',
+  icon: '💢',
+  color: 'red',
+  subscriptions: (unit) => [
+    {
+      when: DealDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit && !unit.isDead()
+        && (instr.result?.dealt ?? 0) > 0,
+      react: (instr, ctx) => {
+        const stacks = unit.getEffectStacks('rage');
+        if (stacks <= 0) return;
+        ctx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks,
+        }), instr);
+      },
+    },
+    {
+      when: TurnStartInstruction,
+      phase: 'post',
+      filter: (instr) => instr.side === unit.side,
+      react: (instr, ctx) => {
+        const stacks = unit.getEffectStacks('rage');
+        if (stacks <= 0) return;
+        ctx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'rage', stacks: -stacks,
+        }), instr);
+      },
+    },
+  ],
+});
+
 // 中毒（EFFECTS.md，2026-09 定调）：回合结束时受到层数点**穿透伤害**（防御与护盾
 // 都不减免），然后层数 -1。与燃烧的区别：回合末结算 + 穿透（燃烧为固定伤害、护盾可挡）。
 registerEffect({

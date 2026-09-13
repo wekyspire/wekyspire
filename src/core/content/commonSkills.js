@@ -8,12 +8,36 @@
 import { registerSkill } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainActionPointsInstruction, GainManaInstruction } from '../instructions/resources.js';
+import { PlayerTurnEndInstruction } from '../instructions/turn.js';
 import {
   AddCardInstruction, DiscardCardInstruction, MoveCardInstruction, TransformCardInstruction,
 } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
+
+// ---- 状态卡（敌方塞入，非奖励池）----
+
+// 灼伤（燃焰术士塞入的状态牌，2026-09-13 用户设计）：无法打出；回合结束时若还在
+// 手牌中，受到 2 点固定伤害。塞的是「牌库」——抽到手上才开始计时；dump（付费弃牌）
+// 与焚毁类处理卡是它的两个出口。Z 阶 + canSpawnAsReward:false 双保险永不入奖励池。
+registerSkill({
+  id: 'burnWound', name: '灼伤', type: 'normal', tier: 'Z',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  canSpawnAsReward: false,
+  canUse: () => false, // 无法打出（状态牌；why 诊断走 def.canUse 分支点名）
+  use() { return true; },
+  subscriptions: (sctx) => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(new DealDamageInstruction({
+      source: null, target: ctx.player, amount: 2, fixed: true, tags: ['burnWound'],
+    }), instr),
+  }],
+  describe: () => '无法打出。回合结束时，若此卡在手牌中，受到2点伤害',
+});
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
 
