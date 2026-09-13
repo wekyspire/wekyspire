@@ -678,13 +678,16 @@ registerEnemy({
     }));
   },
   getIntention: (unit) => {
-    if (unit.actionIndex % 2 === 0) {
-      return { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') };
-    }
-    const fuse = unit.getEffectStacks('blastFuse');
+    // 亡语数值恒挂 note（含攻击拍）——「这回合杀不杀它」的决策窗口在每一拍，
+    // 只在引线拍亮数值等于要求玩家背公式（R8-B/C 双杀点的信息负担）。
     // 预览口径 = 此刻击杀的爆炸（6+3×当前引线）——引线是爆囊自己行动时才 +1，
     // 玩家在己方回合看到意图的决策窗口里，多算一层会高估 3 点代价
-    return { kinds: ['debuff'], note: `引线：死亡时对玩家造成 ${6 + 3 * fuse} 伤害` };
+    const fuse = unit.getEffectStacks('blastFuse');
+    const boom = `引线：死亡时对玩家造成 ${6 + 3 * fuse} 伤害`;
+    if (unit.actionIndex % 2 === 0) {
+      return { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack'), note: boom };
+    }
+    return { kinds: ['debuff'], note: boom };
   },
 });
 
@@ -830,7 +833,11 @@ registerEnemy({
     // 预告计入自身回合开始的燃烧 tick（行动前结算）：燃烧锁死下它必然龟缩，
     // 不预告龟缩会让玩家白留防御牌/错估输出窗（第 7 轮 B 报告的信息缺失）。
     // act 时 tick 已落进 hp，无需此项；这只是「预告时点」的口径补正。
-    const lost = (unit._lastHp ?? unit.hp) - unit.hp + unit.getEffectStacks('burn');
+    // ⚠ tick 先被站立盾吸收（ClearShield 晚于回合开始结算，combat.js 顺序铁律）——
+    // 预告必须按「穿盾部分」预估，否则举着 12 盾时预告龟缩、实际照攻（R8-E 实报：
+    // 预告龟缩 → 吃攻 9）。口径与 act 严格同源：hp 差值 + max(0, 燃烧 − 当前盾)。
+    const burnThrough = Math.max(0, unit.getEffectStacks('burn') - unit.shield);
+    const lost = (unit._lastHp ?? unit.hp) - unit.hp + burnThrough;
     return lost >= 8
       ? { kinds: ['defend'], note: '受创≥8：龟缩，自身护盾+12' }
       : { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack'), note: '受创≥8 时改为龟缩举盾' };
