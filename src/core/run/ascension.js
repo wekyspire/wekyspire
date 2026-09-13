@@ -218,6 +218,9 @@ export function chooseAscension(run, dimension = null) {
     throw new Error('进阶次数已封顶');
   }
   if (run.cardOffering) throw new Error('种子卡尚未选定');
+  // 能力授予待选时同一次进阶事件不可再点火——否则「跳过（留着能力抉择）→ dim 火」
+  // 一次事件吃两份奖励（shop 试玩报告抓出的双吃）；与上面种子卡守卫同一铁律。
+  if (run.ascensionOffer) throw new Error('能力授予尚未选定');
 
   run.player.ascensionCount += 1;
   // 魏启上限提升：必须走 gainMaxMana（同时抬 baseStats）——直写会被下一场 PreBattle 的

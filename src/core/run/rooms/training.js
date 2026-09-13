@@ -44,6 +44,7 @@ export function trainDrawChoices(run) {
 // 终端动作：领取候选中一张或跳过（defId=null），+1 训练并清瞬态。
 // 强绑抓牌（trainUpgrade 开局）不允许 null 跳过。
 export function trainDraw(run, defId = null) {
+  if (run.roomData?.trained) throw new Error('本房的训练已经完成了');
   const choices = run.roomData?.drawChoices;
   if (defId !== null) {
     if (!choices) throw new Error('尚未生成抓牌候选（先调用 trainDrawChoices/trainUpgrade）');
