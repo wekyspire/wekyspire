@@ -214,10 +214,11 @@ feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
 // 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
 // 设计稿 A 阶未写费用 → 0 费；咏唱值取 2（中量档——第 5 轮试玩唯一验证为强卡的咏唱，留 2）。
-// 第 8 轮裁决（R8-E 覆盖局实锤）：自燃泵**至多把燃烧补到 SELF_BURN_CAP 层**——旧版无自限时
-// 自燃每回合净 +3（亲和是固定减伤、不随层数增长），6 回合 2→13 层 = 死亡计时器；
-// 封顶后引擎保留（盾照发）、计时器有界（无亲和 6/回、亲和3 后 3/回，残血仍咬人但不再指数失控）。
-const SELF_BURN_CAP = 6;
+// 定稿（用户 2026-09-13 两轮定调）：R8「自燃无封顶 = 死亡计时器」的修法**不削危险、
+// 不加补偿机制**（短命方案「至多补到 6 层」被否——纯为补偿而非趣味性的机制不要），
+// 只把收益抬到配得上风险：盾量三阶 +2（9/13/13 → 11/15/15），自燃 3 原样保留——
+// 爆燃/焚烧翻倍把自燃推上去是「玩火自焚」身份的正当互动（R9-C 实测 tick 15 穿盾），
+// 乘算局的出口是火源归一/控火术：收，不是给卡本身上锁。
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'kindling',
@@ -231,18 +232,17 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
         when: ChantTriggerInstruction, phase: 'post',
         react: () => {
           gainShield(sctx, shield);
-          const cur = sctx.player.getEffectStacks('burn');
-          if (cur < SELF_BURN_CAP) addEffect(sctx, 'burn', Math.min(3, SELF_BURN_CAP - cur));
+          addEffect(sctx, 'burn', 3);
         },
       }],
     },
-    describe: () => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
-    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
+    describe: () => `护盾${shield}，自身/effect{燃烧}3`,
+    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
   });
 }
-kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 9, ap: 1, promotesTo: 'kindlingBloodPlus' });
-kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 13, ap: 1, promotesTo: 'kindlingBloodMaster' });
-kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 13, ap: 0 });
+kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 11, ap: 1, promotesTo: 'kindlingBloodPlus' });
+kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 15, ap: 1, promotesTo: 'kindlingBloodMaster' });
+kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 15, ap: 0 });
 
 // ====================================================================
 // §1.1 火雨系列（低耗群伤）
