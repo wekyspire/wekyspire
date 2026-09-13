@@ -48,7 +48,15 @@ export function packOf(def) {
 
 // 卡包等级：体修看隐藏的 player.bodyLevel（跳过进阶 +1），灵脉看 leino[维度]
 export function packLevel(run, packId) {
-  if (packId === 'body') return run?.player?.bodyLevel ?? 0;
+  if (packId === 'body') {
+    // 体修门禁 = max(体修等阶, 最高灵脉等级)（2026-09-13 第 10 轮裁决定调）：
+    // 此前只看隐藏的 bodyLevel——不跳进阶的玩家永远 0 级，太极/相刀等体修 B/A
+    // 对灵脉路线**永久不可见**（R9 三连 0 观测 + R10 六组再 0 观测的实锤病灶）。
+    // 灵脉修为反哺体术：跳进阶仍是体修内容的快车道（+3 血/删卡机会不稀释），
+    // 但灵脉大成者不该被体修高阶卡硬锁在门外。
+    const bestLeino = Math.max(0, ...Object.values(run?.player?.leino ?? {}));
+    return Math.max(run?.player?.bodyLevel ?? 0, bestLeino);
+  }
   return run?.player?.leino?.[packId] ?? 0;
 }
 

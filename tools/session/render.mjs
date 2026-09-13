@@ -158,7 +158,7 @@ function renderRoomShop(S, L) {
   if (run.shop.broken) L.push('  瑞米：“上次逃得太狼狈了……忘记补货了……”');
   // 买不起的货直接标注差额——headless 没有 GUI 的红字价格，文本口径是唯一的可负担性信息
   // （R8-A：P0 因为"试着点了最贵的看会不会触发什么"，被动买了货，丧失了主动选择权）
-  run.shop.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金`
+  run.shop.items.forEach((it, i) => L.push(`  [${i + 1}] ${it.label} — ${it.price} 金`
     + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')
     + (!it.sold && p.money < it.price ? `（还差 ${it.price - p.money} 金）` : '')));
   if (run.shopPending) {
@@ -286,7 +286,7 @@ function renderRoomGurpas(S, L) {
   const run = S.run;
   const g = gurpasView(run);
   L.push(`古尔帕斯之店（持有 ${g.money} 金币）——她只收 A/S 级遗物，货架买光不补：`);
-  g.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金`
+  g.items.forEach((it, i) => L.push(`  [${i + 1}] ${it.label} — ${it.price} 金`
     + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')
     + (it.kind === 'remove' ? `（本次已用 ${it.used ?? 0}/2）` : '')));
   if (g.pendingPack) {
