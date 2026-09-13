@@ -214,6 +214,10 @@ feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
 // 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
 // 设计稿 A 阶未写费用 → 0 费；咏唱值取 2（中量档——第 5 轮试玩唯一验证为强卡的咏唱，留 2）。
+// 第 8 轮裁决（R8-E 覆盖局实锤）：自燃泵**至多把燃烧补到 SELF_BURN_CAP 层**——旧版无自限时
+// 自燃每回合净 +3（亲和是固定减伤、不随层数增长），6 回合 2→13 层 = 死亡计时器；
+// 封顶后引擎保留（盾照发）、计时器有界（无亲和 6/回、亲和3 后 3/回，残血仍咬人但不再指数失控）。
+const SELF_BURN_CAP = 6;
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'kindling',
@@ -227,12 +231,13 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
         when: ChantTriggerInstruction, phase: 'post',
         react: () => {
           gainShield(sctx, shield);
-          addEffect(sctx, 'burn', 3);
+          const cur = sctx.player.getEffectStacks('burn');
+          if (cur < SELF_BURN_CAP) addEffect(sctx, 'burn', Math.min(3, SELF_BURN_CAP - cur));
         },
       }],
     },
-    describe: () => `护盾${shield}，自身/effect{燃烧}3`,
-    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
+    describe: () => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
+    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
   });
 }
 kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 9, ap: 1, promotesTo: 'kindlingBloodPlus' });

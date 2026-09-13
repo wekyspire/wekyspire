@@ -369,8 +369,12 @@ function registerPlayCountChant({ id, name, tier, every, promotesTo = null }) {
 registerPlayCountChant({ id: 'leverage', name: '借力', tier: 'C', every: 5, promotesTo: 'redirect' });
 // 化劲（B）
 registerPlayCountChant({ id: 'redirect', name: '化劲', tier: 'B', every: 4, promotesTo: 'taiji' });
-// 太极（A）
-registerPlayCountChant({ id: 'taiji', name: '太极', tier: 'A', every: 4 });
+// 太极（A）——第 8 轮裁决（用户 2026-09-13 定调）：进阶链区分点 = **触发频次阶梯 5/4/3**。
+// 此前太极与化劲同 every 4、同工厂同参，A 阶身份零兑现（R8-E 代码级实锤，且太极与自家
+// 化劲互斥一次都没点亮）；every 3 后按 E 的账：好回合（5 出牌）净 −0.33（带共鸣石）、
+// 爆发回合（7 出牌）转正 +2.33——真正的 A 阶跨回合抽牌引擎。weight 全链统一 3 不动
+//（升级链咏唱压力一致是上一条用户定调，两条定调正交）。
+registerPlayCountChant({ id: 'taiji', name: '太极', tier: 'A', every: 3 });
 
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage 伤，

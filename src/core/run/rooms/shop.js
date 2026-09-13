@@ -12,9 +12,8 @@
 // 古尔帕斯之店（第 35 层，SHOP.md §二）是**另一条渠道**，不在本文件：它要改造战斗层、卖 S 遗物、
 // 回收遗物与删卡服务，留待下一批。
 
-import { draftRelic } from '../../relics/draft.js';
+import { draftRelics } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
-import { allRelics, getRelicDefinition } from '../../relics/registry.js';
 import {
   availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK,
   packCardPool, tierWeight,
@@ -26,11 +25,13 @@ export const SHOP_FLOORS = Object.freeze([4, 8, 15, 19, 25, 29, 36, 40]);
 export const isShopFloor = (floor) => SHOP_FLOORS.includes(floor);
 
 // 价格（SHOP.md 表；区间内由 rng 定值 → 同种子同价格）
+// 遗物货位 2026-09-13 起改「稀有度遗物包」（买到开三选一，用户定：只卖随机一件选择面太窄，
+// 玩家选不到真正有用的遗物）——三选一严格优于随机一件，价位较旧单件上浮约 25%。
 export const SHOP_PRICE = Object.freeze({
   potion: 20,
   apple: 199,
-  relicC: [25, 35],
-  relicB: [45, 60],
+  relicC: [32, 42],
+  relicB: [55, 70],
   packBase: 20,
 });
 
@@ -74,7 +75,6 @@ function makeItem(kind, payload) {
 function rollStock(run) {
   const rng = run.rng;
   const items = [];
-  const usedRelics = [];
 
   // 恢复药剂：总是有且只有一件
   items.push(makeItem('potion', {
@@ -97,7 +97,7 @@ function rollStock(run) {
   ];
   let packPicked = false;
 
-  while (items.length < slots) {
+  while (items.length < slots && kinds.length) {
     const total = kinds.reduce((s, [, w]) => s + w, 0);
     let roll = rng.next() * total;
     let kind = kinds[0][0];
@@ -123,20 +123,17 @@ function rollStock(run) {
       }));
       kinds.splice(kinds.findIndex(([k]) => k === 'apple'), 1); // 只放一件
     } else {
+      // 遗物货位 = 「稀有度遗物包」：货架只标档位不标具体件（选择面交给购买后的三选一，
+      // 2026-09-13 用户定）；具体三件在购买那一刻才由抽选 SDK 掷出（门禁/驱重/兜底集中）。
       const rarity = kind === 'relicC' ? 'C' : 'B';
-      const relicId = draftRelic(run, { rarity, sources: ['vending'], exclude: usedRelics });
-      if (!relicId) continue;               // 该档没货了 → 换别的东西再掷
-      usedRelics.push(relicId);
-      const relicName = getRelicDefinition(relicId)?.name ?? relicId;
       items.push(makeItem('relic', {
-        id: `relic:${relicId}`, relicId, rarity,
-        name: relicName, label: `${rarity} 级遗物 · ${relicName}`,
-        sub: getRelicDefinition(relicId)?.description ?? '',
-        effect: getRelicDefinition(relicId)?.description ?? '',
+        id: `relicPack:${rarity}`, rarity,
+        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包 · 三选一`,
+        sub: '买到即开，三件中挑一件（可放弃）', effect: '买到即开，三件中挑一件（可放弃）',
         price: priceIn(rarity === 'C' ? SHOP_PRICE.relicC : SHOP_PRICE.relicB, rng),
       }));
+      kinds.splice(kinds.findIndex(([k]) => k === kind), 1); // 同一档一柜只放一个
     }
-    if (usedRelics.length > 6) break;       // 兜底防死循环（遗物池被抽干的极端情况）
   }
 
   const discount = rollDiscount(run);
@@ -191,6 +188,15 @@ export function shopItemTip(run, it) {
         + (dist ? `。概率分布：${dist}。` : '。') + '买到即开，可三选一（也可以放弃）。',
     };
   }
+  if (it.kind === 'relic' && it.rarity) {
+    // 遗物包 hover：告知档位数与「三选一可放弃」——具体三件在买的那一刻才掷（门禁/驱重），
+    // 这里只承诺口径不列名单（名单会随你背包里的拥有集变化）。
+    return {
+      title: it.name ?? `${it.rarity} 级遗物包`,
+      body: `买到即开：从全部可获得的 ${it.rarity} 级遗物中随机摆出 3 件，挑 1 件收入囊中`
+        + '（都不想要可以放弃，钱不退）。已拥有的遗物不会再出现。',
+    };
+  }
   return { title: it.name ?? it.label ?? '', body: it.effect ?? it.sub ?? '' };
 }
 
@@ -220,13 +226,16 @@ export function buyShopItem(run, index) {
       return { kind: 'apple' };
     }
     case 'relic': {
-      grantRelic(run, it.relicId);
-      return { kind: 'relic', relicId: it.relicId };
+      // 遗物包买到即开：立刻掷三选一（抽选 SDK 统一门禁/驱重/兜底），挂起选择
+      //（金币已扣，不能退款；放弃出口在 takeShopRelic(null)）
+      const choices = draftRelics(run, 3, { rarity: it.rarity, sources: ['vending'] });
+      run.shopPending = { kind: 'relic', rarity: it.rarity, choices };
+      return { kind: 'relicPack', rarity: it.rarity, choices };
     }
     case 'pack': {
       // 买到即开：立刻掷包内三选一，挂起选择（金币已扣，不能退款）
       const choices = rollSkillChoices(run, it.packId);
-      run.shopPending = { packId: it.packId, choices };
+      run.shopPending = { kind: 'pack', packId: it.packId, choices };
       return { kind: 'pack', packId: it.packId, choices };
     }
     default:
@@ -241,9 +250,23 @@ export function buyShopItem(run, index) {
  */
 export function takeShopCard(run, defId = null) {
   const pending = run.shopPending;
-  if (!pending) throw new Error('当前没有待选择的卡包');
+  if (!pending || pending.kind === 'relic') throw new Error('当前没有待选择的卡包');
   if (defId != null && !pending.choices.includes(defId)) throw new Error(`卡不在候选里：${defId}`);
   if (defId != null) run.player.deck.push(createSkillRuntime(defId));
+  run.shopPending = null;
+  return run;
+}
+
+/**
+ * 遗物包三选一的收尾（2026-09-13 用户定的「稀有度遗物包」）：
+ * 选中的遗物入包（grantRelic：一局内唯一，重复抛错——候选由抽选 SDK 驱重，正常不会撞）；
+ * `relicId = null` = 放弃这个遗物包（与卡包同口径：钱已花，选择权在玩家）。
+ */
+export function takeShopRelic(run, relicId = null) {
+  const pending = run.shopPending;
+  if (!pending || pending.kind !== 'relic') throw new Error('当前没有待选择的遗物包');
+  if (relicId != null && !pending.choices.includes(relicId)) throw new Error(`遗物不在候选里：${relicId}`);
+  if (relicId != null) grantRelic(run, relicId);
   run.shopPending = null;
   return run;
 }

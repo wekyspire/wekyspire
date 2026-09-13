@@ -21,11 +21,16 @@ export const FLOORS_PER_CHAPTER = 11;               // 10 普通层 + 1 Boss 层
 export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * 4; // 44 层 = 4 章
 
 export const isBossFloor = (floor) => floor % FLOORS_PER_CHAPTER === 0;
-// Boss 掉落遗物的稀有度带（按章爬坡；数组 = 池内等概率并集）——第 7 轮裁决定案：
-// 设计稿的「Boss 掉遗物」从未实装，遗物实际来源只剩老虎机/商店/古尔帕斯，
-// 正常局一局只见 0-2 件（遗物系统对玩家不可见）。Boss 掉落是结构修复而非加餐。
-export const BOSS_RELIC_RARITY = Object.freeze({
-  11: ['C', 'B'], 22: ['B'], 33: ['B', 'A'], 44: ['A'],
+// Boss 掉落遗物的稀有度带（按章爬坡）——第 7 轮裁决定案：设计稿的「Boss 掉遗物」从未实装，
+// 遗物实际来源只剩老虎机/商店/古尔帕斯，正常局一局只见 0-2 件（遗物系统对玩家不可见）。
+// Boss 掉落是结构修复而非加餐。
+// 第 8 轮裁决（R8-F/B/D 三方互证：章1 并集等概率一半掉 C = 「大锤/馕饼 ≈ 空气」）：
+// rarity 数组改配 weights——Boss 是里程碑，掉落该有获得感；章1 B 占 65%、章3 A 占 50%。
+export const BOSS_RELIC_DROP = Object.freeze({
+  11: { rarity: ['C', 'B'], weights: { C: 35, B: 65 } },
+  22: { rarity: ['B'] },
+  33: { rarity: ['B', 'A'], weights: { B: 50, A: 50 } },
+  44: { rarity: ['A'] },
 });
 // 训练房固定 4N-2 层（2/6/10…42）——首进阶落在第 2 层，玩家快速特化进入真正的初始卡组。
 // 优先级：Boss 层（22）无房间，Boss 战前一层（10）营地保底顶替训练房（细则见 §9）。
@@ -116,7 +121,8 @@ export function finishBattle(run, verdict, battle = null) {
       run.player.hp = run.player.maxHp; // 章间休整：HP 回满
       // Boss 掉落遗物：抽取走 draft.js 统一 SDK（权重/门禁/驱重/池空兜底集中一处，
       // Boss 掉落只是又一个调用方）；特写由 Shell 的拥有集差分自动兜，这里不声明演出。
-      const relicId = draftRelic(run, { rarity: BOSS_RELIC_RARITY[run.floor] ?? null });
+      const drop = BOSS_RELIC_DROP[run.floor];
+      const relicId = draftRelic(run, { rarity: drop?.rarity ?? null, weights: drop?.weights ?? null });
       if (relicId) grantRelic(run, relicId);
     }
     run.gameStage = 'reward';

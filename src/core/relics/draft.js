@@ -95,13 +95,15 @@ function pickRarity(pool, weights, rng) {
  * 抽 1 件遗物 id（池空 → 兜底件；连兜底件都没注册 → null）。
  * 先按权重定稀有度、再在该稀有度内等概率取一件——这样"抽到 A 的概率"由权重决定，
  * 不被各稀有度池子大小左右（与卡牌侧的等阶加权同一口径）。
+ * rarity 与 weights 可组合（R8-F 裁决：章1 Boss 掉落 ['C','B'] + {C:35,B:65}）——
+ * 先按 rarity 过滤池、再在池内按 weights 归一；只给 rarity 不给 weights 保持旧行为（池内等概率）。
  * @param {object} opts rarity / weights / sources / exclude / rng（缺省 run.rng.next）
  */
 export function draftRelic(run, { rarity = null, weights = null, sources = ['draft'], exclude = [], rng = null } = {}) {
   const next = rng ?? (() => run.rng.next());
   const pool = relicPool(run, { rarity, sources, exclude });
   if (!pool.length) return fillerAvailable(run) ? FILLER_RELIC_ID : null;
-  if (rarity != null) { // 已限定稀有度：池内等概率
+  if (rarity != null && !weights) { // 已限定稀有度且无权重：池内等概率（旧行为）
     return pool[Math.floor(next() * pool.length)].id;
   }
   const r = pickRarity(pool, weights, next);

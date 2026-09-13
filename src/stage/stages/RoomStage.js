@@ -240,6 +240,9 @@ export class RoomStage {
    */
   openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
 
+  /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
+  openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
+
   /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
   openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
 
@@ -655,6 +658,7 @@ export class RoomStage {
       if (action.action === 'closeShop') { this._openPanel(this._focused); return; }
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
+      if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
       return;
     }
     // 得卡标记（老虎机卡多选一 / 训练抓牌）：摘下被点的卡 → 收起操纵条 → 播「择卡得卡」

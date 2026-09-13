@@ -237,6 +237,27 @@ export function createStagePickerKit({
     },
 
     /**
+     * 遗物包三选一（售货机「稀有度遗物包」，2026-09-13 用户定）：全屏 overlay，**可放弃**。
+     * 确认 = 选中的遗物入包（获得特写由拥有集差分自动兜）；返回 = 放弃（钱已花，不退）。
+     * 候选走程序化藏品卡（RelicScrollPickerObject），与老虎机吞噬的遗物侧同一份 picker。
+     */
+    openShopRelicPackPicker(snap = null) {
+      const pend = snap?.shop?.pending;
+      if (pend?.kind !== 'relic' || !pend?.relics?.length) return false;
+      const picker = ensureRelicPicker();
+      confirmFn = (ids) => { onIntent?.({ action: 'takeShopRelic', relicId: ids[0] }); };
+      cancelFn = () => { onIntent?.({ action: 'takeShopRelic', relicId: null }); };
+      picker.attachPicker(pickerNow());
+      picker.open({
+        title: `${pend.rarity} 级遗物包`,
+        hint: '挑一件收入囊中 ｜ 悬停查看效果 ｜ 不想要就点「返回」放弃（钱已花）｜ 滚轮翻页',
+        relics: pend.relics,
+        confirmLabel: '拿下这件',
+      });
+      return true;
+    },
+
+    /**
      * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
      * 候选数据由编排器给（kit 不读 run）：cards 走与升级入口同一份卡面烘焙，
      * relics 走程序化藏品卡（`objects/RelicScrollPickerObject.js`）。

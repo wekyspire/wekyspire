@@ -212,26 +212,29 @@ export function createRunShowcase(ctx) {
     shopShowcase(p);
     return true;
   }
-  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e };
-  /** 买到手的那件东西的特写（遗物交给全局差分：素材与描述口径都在那边）。
+  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e, relic: 0xc9a86a };
+  /** 买到手的那件东西的特写（单件遗物已改为**遗物包三选一**（2026-09-13 用户定），
+   *  遗物直购不复存在，kind 'relic' 现在恒为遗物包：特写演完自动开三选一）。
    *  出货演出播完即**自动收下**（用户定 2026-09-13）：机器那边已经演过一遍"出货"，
    *  这里只是把到手的那件亮一下，不需要玩家再点一次"收货"——操纵条里也不另设收货 UI。 */
   function shopShowcase(p) {
     if (!p) return false;
-    if (p.kind === 'relic') return flushRelicShowcase();
     const stage = ctx.panelStage();
     if (!stage?.showcaseItem) return false;
     const pack = p.kind === 'pack';
+    const relicPack = p.kind === 'relic';
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: pack ? '售货机 · 卡包' : '售货机',
+      desc: pack ? '售货机 · 卡包' : relicPack ? '售货机 · 遗物包' : '售货机',
       effect: p.effect ?? '',
-      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple（没素材就色块）
+      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
-      // 卡包停久一点：看完就**自动开包**（全屏三选一，可放弃）——整条购买链不需要玩家点任何一下
-      autoDismissMs: pack ? 2100 : 1700,
+      // 卡包/遗物包停久一点：看完就**自动开包**（全屏三选一，可放弃）——整条购买链不需要玩家点任何一下
+      autoDismissMs: (pack || relicPack) ? 2100 : 1700,
       // 卡包：获得演出看完**自动开包**（全屏三选一，可放弃；见 openShopPackPicker）
-      onDismiss: pack ? () => ctx.panelStage()?.openShopPackPicker?.() : null,
+      // 遗物包：同理开**遗物三选一**（openShopRelicPackPicker）
+      onDismiss: pack ? () => ctx.panelStage()?.openShopPackPicker?.()
+        : relicPack ? () => ctx.panelStage()?.openShopRelicPackPicker?.() : null,
     });
   }
 

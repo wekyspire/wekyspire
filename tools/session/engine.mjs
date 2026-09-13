@@ -42,7 +42,7 @@ import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
   slotGiftDue, takeSlotGift,
 } from '../../src/core/run/rooms/slotMachine.js';
-import { buyShopItem, takeShopCard } from '../../src/core/run/rooms/shop.js';
+import { buyShopItem, takeShopCard, takeShopRelic } from '../../src/core/run/rooms/shop.js';
 import {
   bankDeposit, bankWithdraw, bankOverdraft, chooseDemonDebuff, bankUpgrade, bankBurn,
 } from '../../src/core/run/rooms/bank.js';
@@ -468,7 +468,7 @@ function execRoom(S, t) {
   throw new Error(`未知房间类型：${room}`);
 }
 
-// 售货机（与任何房间并存，不消耗房间行动）：buy <#> 购买 / claim <#|defId> 卡包三选一
+// 售货机（与任何房间并存，不消耗房间行动）：buy <#> 购买 / claim <#|id> 卡包或遗物包三选一
 function execRoomShop(S, t) {
   const run = S.run;
   const [, , b] = t;
@@ -477,11 +477,16 @@ function execRoomShop(S, t) {
     const idx = num(t[3]);
     const it = run.shop.items[idx];
     const res = buyShopItem(run, idx);
-    if (res.kind === 'relic') {
-      const rdef = getRelicDefinition(res.relicId);
-      S.lastOutcome = `购得遗物【${rdef?.name ?? res.relicId}】（${rdef?.rarity ?? 'C'} 级，`
-        + `${rdef?.nonSlot ? '非槽位式，拾起即生效' : `占 ${rdef?.cost ?? 0} 槽，relic equip ${res.relicId} 装备后生效`}）\n`
-        + `  效果：${rdef?.description ?? ''}`;
+    if (res.kind === 'relicPack') {
+      // 遗物包三选一（2026-09-13 用户定：替代旧的随机单件遗物）
+      const lines = run.shopPending.choices.map((id, i) => {
+        const rdef = getRelicDefinition(id);
+        return `  ${i}｜【${rdef?.name ?? id}】（${rdef?.rarity ?? 'C'} 级，`
+          + `${rdef?.nonSlot ? '非槽位式' : `占 ${rdef?.cost ?? 0} 槽`}）${rdef?.description ?? ''}`;
+      });
+      S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：遗物包到手，三件中挑一件（可放弃）\n`
+        + lines.join('\n')
+        + '\n（用 act shop claim <#> 选择 / act shop claim -1 放弃）';
     } else {
       S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
         + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '');
@@ -489,9 +494,23 @@ function execRoomShop(S, t) {
     return;
   }
   if (b === 'claim') {
-    if (!run.shopPending) throw new Error('当前没有待选的卡包');
-    // 候选表刚生成、期间不会漂移：给编号即选；也可用卡名（唯一时）定位
+    if (!run.shopPending) throw new Error('当前没有待选的卡包/遗物包');
     const raw = t[3];
+    if (run.shopPending.kind === 'relic') {
+      // 遗物包三选一：claim <#> 选 / claim -1 放弃（钱已花，选择权在你）
+      const relicId = (raw === '-1' || raw === 'skip') ? null
+        : run.shopPending.choices.includes(raw) ? raw // 兼容历史 id 记法（可全量重放）
+          : isIdxArg(raw)
+            ? run.shopPending.choices[idxOk(num(raw), run.shopPending.choices.length, '遗物候选')]
+            : resolveChoiceArg(run.shopPending.choices, raw, t[4], '遗物候选',
+              id => getRelicDefinition(id)?.name ?? id);
+      takeShopRelic(run, relicId);
+      S.lastOutcome = relicId
+        ? `遗物包开封：【${getRelicDefinition(relicId)?.name ?? relicId}】已收入囊中`
+        : '放弃了这个遗物包（钱已花，货不补）';
+      return;
+    }
+    // 卡包三选一：候选表刚生成、期间不会漂移：给编号即选；也可用卡名（唯一时）定位
     const defId = run.shopPending.choices.includes(raw) ? raw // 兼容历史 defId 记法（可全量重放）
       : isIdxArg(raw)
         ? run.shopPending.choices[idxOk(num(raw), run.shopPending.choices.length, '卡包候选')]
@@ -501,7 +520,7 @@ function execRoomShop(S, t) {
     S.lastOutcome = `卡包开封：${getSkillDefinition(defId)?.name ?? defId} 已入组`;
     return;
   }
-  throw new Error('售货机动作：act shop buy <#> / act shop claim <#|defId> [卡名]（离开用 next）');
+  throw new Error('售货机动作：act shop buy <#> / act shop claim <#|id|-1> [名字]（离开用 next）');
 }
 
 // 营地（非合并房的 camp，或合并房的营地部分）
@@ -572,7 +591,9 @@ function execRoomTraining(S, t, trainDone) {
 // 古尔帕斯之店（35 层固定房）：buy/claim/sell/remove
 function execRoomGurpas(S, t) {
   const run = S.run;
-  const [, b] = t;
+  // t = ['act','gurpas','buy',...]——子命令在第 3 位（R8-D 实报：旧取第 2 位恒为 'gurpas'，
+  // 35 层商店在 headless 完全不可交互）
+  const [, , b] = t;
   if (b === 'buy') {
     const idx = num(t[3]);
     const it = ensureGurpasStock(run).items[idx];

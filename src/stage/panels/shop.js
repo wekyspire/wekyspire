@@ -11,10 +11,19 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   const shop = snap.shop ?? { items: [], pending: null };
   const w = [];
 
-  // 卡包三选一（买到即开，金币已扣）：**走全屏选卡 overlay**（用户定 2026-09-12：
+  // 卡包/遗物包三选一（买到即开，金币已扣）：**走全屏选择 overlay**（用户定 2026-09-12：
   // "不要塞在操纵条里"），操纵条只留一个兜底入口（overlay 已自动打开，这里是安全阀）。
-  // 三选一**可放弃**：overlay 的「返回」= 放弃这个卡包（钱已花，选择权在你）。
+  // 三选一**可放弃**：overlay 的「返回」= 放弃这个包（钱已花，选择权在你）。
   if (shop.pending) {
+    if (shop.pending.kind === 'relic') {
+      w.push({ kind: 'title', text: `遗物包 · ${shop.pending.rarity} 级`, align: 'center' });
+      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '三件遗物中挑一件（不想要就放弃）' });
+      w.push({
+        kind: 'button', id: 'shop:openRelicPack', width: 300, size: 'main',
+        label: '打开遗物包选择', action: { action: 'openShopRelicPack', local: true },
+      });
+      return w;
+    }
     w.push({ kind: 'title', text: `卡包 · ${shop.pending.packId}`, align: 'center' });
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组（不想要就放弃）' });
     w.push({

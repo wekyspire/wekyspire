@@ -38,7 +38,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     // 银行机（SLOT_MACHINE.md §银行机）：跨遇到常驻（存款/连击/黑名单）；见 rooms/bank.js
     bank: null,                  // { deposit, combo, visits, lockout, blackCleared, pendingRoll, offers }
     pendingDebuffs: [],          // 跨战斗恶魔词条队列 [{ id, battlesLeft }]（PreBattle 折入、战后递减）
-    shopPending: null,           // 买到即开的卡包待选 { packId, choices }（选完才回房）
+    shopPending: null,           // 买到即开的待选 { kind:'pack', packId, choices } | { kind:'relic', rarity, choices }（选完才回房）
     shopAppleBought: false,      // 售货机的苹果全流程仅一件（故事模式）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）
     cardOffering: null,          // 种子包待选（首次点亮灵脉：九选三，§5.3 追加）

@@ -198,13 +198,23 @@ export function roomSnapshot(run, extra = {}) {
         tip: it.relicId ? null : shopItemTip(run, it),
         price: it.price, sold: !!it.sold, affordable: canBuy(run, index),
       })),
-      pending: run.shopPending ? {
+      pending: run.shopPending ? (run.shopPending.kind === 'relic' ? {
+        kind: 'relic',
+        rarity: run.shopPending.rarity,
+        // 遗物包三选一：picker 条目与老虎机吞噬同构（{id,name,rarity}，RelicScrollPicker 直吃）
+        relics: (run.shopPending.choices ?? []).map(id => ({
+          id,
+          name: getRelicDefinition(id)?.name ?? id,
+          rarity: getRelicDefinition(id)?.rarity ?? 'C',
+        })),
+      } : {
+        kind: 'pack',
         packId: run.shopPending.packId,
         cards: (run.shopPending.choices ?? []).map(id => ({
           defId: id,
           view: cardViewFromDef(getSkillDefinition(id), { player: p }),
         })),
-      } : null,
+      }) : null,
     };
   } else {
     snap.shop = null;

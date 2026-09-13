@@ -21,7 +21,7 @@ import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade,
   devourSlot, devourableRelics, devourableCards, devourReady, slotView,
 } from '../core/run/rooms/slotMachine.js';
-import { takeShopCard } from '../core/run/rooms/shop.js';
+import { takeShopCard, takeShopRelic } from '../core/run/rooms/shop.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
 
 export function createRunMachines(ctx) {
@@ -183,11 +183,16 @@ export function createRunMachines(ctx) {
     takeShopCard(run, defId);   // defId = null → 放弃这个卡包（choice 不够好时的出口）
     ctx.notify();
   }
+  function shopTakeRelic(relicId) {
+    if (run.gameStage !== 'room' || !run.shopPending) return;
+    takeShopRelic(run, relicId);   // relicId = null → 放弃这个遗物包（与卡包同口径）
+    ctx.notify();                 // 获得特写由拥有集差分自动兜（runShowcase）
+  }
 
   return {
     bankDo, bossRemoveCard, gurpasDo,
     spin, slotTake, slotDecline, slotPickUpgrade, slotDevour, reportSlotAnimDone,
-    openDevourFlow, shopTakeCard,
+    openDevourFlow, shopTakeCard, shopTakeRelic,
     slotView: () => slotView(run),
     devourableRelics: () => devourableRelics(run),
     devourableCards: () => devourableCards(run),
@@ -212,6 +217,7 @@ export function createRunMachines(ctx) {
       slotDevourRelic: (i) => slotDevour({ kind: 'relic', relicId: i.relicId }),
       slotDevourCard: (i) => slotDevour({ kind: 'card', uniqueID: i.uniqueID }),
       takeShopCard: (i) => shopTakeCard(i.defId),
+      takeShopRelic: (i) => shopTakeRelic(i.relicId),
     },
   };
 }

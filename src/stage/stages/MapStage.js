@@ -250,6 +250,9 @@ export class MapStage {
   /** 卡包三选一（买到即开）：全屏 overlay，**可放弃**（返回 = 放弃卡包）。 */
   openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
 
+  /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
+  openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
+
   /**
    * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
    * 候选数据由编排器给（Stage 不读 run）。

@@ -162,12 +162,23 @@ function renderRoomShop(S, L) {
     + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')
     + (!it.sold && p.money < it.price ? `（还差 ${it.price - p.money} 金）` : '')));
   if (run.shopPending) {
-    L.push('  卡包待选:');
-    run.shopPending.choices.forEach((id, i) => {
-      const def = getSkillDefinition(id);
-      L.push(`    [${i + 1}] ${def?.tier ?? '?'}阶 ${def?.name ?? id}「${plain(def?.describe?.() ?? '')}」`);
-    });
-    L.push('  → act shop claim <#|defId> [卡名]');
+    if (run.shopPending.kind === 'relic') {
+      // 遗物包三选一（2026-09-13 用户定）：稀有度 + 名 + 效果，claim -1 放弃
+      L.push(`  遗物包待选（${run.shopPending.rarity} 级，三选一，可放弃）:`);
+      run.shopPending.choices.forEach((id, i) => {
+        const def = getRelicDefinition(id);
+        L.push(`    [${i}] 【${def?.name ?? id}】（${def?.rarity ?? 'C'} 级，`
+          + `${def?.nonSlot ? '非槽位式' : `占 ${def?.cost ?? 0} 槽`}）${def?.description ?? ''}`);
+      });
+      L.push('  → act shop claim <#> 选择 / act shop claim -1 放弃');
+    } else {
+      L.push('  卡包待选:');
+      run.shopPending.choices.forEach((id, i) => {
+        const def = getSkillDefinition(id);
+        L.push(`    [${i + 1}] ${def?.tier ?? '?'}阶 ${def?.name ?? id}「${plain(def?.describe?.() ?? '')}」`);
+      });
+      L.push('  → act shop claim <#|defId> [卡名]');
+    }
   } else {
     L.push('  → act shop buy <#> 购买（离开房间不清货架，买光不补）');
   }
