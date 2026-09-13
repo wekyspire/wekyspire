@@ -486,7 +486,9 @@ function execRoomShop(S, t) {
   const [, , b] = t;
   if (!run.shop) throw new Error('本层没有售货机（只在 4/8、15/19、25/29、36/40 层出现）');
   if (b === 'buy') {
-    const idx = num(t[3]);
+    // 货位编号 1 起（与 claim/待输入/训练候选全线同口径——R10-A/D 实报：
+    // buy 0 基、claim 1 基并存在同一屏，按 0 基输入拿错货）
+    const idx = idxOk(num(t[3]), run.shop.items.length, '货位');
     const it = run.shop.items[idx];
     const res = buyShopItem(run, idx);
     if (res.kind === 'relicPack') {
@@ -522,7 +524,13 @@ function execRoomShop(S, t) {
         : '放弃了这个遗物包（钱已花，货不补）';
       return;
     }
-    // 卡包三选一：候选表刚生成、期间不会漂移：给编号即选；也可用卡名（唯一时）定位
+    // 卡包三选一：候选表刚生成、期间不会漂移：给编号即选；也可用卡名（唯一时）定位；
+    // claim -1 = 放弃这个卡包（钱已花，与遗物包同口径——R10-D 实报卡包缺放弃出口）
+    if (raw === '-1' || raw === 'skip') {
+      takeShopCard(run, null);
+      S.lastOutcome = '放弃了这个卡包（钱已花，货不补）';
+      return;
+    }
     const defId = run.shopPending.choices.includes(raw) ? raw // 兼容历史 defId 记法（可全量重放）
       : isIdxArg(raw)
         ? run.shopPending.choices[idxOk(num(raw), run.shopPending.choices.length, '卡包候选')]
@@ -607,9 +615,9 @@ function execRoomGurpas(S, t) {
   // 35 层商店在 headless 完全不可交互）
   const [, , b] = t;
   if (b === 'buy') {
-    const idx = num(t[3]);
+    const idx = idxOk(num(t[3]), ensureGurpasStock(run).items.length, '货位'); // 1 起，同上
     const it = ensureGurpasStock(run).items[idx];
-    if (!it) throw new Error(`货架上没有这一件：${idx}`);
+    if (!it) throw new Error(`货架上没有这一件：${t[3]}`);
     const res = buyGurpas(run, idx);
     S.lastOutcome = `购买「${it.label}」(-${it.price}金)：${JSON.stringify(res)}`
       + (res.kind === 'pack' ? '（用 act gurpas claim <#> 选卡）' : '');
@@ -978,6 +986,12 @@ function execNext(S) {
     if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取：act take <#>');
     // 老虎机安慰奖欠着不允许离场（真游戏：点继续前进每次都被吞去强制二选一，不能跳过）
     if (slotGiftDue(run)) throw new Error('老虎机的安慰奖还没领取：act gift <cola|chicken>');
+    // 老虎机产出挂着不允许离场（R10-A 实报可直接 next 走掉；GUI 口径：继续前进压暗）
+    if (run.slotPending) throw new Error('老虎机的产出还没处理：act claim 领取 / act drop 放弃');
+    // 恶魔 roll 词条挂着不允许离房（GUI 同口径守卫）
+    if (run.bank?.pendingRoll) throw new Error('恶魔 roll 的词条还没承受：先选一个词条');
+    // 售货机卡包/遗物包三选一挂着不允许离场（GUI：点继续前进会被拉回货架）
+    if (run.shopPending) throw new Error('卡包/遗物包还没选完：act shop claim <#>（-1 放弃）');
     completeRoom(run); S.roomDone = false; S.lastOutcome = '离开房间'; return;
   }
   throw new Error(`当前阶段无需 next（${stageCn(stage)}）`);
