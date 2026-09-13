@@ -1413,3 +1413,105 @@ registerEnemy({
       : { kinds: ['attack'], hits: 1, damage: 6 + atk };
   },
 });
+
+// ============ 体系镜像补池（2026-09-14，木/空卡牌体系落地后的敌方生态）============
+// 三只各填一个主题空位：章2 起敌方无毒（叠毒体系无镜像）、章3 起敌方无闪避（御风体系
+// 无镜像）、章4 无针对 DoT 的反制件（终章叠毒/燃烧无考题）。各考一道与玩家体系同源的题。
+
+// ㉕ 瘴气菇（章2·叠毒镜像：渐浓毒雾）——孢子云（中毒，每次更浓：2,3,4…）→ 攻6 → 攻6
+// 三拍循环。玩家的叠毒是平方收束，它的毒雾也是：拖得越久，每次喷毒越重——把「毒叠起来
+// 有多可怕」先在玩家身上演一遍。本身零防脆菇，速杀即无毒；与宫廷守卫同场时「先杀谁」
+// 是真问题（盾轴保毒轴）。对标：沼泽伏击者（精英）一口毒5，它常规杂兵 2 起步渐浓。
+registerEnemy({
+  difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 26 },
+  id: 'miasmaShroom', name: '瘴气菇',
+  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24 }),
+  act(actx) {
+    const { unit } = actx;
+    if (unit.actionIndex % 3 === 0) {
+      // 孢子云：_spore 从 1 起每次喷吐 +1（首口毒2）
+      unit._spore = (unit._spore ?? 1) + 1;
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'poison', stacks: unit._spore }));
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player, amount: 6 + unit.getStat('attack') }));
+  },
+  getIntention: (unit) => (unit.actionIndex % 3 === 0
+    ? { kinds: ['debuff'], note: `孢子云：赋予玩家中毒${(unit._spore ?? 1) + 1}（每次更浓）` }
+    : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }),
+});
+
+// ㉖ 风狸（章3·御风镜像：等风停）——起风（闪避2）→ 风爪 攻2×3 → 突风 攻8 三拍循环。
+// 闪避在它自己回合开始蒸发 1 层：起风后 2→1→0，每第三拍是零闪避的输出窗——玩家的
+// 爆发牌要跟它的起风拍错开；单发重击被闪避白吃（垫一发小的再出大的），中毒/燃烧
+// 绕过闪避（dot 是天然克制）。嗡嗡虫的章3 上位：那边教「先垫一发」，这边教「算风停」。
+registerEnemy({
+  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 38 },
+  id: 'windRaccoon', name: '风狸',
+  createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24 }),
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'dodge', stacks: 2 }));
+    } else if (phase === 1) {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 2 + atk }));
+      }
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 8 + atk }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['buff'], note: '起风：自身闪避2（免疫攻击；中毒/燃烧可穿）' };
+    if (phase === 1) return { kinds: ['attack'], hits: 3, damage: 2 + atk, note: '风爪' };
+    return { kinds: ['attack'], hits: 1, damage: 8 + atk, note: '突风' };
+  },
+});
+
+// ㉗ 掸尘者（章4·DoT 反制件：拂尘）——拂尘（净化全体友军的中毒与燃烧）→ 攻10 → 自盾8
+// 三拍循环。终章给叠毒/燃烧体系的一道反考题：毒火囤不起来，输出窗被切成三拍一段——
+// 要么先杀它（20 血的脆皮优先目标），要么掐着拂尘拍结算爆发。对物理/直伤体系它只是
+// 个弱攻击手（拂尘拍空转），考题只点名 DoT 构筑。主教（Boss）的燃烧净化是它的原型，
+// 这只连中毒一起拂。
+registerEnemy({
+  difficulty: { base: 7, min: 6, max: 9, floorMin: 34, floorMax: 43 },
+  id: 'dustkeeper', name: '掸尘者',
+  createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
+      for (const e of aliveEnemies(bs)) {
+        for (const eff of ['poison', 'burn']) {
+          const s = e.getEffectStacks(eff);
+          if (s > 0) {
+            actx.kernel.submitInstruction(new AddEffectInstruction({
+              target: e, effectId: eff, stacks: -s }));
+          }
+        }
+      }
+      return;
+    }
+    if (phase === 2) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+      return;
+    }
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player, amount: 10 + unit.getStat('attack') }));
+  },
+  getIntention: (unit) => {
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['buff'], note: '拂尘：净化全体友军的中毒与燃烧' };
+    if (phase === 2) return { kinds: ['defend'], note: '自身护盾+8' };
+    return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
+  },
+});

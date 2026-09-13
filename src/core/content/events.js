@@ -4,5 +4,5 @@ import './events/moneyBag.js';
 import './events/spring.js';
 import './events/toxicGreenhouse.js';
 import './events/whisperGallery.js';
-import './events/brokenDuelist.js';
+import './events/sparringAutomaton.js';
 import './events/bloodAltar.js';
