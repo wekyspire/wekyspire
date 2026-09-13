@@ -2,3 +2,7 @@
 // 事件会成规模增长（故事模式），文件级隔离便于并行增删。
 import './events/moneyBag.js';
 import './events/spring.js';
+import './events/toxicGreenhouse.js';
+import './events/whisperGallery.js';
+import './events/brokenDuelist.js';
+import './events/bloodAltar.js';
