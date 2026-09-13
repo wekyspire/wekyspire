@@ -2,6 +2,7 @@ import { registerEffect } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
+import { UseSkillInstruction } from '../instructions/skill.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import AIActInstruction from '../instructions/aiAct.js';
@@ -152,6 +153,9 @@ registerEffect({
 });
 
 // 虚弱：每层攻击 -1（可把攻击压到负——伤害算式对负面板天然衰减，减半/加成仍对称生效）。
+// 赎罪（宴厅主教设计，2026-09-13 用户定稿写进效果本体=所有虚弱来源共享）：
+// 虚弱在玩家身上时，每回合打出 3 张**非攻击牌**自净 1 层。
+// 「攻击牌」= 该次出牌的指令子树含对敌伤害（被盾挡下也算攻击）；咏唱发动同样计数。
 registerEffect({
   id: 'weaken',
   type: 'debuff',
@@ -160,9 +164,30 @@ registerEffect({
     attack: (stacks) => -stacks,
   },
   name: '虚弱',
-  description: '每层使攻击降低 1 点。',
+  description: '每层使攻击降低 1 点。每回合打出 3 张非攻击牌可净化 1 层。',
   icon: '📉',
   color: 'purple',
+  subscriptions: (unit) => [{
+    when: UseSkillInstruction,
+    phase: 'post',
+    // 只认玩家自己持虚弱时的玩家出牌（敌方持虚弱不享受赎罪——它不"出牌"）
+    filter: (instr, ctx) => ctx.player === unit && !unit.isDead(),
+    react: (instr, ctx) => {
+      const dealtToEnemy = (node) => node.children?.some(c =>
+        (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
+      if (dealtToEnemy(instr)) return; // 攻击牌不计
+      unit._atonement = (unit._atonement ?? 0) + 1;
+      if (unit._atonement < 3) return;
+      unit._atonement = 0;
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'weaken', stacks: -1 }), instr);
+    },
+  }, {
+    when: PlayerTurnStartInstruction,
+    phase: 'post',
+    filter: (instr, ctx) => ctx.player === unit,
+    react: (instr, ctx) => { unit._atonement = 0; },
+  }],
 });
 
 // 防火（EFFECTS.md）：燃烧结算时跳过伤害（层数照常 -1——燃烧自身的递减在 burn 反应里

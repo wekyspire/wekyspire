@@ -107,7 +107,10 @@ const TEMPLATES = [
 //（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
 //  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环）。
 const BOSS_OF_FLOOR = Object.freeze({
-  11: ['pyro', 'kardas', 'mefm1'], 22: 'knightCommander', 33: 'gluttonLord', 44: 'towerHeart',
+  11: ['pyro', 'kardas', 'mefm1'],
+  // 批次 16（2026-09-13）：章二池三题错开——阵型（骑士长）/ 外挂时钟·手牌节奏（守钟人）/ debuff 对冲（主教）
+  22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
+  33: 'gluttonLord', 44: 'towerHeart',
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 

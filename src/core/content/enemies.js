@@ -303,20 +303,20 @@ registerEnemy({
   },
 });
 
-// ②‴ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 波 2 上岗 2026-09-13）
+// ②‴ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 池三之一，2026-09-13 重做加深）
 // 护驾：首拍召集 2 名宫廷侍从（Boss 生成器只产单 Boss，随从只能 act 内召；首拍不攻
-//   = 给玩家一个先手窗）；**侍从 ≥2 时**才「督战」（全体蓄势1，不亲自攻击），且每回合
-//   自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从环伺时火焰近不了身；
-//   亲征形态失去净化 = 给火系留「先清侍从再引爆」的输出窗，对物理系无感）。
-// 亲征（侍从不足 2）：攻12 → 攻12 → 盾10 三拍循环；每隔一拍行动结束，若侍从 <2
+//   = 给玩家一个先手窗）；**侍从 ≥2 时**才「督战」（全体蓄势1 + **仪仗威压：自身格挡2**，
+//   不亲自攻击），且每回合自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从环伺时
+//   火焰近不了身；亲征形态失去净化与格挡 = 给火系留「先清侍从再引爆」的输出窗）。
+// 亲征（侍从不足 2）：攻16 → 攻16 → 盾10 三拍循环；每隔一拍行动结束，若侍从 <2
 //   且有 ≥2 空位，重新召集 1 名（凑回护驾形态）。
-// 考试点：目标优先级（清侍从 vs 抢 Boss）+ 爆发窗口管理（亲征三拍是输出窗）。
-// 2026-09-13 修复：护驾门槛 some→≥2（旧版留 1 侍从即可定式——骑士长永不攻击，
-// 玩家杀到剩 1 个后白打 Boss）；召集同步放宽到 <2，1 侍从时也会被补齐。
+// 考试点：快速清侍从制造亲征窗口倾泻爆发（处刑姿态攻 16 是窗口的代价）；拖久则
+//   盾 + 格挡 + 蓄势滚雪球。**清场才能获胜**（用户定 2026-09-13：Boss 死≠即胜，
+//   侍从必须清完）。
 registerEnemy({
   difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
   id: 'knightCommander', name: '宫殿骑士长',
-  createUnit: () => new Enemy({ defId: 'knightCommander', name: '宫殿骑士长', maxHp: 40 }),
+  createUnit: () => new Enemy({ defId: 'knightCommander', name: '宫殿骑士长', maxHp: 54 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (unit.actionIndex === 0) {
@@ -328,11 +328,13 @@ registerEnemy({
     }
     const squires = aliveEnemies(bs).filter(e => e.defId === 'courtSquire').length;
     if (squires >= 2) {
-      // 护驾：督战（全体蓄势1）+ 自我净化（燃烧减半，向下取整）
+      // 护驾：督战（全体蓄势1）+ 仪仗威压（自身格挡2）+ 自我净化（燃烧减半，向下取整）
       for (const e of aliveEnemies(bs)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: e, effectId: 'focus', stacks: 1 }));
       }
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'block', stacks: 2 }));
       const b = unit.getEffectStacks('burn');
       if (b >= 2) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -340,12 +342,12 @@ registerEnemy({
       }
       return;
     }
-    // 亲征：攻12 → 攻12 → 盾10 三拍循环（_duelIndex 单调推进，形态来回切换不重置节奏）
+    // 亲征：攻16 → 攻16 → 盾10 三拍循环（_duelIndex 单调推进，形态来回切换不重置节奏）
     const phase = (unit._duelIndex ?? 0) % 3;
     unit._duelIndex = (unit._duelIndex ?? 0) + 1;
     if (phase < 2) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 12 + unit.getStat('attack') }));
+        source: unit, target: actx.player, amount: 16 + unit.getStat('attack') }));
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
     }
@@ -360,26 +362,26 @@ registerEnemy({
   getIntention: (unit, battleState) => {
     if (unit.actionIndex === 0) return { kinds: ['summon'], note: '召集 2 名宫廷侍从' };
     if (aliveEnemies(battleState).filter(e => e.defId === 'courtSquire').length >= 2) {
-      return { kinds: ['buff'], note: '督战：全体蓄势1；侍从≥2时每回合燃烧减半' };
+      return { kinds: ['buff'], note: '督战：全体蓄势1、自身格挡2；侍从≥2时每回合燃烧减半' };
     }
     const phase = (unit._duelIndex ?? 0) % 3;
     if (phase < 2) {
-      return { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack'), note: '亲征' };
+      return { kinds: ['attack'], hits: 1, damage: 16 + unit.getStat('attack'), note: '亲征' };
     }
     return { kinds: ['defend'], note: '亲征：自身护盾+10' };
   },
 });
 
 // 宫廷侍从（骑士长召唤物，不进生成池：无 difficulty 元数据 = 生成器取不到它）。
-// 攻5 ↔ 护驾（骑士长盾8）两拍；主君已陨则护驾拍退化为攻击拍。
+// 攻5 ↔ 护驾（骑士长盾10）两拍；主君已陨则护驾拍退化为攻击拍。
 registerEnemy({
   id: 'courtSquire', name: '宫廷侍从',
-  createUnit: () => new Enemy({ defId: 'courtSquire', name: '宫廷侍从', maxHp: 14 }),
+  createUnit: () => new Enemy({ defId: 'courtSquire', name: '宫廷侍从', maxHp: 22 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 1) {
       const master = aliveEnemies(actx.battleState).find(e => e.defId === 'knightCommander');
       if (master) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: master, amount: 8 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: master, amount: 10 }));
         return;
       }
     }
@@ -392,8 +394,124 @@ registerEnemy({
     }
     const master = aliveEnemies(battleState).find(e => e.defId === 'knightCommander');
     return master
-      ? { kinds: ['defend'], note: '护驾：骑士长护盾+8' }
+      ? { kinds: ['defend'], note: '护驾：骑士长护盾+10' }
       : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') };
+  },
+});
+
+// ②⁴ 22 层 Boss · 烛厅守钟人·卡珊（章2 Boss 池三之一，2026-09-13 新——外挂时钟/手牌节奏考）
+// 本体三拍循环：烛火（攻10+燃烧2）→ 攻14 → 添烛（自盾12）。
+// **鸣钟 = 独立外挂时钟**（不占本体节拍，每次行动后追加判定）：
+//   一阶段每 4 次行动后鸣钟——若玩家手牌 ≥5 张则受 12 伤（正常吃盾，可算可防；
+//   摇钟本身不攻击、不达标只响不伤）。二阶段（HP≤50%）钟摆加速：每 3 次行动鸣钟、
+//   阈值 ≥4、伤害 16，且烛火燃烧 2→3、添烛盾 12→16。
+// 燃烧交互：对燃烧零抗性（火系爽局），但烛火拍给玩家上的燃烧对灼脉流是双刃剑。
+// 考试点：鸣钟拍前必须把手牌卸到阈值下（囤牌流被点名，dump/连打都是解），
+//   与骑士长（阵型）、主教（debuff 对冲）三题错开。实现零新基础设施：
+//   鸣钟 = act 内行动后计数判定 + zones.hand.length 现成读取。
+registerEnemy({
+  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  id: 'candleWarden', name: '烛厅守钟人·卡珊',
+  createUnit: () => new Enemy({ defId: 'candleWarden', name: '烛厅守钟人·卡珊', maxHp: 44 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const atk = unit.getStat('attack');
+    // 二阶段：HP≤50%（钟摆加速）——永久转段（一旦敲响过半血之钟不回头，防状态在阈值线抖动）
+    if (!unit._phase2 && unit.hp * 2 <= unit.maxHp) unit._phase2 = true;
+    const phase2 = !!unit._phase2;
+    // 本体三拍：烛火 → 攻 → 添烛
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 10 + atk }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'burn', stacks: phase2 ? 3 : 2 }));
+    } else if (beat === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 14 + atk }));
+    } else {
+      actx.kernel.submitInstruction(new GainShieldInstruction({
+        target: unit, amount: phase2 ? 16 : 12 }));
+    }
+    // 鸣钟（外挂时钟）：行动后计数，达间隔清零并判定手牌阈值
+    unit._bellCount = (unit._bellCount ?? 0) + 1;
+    const interval = phase2 ? 3 : 4;
+    if (unit._bellCount >= interval) {
+      unit._bellCount = 0;
+      const threshold = phase2 ? 4 : 5;
+      if (bs.zones.hand.length >= threshold) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: phase2 ? 16 : 12, tags: ['bell'] }));
+      }
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase2 = !!unit._phase2 || unit.hp * 2 <= unit.maxHp; // 预告同口径（转段拍即预告二阶段数值）
+    const interval = phase2 ? 3 : 4;
+    const threshold = phase2 ? 4 : 5;
+    const bellIn = interval - (unit._bellCount ?? 0); // 距下次鸣钟的行动数
+    const bell = `鸣钟：${bellIn} 次行动后，若你手牌≥${threshold} 则受 ${phase2 ? 16 : 12} 伤`;
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) {
+      return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk,
+        note: `烛火：燃烧${phase2 ? 3 : 2}；${bell}` };
+    }
+    if (beat === 1) return { kinds: ['attack'], hits: 1, damage: 14 + atk, note: bell };
+    return { kinds: ['defend'], note: `添烛：自身护盾+${phase2 ? 16 : 12}；${bell}` };
+  },
+});
+
+// ②⁵ 22 层 Boss · 宴厅主教·马尔尚（章2 Boss 池三之一，2026-09-13 新——debuff 管理/净化节奏考）
+// 三拍：**布道**（虚弱补到 4 层——不叠加滚雪球；玩家每回合打出 3 张非攻击牌净化 1 层，
+//   赎罪机制写在 weaken 效果本体）→ 攻 15 → **祈祷**（自回 14 + 净化自身全部燃烧——
+//   圣水浇灭：燃烧不得囤，火系必须在两拍祈祷之间引爆）。
+// 二阶段（HP≤40%）狂信：虚弱补到 6、攻 19、祈祷回 18。
+// 考试点：出牌结构对冲虚弱 + 爆发必须卡在两拍祈祷之间。
+registerEnemy({
+  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  id: 'bishopMarchand', name: '宴厅主教·马尔尚',
+  createUnit: () => new Enemy({ defId: 'bishopMarchand', name: '宴厅主教·马尔尚', maxHp: 46 }),
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    // 二阶段：HP≤40%（狂信）——永久转段（否则祈祷自回会把自己抬出二阶段，狂信形同虚设）
+    if (!unit._phase2 && unit.hp * 5 <= unit.maxHp * 2) unit._phase2 = true;
+    const phase2 = !!unit._phase2;
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) {
+      // 布道：虚弱补到 4/6 层（读现层算差值；只补不滚）
+      const target = phase2 ? 6 : 4;
+      const cur = actx.player.getEffectStacks('weaken');
+      if (cur < target) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'weaken', stacks: target - cur }));
+      }
+    } else if (beat === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: (phase2 ? 19 : 15) + atk }));
+    } else {
+      // 祈祷：自回 + 净化自身全部燃烧（无燃烧也回血——祈祷拍的自身代谢）
+      actx.kernel.submitInstruction(new ApplyHealInstruction({
+        target: unit, amount: phase2 ? 18 : 14 }));
+      const b = unit.getEffectStacks('burn');
+      if (b > 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'burn', stacks: -b }));
+      }
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase2 = !!unit._phase2 || unit.hp * 5 <= unit.maxHp * 2; // 预告同口径
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) {
+      return { kinds: ['debuff'], note: `布道：虚弱补到${phase2 ? 6 : 4}层（每层攻击-1）` };
+    }
+    if (beat === 1) {
+      return { kinds: ['attack'], hits: 1, damage: (phase2 ? 19 : 15) + atk, note: '' };
+    }
+    return { kinds: ['buff'], note: `祈祷：自回${phase2 ? 18 : 14}血，净化自身全部燃烧` };
   },
 });
 
