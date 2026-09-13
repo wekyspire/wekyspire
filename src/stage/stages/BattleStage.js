@@ -43,7 +43,8 @@ import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
 import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
-import { CardScrollPickerObject } from '../objects/CardScrollPickerObject.js';
+import { createStagePickerKit } from '../stagePickerKit.js';
+import { playCardGrantFlight } from '../cardGrantFlight.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
@@ -198,7 +199,6 @@ export class BattleStage {
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
     this._aiming = null;       // 选目标卡（targetMode 'enemy'/'ally'）瞄准中 { id, mode }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
-    this._inputSelection = [];
     // 区域查看器（点牌库图标开）：卡牌画廊——渲染/拾取/悬浮/tooltip 与战斗同一套栈
     // 战斗内「选卡牌集」覆盖层（request.picker === 'overlay'）：手牌来源接管既有实例，
     // 其它区来源按投影新建；见 _openPick/_closePick
@@ -271,7 +271,12 @@ export class BattleStage {
       this._buttons[key] = btn;
     }
     this._buttonSigs = {};
-    this._swapMode = false; // 换卡模式：点换卡按钮进入，手牌高亮，点一张手牌换出
+    this._btnData = {};   // 每个按钮最近一次的数据（悬停态变化时据此重烘）
+    this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
+    // 弃牌模式（2026-09-13 改制，原「换卡」单张换出废除）：点弃牌按钮进入，
+    // 手牌任意点选（本地多选集），主按钮变「确认(n)」一次提交——付一次阶梯费弃任意张
+    this._dumpMode = false;
+    this._dumpSel = new Set();
     // ---- 战后奖励面板宿主（用户定 2026-09-12）----
     // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
     // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
@@ -279,14 +284,28 @@ export class BattleStage {
     this._panel = null;      // PanelObject（modal 形态：全屏背板 + 居中内容）
     this._panelSnap = null;  // 当前快照（存在即"面板模态中"：吞掉一切指针）
     this._onPanelIntent = null; // 面板意图上行出口（runController 注入，与 MapStage 同契约）
-    this._cardPicker = null;    // 全屏选卡（战后奖励的 Boss 删卡机会入口；惰性建）
-    this._pickerConfirm = null;
+    this._runSequencer = null;  // run 级动画队列（runController 后置注入：得卡演出指令化）
+    this._grantBusy = false;    // 「择卡得卡」演出进行中：吞掉面板动作（见 _onPanelAction）
+    // 全屏选卡界面（战后奖励的 Boss 删卡机会入口）：三舞台共用套件 stagePickerKit.js。
+    // 战斗层只用得到选卡那一件（特写/选遗物不走这里——战斗内的获得演出由 bridge 节拍驱动）。
+    // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙是按值传的；旧实现漏传它 → 候选卡面隐身）。
+    this._pickerKit = createStagePickerKit({
+      uiScene: this.uiScene,
+      getPicker: () => this.picker,
+      bakeFace: this._bakeFace,
+      bus: () => this._bus,
+      onIntent: (a) => this._onPanelIntent?.(a),
+      getSequencer: () => this._runSequencer,
+      getAnchor: () => this._deckAnchor(),
+    });
     // 「结束回合」的**已点过**标记（用户定 2026-09-12）：动画积压期也允许点结束回合
     // （后端其实是同步结算完的，只是在放动画），点完立刻上灰，直到**下一回合开始**的
     // 快照落定才解锁——避免"动画没放完就点不动按钮，只能干等"。
+    // 用户定 2026-09-13：这枚标记同时是**手牌交互锁**——点击之后到下一回合快照落定之前，
+    // 整手压灰、打牌/换卡全部关闭（后端早已推进到下一回合的 WAIT，不锁就能"抢着"打出
+    // 下一回合的牌：结算没错，但画面还在放上一回合的动画，纯误操作）。
     this._endTurnRequested = false;
-    this._turnKey = null;   // `${side}:${count}`：变化 = 换回合（解锁上面的标记）
-    this._swapLocked = false; // 换卡刚提交：挡同一节拍内的连续点击（下次 sync 解锁）
+    this._endTurnLockKey = null; // 点击那一快照的回合 key（'player:N'）；解锁只认**新的玩家回合**
 
     // 选目标瞄准箭头（杀戮尖塔式）：UI pass 覆盖层，指针追随物，不进队列/注册表
     this._arrow = new TargetingArrowObject();
@@ -344,14 +363,18 @@ export class BattleStage {
     if (snapshot.seq != null && snapshot.seq < this._snapshotSeq) return;
     if (snapshot.seq != null) this._snapshotSeq = snapshot.seq;
     this._snapshot = snapshot;
-    // 换回合（含"新回合开始"）：解锁「结束回合」的已点标记——这就是用户定的口径
-    // 「点完之后，到前端收到下一回合开始之前都不能再点」里的解锁点
+    // 换回合解锁「结束回合」的已点标记：**只认新的玩家回合**（'player:N' 变化）。
+    // 敌方侧快照（side 变 'enemy'）不能解锁——否则敌方阶段的动画积压期手牌提前解禁，
+    // 又能"抢着"打出下一回合的牌（用户 2026-09-13 报的误操作窗口）
     const key = `${snapshot.turn?.side ?? '?'}:${snapshot.turn?.count ?? -1}`;
-    if (key !== this._turnKey) {
-      this._turnKey = key;
+    if (this._endTurnRequested && snapshot.turn?.side === 'player' && key !== this._endTurnLockKey) {
       this._endTurnRequested = false;
     }
-    this._swapLocked = false;   // 每个状态同步节拍解锁换卡（挡的是同一节拍内的连点）
+    // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）
+    if (this._dumpSel.size) {
+      const inHand = new Set(snapshot.hand?.map(c => c.uniqueID) ?? []);
+      for (const id of [...this._dumpSel]) if (!inHand.has(id)) this._dumpSel.delete(id);
+    }
     this.reconcile();
   }
 
@@ -386,6 +409,7 @@ export class BattleStage {
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
+    this._updateDoomMarks();   // 将弃名单随快照变化（新视图补挂/离场视图摘除）
   }
 
   _syncUnits(proj) {
@@ -754,6 +778,12 @@ export class BattleStage {
   /** 面板意图上行出口（runController 注入：Stage 只上报「谁被点了」）。 */
   setPanelIntentHandler(fn) { this._onPanelIntent = fn; }
 
+  /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
+  setRunSequencer(seq) { this._runSequencer = seq ?? null; }
+
+  /** 得卡演出的收编锚点：牌库图标（飞行落点 z 取 40，与造牌入库的飞行约定一致）。 */
+  _deckAnchor() { return { x: PILE_POSITIONS.deck.x, y: PILE_POSITIONS.deck.y, z: 40 }; }
+
   /** 快照下行：kind 变化才重建 PanelObject；未登记的 kind 收起面板。 */
   setPanel(snap) {
     const entry = snap && PANEL_BUILDERS[snap.kind];
@@ -762,7 +792,7 @@ export class BattleStage {
       this._removePanel();
       this._panel = new PanelObject({
         form: entry.form,
-        onIntent: (a) => this._onPanelAction(a),
+        onIntent: (a, info) => this._onPanelAction(a, info),
         bakeFace: this._bakeFace,
       });
       this.uiScene.add(this._panel);
@@ -777,11 +807,28 @@ export class BattleStage {
   _buttonActionsOf(id) { return this._panel?._buttonActions?.get(id) ?? null; }
 
   /** 面板动作分流：`local: true` 的由本舞台消化（选卡界面），其余上行给 runController。 */
-  _onPanelAction(action) {
-    if (!action) return;
+  _onPanelAction(action, info) {
+    if (!action || this._grantBusy) return;
     if (action.local) {
       if (action.action === 'openUpgradePicker') { this._openPanelCardPicker(action.source); return; }
       return;
+    }
+    // 得卡标记（奖励三选一）：摘下被点的卡 → 解除 overlay → 播「择卡得卡」演出
+    // （脉冲→飞入牌库，sequencer 指令化与后续切幕串行）→ 落袋才上行意图。
+    // overlay 是整体 _removePanel 而不是藏起：隐形面板有被同 kind 快照重绘但仍隐形的坑；
+    // 拆掉后演出期间落到战场的点击全部是终局拒付（bridge 已判负/判胜，intents 静默拒绝）。
+    if (action.grantCard && info?.pickId && this._panel) {
+      const entry = this._panel.takeCard(info.pickId);
+      if (entry) {
+        this._grantBusy = true;
+        this.uiScene.add(entry.object);      // 面板组在原点：局部坐标即世界坐标
+        this._removePanel();
+        playCardGrantFlight({
+          card: entry.object, target: this._deckAnchor(), sequencer: this._runSequencer,
+          onDone: () => { this._grantBusy = false; this._onPanelIntent?.(action); },
+        });
+        return;
+      }
     }
     this._onPanelIntent?.(action);
   }
@@ -792,30 +839,15 @@ export class BattleStage {
    */
   _openPanelCardPicker(source) {
     if (source !== 'bossRemove') return false;
-    const cards = (this._panelSnap?.cardRemoval?.removeCards ?? []).filter(c => c.enabled !== false);
-    if (!cards.length) return false;
-    if (!this._cardPicker) {
-      this._cardPicker = new CardScrollPickerObject({
-        bakeFace: this._bakeFace,
-        bus: this._bus,
-        onConfirm: (ids) => this._pickerConfirm?.(ids),
-      });
-      this.uiScene.add(this._cardPicker);
-    }
-    this._pickerConfirm = (ids) => this._onPanelIntent?.({ action: 'bossRemoveCard', uniqueID: ids[0] });
-    this._cardPicker.attachPicker(this.picker);
-    this._cardPicker.open({
-      title: '选择要移除的卡',
-      hint: 'Boss 奖励 · 从牌组中永久移除一张 ｜ 滚轮翻页',
-      cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId })),
-      confirmLabel: '确认移除',
-    });
-    return true;
+    // 与塔楼层/房间层同一份实现（文案「选择要删除的卡/确认删除」也随之统一，
+    // 此前战斗层写的是「移除」）；候选与意图都由 kit 的 UPGRADE_SOURCES 表给出。
+    return this._pickerKit.openUpgradePicker('bossRemove', this._panelSnap);
   }
 
   _removePanel() {
-    this._cardPicker?.dispose();
-    this._cardPicker = null;
+    // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
+    // 与塔楼层/房间层同律）——真正释放交给 dispose() 里的 kit.dispose()。
+    this._pickerKit?.cardPicker?.close();
     if (!this._panel) return;
     this.uiScene.remove(this._panel);
     this._panel.dispose();
@@ -835,10 +867,15 @@ export class BattleStage {
     const inPlayerTurn = proj.turn?.side === 'player' && (proj.turn?.count ?? 0) >= 1
       && proj.verdict == null;
 
-    // 主按钮：结束回合；结算期退化为确认/选择提示
+    // 主按钮：结束回合；弃牌模式/结算期退化为确认/选择提示
     let label = '结束回合';
     let enabled = inPlayerTurn && !pending && !this._endTurnRequested;
-    if (this._pick) {
+    if (this._dumpMode) {
+      // 弃牌模式：主按钮 = 提交选择（付一次阶梯费弃任意张，2026-09-13 改制）
+      const n = this._dumpSel.size;
+      label = n > 0 ? `弃掉${n}张` : '弃牌';
+      enabled = n >= 1;
+    } else if (this._pick) {
       const n = this._pick.selection.length;
       const { min, max } = this._pick;
       const need = min === max ? `${min}` : `${min}~${max}`;
@@ -846,37 +883,46 @@ export class BattleStage {
       enabled = n >= min && n <= max;   // 到 min 即可提交（「至多 N」的上限由收集侧封顶）
     } else if (pending?.kind === 'confirm') { label = '确认'; enabled = true; }
     else if (pending?.kind?.startsWith('select')) {
-      if ((pending.count ?? 1) > 1) { label = `确认(${this._inputSelection.length}/${pending.count})`; enabled = this._inputSelection.length === pending.count; }
-      else { label = '选择目标'; enabled = false; }
+      // 多选（max>1）一律走覆盖层（`_pick` 分支在上，见 _openPick）；落到这里的只可能是
+      // 单手牌点选 —— 无按钮语义，点牌即应答（min/max 是规范字段，勿再读已废弃的 count）
+      label = '选择目标'; enabled = false;
     }
     this._setButtonState('main', { label, enabled });
 
-    // 换卡模式只在玩家的自由行动窗存活：窗口关闭（结算输入/回合外）自动退出
-    if (!inPlayerTurn || pending) this._swapMode = false;
+    // 弃牌模式只在玩家的自由行动窗存活：窗口关闭（结算输入/回合外/回合过渡锁）自动退出
+    // （直接摘旗，不走 _setDumpMode——它内部会重入本函数）
+    if (!inPlayerTurn || pending || this._endTurnRequested) { this._dumpMode = false; this._dumpSel.clear(); }
     const cost = proj.swapCost;
-    // 换卡同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
-    // canSwapCard 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害），
-    // 连点防御落在**换出提交**那一侧（见 `_swapLocked`）
-    const canSwap = inPlayerTurn && !pending && proj.hand.length > 0
+    // 弃牌同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
+    // canDumpCards 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害）。
+    // 回合过渡锁（_endTurnRequested）期间弃牌一并关闭——与打牌同一把锁（用户定 2026-09-13）
+    const canDump = inPlayerTurn && !pending && !this._endTurnRequested && proj.hand.length > 0
       && proj.player.actionPoints >= cost;
     this._setButtonState('swap', {
-      label: '换卡', sublabel: `⚡${cost}`, enabled: canSwap, active: this._swapMode,
+      label: '弃牌', sublabel: `⚡${cost}`, enabled: canDump, active: this._dumpMode,
     });
   }
 
-  // 按钮数据签名去抖：内容不变不重烘（牌面烘焙有 canvas 成本）
+  // 按钮数据/悬停签名去抖：内容不变不重烘（牌面烘焙有 canvas 成本）。
+  // `data` 缺省 = 复用上一次的数据（悬停态变化时只改 active，不必让调用方重算整套数据）。
   _setButtonState(key, data) {
-    const sig = JSON.stringify(data);
+    if (data) this._btnData[key] = data;
+    const base = this._btnData[key];
+    if (!base) return;
+    const hover = !!this._btnHover[key];
+    const sig = JSON.stringify({ ...base, hover });
     if (this._buttonSigs[key] === sig) return;
     this._buttonSigs[key] = sig;
     const btn = this._buttons[key];
-    btn.setCard(data);
-    btn.setVisualState(data.enabled ? 'normal' : 'disabled');
+    // 悬停 → 按钮面走 active 主题（与面板按钮 hover 同一条路）；disabled 主题优先，灰按钮不亮
+    btn.setCard({ ...base, active: !!base.active || hover });
+    btn.setVisualState(base.enabled ? 'normal' : 'disabled');
   }
 
-  _setSwapMode(on) {
-    if (this._swapMode === on || !this._snapshot) return;
-    this._swapMode = on;
+  _setDumpMode(on) {
+    if (this._dumpMode === on || !this._snapshot) return;
+    this._dumpMode = on;
+    if (!on) this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
   }
@@ -1064,8 +1110,13 @@ export class BattleStage {
         view.setVisualState('highlighted');
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
-      } else if (this._swapMode && zone === 'hand') {
-        view.setVisualState(this.bridge.intents.canSwapCard(id) ? 'highlighted' : 'disabled');
+      } else if (this._dumpMode && zone === 'hand') {
+        // 弃牌模式：选中的高亮，其余保持常态（任何手牌都可弃，无"不可选"压灰）
+        view.setVisualState(this._dumpSel.has(id) ? 'highlighted' : 'normal');
+      } else if (this._endTurnRequested && zone === 'hand') {
+        // 回合过渡锁（点了结束回合、下一回合快照未落）：整手压灰——锁定期打牌/换卡全关
+        // （用户定 2026-09-13；放在结算期分支之后：应答输入的候选高亮不受锁影响）
+        view.setVisualState('disabled');
       } else if (zone === 'hand' && !pending) {
         view.setVisualState(this.bridge.intents.canPlayCard(id) ? 'normal' : 'disabled');
       } else {
@@ -1116,7 +1167,8 @@ export class BattleStage {
     if (type === EventNames.ANIM_CARD_ADDED) {
       return this._addCardBeat(payload, finish);
     }
-    if (type === EventNames.ANIM_CARD_SWAPPED) {
+    if (type === EventNames.ANIM_CARDS_DUMPED) {
+      // 弃牌动作节拍（动作级）：牌堆脉冲——弃置本体由每张卡的 ANIM_CARD_DISCARDED 承担
       return this._pulsePile('deck', finish);
     }
     // 结算宾语展示（转化前半）：从原位飞到中央展示位（高于发动展示位，避免叠卡）
@@ -1130,13 +1182,21 @@ export class BattleStage {
     if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
     // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
     // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
-    // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）
+    // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）。
+    // 发动点亮且卡带激发能力（载荷 anim 描述符，core 按 def.activated 判定）时，
+    // 先在展示位播激发演出再放行——「这张卡被点亮了」要看得见。
     if (type === EventNames.ANIM_CHANT_TOGGLED) {
       const id = payload?.skill?.uniqueID ?? null;
-      if (id != null && this.model.getZone(id) === 'held' && this._views.has(id)) {
-        this.model.setZone(id, 'hand');
-        this._entering.add(id); // 从展示位飞回扇形锚点
+      const release = () => {
+        if (id != null && this.model.getZone(id) === 'held' && this._views.has(id)) {
+          this.model.setZone(id, 'hand');
+          this._entering.add(id); // 从展示位飞回扇形锚点
+        }
+      };
+      if (payload?.on && payload?.anim) {
+        return this._chantActivateBeat(id, payload.anim, () => { release(); finish(); });
       }
+      release();
       return finish();
     }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
@@ -1255,30 +1315,64 @@ export class BattleStage {
     });
   }
 
-  // 转化闪变（宾语变化生效反馈主体）：卡面换绑 cardView + 金色迸发 + 尺寸脉冲。
-  // held/deck 来源卡不经 _syncCardContents（只扫手牌），换脸只能由本节拍承担。
-  /** 卡牌转化/进阶的共用演出（金色粒子迸发 + 尺寸脉冲）。
-   *  两个入口：结算树的 ANIM_CARD_TRANSFORMED 节拍（_transformBeat，卡在展示/持有位），
-   *  以及手牌内被转化的对账路径（_syncCardContents 发现 defId 变化）。 */
+  /** 金色迸发 + 卡面闪光（转化演出的特效半，不含缩放时间线与换脸）。
+   *  粒子 z 抬到卡面前方（+2）——与卡面共面时大半能量被牌面深度竞争吞掉；
+   *  fx 层闪光是必达通道（直接叠在牌面上）。 */
+  _transformBurst(id) {
+    const view = this._views.get(id);
+    if (!view) return;
+    const p = view.position;
+    this.particles.spawn(p.x, p.y, { count: 26, color: 0xffd76a, speed: 16, ttl: 0.7, size: 1.6, z: (p.z ?? 0) + 2 });
+    this.particles.spawn(p.x, p.y, { count: 12, color: 0xfff3c0, speed: 24, ttl: 0.5, size: 1.1, z: (p.z ?? 0) + 2 });
+    view.fx.pulse({ color: 0xffe9a8, durationMs: 460, scale: 1.5 });
+  }
+
+  /** 卡牌转化/进阶的共用演出（金色迸发 + 尺寸脉冲）。
+   *  入口 = 手牌内被转化的对账路径（_syncCardContents 发现 defId 变化——换脸已在
+   *  差分里完成，这里只补特效）；展示/持有位的转化走 _transformBeat 的完整 staging。 */
   _transformFx(id, onDone = null) {
     const view = this._views.get(id);
     if (!view) { onDone?.(); return; }
-    const p = view.position;
-    this.particles.spawn(p.x, p.y, { count: 22, color: 0xffd76a, speed: 12, ttl: 0.7, size: 1.6, z: p.z ?? 0 });
-    this.particles.spawn(p.x, p.y, { count: 10, color: 0xfff3c0, speed: 18, ttl: 0.5, size: 1.1, z: p.z ?? 0 });
+    this._transformBurst(id);
     const s0 = view.scale.x || 1;
-    this.animator.animate(id, { scale: s0 * 1.25 }, {
-      durationMs: 150,
-      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 150, onComplete: onDone ?? undefined }),
+    this.animator.animate(id, { scale: s0 * 1.3 }, {
+      durationMs: 160,
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 160, onComplete: onDone ?? undefined }),
     });
   }
 
+  // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底瞬时换脸 + 金爆
+  // （身份切换藏在闪光下）→ 过冲弹起 → 回稳 → 新脸停留窗。旧版「瞬时换脸 + 一撮
+  // 粒子 + 1.25 脉冲」与威力提升公共节拍语言雷同、读不出跃迁；且斩系打出进阶后
+  // 紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留停留窗的话新脸
+  // 唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经 _syncCardContents
+  // （只扫手牌），换脸只能由本节拍承担。
   _transformBeat(payload, finish) {
     const id = payload?.card?.uniqueID ?? null;
     const view = id != null ? this._views.get(id) : null;
     if (!view) return finish();
-    if (payload?.cardView) view.setCard(payload.cardView);
-    this._transformFx(id, finish);
+    const s0 = view.scale.x || 1;
+    this.animator.animate(id, { scale: s0 * 0.88 }, { // 蓄势下压（吸气）
+      durationMs: 110,
+      ease: 'power1.in',
+      onComplete: () => {
+        if (payload?.cardView) view.setCard(payload.cardView); // 谷底换脸（藏在闪光下）
+        this._transformBurst(id);
+        this.animator.animate(id, { scale: s0 * 1.42 }, { // 过冲弹起（跃迁感）
+          durationMs: 170,
+          ease: 'back.out(2.2)',
+          onComplete: () => {
+            this.animator.animate(id, { scale: s0 }, { // 回稳
+              durationMs: 190,
+              onComplete: () => {
+                // 新脸停留窗（纯延迟 tween）：给玩家读完新身份再走后续节拍
+                this.animator.animate(id, {}, { delayMs: 260, onComplete: finish });
+              },
+            });
+          },
+        });
+      },
+    });
   }
 
   // 单位世界坐标（含偏移）→ UI 世界坐标：伤害/治疗读数文本走 uiScene 前景层
@@ -1561,6 +1655,40 @@ export class BattleStage {
     });
   }
 
+  /**
+   * 咏唱**激发**节拍（数据驱动的卡体点亮演出）：发动点亮的咏唱卡在展示位播完自身
+   * 演出后才回扇形。动画种类由卡自己决定（presenter 载荷 anim 描述符；core 在
+   * def.activated.anim 缺省时给 { kind: 'pulse' }——"一般会实现为放缩"），数值
+   * 缺省由本层补全（演出参数是表现层调参位，卡只声明它想覆盖的部分）。
+   * 播完交回调用方放行回手（回扇形的位移与缩放回稳由入场跟踪/弹簧完成，
+   * 同 _cardPowerBeat 的交还惯例）。
+   */
+  _chantActivateBeat(id, anim, done) {
+    const view = id != null ? this._views.get(id) : null;
+    if (!view) { done(); return; }
+    const kind = anim?.kind ?? 'pulse';
+    if (kind !== 'pulse') { done(); return; } // 未知种类：未来扩展位，静默打节拍
+    const upMs = anim.upMs ?? 150;
+    const holdMs = anim.holdMs ?? 140;
+    const s0 = view.scale.x || 1;
+    view.fx.pulse({ // 卡面闪光与激活边缘流光同色系（点亮一体感）
+      color: anim.color ?? 0xffe9a0, durationMs: upMs + holdMs + 200, scale: 1.5,
+    });
+    this.animator.animate(id, { scale: s0 * (anim.scale ?? 1.4) }, {
+      durationMs: upMs,
+      ease: 'back.out(1.8)',
+      onComplete: () => {
+        this.animator.animate(id, {}, { // 峰值停留（纯延迟 tween）
+          delayMs: holdMs,
+          onComplete: () => {
+            if (this.model.getZone(id) === 'hand') { done(); return; } // 弹簧收养弹回
+            this.animator.animate(id, { scale: s0 }, { durationMs: 140, onComplete: done });
+          },
+        });
+      },
+    });
+  }
+
   // 护盾破碎演出：蓝白碎粒自血条处迸射——只在伤害节拍里被驱动（吸收击穿护盾的
   // 最后一击），保护框本身随后续 sync 静默隐去；自然消失（回合清零）无碎粒。
   // 碎粒是真 3D（传单位实际 z）
@@ -1635,6 +1763,7 @@ export class BattleStage {
     // 与手牌同链路），但屏蔽瞄准/拖拽等战斗交互
     if (this._viewer.opened) {
       const hit = this.picker.hover(x, y);
+      this._syncButtonHover(null);
       // 卡面 token（富文本/S 标）视作仍在悬浮所属卡：画廊抬升不中断（与手牌同语义）
       this._viewer.setHovered(this._viewer.ownsHit(hit) ? hit.id : null);
       this._setOverCard(hit);
@@ -1642,6 +1771,7 @@ export class BattleStage {
     }
     // 瞄准模式：卡留手牌不动，箭头从卡牌延伸到指针；掠过存活敌人 → 高亮 + 箭头变色
     if (this._aiming) {
+      this._syncButtonHover(null);
       const obj = this._views.get(this._aiming.id);
       if (!obj) { this._cancelAiming(); return; } // 卡在瞄准中离场（异常路径）：收尾
       const world = this._worldAt(x, y, ARROW_Z);
@@ -1653,6 +1783,7 @@ export class BattleStage {
       return;
     }
     if (this._dragging) {
+      this._syncButtonHover(null);
       const world = this._worldAt(x, y, 30); // 与拖拽卡同深（z=30），防透视视差
       const obj = this._views.get(this._dragging.id);
       if (obj) obj.position.set(world.x, world.y, 30);
@@ -1663,15 +1794,56 @@ export class BattleStage {
       return;
     }
     const hit = this.picker.hover(x, y);
+    // 全屏选卡（战后删卡机会）：悬浮交它（候选卡抬起 + 卡面 hover）。
+    // ⚠ 必须排在面板之前：选卡界面是**盖在面板之上的全屏层**，交给面板的话候选卡既不抬起
+    // 也不弹卡面预览（点击仍走选卡，hover/click 语义会打架）。
+    if (this._pickerKit.routeHover(hit, x, y)) { this._syncButtonHover(null); return; }
     // 面板模态中（战后奖励）：hover 只给面板（背板之外的战场物件不再响应）
-    if (this._panel) { this._panel.onHover(hit); return; }
+    if (this._panel) { this._panel.onHover(hit); this._syncButtonHover(null); return; }
+    this._syncButtonHover(hit);
     this._setOverCard(hit);
+  }
+
+  /**
+   * 战斗常驻按钮（结束回合 / 换卡）的悬停态。这两枚是**直接挂在舞台上**的 CardObject，
+   * 不像休息房面板按钮那样走 `PanelObject.onHover → ButtonObject.setHovered` —— 漏喂就完全
+   * 没有 hover 反馈（用户 2026-09-13 报"结束回合和换卡没有 hover 效果"）。悬停走按钮面的
+   * active 主题（淡蓝底），与整套 `bakeButtonFace` 按钮同一套语言；传 null 清空
+   * （模态/拖拽/瞄准期间不该留高亮）。
+   */
+  _syncButtonHover(hit) {
+    const id = hit?.kind === 'button' ? hit.id : null;
+    this._setButtonHover('main', id === 'btn:main');
+    this._setButtonHover('swap', id === 'btn:swap');
+  }
+
+  _setButtonHover(key, on) {
+    if (!!this._btnHover[key] === on) return;
+    this._btnHover[key] = on;
+    this._setButtonState(key);   // 用缓存的上一次数据重烘（hover 已进签名）
+    if (key === 'main') this._updateDoomMarks();
+  }
+
+  // 「将弃」预告（用户定 2026-09-13，Three 层特效）：hover 结束回合按钮时，给 P9 会被
+  // 尾弃的手牌挂红色呼吸描边（CardFxLayer.setDoomed）。名单来自投影 overflowVictims
+  // （与核心清理同一算法），只在玩家自由行动窗展示——已点结束回合（锁）/结算期都不亮
+  _updateDoomMarks() {
+    const victims = (!!this._btnHover.main
+      && this._snapshot?.turn?.side === 'player'
+      && !this._snapshot?.pendingInput
+      && !this._endTurnRequested
+      && (this._snapshot?.overflowVictims?.length ?? 0) > 0)
+      ? new Set(this._snapshot.overflowVictims) : null;
+    for (const [id, view] of this._views) {
+      const on = !!victims?.has(id);
+      if (!!view._doomOn !== on) { view._doomOn = on; view.setDoomMark(on); }
+    }
   }
 
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
-    if (this._cardPicker?.opened) return; // 全屏选卡（战后删卡机会）
+    if (this._pickerKit.cardPicker?.opened) return; // 全屏选卡（战后删卡机会）
     if (this._panel) return;         // 面板模态中：只走面板自己的点按（不拖牌/不瞄准）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
@@ -1685,8 +1857,9 @@ export class BattleStage {
         return;
       }
     }
-    // 换卡模式下点手牌是"点按换出"，不进入拖拽
-    if (hit.kind === 'card' && !proj?.pendingInput && !this._swapMode) {
+    // 弃牌模式下点手牌是"切换选中"，不进入拖拽/瞄准
+    // 回合过渡锁（_endTurnRequested）：锁定期手牌不发起任何出牌交互（用户定 2026-09-13）
+    if (hit.kind === 'card' && !proj?.pendingInput && !this._dumpMode && !this._endTurnRequested) {
       // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后
       // 于后端（动画积压期）时，玩家看到什么就是什么，不可能"抢先"后端出牌
       const displayPlayable = this._views.get(hit.id)?.visualState !== 'disabled';
@@ -1722,7 +1895,7 @@ export class BattleStage {
       return;
     }
     // 全屏选卡 / 面板模态：只由它们自己处理点击（背板外的战场物件一律不响应）
-    if (this._cardPicker?.opened) { this._cardPicker.onClick(this.picker.pick(x, y)); return; }
+    if (this._pickerKit.routeClick(this.picker.pick(x, y))) return;
     if (this._panel) { this._panel.onClick(this.picker.pick(x, y)); return; }
     const proj = this._snapshot;
     const pending = proj?.pendingInput?.request ?? null;
@@ -1749,7 +1922,7 @@ export class BattleStage {
       const hit = this.picker.pick(x, y, { kinds: ['unit'] });
       const targetId = this._targetableAimId(hit, this._aiming.mode);
       this._cancelAiming();
-      if (targetId && this._views.get(id)?.visualState !== 'disabled') {
+      if (targetId && !this._endTurnRequested && this._views.get(id)?.visualState !== 'disabled') {
         this.bridge.intents.playCard(id, targetId);
       }
       return;
@@ -1769,7 +1942,8 @@ export class BattleStage {
       const pastLine = world.y > PLAY_LINE_Y;
       const targetId = droppedOn ?? soloTarget ?? null;
       const displayPlayable = this._views.get(id)?.visualState !== 'disabled';
-      const played = displayPlayable && (droppedOn || pastLine)
+      // 回合过渡锁：拖拽发起后若锁落下（如锁内显示态尚未重刷的兜底），提交一并关闭
+      const played = displayPlayable && !this._endTurnRequested && (droppedOn || pastLine)
         && this.bridge.intents.playCard(id, targetId);
       if (!played) this.animator.enterIdle(id); // 弹簧收养：从松手位平滑滑回锚点
       return;
@@ -1781,51 +1955,50 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:swap') {
-      // 换卡按钮：模式开关（再点一次取消）；可用性以按钮面当前状态为准
-      if (this._swapMode) this._setSwapMode(false);
-      else if (this._buttons.swap.cardData?.enabled) this._setSwapMode(true);
+      // 弃牌按钮：模式开关（再点一次取消）；可用性以按钮面当前状态为准
+      if (this._dumpMode) this._setDumpMode(false);
+      else if (this._buttons.swap.cardData?.enabled) this._setDumpMode(true);
       return;
     }
-    if (hit.kind === 'card' && this._swapMode) {
-      // 换卡模式点手牌：换出（弃 1 抽 1）；不可换的卡（显示灰/咏唱/费用不足）保持模式。
-      // `_swapLocked`：成功换出后本同步节拍内不再接受换卡——前端防御连续快速点击
-      // （后端 canSwapCard 也拦，但那会让"点了没反应"难以解释，这里直接不响应）
-      if (this._swapLocked) return;
-      if (this._views.get(hit.id)?.visualState !== 'disabled' && this.bridge.intents.canSwapCard(hit.id)) {
-        if (this.bridge.intents.swapCard(hit.id)) this._swapLocked = true;
-        this._setSwapMode(false);
-      }
+    if (hit.kind === 'card' && this._dumpMode) {
+      // 弃牌模式点手牌：切换选中（本地多选集，主按钮一次提交）。任何手牌都可弃
+      // （激活咏唱也可——弃置 = 离手熄灭，玩家自己的抉择）；回合过渡锁期间模式已退，这里是兜底
+      if (this._endTurnRequested) return;
+      if (this._dumpSel.has(hit.id)) this._dumpSel.delete(hit.id);
+      else this._dumpSel.add(hit.id);
+      this.reconcile(); // 选中态高亮 + 主按钮「弃掉N张」
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:main') {
       // 显示态门：按钮面为灰（结算期未就绪/终局/已点过结束回合）时不分发任何意图——
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
-      if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
+      if (this._dumpMode) {
+        // 弃牌提交：付一次阶梯费弃掉全部选中卡（2026-09-13 改制）；失败保持模式便于重试
+        if (this.bridge.intents.dumpCards([...this._dumpSel])) this._setDumpMode(false);
+      } else if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
-      else if (pending?.kind?.startsWith('select') && (pending.count ?? 1) > 1) this.bridge.interaction.respond([...this._inputSelection]);
       else {
         // 结束回合（用户定 2026-09-12）：点完**立刻**上灰（不等 sync 节拍），直到下一回合
         // 开始；后端同步结算，所以动画积压期点也不会丢意图。下发失败（回合已过/终局）
-        // 则回滚标记，避免按钮假死
+        // 则回滚标记，避免按钮假死。
+        // 同时进入**手牌交互锁**（用户定 2026-09-13）：锁 key 记下点击时快照的回合轨道，
+        // 解锁只认新的玩家回合快照（见 _applySnapshot）；reconcile 让锁态立刻上手
         this._endTurnRequested = true;
+        this._endTurnLockKey = `${this._snapshot?.turn?.side ?? '?'}:${this._snapshot?.turn?.count ?? -1}`;
         const ok = this.bridge.intents.endTurn();
         if (!ok) this._endTurnRequested = false;
         this._syncButtons(this._snapshot);
+        this.reconcile();   // 整手立刻压灰、换卡模式退出（不等下一拍 sync）
       }
-      this._inputSelection = [];
       return;
     }
     if (hit.kind === 'card' && pending?.kind?.startsWith('select')) {
+      // 手牌单选：点牌即应答。多选不在这里（已由 _pick 覆盖层接管，见 _openPick——
+      // 「逐张累加再点确认」的私有通道已删，它只认旧 count 字段，是二重花刀卡死的根因）
       if (!pending.candidates || pending.candidates.includes(hit.id)) {
-        if ((pending.count ?? 1) === 1) {
-          this.bridge.interaction.respond([hit.id]);
-        } else {
-          const i = this._inputSelection.indexOf(hit.id);
-          if (i >= 0) this._inputSelection.splice(i, 1);
-          else if (this._inputSelection.length < pending.count) this._inputSelection.push(hit.id);
-          this.reconcile(); // 刷新按钮计数
-        }
+        const lo = pending.min ?? 1; const hi = pending.max ?? lo;
+        if (lo === 1 && hi === 1) this.bridge.interaction.respond([hit.id]);
       }
     }
   }
@@ -1966,6 +2139,7 @@ export class BattleStage {
 
   dispose() {
     this._removePanel();
+    this._pickerKit.dispose();   // 全屏选卡界面（_removePanel 只 close，真正释放在这里）
     this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);

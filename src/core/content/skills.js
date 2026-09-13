@@ -85,14 +85,14 @@ registerSkill({
 });
 
 // ④ 咏唱牌：每个玩家回合开始回复 1 点魏启（验证 activated 生命周期 + WAIT 回合）。
-// 咏唱双态：发动后住手牌持续生效，按咏唱值占手牌压力（咏唱3 = 激活时计 3 张手牌）；
+// 咏唱双态：发动后住手牌持续生效，按咏唱值占手牌压力（咏唱1 = 激活时计 1 张手牌）；
 // 再次打出免费解除并回牌库（压力随离手释放）。
 registerSkill({
   id: 'focusChant', name: '凝神诀', type: 'normal', tier: 'C', series: 'focusChant',
   cost: { mana: 1, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant',
-  chantWeight: 3,
+  chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: () => [{

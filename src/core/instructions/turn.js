@@ -1,11 +1,12 @@
 import BattleInstruction, { WAIT } from '../kernel/BattleInstruction.js';
 import { resetTurnHistory, aliveAllies, aliveEnemies } from '../state/battleState.js';
-import { DrawCardsInstruction } from './cards.js';
+import { DrawCardsInstruction, DiscardOverflowInstruction } from './cards.js';
+import { effectiveHandCount, handLimitOf } from '../skills/helpers.js';
 import { SweepSkillCooldownInstruction } from './skill.js';
 import { AddEffectInstruction } from './effects.js';
 import { GainManaInstruction } from './resources.js';
 import { DealDamageInstruction } from './combat.js';
-import AIActInstruction from './aiAct.js';
+import AIActInstruction, { refreshIntentions } from './aiAct.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 
@@ -56,6 +57,7 @@ export class ChantTriggerInstruction extends BattleInstruction {
 // → P7 盟友行动 → P6/P8 回合结束结算（主角回合结束与"回合结束类触发"合并为一枚指令：
 //   现有机械内容——滞气递减、短暂回库、turn 窗口清扫——全部属于 P8；P6 在本实现里
 //   只是"玩家操作结束"的边界，由 P7 之前的位置天然表达）
+// → P9 清理段（超载尾弃：超出容量的手牌从尾部弃回牌库底，激活咏唱豁免）
 // 注意：盟友在玩家操作**之后**行动（旧实现的"盟友先行动"已废弃）。
 export class PlayerTurnInstruction extends BattleInstruction {
   constructor(opts = {}) {
@@ -98,7 +100,15 @@ export class PlayerTurnInstruction extends BattleInstruction {
         if (ctx.battleState.turn.count > 1) {
           const d = ctx.battleState.debuffs;
           const penalty = ctx.battleState.turn.count <= (d?.drawPenaltyTurns ?? 0) ? 1 : 0;
-          const count = Math.max(0, ctx.battleState.config.drawPerTurn - penalty);
+          // 抽到**手牌容量**（加权口径，2026-09-13 两级手牌制）：留手 = 放弃等额新牌，
+          // 囤牌自动被课税。config.drawPerTurn 是"每回合抽牌数上限"调参旋钮——
+          // 99 ≈ 必抽满（新制），调小退化为"固定抽 N"旧制，A/B 试玩同一条代码路径
+          const room = handLimitOf(ctx) - effectiveHandCount(ctx.battleState);
+          // turnDrawBonus：遗物/效果给的「下回合抽牌 +N」（松鼠的囤积：尾手 ≤2 时记 1），
+          // 加在 room 上 = 可以顶过容量抽（占用超载空间、当回合有效），随取用清零
+          const bonus = ctx.battleState.turnDrawBonus ?? 0;
+          ctx.battleState.turnDrawBonus = 0;
+          const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room + bonus) - penalty);
           if (count > 0) {
             ctx.kernel.submitInstruction(
               new DrawCardsInstruction({ count, reason: 'turnStart' }), this);
@@ -143,6 +153,11 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.kernel.submitInstruction(new PlayerTurnEndInstruction(), this);
         return false;
       }
+      case 7:
+        // P9 清理段·超载尾弃：回合结束触发全部结算完之后，把超出容量的手牌从尾部
+        // 弃回牌库底（激活咏唱豁免）——「回合内抽上来的牌不过夜」
+        ctx.kernel.submitInstruction(new DiscardOverflowInstruction(), this);
+        return false;
       default:
         return true;
     }
@@ -167,16 +182,8 @@ export class EnemyTurnInstruction extends BattleInstruction {
         // 下回合意图预算：敌我 AI 单位同刷（盟友行动在玩家回合 P7，此处一并预告）。
         // 带晕眩层数的单位意图覆写为「晕眩」——预告 = 实际（其下回合行动必被
         // veto 跳过，显示脚本意图会误导），也是 'stun' 意图 kind 的通用来源。
-        for (const e of aliveEnemies(ctx.battleState)) {
-          e.intention = e.getEffectStacks('stun') > 0
-            ? { kinds: ['stun'], note: '晕眩：跳过行动' }
-            : intentionOf(getEnemyDefinition(e.defId), e, ctx.battleState);
-        }
-        for (const a of aliveAllies(ctx.battleState)) {
-          a.intention = a.getEffectStacks('stun') > 0
-            ? { kinds: ['stun'], note: '晕眩：跳过行动' }
-            : intentionOf(getAllyDefinition(a.defId), a, ctx.battleState);
-        }
+        // 刷新本体在 aiAct.js（出牌/AI 行动后也按同一口径刷，预告不陈旧）。
+        refreshIntentions(ctx);
         ctx.kernel.submitInstruction(new EnemyTurnEndInstruction(), this);
         return false;
       default:
@@ -195,9 +202,4 @@ export class TurnLoopInstruction extends BattleInstruction {
     }
     return false;
   }
-}
-
-// AI 单位意图：定义带 getIntention 用之，否则未知
-function intentionOf(def, unit, battleState) {
-  return def.getIntention ? def.getIntention(unit, battleState) : { kinds: ['unknown'] };
 }

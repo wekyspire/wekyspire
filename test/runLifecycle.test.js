@@ -70,16 +70,14 @@ describe('进入战斗防重入', () => {
 describe('房间瞬态清理', () => {
   beforeEach(clearAllSaves);
 
-  it('进入新奖励房时清空上一房的老虎机/事件结果', () => {
+  it('进入新奖励房时清空上一房的老虎机瞬态', () => {
     const ctrl = createRunController({ seed: 42 });
     ctrl.slot.lastSpin = { type: 'nothing' };       // 伪造上一房残留
-    ctrl.eventRoom.result = { eventId: 'moneyBag', money: 15 };
     enterBattle(ctrl.run);
     finishBattle(ctrl.run, 'victory', null);
     ctrl.claimReward(null); // 跳过技能 → 第 1 层为训练房
     expect(ctrl.run.gameStage).toBe('room');
     expect(ctrl.slot.lastSpin).toBeNull();
-    expect(ctrl.eventRoom.result).toBeNull();
   });
 
   // 2026-09-12：随机事件改成「对话 + 选项 + 逻辑」的幕间播片——不再有同步的"探索"面板动作。

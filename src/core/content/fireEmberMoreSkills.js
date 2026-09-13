@@ -102,7 +102,7 @@ burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, p
 burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, cooldown: 0 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
-// 鬼火 B（咏唱3）｜敌人死亡时，其燃烧传播给所有敌人。
+// 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
 // 口径：伤害指令只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
@@ -112,7 +112,7 @@ registerSkill({
   id: 'willOWisp', name: '鬼火', type: 'fire', tier: 'B', series: 'willOWisp',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: () => [{
@@ -147,7 +147,7 @@ function burnMirror({ id, name, tier, spread }) {
     id, name, type: 'fire', tier, series: 'mirrorBurn',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 3,
+    cardMode: 'chant', chantWeight: 2,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
@@ -244,13 +244,13 @@ scorchChantCard({ id: 'warmUp', name: '取暖', tier: 'C', stacks: 1, promotesTo
 scorchChantCard({ id: 'dazzleEye', name: '灼目', tier: 'B', stacks: 2, promotesTo: 'scorchBody' });
 scorchChantCard({ id: 'scorchBody', name: '灼身', tier: 'A', stacks: 3 });
 
-// 火焰披风 B｜3魏启，咏唱2：每回合 P5 若你正在燃烧，获得 9 护盾
+// 火焰披风 B｜3魏启，咏唱1：每回合 P5 若你正在燃烧，获得 9 护盾
 // （火灵脉防御位：燃烧从代价转为收入，与可燃血液/焰愈同轴）。只读不消耗燃烧。
 registerSkill({
   id: 'flameCloak', name: '火焰披风', type: 'fire', tier: 'B', series: 'fireChant',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 2,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{
@@ -267,7 +267,7 @@ registerSkill({
   battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
 });
 
-// 绝炎 A｜1AP，任何燃烧层数免疫消耗和下降。
+// 绝炎 A｜1AP，咏唱3（2026-09-13 权重分档：少量强卡 3-4 咏），任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
 // 的 AddEffect(burn) 负层数（自然递减 -1 / 驱散 -N）一律 PRE veto；
 // 跳伤结算不受影响：燃烧照常按层数跳固定伤害，只是不再衰减——
@@ -277,7 +277,7 @@ registerSkill({
   id: 'absoluteFlame', name: '绝炎', type: 'fire', tier: 'A', series: 'fireChant',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 5,
+  cardMode: 'chant', chantWeight: 3,
   use() { return true; },
   activated: {
     subscriptions: () => [{

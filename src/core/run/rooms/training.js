@@ -33,8 +33,10 @@ export function trainUpgrade(run, uniqueID, targetId = null) {
 }
 
 // 退化模式手动开局：roll 三选一候选待抉择（可领取也可跳过）
+// 候选 pending 时拒绝重 roll——升级强绑的候选会被偷换，退化候选则能刷到满意为止
 export function trainDrawChoices(run) {
   if (run.roomData?.trained) throw new Error('本房的训练已经完成了');
+  if (run.roomData?.drawChoices) throw new Error('抓牌候选已生成，先领取当前候选');
   run.roomData = { ...(run.roomData ?? {}), drawChoices: rollTrainingChoices(run) };
   return run.roomData.drawChoices;
 }
@@ -56,8 +58,12 @@ export function trainDraw(run, defId = null) {
 }
 
 // 阶段一「免费升一」的跳过（或退化房未开局直接离开）：同样记一次训练
+// 强绑抓牌 pending 时拒绝——升级必须换来一张新卡，跳过不能成为丢弃尾款的出口
 export function skipTraining(run) {
   if (run.roomData?.trained) throw new Error('本房的训练已经完成了');
+  if (run.roomData?.drawChoices && run.roomData?.forced) {
+    throw new Error('升级后的抓牌必须领取，不可跳过训练');
+  }
   run.roomData = { campUsed: run.roomData?.campUsed ?? false, trained: true };
   run.player.trainingCount += 1;
   return run;

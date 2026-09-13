@@ -87,8 +87,17 @@ function tagWeight(def, weights = {}) {
   return w;
 }
 
+// 交互设施（老虎机 / 银行机 / 售货机…：prop 定义带 `interactive` 标签，build 时挂 userData.interactive
+// 由 RoomStage 的 rig 驱动）：**只能由配方 guaranteed 定点摆放**，绝不进任何随机池。
+// 它们带着 container / lamp / metal / glass 这些通用标签，不挡就会在任意 PCG 房间里随机长出
+// （用户 2026-09-13 报：这三台机器只该在特定楼层出现）。楼层门禁在房间调度层（SHOP_FLOORS / slot 房），
+// 场景层的口径是"随机撒布永不放交互件"，两者互补。
+const isInteractiveFixture = (d) => (d.tags ?? []).includes('interactive');
+
 function poolByPlace(place, weights) {
-  return [...propRegistry.values()].filter(d => d.place === place && tagWeight(d, weights) > 0);
+  return [...propRegistry.values()].filter(
+    d => d.place === place && !isInteractiveFixture(d) && tagWeight(d, weights) > 0,
+  );
 }
 
 function pickWeighted(rng, pool, weights, { sizeBias = 0, wideBias = 0 } = {}) {
@@ -583,8 +592,12 @@ export function composeRoom(recipeId, seed = 'dev') {
     });
     claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
     if (live) {
+      // 交互 kind 三级口径：①道具自报（userData.interactive——专用机器件，件本身即机器）；
+      // ②**配方指派**（g.kind——通用装饰件被配方拎出来当交互物用，如篝火=营地、训练桩=训练；
+      //   装饰件不能全局自报 interactive，否则会被静态合批跳过、在别的房间里凭空消失）；
+      // ③兜底 = 道具 id。
       interactives.set(g.name ?? g.id, {
-        object: obj, def, kind: obj.userData.interactive ?? g.id,
+        object: obj, def, kind: obj.userData.interactive ?? g.kind ?? g.id,
         x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
       });
     }
@@ -599,7 +612,7 @@ export function composeRoom(recipeId, seed = 'dev') {
   const clusterRng = createRng(`${seed}:${recipeId}:cluster`);
   const clusterWeights = { container: 2.2, furniture: 1.4, generic: 1.2, ...recipe.scatter.tags };
   const clusterPool = [...propRegistry.values()].filter(d => {
-    if (d.place !== 'prop' || !d.footprint) return false;
+    if (d.place !== 'prop' || !d.footprint || isInteractiveFixture(d)) return false;
     const m = Math.max(d.footprint.x, d.footprint.z);
     return m >= 2.5 && m <= 8.5;
   });

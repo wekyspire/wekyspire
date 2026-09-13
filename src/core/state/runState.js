@@ -24,6 +24,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     rewards: null,               // 战后奖励 { money, skillChoices, chosenSkill }（reward 阶段，rewards.js 填充/清空）
     currentRoom: null,           // 当前奖励房类型（'training'|'slot'|'camp'|'event'）
     roomData: null,              // 当前奖励房临时数据（如训练抓牌候选；离房时清空）
+    eventFlags: {},              // 剧情旗标（事件内容用 setFlag 写；故事模式的分支记忆，随存档留存）
     pendingCardRemoval: 0,       // 待使用的删卡机会（Boss 奖励，§2.1）
     relicUses: {},               // 主动遗物剩余次数 { relicId: uses }（§4.5）
     shop: null,                  // 售货机当层货架 { floor, discount, items[] }（SHOP.md §一；非商店层为 null）
@@ -37,7 +38,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     // 银行机（SLOT_MACHINE.md §银行机）：跨遇到常驻（存款/连击/黑名单）；见 rooms/bank.js
     bank: null,                  // { deposit, combo, visits, lockout, blackCleared, pendingRoll, offers }
     pendingDebuffs: [],          // 跨战斗恶魔词条队列 [{ id, battlesLeft }]（PreBattle 折入、战后递减）
-    shopPending: null,           // 买到即开的卡包待选 { packId, choices }（选完才回房）
+    shopPending: null,           // 买到即开的待选 { kind:'pack', packId, choices } | { kind:'relic', rarity, choices }（选完才回房）
     shopAppleBought: false,      // 售货机的苹果全流程仅一件（故事模式）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）
     cardOffering: null,          // 种子包待选（首次点亮灵脉：九选三，§5.3 追加）

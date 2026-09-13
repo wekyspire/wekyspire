@@ -5,6 +5,7 @@ import {
   makeSkillCtx, deactivateChant, freeChantToggle, chantActivationLegal,
 } from '../skills/helpers.js';
 import { ConsumeManaInstruction, ConsumeActionPointsInstruction } from './resources.js';
+import { refreshIntentions } from './aiAct.js';
 
 // 使用技能：四阶段。
 //   stage 0: 播报 + 提交 ConsumeSkillResourcesInstruction（费用/充能）——此刻卡仍在手，
@@ -74,7 +75,10 @@ export class UseSkillInstruction extends BattleInstruction {
         return false;
       }
       default: {
-        if (zoneOf(ctx.battleState, this.skill.uniqueID) !== 'pending') return true; // 已被效果逻辑自行安置
+        if (zoneOf(ctx.battleState, this.skill.uniqueID) !== 'pending') {
+          refreshIntentions(ctx);   // 场面可能已变（效果逻辑自行安置=结算已跑完）
+          return true; // 已被效果逻辑自行安置
+        }
 
         const def = sctx.def;
         if (def.cardMode === 'chant' && !this._chantOff) {
@@ -88,7 +92,12 @@ export class UseSkillInstruction extends BattleInstruction {
             for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
               ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
             }
-            ctx.presenter?.chantToggled?.({ skill: this.skill, on: true, reason: 'played' });
+            // 激发演出描述符随节拍过线：有激发能力（activated 块）的卡点亮时播卡体演出——
+            // 具体动画由卡自己决定（activated.anim），缺省放缩脉冲（数值缺省由表现层补全）
+            ctx.presenter?.chantToggled?.({
+              skill: this.skill, on: true, reason: 'played',
+              anim: def.activated ? (def.activated.anim ?? { kind: 'pulse' }) : null,
+            });
           }
         } else if (def.keywords?.includes('exhaust')) {
           // 消耗卡（含咏唱解除）：→ 焚毁区
@@ -99,6 +108,9 @@ export class UseSkillInstruction extends BattleInstruction {
           moveCard(ctx.battleState, this.skill.uniqueID, 'deck');
           ctx.presenter?.cardMoved?.({ card: this.skill, toZone: 'deck' });
         }
+        // 出牌结算落地后刷新全体 AI 意图（读场面状态的意图，如哨兵受创龟缩，
+        // 只在回合边界刷会让玩家看着上一拍的预告出牌——第 7 轮 B 报告的信息缺失）
+        refreshIntentions(ctx);
         return true;
       }
     }

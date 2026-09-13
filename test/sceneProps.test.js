@@ -61,8 +61,8 @@ describe('kit 调色板', () => {
 });
 
 describe('kit 材质族', () => {
-  it('五族 + unlit 单例：flatShading、顶点色、带 kitFamily 标记', () => {
-    expect(FAMILIES).toEqual(['stone', 'wood', 'metal', 'glass', 'cloth', 'unlit']);
+  it('六族 + unlit 单例：flatShading、顶点色、带 kitFamily 标记', () => {
+    expect(FAMILIES).toEqual(['stone', 'wood', 'metal', 'glass', 'frost', 'cloth', 'unlit']);
     for (const f of FAMILIES) {
       const m = M[f];
       expect(m.userData.kitFamily).toBe(f);
@@ -71,6 +71,10 @@ describe('kit 材质族', () => {
     }
     expect(M.cloth.side).toBe(THREE.DoubleSide);
     expect(M.unlit.fog).toBe(false);
+    // frost = 大面积近景透明面：不反高光（粗糙度拉满、无金属感），透明口径同 glass
+    expect(M.frost.roughness).toBeGreaterThan(M.glass.roughness);
+    expect(M.frost.transparent).toBe(true);
+    expect(M.frost.opacity).toBe(M.glass.opacity);
     expect(() => materialOf('plasma')).toThrow(/未知材质族/);
   });
 

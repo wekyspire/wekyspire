@@ -261,10 +261,27 @@ export class PanelObject extends THREE.Group {
       return true;
     }
     if (hit?.kind === 'card' && this._cardActions.has(hit.id)) {
-      this._onIntent?.(this._cardActions.get(hit.id));
+      // 第二参携带 pickId：得卡演出（cardGrantFlight）要按它找到并摘下被点的那张卡
+      this._onIntent?.(this._cardActions.get(hit.id), { pickId: hit.id });
       return true;
     }
     return false;
+  }
+
+  /**
+   * 摘下一枚卡面（得卡演出用）：从簿记/拾取/场景摘除但**不释放**，返回 { object, id } | null。
+   * 调用方负责后续处置（挂到别处播放或显式 dispose）——面板随后的 _clearRows/dispose
+   * 不再认得它（二次释放防护靠摘表）。
+   */
+  takeCard(pickId) {
+    const i = this._cards.findIndex(c => c.id === pickId);
+    if (i < 0) return null;
+    const [entry] = this._cards.splice(i, 1);
+    this._cardActions.delete(pickId);
+    this._picker?.removePickable(pickId);
+    if (entry.badge) { entry.object.remove(entry.badge); entry.badge.dispose(); entry.badge = null; }
+    this.remove(entry.object);
+    return entry;
   }
 
   /** 命中是否落在本面板内（模态形态的"点背景关闭"判定用）。 */

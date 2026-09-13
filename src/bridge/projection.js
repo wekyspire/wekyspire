@@ -1,7 +1,7 @@
 import { swapCostOf } from '../core/state/battleState.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
-import { makeSkillCtx, canUseSkill, chantActivationLegal } from '../core/skills/helpers.js';
+import { makeSkillCtx, canUseSkill, chantActivationLegal, pickOverflowVictims, handLimitOf } from '../core/skills/helpers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
 
 // 状态投影：battleState → 前端只读视图（纯数据、可序列化）。
@@ -123,6 +123,10 @@ export function projectBattle(battle) {
     // Stage 据此将其映射为 held 展示态（停展示位等离场节拍，防对账绊线误杀）；
     // 咏唱卡结算后回手（发动/关停都留在手牌，激活态 = isActivated）
     pending: battleState.zones.pending.map(rt => rt.uniqueID),
+    // P9 超载尾弃预告：此刻点结束回合会被弃掉的手牌（uniqueID 列表，尾部在前）。
+    // BattleStage 在回合结束按钮 hover 时给这些卡打「将弃」标记——算法与核心清理
+    // 共用 pickOverflowVictims（helpers.js），两处不得各自实现
+    overflowVictims: pickOverflowVictims(battleState.zones.hand, handLimitOf(ctx), battleState),
     // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts
     counts: {
       deck: battleState.zones.deck.length,

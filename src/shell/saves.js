@@ -40,6 +40,7 @@ export function snapshotRun(run) {
     gameStage: run.gameStage,
     result: run.result,
     pendingCardRemoval: run.pendingCardRemoval,
+    eventFlags: { ...(run.eventFlags ?? {}) }, // 剧情旗标（事件分支记忆；故事模式必需）
     relicUses: { ...run.relicUses },
     shop: run.shop ? { ...run.shop, items: run.shop.items.map(it => ({ ...it })) } : null,
     shopPending: run.shopPending ? { ...run.shopPending, choices: [...run.shopPending.choices] } : null,

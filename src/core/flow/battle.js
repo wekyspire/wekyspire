@@ -3,7 +3,7 @@ import { createBattleState, aliveEnemies, swapCostOf } from '../state/battleStat
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { SwapCardInstruction } from '../instructions/cards.js';
+import { DumpCardsInstruction } from '../instructions/cards.js';
 import { PlayerTurnInstruction, TurnLoopInstruction } from '../instructions/turn.js';
 import {
   BattleRootInstruction, PreBattleInstruction, PostBattleInstruction,
@@ -19,7 +19,9 @@ export function createBattle({
   runState, enemies = [], allies = [], seed = 1, presenter = null, config = {},
 }) {
   const battleState = createBattleState({ enemies, allies, seed });
-  battleState.config = { initialDraw: 4, drawPerTurn: 2, swapBaseCost: 0, maxEnemies: 4, ...config };
+  // drawPerTurn = 每回合抽牌数**上限**（2026-09-13 两级手牌制：回合开始抽到容量为止，
+  // 但不超过此值——99 ≈ 必抽满新制，调小退化为"固定抽 N"旧制，A/B 试玩同路径）
+  battleState.config = { initialDraw: 4, drawPerTurn: 99, swapBaseCost: 0, maxEnemies: 4, ...config };
   battleState.result = null;
 
   const kernel = new BattleKernel({
@@ -95,21 +97,23 @@ export function playerEndTurn(battle) {
   return true;
 }
 
-// 玩家换牌：弃 1 抽 1，费用 = swapCostOf（首个 0，逐次 +1，能力可封顶）。
-// 费用走资源指令子节点（PRE 可修饰）；可用性按当前费用检查。
-export function canSwapCard(battle, uniqueID) {
+// 玩家弃牌（2026-09-13 改制，原「换牌·弃1抽1」废除）：支付一次阶梯费用
+// （swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中**任意张**卡（回牌库底，无抽牌
+// ——补给由下一回合「抽到容量」提供）。费用走资源指令子节点（PRE 可修饰）。
+export function canDumpCards(battle, uniqueIDs) {
   const { ctx } = battle;
   const turn = currentPlayerTurn(battle);
   if (!turn || !turn._waiting || turn.endRequested) return false;
-  const skill = ctx.battleState.zones.hand.find(s => s.uniqueID === uniqueID);
-  if (!skill) return false;
+  if (!uniqueIDs?.length) return false;
+  const hand = ctx.battleState.zones.hand;
+  if (!uniqueIDs.every(id => hand.some(s => s.uniqueID === id))) return false;
   return ctx.player.actionPoints >= swapCostOf(ctx.battleState);
 }
 
-export function playerSwapCard(battle, uniqueID) {
-  if (!canSwapCard(battle, uniqueID)) return false;
+export function playerDumpCards(battle, uniqueIDs) {
+  if (!canDumpCards(battle, uniqueIDs)) return false;
   const turn = currentPlayerTurn(battle);
-  battle.kernel.submitInstruction(new SwapCardInstruction({ uniqueID }), turn);
+  battle.kernel.submitInstruction(new DumpCardsInstruction({ uniqueIDs: [...uniqueIDs] }), turn);
   battle.kernel.resume(turn, battle.ctx);
   return true;
 }

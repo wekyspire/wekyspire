@@ -3,7 +3,7 @@
 // 正式 Shell（Vue 薄壳）开工前，本页是 BattleStage 的验收工具。
 
 import '../core/content/index.js';
-import Player from '../core/state/player.js';
+import Player, { PLAYER_BASE_AP } from '../core/state/player.js';
 import { createRunState } from '../core/state/runState.js';
 import { createSkillRuntime } from '../core/state/skillRuntime.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
@@ -15,7 +15,7 @@ import { BattleStage } from '../stage/stages/BattleStage.js';
 
 // ---- Bridge：一场测试战斗（多敌人 + 瑞米 + 体修牌组展示） ----
 const runState = createRunState({
-  player: new Player({ maxHp: 40, maxMana: 3, maxActionPoints: 3 }),
+  player: new Player({ maxHp: 40, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
 });
 runState.player.deck = [
   'punch', 'punch', 'punch', 'punch', 'duckHead', 'duckHead', 'guard', 'guard',

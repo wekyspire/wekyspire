@@ -530,7 +530,8 @@ const CAMP = {
   // 构图定点：**两个交互物** + 各自的功能陈设。整组压到背墙前（z≈-45），前景留空给面板。
   guaranteed: [
     // —— 左：营地部分（篝火）——
-    { id: 'brazierFire', x: -14, z: -45, ry: 0.08, scale: 2.3, live: true, name: 'camp' },
+    // kind = 配方指派交互身份（通用装饰件不当全局机器：篝火在这间房里 = 营地机器）
+    { id: 'brazierFire', x: -14, z: -45, ry: 0.08, scale: 2.3, live: true, name: 'camp', kind: 'camp' },
     { id: 'cauldronWitch', x: -17.6, z: -43.6, ry: 0.4, scale: 1.35 },  // 火边大锅（营地伙食）
     { id: 'kettleTripod', x: -11.4, z: -46.6, ry: -0.4, scale: 1.4 },   // 吊锅（也是火光）
     { id: 'logPile', x: -18.8, z: -47.4, ry: -0.3, scale: 1.5 },        // 柴堆
@@ -544,7 +545,7 @@ const CAMP = {
     { id: 'stoolSquare', x: -17.2, z: -40.2, ry: 0.2, scale: 1.2 },
     { id: 'crateStack', x: -6.6, z: -48.4, ry: 0.3, scale: 1.35 },      // 营地货箱
     // —— 右：训练部分（训练桩）——
-    { id: 'trainingDummy', x: 14, z: -45, ry: -0.1, scale: 2.6, live: true, name: 'training' },
+    { id: 'trainingDummy', x: 14, z: -45, ry: -0.1, scale: 2.6, live: true, name: 'training', kind: 'training' },
     { id: 'anvilIron', x: 8.8, z: -43.2, ry: 0.6, scale: 1.6 },         // 铁砧
     { id: 'weaponRack', x: 19.6, z: -44.8, ry: -0.4, scale: 1.7 },      // 武器架
     { id: 'arrowTarget', x: 23.2, z: -47.8, ry: -0.5, scale: 1.5 },     // 箭靶

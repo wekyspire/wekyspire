@@ -68,7 +68,7 @@ function buildRun() {
     r.storyMode = opt('story', '0') === '1';
     r.player.money = Number(opt('money', '20'));
     ensureShopStock(r);
-    roomUi = { slot: { anim: null, lastSpin: null }, eventResult: null };
+    roomUi = { slot: { anim: null, lastSpin: null } };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
     // 进阶事件：进 ascension 阶段；?offering=1 直接走到种子包（火灵脉首次 0→1）
@@ -151,7 +151,7 @@ mapStage.setPanelIntentHandler((intent) => {
       else if (a === 'slotDevourRelic') devourSlot(run, { kind: 'relic', relicId: intent.relicId });
       else if (a === 'slotDevourCard') devourSlot(run, { kind: 'card', uniqueID: intent.uniqueID });
       else if (a === 'leaveSlot') completeRoom(run);
-      else if (a === 'triggerEvent') roomUi.eventResult = playEvent(run);
+      else if (a === 'triggerEvent') playEvent(run);
       else if (a === 'buyShopItem') buyShopItem(run, intent.index);
       else if (a === 'takeShopCard') takeShopCard(run, intent.defId);
       else if (a === 'leaveEvent') completeRoom(run);
@@ -180,19 +180,18 @@ if (opt('picker', '0') === '1' && (run.currentRoom === 'camp' || run.currentRoom
   mapStage._onPanelAction({ action: 'openUpgradePicker', source: run.currentRoom, local: true });
 }
 // ?relicPicker=1 直接打开全屏选遗物界面（正常要进老虎机「粉碎」才见得到）
+// 走舞台公开入口（openDevourPicker 的 relic 分支）——选遗物界面只有这一个真实来源，
+// 造物走同一条路才能验收真实排版（标题/提示也一并照实）。
 if (opt('relicPicker', '0') === '1') {
   const ids = run.player.equippedRelics.concat(
     ['hardBaguette', 'northMountainRock', 'dragonScale', 'mountainSpringPot'],
   ).filter((id, i, a) => a.indexOf(id) === i && getRelicDefinition(id));
-  mapStage._ensureRelicPicker().attachPicker(mapStage._picker);
-  mapStage._relicPicker.open({
-    title: '粉碎哪件遗物？',
-    hint: '陈列页：只为验收候选卡排版（遗物立绘 + 名字 + 描述）',
+  mapStage.openDevourPicker({
+    kind: 'relic',
     relics: ids.map((id) => {
       const def = getRelicDefinition(id);
       return { id, name: def.name ?? id, rarity: def.rarity ?? 'C', desc: def.description ?? '' };
     }),
-    confirmLabel: '确认粉碎',
   });
 }
 

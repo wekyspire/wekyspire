@@ -51,7 +51,9 @@ function startAssetPreload() {
   assetProgress.value = { loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 };
   preloadAllArt({
     onProgress: (loaded, total) => { assetProgress.value = { ...assetProgress.value, loaded, total }; },
-    onStats: (s) => { assetProgress.value = { ...s }; },
+    // stats 的计数字段叫 done——必须映射回 loaded，否则整条替换会把 loaded 抹成 undefined
+    //（进度条 NaN%、计数文本空白，用户 2026-09-13 报的"进度条 broken"）
+    onStats: (s) => { assetProgress.value = { ...s, loaded: s.done }; },
   }).then((r) => {
     if (r.failed > 0) { assetFailed.value = r.failed; return; }   // 卡住：只给重试
     assetsReady.value = true;

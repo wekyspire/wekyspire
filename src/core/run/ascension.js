@@ -2,10 +2,11 @@ import { advanceFloor } from './runFlow.js';
 import { allSkills } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { packOf } from './rewards.js';
-import { gainMaxMana } from './prep.js';
+import { gainMaxMana, gainMaxHp } from './prep.js';
 
 // 进阶事件（RUN_DESIGN §5.3）：离开训练房时训练次数达标 → 直接进入（无延后、无随机性）。
-// 内容：选一条主维度升级 + 恢复全部状态 + 魏启上限提升 +（达标时）能力授予。
+// 内容：选一条主维度升级 + 定量恢复（healAmount 10，2026-09 定案——全恢复使「跳过/点火」
+// 无脑化，回满血留给 Boss 通关）+ 魏启上限提升 +（达标时）能力授予。
 // 2026-09 追加：维度**首次 0→1** 时获赠体系基石卡与体系能力（FIRST_ASCENSION_GRANT），
 // 再给「种子包」——九选三（可刷新一次），让新体系一次拿到可用的卡组骨架，
 // 而不是靠后续单张奖励慢慢凑。
@@ -155,7 +156,9 @@ export function chooseSeedCards(run, defIds) {
 
 // 结算进阶事件。dimension = 灵脉维度 id，或 null = 「跳过」（体修隐藏等级 +1）。
 // 跳过不触发种子包（体修是初始体系，开局已有小 build），但同样消耗一次进阶机会、
-// 享受全恢复与魏启上限提升——这是故事模式暗线（体修大成）的成长通道。
+// 享受定量恢复与魏启上限提升——这是故事模式暗线（体修大成）的成长通道。
+// 第 7 轮裁决：跳过再 +3 生命上限——E 报告实测「跳过的账不值」（收益延迟到第 10 层、
+// 与灵脉首进阶即得 3 卡+能力差距过大），给跳过一根即时的、不依赖卡池的补偿杠杆。
 export function chooseAscension(run, dimension = null) {
   if (run.gameStage !== 'ascension') {
     throw new Error(`run 阶段不符：期望 'ascension'，实际 '${run.gameStage}'`);
@@ -178,6 +181,11 @@ export function chooseAscension(run, dimension = null) {
 
   if (dimension === null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）
+    gainMaxHp(run, 3); // 跳过补偿：+3 生命上限（走 gainMaxHp 抬 baseStats，PreBattle 重算不抹）
+    // 跳过反哺（用户定 2026-09-13）：再赠一次**可选**删卡机会——与 Boss 奖励同一计数器，
+    // 不删也行：机会在 prep/奖励面板的「使用删卡机会」按钮长期保留，进阶幕间收尾时也会
+    // 就地弹一次全屏删卡界面（title「删一张卡」，可跳过）。
+    run.pendingCardRemoval = (run.pendingCardRemoval ?? 0) + 1;
     return proceedAfterLevelUp(run);
   }
 

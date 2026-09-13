@@ -102,6 +102,7 @@ export class ScrollPickerObject extends THREE.Group {
     this._multi = multi;
     this._picks = Math.max(1, picks);
     this._itemH = itemH;
+    this.confirmHook = null;   // 得卡演出钩子（一次一设；见 onClick 的 CONFIRM 分支）
     this.visible = true;
 
     this._addNode(new THREE.Mesh(
@@ -194,6 +195,19 @@ export class ScrollPickerObject extends THREE.Group {
     for (const [id, btn] of this._buttons) picker.addPickable(id, btn, { kind: 'button', space: 'ui' });
   }
 
+  /**
+   * 摘下一枚候选（得卡演出用）：从簿记/拾取/场景摘除但**不释放**，返回 entry | null。
+   * 调用方负责后续处置——随后的 close()/dispose 不再认得它（二次释放防护靠摘表）。
+   */
+  takeEntry(key) {
+    const i = this._entries.findIndex(e => e.key === key);
+    if (i < 0) return null;
+    const [entry] = this._entries.splice(i, 1);
+    this._picker?.removePickable(entry.id);
+    this.remove(entry.obj);
+    return entry;
+  }
+
   /** 滚动（滚轮/拖拽都走这里）；返回是否真的移动了。 */
   scrollBy(dy) {
     if (!this._opened || this._maxScroll <= 0) return false;
@@ -220,6 +234,14 @@ export class ScrollPickerObject extends THREE.Group {
     if (hit.id === CONFIRM_ID) {
       if (this._selected.size === 0) return false;
       const keys = this.selectedKeys;
+      // 得卡演出钩子（商店卡包）：钩子接管关闭与确认时机（先播「飞入牌库」再上行）。
+      // 一次性：取出即清，防重入（open() 也会重置）
+      if (this.confirmHook) {
+        const hook = this.confirmHook;
+        this.confirmHook = null;
+        hook(keys);
+        return true;
+      }
       this.close();
       this._onConfirm?.(keys);
       return true;

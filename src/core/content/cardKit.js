@@ -184,16 +184,26 @@ export function hitLanded(sctx) {
 // ---- 结算期选牌 ----
 
 /**
- * 通用「从指定卡牌集里选 min~max 张」请求（2026-09-11）。
+ * 通用「从指定卡牌集里选 min~max 张」请求（2026-09-11）——**结算期选牌请求形状的唯一事实源**
+ * （用户定 2026-09-13：所有多选卡牌操作统一走这一条，不再各自手搓请求对象）。
+ *
  * `source` 只描述卡牌集来自哪个区：'hand' 的候选在战斗场景里**已有唯一 CardObject**，
  * 前端界面应当**接管/移动**这些实例（不渲染副本）；'deck'/'burnt' 等区的候选在场景里
  * 没有对象，界面按投影新建即可（与牌库查看器同口径）。
- * 候选为空时**不提交**（空集无合法应答，会把界面挂死）——调用方据此跳过。
+ *
+ * 呈现口径（`picker`，前端据此选交互）：
+ *   · **多选（max > 1）永远走覆盖层**（'overlay'）：卡阵 + 逐张点选 + 确认按钮。
+ *     历史教训：手牌多选曾走"在手牌上逐张累加"的私有通道，而该通道只认旧字段 `count`——
+ *     新请求只发 min/max 时它读到 undefined，点牌被判成单选、校验不过 → 界面死锁
+ *     （用户 2026-09-13 报的「二重花刀打出后卡死」）。多选从此只有一条路。
+ *   · 单选（max = 1）：手牌来源**原地点牌即应答**；非手牌来源仍走覆盖层（场景里无可点对象）。
+ *
+ * 候选为空时**返回 null 不提交**（空集无合法应答，会把界面挂死）——调用方据此跳过。
+ * 形状：`{ kind:'selectCards', source, min, max, reason, picker?, candidates:[uniqueID] }`
+ * （**不再有 `count` 字段**：min/max 是规范，count 是已废弃的旧口径。）
  */
-export function requestCardSelection(sctx, {
+export function buildCardSelectionRequest(sctx, {
   source = 'hand', min = 1, max = null, filter = null, reason = null, zone = null,
-  // 覆盖层开关：'hand' 来源默认走既有「点手牌」交互；'deck' 等区场景里没有可点对象，
-  // 默认必须开覆盖层（否则无从选取）。手牌来源也可显式 overlay:true 走覆盖层。
   overlay = null,
 } = {}) {
   const zoneName = zone ?? (source === 'deck' ? 'deck' : 'hand');
@@ -201,13 +211,18 @@ export function requestCardSelection(sctx, {
   if (pool.length === 0) return null;                       // 空集守卫：不发起请求
   const lo = Math.max(0, Math.min(min, pool.length));
   const hi = Math.max(lo, Math.min(max ?? Math.max(min, pool.length), pool.length));
-  const instr = new AwaitPlayerInputInstruction({
-    request: {
-      kind: 'selectCards', source, min: lo, max: hi, reason,
-      picker: (overlay ?? (source !== 'hand')) ? 'overlay' : undefined,
-      candidates: pool.map(c => c.uniqueID),
-    },
-  });
+  const useOverlay = hi > 1 || (overlay ?? source !== 'hand');
+  return {
+    kind: 'selectCards', source, min: lo, max: hi, reason,
+    picker: useOverlay ? 'overlay' : undefined,
+    candidates: pool.map(c => c.uniqueID),
+  };
+}
+
+export function requestCardSelection(sctx, opts = {}) {
+  const request = buildCardSelectionRequest(sctx, opts);
+  if (!request) return null;
+  const instr = new AwaitPlayerInputInstruction({ request });
   sctx.kernel.submitInstruction(instr);
   return instr;
 }

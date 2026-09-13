@@ -1,4 +1,4 @@
-import Player, { PLAYER_BASE_HP } from '../state/player.js';
+import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../state/player.js';
 import { createRunState } from '../state/runState.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { createRecordingPresenter } from '../presenter.js';
@@ -6,7 +6,7 @@ import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { canUseSkill } from '../skills/helpers.js';
 import {
-  createBattle, startBattle, playerUseSkill, playerEndTurn, playerSwapCard,
+  createBattle, startBattle, playerUseSkill, playerEndTurn, playerDumpCards,
   isBattleFinished, isWaitingPlayerInput, currentPlayerTurn,
   getPendingInput, respondInput,
 } from '../flow/battle.js';
@@ -30,7 +30,7 @@ export class BattleDriver {
   } = {}) {
     this.presenter = createRecordingPresenter();
     const runState = createRunState({
-      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: 3, ...player }),
+      player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP, ...player }),
     });
     runState.player.deck = deck.map(d => {
       if (typeof d === 'string') return createSkillRuntime(d);
@@ -83,13 +83,16 @@ export class BattleDriver {
     return this;
   }
 
-  // 换牌：defId（第一张）或 uniqueID
-  swap(defIdOrUniqueID) {
+  // 弃牌（2026-09-13 改制：付一次阶梯费弃任意张）：[defId|uniqueID…] 数组或单个
+  dump(list) {
     const hand = this.state.zones.hand;
-    const skill = hand.find(s => s.uniqueID === defIdOrUniqueID)
-      ?? hand.find(s => s.defId === defIdOrUniqueID);
-    if (!skill || !playerSwapCard(this.battle, skill.uniqueID)) {
-      throw new Error(`无法换牌 '${defIdOrUniqueID}'（不在手牌/费用不足/不在等待输入）`);
+    const ids = (Array.isArray(list) ? list : [list]).map(x => {
+      const skill = hand.find(s => s.uniqueID === x) ?? hand.find(s => s.defId === x);
+      if (!skill) throw new Error(`无法弃牌 '${x}'（不在手牌）`);
+      return skill.uniqueID;
+    });
+    if (!playerDumpCards(this.battle, ids)) {
+      throw new Error('无法弃牌（费用不足/不在等待输入）');
     }
     return this;
   }

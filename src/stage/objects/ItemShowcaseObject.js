@@ -124,6 +124,34 @@ function bakePlaceholderArt(key) {
   return tex;
 }
 
+/**
+ * 托底暗晕贴图（程序化烘焙：中心暗、向边缘柔和化开到全透明）。
+ *
+ * 为什么需要它（用户 2026-09-13 报「获得演出里图像 alpha=0 的区域仍然把 godlight 盖住了，
+ * 很诡异」）：托底板原先是一块 **0.85 不透明度的深色方板**，尺寸比物品图还大一圈，且画在
+ * 加色 godlight **之前**（z 更大）——物品图四周的透明区域于是露出的不是光束，而是一块硬边
+ * 深色方块，正正好把放射光挡掉。改成**径向柔和暗晕**后：边缘全透明（光束照常透出），只有
+ * 物品正后方留一块渐隐的暗底（保住"浅色物品压在亮光上"时的可读性）。
+ */
+function bakeSoftVignette(size = 256) {
+  if (typeof document === 'undefined') return null;   // node/headless：调用方退回纯色板
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+  ctx.translate(c, c);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, c);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.7)');
+  g.addColorStop(0.62, 'rgba(255,255,255,0.28)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, c, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export class ItemShowcaseObject extends THREE.Group {
   /**
    * @param {object} options
@@ -176,12 +204,18 @@ export class ItemShowcaseObject extends THREE.Group {
     this._rays = rays;
     this.add(rays);
 
-    // ③ 物品图（含托底描边框：素材是透明底时也要有"嵌在光里"的边界）
+    // ③ 物品图（含托底暗晕：素材是透明底时也要有"嵌在光里"的边界）
+    // 托底 = **径向柔和暗晕**（不是硬边方板）：边缘全透明让 godlight 透出来，只在物品正后方
+    // 渐隐地压一层暗底（用户 2026-09-13 报「alpha=0 区域把 godlight 盖住」的正是这块方板）。
+    this._vignetteTex = bakeSoftVignette();
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(ART.size + 1.6, ART.size + 1.6),
       // depthWrite: false —— 物品图与托底**共面**时必须让它输给图（否则 depthTest LESS 会把图剔掉，
       // 症状就是"光有了、字有了，物品图不见了"）
-      new THREE.MeshBasicMaterial({ color: 0x0b1220, transparent: true, opacity: 0, depthWrite: false }),
+      new THREE.MeshBasicMaterial({
+        color: 0x0b1220, map: this._vignetteTex ?? null,
+        transparent: true, opacity: 0, depthWrite: false,
+      }),
     );
     const art = new THREE.Mesh(
       new THREE.PlaneGeometry(ART.size, ART.size),
@@ -322,7 +356,8 @@ export class ItemShowcaseObject extends THREE.Group {
 
   _setOpacity(k) {
     this._back.material.opacity = 0.78 * k;
-    this._plate.material.opacity = 0.85 * k;
+    // 托底暗晕：峰值压到 0.72（原硬方板是 0.85）——配合径向贴图，物品四周的透明区完全透光
+    this._plate.material.opacity = (this._vignetteTex ? 0.72 : 0.5) * k;
     this._art.material.opacity = k;
     this._rays.material.opacity = 0.85 * k;
     for (const m of this._lines) m.material.opacity = k;
@@ -403,6 +438,7 @@ export class ItemShowcaseObject extends THREE.Group {
     for (const t of (this._placeholders?.values() ?? [])) t?.dispose?.();
     this._placeholders?.clear();
     this._raysTex?.dispose?.();
+    this._vignetteTex?.dispose?.();   // 自烘的托底暗晕（同样不进共享缓存）
     // ⚠ 不 dispose this._art.material.map：物品/遗物图取自 sharedPropArtCache /
     // sharedRelicArtCache（进程级共享纹理），舞台拆掉时释放会把下次特写打成黑块。
     this.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });

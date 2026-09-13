@@ -37,7 +37,7 @@ import {
   attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   returnToDeckAtTurnEnd, leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
-  selected, isBladeCard,
+  buildCardSelectionRequest, selected, isBladeCard,
 } from './cardKit.js';
 
 // ==== 共享小工具 ===============================================================
@@ -67,17 +67,16 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
         ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: this.count }), this);
         return false;
       case 1: {
-        const hand = ctx.battleState.zones.hand;
-        if (hand.length === 0) {
+        // 选牌请求走 cardKit 的**唯一形状**（min/max + picker 规则）：多选自动进覆盖层卡阵，
+        // 不再手搓 { count } 旧口径（前端只认旧字段的那套交互已删，见 cardKit 注释）。
+        const request = buildCardSelectionRequest(ctx, {
+          source: 'hand', min: this.count, max: this.count, reason: this.reason,
+        });
+        if (!request) {
           this.result = { discarded: [] };   // 空手（牌库也抽空）：无事发生
           return true;
         }
-        this._ask = new AwaitPlayerInputInstruction({
-          request: {
-            kind: 'selectCards', source: 'hand', count: Math.min(this.count, hand.length),
-            reason: this.reason, candidates: hand.map(c => c.uniqueID),
-          },
-        });
+        this._ask = new AwaitPlayerInputInstruction({ request });
         ctx.kernel.submitInstruction(this._ask, this);
         return false;
       }
@@ -223,7 +222,8 @@ for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
 }
 
-// 碎铁（斩系列衍生牌，D，消耗）：3伤害。斩落下的铁屑——**仍是刀法牌**（用户 2026-09-12
+// 碎铁（斩系列衍生牌，D，消耗）：3伤害，**抽1**（2026-09-13 设计稿：斩落下的铁屑不再是
+// 纯亏损牌，而是"打出即回本"的循环料）。——**仍是刀法牌**（用户 2026-09-12
 // 定：它吃关于刀法牌的一切效果与增益，养刀术/锻刀术/练刀/砺刀系都在其上生效）。判据走
 // `series: 'blade'`（cardKit.isBladeCard），故 keywords 不带 'blade'（页脚不多一个词条）。
 // 只经 AddCard 入场，不入奖励池。
@@ -236,10 +236,11 @@ registerSkill({
   canSpawnAsReward: false,
   use(sctx) {
     attackDamage(sctx, 3);
+    drawCards(sctx, 1);
     return true;
   },
-  describe: () => '3伤害',
-  battleDescribe: (sctx) => resolvedDamageText(sctx, 3),
+  describe: () => '3伤害，抽1',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，抽1`,
 });
 
 // ==== 花刀系列（弃牌换护盾，2026-09 设计稿由伤害改防御）======================
@@ -337,8 +338,8 @@ const cycloneCard = (id, name, tier, damage, count, cd) => registerSkill({
   describe: () => `${damage}伤害，从牌库末抽${count}牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，从牌库末抽${count}牌`,
 });
-cycloneCard('cycloneSlash', '回旋斩', 'C', 7, 1, 1);
-cycloneCard('cycloneBurst', '回旋爆斩', 'B', 11, 3, 1);
+cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1);      // 2026-09-13 稿：7→10 伤害
+cycloneCard('cycloneBurst', '回旋爆斩', 'B', 10, 2, 1);    // 2026-09-13 稿：11/抽3 → 10/抽2
 cycloneCard('perfectCyclone', '完美回斩', 'A', 15, 2, 0);   // 机制跃迁：无冷却
 
 // ==== 飞刀系列（邻牌献祭）======================================================
@@ -369,8 +370,8 @@ const sideDaggerCard = (id, name, tier, damage) => registerSkill({
   describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
-sideDaggerCard('flyingDagger', '飞刀', 'D', 12);
-sideDaggerCard('heavyDagger', '强力飞刀', 'C', 20);
+sideDaggerCard('flyingDagger', '飞刀', 'D', 14);        // 2026-09-13 稿：12→14
+sideDaggerCard('heavyDagger', '强力飞刀', 'C', 22);      // 2026-09-13 稿：20→22
 sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 32);
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
@@ -568,19 +569,21 @@ registerSkill({
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术（C，0费）：咏唱3。咏唱触发（P5）时若手牌少于 2（物理张数——激活咏唱驻手
-// 是物理事实，实际含义即"手里只剩它自己"），斩进阶，此卡焚毁（焚毁先经离手熄灭，
-// 激活订阅随 owner 注销）。
+// 含刃术（C，0费）：咏唱1。咏唱触发（P5）时若手牌少于 4（物理张数），斩进阶，此卡
+// 焚毁（焚毁先经离手熄灭，激活订阅随 owner 注销）。
+// 条件 2026-09-13 改：原「手牌少于 2」（手里只剩它自己）是旧抽 2 体系的设计——抽到
+// 容量 7 的时代要求清空整只手，第 6 轮试玩实测永不触发。「少于 4」= 打空大半个手牌
+// 可达成，保留「与刀独处」的触发幻想。
 registerSkill({
   id: 'edgeBreath', name: '含刃术', type: 'normal', tier: 'C', series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      filter: (instr, ctx) => ctx.battleState.zones.hand.length < 2,
+      filter: (instr, ctx) => ctx.battleState.zones.hand.length < 4,
       react: (instr, ctx) => {
         advanceSlashChain(sctx, instr);
         ctx.kernel.submitInstruction(
@@ -588,8 +591,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '手牌少于2时斩进阶，此卡/named{焚毁}',
-  battleDescribe: (sctx) => '手牌少于2时斩进阶，此卡/named{焚毁}',
+  describe: () => '手牌少于4时斩进阶，此卡/named{焚毁}',
+  battleDescribe: (sctx) => '手牌少于4时斩进阶，此卡/named{焚毁}',
 });
 
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
@@ -704,10 +707,15 @@ registerSkill({
   battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
 });
 
-// 练刀（D/C/B，2026-09-12 设计稿改版）：抽1，**弃掉所有手中刀法牌**，并令它们
-// **本战斗中**伤害 +3（D/C）/ +5（B）。费用 1AP（B 级 0AP），冷却1。
+// 练刀（D/C/B，2026-09-13 设计稿定稿）：抽1，**将手中所有刀法牌洗回牌库底**，并令它们
+// **本战斗中**伤害 +3/+6（D/C）。费用 1AP（B 级 0AP），冷却1。
+// 每一阶**恰好一个跃迁点**（用户定 2026-09-13）：D→C = 威力 +3→+6；C→B = 费用 1AP→0AP
+// （威力保持 +6）。⚠ 此前 D 与 C 的参数完全相同（都是 +3/1AP），升级后卡面一丁点变化都没有
+// ——那是实现漏改，不是设计（用户 2026-09-13 报的"练刀升级后面板没变化"）。
 // 「本战斗中」= runtime.power（跨 zone 持续、战斗结束随 runtime 一起丢弃），
-// 弃牌走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
+// 洗回走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
+// 卡面写「洗回牌库底」而非「弃掉」：回库正是本卡的收益环（P0 实锤：读「弃掉」以为永久失去，
+// 把主力斩当废牌丢了两次，R8-A）。
 // 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽1后手中无刀时纯白板抽1收场。
 const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSkill({
   id, name: '练刀', type: 'normal', tier, series: 'blade',
@@ -728,12 +736,74 @@ const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSk
     }
     return true;
   },
-  describe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
-  battleDescribe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
+  // 卡面写「洗回牌库底」而非「弃掉」——回库正是本卡的收益环（P0 实锤：读「弃掉」
+  // 以为永久失去，把主力斩当废牌丢了两次，R8-A）。动词与本卡语义对齐，不依赖术语表。
+  describe: () => `抽1，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
+  battleDescribe: () => `抽1，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
 });
-practiceBladeCard('practiceBlade', 'D', 1, 3, 'practiceBladePlus');
-practiceBladeCard('practiceBladePlus', 'C', 1, 3, 'practiceBladeMaster');
-practiceBladeCard('practiceBladeMaster', 'B', 0, 5);
+practiceBladeCard('practiceBlade', 'D', 1, 3, 'practiceBladePlus');       // D：+3 / 1AP
+practiceBladeCard('practiceBladePlus', 'C', 1, 6, 'practiceBladeMaster');  // C：+6（威力跃迁）
+practiceBladeCard('practiceBladeMaster', 'B', 0, 6);                       // B：+6 / 0AP（费用跃迁）
+
+// ==== 纯净度构筑件（2026-09-13 批次 4：斩链的「局内纯净」answers）================
+// 斩链痛点：洗入的碎铁与非刀杂卡稀释牌库，斩越打越难抽。这两张是构筑侧的解：
+// 拭刃烧手换抽（本场焚毁 = 局内纯净），相刀定向捞刀。都是「处理牌」——series 'blade'
+// 故仍是刀法牌（吃养刀/锻刀/砺刀系作用域），keywords 不带 'blade'（页脚不多词条，
+// 与碎铁/出鞘同例）。0 费但全部冷却 1（数值意识铁律：彻底 0 开销卡默认冷却 1，
+// 用户定 2026-09-13）。
+
+// 拭刃（C，0费，冷却1）：焚毁手中所有非刀法牌，每焚毁 1 张抽 1。
+// 数值对标：练刀 D（1AP 抽1+洗回强化）——拭刃不强化不产数值，只换手+提纯，
+// 0 费是「烧掉手牌」这个代价换来的；一次性换整只手故定 C。
+// 发动卡自身已离手（pending），手牌扫描天然不含自身；斩链卡是刀法牌天然免疫
+// （「斩不可焚毁」双保险用不上）。焚毁逐张提交（各自的焚毁反应照常触发），
+// 抽牌统一押后——先烧出空间再抽，§7.3 手牌上限按烧完后的手牌计。
+registerSkill({
+  id: 'wipeBlade', name: '拭刃', type: 'normal', tier: 'C', series: 'blade',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'none',
+  use(sctx) {
+    const targets = sctx.battleState.zones.hand.filter(c => !isBladeCard(c));
+    for (const card of targets) burnCard(sctx, card.uniqueID);
+    if (targets.length) drawCards(sctx, targets.length);
+    return true;
+  },
+  describe: () => '/named{焚毁}手中所有非/named{刀法牌}，每焚毁1张抽1',
+  battleDescribe: (sctx) => {
+    const n = sctx.battleState.zones.hand.filter(c => !isBladeCard(c)).length;
+    return `/named{焚毁}手中所有非/named{刀法牌}（当前${n}张），每焚毁1张抽1`;
+  },
+});
+
+// 相刀（B，0费，冷却1）：翻牌库顶至多 5 张，其中首张刀法牌入手，其余落牌库底。
+// 数值对标：出鞘 B（0费消耗，斩进阶+抽斩）——相刀不进阶、检索面放宽到任意刀法牌、
+// 且可循环（冷却1而非消耗），故同样定 B。翻牌决策在发动时按牌库快照一次算定
+// （落底不改动未翻的牌），逐张提交 MoveCardInstruction 让前端看得见翻牌节拍；
+// 满手时入手自动改落牌库（§7.3，MoveCardInstruction 内建）。
+registerSkill({
+  id: 'seekBlade', name: '相刀', type: 'normal', tier: 'B', series: 'blade',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'none',
+  use(sctx) {
+    const peek = sctx.battleState.zones.deck.slice(0, 5);   // 牌库顶 = index 0
+    for (const card of peek) {
+      if (isBladeCard(card)) {
+        moveCardTo(sctx, card.uniqueID, 'hand');
+        break;   // 翻出首张刀法牌即止——其后的牌未曾翻开、原地不动
+      }
+      moveCardTo(sctx, card.uniqueID, 'deck');              // 落牌库底（数组尾），相对序保持
+    }
+    return true;
+  },
+  describe: () => '翻牌库顶至多5张，首张/named{刀法牌}入手，其余落牌库底',
+  battleDescribe: (sctx) => {
+    const hit = sctx.battleState.zones.deck.slice(0, 5).find(isBladeCard);
+    return `翻牌库顶至多5张，首张/named{刀法牌}入手，其余落牌库底`
+      + `（顶5张内${hit ? `有「${getSkillDefinition(hit.defId).name}」` : '无刀'}）`;
+  },
+});
 
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
 // 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经

@@ -81,6 +81,14 @@ const TEMPLATES = [
   { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
+  // —— 第二~四章主题编队（2026-09-13 总策划批次，与新敌补池同波，设计卡 tmp/design-monsters-wave1.mjs）——
+  // 章2 宫殿：阵型互动（群体盾支援 + 开场蓄势 + 受创龟缩）
+  { id: 'palaceGuard', name: '宫廷卫队', minFloor: 12, maxFloor: 21, slots: [{ fixed: 'palaceGuard' }, {}] },
+  { id: 'honorGuard', name: '仪仗队', minFloor: 14, maxFloor: 21, slots: [{ fixed: 'herald' }, { fixed: 'palaceGuard' }, {}] },
+  // 章3 庄园：滚雪球主题（喝酒双鬼， budget 核对 min 10 ≤ 13 / max 18 ≥ 16）
+  { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
+  // 章4 图书馆：防线锚 + 群狼连击（min 15 ≤ 17 / max 25 ≥ 21）
+  { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
   { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, {}] },
   { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, {}] },
@@ -89,7 +97,16 @@ const TEMPLATES = [
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
   { id: 'elitePair', name: '精英押队', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
 ];
-const BOSS_ID = 'pyro'; // Boss 只经 boss 分支出场，永不进通配池
+// Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
+// 第二波（2026-09-13）：22 层骑士长（阵型结业考）、33 层饕餮领主（滚雪球结业考）上岗；
+// 第三波（2026-09-13）：44 层塔心（孤身巨石三阶段体力考）上岗，pyro 占位卸任。
+// 自 22 层起每个 Boss 必带燃烧交互纹理
+//（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
+//  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环）。
+const BOSS_OF_FLOOR = Object.freeze({
+  11: 'pyro', 22: 'knightCommander', 33: 'gluttonLord', 44: 'towerHeart',
+});
+const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR));
 
 // 精英层排期（确定性，好记好测）：每章第 6、9 层（6/9、17/20、28/31、39/42）。
 // 2026-09 试玩后从 5/8 后挪：开局多一层普通战铺垫，再碰精英。
@@ -101,7 +118,7 @@ export const isEliteFloor = (floor) =>
 // difficulty 缺失视为不可生成（防御）。
 function eligiblePool(floor, elite = false) {
   return allEnemies().filter(def =>
-    def.id !== BOSS_ID
+    !BOSS_IDS.has(def.id)
     && Boolean(def.difficulty?.elite) === elite
     && eligibleAtFloor(def, floor));
 }
@@ -140,9 +157,10 @@ export function generateEncounter(run) {
   const rng = createRng(deriveBattleSeed(run.seed, floor) ^ 0x5EED); // 与旧 encounter 派生错开
   if (isBossFloor(floor)) {
     const chapter = floor / FLOORS_PER_CHAPTER - 1;
-    const bossDef = getEnemyDefinition(BOSS_ID);
+    const bossId = BOSS_OF_FLOOR[floor] ?? 'pyro';
+    const bossDef = getEnemyDefinition(bossId);
     const d = Math.min(BOSS_DIFFICULTY[chapter], bossDef.difficulty.max);
-    return [descriptorOf(BOSS_ID, d)];
+    return [descriptorOf(bossId, d)];
   }
 
   const D = floorDifficulty(floor);

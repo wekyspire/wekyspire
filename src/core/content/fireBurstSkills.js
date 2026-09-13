@@ -113,11 +113,14 @@ registerSkill({
 function burstChantCard({ id, name, tier, base, perMana }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'burst',
-    cost: { mana: 4, actionPoint: 0 },
+    // 第 7 轮裁决：发动费 4→2 魏启（4 费点亮一张无即时收益的咏唱 = 整回合空转，没人点）
+    cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable
     activated: {
+      // 激发演出自定（火焰橙——默认是金色脉冲，见 BattleStage _chantActivateBeat）
+      anim: { color: 0xff9a3d },
       onEnable: (sctx) => { sctx.self.burstPool = 0; },
       subscriptions: (sctx) => [{
         when: ConsumeManaInstruction,
@@ -176,14 +179,14 @@ condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 5, bur
 
 // 高热工厂。「纳气N，燃烧4」为**咏唱触发效果**（battle.md P5：激活咏唱卡每回合
 // 在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅（owner=卡牌，熄灭
-// 自动注销），点亮本身不结算。设计稿未写咏唱值，按默认咏唱2计手牌压力。
+// 自动注销），点亮本身不结算。咏唱值取 1（2026-09-13 权重分档：大量 1 咏）。
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
 function feverChantCard({ id, name, tier, naqi, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fever',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 1,
     keywords: ['exhaust'],
     promotesTo,
     use() { return true; },
@@ -210,7 +213,11 @@ feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2 });
 // 每回合在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅，点亮本身
 // 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
-// 设计稿 A 阶未写费用 → 0 费；咏唱值未写 → 按默认咏唱2计手牌压力。
+// 设计稿 A 阶未写费用 → 0 费；咏唱值取 2（中量档——第 5 轮试玩唯一验证为强卡的咏唱，留 2）。
+// 第 8 轮裁决（R8-E 覆盖局实锤）：自燃泵**至多把燃烧补到 SELF_BURN_CAP 层**——旧版无自限时
+// 自燃每回合净 +3（亲和是固定减伤、不随层数增长），6 回合 2→13 层 = 死亡计时器；
+// 封顶后引擎保留（盾照发）、计时器有界（无亲和 6/回、亲和3 后 3/回，残血仍咬人但不再指数失控）。
+const SELF_BURN_CAP = 6;
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'kindling',
@@ -224,12 +231,13 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
         when: ChantTriggerInstruction, phase: 'post',
         react: () => {
           gainShield(sctx, shield);
-          addEffect(sctx, 'burn', 3);
+          const cur = sctx.player.getEffectStacks('burn');
+          if (cur < SELF_BURN_CAP) addEffect(sctx, 'burn', Math.min(3, SELF_BURN_CAP - cur));
         },
       }],
     },
-    describe: () => `护盾${shield}，自身/effect{燃烧}3`,
-    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
+    describe: () => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
+    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3（至多补到${SELF_BURN_CAP}层）`,
   });
 }
 kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 9, ap: 1, promotesTo: 'kindlingBloodPlus' });
@@ -381,9 +389,12 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，抽1牌`,
   });
 }
-firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 8, promotesTo: 'firstArrow' });
-firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 12, promotesTo: 'firstFireBall' });
-firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 17 });
+firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 5, promotesTo: 'firstArrow' });
+firstStrikeCard({ id: 'firstArrow', name: '先发火矢', tier: 'C', damage: 9, promotesTo: 'firstFireBall' });
+firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 13 });
+// 数值（2026-09-13 第 6 轮试玩后 nerfed：原 8/12/17）：0 魏启 0 AP + 抽 1 + 固有 = 零资源
+// 白打，三位 agent 一致评为版本最优（C 一局 4 张开局白送 32 伤）。削到 5/9/13 后仍保有
+// 「免费开路 + 滤牌」的先发身份，但不再是一抓即赢的比率。升阶 delta 保持 +4。
 
 // ====================================================================
 // §1.1 散卡·忍耐（燃烧受伤转魏启）
@@ -417,14 +428,15 @@ registerSkill({
   describe: () => '每累计受到5点/effect{燃烧}伤害，获得1魏启',
 });
 
-// 突破极限（A，消耗，咏唱4）：激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
+// 突破极限（A，消耗，咏唱3——2026-09-13 用户定档：魏启透支是真超模，少量 3-4 咏档）：
+// 激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
 // 的 clamp 兜底，蓝量扣到 0 为止）。放行钩子走 helpers.canUseSkill 的「已激活咏唱
 // activated.canUseSkill」裁决环——卡牌级费用豁免，与能力的 canUseSkill 同语义。
 registerSkill({
   id: 'breakLimit', name: '突破极限', type: 'fire', tier: 'A', series: 'depth',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 4,
+  cardMode: 'chant', chantWeight: 3,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {
@@ -589,7 +601,7 @@ registerSkill({
   describe: () => '每消耗1魏启，获得3护盾',
 });
 
-// 火焰眷顾（B，消耗，咏唱3）：激活期间火灵脉牌的魏启消耗 -1。
+// 火焰眷顾（B，消耗，咏唱2）：激活期间火灵脉牌的魏启消耗 -1。
 // 判定方式：沿 ConsumeManaInstruction 的父链上溯取「正在打出的卡」
 // （cardConsumingMana），type==='fire' 才减免——X 费火卡（凝焰系列，ConsumeMana
 // 由 use 内直接提交，父链同样可达持卡指令）一并享受减免。
@@ -598,7 +610,7 @@ registerSkill({
   id: 'fireAffinity', name: '火焰眷顾', type: 'fire', tier: 'B', series: 'common',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 2,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {

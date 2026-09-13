@@ -67,8 +67,13 @@ function perfectReady(sctx) {
   }
   return true;
 }
+// 标记：headless 的 why 诊断按此识别完美条件、点名左侧压位卡（第 6 轮 A 建议——
+// 「只报自定义条件不满足，玩家要自己反推是哪张」）
+perfectReady.isPerfectCondition = true;
 
-// 精准一击（精准系列 D）：完美。23 伤害。promotesTo 精心一击（C）。
+// 精准一击（精准系列 D）：完美。24 伤害。promotesTo 精心一击（C）。
+// 2026-09-13 用户定：完美是战术挑战——条件不动、payoff 增强（挑战与机遇并存；
+// 新体系 7 张手牌几乎必有压位卡， payoff 必须配得上解套成本）。
 registerSkill({
   id: 'perfectStrike', name: '精准一击', type: 'normal', tier: 'D', series: 'block',
   cost: { mana: 0, actionPoint: 2 },
@@ -77,14 +82,14 @@ registerSkill({
   promotesTo: 'carefulStrike',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 17);
+    attackDamage(sctx, 24, { tags: ['perfect'] }); // tags：架势镜等完美轴效果统一识别口径
     return true;
   },
-  describe: () => '/named{完美}。17伤害',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 17)}`,
+  describe: () => '/named{完美}。24伤害',
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 24)}`,
 });
 
-// 精心一击（精准系列 C）：完美。15 伤害。promotesTo 折杨手（B，机制跃迁到命中）。
+// 精心一击（精准系列 C）：完美。17 伤害。promotesTo 折杨手（B，机制跃迁到命中）。
 registerSkill({
   id: 'carefulStrike', name: '精心一击', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -93,14 +98,14 @@ registerSkill({
   promotesTo: 'foldWillow',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 12);
+    attackDamage(sctx, 17, { tags: ['perfect'] });
     return true;
   },
-  describe: () => '/named{完美}。12伤害',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 12)}`,
+  describe: () => '/named{完美}。17伤害',
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 17)}`,
 });
 
-// 精心二击（精准系列 B·延伸卡）：完美。12 伤害 ×2（2026-09 稿：C→B、数值下调、冷却1）。
+// 精心二击（精准系列 B·延伸卡）：完美。15 伤害 ×2（2026-09 稿：C→B、冷却1；2026-09-13 payoff 增强）。
 registerSkill({
   id: 'doubleStrike', name: '精心二击', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 2 },
@@ -108,15 +113,15 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canUse: perfectReady,
   use(sctx) {
-    attackDamage(sctx, 12);
-    attackDamage(sctx, 12);
+    attackDamage(sctx, 15, { tags: ['perfect'] });
+    attackDamage(sctx, 15, { tags: ['perfect'] });
     return true;
   },
-  describe: () => '/named{完美}。12伤害×2',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 12)}×2`,
+  describe: () => '/named{完美}。15伤害×2',
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 15)}×2`,
 });
 
-// 折杨手/揽云手/摘星手（精准系列 B/A/S）：23 伤害；命中：格挡 N。
+// 折杨手/揽云手/摘星手（精准系列 B/A/S）：24 伤害；命中：格挡 N。
 // 两段式：段 0 提交攻击并挂命中探针，段 1 读探针——>0 点生命值伤害才获得格挡。
 const hitStrike = (id, name, tier, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
@@ -127,14 +132,14 @@ const hitStrike = (id, name, tier, per, promotesTo = null) => registerSkill({
   canUse: perfectReady,
   use(sctx, stage) {
     if (stage === 0) {
-      beginHitProbe(sctx, attackDamage(sctx, 20));
+      beginHitProbe(sctx, attackDamage(sctx, 24, { tags: ['perfect'] }));
       return false; // 挂起一拍：等伤害子节点完整落地后再读探针
     }
     if (hitLanded(sctx)) gainBlock(sctx, per);
     return true;
   },
-  describe: () => `/named{完美}。20伤害；/named{命中}：/effect{格挡}${per}`,
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 20)}，/named{命中}：/effect{格挡}${per}`,
+  describe: () => `/named{完美}。24伤害；/named{命中}：/effect{格挡}${per}`,
+  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 24)}，/named{命中}：/effect{格挡}${per}`,
 });
 hitStrike('foldWillow', '折杨手', 'B', 2, 'embraceCloud');
 hitStrike('embraceCloud', '揽云手', 'A', 3, null); // S（摘星手）阶梯外，不作晋升目标
@@ -249,14 +254,14 @@ registerSkill({
 
 // ==== 姿态系列（常驻引擎·咏唱）=================================================
 
-// 龟守链（咏唱4，P5 咏唱触发攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。
+// 龟守链（咏唱2，P5 咏唱触发攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。
 // 笨拙是发动瞬间的一次性代价（activated.onEnable 时获得层数；解除不回收——层数按
 // 笨拙自身规则逐次消耗。设计稿未写解除回收，此为落地假设）。
 const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 4,
+  cardMode: 'chant', chantWeight: 2,
   promotesTo,
   use() { return true; },
   activated: {
@@ -282,14 +287,14 @@ turtleStanceCard('turtleStance', '龟守姿态', 'B', 1, 2, 2, 'mysticTurtle');
 turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 1, null); // 神龟（S）阶梯外，不接晋升
 turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null);
 
-// 武术链（咏唱3，格挡转攻击）：激活期间，玩家为来源的每一条伤害指令 PRE 加
+// 武术链（咏唱2，格挡转攻击）：激活期间，玩家为来源的每一条伤害指令 PRE 加
 // 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。
 // 与贯心的逐层破伤天然咬合（§3「天一+贯心」斩杀线的引擎件）。
 const martialStanceCard = (id, name, tier, ap, per, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 2,
   promotesTo,
   use() { return true; },
   activated: {
@@ -309,13 +314,13 @@ martialStanceCard('martialStance', '武术姿态', 'C', 2, 2, 'masterStance');
 martialStanceCard('masterStance', '大师姿态', 'B', 1, 4, 'heavenStance');
 martialStanceCard('heavenStance', '天一姿态', 'A', 0, 6, null);
 
-// 狂战链（咏唱4，格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
+// 狂战链（咏唱2，格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
 // 1 层力量；失去格挡（破的负层数 AddEffect）不触发。
 const berserkStanceCard = (id, name, tier, ap, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 4,
+  cardMode: 'chant', chantWeight: 2,
   promotesTo,
   use() { return true; },
   activated: {

@@ -157,6 +157,7 @@ export function createVendingMachineRig({
     displayText: '',
     hoverGoods: null, // 悬停的货位 index
     deny: 0,          // 买不起被点的摇头衰减
+    focused: false,   // 相机怼脸中（商品 hover 说明的门禁：未怼脸时商品完全不可交互）
   };
 
   // ---- 显示条：烘字（余额），与银行机同一套（bakeBoldText 小字号 + 描边） ----
@@ -231,6 +232,11 @@ export function createVendingMachineRig({
 
   const _q = new THREE.Quaternion();
 
+  /** token 门禁：只在怼脸（聚焦）时把 hover 说明挂到卡片根上（Picker 的 tooltip 来源）。 */
+  function applyTokenGate(tile) {
+    tile.root.userData.token = st.focused ? (tile.token ?? null) : null;
+  }
+
   /**
    * 库存下行：`items = [{ index, kind, name, price, sold, affordable, relicId }]`——**按顺序**领货
    * （items[0] 放第 0 格、items[1] 放第 1 格…）：调用方给的是本机的**切片**，全局下标在 `index` 里，
@@ -256,10 +262,14 @@ export function createVendingMachineRig({
       tile.index = it.index;
       tile.item = it;
       // hover 说明：遗物货走遗物效果预览（与面板遗物行同一挂钩）；药水/苹果/卡包走
-      // core 算好的 `tip` 文本（无卡面/立绘的东西必须有说明——用户定 2026-09-12）
-      tile.root.userData.token = it.relicId
+      // core 算好的 `tip` 文本（无卡面/立绘的东西必须有说明——用户定 2026-09-12）。
+      // token 是**怼脸专属**（用户定 2026-09-13）：未 zoom-in 时商品完全不可交互，
+      // 远景就弹 tooltip 会让人觉得"现在就能买"，与"先推近看货、再点选购买"的节奏矛盾。
+      // 逻辑 token 存 tile.token，userData 由 applyTokenGate 按焦点门控写入。
+      tile.token = it.relicId
         ? { type: 'relic', payload: { relicId: it.relicId } }
         : (it.tip ? { type: 'item', payload: it.tip } : null);
+      applyTokenGate(tile);
       tile.root.visible = !st.seq || st.seq.index !== tile.index;
       refreshTile(tile);
     }
@@ -354,8 +364,13 @@ export function createVendingMachineRig({
     setStock,
     setDisplay,
     setHover: (on) => { st.hoverTarget = on ? 1 : 0; },
-    /** 追光（相机怼脸）开关：与其它机器同义（此处只影响灯牌呼吸幅度）。 */
-    setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
+    /** 追光（相机怼脸）开关：与其它机器同义（此处只影响灯牌呼吸幅度）。
+     *  同时是商品 hover 说明的门禁：怼脸才挂 token（未聚焦时商品完全不可交互）。 */
+    setFocus: (on) => {
+      st.focusTarget = on ? 1 : 0;
+      st.focused = !!on;
+      for (const tile of goods.values()) applyTokenGate(tile);
+    },
     /** 悬停某件货（index | null）：抬卡 + 盘子提亮。 */
     setGoodsHover: (index) => { st.hoverGoods = index; },
     /** 买不起被点：盘子闪红 + 卡片摇头。 */

@@ -140,9 +140,9 @@ export default {
     const doorPivot = new THREE.Group();
     doorPivot.position.set(bayCx - bayW / 2 - 0.06, 0, D / 2 + 0.08);
     const dW = bayW + 0.16, dH = bayH + 0.2;
-    // 门板（glass 族：半透明）
-    // ⚠ 玻璃色**偏暗**：浅色玻璃（wax）叠在亮柜内会整面发白，货品全被洗掉
-    doorPivot.add(K.put(K.box({ color: shade(P.iron, 0.06), size: [dW, dH, 0.05], family: 'glass' }),
+    // 门板（**frost 族** = 磨砂玻璃：大面积近景透明面不反高光，见 kit/materials 注释。
+    // ⚠ 玻璃色**偏暗**：浅色玻璃（wax）叠在亮柜内会整面发白，货品全被洗掉）
+    doorPivot.add(K.put(K.box({ color: shade(P.iron, 0.06), size: [dW, dH, 0.05], family: 'frost' }),
       dW / 2, (bayBot + bayTop) / 2, 0));
     // 门框（四边）+ 把手（竖条）：金属件，跟着门一起动
     const fr = 0.11;
