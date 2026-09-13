@@ -477,9 +477,15 @@ function execRoomShop(S, t) {
     const idx = num(t[3]);
     const it = run.shop.items[idx];
     const res = buyShopItem(run, idx);
-    S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
-      + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '')
-      + (res.kind === 'relic' ? `（槽位式需 relic equip ${res.relicId} 才生效；非槽位式拾起即生效）` : '');
+    if (res.kind === 'relic') {
+      const rdef = getRelicDefinition(res.relicId);
+      S.lastOutcome = `购得遗物【${rdef?.name ?? res.relicId}】（${rdef?.rarity ?? 'C'} 级，`
+        + `${rdef?.nonSlot ? '非槽位式，拾起即生效' : `占 ${rdef?.cost ?? 0} 槽，relic equip ${res.relicId} 装备后生效`}）\n`
+        + `  效果：${rdef?.description ?? ''}`;
+    } else {
+      S.lastOutcome = `购买「${it.label}」(-${it.price}金币)：${JSON.stringify(res)}`
+        + (res.kind === 'pack' ? '（用 act shop claim <#> 选卡，候选见状态）' : '');
+    }
     return;
   }
   if (b === 'claim') {
@@ -902,19 +908,28 @@ function execRelic(S, t) {
     throw new Error(`遗物装卸仅能在战前准备/奖励房阶段（当前：${stageCn(stage)}）；主动使用仅限战前准备`);
   }
   if (!sub || !id) {
-    throw new Error(`用法：relic equip|use|unequip <遗物id>（背包：${(run.player.relics ?? []).join(' ') || '空'}）`);
+    throw new Error(`用法：relic equip|use|unequip <遗物id|遗物名>（背包：${(run.player.relics ?? []).join(' ') || '空'}）`);
   }
   const nameOf = (rid) => getRelicDefinition(rid)?.name ?? rid;
+  // id 直给，否则按中文名寻址（P0 实锤：id 拼错一次没装上，1/3 槽位空着进下一战，R8-A）
+  const bag = run.player.relics ?? [];
+  const rid = bag.includes(id) ? id : (() => {
+    const hits = bag.filter(r => nameMatches(id, nameOf(r)));
+    if (hits.length === 1) return hits[0];
+    throw new Error(hits.length > 1
+      ? `背包里有 ${hits.length} 个「${id}」——请用 id 指定：${hits.join(' / ')}`
+      : `背包里没有「${id}」（背包：${bag.map(nameOf).join(' / ') || '空'}）`);
+  })();
   if (sub === 'equip') {
-    equipRelic(run, id);
-    S.lastOutcome = `装备遗物 ${nameOf(id)}`;
+    equipRelic(run, rid);
+    S.lastOutcome = `装备遗物 ${nameOf(rid)}`;
   } else if (sub === 'unequip') {
-    unequipRelic(run, id);
-    S.lastOutcome = `卸下遗物 ${nameOf(id)}`;
+    unequipRelic(run, rid);
+    S.lastOutcome = `卸下遗物 ${nameOf(rid)}`;
   } else if (sub === 'use') {
     const before = run.player.hp;
-    prepUseRelic(run, id);
-    S.lastOutcome = `使用遗物 ${nameOf(id)}（HP ${before}→${run.player.hp}）`;
+    prepUseRelic(run, rid);
+    S.lastOutcome = `使用遗物 ${nameOf(rid)}（HP ${before}→${run.player.hp}）`;
   } else {
     throw new Error(`未知遗物子命令：${sub}（equip|use|unequip）`);
   }

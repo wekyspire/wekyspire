@@ -156,8 +156,11 @@ function renderRoomShop(S, L) {
   const disc = run.shop.discount < 1 ? `（${Math.round(run.shop.discount * 10)} 折）` : '';
   L.push(`自动售货机${disc}｜持有 ${p.money} 金币：`);
   if (run.shop.broken) L.push('  瑞米：“上次逃得太狼狈了……忘记补货了……”');
+  // 买不起的货直接标注差额——headless 没有 GUI 的红字价格，文本口径是唯一的可负担性信息
+  // （R8-A：P0 因为"试着点了最贵的看会不会触发什么"，被动买了货，丧失了主动选择权）
   run.shop.items.forEach((it, i) => L.push(`  [${i}] ${it.label} — ${it.price} 金`
-    + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')));
+    + (it.sub ? `｜${plain(it.sub)}` : '') + (it.sold ? '（已售出）' : '')
+    + (!it.sold && p.money < it.price ? `（还差 ${it.price - p.money} 金）` : '')));
   if (run.shopPending) {
     L.push('  卡包待选:');
     run.shopPending.choices.forEach((id, i) => {
@@ -300,7 +303,7 @@ function renderRoomEvent(L) {
 function renderAscension(S, L) {
   const run = S.run;
   L.push(`→ dim 火 | dim 跳过`);
-  L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌），另回${ASCENSION_PLACEHOLDER.healAmount}血、魏启上限+1`);
+  L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌）且生命上限+3，另回${ASCENSION_PLACEHOLDER.healAmount}血、魏启上限+1`);
   if (run.cardOffering) {
     const off = run.cardOffering;
     const grant = FIRST_ASCENSION_GRANT[off.dimension];

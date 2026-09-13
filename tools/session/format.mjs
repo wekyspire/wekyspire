@@ -36,7 +36,8 @@ export const intentText = (u) => {
     attack: '攻击', defend: '防御', buff: '强化', debuff: '削弱',
     summon: '召唤', unknown: '未知', stun: '晕眩',
   }[k] ?? k)).join('+');
-  const dmg = it.damage ? ` ${it.damage}${it.hits > 1 ? `×${it.hits}` : ''}` : '';
+  // 多段攻击附总额——「攻击 9×2」要自己心算 18 是 P0 的血线误判源（R8-A）
+  const dmg = it.damage ? ` ${it.damage}${it.hits > 1 ? `×${it.hits}（共${it.damage * it.hits}）` : ''}` : '';
   return kind + dmg + (it.note ? `（${it.note}）` : '');
 };
 

@@ -707,13 +707,15 @@ registerSkill({
   battleDescribe: () => '/named{短暂}。你的下一次刀法牌伤害变为固定伤害',
 });
 
-// 练刀（D/C/B，2026-09-13 设计稿定稿）：抽1，**弃掉所有手中刀法牌**，并令它们
-// **本战斗中**伤害 +3/+6（D/C），抽1。费用 1AP（B 级 0AP），冷却1。
+// 练刀（D/C/B，2026-09-13 设计稿定稿）：抽1，**将手中所有刀法牌洗回牌库底**，并令它们
+// **本战斗中**伤害 +3/+6（D/C）。费用 1AP（B 级 0AP），冷却1。
 // 每一阶**恰好一个跃迁点**（用户定 2026-09-13）：D→C = 威力 +3→+6；C→B = 费用 1AP→0AP
 // （威力保持 +6）。⚠ 此前 D 与 C 的参数完全相同（都是 +3/1AP），升级后卡面一丁点变化都没有
 // ——那是实现漏改，不是设计（用户 2026-09-13 报的"练刀升级后面板没变化"）。
 // 「本战斗中」= runtime.power（跨 zone 持续、战斗结束随 runtime 一起丢弃），
-// 弃牌走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
+// 洗回走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
+// 卡面写「洗回牌库底」而非「弃掉」：回库正是本卡的收益环（P0 实锤：读「弃掉」以为永久失去，
+// 把主力斩当废牌丢了两次，R8-A）。
 // 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽1后手中无刀时纯白板抽1收场。
 const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSkill({
   id, name: '练刀', type: 'normal', tier, series: 'blade',
@@ -734,8 +736,10 @@ const practiceBladeCard = (id, tier, ap, power, promotesTo = null) => registerSk
     }
     return true;
   },
-  describe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
-  battleDescribe: () => `抽1，弃掉所有手中/named{刀法牌}，令其本战斗伤害+${power}`,
+  // 卡面写「洗回牌库底」而非「弃掉」——回库正是本卡的收益环（P0 实锤：读「弃掉」
+  // 以为永久失去，把主力斩当废牌丢了两次，R8-A）。动词与本卡语义对齐，不依赖术语表。
+  describe: () => `抽1，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
+  battleDescribe: () => `抽1，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
 });
 practiceBladeCard('practiceBlade', 'D', 1, 3, 'practiceBladePlus');       // D：+3 / 1AP
 practiceBladeCard('practiceBladePlus', 'C', 1, 6, 'practiceBladeMaster');  // C：+6（威力跃迁）

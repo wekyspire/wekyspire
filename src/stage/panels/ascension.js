@@ -26,7 +26,7 @@ export function buildAscensionPanel(snap, { selected = new Set() } = {}) {
     });
     w.push({ kind: 'gap' });
     w.push({
-      kind: 'button', id: 'asc:skip', label: '跳过（改记 1 点体修等级）', width: 300,
+      kind: 'button', id: 'asc:skip', label: '跳过（体修等级 +1，生命上限 +3）', width: 300,
       action: { action: 'skipAscension' },
     });
     w.push({ kind: 'gap' });
