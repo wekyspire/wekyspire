@@ -3,6 +3,7 @@
 import { canUseSkill, makeSkillCtx } from '../../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../../src/core/skills/registry.js';
 import { getEffectDefinition } from '../../src/core/effects/registry.js';
+import { getRelicDefinition } from '../../src/core/relics/registry.js';
 
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
 export const plain = (s) => String(s ?? '')
@@ -86,6 +87,23 @@ export function slotResultText(p) {
                     : p.choices?.length ? `卡${p.choices.length}选1：${p.choices.map(c => `${c.name}(${c.id})`).join(' / ')}`
                       : p.kind;
   return head + body;
+}
+
+// takeSlotPrize 的结果回执（与上面的「停轮揭示」不同——这是领取落账后的人话清单；
+// 原样 JSON.stringify 会把内部结构糊玩家一脸，试玩实报）。
+export function slotOutcomeText(out) {
+  const bits = [];
+  if (out.money != null) bits.push(`金币+${out.money}`);
+  if (out.healed) bits.push('生命恢复');
+  if (out.fullRestore) bits.push('全状态恢复（HP/魏启回满、负面清除）');
+  if (out.special) {
+    bits.push({ apple: '苹果（瑞米的最爱）', fruit: '苹果（瑞米的最爱）', goldApple: '金苹果（瑞米的至爱）', training: '训练次数+1' }[out.special] ?? `特殊物品：${out.special}`);
+  }
+  if (out.defId) bits.push(`卡牌「${getSkillDefinition(out.defId)?.name ?? out.defId}」入组`);
+  if (out.relicId) bits.push(`遗物「${getRelicDefinition(out.relicId)?.name ?? out.relicId}」`);
+  if (out.upgraded?.length) bits.push(`随机升级：${out.upgraded.map(id => `「${getSkillDefinition(id)?.name ?? id}」`).join('、')}`);
+  if (out.needsCardPick) bits.push('免费指定升级（待选卡）');
+  return bits.join('；') || '（空产出）';
 }
 
 // 事件结果的中文呈现：从**效果流水**（事件内容主动施加后记的账）拼一句话。

@@ -50,7 +50,7 @@ import {
   ensureGurpasStock, gurpasView, buyGurpas, takeGurpasCard, sellGurpasRelic, removeCardAtGurpas,
 } from '../../src/core/run/rooms/gurpas.js';
 
-import { defOf, plain, cardDefLine, slotResultText, eventResultText } from './format.mjs';
+import { defOf, plain, cardDefLine, slotResultText, slotOutcomeText, eventResultText } from './format.mjs';
 import {
   num, idxOk, isIdxArg, nameMatches, resolveHandStrict, resolveHandArg, pickHandCard,
   resolveChoiceArg, resolveChoiceStrict,
@@ -90,6 +90,9 @@ export function ensureBattle(S) {
 // 战斗结算日志（presenter 调用 → 中文行；取尾部 N 条）
 export function battleLogText(S, tail = 10) {
   const lines = [];
+  // presenter 的 effect 载荷里 stacks 是「变化后的总层数」而非增量——逐条重放算出增量，
+  // 否则减层（虚弱 2→1）会打印成「获得虚弱1」，读着像新增负面（试玩实报）。
+  const lastStacks = new Map();
   for (const { method, args } of S.presenter?.calls ?? []) {
     const p = args?.[0] ?? {};
     switch (method) {
@@ -105,7 +108,14 @@ export function battleLogText(S, tail = 10) {
       case 'shield': if ((p.gained ?? 0) > 0) lines.push(`${p.target?.name} 护盾+${p.gained}`); break;
       case 'effect': {
         const name = getEffectDefinition(p.effectId)?.name ?? p.effectId;
-        lines.push((p.stacks ?? 0) > 0 ? `${p.target?.name} 获得${name}${p.stacks}` : `${p.target?.name} ${name}消散`);
+        const key = `${p.target?.uniqueID}:${p.effectId}`;
+        const prev = lastStacks.get(key) ?? 0;
+        const now = p.stacks ?? 0;
+        lastStacks.set(key, now);
+        const d = now - prev;
+        if (d > 0) lines.push(`${p.target?.name} 获得${name}${d}（现${now}层）`);
+        else if (now === 0) lines.push(`${p.target?.name} ${name}消散`);
+        else if (d < 0) lines.push(`${p.target?.name} ${name}-${-d}（剩${now}层）`);
         break;
       }
       case 'unitDeath': lines.push(`${p.unit?.name} 被击败！`); break;
@@ -177,9 +187,28 @@ function resolveSlotClaimArg(pending, raw) {
 }
 
 // ---------- 动作解释器 ----------
+// 批处理护栏：一行混入多条动作时，早先只执行第一条、其余 token 被当成参数解析或静默吞掉
+// （试玩实报：「play 斩 1 play 斩 1」→ 目标 token 是 'play' → 敌人编号越界：NaN；
+// 「take 2 精准一击 next」→ next 被静默吞掉，玩家以为已经前进）。显式拒绝并点名。
+// 注意 act 的子命令词表与顶层动作重叠（act take / act play / act remove 皆合法），
+// 对 act 只拦第二个 act；note/dev 与无参查询命令不扫。
+const ACTION_WORDS = new Set([
+  'fight', 'play', 'swap', 'dump', 'end', 'in', 'auto', 'why',
+  'pack', 'take', 'skip', 'act', 'remove',
+  'dim', 'seed', 'reroll', 'ability', 'preview', 'relic', 'next',
+  'state', 'deck', 'terms', 'help',
+]);
+
 export function exec(S, raw) {
   const t = raw.trim().split(/\s+/);
   const cmd = t[0];
+  if (!['note', 'dev', 'state', 'deck', 'terms', 'help'].includes(cmd)) {
+    const words = cmd === 'act' ? new Set(['act']) : ACTION_WORDS;
+    const extra = t.slice(1).find(x => words.has(x));
+    if (extra) {
+      throw new Error(`一次只执行一个动作——这一行混进了第二个动作「${extra}」，请分次发送（本条整体未执行）`);
+    }
+  }
   switch (cmd) {
     case 'note': S.lastOutcome = `记事: ${t.slice(1).join(' ')}`; return;
     case 'state': case 'deck': case 'terms': case 'help': S.lastOutcome = ''; return;
@@ -693,7 +722,7 @@ function execRoomSlot(S, t) {
   if (a === 'claim') {
     if (!run.slotPending) { S.lastOutcome = '本次未中奖，没有待领取的产出（无需处理）'; return; }
     const out = takeSlotPrize(run, resolveSlotClaimArg(run.slotPending ?? {}, b ?? null));
-    S.lastOutcome = `领取产出：${JSON.stringify(out)}`
+    S.lastOutcome = `领取产出：${slotOutcomeText(out)}`
       + (out.needsCardPick ? '（用 act upgrade <构筑#> <卡名> 指定要升级的卡）' : '');
     return;
   }
@@ -983,14 +1012,18 @@ function execRelic(S, t) {
     throw new Error(`用法：relic equip|use|unequip <遗物id|遗物名>（背包：${(run.player.relics ?? []).join(' ') || '空'}）`);
   }
   const nameOf = (rid) => getRelicDefinition(rid)?.name ?? rid;
-  // id 直给，否则按中文名寻址（P0 实锤：id 拼错一次没装上，1/3 槽位空着进下一战，R8-A）
+  // id 直给，否则英文 id 模糊（大小写/前缀），再否则按中文名寻址。
+  // （P0 实锤：id 拼错一次没装上，1/3 槽位空着进下一战；shop 试玩又实报英文 id
+  // 必须全拼——`relic equip horn` 找不到 warHorn。）
   const bag = run.player.relics ?? [];
   const rid = bag.includes(id) ? id : (() => {
-    const hits = bag.filter(r => nameMatches(id, nameOf(r)));
+    const lower = String(id).toLowerCase();
+    const idHits = bag.filter(r => r.toLowerCase() === lower || r.toLowerCase().startsWith(lower));
+    const hits = [...new Set([...idHits, ...bag.filter(r => nameMatches(id, nameOf(r)))])];
     if (hits.length === 1) return hits[0];
     throw new Error(hits.length > 1
-      ? `背包里有 ${hits.length} 个「${id}」——请用 id 指定：${hits.join(' / ')}`
-      : `背包里没有「${id}」（背包：${bag.map(nameOf).join(' / ') || '空'}）`);
+      ? `背包里有 ${hits.length} 个「${id}」——请用完整 id 指定：${hits.join(' / ')}`
+      : `背包里没有「${id}」（背包：${bag.map(r => `${nameOf(r)}(${r})`).join(' / ') || '空'}）`);
   })();
   if (sub === 'equip') {
     equipRelic(run, rid);
