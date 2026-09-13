@@ -55,6 +55,7 @@ export const KEYWORD_LABELS = Object.freeze({
   transient: '短暂',
   slowStart: '慢热',
   anchored: '锁定',
+  blood: '卖血',
 });
 
 export function projectCardFull(battle, rt) {

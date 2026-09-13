@@ -240,18 +240,20 @@ registerSkill({
   describe: () => '8护盾',
 });
 
-// 强化盾（盾系列 C，链顶）：8 护盾 + 1 层格挡。
+// 强化盾（盾系列 B，链顶）：12 护盾 + 1 层格挡。
+// （2026-09-14 等阶铁律修正：原 C 阶与坚固盾同阶晋升，违反「升级等阶必然提升」——
+// 升 B 并把 8盾 提到 12盾（对标 B 阶盾线：火壁条件 22 / 古木壁垒 10+荆棘3）。）
 registerSkill({
-  id: 'reinforcedShield', name: '强化盾', type: 'normal', tier: 'C', series: 'block',
+  id: 'reinforcedShield', name: '强化盾', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    gainShield(sctx, 8);
+    gainShield(sctx, 12);
     gainBlock(sctx, 1);
     return true;
   },
-  describe: () => '8护盾，/effect{格挡}1',
+  describe: () => '12护盾，/effect{格挡}1',
 });
 
 // （批次 17 的绷劲/丹田气两张体修盾已于 2026-09-13 删除——用户试玩判「数值太低
@@ -288,8 +290,12 @@ const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesT
 });
 turtleStanceCard('defensePrep', '防御准备', 'C', 2, 1, 0, 'guardStance');
 turtleStanceCard('guardStance', '守护姿态', 'B', 1, 1, 0, 'turtleStance');
-turtleStanceCard('turtleStance', '龟守姿态', 'B', 1, 2, 2, 'mysticTurtle');
-turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 1, null); // 神龟（S）阶梯外，不接晋升
+// 龟守姿态（A，链顶）：升阶优化代价（笨拙 2→1）。2026-09-14 等阶铁律修正：
+// 原 B 阶与守护姿态同阶晋升违规，升 A 并减笨拙；玄龟姿态改为同效高代价的直出散卡。
+turtleStanceCard('turtleStance', '龟守姿态', 'A', 1, 2, 1, null);
+// 玄龟姿态（A 直出散卡，无晋升来源）：与链顶同效但代价更大（笨拙2）——
+// 晋升终点（龟守）必须 ≥ 直抽散卡，否则晋升失去意义。
+turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 2, null);
 turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null);
 
 // 武术链（咏唱2，格挡转攻击）：激活期间，玩家为来源的每一条伤害指令 PRE 加

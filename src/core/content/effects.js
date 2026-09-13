@@ -440,12 +440,14 @@ registerEffect({
 // 闪避：免疫下一次攻击（层数 -1）。判定口径与火墙一致：「攻击」= 有来源、
 // 非燃烧/中毒等环境标记的伤害指令（玩家普攻/多段/固定伤害都算；燃烧跳伤、
 // 中毒结算不算）。被 veto 的结算无联动（A4）——荆棘不反、命中探针不触发。
+// 可储存但会蒸发（2026-09-14 定，防多层蓄成永久无敌）：持有者**回合开始时**层数 -1——
+// 挂在回合开始而非结束，保证本回合拿的闪避一定能挡过这轮敌方攻击。
 registerEffect({
   id: 'dodge',
   type: 'buff',
   stacking: 'count',
   name: '闪避',
-  description: '免疫下一次攻击，然后层数减少 1。',
+  description: '免疫下一次攻击，然后层数减少 1。自己回合开始时层数 -1。',
   icon: '💨',
   color: 'cyan',
   subscriptions: (unit) => [{
@@ -458,6 +460,15 @@ registerEffect({
     react: (instr, ctx) => ctx.kernel.veto(instr, 'dodge', [
       new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: -1 }),
     ]),
+  }, {
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead()
+      && unit.getEffectStacks('dodge') > 0,
+    react: (instr, ctx) => {
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: -1 }), instr);
+    },
   }],
 });
 

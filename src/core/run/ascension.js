@@ -13,10 +13,10 @@ import { gainMaxMana, gainMaxHp } from './prep.js';
 // 而不是靠后续单张奖励慢慢凑。
 // 门槛数值全部占位（§9 留坑），能力授予池当前最小化为空。
 
-// 可升级维度：木/空灵脉内容待实装，先屏蔽（用户 2026-09 定）；内容落地后加回。
+// 可升级维度：木/空灵脉内容已实装（2026-09-14，WOOD/AIR_VEIN_CARDS），三维度全开放。
 // 体修不再是灵脉维度——它走隐藏的 player.bodyLevel（进阶事件「跳过」时 +1）。
 // player.leino 仍保留四键（旧档兼容），totalLeino 照旧求和（body 恒 0）。
-export const LEINO_DIMENSIONS = ['fire'];
+export const LEINO_DIMENSIONS = ['fire', 'wood', 'air'];
 
 export const ASCENSION_PLACEHOLDER = {
   firstTrainings: 1,    // 首进阶门槛：第 2 层训练房即触发（快速特化，用户 2026-09 定）
@@ -34,6 +34,8 @@ export const SEED_OFFERING = Object.freeze({ cards: 9, picks: 3, rerolls: 1 });
 // 改为获赠直发后该标记移除——九选三回到纯自选，不再强制复发已有基石。
 export const FIRST_ASCENSION_GRANT = Object.freeze({
   fire: Object.freeze({ cards: ['inflame', 'fireBolt'], ability: 'fireVein' }),
+  wood: Object.freeze({ cards: ['poisonSting', 'breathOfLife'], ability: 'woodVein' }),
+  air: Object.freeze({ cards: ['windBlade', 'atEase'], ability: 'airVein' }),
 });
 
 // 种子池排除表：需要前置储备才生效的「组合件」出在九选三里等于废牌。
@@ -58,6 +60,8 @@ const SEED_EXCLUDED = new Set([
   'barrier', 'fortress', 'bronzeCity', 'soulOfWar',
   'perfectStrike', 'carefulStrike',
   'fastRain', 'fastWind', // 需大回合铺垫才生效，种子池里是废牌
+  // 木灵脉：卖血卡（0 练度卖血是负收益——血祭/血藤都带 'blood'）
+  'bloodSacrifice', 'bloodVine',
 ]);
 
 export function totalLeino(run) {
@@ -83,6 +87,14 @@ const ABILITY_POOLS = Object.freeze({
   fire: Object.freeze({
     elite: Object.freeze(['pyroBlast', 'fireWard', 'scorchVein', 'fireBlower']),
     master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
+  }),
+  wood: Object.freeze({
+    elite: Object.freeze(['renew', 'blightLord']),
+    master: Object.freeze(['forestHeart', 'plagueSource']),
+  }),
+  air: Object.freeze({
+    elite: Object.freeze(['galeFury', 'wanderClouds']),
+    master: Object.freeze(['windLord', 'voidness']),
   }),
   body: Object.freeze({
     elite: Object.freeze(['boxer', 'bladeMaster', 'warrior', 'parryFist', 'bladeUnity']),

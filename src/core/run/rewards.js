@@ -27,8 +27,8 @@ export const TIER_UNLOCK_LEINO = { B: 1, A: 2 }; // 该维度灵脉等级 → �
 export const PACKS = Object.freeze({
   body: Object.freeze({ id: 'body', name: '体修', desc: '基础卡组演变而来，恒可用' }),
   fire: Object.freeze({ id: 'fire', name: '火灵脉', desc: '爆发与燃烧' }),
-  wood: Object.freeze({ id: 'wood', name: '木灵脉', desc: '恢复与中毒（内容待实装）' }),
-  air: Object.freeze({ id: 'air', name: '空灵脉', desc: '闪避与增强（内容待实装）' }),
+  wood: Object.freeze({ id: 'wood', name: '木灵脉', desc: '恢复与中毒' }),
+  air: Object.freeze({ id: 'air', name: '空灵脉', desc: '闪避与咏唱' }),
   common: Object.freeze({ id: 'common', name: '通用', desc: '跨体系资源与功能卡（随机混入各卡包）' }),
 });
 
@@ -74,6 +74,10 @@ export const DEEP_GATES = Object.freeze({
   burst: Object.freeze(['pyroBlast', 'fireWard']), // 爆炎深入：回响烈焰/背水一战/放手一搏
   fist: Object.freeze(['boxer']),                  // 拳深入：万变拳/假动作…
   blade: Object.freeze(['bladeMaster']),           // 刀深入：练刀/开刃/斩灭…
+  renew: Object.freeze(['renew']),                 // 生息深入：世界树之心
+  blight: Object.freeze(['blightLord']),           // 瘴毒深入：瘟神附体
+  gale: Object.freeze(['galeFury']),               // 御风深入：天闪
+  wander: Object.freeze(['wanderClouds']),         // 逍遥深入：风行者
 });
 export function deepGateOpen(run, def) {
   if (!def?.deep) return true;
