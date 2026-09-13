@@ -95,13 +95,17 @@ export class CardGalleryObject extends THREE.Group {
         bakeFace: this._bakeFace,
       });
       obj.setCard(cardProj);
-      // 牌库查看器同样给出冷却进度（用户定 2026-09-13）：盖纱 + 剩余拍数徽章，与手牌同语言；
-      // 仅 deck 区展示（焚毁区卡已彻底离场，残留计时无意义）
+      // 牌库查看器同样给出冷却进度（用户定 2026-09-13）：高度=剩余比例的薄纱 + 拍数水印，
+      // 与手牌同语言；仅 deck 区展示（焚毁区卡已彻底离场，残留计时无意义）
       if (zone === 'deck') {
         const max = cardProj.charges?.max ?? Infinity;
-        if ((cardProj.remainingUses ?? max) < max) {
-          const decayed = (cardProj.currentCooldown ?? 0) > (cardProj.charges?.cooldownTurns ?? 0);
-          obj.fx.setCooling(decayed ? 'decayed' : 'cooling', cardProj.currentCooldown ?? 0);
+        const cdTurns = cardProj.charges?.cooldownTurns ?? 0;
+        if ((cardProj.remainingUses ?? max) < max && cdTurns > 0) {
+          const beatsLeft = (cardProj.currentCooldown ?? 0)
+            + (max === Infinity ? 0 : Math.max(0, max - 1 - cardProj.remainingUses) * cdTurns);
+          const frac = Math.min(1, beatsLeft / ((max === Infinity ? 1 : max) * cdTurns));
+          const decayed = (cardProj.currentCooldown ?? 0) > cdTurns;
+          obj.fx.setCooling(decayed ? 'decayed' : 'cooling', cardProj.currentCooldown ?? 0, frac);
         }
       }
       const entry = { id: CARD_ID(cardProj.uniqueID), obj, x, y, baseScale: scale, hovered: false, t: 0 };

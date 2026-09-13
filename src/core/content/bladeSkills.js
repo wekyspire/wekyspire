@@ -99,7 +99,7 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
 // slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却，2026-09 设计稿）；
 // 进阶卡只经局内转化获得，转化继承充能状态，无需重复慢热。
 const SLASH_CHAIN = [
-  { id: 'slash', name: '斩', tier: 'D', damage: 16, cd: 2, slow: true },
+  { id: 'slash', name: '斩', tier: 'D', damage: 15, cd: 3, slow: true },
   { id: 'rockCleave', name: '裂石斩', tier: 'C', damage: 30, cd: 3 },
   { id: 'goldCleave', name: '削金斩', tier: 'B', damage: 57, cd: 4 },
   { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 5 },

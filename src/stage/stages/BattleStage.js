@@ -600,12 +600,20 @@ export class BattleStage {
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
-      // 冷却态盖纱（特效层持久指示）：充能未满=冷却中青纱；冷却被衰败推深（超定义基准）=衰败红纱；
-      // 附冷却剩余拍数徽章（用户定 2026-09-13：冷却进度必须在牌面上看得见）
+      // 冷却薄纱（特效层持久指示，高度 = 剩余冷却比例：全灰=刚入冷、半灰=冷了一半）+
+      // 剩余拍数水印（用户定 2026-09-13 第三版视觉）；衰败推深超基准 = 暗红薄纱
       const max = card.charges?.max ?? Infinity;
+      const cdTurns = card.charges?.cooldownTurns ?? 0;
       const cooling = card.remainingUses < max;
-      const decayed = cooling && card.currentCooldown > (card.charges?.cooldownTurns ?? 0);
-      view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null), card.currentCooldown ?? 0);
+      const decayed = cooling && card.currentCooldown > cdTurns;
+      let coolFrac = 0;
+      if (cooling && cdTurns > 0) {
+        const beatsLeft = (card.currentCooldown ?? 0)
+          + (max === Infinity ? 0 : Math.max(0, max - 1 - card.remainingUses) * cdTurns);
+        coolFrac = Math.min(1, beatsLeft / ((max === Infinity ? 1 : max) * cdTurns));
+      }
+      view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null),
+        card.currentCooldown ?? 0, coolFrac);
     }
   }
 
@@ -1653,16 +1661,17 @@ export class BattleStage {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
   }
 
-  // 牌库图标脉冲（库中卡冷却节拍的落点：绿色粒子 + 图标缩放弹跳一拍）。
+  // 牌库图标脉冲（库中卡冷却节拍的落点）。⚠ 反馈必须在 UI 空间：粒子层挂在世界场景，
+  // 往 UI 坐标（80,-55）打粒子肉眼不可见——0.7.13「斩弃回牌库无特效」的真凶。
+  // 故反馈 = 图标染色闪光（ZonePileObject.pulse）+ 缩放弹跳（动画器注册名 pile:deck）。
   _pulseDeckPile(color) {
     const pile = this._piles?.deck;
     if (!pile) return;
-    const { x, y } = pile.position;
-    this.particles.spawn(x, y, { count: 10, color, speed: 12, ttl: 0.5, size: 1.2, z: (pile.position.z ?? 0) + 2 });
+    pile.pulse(color);
     const s0 = pile.scale.x || 1;
-    this.animator.animate('pile:deck', { scale: s0 * 1.18 }, {
-      durationMs: 120,
-      onComplete: () => this.animator.animate('pile:deck', { scale: s0 }, { durationMs: 120 }),
+    this.animator.animate('pile:deck', { scale: s0 * 1.3 }, {
+      durationMs: 140,
+      onComplete: () => this.animator.animate('pile:deck', { scale: s0 }, { durationMs: 200 }),
     });
   }
 

@@ -3,8 +3,9 @@
 // （旧版脉冲 tween 挂 overlay.userData 的做法已废）。未来的卡面叠加特效一律在此扩层，
 // 不回 CardObject 散装实现。
 // z 分层（牌面 z=0；焚毁着色器挂牌面本体、余烬 z=1.2，均在 CardObject 侧不属本层）：
-//   veil  盖纱  z=0.35 —— 持久状态指示（冷却中/衰败），低透明呼吸
-//   chip  拍数  z=0.40 —— 冷却剩余拍数小徽章（用户定 2026-09-13：冷却进度必须看得见）
+//   veil  薄纱  z=0.35 —— 冷却进度指示：**高度 = 剩余冷却比例**的暗淡薄纱（用户定
+//         2026-09-13：完全灰暗=刚开始冷、一半灰暗=冷了一半；法线混合压暗，不做发光）
+//   chip  水印  z=0.40 —— 冷却剩余拍数水印数字（低透明度平面白字，不描边不发光）
 //   doom  将弃  z=0.36（暗化盖纱）+ 0.5（描边框）—— P9 尾弃预告：红色呼吸描边（用户定
 //         2026-09-13，Three 层实现——重要视效，后续动画扩展都在本层）
 //   pulse 闪光 z=0.45 —— 一次性加色脉冲（冷却推进/威力提升/衰败反向）
@@ -14,14 +15,16 @@
 import * as THREE from 'three';
 
 const VEIL_STYLE = {
-  cooling: { color: 0x4a8ed8, base: 0.08 },  // 冷却中：冷青蓝呼吸
-  decayed: { color: 0xc87070, base: 0.13 },  // 衰败过（冷却被反向推深）：暗红，与 named 术语「衰败」同色
+  cooling: { color: 0x0d1420, base: 0.5 },   // 冷却中：暗青灰薄纱（法线混合压暗牌面）
+  decayed: { color: 0x2c0f14, base: 0.55 },  // 衰败过（冷却被反向推深）：暗红薄纱
 };
-const VEIL_BREATH = 0.06; // 呼吸幅度
-const VEIL_PERIOD = 2.2;  // 呼吸周期（秒）
+const VEIL_BREATH = 0.05;  // 呼吸幅度
+const VEIL_PERIOD = 2.2;   // 呼吸周期（秒）
+const VEIL_LERP = 7;       // 薄纱高度收敛速率（/s——拍数推进时高度平滑过渡的动画）
 const PULSE_OPACITY = 0.55;
-// 冷却拍数徽章：底部居中小色块 + 白字（色随盖纱模式）；数字变化才重烘
-const CHIP_LAYOUT = { w: 8.4, h: 4.6, y: -10.4, z: 0.4 };
+// 冷却拍数水印：牌面中央低透明度平面白字（用户定 2026-09-13：平面型水印，
+// 驳回大号发光 counter 与色块徽章两版）
+const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
 // 将弃描边：警示红 + 急促呼吸（1.2s——逼近的截止感）；暗化盖纱让牌面"沉"下去
 const DOOM_COLOR = 0xd84848;
 const DOOM_PERIOD = 1.2;
@@ -33,11 +36,12 @@ export class CardFxLayer extends THREE.Group {
     this._w = width;
     this._h = height;
     this._t = 0;             // 层内统一时钟（盖纱呼吸相位共用）
-    this._veil = null;       // 持久盖纱平面
+    this._veil = null;       // 冷却薄纱平面（1×1 几何，按剩余比例缩放）
     this._veilMode = null;   // null | 'cooling' | 'decayed'
-    this._chip = null;       // 冷却拍数徽章（随盖纱显示）
-    this._chipN = null;      // 徽章当前数字（重烘判据）
-    this._chipMode = null;   // 徽章当前模式色（重烘判据）
+    this._veilFrac = 0;      // 当前展示的剩余比例（update 里向目标收敛 = 薄纱动画）
+    this._veilFracTarget = 0;
+    this._chip = null;       // 冷却拍数水印（随薄纱显示）
+    this._chipN = null;      // 水印当前数字（重烘判据）
     this._doom = null;       // 将弃特效组（暗化盖纱 + 四边描框，惰性创建）
     this._pulse = null;      // 脉冲平面
     this._pulseTl = null;    // { elapsed, duration, scale } | null
@@ -66,48 +70,54 @@ export class CardFxLayer extends THREE.Group {
   get pulseColor() { return this._pulse?.material.color.getHex() ?? null; }
   get pulseVisible() { return !!this._pulse?.visible; }
 
-  /** 持久冷却盖纱：null 关闭 | 'cooling' 冷却中 | 'decayed' 衰败过（冷却超基准）。
-   *  remaining = 冷却剩余拍数（currentCooldown），>0 时在牌面底部挂拍数徽章。幂等。 */
-  setCooling(mode, remaining = 0) {
+  /** 冷却薄纱：null 关闭 | 'cooling' 冷却中 | 'decayed' 衰败过（冷却超基准）。
+   *  remaining = 剩余拍数（水印数字，>0 才显示）；fraction = 剩余冷却比例 0..1
+   * （薄纱高度：1=刚入冷全灰、0.5=冷了一半——高度变化在 update 里平滑收敛）。幂等。 */
+  setCooling(mode, remaining = 0, fraction = 0) {
     const n = mode && remaining > 0 ? remaining : null;
-    if (mode === this._veilMode && n === this._chipN) return;
+    const f = mode ? Math.min(1, Math.max(0, fraction)) : 0;
+    if (mode === this._veilMode && n === this._chipN && f === this._veilFracTarget) return;
     this._veilMode = mode;
+    this._veilFracTarget = f;
     if (!mode) {
-      if (this._veil) this._veil.visible = false;
-      this._setChip(null, null);
+      // 收起也走收敛动画（薄纱向上退尽后隐藏），不瞬切
+      if (this._chip) this._chip.visible = false;
+      this._chipN = null;
       return;
     }
     if (!this._veil) {
       const mat = new THREE.MeshBasicMaterial({
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        transparent: true, blending: THREE.NormalBlending, depthWrite: false,
       });
-      this._veil = new THREE.Mesh(new THREE.PlaneGeometry(this._w, this._h), mat);
+      this._veil = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
       this._veil.position.z = 0.35;
+      this._veilFrac = 0; // 从 0 长出来 = 入冷时薄纱自上而下罩下的动画
       this.add(this._veil);
     }
     this._veil.material.color.set(VEIL_STYLE[mode].color);
     this._veil.visible = true;
-    this._setChip(mode, n);
+    this._setChip(n);
   }
 
-  /** 拍数徽章建/改/收（内部）：n=null 收起；否则按模式色烘「N」小色块。 */
-  _setChip(mode, n) {
-    if (n === this._chipN && (n === null || mode === this._chipMode)) return;
+  /** 拍数水印建/改/收（内部）：n=null 收起；否则烘低透明度平面白字数字。 */
+  _setChip(n) {
+    if (n === this._chipN) return;
     this._chipN = n;
-    this._chipMode = mode;
     if (n === null) {
       if (this._chip) this._chip.visible = false;
       return;
     }
     if (!this._chip) {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true, opacity: CHIP_LAYOUT.opacity, depthWrite: false,
+      });
       this._chip = new THREE.Mesh(
         new THREE.PlaneGeometry(CHIP_LAYOUT.w, CHIP_LAYOUT.h), mat);
       this._chip.position.set(0, CHIP_LAYOUT.y, CHIP_LAYOUT.z);
       this.add(this._chip);
     }
     const old = this._chip.material.map;
-    this._chip.material.map = bakeChipTexture(n, VEIL_STYLE[mode].color);
+    this._chip.material.map = bakeChipTexture(n);
     this._chip.material.needsUpdate = true;
     old?.dispose?.();
     this._chip.visible = true;
@@ -203,10 +213,21 @@ export class CardFxLayer extends THREE.Group {
         this._pulseTl = null;
       }
     }
-    if (this._veil?.visible) {
-      const st = VEIL_STYLE[this._veilMode];
-      this._veil.material.opacity = st.base
-        + VEIL_BREATH * (0.5 + 0.5 * Math.sin((this._t / VEIL_PERIOD) * Math.PI * 2));
+    if (this._veil) {
+      // 薄纱高度收敛动画：入冷时从牌顶罩下、每推进一拍向下退一截、回充后退尽隐藏
+      const k = 1 - Math.exp(-VEIL_LERP * dt);
+      this._veilFrac += (this._veilFracTarget - this._veilFrac) * k;
+      if (Math.abs(this._veilFracTarget - this._veilFrac) < 1e-3) this._veilFrac = this._veilFracTarget;
+      if (!this._veilMode && this._veilFrac <= 0) {
+        this._veil.visible = false;
+      } else if (this._veil.visible) {
+        const f = this._veilFrac;
+        this._veil.scale.set(this._w, Math.max(1e-4, this._h * f), 1);
+        this._veil.position.y = this._h / 2 - (this._h * f) / 2; // 顶边锚定牌顶
+        const st = VEIL_STYLE[this._veilMode] ?? VEIL_STYLE.cooling;
+        this._veil.material.opacity = st.base
+          + VEIL_BREATH * (0.5 + 0.5 * Math.sin((this._t / VEIL_PERIOD) * Math.PI * 2));
+      }
     }
     if (this._doom) {
       // 将弃呼吸：描边框 0.45~0.95 急促明暗（逼近的截止感），暗化盖纱同相反相轻颤
@@ -249,31 +270,25 @@ export class CardFxLayer extends THREE.Group {
   }
 }
 
-// 拍数徽章烘焙：圆角小色块（模式色压暗）+ 居中白粗体数字；node 无 document 走占位
-function bakeChipTexture(n, colorHex) {
+// 拍数水印烘焙：平面白字（透明度由材质统一压到 CHIP_LAYOUT.opacity），不描边不发光；
+// node 无 document 走占位
+function bakeChipTexture(n) {
   if (typeof document === 'undefined') {
     const texture = new THREE.Texture();
     texture.needsUpdate = true;
     return texture;
   }
-  const scale = 10; // 世界单位 → px（0.84×0.46 世界单位 → 84×46px 级，保字清晰）
-  const w = Math.round(CHIP_LAYOUT.w * scale), h = Math.round(CHIP_LAYOUT.h * scale);
+  const size = 144; // 正方形画布，数字居中
   const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
+  canvas.width = size; canvas.height = size;
   const g = canvas.getContext('2d');
-  const c = new THREE.Color(colorHex);
-  // 色块：模式色压暗 + 高不透明度（盖纱是加色呼吸，徽章要稳定可读）
-  const r = Math.round(c.r * 90), gg = Math.round(c.g * 90), b = Math.round(c.b * 110);
-  const rad = h * 0.32;
-  g.fillStyle = `rgba(${r},${gg},${b},0.92)`;
-  g.beginPath();
-  g.roundRect(1, 1, w - 2, h - 2, rad);
-  g.fill();
-  g.fillStyle = '#f2f6ff';
-  g.font = `bold ${Math.round(h * 0.62)}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  const text = String(n);
+  const fontPx = text.length >= 2 ? 66 : 88;
+  g.font = `bold ${fontPx}px "Segoe UI", "Microsoft YaHei", sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText(String(n), w / 2, h / 2 + 1);
+  g.fillStyle = '#eef3fd';
+  g.fillText(text, size / 2, size / 2 + 3);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;

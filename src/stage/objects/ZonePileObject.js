@@ -2,6 +2,7 @@
 // 点击交互由 BattleStage 处理（kind:'pile' → 打开区域查看器），本类只管视觉与计数重烘。
 
 import * as THREE from 'three';
+import gsap from 'gsap';
 
 const ICON_LAYOUT = { width: 100, height: 120 }; // 10x12 世界单位 × 10px（icon 型小图标）
 
@@ -40,6 +41,21 @@ export class ZonePileObject extends THREE.Group {
   }
 
   get count() { return this._count; }
+
+  /** 染色闪光（冷却节拍等 UI 空间反馈）：图标材质瞬时染成指定色再缓释回白。
+   *  粒子层在世界场景、打不到 UI 空间的图标，故反馈必须做在图标自己身上。 */
+  pulse(colorHex = 0x66ff99) {
+    const mat = this._material;
+    const c = new THREE.Color(colorHex);
+    gsap.killTweensOf(mat.color);
+    mat.color.setRGB(1, 1, 1); // 从白闪向目标色，再缓释回白：两跳都有颜色信息
+    gsap.to(mat.color, {
+      r: c.r, g: c.g, b: c.b, duration: 0.09, ease: 'power1.in',
+      onComplete: () => gsap.to(mat.color, {
+        r: 1, g: 1, b: 1, duration: 0.5, ease: 'power2.out',
+      }),
+    });
+  }
 
   dispose() {
     this._mesh.geometry.dispose();
