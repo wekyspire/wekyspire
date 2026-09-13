@@ -12,8 +12,8 @@ registerEvent({
   name: '毒藤温室',
   art: 'toxicGreenhouse',
   pages: [
-    { speaker: '旁白', text: '这一层的窗棂被藤蔓撑破了。紫黑色的孢子悬浮在空气里，像一场不会落地的雪。' },
-    { speaker: '旁白', text: '藤蔓深处结着几枚肥厚的毒菇——塔楼里的瘴毒之物，对懂行的人是宝贝。' },
+    { speaker: '旁白', text: '这一层的窗棂被藤蔓撑破了。紫黑色的孢子悬浮在空气里，久久不落。' },
+    { speaker: '旁白', text: '这里许是哪一系遗民荒废的药圃——藤蔓深处结着几枚肥厚的毒菇，对懂行的人是宝贝。' },
   ],
   choices: (run) => {
     const list = [
@@ -36,6 +36,6 @@ registerEvent({
       gainMoney(ctx, 12, { source: '毒藤温室 · 净化' });
       return { pages: [{ speaker: '旁白', text: '（火焰舔过藤蔓，孢子在高热里噼啪作响。灰烬落定后，你在烧穿的墙缝里摸到一袋钱币。）' }] };
     }
-    return { pages: [{ speaker: '旁白', text: '（你屏住呼吸绕了过去。孢子在身后继续飘落，像什么都没发生。）' }] };
+    return { pages: [{ speaker: '旁白', text: '（你屏住呼吸绕了过去。孢子在身后继续飘落。）' }] };
   },
 });
