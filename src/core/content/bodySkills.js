@@ -60,16 +60,15 @@ registerPureFist({
 
 // ==== 2. 崩拳系列（出牌冷却附伤：充能大弹匣，出牌是唯一上膛途径）====
 
-// 崩拳族共用骨架：8 回合大冷却 + 高额伤害；冷却位仅牌库（cooldownZones: ['deck']）
-// ——手中无自然冷却，打出其他牌是唯一加速途径（每打 1 牌即刻冷却 1），
+// 崩拳族共用骨架：8 回合大冷却 + 高额伤害；冷却走统一口径（仅在进入牌库时推进），
+// 手中无自然冷却——打出其他牌是**手中加速**途径（每打 1 牌即刻冷却 1，定向直达），
 // 与拳组合「高频出牌」哲学互为引擎。自身打出结算完成时已离手（pending→deck），
-// 不会自我加速。
+// 不会自我加速（但回库那一拍入库钩子照走）。
 function registerCollapseFist({ id, name, tier, damage, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 8 },
-    cooldownZones: ['deck'],
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {

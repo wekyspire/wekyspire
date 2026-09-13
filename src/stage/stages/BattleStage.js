@@ -1208,10 +1208,18 @@ export class BattleStage {
       return finish();
     }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
+    // 卡已入库（视图不在手）时改在牌库图标上播——入库冷却制下这是主落点（用户定 2026-09-13）；
+    // 队列定序保证它紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一拍。
     // 立即 finish——non-blocking，不占队列节拍
     if (type === EventNames.ANIM_COOLDOWN_TICK) {
       const delta = payload?.delta ?? 1;
-      this._pulseCard(payload?.skill?.uniqueID, delta < 0 ? 0xc87070 : 0x66ff99);
+      const id = payload?.skill?.uniqueID ?? null;
+      const view = id != null ? this._views.get(id) : null;
+      if (view) {
+        this._pulseCard(id, delta < 0 ? 0xc87070 : 0x66ff99);
+      } else if (delta > 0) {
+        this._pulseDeckPile(0x66ff99); // 反向（衰败）只可能在手牌，无退路需求
+      }
       return finish();
     }
     // 卡牌威力提升（公共节拍）：卡面放缩脉冲 —— 手牌里由弹簧层收养后自然弹回锚点，
@@ -1640,6 +1648,19 @@ export class BattleStage {
 
   _pulseCard(id, color) {
     this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
+  }
+
+  // 牌库图标脉冲（入库冷却节拍的落点：绿色粒子 + 图标缩放弹跳一拍）。
+  _pulseDeckPile(color) {
+    const pile = this._piles?.deck;
+    if (!pile) return;
+    const { x, y } = pile.position;
+    this.particles.spawn(x, y, { count: 10, color, speed: 12, ttl: 0.5, size: 1.2, z: (pile.position.z ?? 0) + 2 });
+    const s0 = pile.scale.x || 1;
+    this.animator.animate('pile:deck', { scale: s0 * 1.18 }, {
+      durationMs: 120,
+      onComplete: () => this.animator.animate('pile:deck', { scale: s0 }, { durationMs: 120 }),
+    });
   }
 
   /**

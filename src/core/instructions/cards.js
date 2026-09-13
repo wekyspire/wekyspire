@@ -6,6 +6,7 @@ import {
   overloadLimitOf, pickOverflowVictims,
 } from '../skills/helpers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
+import { tickCooldownOnEnterDeck } from './skill.js';
 
 // 卡牌指令族。约定：牌库 = FIFO 循环队列（顶 = index 0 = 下次抽的卡；离手卡回尾 =
 // 牌库底——无弃牌堆、无重洗）。一切 zone 迁移走 moveCard（数组唯一事实源）。
@@ -107,6 +108,7 @@ export class DiscardCardInstruction extends BattleInstruction {
     ctx.battleState.history.turn.discarded += 1;
     ctx.battleState.history.battle.discarded += 1;
     ctx.presenter?.cardDiscarded?.({ card });
+    tickCooldownOnEnterDeck(ctx, card); // 入库冷却（一切冷却仅在入库时发生）
     return true;
   }
 }
@@ -137,13 +139,16 @@ export class MoveCardInstruction extends BattleInstruction {
   }
 
   execute(ctx) {
-    if (zoneOf(ctx.battleState, this.uniqueID) === 'hand') {
+    const fromZone = zoneOf(ctx.battleState, this.uniqueID);
+    if (fromZone === 'hand') {
       deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
     }
     const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
     const card = moveCard(ctx.battleState, this.uniqueID, toZone, { index: toZone === this.toZone ? this.index : null });
     this.result = { card, toZone };
     ctx.presenter?.cardMoved?.({ card, toZone });
+    // 入库冷却：仅「从非牌库区进入牌库」算一次进入（牌库内搬移/换序不算）
+    if (toZone === 'deck' && fromZone !== 'deck') tickCooldownOnEnterDeck(ctx, card);
     return true;
   }
 }

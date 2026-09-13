@@ -625,3 +625,24 @@ shieldedOffense / bladeUnity / bladeSoul。
   batch11 25/25、batch12 16/16、batch13 17/17、batch16 38/38。
 - 收尾：PLAYBOOK R11 传承入库（tmp/playtests/PLAYBOOK.md）、changelog 0.7.8、探索试玩轮暂停
   （R11 为终轮，版本进入打磨期）。
+
+## 批次 19：冷却统一入库制（2026-09-13 用户两条连续拍板）
+
+> 用户原话：「让冷却仅在进入牌库时发生？我觉得可以！」→「能不能让所有冷却都仅在进入
+> 牌库时候才发生？不只是斩。」
+
+- **规则**：一切冷却**仅在卡牌进入牌库时**推进 1 拍。回合开始扫掠（SweepSkillCooldown）
+  与 cooldownZones 机制整体废除。落点 = 三条入库指令：UseSkill 收尾回库底 / DiscardCard /
+  MoveCard（toZone=deck 且 fromZone≠deck——库内搬移/换序不算进入）；DumpCards 展开 Discard
+  自动覆盖；斩焚毁 veto 走 MoveCard 自动触发；满充能卡静默豁免。
+- **语义闭环**：冷却 1 ≈ 新旧等价（打出回库即回充）；冷却 2+ = 入库次数税（攥手里永不
+  走表）；慢热/衰败（反向）语义更干净；砺刀系/猛拳族/崩拳族定向直达不受影响。
+- **演出**：入库冷却脉冲落在**牌库图标**（卡已入库、视图不在手）——绿色粒子 + 图标缩放
+  弹跳，队列定序保证紧跟 cardMoved 飞入落定之后；在手卡（砺刀直达）维持卡面脉冲；
+  衰败反向仍暗红卡面脉冲。
+- **文档同步**：battle.md §3.1（P2 阶段废除，号保留以免连锁改号）+ C4 重写；斩/衰败
+  named 词条；PLAYBOOK 机制传承首条。
+- 冒烟 tmp/smoke-cooldown-deck.mjs **19/19**（冷却1/冷却2/慢热斩/焚毁满充能斩/焚毁冷却中斩/
+  砺刀直达/MoveCard 三口径/满充能豁免）。全量回归：batch4 一处旧断言随新制更新
+  （拭刃「冷却 1」→「入库即回充」）；batch2 在 HEAD 上即挂（chantCapacity，存量失效，
+  与本次无关）。

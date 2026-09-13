@@ -170,16 +170,16 @@ function advanceSlashChain(sctx, parentInstr = null) {
 }
 
 // ==== 斩系列（局内进阶链，全游戏最高单伤）======================================
-// 【斩】（NAMED.md）：不可被焚毁（被焚毁时以回牌库取代之，进入牌库时冷却1）；
-// 只在牌库中冷却充能（cooldownZones: ['deck']——手中攥着不回充，砺刀/花刀是唯二
-// 的手中处理手段）；发动后进阶（转化到链上下一阶，keepPower 延续强化）。
-// 洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改伤害/冷却/等阶）。
+// 【斩】（NAMED.md）：不可被焚毁（被焚毁时以回牌库取代之）；发动后进阶（转化到链上
+//   下一阶，keepPower 延续强化）。冷却走全游戏统一口径——**仅在进入牌库时推进 1 拍**
+//   （打出回牌库底 / 弃回 / 焚毁 veto 回库统一走入库钩子；手中攥着与回合开始均不
+//   走表，砺刀/花刀是唯二的手中直达手段）。洗入3碎铁是链上每阶共有的效果
+//   （设计稿单行表述 + 链条只改伤害/冷却/等阶）。
 const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade', ...(slow ? ['slowStart'] : [])],
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: cd },
-  cooldownZones: ['deck'],
   cardMode: 'normal', targetMode: 'enemy',
   // 局内进阶链走 battlePromotesTo（局内转化专用字段）——斩不可局外晋升
   // （营地/训练场的 promoteCard 只认 promotesTo，对斩链天然不可见）
@@ -196,9 +196,8 @@ const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => regi
   },
   subscriptions: (sctx) => [{
     // 【斩】不可焚毁：PRE 否决焚毁，以「回牌库」取代（veto replacements 插入父节点）；
-    // 入库代价 = 没收充能并冷却 1（NAMED.md「进入牌库时，冷却1」）。满充能被焚时
-    // 计时按 1 重置——enterBattle 对满充能卡也预置 cooldownTurns 计时，那是无意义
-    // 残留值；冷却中的卡保持原计时（不低于 1）。
+    // 入库代价 = 没收充能、重新全程冷却——冷却推进由入库钩子统一接管（回库那拍
+    // 立即走 1）；冷却中的卡保持原计时（钩子照走那 1 拍）。
     when: BurnCardInstruction, phase: 'pre',
     filter: (instr) => instr.uniqueID === sctx.self.uniqueID,
     react: (instr, ctx) => {
@@ -206,9 +205,7 @@ const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => regi
       const max = def.charges?.max ?? Infinity;
       if (sctx.self.remainingUses >= max) {
         sctx.self.remainingUses = 0;
-        sctx.self.currentCooldown = 1;
-      } else {
-        sctx.self.currentCooldown = Math.max(sctx.self.currentCooldown, 1);
+        sctx.self.currentCooldown = def.charges?.cooldownTurns ?? 0;
       }
       ctx.kernel.veto(instr, '斩：不可焚毁', [
         new MoveCardInstruction({ uniqueID: sctx.self.uniqueID, toZone: 'deck' }),
@@ -625,9 +622,10 @@ registerSkill({
 });
 
 // ==== 深入卡（砺刀系：手中刀的冷却管理）========================================
-// 手中刀法牌冷却 N：SkillCooldownInstruction 定向推进无视 cooldownZones 区域门——
-// 这正是斩系列「只在牌库冷却」的唯一手中补救手段；满充能的刀无处推进、静默落空。
-// 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜）。
+// 手中刀法牌冷却 N：SkillCooldownInstruction 定向直达，不经入库钩子——
+// 这正是斩系列「只在牌库冷却」（入库冷却制）的手中补救手段；满充能的刀无处推进、静默落空。
+// 【短暂】：回合结束时仍滞留手牌则回牌库（打出走 FIFO 回库，抽到不打也不许过夜——
+// 回库那一刻入库钩子照常走 1 拍）。
 const whetCard = (id, name, tier, delta) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['transient'],
