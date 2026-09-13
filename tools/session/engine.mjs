@@ -16,7 +16,7 @@ import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../../src/core/state/pla
 import { createSkillRuntime } from '../../src/core/state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../../src/core/content/bodySkills.js';
 import { createRecordingPresenter } from '../../src/core/presenter.js';
-import { canUseSkill, makeSkillCtx, effectiveHandCount, chantActivationLegal } from '../../src/core/skills/helpers.js';
+import { canUseSkill, makeSkillCtx, effectiveHandCount, chantActivationLegal, handBreakdown } from '../../src/core/skills/helpers.js';
 import { getSkillDefinition, allSkills, hasSkill } from '../../src/core/skills/registry.js';
 import { getEffectDefinition } from '../../src/core/effects/registry.js';
 import { getAbilityDefinition } from '../../src/core/abilities/registry.js';
@@ -267,7 +267,10 @@ function execBattle(S, cmd, t) {
       L.push(`  充能: 剩余 ${rt.remainingUses}`
         + (rt.remainingUses <= 0 && rt.currentCooldown > 0 ? `，冷却剩 ${rt.currentCooldown} 拍` : ''));
       if (def.cardMode === 'chant') {
-        L.push(`  咏唱: ${rt.isActivated ? '已激活' : '未激活'}｜加权手牌 ${effectiveHandCount(bs)} / 上限 ${pl.maxHandSize}`);
+        const _bd = handBreakdown(bs);
+        const _cap = pl.chantCapacity ?? 1;
+        L.push(`  咏唱: ${rt.isActivated ? '已激活' : '未激活'}｜手牌占用 ${_bd.normal + Math.max(0, _bd.chantW - _cap)} / 上限 ${pl.maxHandSize}`
+          + `（普通${_bd.normal} + 咏唱溢出${Math.max(0, _bd.chantW - _cap)}）｜咏唱容量 ${Math.min(_bd.chantW, _cap)}/${_cap}`);
       }
       const reasons = unusableReasons(S, rt);
       L.push(reasons.length ? `  → 原因: ${reasons.join('；')}`

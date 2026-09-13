@@ -16,7 +16,7 @@ import { ConsumeActionPointsInstruction } from './resources.js';
 // 仍失败则焚毁。超载是唯一会让"移动失败"的约束（牌库/坟墓无上限）——容量（handLimitOf）
 // 不拦移动：容量只约束回合开始抽牌与 P9 尾弃，回合内移动/抽牌可以顶进超载区。
 function resolveTargetZone(ctx, toZone) {
-  if (toZone === 'hand' && effectiveHandCount(ctx.battleState) >= overloadLimitOf(ctx)) {
+  if (toZone === 'hand' && effectiveHandCount(ctx) >= overloadLimitOf(ctx)) {
     return 'deck';
   }
   return toZone;
@@ -48,7 +48,7 @@ export class DrawCardsInstruction extends BattleInstruction {
     for (let i = 0; i < this.payload.count; i++) {
       // 抽牌截断走超载口径：容量只约束回合开始抽牌（turn.js 已按容量房间算好 count），
       // 回合内的抽牌效果允许顶过容量、直到超载——超载空间是抽牌卡的当回合价值空间
-      if (effectiveHandCount(ctx.battleState) >= overloadLimitOf(ctx)) { blockedByHandLimit = true; break; }
+      if (effectiveHandCount(ctx) >= overloadLimitOf(ctx)) { blockedByHandLimit = true; break; }
       if (zones.deck.length === 0) { deckEmpty = true; break; }
       const card = this.from === 'bottom' ? zones.deck.pop() : zones.deck.shift();
       zones.hand.push(card);
@@ -117,7 +117,7 @@ export class DiscardCardInstruction extends BattleInstruction {
 // 弃置 = 回牌库底（Z2 非消耗离手口径），从最尾端开始逐张——FIFO 循环序因此确定可规划。
 export class DiscardOverflowInstruction extends BattleInstruction {
   execute(ctx) {
-    const victims = pickOverflowVictims(ctx.battleState.zones.hand, handLimitOf(ctx), ctx.battleState);
+    const victims = pickOverflowVictims(ctx.battleState.zones.hand, ctx);
     for (const uniqueID of victims) {
       ctx.kernel.submitInstruction(new DiscardCardInstruction({ uniqueID }), this);
     }

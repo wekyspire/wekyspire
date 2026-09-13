@@ -31,9 +31,11 @@ export default class Player extends Unit {
     // 隐藏体修等级：不随灵脉加点增长，只在进阶事件「跳过」时 +1（故事模式暗线，
     // 见 RUN_DESIGN；决定体修卡包的等阶门禁）。
     this.bodyLevel = opts.bodyLevel ?? 0;
-    // 手牌上限（加权口径：激活的咏唱卡按咏唱值 chantWeight 计多张——咏唱与手牌
-    // 压力统一为同一资源）。旧档无此字段时读取侧 ?? 10 兜底。
-    this.maxHandSize = opts.maxHandSize ?? 7;
+    // 手牌上限（2026-09-13 批次 13 起 7→6；加权口径：激活咏唱先吃咏唱容量、
+    // 溢出部分才吃手牌容量——见 helpers.effectiveHandCount）。
+    this.maxHandSize = opts.maxHandSize ?? 6;
+    // 咏唱容量（激活咏唱的免费占用额度，按咏唱开销计数不按卡数；空系未来的改造钩子）。
+    this.chantCapacity = opts.chantCapacity ?? 1;
 
     // 基础值（run 级修正的基准）：遗物的 run 级加成（行动力上限/魏启上限/防御…）
     // **不写进这些字段**，而是每次由 refreshRunModifiers 从 baseStats + Σ已激活遗物修正重算。
@@ -47,6 +49,7 @@ export default class Player extends Unit {
       attack: this.attack,
       defense: this.defense,
       maxHandSize: this.maxHandSize,
+      chantCapacity: this.chantCapacity,
       ...opts.baseStats,
     };
   }

@@ -1,7 +1,7 @@
 // 状态渲染：把会话状态（run + 战斗）渲染成文本界面（headless CLI 与直播观战共用同一份）。
 // 按阶段分流到 render* 小函数；render() 只负责玩家/遗物表头与尾档收尾。
 import { swapCostOf } from '../../src/core/state/battleState.js';
-import { effectiveHandCount } from '../../src/core/skills/helpers.js';
+import { handBreakdown } from '../../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../../src/core/skills/registry.js';
 import { getAbilityDefinition } from '../../src/core/abilities/registry.js';
 import { getEnemyDefinition } from '../../src/core/enemies/registry.js';
@@ -86,7 +86,13 @@ function renderBattle(S, L) {
     if (al.isDead()) continue;
     L.push(`瑞米: HP ${al.hp}/${al.maxHp} 意图: ${intentText(al)}`);
   }
-  L.push(`牌库 ${bs.zones.deck.length}（lib 查抽牌顺序——顺序抽，可预知） | 焚毁 ${bs.zones.burnt.length} | 手牌 ${effectiveHandCount(bs)}/${p.maxHandSize}（加权）`);
+  // 批次 13 容量分解（用户要求 headless 注明状态）：普通/咏唱容量/溢出三段
+  const _bd = handBreakdown(bs);
+  const _cap = p.chantCapacity ?? 1;
+  const _used = _bd.normal + Math.max(0, _bd.chantW - _cap);
+  L.push(`牌库 ${bs.zones.deck.length}（lib 查抽牌顺序——顺序抽，可预知） | 焚毁 ${bs.zones.burnt.length} | `
+    + `手牌 占用${_used}/${p.maxHandSize}（普通${_bd.normal} + 咏唱溢出${Math.max(0, _bd.chantW - _cap)}） | `
+    + `咏唱容量 ${Math.min(_bd.chantW, _cap)}/${_cap}`);
   L.push(`手牌:`);
   bs.zones.hand.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, S.battle.ctx)));
   L.push(`本回合累计: 打${bs.history.turn.played} 弃${bs.history.turn.discarded} 抽${bs.history.turn.drawn}`);
@@ -103,8 +109,11 @@ function renderBattle(S, L) {
         + pi.candidates.map((id, i) => `[${i + 1}] ${byId.has(id) ? defOf(byId.get(id)).name : id}`).join(' '));
     }
   }
+  if (pi) {
+    L.push(`  → 应答：in <候选#> [卡名] …（多选就重复写，如 in 1 拳 3 盾）`);
+  }
   L.push(`→ play <手牌#> <卡名> [敌#] / dump <手牌#> <卡名> [更多# 卡名…]（付费${swapCostOf(bs)}AP弃任意张） / end`
-    + ` / in <候选#> [卡名] …（多选就重复写，如 in 1 拳 3 盾） / why <手牌#> / lib 看牌库`);
+    + ` / why <手牌#> / lib 看牌库`);
   const log = battleLogText(S);
   if (log.length) {
     L.push(`最近结算:`);

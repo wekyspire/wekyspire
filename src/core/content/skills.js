@@ -19,7 +19,10 @@ export function resolvedDamageText(sctx, base) {
 
 // ① 纯伤害攻击牌（真拳系列 D 位：拳→快拳→炮拳→真拳）
 registerSkill({
+  // D− 初始卡：不进任何奖励池（批次 14，2026-09-13 用户定——正常 D 卡都比它们强，
+  // 杀戮尖塔 Strike/Defend 同款：开包即提升）。
   id: 'punch', name: '拳', type: 'normal', tier: 'D', series: 'punch',
+  canSpawnAsReward: false,
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -48,6 +51,7 @@ export function enemyTarget(sctx) {
 // ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾，2026-09 稿 4→5）。
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'D', series: 'block',
+  canSpawnAsReward: false, // D− 初始卡，不进奖励池（批次 14）
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',

@@ -62,7 +62,7 @@ export function gainMaxMana(run, amount) {
 export function refreshRunModifiers(run, battleState = null) {
   const p = run.player;
   const base = p.baseStats ?? {};
-  const patch = { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0 };
+  const patch = { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0, chantCapacity: 0 };
   for (const id of activeRelics(run)) {
     const def = getRelicDefinition(id);
     const mods = def?.runModifiers;
@@ -85,7 +85,8 @@ export function refreshRunModifiers(run, battleState = null) {
   p.maxActionPoints = (base.maxActionPoints ?? PLAYER_BASE_AP) + patch.maxActionPoints;
   p.attack = (base.attack ?? 0) + patch.attack;
   p.defense = (base.defense ?? 0) + patch.defense;
-  p.maxHandSize = (base.maxHandSize ?? 7) + patch.maxHandSize;
+  p.maxHandSize = (base.maxHandSize ?? 6) + patch.maxHandSize;
+  p.chantCapacity = (base.chantCapacity ?? 1) + patch.chantCapacity;
   p.mana = Math.min(p.mana, p.maxMana);        // 上限下调时不残留
   p.actionPoints = Math.min(p.actionPoints, p.maxActionPoints);
   return run;
@@ -99,7 +100,7 @@ export function refreshRunModifiers(run, battleState = null) {
 export function applyBattleModifier(ctx, field, delta) {
   const bs = ctx.battleState;
   if (!bs) throw new Error('战斗级数值修正只能在战斗内使用（缺少 battleState）');
-  bs.modifiers ??= { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0 };
+  bs.modifiers ??= { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0, chantCapacity: 0 };
   if (!(field in bs.modifiers)) {
     throw new Error(`未知的战斗级修正字段：${field}（可用：${Object.keys(bs.modifiers).join('/')}）`);
   }

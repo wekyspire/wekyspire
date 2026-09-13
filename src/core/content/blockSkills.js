@@ -26,6 +26,7 @@ import {
 // 抱头（格挡系列 D）：+1 层格挡（block 效果，非护盾池）。promotesTo 格挡（C）。
 registerSkill({
   id: 'duckHead', name: '抱头', type: 'normal', tier: 'D', series: 'block',
+  canSpawnAsReward: false, // D− 初始卡，不进奖励池（批次 14）
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -364,9 +365,11 @@ const handGateChant = (id, name, conditionText, gate) => registerSkill({
 handGateChant('winWithout', '以无胜有', '若你只有1手牌', (sctx, battleState) =>
   battleState.zones.hand.length === 1);
 
-// 以有胜无（B）：加权手牌不少于 6 张（囤牌）→ 3 层格挡
-handGateChant('haveWithout', '以有胜无', '若你手牌不少于6张', (sctx, battleState) =>
-  effectiveHandCount(battleState) >= 6);
+// 以有胜无（B）：加权手牌不少于 5 张（囤牌）→ 3 层格挡
+// （2026-09-13 批次 13：上限 7→6 后「>=6」在结算中此卡离手时永不成立=直接删卡，
+//   对齐为 5 = 恢复「满手触发」原语义。）
+handGateChant('haveWithout', '以有胜无', '若你手牌不少于5张', (sctx) =>
+  effectiveHandCount(sctx) >= 5);
 
 // 活动筋骨（C/B，1AP 冷却2）：获得力量。C 版固定 1；B 版「力量 1+N」，
 // N = 此牌本场已打出次数（打出前计数——首打仍为 1，越打越强，与冷却2的循环咬合）。

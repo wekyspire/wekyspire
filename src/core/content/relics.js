@@ -863,7 +863,7 @@ registerRelic({
   subscriptions: () => [{
     when: PlayerTurnEndInstruction,
     phase: 'post',
-    filter: (instr, c) => effectiveHandCount(c.battleState) <= 3,
+    filter: (instr, c) => effectiveHandCount(c) <= 3,
     react: (instr, c) => {
       c.battleState.turnDrawBonus = (c.battleState.turnDrawBonus ?? 0) + 1;
     },

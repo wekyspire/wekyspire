@@ -29,7 +29,7 @@ export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) 
     lastPlayerTarget: null, // 主角最后攻击过的敌人 uniqueID（瑞米索敌口径；null = 本场尚未攻击过）
     // 本场战斗级数值修正（内容侧只经 prep.applyBattleModifier 写入；随本对象一起消失，
     // 故「本场 +1 上限」类效果不需要任何战后回滚）。
-    modifiers: { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0 },
+    modifiers: { maxMana: 0, maxActionPoints: 0, attack: 0, defense: 0, maxHandSize: 0, chantCapacity: 0 },
     // 本场战斗的恶魔词条标量（银行机超额取款；PreBattle 从 run.pendingDebuffs 折入）：
     // { blind, drawPenaltyTurns, noManaRegenTurns, deathAtTurnEnd, dotFromTurn }
     debuffs: { blind: false, drawPenaltyTurns: 0, noManaRegenTurns: 0, deathAtTurnEnd: 0, dotFromTurn: null },

@@ -118,7 +118,7 @@ export function drawCards(sctx, count, opts = {}) {
 
 // 抽到手牌上限（虚形拳「后手：抽满手牌」；按加权口径算差额）
 export function drawToHandLimit(sctx) {
-  const room = handLimitOf(sctx) - effectiveHandCount(sctx.battleState);
+  const room = handLimitOf(sctx) - effectiveHandCount(sctx);
   if (room > 0) drawCards(sctx, room);
 }
 
