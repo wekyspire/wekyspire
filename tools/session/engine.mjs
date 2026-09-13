@@ -200,7 +200,7 @@ export function exec(S, raw) {
 // ---- Boss 奖励删卡（pendingCardRemoval 的 headless 出口；Shell 侧 = runMachines.bossRemoveCard）----
 function execRemove(S, t) {
   const run = S.run;
-  if (!(run.pendingCardRemoval > 0)) throw new Error('当前没有可用的删卡机会（Boss 层胜利奖励）');
+  if (!(run.pendingCardRemoval > 0)) throw new Error('当前没有可用的删卡机会（Boss 奖励 / 跳过进阶反哺）');
   if (run.gameStage === 'battle') throw new Error('战斗中不能删卡');
   const card = run.player.deck[resolveHandStrict(run.player.deck, t[1], t[2], '构筑卡')];
   const name = removeCardAtGurpas(run, card.uniqueID);
