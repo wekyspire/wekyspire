@@ -12,6 +12,7 @@
 //   card     卡牌整卡预览：按 id 反查（markup 只存 id，印出的名字永远等于定义名）；
 //            模型带 cardPreview { skillId, params }，TooltipOverlay 渲染 CardFacePreview
 //            （应用前口径 describe，params 经 ctx.params 透传插值）
+//   cards    多卡并列预览（升级分叉 hover）：模型带 cardPreviews [{ skillId, params }]
 //   named    术语文档（namedTerms，键即术语名，含参数如「衰败2」）
 //   intention 意图投影数据直译短句（与 UnitObject 意图条图标一一对应）
 //   shift    Shift 详情方标（文案由热区携带）
@@ -28,6 +29,7 @@ export function tooltipModel(kind, payload = {}) {
   switch (kind) {
     case 'effect': return effectModel(payload);
     case 'card': return cardModel(payload);
+    case 'cards': return cardsModel(payload);
     case 'relic': return relicModel(payload);
     case 'item': return { title: payload.title ?? '', body: payload.body ?? '', tint: payload.tint };
     case 'named': return namedModel(payload);
@@ -54,6 +56,20 @@ function cardModel({ cardId, params }) {
     body: '',
     cardPreview: { skillId: def.id, params: params ?? {} },
     size: CARD_PREVIEW_SIZE,
+  };
+}
+
+// cards：多卡并列预览（升级分叉的 hover——候选卡的全部可升方向并排摆，用户定
+// 2026-09-13）。单张时退化为与 card 相同的单卡模型，少一层并列样式分叉。
+function cardsModel({ cardIds = [], params }) {
+  const defs = cardIds.filter(id => id != null && hasSkill(id)).map(id => getSkillDefinition(id));
+  if (!defs.length) return { title: `[cards] ${cardIds.join(',')}`, body: '' };
+  if (defs.length === 1) return cardModel({ cardId: defs[0].id, params });
+  return {
+    title: defs.map(d => d.name).join(' / '),
+    body: '',
+    cardPreviews: defs.map(d => ({ skillId: d.id, params: params ?? {} })),
+    size: { w: CARD_PREVIEW_SIZE.w * defs.length + 8 * (defs.length - 1), h: CARD_PREVIEW_SIZE.h },
   };
 }
 

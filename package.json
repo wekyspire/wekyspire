@@ -1,6 +1,6 @@
 {
   "name": "weiqi-chaos",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "private": true,
   "scripts": {
     "dev": "vite",

@@ -28,14 +28,14 @@ export function createRunMachines(ctx) {
   const { run, slot, runSequencer, cutscene, showcase } = ctx;
 
   // ---- 银行机（与老虎机成对；SLOT_MACHINE.md §银行机）----
-  function bankDo(kind, arg) {
+  function bankDo(kind, arg, arg2 = null) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
     try {
       if (kind === 'deposit') bankDeposit(run, arg ?? null);       // 缺省 = 全部存入
       else if (kind === 'withdraw') bankWithdraw(run);
       else if (kind === 'overdraft') bankOverdraft(run, arg);
       else if (kind === 'pick') showcase.bankDemonPick(arg);
-      else if (kind === 'upgradeOffer') bankUpgrade(run, arg);
+      else if (kind === 'upgradeOffer') bankUpgrade(run, arg, arg2); // arg2 = 分叉目标
       else if (kind === 'burnOffer') bankBurn(run, arg);
     } catch (err) {
       console.warn('[bank]', err.message);
@@ -108,10 +108,10 @@ export function createRunMachines(ctx) {
     slot.lastSpin = null;
     ctx.notify();
   }
-  // 大奖「免费指定升级」：选卡界面确认后落地
-  function slotPickUpgrade(uniqueID) {
+  // 大奖「免费指定升级」：选卡界面确认后落地（分叉卡由升级子面板带 targetId）
+  function slotPickUpgrade(uniqueID, targetId = null) {
     if (run.gameStage !== 'room' || !run.slotUpgradePending) return;
-    slotUpgrade(run, uniqueID);
+    slotUpgrade(run, uniqueID, targetId);
     ctx.notify();
   }
   // 吞噬（粉碎换金币）
@@ -203,7 +203,7 @@ export function createRunMachines(ctx) {
       bankWithdraw: () => bankDo('withdraw'),
       bankOverdraft: (i) => bankDo('overdraft', i.tier),
       bankPick: (i) => bankDo('pick', i.id),
-      bankUpgradeOffer: (i) => bankDo('upgradeOffer', i.uniqueID),
+      bankUpgradeOffer: (i) => bankDo('upgradeOffer', i.uniqueID, i.targetId ?? null),
       bankBurnOffer: (i) => bankDo('burnOffer', i.uniqueID),
       bossRemoveCard: (i) => bossRemoveCard(i.uniqueID),
       gurpasBuy: (i) => gurpasDo('buy', i.index),
@@ -212,7 +212,7 @@ export function createRunMachines(ctx) {
       gurpasRemove: (i) => gurpasDo('remove', i.uniqueID, i.uniqueID),
       slotTake: (i) => slotTake(i.choice ?? null),
       slotDecline: () => slotDecline(),
-      slotPickUpgrade: (i) => slotPickUpgrade(i.uniqueID),
+      slotPickUpgrade: (i) => slotPickUpgrade(i.uniqueID, i.targetId ?? null),
       requestDevour: () => openDevourFlow(),
       slotDevourRelic: (i) => slotDevour({ kind: 'relic', relicId: i.relicId }),
       slotDevourCard: (i) => slotDevour({ kind: 'card', uniqueID: i.uniqueID }),

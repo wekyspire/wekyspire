@@ -430,10 +430,10 @@ export function declineSlotPrize(run, out = {}) {
   return { ...out, declined: true };
 }
 
-/** 免费指定升级的落地点（前端选卡界面 / headless 直接调）。 */
-export function slotUpgrade(run, uniqueID) {
+/** 免费指定升级的落地点（前端选卡界面 / headless 直接调）。分叉时 targetId 由升级子面板传入。 */
+export function slotUpgrade(run, uniqueID, targetId = null) {
   if (!run.slotUpgradePending) throw new Error('当前没有待指定的免费升级');
-  const r = promoteCard(run, uniqueID);
+  const r = promoteCard(run, uniqueID, targetId);
   if (!r) throw new Error('该卡没有可用的升级目标');
   run.slotUpgradePending = false;
   run.slotPending = null;

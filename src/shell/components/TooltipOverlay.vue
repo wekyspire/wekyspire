@@ -11,10 +11,14 @@ const s = tooltipState;
 </script>
 
 <template>
-  <div v-if="s.visible && s.model" class="tooltip" :class="{ 'is-card': s.model.cardPreview }"
+  <div v-if="s.visible && s.model" class="tooltip" :class="{ 'is-card': s.model.cardPreview || s.model.cardPreviews }"
     :style="{ left: s.x + 'px', top: s.y + 'px' }">
     <CardFacePreview v-if="s.model.cardPreview" class="tip-card"
       :skill-id="s.model.cardPreview.skillId" :ctx="{ params: s.model.cardPreview.params }" />
+    <div v-else-if="s.model.cardPreviews" class="tip-cards">
+      <CardFacePreview v-for="p in s.model.cardPreviews" :key="p.skillId" class="tip-card"
+        :skill-id="p.skillId" :ctx="{ params: p.params }" />
+    </div>
     <template v-else>
       <b>{{ s.model.title }}</b>
       <template v-if="s.model.body"><br><span class="tip-body" :style="{ color: s.model.tint }">{{ s.model.body }}</span></template>
@@ -36,4 +40,6 @@ const s = tooltipState;
 /* 整卡预览宿主：去 max-width 文本约束，卡宽固定 200（与 tooltip.js CARD_PREVIEW_SIZE 同步） */
 .tooltip.is-card { max-width: none; padding: 8px; }
 .tip-card { width: 200px; }
+/* 多卡并列预览（升级分叉 hover）：横排、间距 8（与 cardsModel.size 的估算同步） */
+.tip-cards { display: flex; gap: 8px; }
 </style>

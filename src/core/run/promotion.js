@@ -33,7 +33,9 @@ export function canPromoteRuntime(runtime, run) {
   return gatedPromotionTargets(run, getSkillDefinition(runtime.defId)).length > 0;
 }
 
-// 晋升 deck 内一张卡。targetId 可选（分叉时指定）；无可用目标（含被等阶门禁挡下）
+// 晋升 deck 内一张卡。targetId 可选（分叉时指定）；**缺省且多分叉时按 run.rng 确定性
+// 随机取一条**（用户定 2026-09-13：随机升级随机选分叉——老虎机随机升级/headless 兜底都走
+// 这条；营地/训练场等 UI 流由升级子面板显式传 targetId）。无可用目标（含被等阶门禁挡下）
 // 返回 null（调用方决定跳过）。uniqueID 保持不变（牌面身份稳定），其余运行时状态
 // 按新定义重置。
 export function promoteCard(run, uniqueID, targetId = null) {
@@ -43,7 +45,10 @@ export function promoteCard(run, uniqueID, targetId = null) {
   if (targetId !== null && !targets.includes(targetId)) {
     throw new Error(`'${targetId}' 不是 '${runtime.defId}' 的可用晋升目标（不存在或等阶未解锁）`);
   }
-  const next = targetId ?? targets[0];
+  const next = targetId
+    ?? (targets.length > 1 && run.rng
+      ? targets[Math.floor(run.rng.next() * targets.length)]
+      : targets[0]);
   if (!next) return null; // 晋升目标内容缺省/被门禁挡下 → 跳过（占位）
   Object.assign(runtime, createSkillRuntime(next), { uniqueID: runtime.uniqueID });
   return runtime;

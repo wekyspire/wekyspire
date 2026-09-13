@@ -421,13 +421,13 @@ export function takeBankOffer(run) {
   return offer;
 }
 
-/** 词条附赠：立即免费升级一张（浑浑噩噩）。 */
-export function bankUpgrade(run, uniqueID) {
+/** 词条附赠：立即免费升级一张（浑浑噩噩）。分叉时 targetId 由升级子面板显式传入。 */
+export function bankUpgrade(run, uniqueID, targetId = null) {
   const b = bankState(run);
   if (!b.offers.includes('upgrade')) throw new Error('当前没有待用的升级');
   const rt = run.player.deck.find(c => c.uniqueID === uniqueID);
   if (!rt) throw new Error('牌库里没有这张卡');
-  const result = promoteCard(run, uniqueID);
+  const result = promoteCard(run, uniqueID, targetId);
   if (!result) throw new Error('该卡暂无可用晋升目标，无法升级');
   b.offers.splice(b.offers.indexOf('upgrade'), 1);
   return run;

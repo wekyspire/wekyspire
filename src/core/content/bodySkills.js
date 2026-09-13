@@ -150,11 +150,12 @@ function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null
   });
 }
 
-// 仿形拳（C）：伤害线链首
-registerShadowFist({ id: 'mimicFist', name: '仿形拳', tier: 'C', bonus: 7, promotesTo: 'leopardFist' });
+// 仿形拳（C）：链首——晋升在此分叉（用户定 2026-09-13：升级必须提升等阶，
+// C→B 的两个同族成员都是合法方向；抉择走升级子面板，随机升级随机取）
+registerShadowFist({ id: 'mimicFist', name: '仿形拳', tier: 'C', bonus: 7, promotesTo: ['leopardFist', 'snakeFist'] });
 // 豹形拳（B）：伤害线
 registerShadowFist({ id: 'leopardFist', name: '豹形拳', tier: 'B', bonus: 15, promotesTo: 'tigerFist' });
-// 蛇形拳（B）：抽牌分叉线链首（无 C 前置，奖励直取）
+// 蛇形拳（B）：抽牌分叉线（可由仿形拳晋升分岔而来，也可奖励直取）
 registerShadowFist({ id: 'snakeFist', name: '蛇形拳', tier: 'B', bonus: 7, draw: 2, promotesTo: 'dragonFist' });
 // 虎形拳（A）：伤害线
 registerShadowFist({ id: 'tigerFist', name: '虎形拳', tier: 'A', bonus: 27 });

@@ -29,7 +29,7 @@ import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } 
 import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
-import { canPromoteRuntime, gatedPromotionTargets } from './promotion.js';
+import { gatedPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
 /**
@@ -360,14 +360,19 @@ export function deckUpgradeCards(run) {
   const p = run.player;
   return p.deck.map((rt) => {
     const def = getSkillDefinition(rt.defId);
-    const targetId = canPromoteRuntime(rt, run) ? (gatedPromotionTargets(run, def)[0] ?? null) : null;
-    const targetDef = targetId ? getSkillDefinition(targetId) : null;
+    // 全部分叉目标（过等阶门禁）：升级子面板按它渲染方向选择，hover 按它弹多卡预览；
+    // toName/toView/tipDefId 保留第一目标（单分叉口径，向后兼容）
+    const targetIds = gatedPromotionTargets(run, def);
+    const targetDef = targetIds.length ? getSkillDefinition(targetIds[0]) : null;
     return {
       uniqueID: rt.uniqueID,
       defId: rt.defId,
       view: cardViewFromDef(def, { player: p }),
-      enabled: !!targetId,
-      tipDefId: targetId ?? rt.defId,
+      enabled: targetIds.length > 0,
+      tipDefId: targetIds[0] ?? rt.defId,
+      toDefIds: targetIds,
+      // 各分叉目标的渲染视图（升级子面板的候选卡面；与 toDefIds 同序）
+      toViews: targetIds.map(id => ({ defId: id, view: cardViewFromDef(getSkillDefinition(id), { player: p }) })),
       toName: targetDef?.name ?? null,
       toView: targetDef ? cardViewFromDef(targetDef, { player: p }) : null,
     };

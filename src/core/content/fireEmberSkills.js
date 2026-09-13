@@ -166,13 +166,20 @@ registerSkill({
 // 排除出奖励池），化整为零地承载「0 开销」语义。
 const FIRE_CONTROL_ZERO_IDS = [];
 
-function registerFireControlPair(id, name, tier, mana, targetMode, def) {
+// 族内晋升分岔（用户定 2026-09-13）：升级必须提升等阶，故同族按等阶跨档互升——
+// C（燃/扰）→ B 三选一（散/收/灼）；B → A 三选一（爆/聚/炼）；S（无上）阶梯外不接。
+// 抉择走升级子面板；随机升级由 promoteCard 随机取分叉。
+const FIRE_CONTROL_B = ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch'];
+const FIRE_CONTROL_A = ['fireControlDetonate', 'fireControlGather', 'fireControlRefine'];
+
+function registerFireControlPair(id, name, tier, mana, targetMode, def, promotesTo = null) {
   const common = {
     name, type: 'fire', tier, series: 'fireControl',
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', ...def,
   };
-  registerSkill({ ...common, id, cost: { mana, actionPoint: 0 }, targetMode });
+  // promotesTo 只挂主卡：Zero 镜像是「发现 0 费」的瞬态件，不进牌组也就不参与局外晋升
+  registerSkill({ ...common, id, cost: { mana, actionPoint: 0 }, targetMode, promotesTo });
   registerSkill({
     ...common, id: `${id}Zero`,
     cost: { mana: 0, actionPoint: 0 }, targetMode,
@@ -194,7 +201,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
   },
-});
+}, ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch']);
 
 // 控火术：灭 已于 2026-09-13 按用户新文档删除（拍板：驱散敌方燃烧与叠炎主轴背道而驰，
 // 清燃烧的正向出口由控火术：收/爆/聚 承担，自身泄压由新卡「灭火」承担）。
@@ -221,7 +228,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy',
     return true;
   },
   describe: () => '你下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
-});
+}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
 // 口径：多成员时按「传播」语义——每名其它成员各获得全额层数（与鬼火
@@ -243,7 +250,7 @@ registerFireControlPair('fireControlSpread', '控火术：散', 'B', 3, 'enemy',
     return true;
   },
   describe: () => '消耗目标全部/effect{燃烧}，叠加到其阵营其它成员身上',
-});
+}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：收 B —— 消耗目标所有燃烧，每 3 层获得 1 魏启（走上限截断管线）。
 registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 3, 'enemy', {
@@ -264,7 +271,7 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 3, 'enemy'
     const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `消耗目标全部/effect{燃烧}（当前${stacks}层），获得${Math.floor(stacks / 3)}魏启`;
   },
-});
+}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：扰 C（2026-09 由 B 改 C）—— 消耗自身所有燃烧，每层获得 3 护盾。
 registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 3, 'none', {
@@ -280,7 +287,7 @@ registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 3, 'none',
     const stacks = sctx.player.getEffectStacks('burn');
     return `消耗自身全部/effect{燃烧}（当前${stacks}层），获得${stacks * 3}护盾`;
   },
-});
+}, ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch']);
 
 // 控火术：爆 A —— 消耗所有敌人的全部燃烧，每层对全体敌人造成 1 点群伤
 // （口径："敌人"取敌方全体——与同系列始终用"目标"指代单体的写法相区别；

@@ -527,9 +527,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRoom(run);
     notify();
   }
-  function trainingUpgrade(uniqueID) {
+  function trainingUpgrade(uniqueID, targetId = null) {
     if (run.gameStage !== 'room' || trainingLocked()) return;
-    trainUpgrade(run, uniqueID); // 内部已 roll 强制抓牌候选
+    trainUpgrade(run, uniqueID, targetId); // 内部已 roll 强制抓牌候选；分叉目标由升级子面板传入
     notify();
   }
   function trainingDrawRoll() {
@@ -542,11 +542,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     trainDraw(run, defId); // forced 状态下 null 由核心抛错拦截（UI 不渲染跳过入口）
     maybeLeaveRoom();
   }
-  function campChoose(option, uniqueID = null) {
+  function campChoose(option, uniqueID = null, targetId = null) {
     if (run.gameStage !== 'room' || campLocked()) return;
     if (option === 'rest') campRest(run);
     else if (option === 'recoverRemi') campRecoverRemi(run);
-    else if (option === 'upgrade') campUpgrade(run, uniqueID);
+    else if (option === 'upgrade') campUpgrade(run, uniqueID, targetId); // 分叉目标由升级子面板传入
     maybeLeaveRoom();
   }
   // 合并房的主动离房（单房由动作自动离房，不需要这个）
@@ -588,10 +588,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     startBattle: () => startBattle(),
     chooseRewardPack: (i) => chooseRewardPack(i.packId),
     claimReward: (i) => claimReward(i.defId ?? null),
-    trainingUpgrade: (i) => trainingUpgrade(i.uniqueID),
+    trainingUpgrade: (i) => trainingUpgrade(i.uniqueID, i.targetId ?? null),
     trainingDrawRoll: () => trainingDrawRoll(),
     trainingDraw: (i) => trainingDraw(i.defId ?? null),
-    campChoose: (i) => campChoose(i.option, i.uniqueID ?? null),
+    campChoose: (i) => campChoose(i.option, i.uniqueID ?? null, i.targetId ?? null),
     leaveRoom: () => leaveRoom(),
     leaveSlot: () => leaveSlot(),
     ...machines.intents,

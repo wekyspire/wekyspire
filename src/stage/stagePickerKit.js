@@ -41,19 +41,19 @@ import { playCardGrantFlight } from './cardGrantFlight.js';
 const UPGRADE_SOURCES = {
   camp: {
     cards: (s) => s?.camp?.upgradeCards,
-    intent: (uniqueID) => ({ action: 'campChoose', option: 'upgrade', uniqueID }),
+    intent: (uniqueID, targetId = null) => ({ action: 'campChoose', option: 'upgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
   training: {
     cards: (s) => s?.training?.upgradeCards,
-    intent: (uniqueID) => ({ action: 'trainingUpgrade', uniqueID }),
+    intent: (uniqueID, targetId = null) => ({ action: 'trainingUpgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
   bankUpgrade: {
     cards: (s) => s?.bank?.upgradeCards,
-    intent: (uniqueID) => ({ action: 'bankUpgradeOffer', uniqueID }),
+    intent: (uniqueID, targetId = null) => ({ action: 'bankUpgradeOffer', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
@@ -65,7 +65,7 @@ const UPGRADE_SOURCES = {
   },
   slot: {
     cards: (s) => s?.slot?.upgradeCards,
-    intent: (uniqueID) => ({ action: 'slotPickUpgrade', uniqueID }),
+    intent: (uniqueID, targetId = null) => ({ action: 'slotPickUpgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
@@ -92,9 +92,10 @@ const UPGRADE_SOURCES = {
 };
 
 // 选卡快照段 → 界面的候选条目形状（保持各入口原有的字段口径）
+// tipDefIds/toViews 是升级分叉的全目标段（hover 多卡预览 + 分叉子面板候选）
 const toCardEntry = (c) => ({
   uniqueID: c.uniqueID, defId: c.defId, view: c.view,
-  enabled: c.enabled, tipDefId: c.tipDefId,
+  enabled: c.enabled, tipDefId: c.tipDefId, tipDefIds: c.toDefIds,
 });
 
 export function createStagePickerKit({
@@ -183,6 +184,9 @@ export function createStagePickerKit({
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
      * 所有入口都只列**可用**候选（`enabled !== false`：升级入口的 enabled = 有晋升目标，
      * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标——用户 2026-09-11 报）。
+     * **晋升分叉**（用户定 2026-09-13）：确认的卡带多个晋升目标时不直接上行，换开
+     * 「选择晋升方向」子面板（候选 = 各分叉目标卡面），确认才带 targetId 上行；
+     * 子面板「返回」= 回上一级重选（不消费升级机会——意图未上行，core 未结算）。
      * @returns 是否真的打开了（无候选 / 未知 source → false，编排器据此跳过）
      */
     openUpgradePicker(source, snap = null) {
@@ -191,18 +195,38 @@ export function createStagePickerKit({
       const cards = (def.cards(snap) ?? []).filter(c => c.enabled !== false);
       if (!cards.length) return false;
       const picker = ensureCardPicker();
-      confirmFn = (ids) => {
-        const intent = def.intent(ids[0]);
+      const fire = (uniqueID, targetId = null) => {
+        const intent = def.intent(uniqueID, targetId);
         if (intent) onIntent?.(intent);
       };
-      cancelFn = null;   // 升级/焚毁/删除：返回 = 只收起界面（不做放弃）
+      const openMain = () => {
+        confirmFn = (ids) => {
+          const c = cards.find(x => x.uniqueID === ids[0]);
+          if (c?.toDefIds?.length > 1) { openBranch(c); return; }
+          fire(ids[0]);
+        };
+        cancelFn = null;   // 升级/焚毁/删除：返回 = 只收起界面（不做放弃）
+        picker.open({
+          title: def.title,
+          hint: def.hint,
+          cards: cards.map(toCardEntry),
+          confirmLabel: def.confirmLabel,
+        });
+      };
+      const openBranch = (c) => {
+        confirmFn = (ids) => fire(c.uniqueID, ids[0]);  // 子面板候选 key = 目标 defId
+        cancelFn = () => openMain();                    // 返回 = 回上一级重选
+        picker.open({
+          title: '选择晋升方向',
+          hint: '这张卡可以晋升为以下形态之一 ｜ 悬停查看卡面 ｜ 「返回」重新选卡',
+          cards: (c.toViews ?? []).map(t => ({
+            uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
+          })),
+          confirmLabel: '确认晋升',
+        });
+      };
       picker.attachPicker(pickerNow());
-      picker.open({
-        title: def.title,
-        hint: def.hint,
-        cards: cards.map(toCardEntry),
-        confirmLabel: def.confirmLabel,
-      });
+      openMain();
       return true;
     },
 

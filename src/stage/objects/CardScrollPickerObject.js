@@ -57,8 +57,11 @@ export class CardScrollPickerObject extends ScrollPickerObject {
         return {
           obj, key: c.uniqueID, id, enabled: c.enabled,
           meta: { uniqueID: c.uniqueID, defId: c.defId, view: c.view, tipDefId: c.tipDefId },
-          // 预览用 `tipDefId ?? defId`（升级入口传的是升阶后的卡；无目标时预览自身，hover 不落空）
-          tip: { type: 'card', payload: { cardId: c.tipDefId ?? c.defId } },
+          // 预览用 `tipDefId ?? defId`（升级入口传的是升阶后的卡；无目标时预览自身，hover 不落空）；
+          // 升级分叉（tipDefIds 多张）→ 多卡并列预览（「可升方向全摆出来」，用户定 2026-09-13）
+          tip: (c.tipDefIds?.length > 1)
+            ? { type: 'cards', payload: { cardIds: c.tipDefIds } }
+            : { type: 'card', payload: { cardId: c.tipDefId ?? c.defId } },
           setState: (s) => obj.setVisualState(s),
         };
       },
