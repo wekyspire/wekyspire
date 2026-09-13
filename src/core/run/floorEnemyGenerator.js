@@ -99,10 +99,12 @@ const TEMPLATES = [
 ];
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
 // 第二波（2026-09-13）：22 层骑士长（阵型结业考）、33 层饕餮领主（滚雪球结业考）上岗；
-// 44 层终塔 Boss 单独设计，暂由 pyro 占位。自 22 层起每个 Boss 必带燃烧交互纹理
-//（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控）。
+// 第三波（2026-09-13）：44 层塔心（孤身巨石三阶段体力考）上岗，pyro 占位卸任。
+// 自 22 层起每个 Boss 必带燃烧交互纹理
+//（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
+//  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环）。
 const BOSS_OF_FLOOR = Object.freeze({
-  11: 'pyro', 22: 'knightCommander', 33: 'gluttonLord', 44: 'pyro',
+  11: 'pyro', 22: 'knightCommander', 33: 'gluttonLord', 44: 'towerHeart',
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR));
 

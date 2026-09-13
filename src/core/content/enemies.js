@@ -259,6 +259,105 @@ registerEnemy({
   },
 });
 
+// ②‴ 44 层终塔 Boss · 塔心（孤身巨石 · 三阶段，Boss 波 3 上岗 2026-09-13；设计定稿见
+// tmp/design-final-boss.md——整塔唯一一场 1v1 巨石战：无召唤无随从，靠体量与换形态压场，
+// 与波 2 两只召唤轴 Boss 反其道，避免「终极战又在清小怪」）。
+// 阶段由自身 hp 比例驱动（>66% P1 塔心之怒 / 33–66% P2 塔心之壁 / ≤33% P3 塔心崩落）；
+// 每次跨入新阶段的第一拍改为「蜕壳」宣言拍：不攻击，净化自身全部燃烧 + 自盾 15
+// （燃烧交互铁律：换壳即剥落——火系要在一个阶段内完成「堆层→引爆」闭环，不能跨阶段囤层）。
+//   P1 快攻考（盾线跟不跟得上连击）：三连击(6+atk×3) → 攻16 → 三连击，三拍循环；
+//   P2 持久输出考（盾墙里维持 DPS）：自盾20+蓄势2 → 攻10 → 自盾20 → 攻14，四拍循环；
+//   P3 终局竞速（它也在死）：攻14 → 攻14 → 大崩落（攻22+自身燃烧6）——自焚是设计好的
+//   败亡曲线，玩家正解从「抢伤害」切换为「全防御拖它自焚」（赢 = 不死）。
+// 阶段内节拍用 _phaseBeat 独立计数（换阶段重置），蜕壳拍不消耗节拍。
+const towerHeartPhaseOf = (unit) => {
+  const r = unit.hp / unit.maxHp;
+  return r > 2 / 3 ? 1 : r > 1 / 3 ? 2 : 3;
+};
+registerEnemy({
+  difficulty: { base: 18, min: 18, max: 18, floorMin: 44, floorMax: 44 },
+  id: 'towerHeart', name: '塔心',
+  createUnit: () => new Enemy({ defId: 'towerHeart', name: '塔心', maxHp: 44 }),
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    const phase = towerHeartPhaseOf(unit);
+    // 蜕壳：跨入新阶段的第一拍（宣言拍，不攻击）
+    if (phase !== (unit._phase ?? 1)) {
+      unit._phase = phase;
+      unit._phaseBeat = 0;
+      const b = unit.getEffectStacks('burn');
+      if (b > 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'burn', stacks: -b }));
+      }
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
+      return;
+    }
+    const beat = (unit._phaseBeat ?? 0) % (phase === 2 ? 4 : 3);
+    unit._phaseBeat = (unit._phaseBeat ?? 0) + 1;
+    if (phase === 1) {
+      // 三连击 → 攻16 → 三连击
+      if (beat !== 1) {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: actx.player, amount: 6 + atk }));
+        }
+      } else {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 16 + atk }));
+      }
+      return;
+    }
+    if (phase === 2) {
+      // 自盾20+蓄势2 → 攻10 → 自盾20 → 攻14
+      if (beat === 0 || beat === 2) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 20 }));
+        if (beat === 0) {
+          actx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: 'focus', stacks: 2 }));
+        }
+      } else {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: (beat === 1 ? 10 : 14) + atk }));
+      }
+      return;
+    }
+    // P3：攻14 → 攻14 → 大崩落（攻22 + 自身燃烧6，自焚累积不再蜕壳）
+    if (beat === 2) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 22 + atk }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'burn', stacks: 6 }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 14 + atk }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase = towerHeartPhaseOf(unit);
+    // 预告与实际同轨：下一拍若是蜕壳（即将跨入新阶段），预告宣言
+    if (phase !== (unit._phase ?? 1)) {
+      return { kinds: ['buff'], note: '蜕壳：净化自身全部燃烧，自身护盾+15' };
+    }
+    const beat = (unit._phaseBeat ?? 0) % (phase === 2 ? 4 : 3);
+    if (phase === 1) {
+      return beat !== 1
+        ? { kinds: ['attack'], hits: 3, damage: 6 + atk, note: '塔心之怒' }
+        : { kinds: ['attack'], hits: 1, damage: 16 + atk, note: '塔心之怒' };
+    }
+    if (phase === 2) {
+      if (beat === 0) return { kinds: ['defend', 'buff'], note: '塔心之壁：自身护盾+20，蓄势2' };
+      if (beat === 2) return { kinds: ['defend'], note: '塔心之壁：自身护盾+20' };
+      return { kinds: ['attack'], hits: 1, damage: (beat === 1 ? 10 : 14) + atk, note: '塔心之壁' };
+    }
+    return beat === 2
+      ? { kinds: ['attack'], hits: 1, damage: 22 + atk, note: '大崩落：塔心自身燃烧+6' }
+      : { kinds: ['attack'], hits: 1, damage: 14 + atk, note: '塔心崩落' };
+  },
+});
+
 // ③ 针鼠：**首拍竖刺（荆棘3，一次性）**，此后「攻3+护盾8 ↔ 攻6」两拍往复。
 // 2026-09 用户改稿：旧版每两拍叠一次荆棘（越拖越痛），实质是在奖励速杀；改后荆棘只在开场
 // 上一次，长线战斗不再变本加厉——速攻的唯一优势只剩「第一拍就秒掉它」从而完全避开荆棘。
