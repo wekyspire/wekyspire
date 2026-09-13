@@ -250,7 +250,8 @@ registerSkill({
 // 选牌弃：N 段护盾 + 选 K 张手牌丢弃（结算期选牌：段0请求，段1读应答弃牌）。
 // 自身已离手（pending），选牌候选即其余手牌；空手则跳过请求。
 // 仍是刀法牌（blade 关键词）——练刀/培植/砺刀系的作用域不变。
-// 阶梯（设计稿表）：花刀→二重花刀→（乱舞系）银刀乱舞；完美花刀是分叉散卡不进链。
+// 阶梯（用户裁 2026-09-13：升级等阶必然提升——花刀与二重花刀同为 C 阶不能互升，
+// 两张 C 都直升同一张 B：银刀乱舞；完美花刀是分叉散卡不进链）。
 const cleaveCard = (id, name, tier, shield, hits, picks, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
@@ -277,7 +278,7 @@ const cleaveCard = (id, name, tier, shield, hits, picks, promotesTo = null) => r
   describe: () => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
   battleDescribe: (sctx) => `${shield}护盾${hits > 1 ? `×${hits}` : ''}，选${picks}张手牌丢弃`,
 });
-cleaveCard('handCleave', '花刀', 'C', 8, 1, 1, 'doubleCleave');
+cleaveCard('handCleave', '花刀', 'C', 8, 1, 1, 'silverDance');
 cleaveCard('doubleCleave', '二重花刀', 'C', 8, 2, 2, 'silverDance');
 cleaveCard('perfectCleave', '完美花刀', 'B', 14, 1, 1);
 
