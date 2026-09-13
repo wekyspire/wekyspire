@@ -253,6 +253,37 @@ registerSkill({
   describe: () => '8护盾，/effect{格挡}1',
 });
 
+// 绷劲（盾系列 D，批次 17 体修盾紧急按钮·用户批 2026-09-13）：1AP 5 护盾（基础对齐
+// D 盾白板——铁律「无条件部分不许比同阶白板强」）；本回合已打出≥3 张牌改 8 护盾
+//（+3 是连打体系溢价；紧急按钮语义 = 回合后段打出吃大盾。计数不含自身——发动卡
+// 结算时尚未计入，与快如雨同口径）。
+registerSkill({
+  id: 'tenseMuscle', name: '绷劲', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal',
+  use(sctx) {
+    gainShield(sctx, sctx.battleState.history.turn.played >= 3 ? 8 : 5);
+    return true;
+  },
+  describe: () => '5护盾；若本回合已打出不少于3张牌，改为8护盾',
+  battleDescribe: (sctx) => `${sctx.battleState.history.turn.played >= 3 ? 8 : 5}护盾`,
+});
+
+// 丹田气（盾系列 C，批次 17）：0 费 4 护盾，冷却 2（彻底 0 开销卡必须谨慎——
+// 免费即每回合白嫖，默认冷却起步；省 AP 的救命盾，弱于 D 盾的 1AP 5 合理）。
+registerSkill({
+  id: 'dantianBreath', name: '丹田气', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 2 },
+  cardMode: 'normal',
+  use(sctx) {
+    gainShield(sctx, 4);
+    return true;
+  },
+  describe: () => '4护盾',
+});
+
 // ==== 姿态系列（常驻引擎·咏唱）=================================================
 
 // 龟守链（咏唱2，P5 咏唱触发攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。

@@ -17,12 +17,13 @@ import { promoteCard } from '../promotion.js';
 // 未实装：故事模式的跨轮回剧情（存满 900 金佣金 / 银行机跑路 / 对话）——那属于故事模式大项。
 
 export const BANK = Object.freeze({
-  // 每层利率（连击档 → 每 X 金产出 Y 金）：文档原表
+  // 每层利率（连击档 → 每 X 金产出 Y 金）：批次 18 压复利（2026-09-13 用户定）——
+  // 原表 20-25%/层（21 层滚出数十倍，D 组试玩 3713 金死在塔里）压到约 7%/层
+  //（21 层 ≈ 5 倍：20→100 金，购买力不失控）；连击档结构与存款降连击规则不变。
   rates: [
-    { minCombo: 5, per: 7, yield: 2 },
-    { minCombo: 4, per: 4, yield: 1 },   // 4 连击
-    { minCombo: 3, per: 9, yield: 2 },   // 3 连击
-    { minCombo: 0, per: 5, yield: 1 },   // 2 连击或以下
+    { minCombo: 4, per: 12, yield: 1 },  // 4 连击或以上 ≈ 8.3%/层
+    { minCombo: 3, per: 25, yield: 2 },  // 3 连击 ≈ 8%/层
+    { minCombo: 0, per: 15, yield: 1 },  // 2 连击或以下 ≈ 6.7%/层
   ],
   // 超额取款的档位（拿到的金币 = 该档所承受词条的等级）
   tiers: [
