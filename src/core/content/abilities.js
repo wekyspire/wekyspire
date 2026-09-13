@@ -2,9 +2,9 @@ import { registerAbility } from '../abilities/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { DealDamageInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
-import { PlayerTurnStartInstruction } from '../instructions/turn.js';
+import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { aliveEnemies } from '../state/battleState.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { isBladeCard } from './cardKit.js';
@@ -42,7 +42,7 @@ registerAbility({
 //   刀圣 = 战斗窗口订阅，打出刀法牌（isBladeCard 判据，含碎铁/斩链衍生牌）就抽 1。
 registerAbility({
   id: 'bladeMaster', name: '刀客', grade: 'elite',
-  description: '换卡开销不超过 1。',
+  description: '弃卡开销不超过 1。',
   onBattleStart(ctx) {
     // 取更严者：将来若有多条能力同时封顶，低的那个生效（null = 无上限）
     ctx.battleState.swapCostCap = Math.min(ctx.battleState.swapCostCap ?? Infinity, 1);
@@ -50,7 +50,7 @@ registerAbility({
 });
 
 registerAbility({
-  id: 'bladeSaint', name: '刀圣', grade: 'master',
+  id: 'bladeSaint', requires: 'bladeMaster', name: '刀圣', grade: 'master',
   description: '每打出一张刀法牌，抽 1 张牌。',
   subscriptions: () => [{
     when: UseSkillInstruction, phase: 'post',
@@ -90,7 +90,7 @@ registerAbility({
 // 大师 **起手式**：战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。
 // 判据 = 伤害指令携带的 skill 反查 def.type === 'fire'（dealDamage 透传 sctx.self）。
 registerAbility({
-  id: 'openerGambit', name: '起手式', grade: 'master',
+  id: 'openerGambit', requires: 'pyroBlast', name: '起手式', grade: 'master',
   description: '战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。',
   subscriptions: () => {
     let used = false; // 战斗窗口闭包：每场重置（订阅随战斗销毁）
@@ -116,7 +116,7 @@ registerAbility({
 
 // 大师 **避焰决**：战斗开始时，获得烈焰亲和5。
 registerAbility({
-  id: 'flameSever', name: '避焰决', grade: 'master',
+  id: 'flameSever', requires: 'fireWard', name: '避焰决', grade: 'master',
   description: '战斗开始时，获得烈焰亲和5。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
@@ -142,7 +142,7 @@ registerAbility({
 
 // 大师 **炎魔**：战斗开始时炎魔1（与火灵脉基础能力的 1 层叠加）。
 registerAbility({
-  id: 'flameDemonLord', name: '炎魔', grade: 'master',
+  id: 'flameDemonLord', requires: 'scorchVein', name: '炎魔', grade: 'master',
   description: '战斗开始时，获得炎魔1。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
@@ -173,7 +173,7 @@ registerAbility({
 
 // 大师 **吞日者**：每点溢出魏启赋予所有敌人燃烧4（吹火者的上位，同持覆盖）。
 registerAbility({
-  id: 'sunSwallower', name: '吞日者', grade: 'master',
+  id: 'sunSwallower', requires: 'fireBlower', name: '吞日者', grade: 'master',
   description: '每点溢出魏启，赋予所有敌人燃烧4。',
   subscriptions: () => [{
     when: GainManaInstruction, phase: 'post',
@@ -219,7 +219,7 @@ registerAbility({
 
 // 大师 **拳王**：每回合打出第 8 张牌后，回复 1 AP（与拳师独立计数，同持双触发）。
 registerAbility({
-  id: 'champion', name: '拳王', grade: 'master',
+  id: 'champion', requires: 'boxer', name: '拳王', grade: 'master',
   description: '每回合打出第 8 张牌后，回复 1 行动点。',
   subscriptions: () => {
     let count = 0;
@@ -243,7 +243,66 @@ registerAbility({
   },
 });
 
+
+// ---- 体修·拳/刀补强（2026-09-13 批次 12，BODY_CULTIVATION_CARDS §1.4/§2.5 用户文档定稿）----
+
+// 精英 **挡拆**：你每打出一张牌，获得 1 护盾（咏唱发动同样过 UseSkillInstruction → 天然计入）。
+registerAbility({
+  id: 'parryFist', name: '挡拆', grade: 'elite',
+  description: '你每打出一张牌，获得 1 护盾。',
+  subscriptions: () => [{
+    when: UseSkillInstruction, phase: 'post',
+    filter: () => true,
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
+  }],
+});
+
+// 大师 **以攻为守**（前置：挡拆）：你每造成一次伤害（实际落血），获得 1 护盾。
+// source 空（燃烧/反伤）与被全挡（dealt 0）不计——只奖真实命中。
+registerAbility({
+  id: 'shieldedOffense', name: '以攻为守', grade: 'master', requires: 'parryFist',
+  description: '你每造成一次伤害，获得 1 护盾。',
+  subscriptions: () => [{
+    when: DealDamageInstruction, phase: 'post',
+    filter: (instr, ctx) => instr.source === ctx.player && (instr.result?.dealt ?? 0) > 0,
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
+  }],
+});
+
+// 精英 **人刀一体**：回合结束时，牌库中每张刀法牌提供 1 护盾（持有人刀一心时被覆盖）。
+registerAbility({
+  id: 'bladeUnity', name: '人刀一体', grade: 'elite',
+  description: '回合结束时，你的牌库中每有一张刀法牌，获得 1 护盾。',
+  subscriptions: () => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => !ctx.player.abilities.includes('bladeSoul'),
+    react: (instr, ctx) => {
+      const n = ctx.battleState.zones.deck.filter(c => isBladeCard(c)).length;
+      if (n > 0) ctx.kernel.submitInstruction(
+        new GainShieldInstruction({ target: ctx.player, amount: n }), instr);
+    },
+  }],
+});
+
+// 大师 **人刀一心**（前置：人刀一体）：牌库中每张刀法牌提供 2 护盾（人刀一体的上位）。
+registerAbility({
+  id: 'bladeSoul', name: '人刀一心', grade: 'master', requires: 'bladeUnity',
+  description: '回合结束时，你的牌库中每有一张刀法牌，获得 2 护盾。',
+  subscriptions: () => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: () => true,
+    react: (instr, ctx) => {
+      const n = ctx.battleState.zones.deck.filter(c => isBladeCard(c)).length;
+      if (n > 0) ctx.kernel.submitInstruction(
+        new GainShieldInstruction({ target: ctx.player, amount: n * 2 }), instr);
+    },
+  }],
+});
+
 // ---- 体修·拆（§3.4）----
+
 
 // 精英 **武者**：格挡 ≥3 层时，受攻击从减免 50% 变为减免 75%（block 减半后再折半；
 // 持有武帝时被覆盖）。priority -10 = 必须在 block 的 PRE（默认 0）之后跑。
@@ -261,7 +320,7 @@ registerAbility({
 
 // 大师 **武帝**：格挡 ≥5 层时，减免 90% 伤害（block 减半后再折到 1/5；武者的上位）。
 registerAbility({
-  id: 'warEmperor', name: '武帝', grade: 'master',
+  id: 'warEmperor', requires: 'warrior', name: '武帝', grade: 'master',
   description: '格挡不少于 5 层时，受攻击减免 90% 伤害。',
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'pre', priority: -10,

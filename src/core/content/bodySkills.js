@@ -411,11 +411,11 @@ function registerDrawDamageChant({ id, name, tier, damage, promotesTo = null }) 
 }
 
 // 入门（C）
-registerDrawDamageChant({ id: 'novice', name: '入门', tier: 'C', damage: 1, promotesTo: 'adept' });
+registerDrawDamageChant({ id: 'novice', name: '入门', tier: 'C', damage: 2, promotesTo: 'adept' });
 // 精通（B）
-registerDrawDamageChant({ id: 'adept', name: '精通', tier: 'B', damage: 2, promotesTo: 'peerless' });
+registerDrawDamageChant({ id: 'adept', name: '精通', tier: 'B', damage: 4, promotesTo: 'peerless' });
 // 无双（A）
-registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 4 });
+registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 6 });
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 

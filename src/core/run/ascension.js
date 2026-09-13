@@ -1,5 +1,6 @@
 import { advanceFloor } from './runFlow.js';
 import { allSkills } from '../skills/registry.js';
+import { getAbilityDefinition } from '../abilities/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { packOf } from './rewards.js';
 import { gainMaxMana, gainMaxHp } from './prep.js';
@@ -84,12 +85,14 @@ const ABILITY_POOLS = Object.freeze({
     master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
   }),
   body: Object.freeze({
-    elite: Object.freeze(['boxer', 'bladeMaster', 'warrior']),
-    master: Object.freeze(['champion', 'bladeSaint', 'warEmperor']),
+    elite: Object.freeze(['boxer', 'bladeMaster', 'warrior', 'parryFist', 'bladeUnity']),
+    master: Object.freeze(['champion', 'bladeSaint', 'warEmperor', 'shieldedOffense', 'bladeSoul']),
   }),
 });
 
 // 能力授予候选：按当前修为聚合「已达标且未持有」的能力（授予幕间据此出选项）。
+// 大师能力双铁律（2026-09-13 用户定）：①前置精英未持有则大师不入选（def.requires）；
+// ②已持有的能力永不重复入选（下方 filter；chooseAscensionAbility 落账侧另有防御）。
 export function abilityOffering(run) {
   const p = run?.player;
   if (!p) return [];
@@ -104,7 +107,11 @@ export function abilityOffering(run) {
   const bodyLv = p.bodyLevel ?? 0;
   if (bodyLv >= 2) out.push(...ABILITY_POOLS.body.elite);
   if (bodyLv >= 3) out.push(...ABILITY_POOLS.body.master);
-  return [...new Set(out)].filter(id => !p.abilities.includes(id));
+  return [...new Set(out)].filter(id => {
+    if (p.abilities.includes(id)) return false;
+    const req = getAbilityDefinition(id)?.requires;
+    return !req || p.abilities.includes(req);
+  });
 }
 
 // ---- 种子包（首次 0→1）----
@@ -249,6 +256,7 @@ export function chooseAscensionAbility(run, abilityId = null) {
   if (!run.ascensionOffer) throw new Error('当前没有待授予的能力');
   if (abilityId !== null) {
     if (!run.ascensionOffer.includes(abilityId)) throw new Error(`能力不在授予候选中：${abilityId}`);
+    if (run.player.abilities.includes(abilityId)) throw new Error(`能力已持有，不得重复领取：${abilityId}`);
     run.player.abilities.push(abilityId);
   }
   run.ascensionOffer = null;
