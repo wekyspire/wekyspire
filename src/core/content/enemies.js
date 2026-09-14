@@ -9,6 +9,7 @@ import {
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UnitSpawnInstruction } from '../instructions/units.js';
 import { PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { GainManaInstruction } from '../instructions/resources.js';
 import { aliveEnemies, aliveAllies, zoneOf } from '../state/battleState.js';
 
 // 敌人定义总集。约定：
@@ -2234,3 +2235,282 @@ registerEnemy({
     return { kinds: ['unknown'], note: '重启....失失失失败' };
   },
 });
+
+// ⑥″ 33 层 Boss · 温室之后（章3 Boss 池之三，2026-09-14 用户设计；wiki 魔物爆发页·
+// 南孚妖蝶——D 级、空/暗双属性、「本体脆弱，麻烦在于如何命中」）。设定升级：庄园温室
+// 自长风高原引种了宿主植物，妖蝶随之入栖；魔化百年、暗脉觉醒（大陆仅 1.59‱ 的附属
+// 灵脉），虫群意识凝成单一的「之后」——场上的每一只蝶都是它（分布的自我）。
+// 核心体验（v2 用户定稿）：**同律集群**——母体与子体打同一套招式语言（蝶针/鳞粉/孕卵），
+// 拍子与份量不同，读谱一次掌握全场；无真伪、无换位，身份一目了然。
+//   母体三拍：鳞粉（中毒3）→ 蝶针 20 → 孕卵（子体不足2时补位；满员改自愈12）；
+//   子体两拍：蝶针 8 ↔ 鳞屑（中毒2）；
+//   舞步蜕变：母体每满三轮，全体蝶力量+2（滚雪球死钟，翅膀花纹逐阶变色的演出即计数条）；
+//   孤蝶之怒（防白嫖）：子体全灭的一次性狂化——力量+4 即时生效 + 孕卵拍永久改为蝶针，
+//   清场后留 1~2 拍爆发窗口，磨蹭就吃狂化母体的满额输出；
+//   灵动：母体每拍补 1 层闪避（蒸发口径照旧）——只克单点大额爆发（大招落空），
+//   多段流只被吃一段、群伤正解不受阻。
+// 死亡：万蝶溃散——母体亡语杀光子体（同一结算树内完成，胜利判定不被亡语绊住）。
+registerEnemy({
+  // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），让 150 血
+  // 精确落地；floorMin/Max=33 + BOSS_IDS 排除保证不进任何精英/通配取材池。
+  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  id: 'greenhouseQueen', name: '温室之后',
+  createUnit: () => new Enemy({ defId: 'greenhouseQueen', name: '温室之后', maxHp: 150 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: 1 }));
+    for (let i = 0; i < 2; i++) {
+      ctx.kernel.submitInstruction(new UnitSpawnInstruction({
+        unit: getEnemyDefinition('butterflyLarva').createUnit(), source: unit }));
+    }
+  },
+  act(actx) {
+    const { unit, battleState: bs, player } = actx;
+    const atk = unit.getStat('attack');
+    // 灵动：每拍补 1 层闪避（敌方回合开始蒸发——玩家的回合里恒有 1 层挡单发）
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'dodge', stacks: 1 }));
+    // 孤蝶之怒：子体全灭的一次性狂化（力量+4；孕卵拍在下方分支改蝶针）
+    const larvae = aliveEnemies(bs).filter(e => e.defId === 'butterflyLarva');
+    if (larvae.length === 0 && !unit._soloRage) {
+      unit._soloRage = true;
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'strength', stacks: 4 }));
+    }
+    // 舞步蜕变：每满三轮（第 4/7/10…拍行动前）全体蝶力量+2
+    const n = unit._beat ?? 0;
+    if (n > 0 && n % 3 === 0) {
+      for (const e of aliveEnemies(bs)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: e, effectId: 'strength', stacks: 2 }));
+      }
+    }
+    const beat = n % 3;
+    unit._beat = n + 1;
+    if (beat === 0) {
+      // 【鳞粉】玩家中毒3
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: player, effectId: 'poison', stacks: 3 }));
+    } else if (beat === 1) {
+      // 【蝶针】
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 20 + atk }));
+    } else if (larvae.length < 2) {
+      // 【孕卵】补位
+      actx.kernel.submitInstruction(new UnitSpawnInstruction({
+        unit: getEnemyDefinition('butterflyLarva').createUnit(), source: unit }));
+    } else if (unit._soloRage) {
+      // 孤蝶狂化：孕卵拍永久改为蝶针
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 20 + atk }));
+    } else {
+      // 【振翅】满员时的维持拍
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 12 }));
+    }
+  },
+  getIntention: (unit, bs) => {
+    const atk = unit.getStat('attack');
+    const larvae = (bs?.enemies ?? []).filter(e => e.defId === 'butterflyLarva' && !e.isDead());
+    const n = unit._beat ?? 0;
+    const molt = n > 0 && n % 3 === 0 ? '蜕变：全体蝶力量+2；' : '';
+    const beat = n % 3;
+    if (beat === 0) return { kinds: ['debuff'], note: `${molt}鳞粉：中毒3` };
+    if (beat === 1) return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '蝶针' };
+    if (larvae.length < 2) return { kinds: ['summon'], note: `${molt}孕卵：孵化一只妖蝶子体` };
+    if (unit._soloRage) return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '孤蝶之怒' };
+    return { kinds: ['buff'], note: '振翅：自愈12' };
+  },
+  onDeath(actx) {
+    // 万蝶溃散：母体亡→子体同拍蒸发（走正规死亡结算；子体无亡语不递归）
+    for (const e of aliveEnemies(actx.battleState)) {
+      if (e.defId !== 'butterflyLarva') continue;
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: e, amount: 999, pierce: true, tags: ['disperse'] }));
+    }
+  },
+});
+
+// 妖蝶子体（温室之后的分布自我——无 difficulty 元数据 = 永不进生成池，只经母体孵化）。
+// 与母体同律：两拍循环 蝶针 8 ↔ 鳞屑（中毒2）——读谱一次掌握全场的「回声份量」。
+registerEnemy({
+  id: 'butterflyLarva', name: '妖蝶子体',
+  createUnit: () => new Enemy({ defId: 'butterflyLarva', name: '妖蝶子体', maxHp: 40 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 8 + unit.getStat('attack') }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: player, effectId: 'poison', stacks: 2 }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack'), note: '蝶针' }
+    : { kinds: ['debuff'], note: '鳞屑：中毒2' }),
+});
+
+// ⑦″ 33 层 Boss · 渊素食客（章3 Boss 池之四，2026-09-14 用户设计；自发角色。wiki 灵御
+// 页：渊素（砹晶石）1956 年被 UPW 认定为毒品、与降临神教关联；「1920 年后考核要求大师
+// 与持枪士兵看护」）。设定：昔日的灵御考核官，监守自盗庄园地窖的渊素窖藏，常年吸食致
+// 灵脉晶化——他曾是给人发证书的人，现在是塔要淘汰的东西。
+// 考核定位=**增益掠夺考**：你叠的每一层力量，都是他的。
+// 【渊素共鸣】（常驻被动）：每获得一个负面效果（按赋予次数计，非层数），获得 1 层力量
+//   ——叠火/叠毒流仍可打（DoT 穿透照掉血），但他的输出同步膨胀，打不打变成对赌。
+// 三段单向堕落（血量驱动 70%/40%，越打越疯）：
+//   一段·清醒（>70%）——考核官的体面（用玩家的招式语言）：灵压9 → 架势（盾8+格挡2）
+//     → 虹吸（偷2魏启+攻6）；
+//   跨线【吸食】：自愈12+力量1；
+//   二段·瘾发（40~70%）：灵脉虹吸（偷玩家一个增益的全部层数）→ 谵妄突袭 (8+atk)×2
+//     （偷来的力量立刻变现）→ 戒断（盾12+格挡2）；
+//   跨线【过量】：自伤6+力量2+蓄势2；
+//   三段·渊素暴走（<40%）：每拍【过载】自伤4换力量1（自焚死钟——龟缩玩家的胜路是
+//     「赢=不死」）；灵潮倾泻 (6+atk)×3 → 掠夺成性（偷2魏启+1AP+力量1）→
+//     渊素反噬（fixed 5，自愈5——吸玩家的命）。
+registerEnemy({
+  // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），180 血精确落地。
+  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  id: 'essenceEater', name: '渊素食客',
+  createUnit: () => new Enemy({ defId: 'essenceEater', name: '渊素食客', maxHp: 180 }),
+  onBattleStart(ctx, unit) {
+    // 渊素共鸣：获得负面效果（payload.stacks>0 的赋予）→ 力量+1。
+    // 力量是 buff，不会自触发递归；naqi 类纯玩家侧触发逻辑偷过去语义荒谬，入黑名单。
+    ctx.kernel.addSubscription({
+      when: AddEffectInstruction, phase: 'post',
+      owner: `enemy:${unit.uniqueID}:essenceResonance`,
+      filter: (instr) => instr.target === unit
+        && instr.payload?.stacks > 0
+        && getEffectDefinition(instr.effectId)?.type === 'debuff',
+      react: (instr, c) => c.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'strength', stacks: 1 }), instr),
+    });
+  },
+  act(actx) {
+    const { unit, player } = actx;
+    const atk = unit.getStat('attack');
+    // 三段单向锁存（kardas _phase2 同款语义）：吸食/反噬的回血不许把阶段跌回去——
+    // 沦陷的清醒不会回来。实时血量只允许向前推进阶段。
+    const r = unit.hp / unit.maxHp;
+    const phase = Math.max(unit._phase ?? 1, r > 0.7 ? 1 : r > 0.4 ? 2 : 3);
+    // 跨线宣言拍：不攻击，只嗑药
+    if (phase !== (unit._phase ?? 1)) {
+      unit._phase = phase;
+      unit._beat = 0;
+      if (phase === 2) {
+        // 【吸食】
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 12 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'strength', stacks: 1 }));
+        return;
+      }
+      // 【过量】
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: unit, amount: 6, fixed: true, tags: ['overdose'] }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'strength', stacks: 2 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'focus', stacks: 2 }));
+      return;
+    }
+    // 三段过载：每拍自伤4换力量1（自焚死钟，先于行动结算）
+    if (phase === 3) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: unit, amount: 4, fixed: true, tags: ['overload'] }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'strength', stacks: 1 }));
+    }
+    const beat = (unit._beat ?? 0) % 3;
+    unit._beat = (unit._beat ?? 0) + 1;
+    if (phase === 1) {
+      if (beat === 0) {
+        // 【灵压】
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 9 + atk }));
+      } else if (beat === 1) {
+        // 【架势】
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'block', stacks: 2 }));
+      } else {
+        // 【虹吸】偷2魏启 + 攻6
+        actx.kernel.submitInstruction(new GainManaInstruction({ amount: -2 }));
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 6 + atk }));
+      }
+      return;
+    }
+    if (phase === 2) {
+      if (beat === 0) {
+        // 【灵脉虹吸】偷玩家一个增益的全部层数（黑名单外的非空 buff；无可偷则退化为攻6）
+        const buffs = player.effects.filter(e => e.stacks > 0
+          && getEffectDefinition(e.effectId)?.type === 'buff'
+          && !ESSENCE_STEAL_BLACKLIST.has(e.effectId));
+        if (buffs.length > 0) {
+          const pick = buffs[actx.battleState.rng.int(0, buffs.length - 1)];
+          actx.kernel.submitInstruction(new AddEffectInstruction({
+            target: player, effectId: pick.effectId, stacks: -pick.stacks }));
+          actx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: pick.effectId, stacks: pick.stacks }));
+        } else {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 6 + atk }));
+        }
+      } else if (beat === 1) {
+        // 【谵妄突袭】偷来的力量立刻变现
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 8 + atk }));
+        }
+      } else {
+        // 【戒断】
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'block', stacks: 2 }));
+      }
+      return;
+    }
+    // 三段·渊素暴走
+    if (beat === 0) {
+      // 【灵潮倾泻】
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 6 + atk }));
+      }
+    } else if (beat === 1) {
+      // 【掠夺成性】偷2魏启 + 力量1 + 攻8（原案偷1AP——AP每回合开始置满，敌方拍
+      // 偷取对玩家无感，折成直伤才有牙）
+      actx.kernel.submitInstruction(new GainManaInstruction({ amount: -2 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'strength', stacks: 1 }));
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 8 + atk }));
+    } else {
+      // 【渊素反噬】吸玩家的命
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 5, fixed: true, tags: ['vampiric'] }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase = unit.hp / unit.maxHp > 0.7 ? 1 : unit.hp / unit.maxHp > 0.4 ? 2 : 3;
+    if (phase !== (unit._phase ?? 1)) {
+      return phase === 2
+        ? { kinds: ['buff'], note: '吸食：自愈12、力量+1（渊素共鸣：每次获得负面效果力量+1）' }
+        : { kinds: ['buff'], note: '过量：自伤6、力量+2、蓄势+2，进入暴走' };
+    }
+    const beat = (unit._beat ?? 0) % 3;
+    if (phase === 1) {
+      if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '灵压' };
+      if (beat === 1) return { kinds: ['defend', 'buff'], note: '架势：盾8、格挡2' };
+      return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '虹吸：偷取2魏启' };
+    }
+    if (phase === 2) {
+      if (beat === 0) return { kinds: ['debuff'], note: '灵脉虹吸：偷取你的一个增益的全部层数' };
+      if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk, note: '谵妄突袭' };
+      return { kinds: ['defend', 'buff'], note: '戒断：盾12、格挡2' };
+    }
+    if (beat === 0) return { kinds: ['attack'], hits: 3, damage: 6 + atk, note: `灵潮倾泻（每拍过载：自伤4换力量+1）` };
+    if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 8 + atk, note: '掠夺成性：偷2魏启，力量+1' };
+    return { kinds: ['attack', 'buff'], hits: 1, damage: 5, note: '渊素反噬：5点穿透生命伤害，自愈5' };
+  },
+});
+
+// 灵脉虹吸的黑名单：纯玩家侧触发逻辑（偷过去语义反转）与内部计数轨不可偷
+const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse']);

@@ -128,7 +128,9 @@ const TEMPLATES = [
 // 第四波（2026-09-13，用户设计）：11 层改为**火主题 Boss 三候选池**——燃焰术士（重做）/
 // 卡达斯/MEFM-1，每场 Boss 战由战斗种子确定性抽一只（同一层重打 = 同一只）。
 // 第五波（2026-09-14，用户设计）：33 层改为候选池——饕餮领主 / 完好的无人战体
-// （三灯状态机 + 锁牌 + 盾碎转段 + 自爆收场的机体考）。
+// （三灯状态机 + 锁牌 + 盾碎转段 + 自爆收场的机体考）/ 温室之后（南孚妖蝶集群意识体：
+// 同律集群 + 舞步滚雪球 + 清场窗口反转）/ 渊素食客（堕落考核官：三段单向堕落 +
+// 增益掠夺 + 渊素共鸣对赌）——清杂考、手牌考、指向与节奏考、增益对赌考一届配齐。
 // 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
 // 自 22 层起每个 Boss 必带燃烧交互纹理
 //（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
@@ -138,7 +140,7 @@ const BOSS_OF_FLOOR = Object.freeze({
   11: ['pyro', 'kardas', 'mefm1'],
   // 批次 16（2026-09-13）：章二池三题错开——阵型（骑士长）/ 外挂时钟·手牌节奏（守钟人）/ debuff 对冲（主教）
   22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
-  33: ['gluttonLord', 'intactDrone'], 44: 'towerHeart',
+  33: ['gluttonLord', 'intactDrone', 'greenhouseQueen', 'essenceEater'], 44: 'towerHeart',
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 
