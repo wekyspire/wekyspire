@@ -360,6 +360,7 @@ function bothSidesPresent(sctx) {
 }
 
 // 弃两侧基型（飞刀/强力飞刀/绝灭飞刀）：伤害 + 丢弃两侧牌。
+// 2026-09-14 用户定整体提阶 C→B→A（原 D→C→A 跳档，C 与 A 之间无 B 衔接）。
 const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
@@ -378,9 +379,9 @@ const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSk
   describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
-sideDaggerCard('flyingDagger', '飞刀', 'D', 13, 'heavyDagger');        // 2026-09-14 小削：14→13
-sideDaggerCard('heavyDagger', '强力飞刀', 'C', 20, 'annihilateDagger'); // 2026-09-14 小削：22→20
-sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 28); // 2026-09-14 小削：32→28（前中期过渡卡定位，整系列随削）
+sideDaggerCard('flyingDagger', '飞刀', 'C', 13, 'heavyDagger');
+sideDaggerCard('heavyDagger', '强力飞刀', 'B', 20, 'annihilateDagger');
+sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 28);
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
