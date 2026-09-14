@@ -1,5 +1,6 @@
 // 体修·拆组合（BODY_CULTIVATION_CARDS §3：格挡体系）。
-// 精准（完美/命中）/ 破势（破）/ 格挡 / 盾 / 姿态（龟守·武术·狂战）/ 以无胜有·以有胜无 咏唱。
+// 精准（完美/命中）/ 破势（破）/ 格挡 / 扫腿（多敌防卡）/ 盾 / 姿态（龟守·武术·狂战）
+// / 以无胜有·以有胜无 咏唱。
 // 格挡一律落 block 效果层数（≠ 护盾池）；伤害走 cardKit 统一算式。
 //
 // 机制词（NAMED.md）落地口径：
@@ -19,7 +20,7 @@ import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instruct
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { canUseSkill, effectiveHandCount } from '../skills/helpers.js';
 import {
-  attackDamage, dealDamage, resolvedDamageText, enemyTarget,
+  attackDamage, dealDamage, resolvedDamageText, enemyTarget, aoeAttack,
   gainShield, gainBlock, addEffect,
   breakAllBlock, beginHitProbe, hitLanded, isLastHandCardAtPlay,
 } from './cardKit.js';
@@ -224,6 +225,29 @@ registerSkill({
 
 // （批次 17 的绷劲/丹田气两张体修盾已于 2026-09-13 删除——用户试玩判「数值太低
 // 没什么用」，裁决直接删卡而非加强。）
+
+// ==== 扫腿系列（多敌防卡）======================================================
+// 2026-09-14 定案迁入拆组合（原拳组合的群伤位，重做为防卡后归属格挡经济）：
+// 群伤走折价数字不追输出，C 阶起每命中 1 敌人格挡 1——敌人越多越硬，多敌房的
+// 应对防卡；格挡按命中数并成单枚指令（狂战姿态按「获得事件」只喂 1 力量）。
+const sweepCard = ({ id, name, tier, damage, block = 0, promotesTo = null }) => registerSkill({
+  id, name, type: 'normal', tier, series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
+  use(sctx) {
+    const struck = aoeAttack(sctx, damage);
+    if (block > 0 && struck > 0) gainBlock(sctx, block * struck);
+    return true;
+  },
+  describe: () => `群伤${damage}${block ? `，每命中1敌人/effect{格挡}${block}` : ''}`,
+  battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}`
+    + (block ? `，每命中1敌人/effect{格挡}${block}` : ''),
+});
+sweepCard({ id: 'heavyStomp', name: '重踏', tier: 'D', damage: 7, promotesTo: 'sweepKick' });
+sweepCard({ id: 'sweepKick', name: '横扫', tier: 'C', damage: 7, block: 1, promotesTo: 'whirlLeg' });
+sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'B', damage: 9, block: 1 });
 
 // ==== 姿态系列（常驻引擎·咏唱）=================================================
 

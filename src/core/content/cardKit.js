@@ -87,6 +87,17 @@ export function attackDamage(sctx, base, opts = {}) {
   return dealDamage(sctx, attackAmount(sctx, base), opts);
 }
 
+// 群伤原语：对每个存活敌人一枚 aoe 标记攻击（面板/power 逐枚结算）；返回命中敌人数。
+// 体修扫腿/刀组横劈共用（火系 aoeDamage 是「选定敌人最后命中」的局部特化，不复用）。
+export function aoeAttack(sctx, base) {
+  let struck = 0;
+  for (const e of aliveEnemies(sctx.battleState)) {
+    attackDamage(sctx, base, { target: e, tags: ['aoe'] });
+    struck++;
+  }
+  return struck;
+}
+
 /**
  * 卡牌威力提升（runtime.power 增加）——**唯一入口**：改数值 + 通知 presenter 播
  * 「牌状态改变」的放缩节拍（公共动画：bridge 的 cardPowerUp → ANIM_CARD_POWER_UP）。

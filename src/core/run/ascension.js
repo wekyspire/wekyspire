@@ -148,7 +148,8 @@ function chainTargets() {
   return targets;
 }
 
-// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡 + 进阶链只留链头
+// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡 + 进阶链只留链头。
+// 深入卡一律不进（种子包发生在首次进阶，此刻必无任何精英能力，门禁必然没开）。
 export function seedPool(run, dimension) {
   const chained = chainTargets();
   return allSkills().filter(def =>
@@ -156,6 +157,7 @@ export function seedPool(run, dimension) {
     && (def.tier === 'D' || def.tier === 'C')
     && def.canSpawnAsReward !== false
     && def.seedEligible !== false
+    && !def.deep
     && !SEED_EXCLUDED.has(def.id)
     && !chained.has(def.id));
 }

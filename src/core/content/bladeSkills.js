@@ -3,6 +3,7 @@
 //   斩系列 —— 局内进阶链（打出即转化升阶；只在牌库中冷却；不可被焚毁；链首慢热）；
 //   花刀   —— 弃牌换护盾（选牌弃 / 弃掉所有无法打出的手牌，2026-09 稿改防御）；
 //   回旋斩 —— 牌库末抽牌（与牌库顶抽牌形成规划语言）；
+//   横劈   —— 真群伤（刀组的群伤答案：纯伤害无附加，数字带体系溢价）；
 //   飞刀   —— 邻牌献祭（两侧语义统一读「打出那一刻」，helpers.handNeighborsAtPlay）；
 //   藏锋   —— 高伤换滞气（stall：无法抽牌）；
 //   呼吸   —— 弃牌回补（同名效果承担弃牌监听 + 回合末自清，见 content/effects.js）；
@@ -34,7 +35,7 @@ import {
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
-  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower,
+  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower, aoeAttack,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
   buildCardSelectionRequest, selected, isBladeCard,
@@ -348,6 +349,28 @@ const cycloneCard = (id, name, tier, damage, count, cd, promotesTo = null) => re
 cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1, 'cycloneBurst');   // 2026-09-13 稿：7→10 伤害
 cycloneCard('cycloneBurst', '回旋爆斩', 'B', 10, 2, 1, 'perfectCyclone'); // 2026-09-13 稿：11/抽3 → 10/抽2
 cycloneCard('perfectCyclone', '完美回斩', 'A', 15, 2, 0);   // 机制跃迁：无冷却
+
+// ==== 横劈系列（真群伤）========================================================
+// 刀组的群伤答案（2026-09-14 用户定）：纯伤害无附加——刀是全游戏最高伤害体系，群伤
+// 数字带体系溢价（D 8 对齐正常 D 底线、C 11 对标回旋斩 C 10 单发）；冷却1 是刀组
+// 攻击卡的常规节拍。作为刀法牌自动吃养刀/锻刀/练刀/刀圣的加成。
+const horizontalCleave = (id, name, tier, damage, promotesTo = null) => registerSkill({
+  id, name, type: 'normal', tier, series: 'blade',
+  keywords: ['blade'],
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
+  use(sctx) {
+    aoeAttack(sctx, damage);
+    return true;
+  },
+  describe: () => `群伤${damage}`,
+  battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}`,
+});
+horizontalCleave('cleave', '横劈', 'D', 8, 'skyCleave');
+horizontalCleave('skyCleave', '裂空劈', 'C', 11, 'huashanCleave');
+horizontalCleave('huashanCleave', '力劈华山', 'B', 14);
 
 // ==== 飞刀系列（邻牌献祭）======================================================
 // 两侧语义统一读「打出那一刻」（handNeighborsAtPlay：结算中自身已离手，按捕获手位

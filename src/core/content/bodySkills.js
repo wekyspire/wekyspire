@@ -10,7 +10,7 @@
 //   * 咏唱触发效果 = activated.subscriptions 订阅 ChantTriggerInstruction(post)（P5 挂载点）。
 
 import { registerSkill } from '../skills/registry.js';
-import { zoneOf, aliveEnemies } from '../state/battleState.js';
+import { zoneOf } from '../state/battleState.js';
 import { UseSkillInstruction, SkillCooldownInstruction } from '../instructions/skill.js';
 import { ConsumeActionPointsInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
@@ -20,7 +20,7 @@ import { effectiveHandCount } from '../skills/helpers.js';
 import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
   dealDamage, drawCards, drawToHandLimit, addCard, randomAliveEnemy,
-  isLastHandCardAtPlay, isFirstPlayThisTurn, gainBlock,
+  isLastHandCardAtPlay, isFirstPlayThisTurn,
 } from './cardKit.js';
 
 // ==== 1. 真拳系列（基石：纯伤害直线升级，A 阶跃迁为无任何资源消耗）====
@@ -120,10 +120,10 @@ function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null })
   });
 }
 
-// 敏捷连击（D）
-registerAgileCombo({ id: 'agileCombo', name: '敏捷连击', tier: 'D', damage: 7, draw: 1, promotesTo: 'rapidCombo' });
+// 敏捷连击（D）——8 起步（2026-09-14 用户定正常 D 伤害底线）
+registerAgileCombo({ id: 'agileCombo', name: '敏捷连击', tier: 'D', damage: 8, draw: 1, promotesTo: 'rapidCombo' });
 // 疾速连击（C）
-registerAgileCombo({ id: 'rapidCombo', name: '疾速连击', tier: 'C', damage: 7, draw: 2, promotesTo: 'stormCombo' });
+registerAgileCombo({ id: 'rapidCombo', name: '疾速连击', tier: 'C', damage: 8, draw: 2, promotesTo: 'stormCombo' });
 // 暴风连击（B）
 registerAgileCombo({ id: 'stormCombo', name: '暴风连击', tier: 'B', damage: 11, draw: 3 });
 
@@ -479,18 +479,14 @@ registerSkill({
 //   * 卖血爆发（狂拳链，设计稿欠账实装）——HP 一次性代价换高伤+抽牌；
 //   * 多段连击（乱拳链）——「连击」主题终于有 ×N 段，吃快如雨/拳师/灼类「每段触发」；
 //   * 群伤 AOE（重踏链）——拳组合此前零 AOE（武学只是随机散步）；
-//   * 瞬击下游（拳风）——蓄力系造的瞬击终于有「吃瞬击」的加成件；
+//   * 瞬击下游（拳压，拳师深入卡）——蓄力系造的瞬击终于有「吃瞬击」的加成件；
 //   * 弃牌引擎（混元，设计稿欠账实装）——弃牌语言（呼吸/假动作/以无胜有）的消费端。
 // 数值对标：无条件部分 = 同阶白板（乱拳 6=拳、密雨 9=快拳、千手 12=炮拳），
 // 多段/条件加成才是体系溢价。失去生命 = 无来源固定伤害（跳修正、护盾可吸收、
 // 不触发荆棘/忍耐类反制——纯代价语义）。
 
-// 群伤原语：对每个存活敌人一枚 aoe 标记伤害（与火系 aoeDamage 同语言）
-function bodyAoe(sctx, base) {
-  for (const e of aliveEnemies(sctx.battleState)) {
-    attackDamage(sctx, base, { target: e, tags: ['aoe'] });
-  }
-}
+// 群伤原语（bodyAoe）与扫腿链已于 2026-09-14 迁入拆组合（blockSkills.js，series 'block'）
+// ——扫腿线重做为多敌防卡后归属拆；群伤原语上移 cardKit.aoeAttack 共用。
 
 // 狂拳 D → 血怒 C → 亡命 B（卖血链）
 function wildPunchCard({ id, name, tier, damage, lifeLoss, draw, promotesTo = null }) {
@@ -516,8 +512,9 @@ wildPunchCard({ id: 'wildPunch', name: '狂拳', tier: 'D', damage: 12, lifeLoss
 wildPunchCard({ id: 'bloodRage', name: '血怒', tier: 'C', damage: 15, lifeLoss: 5, draw: 1, promotesTo: 'lastGasp' });
 wildPunchCard({ id: 'lastGasp', name: '亡命', tier: 'B', damage: 20, lifeLoss: 7, draw: 2 });
 
-// 乱拳 D → 密雨拳 C → 千手 B（多段链：每段独立结算、独立吃减伤门与触发面）
-function flurryCard({ id, name, tier, hits, promotesTo = null }) {
+// 乱拳 D → 密雨拳 C → 千手 B（多段链：每段独立结算、独立吃减伤门与触发面。
+// D 段伤 4 对齐「正常 D 伤害 8 起步」（2026-09-14 用户定底线）；C/B 总伤钉白板 9/12）
+function flurryCard({ id, name, tier, damage = 3, hits, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
@@ -525,54 +522,36 @@ function flurryCard({ id, name, tier, hits, promotesTo = null }) {
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {
-      for (let i = 0; i < hits; i++) attackDamage(sctx, 3);
+      for (let i = 0; i < hits; i++) attackDamage(sctx, damage);
       return true;
     },
-    describe: () => `3伤害×${hits}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}×${hits}`,
+    describe: () => `${damage}伤害×${hits}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}×${hits}`,
   });
 }
-flurryCard({ id: 'wildFlurry', name: '乱拳', tier: 'D', hits: 2, promotesTo: 'rainFist' });
+flurryCard({ id: 'wildFlurry', name: '乱拳', tier: 'D', damage: 4, hits: 2, promotesTo: 'rainFist' });
 flurryCard({ id: 'rainFist', name: '密雨拳', tier: 'C', hits: 3, promotesTo: 'thousandHands' });
 flurryCard({ id: 'thousandHands', name: '千手', tier: 'B', hits: 4 });
 
-// 重踏 D → 横扫 C → 旋风腿 B（AOE 链：单发白板的群折——拳6/快拳9 打折为群5/6/8）
-function sweepCard({ id, name, tier, damage, block = 0, promotesTo = null }) {
-  registerSkill({
-    id, name, type: 'normal', tier, series: 'fist',
-    cost: { mana: 0, actionPoint: 1 },
-    charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'normal', targetMode: 'enemy',
-    promotesTo,
-    use(sctx) {
-      bodyAoe(sctx, damage);
-      if (block > 0) gainBlock(sctx, block);
-      return true;
-    },
-    describe: () => `群伤${damage}${block ? `，自身/effect{格挡}${block}` : ''}`,
-    battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}${block ? `，自身/effect{格挡}${block}` : ''}`,
-  });
-}
-sweepCard({ id: 'heavyStomp', name: '重踏', tier: 'D', damage: 5, promotesTo: 'sweepKick' });
-sweepCard({ id: 'sweepKick', name: '横扫', tier: 'C', damage: 6, promotesTo: 'whirlLeg' });
-sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'B', damage: 8, block: 1 });
-
-// 拳风 D（瞬击下游）：1AP 6伤；本回合每打出过 1 张瞬击，伤害 +2
-// （基础 = 拳 D 白板；瞬击计数读 history.turn.playedCards 明细——蓄力系的引擎出口）。
-registerSkill({
-  id: 'fistWind', name: '拳风', type: 'normal', tier: 'D', series: 'fist',
+// 拳压 C→B（拳师深入卡，瞬击下游）：1AP 9/11 伤；本回合每打出过 1 张瞬击，伤害 +3/+4
+// （基础值对齐 快拳9/炮拳12 白板口径，瞬击引擎是溢价来源——无引擎时近白板，故收进
+// 深入门禁：拳师到手前不进任何奖励池。瞬击计数读 history.turn.playedCards 明细）。
+const fistPressCard = ({ id, tier, damage, per, promotesTo = null }) => registerSkill({
+  id, name: '拳压', type: 'normal', tier, series: 'fist', deep: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'comboStrike',
+  promotesTo,
   use(sctx) {
-    attackDamage(sctx, 6 + instantStrikesThisTurn(sctx) * 2);
+    attackDamage(sctx, damage + instantStrikesThisTurn(sctx) * per);
     return true;
   },
-  describe: () => '6伤害；本回合每打出过1/card{instantStrike}，伤害+2',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6 + instantStrikesThisTurn(sctx) * 2)}`
-    + `（6+${instantStrikesThisTurn(sctx) * 2}）`,
+  describe: () => `${damage}伤害；本回合每打出过1/card{instantStrike}，伤害+${per}`,
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage + instantStrikesThisTurn(sctx) * per)}`
+    + `（${damage}+${instantStrikesThisTurn(sctx) * per}）`,
 });
+fistPressCard({ id: 'fistPress', tier: 'C', damage: 9, per: 3, promotesTo: 'fistPressPlus' });
+fistPressCard({ id: 'fistPressPlus', tier: 'B', damage: 11, per: 4 });
 function instantStrikesThisTurn(sctx) {
   return sctx.battleState.history.turn.playedCards.filter(id => id === 'instantStrike').length;
 }
