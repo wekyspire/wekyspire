@@ -1,6 +1,6 @@
 // 体修·拆组合（BODY_CULTIVATION_CARDS §3：格挡体系）。
-// 精准（完美/命中）/ 破势（破）/ 格挡 / 扫腿（多敌防卡）/ 盾 / 姿态（龟守·武术·狂战）
-// / 以无胜有·以有胜无 咏唱。
+// 精准（完美/命中）/ 破势（破）/ 格挡 / 扫腿（多敌防卡）/ 忍耐（受击转格挡·弱化）
+// / 盾 / 姿态（龟守·武术·狂战）/ 以无胜有·以有胜无 咏唱。
 // 格挡一律落 block 效果层数（≠ 护盾池）；伤害走 cardKit 统一算式。
 //
 // 机制词（NAMED.md）落地口径：
@@ -249,6 +249,56 @@ sweepCard({ id: 'heavyStomp', name: '重踏', tier: 'D', damage: 7, promotesTo: 
 sweepCard({ id: 'sweepKick', name: '横扫', tier: 'C', damage: 7, block: 1, promotesTo: 'whirlLeg' });
 sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'B', damage: 9, block: 1 });
 
+// ==== 忍耐系列（受击转格挡 · 弱化）==============================================
+// 2026-09-14 用户定套票：忍耐 = 到自己回合开始，每受一次伤害长等层数格挡
+// （效果本体见 content/effects.js）。蔑视是拆组合第一张「读层不消费」的出口——
+// 与武术姿态同向（都抱着格挡打），破系清空流之外的第二条构筑线。
+
+// 忍耐 D：忍耐1。
+registerSkill({
+  id: 'endure', name: '忍耐', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: 'toughItOut',
+  use(sctx) {
+    addEffect(sctx, 'endure', 1);
+    return true;
+  },
+  describe: () => '/effect{忍耐}1',
+});
+
+// 强撑 C：格挡2；目标虚弱3。
+registerSkill({
+  id: 'toughItOut', name: '强撑', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'disdain',
+  use(sctx) {
+    gainBlock(sctx, 2);
+    const target = enemyTarget(sctx);
+    if (target) addEffect(sctx, 'weaken', 3, target);
+    return true;
+  },
+  describe: () => '/effect{格挡}2；目标/effect{虚弱}3',
+});
+
+// 蔑视 B：所有敌人虚弱1；每有一层格挡，多赋予1层。
+registerSkill({
+  id: 'disdain', name: '蔑视', type: 'normal', tier: 'B', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  use(sctx) {
+    const stacks = 1 + sctx.player.getEffectStacks('block');
+    for (const e of aliveEnemies(sctx.battleState)) addEffect(sctx, 'weaken', stacks, e);
+    return true;
+  },
+  describe: () => '所有敌人/effect{虚弱}1；每有一层/effect{格挡}，多赋予1层',
+  battleDescribe: (sctx) => `所有敌人/effect{虚弱}${1 + sctx.player.getEffectStacks('block')}`,
+});
+
 // ==== 姿态系列（常驻引擎·咏唱）=================================================
 
 // 龟守链（咏唱2，P5 咏唱触发攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。
@@ -430,9 +480,8 @@ registerSkill({
   battleDescribe: (sctx) => `护盾${isLastHandCardAtPlay(sctx) ? 10 : 5}`,
 });
 
-// 铁靠 C：1AP 6盾；到你的下回合开始前，你每受到一次攻击，格挡 +1
-// （受击判定与荆棘同口径：有来源的伤害才算攻击；敌方攻击发生在敌方回合，
-// 订阅挂 battle 窗口 + 下回合开始自清——「本回合」按攻击的实际发生窗口实现）。
+// 铁靠 C：1AP 6盾 + 忍耐1（2026-09-14 并入忍耐机制词——此前的专属受击订阅
+// 就是忍耐1的语义，统一走效果本体；顺带多覆盖环境 DoT 与格挡获得事件）。
 registerSkill({
   id: 'ironLean', name: '铁靠', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -441,25 +490,10 @@ registerSkill({
   promotesTo: 'reinforcedShield',
   use(sctx) {
     gainShield(sctx, 6);
-    const owner = `ironLean:${sctx.self.uniqueID}`;
-    sctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'post', owner,
-      filter: (instr) => instr.target === sctx.player
-        && instr.source && !instr.source.isDead() && instr.source.side === 'enemy',
-      react: (instr, ctx) => {
-        ctx.kernel.submitInstruction(new AddEffectInstruction({
-          target: ctx.player, effectId: 'block', stacks: 1,
-        }), instr);
-      },
-    });
-    sctx.kernel.addSubscription({
-      when: PlayerTurnStartInstruction, phase: 'post', owner,
-      react: (instr, ctx) => ctx.kernel.removeSubscriptionsByOwner(owner),
-    });
+    addEffect(sctx, 'endure', 1);
     return true;
   },
-  describe: () => '护盾6。到你的下回合开始，你每受到一次攻击，/effect{格挡}+1',
-  battleDescribe: () => '护盾6。到你的下回合开始，你每受到一次攻击，/effect{格挡}+1',
+  describe: () => '护盾6。/effect{忍耐}1',
 });
 
 // 碎击 C → 碎骨 B（设计稿「碎击系列」：格挡转负面效果）。

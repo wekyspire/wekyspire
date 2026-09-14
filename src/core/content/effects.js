@@ -62,6 +62,38 @@ registerEffect({
   }],
 });
 
+// 忍耐（拆组合机制词，2026-09-14）：每受到一次伤害获得层数相当的格挡；自己的回合
+// 开始时整体消散（不逐层衰减——它是「撑过这个敌方回合」的一次性姿态）。触发口径：
+// 实际造成生命值伤害的结算（被护盾全额吸收不算）；自伤付费（selfcost 标记，狂拳类
+// 失去生命是代价不是挨打）不算；敌方攻击与环境 DoT（燃烧/中毒）都算。
+registerEffect({
+  id: 'endure', type: 'buff', stacking: 'count',
+  name: '忍耐',
+  description: '每受到一次伤害，获得层数相当的格挡；自己回合开始时消失。',
+  icon: '🪨', color: 'blue',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction, phase: 'post',
+    filter: (instr) => instr.target === unit
+      && !instr.tags?.includes('selfcost')
+      && (instr.result?.dealt ?? 0) > 0
+      && !unit.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('endure');
+      if (stacks > 0) ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'block', stacks }), instr);
+    },
+  }, {
+    when: TurnStartInstruction, phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead()
+      && unit.getEffectStacks('endure') > 0,
+    react: (instr, ctx) => {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'endure', stacks: -unit.getEffectStacks('endure'),
+      }), instr);
+    },
+  }],
+});
+
 // 滞气（体修通用代价关键词）：debuff，无法抽牌（含回合开始抽牌与技能抽牌），
 // 玩家回合结束层数 -1。藏锋系列等高收益卡的费用语言。
 // 原型验证：test/slashSeries.test.js。
