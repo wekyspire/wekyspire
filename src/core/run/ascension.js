@@ -80,7 +80,8 @@ export function ascensionReady(run) {
 }
 
 // 能力授予池（2026-09-13 实装，设计稿 FIRE_VEIN_CARDS §1.4/§2.3 + BODY §1.4/§2.5/§3.4）：
-//   灵脉 2 级 → 该维度**精英**池；3 级 → **大师**池；体修看隐藏 bodyLevel（同门槛）。
+//   灵脉 2 级 → 该维度**精英**池；3 级 + 体系内已持 ≥2 精英 → **大师**池（2026-09-14
+//   用户定：大师需双精英垫背，不再是等级一到就开的捷径）；体修看隐藏 bodyLevel（同门槛）。
 // 每次进阶至多授予一项（对话选择制）；已持有的不再出现，同池其余能力留给后续进阶
 // 慢慢取（设计：一局后期约可解锁两个子体系卡池——想多取就得多投入进阶机会）。
 const ABILITY_POOLS = Object.freeze({
@@ -103,22 +104,25 @@ const ABILITY_POOLS = Object.freeze({
 });
 
 // 能力授予候选：按当前修为聚合「已达标且未持有」的能力（授予幕间据此出选项）。
-// 大师能力双铁律（2026-09-13 用户定）：①前置精英未持有则大师不入选（def.requires）；
-// ②已持有的能力永不重复入选（下方 filter；chooseAscensionAbility 落账侧另有防御）。
+// 大师能力三铁律：①前置精英未持有则大师不入选（def.requires）；②已持有的能力
+// 永不重复入选（下方 filter；chooseAscensionAbility 落账侧另有防御）；③**体系内
+// 已持有 ≥2 个精英能力才开大师池**（2026-09-14 用户定：此前只看等级——第二次拿
+// 能力就能直接拿大师，超模；大师必须有双精英垫背，成为体系深耕的终点而非捷径）。
 export function abilityOffering(run) {
   const p = run?.player;
   if (!p) return [];
   const out = [];
+  const ownedElites = (dim) => ABILITY_POOLS[dim].elite.filter(id => p.abilities.includes(id)).length;
   for (const dim of LEINO_DIMENSIONS) {
     const pool = ABILITY_POOLS[dim];
     if (!pool) continue;
     const lv = p.leino?.[dim] ?? 0;
     if (lv >= 2) out.push(...pool.elite);
-    if (lv >= 3) out.push(...pool.master);
+    if (lv >= 3 && ownedElites(dim) >= 2) out.push(...pool.master);
   }
   const bodyLv = p.bodyLevel ?? 0;
   if (bodyLv >= 2) out.push(...ABILITY_POOLS.body.elite);
-  if (bodyLv >= 3) out.push(...ABILITY_POOLS.body.master);
+  if (bodyLv >= 3 && ownedElites('body') >= 2) out.push(...ABILITY_POOLS.body.master);
   return [...new Set(out)].filter(id => {
     if (p.abilities.includes(id)) return false;
     const req = getAbilityDefinition(id)?.requires;
