@@ -379,7 +379,7 @@ const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSk
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
 sideDaggerCard('flyingDagger', '飞刀', 'D', 13, 'heavyDagger');        // 2026-09-14 小削：14→13
-sideDaggerCard('heavyDagger', '强力飞刀', 'C', 21, 'annihilateDagger'); // 2026-09-14 小削：22→21
+sideDaggerCard('heavyDagger', '强力飞刀', 'C', 20, 'annihilateDagger'); // 2026-09-14 小削：22→20
 sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 28); // 2026-09-14 小削：32→28（前中期过渡卡定位，整系列随削）
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
