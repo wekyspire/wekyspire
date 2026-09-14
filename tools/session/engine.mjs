@@ -838,7 +838,7 @@ function execAscension(S, cmd, t) {
     // 此处早先只接了 fire，d-wood 试玩实报「木维度不存在」）
     const DIM_ALIAS = { 火: 'fire', fire: 'fire', 木: 'wood', wood: 'wood', 空: 'air', air: 'air', 风: 'air' };
     const DIM_LABEL = { fire: '火灵脉', wood: '木灵脉', air: '空灵脉' };
-    if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修等阶+1，恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1，删卡机会+1——remove <构筑#> [卡名] 使用，不用则保留）`; }
+    if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修等阶+1，生命上限+3，删卡机会+1——remove <构筑#> [卡名] 使用，不用则保留；不回血不提魏启）`; }
     else if (DIM_ALIAS[a]) {
       const dim = DIM_ALIAS[a];
       const first = (run.player.leino[dim] ?? 0) === 0;

@@ -203,10 +203,13 @@ export function chooseSeedCards(run, defIds) {
 // ---- 进阶事件主流程 ----
 
 // 结算进阶事件。dimension = 灵脉维度 id，或 null = 「跳过」（体修隐藏等级 +1）。
-// 跳过不触发种子包（体修是初始体系，开局已有小 build），但同样消耗一次进阶机会、
-// 享受定量恢复与魏启上限提升——这是故事模式暗线（体修大成）的成长通道。
-// 第 7 轮裁决：跳过再 +3 生命上限——E 报告实测「跳过的账不值」（收益延迟到第 10 层、
-// 与灵脉首进阶即得 3 卡+能力差距过大），给跳过一根即时的、不依赖卡池的补偿杠杆。
+// 跳过不触发种子包（体修是初始体系，开局已有小 build），但同样消耗一次进阶机会
+// ——这是故事模式暗线（体修大成）的成长通道。
+// 跳过补偿（用户定 2026-09-14 收紧）：**只给 +3 生命上限与一次可选删卡**——不回血、
+// 不提魏启。体修吃**牌组纯净度**，删卡就是这条路线的成型资源；血量/魏启这类通用
+// 资源不再白送（此前四项全给，六路试玩里全跳过路线横扫 44/38/32 三席，「难成型、
+// 成型后极强」的定位倒挂成最易成型路线）。第 7 轮裁决的 +3 生命上限保留——跳过
+// 需要一根即时的、不依赖卡池的补偿杠杆。
 export function chooseAscension(run, dimension = null) {
   if (run.gameStage !== 'ascension') {
     throw new Error(`run 阶段不符：期望 'ascension'，实际 '${run.gameStage}'`);
@@ -223,12 +226,6 @@ export function chooseAscension(run, dimension = null) {
   if (run.ascensionOffer) throw new Error('能力授予尚未选定');
 
   run.player.ascensionCount += 1;
-  // 魏启上限提升：必须走 gainMaxMana（同时抬 baseStats）——直写会被下一场 PreBattle 的
-  // refreshRunModifiers 重算抹掉（2026-09-11 修的 bug：进阶 +1 实际上从未生效）。
-  gainMaxMana(run, ASCENSION_PLACEHOLDER.manaGain);
-  run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
-  // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「跳过/点火」无脑化，回满血留给 Boss 通关）
-  run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);
 
   if (dimension === null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）
@@ -239,6 +236,15 @@ export function chooseAscension(run, dimension = null) {
     run.pendingCardRemoval = (run.pendingCardRemoval ?? 0) + 1;
     return proceedAfterLevelUp(run);
   }
+
+  // 灵脉路径：+1 魏启上限并回满、定量回血——点火即时战力（跳过路径已不给这两项，
+  // 见函数头注释）。魏启上限提升必须走 gainMaxMana（同时抬 baseStats）——直写会被
+  // 下一场 PreBattle 的 refreshRunModifiers 重算抹掉（2026-09-11 修的 bug：进阶 +1
+  // 实际上从未生效）。
+  gainMaxMana(run, ASCENSION_PLACEHOLDER.manaGain);
+  run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
+  // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「点火」无脑化，回满血留给 Boss 通关）
+  run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);
 
   run.player.leino[dimension] += 1;
   // 首次 0→1：获赠体系基石卡与体系能力（FIRE_VEIN_CARDS §0）→ 开种子包（九选三），

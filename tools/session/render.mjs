@@ -328,7 +328,7 @@ function renderRoomEvent(L) {
 function renderAscension(S, L) {
   const run = S.run;
   L.push(`→ dim 火 | dim 木 | dim 空 | dim 跳过`);
-  L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌）且生命上限+3，另回${ASCENSION_PLACEHOLDER.healAmount}血、魏启上限+1`);
+  L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌）+生命上限+3+删卡机会1次（不回血、不提魏启）；点火系 = +1魏启上限并回满、回${ASCENSION_PLACEHOLDER.healAmount}血`);
   if (run.cardOffering) {
     const off = run.cardOffering;
     const grant = FIRST_ASCENSION_GRANT[off.dimension];
