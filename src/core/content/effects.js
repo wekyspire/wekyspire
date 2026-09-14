@@ -713,3 +713,47 @@ registerEffect({
   color: 'yellow',
   statModifiers: { minHp: () => 1 },
 });
+
+// 充能（2026-09-14 用户定，静电毛球）：每层攻击 +1；**受攻击时层数 -2**（提前放电）。
+// 与蓄势的差异：蓄势是纯滚雪球标记（不打它就白白变强），充能可被玩家攻击泄放——
+// 「不打它越充越强，打它有泄压收益」的攻防节奏抉择；与力量的差异：力量不因受击衰减。
+registerEffect({
+  id: 'charge',
+  type: 'buff',
+  stacking: 'count',
+  name: '充能',
+  description: '每层使攻击提高 1 点。受到攻击时层数减少 2。',
+  icon: '🔋',
+  color: 'yellow',
+  statModifiers: {
+    attack: (stacks) => stacks,
+  },
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    // 被打中护盾也算「受攻击」（电是接触即放）；无来源的环境伤害不触发
+    filter: (instr) => instr.target === unit && instr.source && !unit.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('charge');
+      if (stacks <= 0) return;
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'charge', stacks: -2,
+      }), instr);
+    },
+  }],
+});
+
+// 紧勒（EFFECTS.md 目录既有定义：「手牌上限减少层数张」。实装首用：腐苔球的腐烂蔓延）
+// ——第一章「卡手」主题的语言。显示轨（玩家看得见层数在涨）；上限的实际扣减由施加方
+// 在 act 里直改 player.maxHandSize（handLimitOf 直读实例字段不走效果轨；战斗内有效，
+// 战后 refreshRunModifiers 从 baseStats 重算自动恢复）。施加者死亡时归还自己施加的
+// 层数（腐苔枯萎即松手——绑怪生命周期，杀了就松的教学化口径）。
+registerEffect({
+  id: 'constrict',
+  type: 'debuff',
+  stacking: 'count',
+  name: '紧勒',
+  description: '手牌上限减少层数张（施加者死亡时解除其施加的部分）。',
+  icon: '🪢',
+  color: 'purple',
+});

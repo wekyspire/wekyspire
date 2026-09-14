@@ -961,10 +961,21 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['debuff'], note: '向牌库末塞入1张「粘液」' }
     : { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') }),
+  // 融合（wiki：「魔化时多只融合成一只大史莱姆，实际仍是多个体」）：尸液融入存活的
+  // 史莱姆族（+4血+1攻面板）——打小的喂大的，AOE/斩杀顺序的低压力教学（2026-09-14）。
+  onDeath(actx) {
+    for (const e of aliveEnemies(actx.battleState)) {
+      if (e.defId !== 'slime' && e.defId !== 'slimelet' && e.defId !== 'bigSlime') continue;
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 4 }));
+      e.attack += 1;
+    }
+  },
 });
 
-// ⑪ 嗡嗡虫（前期小敌人，2026-09）：闪避1 → 攻1×4 → 攻3 三拍循环。
-// 闪避逼玩家先垫一发再集火（或用燃烧/中毒等环境伤害绕过）。
+// ⑪ 嗡嗡虫（前期小敌人，2026-09；2026-09-14 章1「塔基爆发」改版）：wiki 习性
+// 「成群结队的冲击足以让人头晕目眩、难以视物」——振翅拍改为**塞 1 张迷眼粉尘**
+// （灼伤的轻量版，硬卡手教学）进牌库随机位，随后两拍撞击。本体脆（7 血），是
+// 章 1「塞卡/卡手」主题的入门件；与粘液（软卡手税）构成两档语言。
 registerEnemy({
   difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
   id: 'buzzbug', name: '嗡嗡虫',
@@ -973,8 +984,9 @@ registerEnemy({
     const atk = actx.unit.getStat('attack');
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'dodge', stacks: 1,
+      // 振翅：迷眼粉尘塞入牌库随机位（抽到手上才开始计时）
+      actx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'dustCloud', toZone: 'deck', index: 'random',
       }));
     } else if (phase === 1) {
       for (let i = 0; i < 4; i++) {
@@ -991,7 +1003,7 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['buff'], note: '自身闪避1（免疫下一次攻击）' };
+    if (phase === 0) return { kinds: ['debuff'], note: '振翅：1张迷眼粉尘塞入你的牌库' };
     if (phase === 1) return { kinds: ['attack'], hits: 4, damage: 1 + atk };
     return { kinds: ['attack'], hits: 1, damage: 3 + atk };
   },
@@ -1046,47 +1058,80 @@ registerEnemy({
 // ============ 第一章补充敌人（2026-09，设计卡见 battle_gameplay/ENEMIES_1.md §6）============
 // 四只各填一个机制空位（支援 / 预告重击 / 亡语 / 蛰伏），互不重叠，都不引入新资源轴。
 
-// ⑬ 腐苔球：治疗自身或最低血友军 6 ↔ 攻 4 两拍循环。双敌房里是「先杀谁」的目标优先级
-// 考题，单只时是「你得比它回得快」的持久压力；不叠盾、不反伤——最坏只是把战斗拉长。
+// ⑬ 腐苔球（2026-09-14 章1「塔基爆发」改版）：**腐烂蔓延**——活着就在收拢你的手牌
+// 空间（紧勒，EFFECTS.md 目录定义的实装首用）：每拍玩家紧勒+1（手牌上限 -1，效果
+// 轨可见），奇数拍小攻、偶数拍自愈；**枯萎（死亡）时归还自己施加的全部层数**——
+// 绑怪生命周期的教学化口径：杀了就松手。上限实际扣减直改 player.maxHandSize
+// （战斗内有效；战后 refreshRunModifiers 从 baseStats 重算自动恢复），下限 2 不锁死。
 registerEnemy({
   difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
   id: 'mossBall', name: '腐苔球',
   createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 14 }),
   act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      // 治疗血量最低的存活友军（含自己）：把「先杀谁」变成真问题
-      const pool = aliveEnemies(actx.battleState);
-      const target = pool.reduce((a, b) => (b.hp < a.hp ? b : a), pool[0]);
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target, amount: 6 }));
-    } else {
+    const { unit, player } = actx;
+    unit._grip = (unit._grip ?? 0) + 1;
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: player, effectId: 'constrict', stacks: 1 }));
+    player.maxHandSize = Math.max(2, (player.maxHandSize ?? 6) - 1);
+    if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 4 + actx.unit.getStat('attack'),
-      }));
+        source: unit, target: player, amount: 3 + unit.getStat('attack') }));
+    } else {
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 3 }));
     }
   },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['buff'], note: '治疗友军6' }
-    : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }),
+  getIntention: (unit) => ({
+    kinds: unit.actionIndex % 2 === 0 ? ['attack', 'debuff'] : ['buff', 'debuff'],
+    hits: unit.actionIndex % 2 === 0 ? 1 : undefined,
+    damage: unit.actionIndex % 2 === 0 ? 3 + unit.getStat('attack') : undefined,
+    note: '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）',
+  }),
+  onDeath(actx) {
+    const grip = actx.unit._grip ?? 0;
+    if (grip > 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'constrict', stacks: -grip }));
+      actx.player.maxHandSize += grip;
+    }
+  },
 });
 
-// ⑭ 鼓腹蟾：鼓腹蓄力 → 重锤 10+攻击 → 甩舌 4+攻击，三拍循环。三拍里有一拍是明确的
-// 重击预告，把「立盾」从反射动作变成决策；蓄力拍零输出，总量与史莱姆同级。
+// ⑭ 鼓腹蟾（2026-09-14 章1「塔基爆发」改版）：**鼓腹**——每次被攻击膨胀（攻击+1，
+// _inflated 计数），膨胀满 4 次后下一拍**自爆**（对玩家 8+atk 伤并炸死自己）——
+// 「别贪刀连打」的轻教学，与静电毛球互为镜像（毛球不打它亏、蟾蜍打太狠亏）。
+// 意图实时反映膨胀伤害与自爆预告（玩家出牌后刷新意图），膨胀可见可控。
 registerEnemy({
   difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
   id: 'pufferToad', name: '鼓腹蟾',
   createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 20 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.addSubscription({
+      when: DealDamageInstruction, phase: 'post',
+      owner: `enemy:${unit.uniqueID}:inflate`,
+      filter: (instr) => instr.target === unit && instr.source && !unit.isDead(),
+      react: () => {
+        unit._inflated = (unit._inflated ?? 0) + 1;
+        unit.attack += 1; // 膨胀：攻击面板直接涨（difficultyScaling 同款直改口径）
+      },
+    });
+  },
   act(actx) {
-    const phase = actx.unit.actionIndex % 3;
-    if (phase === 0) return; // 鼓腹：不提交指令（意图已预告下一拍重击）
+    const { unit, player } = actx;
+    if ((unit._inflated ?? 0) >= 4) {
+      // 自爆：对玩家爆发并炸死自己（走正规死亡结算）
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 8 + unit.getStat('attack') }));
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: unit, amount: 999, pierce: true, tags: ['burst'] }));
+      return;
+    }
     actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: actx.unit, target: actx.player,
-      amount: (phase === 1 ? 10 : 4) + actx.unit.getStat('attack'),
-    }));
+      source: unit, target: player, amount: 5 + unit.getStat('attack') }));
   },
   getIntention: (unit) => {
-    const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['buff'], note: '鼓腹蓄力·下回合重击10' };
-    return { kinds: ['attack'], hits: 1, damage: (phase === 1 ? 10 : 4) + unit.getStat('attack') };
+    const n = unit._inflated ?? 0;
+    if (n >= 3) return { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack'), note: '即将自爆！（停止攻击它）' };
+    return { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack'), note: n > 0 ? `鼓腹×${n}：每被攻击一次膨胀+1攻` : undefined };
   },
 });
 
@@ -2514,3 +2559,131 @@ registerEnemy({
 
 // 灵脉虹吸的黑名单：纯玩家侧触发逻辑（偷过去语义反转）与内部计数轨不可偷
 const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse']);
+
+// ============ 章1「塔基爆发」新敌（2026-09-14 用户设计；wiki 魔物爆发页低阶魔物，
+// 习性即机制书）。主题：塔基要塞正处一场 D 级魔物爆发中——F/E 级杂鱼起步，机制随
+// 烈度爬升（DoT → 滚雪球 → 时机 → 集群 → 组合），6/9 层精英收烈度，11 层源头 Boss。============
+
+// ⑯ 静电毛球（wiki：E·雷「滚动摩擦积蓄静电」「多个附着累积电击致肢体僵硬」「怕水」）：
+// **充能**（2026-09-14 用户新效果）——每拍自动充能+1（每层攻击+1，意图栏实时可见
+// 滚雪球），玩家攻击它=提前放电（受击层数-2）。不打它越电越强、打它有泄压收益——
+// 攻防节奏抉择，与鼓腹蟾互为镜像（蟾蜍打太狠亏、毛球不打亏）。
+registerEnemy({
+  difficulty: { base: 2, min: 1, max: 3, floorMin: 4, floorMax: 12 },
+  id: 'staticPuff', name: '静电毛球',
+  createUnit: () => new Enemy({ defId: 'staticPuff', name: '静电毛球', maxHp: 10 }),
+  act(actx) {
+    const { unit, player } = actx;
+    // 先放电后积蓄：行动面板在提交一刻快照——同拍「先充再放」吃不到新充能；
+    // 倒序后每拍攻击自然吃到上一拍的充能，与意图 damage 同口径。
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player, amount: 3 + unit.getStat('attack') }));
+    actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'charge', stacks: 1 }));
+  },
+  getIntention: (unit) => ({ kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') + 1,
+    note: `静电放电（充能${unit.getEffectStacks('charge')}+1：每层+1，攻击它泄放2层）` }),
+});
+
+// ⑰ 刺刺草（wiki：F·木「茎秆布满尖刺」「刺尖含麻痹毒素」「缓慢蠕动」）：低层 DoT
+// 教学件——藤鞭 4+中毒1 ↔ 扎根自盾4 两拍循环；血薄（12），是「带不带解毒素」的
+// 第一道分岔题。
+registerEnemy({
+  difficulty: { base: 2, min: 1, max: 3, floorMin: 3, floorMax: 14 },
+  id: 'thornWeed', name: '刺刺草',
+  createUnit: () => new Enemy({ defId: 'thornWeed', name: '刺刺草', maxHp: 12 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 4 + unit.getStat('attack') }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: player, effectId: 'poison', stacks: 1 }));
+    } else {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 4 }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack', 'debuff'], hits: 1, damage: 4 + unit.getStat('attack'), note: '藤鞭：中毒1' }
+    : { kinds: ['defend'], note: '扎根：自身护盾+4' }),
+});
+
+// ⑱ 腐食甲虫（wiki：E「集群 10-30」「啃食皮革制品、帆布背包或裸露在外的食物」
+// 「传播病菌」）：集群白板+双重资源压力——攻击附带**啃食**（吃掉玩家牌库顶 1 张，
+// 本场消化：战斗 zones 是 run 牌组的克隆，焚毁天然不回写）；**亡语病菌**（死亡时
+// 玩家中毒 2）——AOE 流的甜蜜点带小代价。
+registerEnemy({
+  difficulty: { base: 1, min: 1, max: 2, floorMin: 3, floorMax: 14 },
+  id: 'carrionBeetle', name: '腐食甲虫',
+  createUnit: () => new Enemy({ defId: 'carrionBeetle', name: '腐食甲虫', maxHp: 8 }),
+  act(actx) {
+    const { unit, player, battleState: bs } = actx;
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player, amount: 3 + unit.getStat('attack') }));
+    const top = bs.zones.deck[0];
+    if (top) {
+      actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: top.uniqueID }));
+    }
+  },
+  getIntention: (unit) => ({ kinds: ['attack', 'debuff'], hits: 1,
+    damage: 3 + unit.getStat('attack'), note: '啃食：吃掉你的牌库顶1张（本场消化）' }),
+  onDeath(actx) {
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: actx.player, effectId: 'poison', stacks: 2 }));
+  },
+});
+
+// ⑲ 掘地鼹鼠（wiki：F·地「异常发达、金属光泽的前爪」「挖洞逃离危险」「致病菌」）：
+// **遁地节拍**——突袭 7 ↔ 遁地（闪避拉到 2+自愈 2）两拍循环。遁地拍玩家打不着它
+// （蒸发口径：遁地给的闪避跨玩家回合仍在），现身拍是集火窗口——「转火时机」的
+// 低配教学（与第四章音叉错拍同族但更直白）。
+registerEnemy({
+  difficulty: { base: 3, min: 2, max: 4, floorMin: 5, floorMax: 16 },
+  id: 'diggerMole', name: '掘地鼹鼠',
+  createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 14 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 7 + unit.getStat('attack') }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'dodge', stacks: 2 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 2 }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack'), note: '突袭' }
+    : { kinds: ['buff'], note: '遁地：自身闪避2、自愈2（打不着它）' }),
+});
+
+// ⑳ 碎岩穿山甲（wiki：C·地「层层叠叠如花岗岩般的厚重甲片」「小口径枪械难以穿透
+// 背部，需攻击腹部或眼部」「冲锋撞断树木」）：章 1 新精英。**重甲+蓄力冲锋**——
+// 固定防御 3（白板 6 伤拳只磨出 3：考玩家的卡牌成长性输出）；两拍循环：蓄力（盾 6
+// + 蓄势 1，重甲恢复）→ 冲锋（14+atk 大单发，**冲锋拍失衡：防御归零**，下一拍恢复）
+// ——重甲的破绽窗口写在意图里，读节奏打。
+registerEnemy({
+  difficulty: { base: 5, min: 4, max: 6, floorMin: 4, floorMax: 10, elite: true },
+  id: 'rockPangolin', name: '碎岩穿山甲',
+  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 45 }),
+  onBattleStart(ctx, unit) {
+    unit.defense += 3; // 花岗岩甲：固定减伤轨（冲锋拍失衡时归零）
+  },
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex % 2 === 0) {
+      // 蓄力：重甲恢复 + 自盾 + 蓄势
+      unit.defense = Math.max(unit.defense, 3);
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'focus', stacks: 1 }));
+    } else {
+      // 冲锋：大单发；冲锋瞬间腹部暴露——防御归零（破绽窗口）
+      unit.defense = 0;
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 14 + unit.getStat('attack') }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['defend', 'buff'], note: '蓄力：重甲恢复、自身护盾+6、蓄势+1' }
+    : { kinds: ['attack'], hits: 1, damage: 14 + unit.getStat('attack'), note: '冲锋：露出腹部（本拍防御归零）' }),
+});

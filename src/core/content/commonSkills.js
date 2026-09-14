@@ -40,6 +40,27 @@ registerSkill({
   describe: () => '无法打出。回合结束时，若此卡在手牌中，受到2点伤害',
 });
 
+// 迷眼粉尘（嗡嗡虫塞入的状态牌，2026-09-14 章1「塔基爆发」）：灼伤的**轻量版**
+// （1 伤，第一章口径）——无法打出，回合结束时若还在手牌中受到 1 点固定伤害。
+// 与粘液（软卡手：1AP 抽 1 的处理税）构成两档卡手语言；dump 弃牌与焚毁类是它的出口。
+registerSkill({
+  id: 'dustCloud', name: '迷眼粉尘', type: 'normal', tier: 'Z',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  canSpawnAsReward: false,
+  canUse: () => false,
+  use() { return true; },
+  subscriptions: (sctx) => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(new DealDamageInstruction({
+      source: null, target: ctx.player, amount: 1, fixed: true, tags: ['dustCloud'],
+    }), instr),
+  }],
+  describe: () => '无法打出。回合结束时，若此卡在手牌中，受到1点伤害',
+});
+
 // 墨渍（第四章高压敌塞入的状态牌，2026-09-14 用户设计）：灼伤同款口径、数值加重一档
 // （在手回合末受 3 伤）——档案馆巨像/墨海母核的持续干扰件。处理出口同为 dump/焚毁。
 registerSkill({

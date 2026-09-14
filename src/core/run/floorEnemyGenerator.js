@@ -79,6 +79,22 @@ const TEMPLATES = [
   // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
   { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
   { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
+  // —— 章1「塔基爆发」编队（2026-09-14 用户设计；wiki 魔物爆发：F/E 级杂鱼起步，
+  // 机制随烈度爬升：塞卡 → DoT → 滚雪球 → 时机 → 集群 → 组合；预算按楼层难度 2-7 配平）——
+  // 虫群风暴（E）：嗡嗡虫集群塞粉尘——「卡手」主题的入门场（min 1+1+1+1=4 / max 8）
+  { id: 'infestation', name: '虫群风暴', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'buzzbug' }, { fixed: 'buzzbug' }, { fixed: 'buzzbug' }, {}] },
+  // 草丛（F-E）：刺刺草 DoT 教学 + 杂鱼（min 2+2+1=5 / max 8）
+  { id: 'thornPatch', name: '草丛', minFloor: 3, maxFloor: 10, slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, {}] },
+  // 静电原野（E）：双毛球充能滚雪球——「不打它越充越强」的镜像抉择场（min 2 / max 6）
+  { id: 'staticField', name: '静电原野', minFloor: 4, maxFloor: 12, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
+  // 掘地场（E）：双鼹鼠错相位遁地——转火时机教学（min 4+1=5 / max 10）
+  { id: 'digSite', name: '掘地场', minFloor: 5, maxFloor: 12, slots: [{ fixed: 'diggerMole' }, { fixed: 'diggerMole' }, {}] },
+  // 甲虫潮（E）：集群啃牌 + 亡语病菌——AOE 甜蜜点带代价（min 3+1=4 / max 8）
+  { id: 'beetleTide', name: '甲虫潮', minFloor: 6, maxFloor: 14, slots: [{ fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, {}] },
+  // 共振带（E+）：毛球×2+鼹鼠——双机制组合的章1 收官难度（min 5 / max 10）
+  { id: 'resonance', name: '共振带', minFloor: 8, maxFloor: 14, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'diggerMole' }] },
+  // 腐蔓园（E）：紧勒+DoT+塞牌三重卡手主题战——「腾手」能力的第一次大考（min 5 / max 8）
+  { id: 'rotGarden', name: '腐蔓园', minFloor: 6, maxFloor: 12, slots: [{ fixed: 'mossBall' }, { fixed: 'thornWeed' }, { fixed: 'buzzbug' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
   // —— 第二~四章主题编队（2026-09-13 总策划批次，与新敌补池同波，设计卡 tmp/design-monsters-wave1.mjs）——
