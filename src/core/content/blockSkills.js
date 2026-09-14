@@ -72,79 +72,43 @@ function perfectReady(sctx) {
 // 「只报自定义条件不满足，玩家要自己反推是哪张」）
 perfectReady.isPerfectCondition = true;
 
-// 精准一击（精准系列 D）：完美。24 伤害。promotesTo 精心一击（C）。
-// 2026-09-13 用户定：完美是战术挑战——条件不动、payoff 增强（挑战与机遇并存；
-// 新体系 7 张手牌几乎必有压位卡， payoff 必须配得上解套成本）。
-registerSkill({
-  id: 'perfectStrike', name: '精准一击', type: 'normal', tier: 'D', series: 'block',
-  cost: { mana: 0, actionPoint: 2 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'carefulStrike',
-  canUse: perfectReady,
-  use(sctx) {
-    attackDamage(sctx, 24, { tags: ['perfect'] }); // tags：架势镜等完美轴效果统一识别口径
-    return true;
-  },
-  describe: () => '/named{完美}。24伤害',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 24)}`,
-});
-
-// 精心一击（精准系列 C）：完美。17 伤害。promotesTo 折杨手（B，机制跃迁到命中）。
-registerSkill({
-  id: 'carefulStrike', name: '精心一击', type: 'normal', tier: 'C', series: 'block',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'foldWillow',
-  canUse: perfectReady,
-  use(sctx) {
-    attackDamage(sctx, 17, { tags: ['perfect'] });
-    return true;
-  },
-  describe: () => '/named{完美}。17伤害',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 17)}`,
-});
-
-// 精心二击（精准系列 B·延伸卡）：完美。15 伤害 ×2（2026-09 稿：C→B、冷却1；2026-09-13 payoff 增强）。
-registerSkill({
-  id: 'doubleStrike', name: '精心二击', type: 'normal', tier: 'B', series: 'block',
-  cost: { mana: 0, actionPoint: 2 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
-  canUse: perfectReady,
-  use(sctx) {
-    attackDamage(sctx, 15, { tags: ['perfect'] });
-    attackDamage(sctx, 15, { tags: ['perfect'] });
-    return true;
-  },
-  describe: () => '/named{完美}。15伤害×2',
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 15)}×2`,
-});
-
-// 折杨手/揽云手/摘星手（精准系列 B/A/S）：24 伤害；命中：格挡 N。
-// 两段式：段 0 提交攻击并挂命中探针，段 1 读探针——>0 点生命值伤害才获得格挡。
-const hitStrike = (id, name, tier, per, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'block',
-  cost: { mana: 0, actionPoint: 2 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo,
-  canUse: perfectReady,
-  use(sctx, stage) {
-    if (stage === 0) {
-      beginHitProbe(sctx, attackDamage(sctx, 24, { tags: ['perfect'] }));
-      return false; // 挂起一拍：等伤害子节点完整落地后再读探针
-    }
-    if (hitLanded(sctx)) gainBlock(sctx, per);
-    return true;
-  },
-  describe: () => `/named{完美}。24伤害；/named{命中}：/effect{格挡}${per}`,
-  battleDescribe: (sctx) => `/named{完美}。${resolvedDamageText(sctx, 24)}，/named{命中}：/effect{格挡}${per}`,
-});
-hitStrike('foldWillow', '折杨手', 'B', 2, 'embraceCloud');
-hitStrike('embraceCloud', '揽云手', 'A', 3, null); // S（摘星手）阶梯外，不作晋升目标
-hitStrike('pluckStar', '摘星手', 'S', 4, null);
+// ==== 精准（完美/命中）系列 =====================================================
+// 2026-09-14 用户裁决重做：伤害削到**每AP与拳系白板相当**（精准一击 12/2AP=6/AP 对标
+// 基础拳；精心一击 10/1AP 对标快拳 9/AP+完美小溢价），**命中给格挡1 下放到全系列**
+// （原 B 阶起才有且层数递增——功能性下放换数值，系列从「完美大数字」转型「稳定格挡+
+// 阶梯伤害」）；高阶伤害保留梯度（B23→A26→S30）。完美条件不动（战术挑战保留）。
+// 【命中】两段式：段 0 提交攻击并挂命中探针，段 1 读探针——>0 点生命值伤害才给格挡。
+const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, promotesTo = null } = {}) => {
+  const dmgText = (fn) => `${fn(damage)}${hits > 1 ? `×${hits}` : ''}`;
+  return registerSkill({
+    id, name, type: 'normal', tier, series: 'block',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal', targetMode: 'enemy',
+    promotesTo,
+    canUse: perfectReady,
+    use(sctx, stage) {
+      if (stage === 0) {
+        let last = null;
+        for (let i = 0; i < hits; i++) {
+          last = attackDamage(sctx, damage, { tags: ['perfect'] }); // tags：架势镜等完美轴效果统一识别口径
+        }
+        beginHitProbe(sctx, last); // 挂末段：命中语义 = 至少一段造成生命伤害
+        return false; // 挂起一拍：等伤害子节点完整落地后再读探针
+      }
+      if (hitLanded(sctx)) gainBlock(sctx, 1);
+      return true;
+    },
+    describe: () => `/named{完美}。${dmgText((d) => d)}伤害；/named{命中}：/effect{格挡}1`,
+    battleDescribe: (sctx) => `/named{完美}。${dmgText((d) => resolvedDamageText(sctx, d))}，/named{命中}：/effect{格挡}1`,
+  });
+};
+perfectSeries('perfectStrike', '精准一击', 'D', 12); // 12/2AP=6/AP，对标基础拳
+perfectSeries('carefulStrike', '精心一击', 'C', 10, { ap: 1, promotesTo: 'foldWillow' }); // 10/1AP，对标快拳
+perfectSeries('doubleStrike', '精心二击', 'B', 12, { hits: 2 }); // 延伸卡随系列对标：2AP 24 总伤
+perfectSeries('foldWillow', '折杨手', 'B', 23, { promotesTo: 'embraceCloud' });
+perfectSeries('embraceCloud', '揽云手', 'A', 26); // S（摘星手）阶梯外，不作晋升目标
+perfectSeries('pluckStar', '摘星手', 'S', 30);
 
 // ==== 破势系列（格挡转资源）====================================================
 
