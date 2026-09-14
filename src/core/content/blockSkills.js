@@ -74,11 +74,12 @@ perfectReady.isPerfectCondition = true;
 
 // ==== 精准（完美/命中）系列 =====================================================
 // 2026-09-14 用户裁决重做：伤害削到**每AP与拳系白板相当**（精准一击 12/2AP=6/AP 对标
-// 基础拳；精心一击 10/1AP 对标快拳 9/AP+完美小溢价），**命中给格挡1 下放到全系列**
-// （原 B 阶起才有且层数递增——功能性下放换数值，系列从「完美大数字」转型「稳定格挡+
-// 阶梯伤害」）；高阶伤害保留梯度（B23→A26→S30）。完美条件不动（战术挑战保留）。
+// 基础拳；精心一击 10/1AP 对标快拳 9/AP+完美小溢价），**命中给格挡下放到全系列**
+// （原 B 阶起才有——功能性下放换数值，系列从「完美大数字」转型「稳定格挡+阶梯伤害」）。
+// 阶梯（用户定稿）：格挡 1/1/1/1/2/2——揽云手与折杨同伤 23 但格挡 2（小质变），
+// 摘星手 30 伤格挡 2（S 卡要强度）。完美条件不动（战术挑战保留）。
 // 【命中】两段式：段 0 提交攻击并挂命中探针，段 1 读探针——>0 点生命值伤害才给格挡。
-const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, promotesTo = null } = {}) => {
+const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, block = 1, promotesTo = null } = {}) => {
   const dmgText = (fn) => `${fn(damage)}${hits > 1 ? `×${hits}` : ''}`;
   return registerSkill({
     id, name, type: 'normal', tier, series: 'block',
@@ -96,19 +97,19 @@ const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, promotesTo = 
         beginHitProbe(sctx, last); // 挂末段：命中语义 = 至少一段造成生命伤害
         return false; // 挂起一拍：等伤害子节点完整落地后再读探针
       }
-      if (hitLanded(sctx)) gainBlock(sctx, 1);
+      if (hitLanded(sctx)) gainBlock(sctx, block);
       return true;
     },
-    describe: () => `/named{完美}。${dmgText((d) => d)}伤害；/named{命中}：/effect{格挡}1`,
-    battleDescribe: (sctx) => `/named{完美}。${dmgText((d) => resolvedDamageText(sctx, d))}，/named{命中}：/effect{格挡}1`,
+    describe: () => `/named{完美}。${dmgText((d) => d)}伤害；/named{命中}：/effect{格挡}${block}`,
+    battleDescribe: (sctx) => `/named{完美}。${dmgText((d) => resolvedDamageText(sctx, d))}，/named{命中}：/effect{格挡}${block}`,
   });
 };
 perfectSeries('perfectStrike', '精准一击', 'D', 12); // 12/2AP=6/AP，对标基础拳
 perfectSeries('carefulStrike', '精心一击', 'C', 10, { ap: 1, promotesTo: 'foldWillow' }); // 10/1AP，对标快拳
 perfectSeries('doubleStrike', '精心二击', 'B', 12, { hits: 2 }); // 延伸卡随系列对标：2AP 24 总伤
 perfectSeries('foldWillow', '折杨手', 'B', 23, { promotesTo: 'embraceCloud' });
-perfectSeries('embraceCloud', '揽云手', 'A', 26); // S（摘星手）阶梯外，不作晋升目标
-perfectSeries('pluckStar', '摘星手', 'S', 30);
+perfectSeries('embraceCloud', '揽云手', 'A', 23, { block: 2 }); // 与折杨同伤、格挡2（小质变）；S 阶梯外不作晋升目标
+perfectSeries('pluckStar', '摘星手', 'S', 30, { block: 2 }); // S 卡要强度
 
 // ==== 破势系列（格挡转资源）====================================================
 
