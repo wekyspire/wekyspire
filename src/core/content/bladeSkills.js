@@ -380,7 +380,7 @@ const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSk
 });
 sideDaggerCard('flyingDagger', '飞刀', 'D', 14, 'heavyDagger');        // 2026-09-13 稿：12→14
 sideDaggerCard('heavyDagger', '强力飞刀', 'C', 22, 'annihilateDagger'); // 2026-09-13 稿：20→22
-sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 32);
+sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 30); // 2026-09-14 用户小削：32→30（前中期过渡卡定位，不必顶着 A 阶伤害带）
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
