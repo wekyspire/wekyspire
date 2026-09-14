@@ -471,7 +471,7 @@ function execReward(S, cmd, t) {
   if (run.gameStage !== 'reward') throw new Error('当前不在奖励阶段');
   if (cmd === 'pack') {
     const packs = run.rewards.packs;
-    const PACK_ALIAS = { 体修: 'body', 火: 'fire', 火灵脉: 'fire', 通用: 'common' };
+    const PACK_ALIAS = { 基础: 'body', 体修: 'body', 火: 'fire', 火灵脉: 'fire', 通用: 'common' };
     const key = PACK_ALIAS[a] ?? a;
     const id = /^-?\d+$/.test(key ?? '')
       ? packs[idxOk(num(key), packs.length, '卡包')]

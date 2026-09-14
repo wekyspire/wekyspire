@@ -2,11 +2,11 @@ import { allSkills, getSkillDefinition } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 
 // 战后奖励（RUN_DESIGN §1 + 2026-09 卡包化）：
-//   金币固定入账 → 玩家选一个**卡包**（体修包恒开，其余维度需该维度灵脉等级 ≥1）
+//   金币固定入账 → 玩家选一个**卡包**（基础包恒开，其余维度需该维度灵脉等级 ≥1）
 //   → 包内技能 3 选 1（或跳过）。
 //
 // 等阶门禁按**该体系自己的等级**（专精昂贵是设计意图，用户 2026-09 定调）：
-//   灵脉包看 leino[维度]，体修包看隐藏的 player.bodyLevel（跳过进阶时 +1）；
+//   灵脉包看 leino[维度]，基础包看隐藏的 player.bodyLevel（跳过进阶时 +1）；
 //   0 级 → 只出 D/C；1 级 → 解锁 B；2 级 → 解锁 A。
 // 门禁之内按等阶加权生成（TIER_WEIGHTS，用户 2026-09 定）：相对上限本阶 20% /
 // 低一阶 55% / 低两阶 25%，更低阶不掉落；战后开包与训练抓牌共用同一加权口径。
@@ -25,7 +25,7 @@ export const TIER_UNLOCK_LEINO = { B: 1, A: 2 }; // 该维度灵脉等级 → �
 
 // ---- 卡包（维度）定义：id 与 player.leino 的键同名 ----
 export const PACKS = Object.freeze({
-  body: Object.freeze({ id: 'body', name: '体修', desc: '基础卡组演变而来，恒可用' }),
+  body: Object.freeze({ id: 'body', name: '基础', desc: '体修卡与通用卡的混合池（通用浓度高），恒可用' }),
   fire: Object.freeze({ id: 'fire', name: '火灵脉', desc: '爆发与燃烧' }),
   wood: Object.freeze({ id: 'wood', name: '木灵脉', desc: '恢复与中毒' }),
   air: Object.freeze({ id: 'air', name: '空灵脉', desc: '闪避与咏唱' }),
@@ -36,6 +36,12 @@ export const PACKS = Object.freeze({
 // 2026-09-13 用户定 30%→45%：R9 三连「新内容 0 观测」的曝光率加码（门禁过深，
 // 通用件是跨体系构筑的胶水，先让玩家看得见）。
 export const COMMON_INJECT = Object.freeze({ chance: 0.45, pity: 4 });
+// 基础包专用注入浓度（2026-09-14 用户定「大幅提升」，体修包更名基础卡包的另一半）：
+// 主注入 90%、保底 2 次开包，命中后独立掷 secondChance 再换第二张（不同位、不重复）。
+// 期望每包 ≈1.35 张通用卡（浓度 ~45%）——通用卡是强力单卡但不能成体系（C 位）：
+// 灵脉玩家开基础包收益升，体修玩家的体修候选被稀释到平均 1.65 张/包，前期成型
+// 压力增加（蓝量/恢复/获取途径三刀的第三刀）。
+export const BODY_PACK_INJECT = Object.freeze({ chance: 0.9, pity: 2, secondChance: 0.5 });
 
 // 卡定义归属的卡包：显式 pack 字段优先（通用灰卡标 'common'），否则按 type 归维度
 export function packOf(def) {
@@ -188,7 +194,7 @@ export function seriesAffinityWeight(run, def, counts = null) {
   return 1 + SERIES_AFFINITY.perCard * Math.min(c.get(series) ?? 0, SERIES_AFFINITY.maxCount);
 }
 
-// 可开卡包：体修恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
+// 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
   const out = [PACKS.body];
@@ -237,21 +243,35 @@ export function spawnRewards(run) {
   return run;
 }
 
-// 通用注入（三选一共享）：按概率/保底把一张候选替换为通用卡，返回 { injected, slot }。
+// 通用注入（三选一共享）：按概率/保底把候选替换为通用卡，返回 { injected, slot }。
 // capTier = 本次抽取所用的等阶门禁（跟随所开卡包/最高已解锁卡包）。
-export function injectCommon(run, choices, capTier) {
+// packId = 所开卡包：'body'（基础包）走 BODY_PACK_INJECT 高浓度参数且命中后可再
+// 换第二张（2026-09-14）；其余包/训练抓牌（不传）维持 COMMON_INJECT 单张口径。
+export function injectCommon(run, choices, capTier, packId = null) {
+  const spec = packId === 'body' ? BODY_PACK_INJECT : COMMON_INJECT;
   const pity = run.commonPity ?? 0;
-  const inject = pity + 1 >= COMMON_INJECT.pity || run.rng.next() < COMMON_INJECT.chance;
+  const inject = pity + 1 >= spec.pity || run.rng.next() < spec.chance;
   if (!inject) {
     run.commonPity = pity + 1;
     return { injected: false, slot: -1 };
   }
   run.commonPity = 0;
-  const pool = commonPool(run, capTier).filter(def => !choices.includes(def.id));
-  if (!pool.length) return { injected: false, slot: -1 };
-  const slot = run.rng.int(0, choices.length - 1);
-  choices[slot] = pool[run.rng.int(0, pool.length - 1)].id;
-  return { injected: true, slot };
+  const usedSlots = [];
+  const injectOne = () => {
+    const pool = commonPool(run, capTier).filter(def => !choices.includes(def.id));
+    if (!pool.length) return -1;
+    const free = choices.map((_, i) => i).filter(i => !usedSlots.includes(i));
+    if (!free.length) return -1;
+    const slot = free[run.rng.int(0, free.length - 1)];
+    choices[slot] = pool[run.rng.int(0, pool.length - 1)].id;
+    usedSlots.push(slot);
+    return slot;
+  };
+  const slot = injectOne();
+  const injected = slot >= 0;
+  // 基础包：命中后独立掷第二张（进一步稀释体修候选；通用池不足则静默单张）
+  if (injected && spec.secondChance && run.rng.next() < spec.secondChance) injectOne();
+  return { injected, slot };
 }
 
 // 开包：选定卡包 → 抽出包内 3 选 1 候选 → 按概率/保底混入一张通用卡。
@@ -264,7 +284,7 @@ export function chooseRewardPack(run, packId) {
   rw.packId = packId;
 
   const choices = rollSkillChoices(run, packId);
-  const { injected, slot } = injectCommon(run, choices, maxRewardTier(run, packId));
+  const { injected, slot } = injectCommon(run, choices, maxRewardTier(run, packId), packId);
   rw.commonInjected = injected;
   rw.commonSlot = slot;
   rw.skillChoices = choices;
