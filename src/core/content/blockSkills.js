@@ -11,6 +11,7 @@
 //           （「每失去一层触发一次」严格同构：每层单独结算、可各自被修饰/取消）。
 
 import { registerSkill } from '../skills/registry.js';
+import { aliveEnemies } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainActionPointsInstruction } from '../instructions/resources.js';
@@ -18,9 +19,9 @@ import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instruct
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { canUseSkill, effectiveHandCount } from '../skills/helpers.js';
 import {
-  attackDamage, dealDamage, resolvedDamageText,
+  attackDamage, dealDamage, resolvedDamageText, enemyTarget,
   gainShield, gainBlock, addEffect,
-  breakAllBlock, beginHitProbe, hitLanded,
+  breakAllBlock, beginHitProbe, hitLanded, isLastHandCardAtPlay,
 } from './cardKit.js';
 
 // 抱头（格挡系列 D）：+1 层格挡（block 效果，非护盾池）。promotesTo 格挡（C）。
@@ -368,7 +369,118 @@ const rallyCard = (id, name, tier, scaled, promotesTo = null) => registerSkill({
 rallyCard('rally', '活动筋骨', 'C', false, 'rallyPlus');
 rallyCard('rallyPlus', '活动筋骨', 'B', true);
 
-// ==== 散卡（2026-09 设计稿新增）=================================================
+// ==== 扩容批（2026-09-14 用户审查定稿：「D-C 扩容 + D 卡全部接链」）====
+// 五张补拆组合的格挡来源与转化出口，全部用现有语言（盾/格挡/破/后手/受击）：
+//   * 稳桩/收势：D 阶补厚（混合件 + 后手防御位——后手语言此前只在拳侧）；
+//   * 铁靠：受击转格挡（拳拆之间的桥——纯输出构筑挨打终于有回收）；
+//   * 碎击链（设计稿欠账实装）：破→虚弱，格挡转 debuff 的出口（破势转伤的分岔）。
+
+// 稳桩 D：1AP 4盾 + 格挡1（盾5/抱头1的混合件——拆组合 D 阶补厚）。
+registerSkill({
+  id: 'steadyPost', name: '稳桩', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: 'blockGuard',
+  use(sctx) {
+    gainShield(sctx, 4);
+    gainBlock(sctx, 1);
+    return true;
+  },
+  describe: () => '护盾4，/effect{格挡}1',
+});
+
+// 收势 D：1AP 5盾；后手（手牌最后的非激活卡打出）时再 +5 盾
+// （基础 = 盾 D 白板；后手溢价 +5——虚形拳的时序语言落到防御位）。
+registerSkill({
+  id: 'closingStance', name: '收势', type: 'normal', tier: 'D', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: 'solidShield',
+  use(sctx) {
+    gainShield(sctx, isLastHandCardAtPlay(sctx) ? 10 : 5);
+    return true;
+  },
+  describe: () => '护盾5。/named{后手}：再+5',
+  battleDescribe: (sctx) => `护盾${isLastHandCardAtPlay(sctx) ? 10 : 5}`,
+});
+
+// 铁靠 C：1AP 6盾；到你的下回合开始前，你每受到一次攻击，格挡 +1
+// （受击判定与荆棘同口径：有来源的伤害才算攻击；敌方攻击发生在敌方回合，
+// 订阅挂 battle 窗口 + 下回合开始自清——「本回合」按攻击的实际发生窗口实现）。
+registerSkill({
+  id: 'ironLean', name: '铁靠', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: 'reinforcedShield',
+  use(sctx) {
+    gainShield(sctx, 6);
+    const owner = `ironLean:${sctx.self.uniqueID}`;
+    sctx.kernel.addSubscription({
+      when: DealDamageInstruction, phase: 'post', owner,
+      filter: (instr) => instr.target === sctx.player
+        && instr.source && !instr.source.isDead() && instr.source.side === 'enemy',
+      react: (instr, ctx) => {
+        ctx.kernel.submitInstruction(new AddEffectInstruction({
+          target: ctx.player, effectId: 'block', stacks: 1,
+        }), instr);
+      },
+    });
+    sctx.kernel.addSubscription({
+      when: PlayerTurnStartInstruction, phase: 'post', owner,
+      react: (instr, ctx) => ctx.kernel.removeSubscriptionsByOwner(owner),
+    });
+    return true;
+  },
+  describe: () => '护盾6。到你的下回合开始，你每受到一次攻击，/effect{格挡}+1',
+  battleDescribe: () => '护盾6。到你的下回合开始，你每受到一次攻击，/effect{格挡}+1',
+});
+
+// 碎击 C → 碎骨 B（设计稿「碎击系列」：格挡转负面效果）。
+// 【破】在此是固定触发（不按层）：消耗全部格挡，换目标/全体的虚弱。
+// 碎击 C：1AP 7伤；破：目标虚弱2。
+registerSkill({
+  id: 'shatterHit', name: '碎击', type: 'normal', tier: 'C', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'shatterBone',
+  use(sctx) {
+    attackDamage(sctx, 7);
+    const target = enemyTarget(sctx);
+    if (breakAllBlock(sctx) > 0 && target) addEffect(sctx, 'weaken', 2, target);
+    return true;
+  },
+  describe: () => '7伤害；/named{破}：目标/effect{虚弱}2',
+  battleDescribe: (sctx) => {
+    const layers = sctx.player.getEffectStacks('block');
+    return `${resolvedDamageText(sctx, 7)}，/named{破}：目标/effect{虚弱}2（当前${layers}层）`;
+  },
+});
+
+// 碎骨 B：1AP 7伤；破：全体敌人虚弱2（多敌房的群体压制件）。
+registerSkill({
+  id: 'shatterBone', name: '碎骨', type: 'normal', tier: 'B', series: 'block',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'enemy',
+  use(sctx) {
+    attackDamage(sctx, 7);
+    if (breakAllBlock(sctx) > 0) {
+      for (const e of aliveEnemies(sctx.battleState)) addEffect(sctx, 'weaken', 2, e);
+    }
+    return true;
+  },
+  describe: () => '7伤害；/named{破}：所有敌人/effect{虚弱}2',
+  battleDescribe: (sctx) => {
+    const layers = sctx.player.getEffectStacks('block');
+    return `${resolvedDamageText(sctx, 7)}，/named{破}：所有敌人/effect{虚弱}2（当前${layers}层）`;
+  },
+});
+
+// ==== 散卡（2026-09 设计稿新增）=============================================
 
 // 快如雨（C）/ 疾如风（B）：1AP 冷却1——打出时按**本回合已打出的牌数**结算：
 // 每 4 张（B：每 3 张）获得 1 层格挡（向下取整，不含自身——发动卡结算时尚未计入）。

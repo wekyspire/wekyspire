@@ -49,6 +49,8 @@ const SEED_EXCLUDED = new Set([
   'fireControlSpread', 'fireControlHarvest', 'fireControlDisturb',
   'fireControlDetonate', 'fireControlGather', 'fireControlRefine', 'fireControlSupreme',
   'heatSurge', 'meltFlame', 'mirrorBurn', 'flameHeal', 'patience',
+  // 扩容批（2026-09-14）：需燃烧储备的收割/条件件（燃爆/回火/热浪——同激热/焰愈口径）
+  'burnSnap', 'backfire', 'heatWave',
   // 体修：花刀/飞刀系（吃手牌与邻位）、呼吸系（吃弃牌）、培植/开刃/砺刀系（吃刀法牌）、
   // 斩进阶链（只经转化获得）、纯格挡转化（壁垒系）、完美门槛卡（精准一击/精心一击）、
   // 手牌数量条件咏唱（以无胜有/以有胜无）
@@ -58,6 +60,8 @@ const SEED_EXCLUDED = new Set([
   'whetstone', 'honeEdgeMid', 'razorEdge', 'honeEdge', 'annihilatingEdge', 'practiceBlade',
   'bladeArt', 'bladeHeart',
   'barrier', 'fortress', 'bronzeCity', 'soulOfWar',
+  // 扩容批（2026-09-14）：混元需弃牌引擎储备（同呼吸系口径）
+  'hunYuan',
   'perfectStrike', 'carefulStrike',
   'fastRain', 'fastWind', // 需大回合铺垫才生效，种子池里是废牌
   // 木灵脉：卖血卡（0 练度卖血是负收益——血祭/血藤都带 'blood'）

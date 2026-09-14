@@ -9,6 +9,7 @@ import './blockSkills.js';
 import './fireBurstSkills.js';
 import './fireEmberSkills.js';
 import './fireEmberMoreSkills.js';
+import './fireExpansionSkills.js';
 import './woodSkills.js';
 import './airSkills.js';
 import './commonSkills.js';

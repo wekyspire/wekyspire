@@ -50,6 +50,9 @@ export function freshHistory() {
   const counters = () => ({
     played: 0, drawn: 0, discarded: 0, burnt: 0,
     damageDealt: 0, damageTaken: 0, healing: 0,
+    // 本回合打出的卡 defId 明细（按打出顺序）——「打出过 N 张瞬击/火牌」类判据用；
+    // 只在 turn 级有意义（battle 级不累计，freshHistory 共用工厂照带一份无害）。
+    playedCards: [],
   });
   return { turn: counters(), battle: counters() };
 }

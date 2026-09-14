@@ -10,16 +10,17 @@
 //   * 咏唱触发效果 = activated.subscriptions 订阅 ChantTriggerInstruction(post)（P5 挂载点）。
 
 import { registerSkill } from '../skills/registry.js';
-import { zoneOf } from '../state/battleState.js';
+import { zoneOf, aliveEnemies } from '../state/battleState.js';
 import { UseSkillInstruction, SkillCooldownInstruction } from '../instructions/skill.js';
 import { ConsumeActionPointsInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { DealDamageInstruction, previewDamage } from '../instructions/combat.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
+import { effectiveHandCount } from '../skills/helpers.js';
 import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
   dealDamage, drawCards, drawToHandLimit, addCard, randomAliveEnemy,
-  isLastHandCardAtPlay, isFirstPlayThisTurn,
+  isLastHandCardAtPlay, isFirstPlayThisTurn, gainBlock,
 } from './cardKit.js';
 
 // ==== 1. 真拳系列（基石：纯伤害直线升级，A 阶跃迁为无任何资源消耗）====
@@ -471,6 +472,167 @@ registerSkill({
   canSpawnAsReward: false,
   use() { return true; },
   describe: () => '无效果',
+});
+
+// ==== 10. 扩容批（2026-09-14 用户审查定稿：「D-C 扩容 + D 卡全部接链」）====
+// 五个新维度补拳组合的机制空白，全部用体修现有语言（过牌/先手后手/瞬击/咏唱/打出计数）：
+//   * 卖血爆发（狂拳链，设计稿欠账实装）——HP 一次性代价换高伤+抽牌；
+//   * 多段连击（乱拳链）——「连击」主题终于有 ×N 段，吃快如雨/拳师/灼类「每段触发」；
+//   * 群伤 AOE（重踏链）——拳组合此前零 AOE（武学只是随机散步）；
+//   * 瞬击下游（拳风）——蓄力系造的瞬击终于有「吃瞬击」的加成件；
+//   * 弃牌引擎（混元，设计稿欠账实装）——弃牌语言（呼吸/假动作/以无胜有）的消费端。
+// 数值对标：无条件部分 = 同阶白板（乱拳 6=拳、密雨 9=快拳、千手 12=炮拳），
+// 多段/条件加成才是体系溢价。失去生命 = 无来源固定伤害（跳修正、护盾可吸收、
+// 不触发荆棘/忍耐类反制——纯代价语义）。
+
+// 群伤原语：对每个存活敌人一枚 aoe 标记伤害（与火系 aoeDamage 同语言）
+function bodyAoe(sctx, base) {
+  for (const e of aliveEnemies(sctx.battleState)) {
+    attackDamage(sctx, base, { target: e, tags: ['aoe'] });
+  }
+}
+
+// 狂拳 D → 血怒 C → 亡命 B（卖血链）
+function wildPunchCard({ id, name, tier, damage, lifeLoss, draw, promotesTo = null }) {
+  registerSkill({
+    id, name, type: 'normal', tier, series: 'fist',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal', targetMode: 'enemy',
+    promotesTo,
+    use(sctx) {
+      attackDamage(sctx, damage);
+      sctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: null, target: sctx.player, amount: lifeLoss, fixed: true, tags: ['selfcost'],
+      }));
+      if (draw > 0) drawCards(sctx, draw);
+      return true;
+    },
+    describe: () => `${damage}伤害，失去${lifeLoss}生命${draw ? `，抽${draw}` : ''}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，失去${lifeLoss}生命${draw ? `，抽${draw}` : ''}`,
+  });
+}
+wildPunchCard({ id: 'wildPunch', name: '狂拳', tier: 'D', damage: 12, lifeLoss: 3, promotesTo: 'bloodRage' });
+wildPunchCard({ id: 'bloodRage', name: '血怒', tier: 'C', damage: 15, lifeLoss: 5, draw: 1, promotesTo: 'lastGasp' });
+wildPunchCard({ id: 'lastGasp', name: '亡命', tier: 'B', damage: 20, lifeLoss: 7, draw: 2 });
+
+// 乱拳 D → 密雨拳 C → 千手 B（多段链：每段独立结算、独立吃减伤门与触发面）
+function flurryCard({ id, name, tier, hits, promotesTo = null }) {
+  registerSkill({
+    id, name, type: 'normal', tier, series: 'fist',
+    cost: { mana: 0, actionPoint: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'enemy',
+    promotesTo,
+    use(sctx) {
+      for (let i = 0; i < hits; i++) attackDamage(sctx, 3);
+      return true;
+    },
+    describe: () => `3伤害×${hits}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}×${hits}`,
+  });
+}
+flurryCard({ id: 'wildFlurry', name: '乱拳', tier: 'D', hits: 2, promotesTo: 'rainFist' });
+flurryCard({ id: 'rainFist', name: '密雨拳', tier: 'C', hits: 3, promotesTo: 'thousandHands' });
+flurryCard({ id: 'thousandHands', name: '千手', tier: 'B', hits: 4 });
+
+// 重踏 D → 横扫 C → 旋风腿 B（AOE 链：单发白板的群折——拳6/快拳9 打折为群5/6/8）
+function sweepCard({ id, name, tier, damage, block = 0, promotesTo = null }) {
+  registerSkill({
+    id, name, type: 'normal', tier, series: 'fist',
+    cost: { mana: 0, actionPoint: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'enemy',
+    promotesTo,
+    use(sctx) {
+      bodyAoe(sctx, damage);
+      if (block > 0) gainBlock(sctx, block);
+      return true;
+    },
+    describe: () => `群伤${damage}${block ? `，自身/effect{格挡}${block}` : ''}`,
+    battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}${block ? `，自身/effect{格挡}${block}` : ''}`,
+  });
+}
+sweepCard({ id: 'heavyStomp', name: '重踏', tier: 'D', damage: 5, promotesTo: 'sweepKick' });
+sweepCard({ id: 'sweepKick', name: '横扫', tier: 'C', damage: 6, promotesTo: 'whirlLeg' });
+sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'B', damage: 8, block: 1 });
+
+// 拳风 D（瞬击下游）：1AP 6伤；本回合每打出过 1 张瞬击，伤害 +2
+// （基础 = 拳 D 白板；瞬击计数读 history.turn.playedCards 明细——蓄力系的引擎出口）。
+registerSkill({
+  id: 'fistWind', name: '拳风', type: 'normal', tier: 'D', series: 'fist',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'comboStrike',
+  use(sctx) {
+    attackDamage(sctx, 6 + instantStrikesThisTurn(sctx) * 2);
+    return true;
+  },
+  describe: () => '6伤害；本回合每打出过1/card{instantStrike}，伤害+2',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6 + instantStrikesThisTurn(sctx) * 2)}`
+    + `（6+${instantStrikesThisTurn(sctx) * 2}）`,
+});
+function instantStrikesThisTurn(sctx) {
+  return sctx.battleState.history.turn.playedCards.filter(id => id === 'instantStrike').length;
+}
+
+// 拆招 D（低手牌过牌）：0费 冷却1——抽 1；打出后手牌只剩 2 张或更少时再抽 1
+// （后手场景的资源件——清手流的续航，与虚形拳同一时序语言）。
+registerSkill({
+  id: 'counterDraw', name: '拆招', type: 'normal', tier: 'D', series: 'fist',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: 'rapidCombo',
+  use(sctx) {
+    drawCards(sctx, 1);
+    if (sctx.battleState.zones.hand.length <= 2) drawCards(sctx, 1);
+    return true;
+  },
+  describe: () => '抽1牌；若手牌只剩2张或更少，再抽1',
+  battleDescribe: (sctx) => `抽1牌（当前手牌${sctx.battleState.zones.hand.length}张）`,
+});
+
+// 蓄满 C（手牌条件攻击）：1AP 9伤；加权手牌不少于 5 张时 +5
+// （基础 = 快拳白板；「手多势众」的条件溢价——囤牌流的输出位，与以有胜无同口径）。
+registerSkill({
+  id: 'fullCharge', name: '蓄满', type: 'normal', tier: 'C', series: 'fist',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo: 'cannonFist',
+  use(sctx) {
+    attackDamage(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9);
+    return true;
+  },
+  describe: () => '9伤害；若你的手牌不少于5张，+5',
+  battleDescribe: (sctx) => resolvedDamageText(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9),
+});
+
+// 混元 C（弃牌引擎，设计稿欠账实装）：1AP 咏唱3——每弃 3 张牌，抽 1 张
+// （太极「每打 5 抽 1」的弃牌镜像；弃牌语言在体修三子系都有：假动作/呼吸/以无胜有）。
+// 计数挂 skillRuntime（跨回合累积，plain data 可序列化）。
+registerSkill({
+  id: 'hunYuan', name: '混元', type: 'normal', tier: 'C', series: 'fist',
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'chant', chantWeight: 3,
+  promotesTo: 'redirect',
+  use() { return true; },
+  activated: {
+    subscriptions: (sctx) => [{
+      when: DiscardCardInstruction, phase: 'post',
+      react: (instr, ctx) => {
+        sctx.self.discardCount = (sctx.self.discardCount ?? 0) + 1;
+        if (sctx.self.discardCount % 3 === 0) {
+          ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
+        }
+      },
+    }],
+  },
+  describe: () => '每弃3张牌，抽1牌',
+  battleDescribe: (sctx) => `每弃3张牌，抽1牌（已弃${sctx.self.discardCount ?? 0}）`,
 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
