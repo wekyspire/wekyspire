@@ -95,6 +95,28 @@ const TEMPLATES = [
   // 编成层面再防「双龟」「龟+像」这类叠加组合。
   { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
   { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  // —— 第四章特色战斗（2026-09-14 用户设计定稿，古尔帕斯商店 35 层之后的中后期）：
+  // 三族（玻璃连炮/巨兽渐强/机制反制）+ 机制四件套组合。每场是一个有破解方程的谜题，
+  // 设计红线：开局 2 拍 ≤25（A 系齐射除外）、单回合峰值 30-40、滚雪球 6-8 回合进
+  // 不可挡区、多源爆发错拍、大伤害意图预告可见——「高压但有解」，考大成牌组。 ——
+  // 族A 玻璃连炮：开局重压+异常轮转，杀一只少一份（守像阵型共鸣）
+  { id: 'guardQuad', name: '典礼方阵', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }] },
+  { id: 'guardPhalanx', name: '受戒典礼', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'shieldBearer' }] },
+  { id: 'forkDuet', name: '音叉双鸣', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'tuningFork' }, { fixed: 'tuningFork' }] },
+  { id: 'candleSwarm', name: '烛火群', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }] },
+  // 族B 巨兽渐强：血牛（终值 200+）+ 塞牌干扰 + 回合账单，启动窗口温和
+  { id: 'archiveTitan', name: '档案巨像', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'archiveColossus' }] },
+  { id: 'devourLair', name: '噬书巢穴', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'bookDevourer' }, {}] },
+  { id: 'inkTide', name: '墨海涨潮', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'inkTideCore' }, { fixed: 'bookWorm' }] },
+  // 族C 机制反制：读构筑/行为的镜子
+  { id: 'mirrorHall', name: '镜厅', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'oracleOrb' }, { fixed: 'galeGolem' }] },
+  { id: 'scriptorium', name: '禁阅室', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'censorScribe' }] },
+  { id: 'ledgerOffice', name: '账房', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'ledgerImp' }] },
+  { id: 'monitorPost', name: '监察岗', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'acadMonitor' }, {}] },
+  // 机制四件套组合：增益核心+闪避多段打手 / 抗爆发阵型 / 开局塞重物
+  { id: 'consecration', name: '受戒仪仗', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'riteAltar' }, { fixed: 'galeGolem' }, { fixed: 'shieldBearer' }] },
+  { id: 'phalanxWall', name: '方阵阻击', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'repeaterBallista' }, { fixed: 'shieldBearer' }, {}] },
+  { id: 'binderVault', name: '装订库', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'binderPython' }, { fixed: 'tomeWarden' }] },
   // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）：1-2 敌，
   // 恒含一只高难精英（elite 槽从当层精英池按份额取材），余量可带一名杂鱼随从
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
@@ -250,6 +272,16 @@ export function generateEncounter(run) {
       // 下界已到 min 时，削弱体现在「延迟苏醒 + 苏醒时少叠一层力量」上。
       const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
       out[i] = descriptorOf('stoneCocoon', d, { wakeDelay: 2, wakeStrength: 1 });
+    }
+  }
+  // 音叉群（2026-09-14 第四章特色战斗）：第二只起 wakeDelay=1 且难度 -1——两台大振
+  // 恒错拍，任意回合最多一次大振（同拍双大振 = 单回合 50+ 直伤，踩红线）。
+  const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);
+  if (forks.length > 1) {
+    const def = getEnemyDefinition('tuningFork');
+    for (const i of forks.slice(1)) {
+      const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
+      out[i] = descriptorOf('tuningFork', d, { wakeDelay: 1 });
     }
   }
   return out;
