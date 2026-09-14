@@ -90,8 +90,11 @@ const TEMPLATES = [
   // 章4 图书馆：防线锚 + 群狼连击（min 15 ≤ 17 / max 25 ≥ 21）
   { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
-  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, {}] },
-  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, {}] },
+  // 血牛互斥（2026-09-14 马拉松修复）：钉死位已有一只龟/像时，通配位排除其余血牛
+  // （岩甲龟/石像卫士/禁书守卫）——防线怪的单体马拉松已由蓄势/再生递减治理，
+  // 编成层面再防「双龟」「龟+像」这类叠加组合。
+  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
   // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）：1-2 敌，
   // 恒含一只高难精英（elite 槽从当层精英池按份额取材），余量可带一名杂鱼随从
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
@@ -134,10 +137,15 @@ function eligibleAtFloor(def, floor) {
   return Boolean(d) && floor >= d.floorMin && floor <= d.floorMax;
 }
 
-// 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池
+// 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池。
+// slot.exclude（2026-09-14 马拉松修复）：通配位排除指定敌 id——「龟甲阵/巨像」这类
+// 血牛钉死位的搭档不许再抽到其他血牛（双龟/龟+像组合是 15~20+ 回合无风险马拉松的
+// 直接来源，两份试玩死于 32 层双岩甲龟）。exclude 只过滤选材池（templateRange 与
+// 份额分配同用此池），不影响预算逻辑本身。
 function slotPool(slot, floor) {
   if (slot.fixed) return [getEnemyDefinition(slot.fixed)];
-  return eligiblePool(floor, slot.elite === true);
+  const pool = eligiblePool(floor, slot.elite === true);
+  return slot.exclude?.length ? pool.filter(def => !slot.exclude.includes(def.id)) : pool;
 }
 
 // 模板在指定层的难度可达区间 [minSum, maxSum]：各槽取材池的 min 最小值 /

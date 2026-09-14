@@ -774,9 +774,14 @@ registerEnemy({
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
+      // 再生递减（2026-09-14 马拉松修复）：首次 3 层，此后每次 -1、最低 1——
+      // 原无限「再生3+盾6」循环让输出不足的卡组磨了 26~37 回合（d-free 实测），
+      // 净回复收敛后马拉松自然收束；再生依旧，只是「拖得越久回得越少」。
+      const times = (actx.unit._regenTimes ?? 0);
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'regen', stacks: 3,
+        target: actx.unit, effectId: 'regen', stacks: Math.max(1, 3 - times),
       }));
+      actx.unit._regenTimes = times + 1;
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: actx.unit, target: actx.player, amount: 10 + actx.unit.getStat('attack'),
@@ -787,7 +792,10 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['buff'], note: '自身再生3' };
+    if (phase === 0) {
+      const next = Math.max(1, 3 - (unit._regenTimes ?? 0));
+      return { kinds: ['buff'], note: `自身再生${next}` };
+    }
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
     return { kinds: ['defend'], note: '自身护盾+6' };
   },
@@ -830,6 +838,12 @@ registerEnemy({
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'thorns', stacks: 1,
       }));
+      // 缩壳蓄势（2026-09-14 马拉松修复）：双龟阵曾是「无风险马拉松」（32 层两份试玩
+      // 死于 15~20+ 回合龟拳磨血）——每次缩壳 +1 蓄势，攻拍 10+atk 随之线性上涨，
+      // 拖得越久龟拳越痛，磨盘战有时间账单。
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'focus', stacks: 1,
+      }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: actx.unit, target: actx.player, amount: 10 + actx.unit.getStat('attack'),
@@ -837,7 +851,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1' }
+    ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1 + 蓄势+1' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
@@ -1164,11 +1178,17 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 6 }));
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 4 }));
+      // 缩壳蓄势（2026-09-14 马拉松修复）：礁石滩曾是「无风险磨 12+ 回合」——攻击软、
+      // 缩壳无限回复，输出不足的卡组全程零压力干耗。每次缩壳 +1 蓄势（每层攻击+1，
+      // 走 getStat 自动进攻击与意图预告）＝温水煮青蛙的时间账单：磨可以，但越磨越疼。
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'focus', stacks: 1,
+      }));
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
-    : { kinds: ['defend', 'buff'], note: '缩壳：自身护盾6，回复4' }),
+    : { kinds: ['defend', 'buff'], note: '缩壳：自身护盾6，回复4，蓄势+1' }),
 });
 
 // ============ 第二~四章补池（2026-09-13 总策划批次，设计稿 tmp/design-monsters-wave1.mjs）============
@@ -1372,6 +1392,11 @@ registerEnemy({
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 }));
       }
+      // 盾拍蓄势（2026-09-14 马拉松修复）：禁书库防挡 3+全体盾 12 曾把小刀流磨到
+      // 无风险长跑——盾拍自身 +2 蓄势，大攻击（14+atk）随回合线性上涨，拖久必痛。
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.unit, effectId: 'focus', stacks: 2,
+      }));
       return;
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -1381,7 +1406,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+12' };
+    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+12，自身蓄势+2' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 10 : 14) + unit.getStat('attack') };
   },
 });
