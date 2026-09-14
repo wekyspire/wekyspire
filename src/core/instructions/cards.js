@@ -276,3 +276,28 @@ export class TransformCardInstruction extends BattleInstruction {
     }
   }
 }
+
+// 锁定（无人战体「解除威胁/反反反反制」）：给手牌打「回合结束时若仍在手则被焚毁」的
+// 纯标记——不打断任何玩家操作（照常打出/弃置），离手即免除。结算与清标由施加方的
+// 订阅负责（enemies.js intactDrone 的 PlayerTurnEnd 订阅：手牌中的锁定卡焚毁、
+// 全 zone 清标——本轮锁定结算完毕，离手的卡不带标回库）。
+// 过期引用无害：锁定时已离场的 uniqueID 静默跳过（与弃/移同哲学）。
+export class LockCardsInstruction extends BattleInstruction {
+  constructor({ uniqueIDs }, opts = {}) {
+    super(opts);
+    this.uniqueIDs = uniqueIDs;
+  }
+
+  execute(ctx) {
+    const locked = [];
+    for (const uniqueID of this.uniqueIDs) {
+      const card = ctx.battleState.zones.hand.find(c => c.uniqueID === uniqueID);
+      if (!card) continue;
+      card.locked = true;
+      locked.push(card);
+    }
+    this.result = { locked };
+    ctx.presenter?.cardsLocked?.({ cards: locked });
+    return true;
+  }
+}

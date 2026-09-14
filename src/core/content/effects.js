@@ -1,6 +1,6 @@
-import { registerEffect } from '../effects/registry.js';
+import { registerEffect, getEffectDefinition } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
-import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction, ClearShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
@@ -591,4 +591,125 @@ registerEffect({
       if (stacks > 0) instr.setPayload('damage', instr.payload.damage + stacks);
     },
   }],
+});
+
+// 如山（EFFECTS.md）：护盾不自动清空——回合开始的例行清盾对持有者失效。
+// 1 层即恒效、不随触发递减（多层无额外意义，只表强度）：无人战体的 150 初始盾
+// 全靠它跨回合存续（否则敌方回合开始的清盾让任何盾都活不过「护一个玩家回合」）。
+registerEffect({
+  id: 'mountain',
+  type: 'buff',
+  stacking: 'count',
+  name: '如山',
+  description: '护盾不自动清空。',
+  icon: '⛰️',
+  color: 'gray',
+  subscriptions: (unit) => [{
+    when: ClearShieldInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit,
+    react: (instr, ctx) => ctx.kernel.veto(instr, 'mountain'),
+  }],
+});
+
+// 纯净（EFFECTS.md）：抵消一次负面效果赋予，层数 -1。识别走效果定义的 type
+// 而非名单特判；层数递减（负数赋予）与正面效果不消耗。
+registerEffect({
+  id: 'pure',
+  type: 'buff',
+  stacking: 'count',
+  name: '纯净',
+  description: '抵消一次负面效果赋予，层数减少 1。',
+  icon: '✨',
+  color: 'blue',
+  subscriptions: (unit) => [{
+    when: AddEffectInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit
+      && instr.payload.stacks > 0
+      && getEffectDefinition(instr.effectId)?.type === 'debuff'
+      && unit.getEffectStacks('pure') > 0,
+    react: (instr, ctx) => ctx.kernel.veto(instr, 'pure', [
+      new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: -1 }),
+    ]),
+  }],
+});
+
+// 凝滞（EFFECTS.md）：一切状态都无法变更——效果、生命、护盾等全部冻结
+// （对持有者的一切状态类指令 veto；多层时连 AI 行动一并冻结）。
+// 持有者回合开始时层数 -1（在其它回合开始结算之前解除——1 层凝滞的下一拍行动正常）。
+// 首用：无人战体盾碎转阶段（整机挂起，玩家剩余输出打不动冻结的机器）。
+// type 定为 buff：它对持有者是保护性冻结，不能被「纯净」当负面吃掉（否则盾碎瞬间
+// 挂上的凝滞会被自己的纯净 4 拦截，转阶段永远不触发）。
+registerEffect({
+  id: 'stasis',
+  type: 'buff',
+  stacking: 'count',
+  name: '凝滞',
+  description: '一切状态都无法变更（效果、生命、护盾）。自己回合开始时层数减少 1。',
+  icon: '🧊',
+  color: 'cyan',
+  subscriptions: (unit) => [
+    {
+      when: DealDamageInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      when: ApplyHealInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      when: GainShieldInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      when: ClearShieldInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      when: AddEffectInstruction,
+      phase: 'pre',
+      // 递减自身（stasis 负层数）必须放行——否则自己挡自己，层数永不减少
+      filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0
+        && !(instr.effectId === 'stasis' && instr.payload.stacks < 0),
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      // 多层凝滞连行动一并冻结（1 层已在回合开始扣完，正常行动）
+      when: AIActInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.unit === unit && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
+    },
+    {
+      when: TurnStartInstruction,
+      phase: 'post',
+      priority: 50, // 早于燃烧等回合开始结算（priority 0）：解除在本回合开始一刻生效
+      filter: (instr) => instr.side === unit.side && !unit.isDead() && unit.getEffectStacks('stasis') > 0,
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'stasis', stacks: -1 }), instr),
+    },
+  ],
+});
+
+// 无敌：生命不会降到 1 以下（minHp 地板，与伤害管线同源）。无自动递减、不自杀——
+// 何时终结（移除）由施加方控制。首用：无人战体死亡拍的自爆协议（宕机→锁死→下一拍引爆）。
+// 与奇迹的区别：奇迹自带「回合末递减 + 归零即死」的倒计时，无敌是外部托管的绝对态。
+registerEffect({
+  id: 'invulnerable',
+  type: 'buff',
+  stacking: 'count',
+  name: '无敌',
+  description: '生命不会降到 1 以下。',
+  icon: '🛡️',
+  color: 'yellow',
+  statModifiers: { minHp: () => 1 },
 });

@@ -1,14 +1,15 @@
 import { registerEnemy, getEnemyDefinition } from '../enemies/registry.js';
 import { registerSkill } from '../skills/registry.js';
 import { getEffectDefinition } from '../effects/registry.js';
-import { AddCardInstruction, DrawCardsInstruction, MoveCardInstruction } from '../instructions/cards.js';
+import { AddCardInstruction, DrawCardsInstruction, MoveCardInstruction, BurnCardInstruction, LockCardsInstruction } from '../instructions/cards.js';
 import Enemy from '../state/enemy.js';
 import {
-  DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction,
+  DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
 } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UnitSpawnInstruction } from '../instructions/units.js';
-import { aliveEnemies, aliveAllies } from '../state/battleState.js';
+import { PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { aliveEnemies, aliveAllies, zoneOf } from '../state/battleState.js';
 
 // 敌人定义总集。约定：
 //   * 行动序列固定循环，按 unit.actionIndex 取模分支；行动即提交指令，无特判；
@@ -2053,5 +2054,183 @@ registerEnemy({
     return (unit.actionIndex - 1) % 2 === 0
       ? { kinds: ['attack'], hits: 1, damage: 11 + unit.getStat('attack'), note: '缠绕' }
       : { kinds: ['buff'], note: '蜕皮：自愈6' };
+  },
+});
+
+// ⑤″ 33 层 Boss · 完好的无人战体（章3 Boss 池之二，2026-09-14 用户设计；原型参考
+// wekyland「无人战体」词条：古南圣国军事遗留的自律战斗机器，「完好的」= 装备无损的
+// 个体——灰烬装甲可用、拟态基质未失活，所以它带着 150 初始盾与「如山+纯净」的完好
+// 协议出场；指示灯「警戒模式由绿转黄」、智能「经漫长岁月往往严重错乱」= 三灯状态机）。
+//   绿灯（第 1 拍）【徘徊】：不行动——白给玩家一拍，代价是 150 盾（如山存续）横在面前；
+//   黄灯（第 2 拍起三拍循环）：解除威胁（盾15+攻10+锁定手中3张）→ 劝诫（盾30）→
+//     解除威胁'（攻10+焚牌库顶2）。盾逐轮累积不清（如山），玩家迟早打穿——破盾越快，
+//     黄灯期越短（少挨锁定/焚库）；
+//   红灯（转阶段后三拍循环）：锁定要害，清除（穿透35+自身格挡1）→ 反反反反制
+//     （锁定全部手牌+5×7）→ 重启....失失失失败（空转）。
+// 转阶段：盾第一次被打穿 → **马上**凝滞1（一切状态无法变更——破盾那回合玩家的剩余
+//   输出打不动冻结的机器）→ 其回合开始凝滞解除，行动拍播【系统统统错误，最终预案启动】：
+//   净化自身全部效果 + 盾50，转红灯。
+// 死亡协议：第一次致死伤害被拦截（塞西莉亚之恩赐同款范式：改判保留 1 血 + 无敌）——
+//   宕机锁死；下一行动拍【错错错误】自爆：对玩家 20 伤 + 拆地板自杀。它永远以自爆收场。
+registerEnemy({
+  // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），让 100 血
+  // 精确落地；floorMin/Max=33 + BOSS_IDS 排除保证它不进任何精英/通配取材池。
+  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  id: 'intactDrone', name: '完好的无人战体',
+  createUnit: () => new Enemy({ defId: 'intactDrone', name: '完好的无人战体', maxHp: 100 }),
+  onBattleStart(ctx, unit) {
+    unit.shield += 150; // 灰烬装甲（完好无损）——如山存续，必须真打穿
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 4 }));
+    const owner = `enemy:${unit.uniqueID}:drone`;
+    // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 马上凝滞1 + 排转阶段。
+    // 如山在场，盾只会因伤害归零（回合开始的例行清盾被 veto），不会误触发。
+    ctx.kernel.addSubscription({
+      when: DealDamageInstruction, phase: 'post', owner,
+      filter: (instr) => instr.target === unit
+        && !unit._stasisArmed && !unit._phase2
+        && (instr.result?.shieldAbsorbed ?? 0) > 0 && unit.shield <= 0,
+      react: (instr, c) => {
+        unit._stasisArmed = true;
+        unit._phase2Pending = true;
+        c.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'stasis', stacks: 1 }), instr);
+      },
+    });
+    // 死亡协议拦截（致命判定写在 react、priority 压到修饰者之后——_collect 契约）：
+    // 第一次致死伤害 veto 并改判「保留 1 血 + 无敌」，进入自爆倒计时。
+    ctx.kernel.addSubscription({
+      when: DealDamageInstruction, phase: 'pre', priority: -100, owner,
+      filter: (instr) => instr.target === unit && !unit._detonated,
+      react: (instr, c) => {
+        if (!wouldBeLethal(instr, unit)) return;
+        unit._detonated = true;
+        c.kernel.veto(instr, 'droneLockdown', [
+          new DealDamageInstruction({
+            source: instr.source, target: unit,
+            amount: Math.max(unit.hp - 1, 0) + unit.shield,
+            fixed: true, tags: ['droneLockdown'],
+          }),
+          new AddEffectInstruction({ target: unit, effectId: 'invulnerable', stacks: 1 }),
+        ]);
+      },
+    });
+    // 锁定结算：玩家回合结束时，手牌中的锁定卡焚毁（离手即免除），随后全 zone 清标
+    // ——本轮锁定结算完毕，离手的卡不带标回库/回手。
+    ctx.kernel.addSubscription({
+      when: PlayerTurnEndInstruction, phase: 'post', owner,
+      filter: () => !unit.isDead(),
+      react: (instr, c) => {
+        for (const card of [...c.battleState.zones.hand]) {
+          if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
+            c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
+          }
+        }
+        for (const zone of ['hand', 'deck', 'burnt', 'pending']) {
+          for (const card of c.battleState.zones[zone]) card.locked = false;
+        }
+      },
+    });
+  },
+  act(actx) {
+    const { unit, battleState: bs, player } = actx;
+    const atk = unit.getStat('attack');
+
+    // 【错错错误】自爆拍：对玩家 20 伤，拆掉无敌地板后自杀（miracle 同款顺序铁律：
+    // 先摘地板再落死，反过来会被地板挡回 1）
+    if (unit._detonated) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 20 + atk, tags: ['detonate'] }));
+      const inv = unit.getEffectStacks('invulnerable');
+      if (inv > 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'invulnerable', stacks: -inv }));
+      }
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: unit, amount: 999, pierce: true, tags: ['detonate'] }));
+      return;
+    }
+
+    // 【系统统统错误，最终预案启动】转阶段拍（凝滞已在回合开始解除）：净化全部效果 + 盾50
+    if (unit._phase2Pending) {
+      unit._phase2Pending = false;
+      unit._phase2 = true;
+      unit._redBeat = 0;
+      for (const e of [...unit.effects]) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: e.effectId, stacks: -e.stacks }));
+      }
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 50 }));
+      return;
+    }
+
+    // 绿灯【徘徊】：第 1 拍不行动
+    if (unit.actionIndex === 0) return;
+
+    if (!unit._phase2) {
+      const beat = (unit.actionIndex - 1) % 3;
+      if (beat === 0) {
+        // 【解除威胁】盾15 + 攻10 + 锁定手中3张（随机；锁定不影响打出，回合末仍在手才焚）
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 10 + atk }));
+        const pool = bs.rng.shuffle([...bs.zones.hand]);
+        actx.kernel.submitInstruction(new LockCardsInstruction({
+          uniqueIDs: pool.slice(0, 3).map(c => c.uniqueID) }));
+      } else if (beat === 1) {
+        // 【劝诫】盾30
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 30 }));
+      } else {
+        // 【解除威胁'】攻10 + 焚牌库顶2（快照 uniqueID，牌库抽空自然落空）
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 10 + atk }));
+        for (let i = 0; i < 2; i++) {
+          const top = bs.zones.deck[0];
+          if (!top) break;
+          actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: top.uniqueID }));
+        }
+      }
+      return;
+    }
+
+    // 红灯三拍循环
+    const beat = unit._redBeat % 3;
+    unit._redBeat += 1;
+    if (beat === 0) {
+      // 【锁定要害，清除】穿透35（奇异射线：防御与护盾都不减免）+ 自身格挡1
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 35 + atk, pierce: true }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'block', stacks: 1 }));
+    } else if (beat === 1) {
+      // 【反反反反制】锁定全部手牌 + 5×7
+      actx.kernel.submitInstruction(new LockCardsInstruction({
+        uniqueIDs: bs.zones.hand.map(c => c.uniqueID) }));
+      for (let i = 0; i < 7; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 5 + atk }));
+      }
+    }
+    // beat 2：【重启....失失失失败】空转
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit._detonated) {
+      return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '错错错误：自爆！' };
+    }
+    if (unit.getEffectStacks('stasis') > 0 || unit._phase2Pending) {
+      return { kinds: ['buff'], note: '系统统统错误，最终预案启动：净化自身全部效果，护盾+50' };
+    }
+    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '徘徊' };
+    if (!unit._phase2) {
+      const beat = (unit.actionIndex - 1) % 3;
+      if (beat === 0) return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：锁定手中3张牌（回合结束时仍在手则焚毁）' };
+      if (beat === 1) return { kinds: ['defend'], note: '劝诫：自身护盾+30' };
+      return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：焚毁牌库顶2张' };
+    }
+    const beat = unit._redBeat % 3;
+    if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 35 + atk, note: '锁定要害，清除：穿透伤害，自身格挡+1' };
+    if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 7, damage: 5 + atk, note: '反反反反制：锁定你的全部手牌' };
+    return { kinds: ['unknown'], note: '重启....失失失失败' };
   },
 });

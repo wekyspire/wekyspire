@@ -8,6 +8,8 @@
 //   chip  水印  z=0.40 —— 冷却剩余拍数水印数字（低透明度平面白字，不描边不发光）
 //   doom  将弃  z=0.36（暗化盖纱）+ 0.5（描边框）—— P9 尾弃预告：红色呼吸描边（用户定
 //         2026-09-13，Three 层实现——重要视效，后续动画扩展都在本层）
+//   lock  锁定  z=0.44（四角瞄准括号）—— 无人战体「解除威胁」：琥珀色慢呼吸，回合末
+//         仍在手则焚毁（与 doom 的红框急促截止感区分：锁定是持续「被瞄准」态）
 //   pulse 闪光 z=0.45 —— 一次性加色脉冲（冷却推进/威力提升/衰败反向）
 //   edge  流光 z=0.6  —— 咏唱激活的绕边小光点
 // 三张平面各自惰性创建；焚毁接管牌面前调 clearTransient() 熄灭全部叠加。
@@ -28,6 +30,9 @@ const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
 // 将弃描边：警示红 + 急促呼吸（1.2s——逼近的截止感）；暗化盖纱让牌面"沉"下去
 const DOOM_COLOR = 0xd84848;
 const DOOM_PERIOD = 1.2;
+// 锁定括号：警戒琥珀 + 慢呼吸（2.4s——「已被瞄准」的持续状态感，与将弃的急促截止区分）
+const LOCK_COLOR = 0xe8a23c;
+const LOCK_PERIOD = 2.4;
 
 export class CardFxLayer extends THREE.Group {
   constructor({ width = 20, height = 27 } = {}) {
@@ -43,6 +48,7 @@ export class CardFxLayer extends THREE.Group {
     this._chip = null;       // 冷却拍数水印（随薄纱显示）
     this._chipN = null;      // 水印当前数字（重烘判据）
     this._doom = null;       // 将弃特效组（暗化盖纱 + 四边描框，惰性创建）
+    this._lock = null;       // 锁定特效组（四角瞄准括号，惰性创建）
     this._pulse = null;      // 脉冲平面
     this._pulseTl = null;    // { elapsed, duration, scale } | null
     this._edgeDot = null;    // 咏唱流光点
@@ -191,11 +197,50 @@ export class CardFxLayer extends THREE.Group {
 
   get hasDoomMark() { return !!this._doom; }
 
+  /** 「锁定」标记（无人战体「解除威胁」）：警戒琥珀色四角括号 + 慢呼吸——
+   *  区别于将弃的红色整框（锁定是「被瞄准」，将弃是「要离开」）。幂等；呼吸在 update(dt)。 */
+  setLocked(on) {
+    if (on === !!this._lock) return;
+    if (!on) {
+      this.remove(this._lock);
+      this._lock.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      this._lock = null;
+      return;
+    }
+    const g = new THREE.Group();
+    g.name = 'lock';
+    // 四角 L 形括号（瞄准框）：每角两根短条，牌面外扩 1.0，条粗 0.9，臂长 5
+    const inset = 1.0, t = 0.9, arm = 5;
+    const w = this._w / 2 + inset, h = this._h / 2 + inset;
+    const mkArm = (bw, bh, x, y) => {
+      const bar = new THREE.Mesh(
+        new THREE.PlaneGeometry(bw, bh),
+        new THREE.MeshBasicMaterial({
+          color: LOCK_COLOR, transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      bar.position.set(x, y, 0.44);
+      bar.name = 'arm';
+      g.add(bar);
+    };
+    // 四角：右上/右下/左下/左上，每角横臂 + 竖臂
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      mkArm(arm, t, sx * (w - arm / 2), sy * h);          // 横臂（沿牌边向内）
+      mkArm(t, arm, sx * w, sy * (h - arm / 2));          // 竖臂（沿牌边向内）
+    }
+    this._lock = g;
+    this.add(g);
+  }
+
+  get hasLockMark() { return !!this._lock; }
+
   /** 焚毁等接管牌面前：熄灭全部叠加特效（不销毁资源——卡随后整体 dispose）。 */
   clearTransient() {
     this.setEdgeGlow(false);
     this.setCooling(null);
     this.setDoomed(false);
+    this.setLocked(false);
     if (this._pulse) this._pulse.visible = false;
     this._pulseTl = null;
   }
@@ -234,6 +279,13 @@ export class CardFxLayer extends THREE.Group {
       const k = 0.5 + 0.5 * Math.sin((this._t / DOOM_PERIOD) * Math.PI * 2);
       for (const o of this._doom.children) {
         o.material.opacity = o.name === 'bar' ? 0.45 + 0.5 * k : 0.22 + 0.12 * (1 - k);
+      }
+    }
+    if (this._lock) {
+      // 锁定呼吸：四角括号 0.45~0.95 慢明暗（持续瞄准态，无截止感）
+      const k = 0.5 + 0.5 * Math.sin((this._t / LOCK_PERIOD) * Math.PI * 2);
+      for (const o of this._lock.children) {
+        o.material.opacity = 0.45 + 0.5 * k;
       }
     }
     if (this._edgeDot) {

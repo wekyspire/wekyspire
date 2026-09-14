@@ -126,6 +126,11 @@ export class CardObject extends THREE.Group {
 
   get hasDoomMark() { return this.fx.hasDoomMark; }
 
+  /** 「锁定」标记（无人战体「解除威胁」：琥珀四角括号，回合末仍在手则焚毁）。幂等。 */
+  setLockMark(on) { this.fx.setLocked(on); }
+
+  get hasLockMark() { return this.fx.hasLockMark; }
+
   /** 帧驱动卡面特效（脉冲回程/盖纱呼吸/流光轨道）。 */
   updateFx(dt) { this.fx.update(dt); }
 
