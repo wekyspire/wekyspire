@@ -893,10 +893,14 @@ const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
 swapCleaveCard('quickCleave', '快速花刀', 'C', 1, 'quickCleavePlus');
 swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0);
 
-// 铁雨（B，消耗，设计稿未写费用 → 0费；2026-09-12 设计稿新增）：**打出手中所有的碎铁**。
+// 铁雨（B，消耗，设计稿未写费用 → 0费；2026-09-12 设计稿新增）：**打出所有碎铁**。
+// 2026-09-14 用户改：手中 → 所有（手牌+牌库）——原「打包手中碎铁」零增量（碎铁 0 费
+// 自带抽 1，手动逐张打毫无成本；试玩 24 局唯一一次入手即当废牌卡手），改成把斩链
+// 洗进牌库的碎铁**全部拉出来打**，才是真正的碎铁爆发件。
 // 口径：逐张**嵌套出牌**（UseSkillInstruction —— skill.js 头注声明的能力：技能逻辑直接提交，
-// 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride）。
-// 先快照手牌再逐张打：打出的会离手（pending → 焚毁），边遍历边打会错位。
+// 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride；其 moveCard 不要求来源
+// 是手牌，牌库碎铁直接进结算）。先快照（手牌+牌库）再逐张打：打出的会离手/离库，
+// 边遍历边打会错位；碎铁自带抽 1 翻上来的新碎铁不在快照内、不打（快照口径同 pending 惯例）。
 registerSkill({
   id: 'ironRain', name: '铁雨', type: 'normal', tier: 'B', series: 'blade',
   keywords: ['exhaust'],
@@ -904,16 +908,21 @@ registerSkill({
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
-    const shards = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard');
+    const bs = sctx.battleState;
+    const shards = [
+      ...bs.zones.hand.filter(c => c.defId === 'ironShard'),
+      ...bs.zones.deck.filter(c => c.defId === 'ironShard'),
+    ];
     for (const shard of shards) {
       sctx.kernel.submitInstruction(new UseSkillInstruction({ skill: shard }));
     }
     return true;
   },
-  describe: () => '打出手中所有/card{ironShard}',
+  describe: () => '打出所有/card{ironShard}（含牌库）',
   battleDescribe: (sctx) => {
-    const n = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard').length;
-    return `打出手中所有/card{ironShard}（当前${n}张）`;
+    const bs = sctx.battleState;
+    const n = [...bs.zones.hand, ...bs.zones.deck].filter(c => c.defId === 'ironShard').length;
+    return `打出所有/card{ironShard}（含牌库，共${n}张）`;
   },
 });
 
