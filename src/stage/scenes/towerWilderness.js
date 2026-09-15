@@ -13,6 +13,12 @@
 
 import * as THREE from 'three';
 import { CAMERA_AZIMUTH, CAMERA_ELEVATION } from '../StageManager.js';
+// shader 源码在同名 .glsl 文件（?raw 原生字符串导入，零插件；编辑器直接认后缀出高亮）。
+// ⚠ dome.frag 里的归一化半径 900.0 与本文件 DOME_RADIUS 同值，改半径时两处一起动。
+import domeVertSrc from './towerWilderness.dome.vert.glsl?raw';
+import domeFragSrc from './towerWilderness.dome.frag.glsl?raw';
+import snowVertSrc from './towerWilderness.snow.vert.glsl?raw';
+import snowFragSrc from './towerWilderness.snow.frag.glsl?raw';
 
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
@@ -63,47 +69,7 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// ---- 雪花（GPU 常驻粒子）----
-const SNOW_VERT = /* glsl */`
-  attribute float aSeed;
-  uniform float uTime;
-  uniform float uSize;    // 点径基准（世界单位）
-  uniform float uScale;   // 尺寸衰减基准 = 画布高/2（1080p 假设 540）
-  uniform vec3 uVolMin;
-  uniform vec3 uVolSpan;
-  varying float vDepth;   // 视深（片元做雾衰减：远处雪片融雾淡出，掩盖体积盒边缘）
-  void main() {
-    // 下落（逐粒速度差 6~14 世界单位/秒）+ 盒内回绕
-    float fall = 6.0 + 8.0 * fract(aSeed * 17.31);
-    vec3 base = position;
-    base.y = uVolMin.y + mod(position.y - uVolMin.y - uTime * fall, uVolSpan.y);
-    // 风摆：错频正弦水平漂移（x 主摆 + z 副摆）
-    float sway = 1.2 + 1.6 * fract(aSeed * 7.7);
-    base.x += sin(uTime * (0.5 + fract(aSeed * 3.1)) + aSeed) * sway;
-    base.z += cos(uTime * (0.4 + fract(aSeed * 5.3)) + aSeed * 2.0) * sway * 0.6;
-    vec4 wp = modelMatrix * vec4(base, 1.0);
-    vec4 mv = viewMatrix * wp;
-    vDepth = -mv.z;
-    gl_PointSize = uSize * (0.6 + 0.9 * fract(aSeed * 11.3)) * uScale / max(1.0, -mv.z);
-    gl_Position = projectionMatrix * mv;
-  }
-`;
-const SNOW_FRAG = /* glsl */`
-  precision highp float;
-  uniform float uOpacity;
-  uniform float uFogDensity;  // 与场景 FogExp2 同值同公式（squared exp）——远处雪片自然融雾
-  varying float vDepth;
-  void main() {
-    float d = length(gl_PointCoord - 0.5);
-    float a = smoothstep(0.5, 0.15, d) * uOpacity;
-    a *= exp(-uFogDensity * uFogDensity * vDepth * vDepth);
-    gl_FragColor = vec4(0.95, 0.97, 1.0, a);
-    // 同天空穹：补齐 tone map / sRGB 输出链路，与场景内置材质统一色彩
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`;
-
+// ---- 雪花（GPU 常驻粒子；shader 源码在 towerWilderness.snow.*.glsl）----
 function buildSnowfall({ count = 720 } = {}) {
   // 近场体积盒：罩住塔楼层视锥中段（相机 (≈98, 48, 145) 看向 (0, -15, 0)）
   const VOL_MIN = new THREE.Vector3(-80, -50, -40);
@@ -131,8 +97,8 @@ function buildSnowfall({ count = 720 } = {}) {
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
-    vertexShader: SNOW_VERT,
-    fragmentShader: SNOW_FRAG,
+    vertexShader: snowVertSrc,
+    fragmentShader: snowFragSrc,
     transparent: true,
     depthWrite: false,
   });
@@ -155,37 +121,15 @@ export function buildTowerWilderness({ towerX = 58, towerZ = -10 } = {}) {
   const disposables = []; // { dispose() }——几何/材质统一释放
 
   // ---- 天空穹：渐变（地平线雪白 → 天顶灰蓝），不吃雾不写深度、最先画 ----
+  // shader 源码在 towerWilderness.dome.*.glsl（uTop/uBottom 由本文件头部常量注入）
   const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 16);
   const domeMat = new THREE.ShaderMaterial({
     uniforms: {
       uTop: { value: new THREE.Color(SKY_TOP) },
       uBottom: { value: new THREE.Color(SKY_BOTTOM) },
     },
-    vertexShader: /* glsl */`
-      varying vec3 vLocal;
-      void main() {
-        vLocal = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */`
-      precision highp float;
-      uniform vec3 uTop;
-      uniform vec3 uBottom;
-      varying vec3 vLocal;
-      void main() {
-        float h = clamp(vLocal.y / ${DOME_RADIUS.toFixed(1)} * 0.5 + 0.5, 0.0, 1.0);
-        // 地平线雾带压平：浓雾天观感——下半球到略高于地平线整段都是雾白
-        // （与 FogExp2 融掉的远端雪原无缝相接），往上才 smoothstep 渐入天顶灰蓝
-        float t = smoothstep(0.56, 0.92, h);
-        vec3 col = mix(uBottom, uTop, t);
-        gl_FragColor = vec4(col, 1.0);
-        // 自定义 ShaderMaterial 不会自动过内置材质自带的 tone map / sRGB 输出链路，
-        // 底色（=雾色）与被雾融的雪原对不上屏——补齐同一条输出链路（编译期 chunk 展开）
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }
-    `,
+    vertexShader: domeVertSrc,
+    fragmentShader: domeFragSrc,
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
