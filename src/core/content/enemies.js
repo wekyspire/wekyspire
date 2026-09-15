@@ -67,7 +67,7 @@ registerEnemy({
   createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 44 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
-    if (unit.actionIndex >= 1 && bigSlimeCanSummon(unit, bs)) { // 首拍必攻（2026-09-16 首拍压力），召唤从第二拍起
+    if (bigSlimeCanSummon(unit, bs)) {
       unit.lastSummonTurn = bs.turn.count;
       actx.kernel.submitInstruction(new UnitSpawnInstruction({
         unit: getEnemyDefinition('slime').createUnit(),
@@ -80,8 +80,7 @@ registerEnemy({
     }));
     actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 })); // 数值意识（2026-09-16）：5→8
   },
-  getIntention: (unit, battleState) => (unit.actionIndex >= 1
-    && bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
+  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
     ? { kinds: ['summon'], note: '召唤史莱姆' }
     : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '自身护盾+5' }),
 });
@@ -691,7 +690,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 2, min: 1, max: 3, floorMin: 1, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
-  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18, actionIndex: 1 }), // 首拍相位偏移：竖刺→攻+自盾
+  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18 }),
   act(actx) {
     if (actx.unit.actionIndex === 0) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -776,7 +775,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-44→23-32，章4 血牛由禁书守卫/档案巨像承担
   id: 'gargoyle', name: '石像卫士',
-  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2, actionIndex: 1 }), // 首拍相位偏移：再生→攻（血牛循环保留）
+  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2 }),
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
@@ -1256,7 +1255,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 7, floorMin: 12, floorMax: 24 },
   id: 'palaceGuard', name: '宫廷守卫',
-  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22, actionIndex: 1 }), // 首拍相位偏移：全体盾→攻
+  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
@@ -1281,7 +1280,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 22 },
   id: 'herald', name: '传令官',
-  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16, actionIndex: 1 }), // 首拍相位偏移：全体蓄势→攻
+  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16 }),
   act(actx) {
     if (actx.unit.actionIndex === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
@@ -1345,7 +1344,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）
   id: 'tippler', name: '贪杯鬼',
-  createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30, actionIndex: 2 }), // 首拍相位偏移：喝酒→大口（滚雪球从第二拍起）
+  createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30 }),
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase < 2) {
@@ -1505,7 +1504,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 26 },
   id: 'miasmaShroom', name: '瘴气菇',
-  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24, actionIndex: 1 }), // 首拍相位偏移：毒云→攻（毒云第二拍）
+  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24 }),
   act(actx) {
     const { unit } = actx;
     if (unit.actionIndex % 3 === 0) {
@@ -1530,7 +1529,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-38→23-32
   id: 'windRaccoon', name: '风狸',
-  createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24, actionIndex: 1 }), // 首拍相位偏移：闪避→三连击
+  createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24 }),
   act(actx) {
     const { unit } = actx;
     const atk = unit.getStat('attack');
@@ -1565,7 +1564,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 7, min: 6, max: 9, floorMin: 34, floorMax: 43 },
   id: 'dustkeeper', name: '掸尘者',
-  createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20, actionIndex: 1 }), // 首拍相位偏移：净化→攻
+  createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 3;
@@ -1929,7 +1928,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 7, max: 9, floorMin: 36, floorMax: 43 },
   id: 'acadMonitor', name: '学术监察',
-  createUnit: () => new Enemy({ defId: 'acadMonitor', name: '学术监察', maxHp: 17, actionIndex: 1 }), // 首拍相位偏移：虚弱→攻（虚弱第二拍）
+  createUnit: () => new Enemy({ defId: 'acadMonitor', name: '学术监察', maxHp: 17 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 3;
@@ -2027,7 +2026,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 6, max: 9, floorMin: 36, floorMax: 43 },
   id: 'galeGolem', name: '风刃魔像',
-  createUnit: () => new Enemy({ defId: 'galeGolem', name: '风刃魔像', maxHp: 20, actionIndex: 1 }), // 首拍相位偏移：闪避→四连击
+  createUnit: () => new Enemy({ defId: 'galeGolem', name: '风刃魔像', maxHp: 20 }),
   act(actx) {
     const { unit } = actx;
     if (unit.actionIndex % 2 === 0) {
@@ -2052,7 +2051,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 9, min: 7, max: 10, floorMin: 36, floorMax: 43 },
   id: 'repeaterBallista', name: '连环弩台',
-  createUnit: () => new Enemy({ defId: 'repeaterBallista', name: '连环弩台', maxHp: 22, actionIndex: 1 }), // 首拍相位偏移：架盾蓄势→开火
+  createUnit: () => new Enemy({ defId: 'repeaterBallista', name: '连环弩台', maxHp: 22 }),
   act(actx) {
     const { unit } = actx;
     const phase = unit.actionIndex % 3;

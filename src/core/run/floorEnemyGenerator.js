@@ -295,6 +295,20 @@ export function generateEncounter(run) {
       out[i] = descriptorOf('stoneCocoon', d, { wakeDelay: 2, wakeStrength: 1 });
     }
   }
+  // 同种错拍（用户 2026-09-16 定）：同 defId 的多只个体按 0/1 交错起始节拍——
+  // 「四只风狸＝两只先攻两只先闪避」，而不是四只同拍齐动齐停（齐拍要么瞬间爆炸、
+  // 要么整拍零压力，是节奏锯齿）。特意安排齐拍的（典礼方阵开局齐射）与自带错拍
+  // 特殊处理的（石茧/音叉 wakeDelay）不在此列。跨种组合的主题节奏（阵型先架盾、
+  // 血牛先回春、醉鬼先喝酒）由各敌 act 自身表达，不受影响。
+  const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork', 'stoneCocoon']);
+  const nthOf = new Map();
+  for (let i = 0; i < out.length; i++) {
+    const s = out[i];
+    if (SYNC_EXEMPT.has(s.defId) || s.wakeDelay != null) continue;
+    const n = (nthOf.get(s.defId) ?? 0) + 1;
+    nthOf.set(s.defId, n);
+    if (n % 2 === 0) out[i] = { ...s, actionIndex: 1 }; // 第 2、4…只错一拍
+  }
   // 音叉群（2026-09-14 第四章特色战斗）：第二只起 wakeDelay=1 且难度 -1——两台大振
   // 恒错拍，任意回合最多一次大振（同拍双大振 = 单回合 50+ 直伤，踩红线）。
   const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);
@@ -325,5 +339,6 @@ export function spawnEnemy(entry) {
   if (entry.attack != null) unit.attack = entry.attack;
   if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;       // 石茧等：苏醒回合参数
   if (entry.wakeStrength != null) unit.wakeStrength = entry.wakeStrength;
+  if (entry.actionIndex != null) unit.actionIndex = entry.actionIndex; // 同种错拍（2026-09-16）
   return unit;
 }
