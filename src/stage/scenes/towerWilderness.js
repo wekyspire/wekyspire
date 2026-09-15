@@ -12,9 +12,7 @@
 // node/headless 可安全构造（ShaderMaterial/几何不依赖 document；无贴图需求）。
 
 import * as THREE from 'three';
-import {
-  WORLD_HEIGHT, CAMERA_FOV, CAMERA_ZOOM, CAMERA_AZIMUTH, CAMERA_ELEVATION, CAMERA_LOOK_AT,
-} from '../StageManager.js';
+import { CAMERA_AZIMUTH, CAMERA_ELEVATION } from '../StageManager.js';
 
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
@@ -24,24 +22,13 @@ export const FOG_DENSITY = 0.016;      // 指数雾密度：~50 单位能见度�
 export const GROUND_BASE_Y = -58;      // 雪原基准高度（画面下缘附近；低楼层时动态上抬贴塔基）
 const DOME_RADIUS = 900;
 
-/** 世界相机位置（由 StageManager 常量重算——塔楼层相机固定在基准机位）。 */
-function cameraPosition() {
-  const az = THREE.MathUtils.degToRad(CAMERA_AZIMUTH);
-  const el = THREE.MathUtils.degToRad(CAMERA_ELEVATION);
-  const dist = ((WORLD_HEIGHT / 2) / Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2))) * CAMERA_ZOOM;
-  return new THREE.Vector3(
-    CAMERA_LOOK_AT.x - Math.sin(az) * Math.cos(el) * dist,
-    CAMERA_LOOK_AT.y + Math.sin(el) * dist,
-    CAMERA_LOOK_AT.z + Math.cos(az) * Math.cos(el) * dist,
-  );
-}
-
 /**
- * billboard 纸片塔的水平朝向角（绕 y，朝向世界相机）。
- * 塔楼层相机固定（基准机位），一次性算角即可，无需逐帧 billboard。
+ * billboard 纸片塔的水平朝向角（绕 y，朝向塔楼层专属机位）。
+ * 塔楼层相机走 towerCameraPose 专属机位（非 StageManager 基准机位）且固定，
+ * 一次性算角即可，无需逐帧 billboard。from 缺省与 towerCameraPose 的缺省塔位一致。
  */
-export function towerFacingY(from = { x: 0, z: 0 }) {
-  const cam = cameraPosition();
+export function towerFacingY(from = { x: 58, z: -10 }) {
+  const cam = towerCameraPose({ towerX: from.x, towerZ: from.z }).position;
   return Math.atan2(cam.x - from.x, cam.z - from.z);
 }
 
@@ -111,6 +98,9 @@ const SNOW_FRAG = /* glsl */`
     float a = smoothstep(0.5, 0.15, d) * uOpacity;
     a *= exp(-uFogDensity * uFogDensity * vDepth * vDepth);
     gl_FragColor = vec4(0.95, 0.97, 1.0, a);
+    // 同天空穹：补齐 tone map / sRGB 输出链路，与场景内置材质统一色彩
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -190,6 +180,10 @@ export function buildTowerWilderness({ towerX = 58, towerZ = -10 } = {}) {
         float t = smoothstep(0.56, 0.92, h);
         vec3 col = mix(uBottom, uTop, t);
         gl_FragColor = vec4(col, 1.0);
+        // 自定义 ShaderMaterial 不会自动过内置材质自带的 tone map / sRGB 输出链路，
+        // 底色（=雾色）与被雾融的雪原对不上屏——补齐同一条输出链路（编译期 chunk 展开）
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }
     `,
     side: THREE.BackSide,
