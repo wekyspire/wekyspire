@@ -8,6 +8,9 @@
 // 模块内的 core 调用（chooseDemonDebuff/buyShopItem/takeSlotGift）随函数一起搬进来。
 
 import { getRelicDefinition } from '../core/relics/registry.js';
+import { getSkillDefinition } from '../core/skills/registry.js';
+import { cardViewFromDef } from '../core/skills/cardView.js';
+import { withLabels } from '../stage/panels/shared.js';
 import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
 import { slotPrizeText } from '../stage/panels/index.js';
 import { showcaseItemOf } from './runPresenter.js';
@@ -241,10 +244,17 @@ export function createRunShowcase(ctx) {
   /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
   function flushRunPresentations() {
     for (const intent of runPresenter.drain()) {
-      // 卡牌升级：播「变身收编」演出（原卡金闪变新卡后飞入牌库），不是三行文本特写
+      // 卡牌升级：播「变身收编」演出（原卡金闪变新卡后飞入牌库），不是三行文本特写。
+      // 换面要**投影后的卡面视图**（裸 defId 会被 bakeFace 烘成空卡）——这里按面板同
+      // 口径现投影（休息阶段语境，带 player 的应用前 describe）。
       if (intent?.kind === 'cardUpgrade') {
+        const viewOf = (id) => {
+          try { return withLabels(cardViewFromDef(getSkillDefinition(id), { player: run.player })); }
+          catch { return null; }   // 定义缺失等异常：交给 kit 的 defId 兜底，不拦排水
+        };
         ctx.panelStage()?.playCardUpgrade?.({
           fromDefId: intent.fromDefId, toDefId: intent.toDefId,
+          fromView: viewOf(intent.fromDefId), toView: viewOf(intent.toDefId),
         });
         continue;
       }

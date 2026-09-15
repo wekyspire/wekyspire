@@ -14,6 +14,7 @@
 import { CardObject } from './CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from './cardMetrics.js';
 import { ScrollPickerObject } from './ScrollPickerObject.js';
+import { withLabels } from '../panels/shared.js';
 
 const SCALE = 0.62;
 const CARD_ID = (uniqueID) => `picker:card:${uniqueID}`;
@@ -51,7 +52,9 @@ export class CardScrollPickerObject extends ScrollPickerObject {
         const obj = new CardObject({
           uniqueID: id, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
         });
-        obj.setCard(c.view ? { ...c.view, uniqueID: id, defId: c.defId } : c.defId);
+        // 关键词 id → 页脚中文标签（标签表在 bridge，快照 view 是 core 产的原始 id——
+        // 与奖励面板的 withLabels 同口径，升级演出摘下的卡也走这里，口径一致）
+        obj.setCard(c.view ? withLabels({ ...c.view, uniqueID: id, defId: c.defId }) : c.defId);
         obj.position.set(x, yTop - (CARD_HEIGHT * SCALE) / 2, 0);
         obj.scale.set(SCALE, SCALE, 1);
         return {

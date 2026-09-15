@@ -36,6 +36,9 @@ import { CARD_WIDTH, CARD_HEIGHT } from './objects/cardMetrics.js';
 import { renderRichTextBlock } from './richtext/texture.js';
 import { playCardGrantFlight } from './cardGrantFlight.js';
 import { playCardUpgradeFlight } from './cardUpgradeFlight.js';
+import { getSkillDefinition } from '../core/skills/registry.js';
+import { cardViewFromDef } from '../core/skills/cardView.js';
+import { withLabels } from './panels/shared.js';
 
 // ---- 「升级 / 焚毁 / 删除」类选卡入口的统一来源表 ----
 // 每项 = 从快照取候选段 + 确认后上行的意图 + 三行文案（标题/提示/确认键）。
@@ -196,21 +199,30 @@ export function createStagePickerKit({
    */
   function playCardUpgrade({ card = null, fromDefId = null, fromView = null, toDefId = null, toView = null, at = null, onDone = null } = {}) {
     let obj = card;
+    // defId → 卡面投影（应用前口径；调用方给了现成 view 就不投影——快照 view 与界面同源）
+    const viewOfDef = (id) => {
+      try {
+        const def = getSkillDefinition(id);
+        return def ? withLabels(cardViewFromDef(def)) : null;
+      } catch { return null; }   // 未注册等异常：退回字符串（bakeFace 占位），不拦确认流
+    };
     if (!obj) {
-      if (!bakeFace || (!fromDefId && !fromView)) { onDone?.(); return false; }
+      const fromData = fromView ?? viewOfDef(fromDefId) ?? fromDefId;
+      if (!bakeFace || !fromData) { onDone?.(); return false; }
       obj = new CardObject({
         uniqueID: 'upgrade:flight',   // 演出卡不进拾取，id 只为日志区分
         cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace,
       });
-      obj.setCard(fromView ?? fromDefId);
+      obj.setCard(fromData);
       obj.position.set(at?.x ?? 0, at?.y ?? 0, at?.z ?? 0);
       obj.scale.set(0.95, 0.95, 1);   // 亮相缩放（已在亮相位，gather 拍自动跳过）
     }
     scene()?.add(obj);   // takeEntry 摘出的卡已不在场景；新建的同样要挂
+    const toCard = toView ?? viewOfDef(toDefId) ?? toDefId;
     upgradeBusy = true;
     return playCardUpgradeFlight({
       card: obj,
-      toCard: toView ?? toDefId,
+      toCard,
       target: typeof getAnchor === 'function' ? getAnchor() : null,
       center: at ?? null,
       sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
@@ -256,6 +268,12 @@ export function createStagePickerKit({
       // 晋升类入口的确认钩子：**先播「变身收编」演出再上行**（状态变更发生在演出之后，
       // 同 openShopPackPicker 的节拍哲学）。⚠ 必须设在 picker.open() 之后——open 会
       // 重置 confirmHook（设反了钩子被清，演出静默失效）。
+      // 换面目标卡面优先取快照 toViews 里现成的投影（与界面 hover 预览同源，所见即所得；
+      // 裸 defId 会被 bakeFace 当无字段数据烘成空卡）。
+      const targetViewOf = (c, defId) => {
+        const v = c?.toViews?.find(t => t.defId === defId)?.view ?? null;
+        return v ? withLabels(v) : null;
+      };
       const hookMain = () => {
         if (!def.upgrade) { picker.confirmHook = null; return; }
         picker.confirmHook = (keys) => {
@@ -265,7 +283,7 @@ export function createStagePickerKit({
           playCardUpgrade({
             card: entry?.obj ?? null,
             fromDefId: c?.defId ?? null, fromView: c?.view ?? null,
-            toDefId: c?.tipDefId ?? null,   // 单目标的晋升 defId（无目标时演出受理失败即同步续走）
+            toDefId: c?.tipDefId ?? null, toView: targetViewOf(c, c?.tipDefId),
             onDone: () => fire(keys[0]),
           });
         };
@@ -302,7 +320,7 @@ export function createStagePickerKit({
             picker.close();
             playCardUpgrade({
               fromDefId: c.defId, fromView: c.view,
-              toDefId: keys[0],
+              toDefId: keys[0], toView: targetViewOf(c, keys[0]),
               onDone: () => fire(c.uniqueID, keys[0]),
             });
           };
