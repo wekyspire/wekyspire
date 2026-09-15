@@ -4,8 +4,8 @@
 // 决策轴：**金币换卡牌晋升**（现在事件池里唯一的晋升渠道）+ 生命换金币的赌。
 // 晋升目标 = 牌组内随机一张可晋升卡（run.rng 确定性）；无可晋升卡则交易不成立（不扣钱）。
 import { registerEvent } from '../../events/registry.js';
-import { gainMoney, spendMoney, damagePlayer } from '../../run/runEffects.js';
-import { canPromoteRuntime, promoteCard } from '../../run/promotion.js';
+import { gainMoney, spendMoney, damagePlayer, upgradeCard } from '../../run/runEffects.js';
+import { canPromoteRuntime } from '../../run/promotion.js';
 import { getSkillDefinition } from '../../skills/registry.js';
 
 registerEvent({
@@ -36,9 +36,9 @@ registerEvent({
       }
       const pick = candidates[Math.floor(run.rng.next() * candidates.length)];
       const before = getSkillDefinition(pick.defId).name;
-      promoteCard(run, pick.uniqueID);
-      const afterCard = run.player.deck.find(c => c.uniqueID === pick.uniqueID);
-      const after = getSkillDefinition(afterCard.defId).name;
+      // 走 runEffects 原语（改 run + 记流水 + 声明「卡牌升级」变身演出——揭幕后播）
+      const rt = upgradeCard(ctx, pick.uniqueID, null, { source: '演武残机 · 投币' });
+      const after = getSkillDefinition(rt.defId).name;
       return { pages: [{ speaker: '旁白', text: `（金币落进投币口，齿轮重新咬合。它陪你把那式动作拆了七遍——你的「${before}」豁然贯通，化作「${after}」。然后它退回墙边，继续空练。）` }] };
     }
     if (choiceId === 'spar') {

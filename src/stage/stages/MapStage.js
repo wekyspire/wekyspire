@@ -197,6 +197,9 @@ export class MapStage {
   // 本舞台只保留同名转发（宿主编排器按"当前舞台"调用，签名不变）。
   showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
 
+  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
+  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
+
   /** 特写是否在播（宿主据此吞掉面板输入）。 */
   get showcasing() { return this._pickerKit.showcasing; }
 

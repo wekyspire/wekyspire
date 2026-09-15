@@ -862,6 +862,9 @@ export class BattleStage {
     return this._pickerKit.openUpgradePicker('bossRemove', this._panelSnap);
   }
 
+  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
+  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
+
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
     // 与塔楼层/房间层同律）——真正释放交给 dispose() 里的 kit.dispose()。

@@ -241,6 +241,13 @@ export function createRunShowcase(ctx) {
   /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
   function flushRunPresentations() {
     for (const intent of runPresenter.drain()) {
+      // 卡牌升级：播「变身收编」演出（原卡金闪变新卡后飞入牌库），不是三行文本特写
+      if (intent?.kind === 'cardUpgrade') {
+        ctx.panelStage()?.playCardUpgrade?.({
+          fromDefId: intent.fromDefId, toDefId: intent.toDefId,
+        });
+        continue;
+      }
       ctx.panelStage()?.showcaseItem?.(showcaseItemOf(intent));
     }
   }
