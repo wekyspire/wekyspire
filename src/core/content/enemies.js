@@ -2113,9 +2113,10 @@ registerEnemy({
 //     黄灯期越短（少挨锁定/焚库）；
 //   红灯（转阶段后三拍循环）：锁定要害，清除（穿透35+自身格挡1）→ 反反反反制
 //     （锁定全部手牌+5×7）→ 重启....失失失失败（空转）。
-// 转阶段：盾第一次被打穿 → **马上**凝滞1（一切状态无法变更——破盾那回合玩家的剩余
-//   输出打不动冻结的机器）→ 其回合开始凝滞解除，行动拍播【系统统统错误，最终预案启动】：
-//   净化自身全部效果 + 盾50，转红灯。
+// 转阶段：盾第一次被打穿 → **马上**净化自身全部效果 + 凝滞1（先净化后冻结——转阶段
+//   前堆上的 DOT 一并清空，不会在净化之前再吃一口 tick；一切状态无法变更，破盾那回合
+//   玩家的剩余输出打不动冻结的机器）→ 其回合开始凝滞解除，行动拍播【系统统统错误，
+//   最终预案启动】：盾50，转红灯。
 // 死亡协议：第一次致死伤害被拦截（塞西莉亚之恩赐同款范式：改判保留 1 血 + 无敌）——
 //   宕机锁死；下一行动拍【错错错误】自爆：对玩家 20 伤 + 拆地板自杀。它永远以自爆收场。
 registerEnemy({
@@ -2129,8 +2130,9 @@ registerEnemy({
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 4 }));
     const owner = `enemy:${unit.uniqueID}:drone`;
-    // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 马上凝滞1 + 排转阶段。
-    // 如山在场，盾只会因伤害归零（回合开始的例行清盾被 veto），不会误触发。
+    // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 马上净化全部效果 + 凝滞1 + 排转阶段
+    //（净化在前：转阶段前堆上的 DOT 一并清空，冻结前不留账；如山在场，盾只会因伤害
+    // 归零——回合开始的例行清盾被 veto——不会误触发）。
     ctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', owner,
       filter: (instr) => instr.target === unit
@@ -2139,6 +2141,10 @@ registerEnemy({
       react: (instr, c) => {
         unit._stasisArmed = true;
         unit._phase2Pending = true;
+        for (const e of [...unit.effects]) {
+          c.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: e.effectId, stacks: -e.stacks }), instr);
+        }
         c.kernel.submitInstruction(new AddEffectInstruction({
           target: unit, effectId: 'stasis', stacks: 1 }), instr);
       },
@@ -2197,15 +2203,12 @@ registerEnemy({
       return;
     }
 
-    // 【系统统统错误，最终预案启动】转阶段拍（凝滞已在回合开始解除）：净化全部效果 + 盾50
+    // 【系统统统错误，最终预案启动】转阶段拍（净化已在碎盾瞬间完成，凝滞已在回合开始
+    // 解除）：盾50，转红灯
     if (unit._phase2Pending) {
       unit._phase2Pending = false;
       unit._phase2 = true;
       unit._redBeat = 0;
-      for (const e of [...unit.effects]) {
-        actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: e.effectId, stacks: -e.stacks }));
-      }
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 50 }));
       return;
     }
