@@ -261,18 +261,21 @@ registerEffect({
 // 炎魔（火灵脉体系效果，EFFECTS.md）：造成伤害时，赋予伤害对象燃烧1（按当前层数）。
 // 循环防护双保险：燃烧跳伤 source 为空天然不触发；'burn' 标记伤害一律不触发（防
 // 自馈级联）。目标已死亡不赋予。荆棘反伤等非 burn 标记的己方伤害照常附带（设计语义）。
+// 2026-09-15 用户定：**未造成生命伤害不附带燃烧**（被护盾全额吸收/被闪避的结算
+// dealt=0 → 不烧）——防住了就是真防住；无火系泄压件与后期大净化构筑的体验修复。
 registerEffect({
   id: 'flameDemon',
   type: 'buff',
   stacking: 'count',
   name: '炎魔',
-  description: '造成伤害时，赋予伤害对象燃烧1。',
+  description: '造成生命伤害时，赋予伤害对象燃烧1。',
   icon: '👹',
   color: 'red',
   subscriptions: (unit) => [{
     when: DealDamageInstruction,
     phase: 'post',
     filter: (instr) => instr.source === unit && !unit.isDead()
+      && (instr.result?.dealt ?? 0) > 0
       && !instr.tags?.includes('burn') && !instr.target.isDead(),
     react: (instr, ctx) => {
       ctx.kernel.submitInstruction(new AddEffectInstruction({
