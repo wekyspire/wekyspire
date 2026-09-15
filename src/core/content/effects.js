@@ -38,6 +38,21 @@ registerEffect({
   }],
 });
 
+// 防御（EFFECTS.md 词条）：受到的伤害减少层数层。2026-09-16 效果化：原为角色数值
+// （前端面板显示不出，玩家看不见自己/敌人的防御），改走效果轨——各单位 base 防御由
+// PreBattle 统一转入（battleRoot），此后增减一律 AddEffect（敌人「重甲恢复/冲锋破防」
+// 同口径）。常驻不衰减；结算公式读 getStat('defense') 不变，pierce/fixed 照旧绕过。
+registerEffect({
+  id: 'defense',
+  type: 'buff',
+  stacking: 'count',
+  name: '防御',
+  description: '受到的伤害减少层数层。',
+  icon: '🧱',
+  color: 'gray',
+  statModifiers: { defense: (stacks) => stacks },
+});
+
 // 格挡（体修·拆体系核心资源，BODY_CULTIVATION_CARDS §0）：buff 层数，≠ 护盾池。
 // 受主级攻击时伤害减半（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
 // 原型验证：test/posture.test.js（此处为正式落地，语义不变）。

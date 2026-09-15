@@ -13,6 +13,9 @@ export default class AIUnit extends Unit {
     // 兜底 { kinds: ['unknown'] }。可选 note：行动逻辑补充说明（tooltip 附加行，
     // 如图标条无法表达的固定索敌规则——瑞米「目标：最靠前的存活敌人」）。
     this.intention = null;
-    this.actionIndex = 0;       // 固定行动序列游标（状态）；推进逻辑在定义/指令侧
+    // 固定行动序列游标（状态）；推进逻辑在定义/指令侧。createUnit 可预置起始相位
+    // （2026-09-16 首拍压力：偏移「增益/防御位起步」的敌人让首拍走攻击位——
+    // 数值与机制零改动，只动节拍位置）。
+    this.actionIndex = opts.actionIndex ?? 0;
   }
 }

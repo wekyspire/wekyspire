@@ -6,8 +6,8 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
-import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
 import { AddEffectInstruction } from './effects.js';
+import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
@@ -83,9 +83,21 @@ export class PreBattleInstruction extends BattleInstruction {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
       }
+      // 防御效果化（2026-09-16 用户定）：defense 不再是角色数值——前端数值面板显示不出，
+      // 改走效果轨（EFFECTS.md「防御」词条对齐）。各单位 base 防御在 PreBattle 统一转为
+      // 「防御」效果：敌人 createUnit 的 defense、遗物 runModifiers（龙鳞碎片=战斗开始
+      // 防御2）**零改动自动入轨可见**；此后对防御的一切增减一律 AddEffect（不再直改字段）。
+      for (const unit of [player, ...aliveEnemies(battleState), ...battleState.allies]) {
+        if (unit.defense > 0) {
+          ctx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: 'defense', stacks: unit.defense,
+          }), this);
+          unit.defense = 0;
+        }
+      }
       // 敌人开场效果（2026-09-13：Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
       // def.onBattleStart(ctx, unit)：订阅型效果必须经 AddEffectInstruction 入列（走正常
-      // 挂载管线），只有 shield/defense 这类标量才适合直改字段。
+      // 挂载管线），只有 shield 这类标量才适合直改字段（防御已效果化，同样走 AddEffect）。
       for (const unit of aliveEnemies(battleState)) {
         getEnemyDefinition(unit.defId)?.onBattleStart?.(ctx, unit);
       }

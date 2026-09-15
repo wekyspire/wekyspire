@@ -67,7 +67,7 @@ registerEnemy({
   createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 44 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
-    if (bigSlimeCanSummon(unit, bs)) {
+    if (unit.actionIndex >= 1 && bigSlimeCanSummon(unit, bs)) { // 首拍必攻（2026-09-16 首拍压力），召唤从第二拍起
       unit.lastSummonTurn = bs.turn.count;
       actx.kernel.submitInstruction(new UnitSpawnInstruction({
         unit: getEnemyDefinition('slime').createUnit(),
@@ -78,9 +78,10 @@ registerEnemy({
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: unit, target: actx.player, amount: 10 + unit.getStat('attack'),
     }));
-    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 5 }));
+    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 })); // 数值意识（2026-09-16）：5→8
   },
-  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
+  getIntention: (unit, battleState) => (unit.actionIndex >= 1
+    && bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
     ? { kinds: ['summon'], note: '召唤史莱姆' }
     : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '自身护盾+5' }),
 });
@@ -252,7 +253,9 @@ registerEnemy({
   id: 'mefm1', name: 'MEFM-1',
   createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 47 }),
   onBattleStart(ctx, unit) {
-    unit.defense += 4; // 铁壳（基础防御轨，P2 故障时失去）
+    // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'defense', stacks: 4 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({
       target: unit, effectId: 'block', stacks: 2 }));
   },
@@ -688,7 +691,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 2, min: 1, max: 3, floorMin: 1, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
-  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18 }),
+  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18, actionIndex: 1 }), // 首拍相位偏移：竖刺→攻+自盾
   act(actx) {
     if (actx.unit.actionIndex === 0) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -771,9 +774,9 @@ registerEnemy({
 
 // ⑥ 石像卫士：高防厚血 + 再生续航——再生3 → 攻 → 盾 循环，考验破防与斩杀线
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 9, floorMin: 23, floorMax: 44 },
+  difficulty: { base: 5, min: 4, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-44→23-32，章4 血牛由禁书守卫/档案巨像承担
   id: 'gargoyle', name: '石像卫士',
-  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2 }),
+  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2, actionIndex: 1 }), // 首拍相位偏移：再生→攻（血牛循环保留）
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
@@ -782,7 +785,7 @@ registerEnemy({
       // 净回复收敛后马拉松自然收束；再生依旧，只是「拖得越久回得越少」。
       const times = (actx.unit._regenTimes ?? 0);
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'regen', stacks: Math.max(1, 3 - times),
+        target: actx.unit, effectId: 'regen', stacks: Math.max(2, 6 - times), // 数值意识（2026-09-16）：3→6——中期 40-60 输出面前原值是薄纸
       }));
       actx.unit._regenTimes = times + 1;
     } else if (phase === 1) {
@@ -790,7 +793,7 @@ registerEnemy({
         source: actx.unit, target: actx.player, amount: 10 + actx.unit.getStat('attack'),
       }));
     } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 6 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 })); // 数值意识（2026-09-16）：6→10
     }
   },
   getIntention: (unit) => {
@@ -832,12 +835,12 @@ registerEnemy({
 // ⑧ 岩甲龟：龟缩（盾7 + 荆棘1）→ 重击 循环——盾棘一体的防御压迫，
 // 打盾要吃反伤，绕盾要挨重击
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 7, floorMin: 23, floorMax: 40 },
+  difficulty: { base: 4, min: 3, max: 7, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-40→23-32
   id: 'rockshell', name: '岩甲龟',
   createUnit: () => new Enemy({ defId: 'rockshell', name: '岩甲龟', maxHp: 30, defense: 1 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 7 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 })); // 数值意识（2026-09-16）：7→10
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'thorns', stacks: 1,
       }));
@@ -1253,7 +1256,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 7, floorMin: 12, floorMax: 24 },
   id: 'palaceGuard', name: '宫廷守卫',
-  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22 }),
+  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22, actionIndex: 1 }), // 首拍相位偏移：全体盾→攻
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
@@ -1278,7 +1281,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 22 },
   id: 'herald', name: '传令官',
-  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16 }),
+  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16, actionIndex: 1 }), // 首拍相位偏移：全体蓄势→攻
   act(actx) {
     if (actx.unit.actionIndex === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
@@ -1340,13 +1343,13 @@ registerEnemy({
 // 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是蓄势，
 // 贪杯鬼是自愈+力量双轴）。
 registerEnemy({
-  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 36 },
+  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）
   id: 'tippler', name: '贪杯鬼',
-  createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30 }),
+  createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30, actionIndex: 2 }), // 首拍相位偏移：喝酒→大口（滚雪球从第二拍起）
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase < 2) {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 5 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 9 })); // 数值意识（2026-09-16）：5→9
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'strength', stacks: 1,
       }));
@@ -1442,7 +1445,7 @@ registerEnemy({
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：12→16（章4 输出 60-100+）
       }
       // 盾拍蓄势（2026-09-14 马拉松修复）：禁书库防挡 3+全体盾 12 曾把小刀流磨到
       // 无风险长跑——盾拍自身 +2 蓄势，大攻击（14+atk）随回合线性上涨，拖久必痛。
@@ -1502,7 +1505,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 26 },
   id: 'miasmaShroom', name: '瘴气菇',
-  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24 }),
+  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24, actionIndex: 1 }), // 首拍相位偏移：毒云→攻（毒云第二拍）
   act(actx) {
     const { unit } = actx;
     if (unit.actionIndex % 3 === 0) {
@@ -1525,9 +1528,9 @@ registerEnemy({
 // 爆发牌要跟它的起风拍错开；单发重击被闪避白吃（垫一发小的再出大的），中毒/燃烧
 // 绕过闪避（dot 是天然克制）。嗡嗡虫的章3 上位：那边教「先垫一发」，这边教「算风停」。
 registerEnemy({
-  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 38 },
+  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-38→23-32
   id: 'windRaccoon', name: '风狸',
-  createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24 }),
+  createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24, actionIndex: 1 }), // 首拍相位偏移：闪避→三连击
   act(actx) {
     const { unit } = actx;
     const atk = unit.getStat('attack');
@@ -1562,7 +1565,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 7, min: 6, max: 9, floorMin: 34, floorMax: 43 },
   id: 'dustkeeper', name: '掸尘者',
-  createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20 }),
+  createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20, actionIndex: 1 }), // 首拍相位偏移：净化→攻
   act(actx) {
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 3;
@@ -1579,7 +1582,7 @@ registerEnemy({
       return;
     }
     if (phase === 2) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 })); // 数值意识（2026-09-16）：8→12
       return;
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -1926,7 +1929,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 7, max: 9, floorMin: 36, floorMax: 43 },
   id: 'acadMonitor', name: '学术监察',
-  createUnit: () => new Enemy({ defId: 'acadMonitor', name: '学术监察', maxHp: 17 }),
+  createUnit: () => new Enemy({ defId: 'acadMonitor', name: '学术监察', maxHp: 17, actionIndex: 1 }), // 首拍相位偏移：虚弱→攻（虚弱第二拍）
   act(actx) {
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 3;
@@ -1976,7 +1979,7 @@ registerEnemy({
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 10 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：10→16
       }
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -2007,10 +2010,10 @@ registerEnemy({
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: e, effectId: 'strength', stacks: 2 }));
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 8 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 })); // 数值意识（2026-09-16）：8→12 / 14→18
       }
     } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 14 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 18 }));
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
@@ -2024,7 +2027,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 6, max: 9, floorMin: 36, floorMax: 43 },
   id: 'galeGolem', name: '风刃魔像',
-  createUnit: () => new Enemy({ defId: 'galeGolem', name: '风刃魔像', maxHp: 20 }),
+  createUnit: () => new Enemy({ defId: 'galeGolem', name: '风刃魔像', maxHp: 20, actionIndex: 1 }), // 首拍相位偏移：闪避→四连击
   act(actx) {
     const { unit } = actx;
     if (unit.actionIndex % 2 === 0) {
@@ -2049,12 +2052,12 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 9, min: 7, max: 10, floorMin: 36, floorMax: 43 },
   id: 'repeaterBallista', name: '连环弩台',
-  createUnit: () => new Enemy({ defId: 'repeaterBallista', name: '连环弩台', maxHp: 22 }),
+  createUnit: () => new Enemy({ defId: 'repeaterBallista', name: '连环弩台', maxHp: 22, actionIndex: 1 }), // 首拍相位偏移：架盾蓄势→开火
   act(actx) {
     const { unit } = actx;
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 16 })); // 数值意识（2026-09-16）：10→16（章4 输出 60-100+）
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'focus', stacks: 2 }));
     } else if (phase === 1) {
@@ -2096,7 +2099,7 @@ registerEnemy({
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: actx.player, amount: 11 + unit.getStat('attack') }));
     } else {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 6 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 })); // 数值意识（2026-09-16）：6→10
     }
   },
   getIntention: (unit) => {
@@ -2681,14 +2684,19 @@ registerEnemy({
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
-      // 蓄力：重甲恢复 + 自盾 + 蓄势
-      unit.defense = Math.max(unit.defense, 3);
+      // 蓄力：重甲恢复（防御效果至少 3 层）+ 自盾 + 蓄势
+      const armor = unit.getEffectStacks('defense');
+      if (armor < 3) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'defense', stacks: 3 - armor }));
+      }
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'focus', stacks: 1 }));
     } else {
-      // 冲锋：大单发；冲锋瞬间腹部暴露——防御归零（破绽窗口）
-      unit.defense = 0;
+      // 冲锋：大单发；冲锋瞬间腹部暴露——防御清空（破绽窗口）
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'defense', stacks: -unit.getEffectStacks('defense') }));
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 14 + unit.getStat('attack') }));
     }

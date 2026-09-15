@@ -109,8 +109,8 @@ const TEMPLATES = [
   // 血牛互斥（2026-09-14 马拉松修复）：钉死位已有一只龟/像时，通配位排除其余血牛
   // （岩甲龟/石像卫士/禁书守卫）——防线怪的单体马拉松已由蓄势/再生递减治理，
   // 编成层面再防「双龟」「龟+像」这类叠加组合。
-  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
-  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] }, // 血牛模板随 gargoyle/rockshell 收窄至章3（2026-09-16）
   // —— 第四章特色战斗（2026-09-14 用户设计定稿，古尔帕斯商店 35 层之后的中后期）：
   // 三族（玻璃连炮/巨兽渐强/机制反制）+ 机制四件套组合。每场是一个有破解方程的谜题，
   // 设计红线：开局 2 拍 ≤25（A 系齐射除外）、单回合峰值 30-40、滚雪球 6-8 回合进
