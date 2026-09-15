@@ -75,17 +75,18 @@ flameHealSkill({ id: 'blazingHeal', name: '炽愈', tier: 'B', base: 7, per: 2 }
 flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'A', base: 10, per: 3 });
 
 // ==== 焚天系列（2026-09-12 设计稿改版：燃烧层数倍增）=========================
-// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），**消耗**——
-// 每场每张只放一次（用户定 2026-09-15：倍增器复读是火系过强的主要推手）。作用域按设计稿
-// 字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——火焰体系的自焚是常态，翻倍自焚
-// 是这张牌的代价面）。
+// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），全系列冷却 2
+// （用户定 2026-09-15：倍增器复读是火系过强的主要推手；链内 AP 3/2/1/1、倍率 2/2/2/3、
+// 冷却持平——每一级仍是完全上位。注意冷却只约束同一张：打出回库底须重抽，大牌组里
+// 冷却常被抽牌循环盖过，多份同回合不受限——多份密度归 S 直出频率管）。
+// 作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
+// 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
 const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null }) => registerSkill({
   id, name, type: 'fire', tier, series: 'burnDoubler',
   cost: { mana: 0, actionPoint: ap },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 2 },
   cardMode: 'normal',
-  keywords: ['exhaust'],
   promotesTo,
   use(sctx) {
     for (const unit of allAliveUnits(sctx.battleState, sctx.player)) {
