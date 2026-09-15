@@ -70,7 +70,7 @@ const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
   { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
-  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §7）——
+  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §4）——
   // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
   // 2026-09-11 用户试玩后削：原「爆囊×2 + 石茧×2」四敌同时施压（两只石茧苏醒后每回合 20+ 伤
   // 叠爆囊死亡反伤）堪比精英，删掉一只石茧 → 三敌；难度份额改由前三槽分摊。
