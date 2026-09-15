@@ -119,22 +119,28 @@ describe('MapStage uiScene 状态栏（与战斗共享契约）', () => {
   it('setFloor 塔身重建不受状态栏接入影响（回归）', () => {
     const stage = new MapStage({ totalFloors: 44 });
     stage.setFloor(1, 44);
-    expect(stage._tower.children.length).toBe(6); // 底层窗口被截：1~6 层
+    expect(stage._tower.children.length).toBe(44); // 全楼层贴片（2026-09-15 观感重做：视锥外自动剔除）
     stage.setFloor(22, 44);
-    expect(stage._tower.children.length).toBe(11); // 中层满窗口 VISIBLE_WINDOW
+    expect(stage._tower.children.length).toBe(44); // 重建幂等（不随层数累积）
     // 当前层高亮（金色）
     const current = stage._tower.children.find(c => c.position.y === 0);
     expect(current.material.color.getHex()).toBe(0xffd75e);
+    // 层序方向：高层在上（f-floor；旧占位反着画，重做时修正）
+    const FLOOR_GAP = 7;
+    const above = stage._tower.children.find(c => c.position.y === FLOOR_GAP);
+    const below = stage._tower.children.find(c => c.position.y === -FLOOR_GAP);
+    expect(above.position.y).toBeGreaterThan(0);
+    expect(below.position.y).toBeLessThan(0);
   });
 
-  it('dispose 释放塔身层块与星空（无几何/材质残留）', () => {
+  it('dispose 释放塔身层块与荒原环境（无几何/材质残留）', () => {
     const stage = new MapStage({ totalFloors: 44 });
     stage.setFloor(22, 44);
-    expect(stage._tower.children.length).toBe(11);
-    expect(stage._stars).toBeTruthy();
+    expect(stage._tower.children.length).toBe(44);
+    expect(stage._wilderness).toBeTruthy();
     stage.dispose();
     expect(stage._tower.children.length).toBe(0);            // 层块全部释放移除
-    expect(stage.scene.children.includes(stage._stars)).toBe(false); // 星空移出场景
+    expect(stage._wilderness).toBe(null);                    // 荒原环境释放（天空/雪原/雪花）
   });
 
   it('arriveFloor（S5）：当前层块自下而上长出，onDone 回执', async () => {

@@ -15,17 +15,23 @@ import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
+import { sharedTowerArtCache } from '../art/towerArt.js';
+import { buildTowerWilderness, towerFacingY } from '../scenes/towerWilderness.js';
 
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
-// 战前准备/地图舞台（阶段 7 色块占位，RUN_DESIGN §8.8）：
-// 夜空背景 + 点星 + 右侧塔楼侧视图（只看当前层附近一截——看不到顶底）+ 高亮当前层。
+// 战前准备/地图舞台：大雪荒原 + 孤立塔楼（2026-09-15 观感重做，替占位夜空+色块塔）。
+// 塔身 = billboard 纸片塔——每层一张模块贴片（assets/tower/，全部楼层同一模块直
+// 到后续章节素材落位），当前层恒居画面中心（y=0），低层在下、塔顶没入天空、塔底
+// 没入雪原雾中；贴图缺席（headless/加载中）退化为色块层。雪原/天空/雾/雪花在
+// scenes/towerWilderness.js（环境件），本舞台只持塔身（setFloor/arriveFloor 接口不变）。
 // uiScene pass 绘左下角玩家状态栏（与战斗内 PlayerStatusObject 同物同位）。
-// 水彩素材与正式布局后补（§9）；本舞台只保证三阶段模型中"楼层切换"一极可跑通。
-const VISIBLE_WINDOW = 11;      // 可视层数窗口
-const FLOOR_GAP = 7;            // 层间纵向间距（世界单位）
+const FLOOR_GAP = 7;            // 层间纵向间距（世界单位）= 模块贴片高
+const MODULE_ASPECT = 2048 / 1199;  // 模块素材宽高比（层宽 = FLOOR_GAP × 此值）
 const TOWER_X = 58;             // 塔楼横向位置（右侧）
-const BOX_SIZE = { w: 14, h: 4.6, d: 10 };
+const TOWER_Z = -10;
+const TOWER_Y = -15;            // 当前层中心的世界 y（相机取景中心对齐）
+const TOWER_MODULE = '第一章_基础';  // 全楼层共用的模块（后续按章换）
 
 export class MapStage {
   /**
@@ -34,15 +40,31 @@ export class MapStage {
    *   bakeLabel: 文本烘焙（缺省浏览器用 renderRichTextBlock，node 退化为 1x1 占位）
    *   unitArt: 立牌/图标美术缓存（缺省浏览器用 sharedUnitArtCache，node 为 null）
    */
-  constructor({ totalFloors = 44, bakeLabel = null, unitArt = null } = {}) {
+  constructor({ totalFloors = 44, bakeLabel = null, unitArt = null, towerArt = null } = {}) {
     this.name = 'map';
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b1026); // 夜空
     this.uiScene = new THREE.Scene(); // UI pass：玩家状态栏（StageManager 清深度后二次渲染）
+    // ---- 荒原环境：渐变天空穹 + 指数大气 + 两半球环境光 + 起伏雪原 + GPU 雪花 ----
+    this._wilderness = buildTowerWilderness({ towerX: TOWER_X, towerZ: TOWER_Z });
+    this.scene.add(this._wilderness.group);
+    this.scene.fog = this._wilderness.fog;
+    // billboard 纸片塔：一次性朝向世界相机（塔楼层相机固定在基准机位）
     this._tower = new THREE.Group();
-    this._tower.position.set(TOWER_X, -15, -10);
+    this._tower.position.set(TOWER_X, TOWER_Y, TOWER_Z);
+    this._tower.rotation.y = towerFacingY({ x: TOWER_X, z: TOWER_Z });
     this.scene.add(this._tower);
-    this._buildStars();
+    // 塔楼模块贴图缓存（node/headless 为 null → 层块退化色块；浏览器共享单例，
+    // 预载门 warm 过则首拍同步命中）
+    this._towerArt = towerArt ?? ((typeof document !== 'undefined') ? sharedTowerArtCache : null);
+    this._towerTexture = this._loadTowerTexture();
+    // 模块贴图晚到（首拍未命中）→ 重取并重建塔身挂图（重取即同步命中）
+    this._unsubTowerArt = this._towerArt?.addOnLoad(() => {
+      if (this._towerTexture) return;
+      this._towerTexture = this._loadTowerTexture();
+      if (this._towerTexture && this._floorState) {
+        this.setFloor(this._floorState.floor, this._floorState.totalFloors);
+      }
+    });
 
     // ---- 玩家状态栏（与战斗内共享 PlayerStatusObject，同位同尺寸）----
     // 头像素材走应用级共享立牌缓存（与 BattleStage 同一份，互为预热）；
@@ -405,6 +427,7 @@ export class MapStage {
       this._statusBar.update(dt);
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._pickerKit.update(dt);        // 获得物特写（自带 in/hold/out 时序）
+      this._wilderness?.update(dt);      // 荒原环境（雪花 GPU 推进）
       this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
       this._bubbles.update(dt);
     });
@@ -420,6 +443,8 @@ export class MapStage {
     this._unsubArt?.(); // 共享缓存订阅摘除（防幽灵舞台补挂头像）
     this._unsubCardArt?.();
     this._unsubCardArt = null;
+    this._unsubTowerArt?.(); // 塔楼模块晚到订阅摘除
+    this._unsubTowerArt = null;
     this._removePanel();
     this._bubbles.dispose();
     this._bubbleAnchors.clear();
@@ -435,49 +460,51 @@ export class MapStage {
       child.material.dispose();
       this._tower.remove(child);
     }
-    this._stars?.geometry.dispose();
-    this._stars?.material.dispose();
-    this.scene.remove(this._stars);
+    this._wilderness?.dispose(); // 荒原环境（天空穹/雪原/雪花/灯光，几何材质统一释放）
+    this._wilderness = null;
+    this.scene.fog = null;
     this._statusBar.dispose();
     this._topBar.dispose();
   }
 
-  _buildStars() {
-    const count = 260;
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 360;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 220;
-      positions[i * 3 + 2] = -40 - Math.random() * 80;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const stars = new THREE.Points(geo, new THREE.PointsMaterial({
-      color: 0xaabbee, size: 0.7, sizeAttenuation: true, transparent: true, opacity: 0.85,
-    }));
-    this._stars = stars; // dispose 时释放（geometry + material）
-    this.scene.add(stars);
+  /** 模块贴图同步取：命中 → THREE 纹理（propArt 同款 sRGB/各向异性）；未命中 null。 */
+  _loadTowerTexture() {
+    const img = this._towerArt?.getModule(TOWER_MODULE) ?? null;
+    if (!img) return null;
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
   }
 
-  // 重建塔身窗口：以当前层为中心的一截；当前层高亮，Boss 层红色调
+  // 重建塔身：全楼层 billboard 贴片（视锥外的自动剔除）——低层在下（f-floor），
+  // 当前层恒在塔组原点（世界 y=TOWER_Y，画面中心）；当前层金 tint、Boss 层红 tint、
+  // 其余白（贴图原色）。贴图缺席（headless/首拍加载中）为纯色块层。
   setFloor(floor, totalFloors) {
+    this._floorState = { floor, totalFloors };
     for (const child of [...this._tower.children]) {
       child.geometry.dispose();
       child.material.dispose();
       this._tower.remove(child);
     }
-    const half = Math.floor(VISIBLE_WINDOW / 2);
-    for (let f = floor - half; f <= floor + half; f++) {
-      if (f < 1 || f > totalFloors) continue; // 看不到顶底 → 窗口外的层不画
-      const isCurrent = f === floor;
-      const color = isCurrent ? 0xffd75e : (isBossFloor(f) ? 0x8a3548 : 0x39456b);
-      const box = new THREE.Mesh(
-        new THREE.BoxGeometry(BOX_SIZE.w, BOX_SIZE.h, BOX_SIZE.d),
-        new THREE.MeshBasicMaterial({ color }),
+    const w = FLOOR_GAP * MODULE_ASPECT;
+    for (let f = 1; f <= totalFloors; f++) {
+      const color = f === floor ? 0xffd75e : (isBossFloor(f) ? 0x8a3548 : 0xffffff);
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, FLOOR_GAP),
+        new THREE.MeshBasicMaterial({
+          color, map: this._towerTexture ?? null,
+          transparent: true, alphaTest: 0.35, depthWrite: true,
+        }),
       );
-      box.position.set(0, (floor - f) * FLOOR_GAP, 0);
-      this._tower.add(box);
+      plane.position.set(0, (f - floor) * FLOOR_GAP, 0);
+      this._tower.add(plane);
     }
+    // 低楼层时雪原上抬贴住塔基（塔基世界 y 随当前层漂移；中高楼层固定在基准高度，
+    // 塔底没入画面下缘的雾中——「塔从雪原里长出来」）
+    const towerBaseY = TOWER_Y + (1 - floor) * FLOOR_GAP - FLOOR_GAP / 2;
+    this._wilderness.setSnowfieldY(towerBaseY + 2);
   }
 
   // 塔楼抵达动画（S5 pilot）：黑幕 reveal 后当前层高亮块自下而上"长出"。

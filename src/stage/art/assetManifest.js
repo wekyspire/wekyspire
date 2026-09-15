@@ -11,6 +11,7 @@ import { sharedUnitArtCache } from './unitArt.js';
 import { sharedCardArtCache } from './cardArtCache.js';
 import { sharedUiArtCache } from './bubbleArt.js';
 import { sharedRelicArtCache } from './relicArt.js';
+import { sharedTowerArtCache } from './towerArt.js';
 
 // 根级散图（如 remi.webp）与任意深度子目录（cards/decor/ 等）均被 ** 命中；
 // 扩展名过滤天然排除 css/mp3 等非位图（素材经 tools/compress_art.py 转 WebP）
@@ -57,6 +58,7 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
   const Img = imageFactory ?? (typeof Image !== 'undefined' ? Image : null);
   const targets = caches ?? {
     stage: sharedUnitArtCache, card: sharedCardArtCache, ui: sharedUiArtCache, relic: sharedRelicArtCache,
+    tower: sharedTowerArtCache,
   };
   const total = ART_MANIFEST.length;
   const warmInto = (path, url, img) => {
@@ -64,7 +66,8 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
       ? targets.stage
       : path.includes('/assets/cards/') ? targets.card
         : path.includes('/assets/relics/') ? targets.relic
-          : path.includes('/assets/ui/') ? targets.ui : null;
+          : path.includes('/assets/ui/') ? targets.ui
+            : path.includes('/assets/tower/') ? targets.tower : null;
     t?.warm?.(url, img);
   };
   if (!Img || !total) {
