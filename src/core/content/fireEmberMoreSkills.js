@@ -75,15 +75,17 @@ flameHealSkill({ id: 'blazingHeal', name: '炽愈', tier: 'B', base: 7, per: 2 }
 flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'A', base: 10, per: 3 });
 
 // ==== 焚天系列（2026-09-12 设计稿改版：燃烧层数倍增）=========================
-// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），冷却1
-// （星炎无冷却）。作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
-// 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
+// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），**消耗**——
+// 每场每张只放一次（用户定 2026-09-15：倍增器复读是火系过强的主要推手）。作用域按设计稿
+// 字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——火焰体系的自焚是常态，翻倍自焚
+// 是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
-const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, cooldown = 1 }) => registerSkill({
+const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null }) => registerSkill({
   id, name, type: 'fire', tier, series: 'burnDoubler',
   cost: { mana: 0, actionPoint: ap },
-  charges: cooldown ? { max: 1, cooldownTurns: cooldown } : { max: Infinity, cooldownTurns: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  keywords: ['exhaust'],
   promotesTo,
   use(sctx) {
     for (const unit of allAliveUnits(sctx.battleState, sctx.player)) {
@@ -102,7 +104,7 @@ const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, cooldown = 1
 burnDoubler({ id: 'burnBurst', name: '爆燃', tier: 'C', ap: 3, mult: 2, promotesTo: 'burnBurstPlus' });
 burnDoubler({ id: 'burnBurstPlus', name: '焚烧', tier: 'B', ap: 2, mult: 2, promotesTo: 'burnBurstGrand' });
 burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, promotesTo: 'burnBurstStar' });
-burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, cooldown: 0 });
+burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
 // 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
