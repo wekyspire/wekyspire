@@ -10,7 +10,7 @@
 // 现有链位或新链（用户定：不接链的 D 卡是「拿了升不上去的负资产」）。
 
 import { registerSkill } from '../skills/registry.js';
-import { DealDamageInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instructions/turn.js';
@@ -320,8 +320,9 @@ registerSkill({
 // ==== 反制防御（烫甲 C → [火壁 B]）：火墙家族的反伤分岔 ====
 
 // 烫甲 C：1AP 冷却1——6盾；到你的下回合开始前，你每受到一次攻击，
-// 对攻击者施加燃烧2（受击判定与荆棘同口径：有来源的伤害才算攻击，燃烧跳伤无来源
-// 不触发。「本回合」按敌方攻击的实际发生窗口实现——battle 窗口订阅 + 下回合开始自清）。
+// 对攻击者施加燃烧2（受击判定挂应用原语 POST + 只认主级（2026-09-15 拆分）：
+// 有来源的**主级**伤害才算攻击——附级反伤/毒 tick 不触发；「本回合」按敌方攻击的
+// 实际发生窗口实现——battle 窗口订阅 + 下回合开始自清）。
 registerSkill({
   id: 'scaldArmor', name: '烫甲', type: 'fire', tier: 'C', series: 'fireWall',
   cost: { mana: 0, actionPoint: 1 },
@@ -332,9 +333,10 @@ registerSkill({
     gainShield(sctx, 6);
     const owner = `scaldArmor:${sctx.self.uniqueID}`;
     sctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'post', owner,
+      when: ApplyDamageInstruction, phase: 'post', owner,
       filter: (instr) => instr.target === sctx.player
-        && instr.source && !instr.source.isDead() && instr.source.side === 'enemy',
+        && instr.source && !instr.source.isDead() && instr.source.side === 'enemy'
+        && instr.type === 'major',
       react: (instr, ctx) => {
         ctx.kernel.submitInstruction(new AddEffectInstruction({
           target: instr.source, effectId: 'burn', stacks: 2,

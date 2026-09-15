@@ -15,7 +15,7 @@ import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
-import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -109,9 +109,10 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
 // 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
-// 口径：伤害指令只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
+// 口径：伤害应用只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
+// 死亡检测挂应用原语 POST（2026-09-15 拆分：死亡发生在受击结算处，不筛主/附级）；
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 registerSkill({
@@ -122,7 +123,7 @@ registerSkill({
   use() { return true; },
   activated: {
     subscriptions: () => [{
-      when: DealDamageInstruction, phase: 'post',
+      when: ApplyDamageInstruction, phase: 'post',
       filter: (instr) => instr.target.side === 'enemy'
         && instr.result?.targetDead === true
         && instr.target.getEffectStacks('burn') > 0,

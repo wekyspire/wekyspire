@@ -332,7 +332,8 @@ registerSkill({
   activated: {
     subscriptions: () => [{
       when: DealDamageInstruction, phase: 'pre',
-      filter: (instr) => instr.tags?.includes('elbow') === true && !instr.fixed,
+      filter: (instr) => instr.tags?.includes('elbow') === true && !instr.fixed
+        && instr.type === 'major',
       react: (instr) => instr.setPayload('damage', instr.payload.damage * 2),
     }],
   },
@@ -401,7 +402,9 @@ function registerDrawDamageChant({ id, name, tier, damage, promotesTo = null }) 
           for (let i = 0; i < (instr.result?.drawn?.length ?? 0); i++) {
             const target = randomAliveEnemy(sctx);
             if (!target) break; // 敌已死光（收尾期）：伤害落空
-            dealDamage(sctx, attackAmount(sctx, damage), { target });
+            // 附级伤害（2026-09-15 用户定）：被动触发的抽卡伤害不是攻击——不吃任何
+            // 加成（武术姿态×精通=一回合上百爆炸伤的病灶）、不上燃、不触发受击响应。
+            dealDamage(sctx, attackAmount(sctx, damage), { target, type: 'minor' });
           }
         },
       }],

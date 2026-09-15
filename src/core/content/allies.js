@@ -22,8 +22,10 @@ registerAlly({
   act(actx) {
     const target = remiTarget(actx.battleState);
     if (target) {
+      // 附级（2026-09-15 拆分）：瑞米的补刀是被动跟随攻击，不是玩家的主动出牌
+      // ——不吃玩家侧加成、不触发敌人受击响应（暴怒/膨胀等）。
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target, amount: REMI_DAMAGE,
+        source: actx.unit, target, amount: REMI_DAMAGE, type: 'minor',
       }));
     }
   },

@@ -735,6 +735,7 @@ registerSkill({
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'pre', window: 'once',
       filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
+        && instr.type === 'major'
         && ctx.kernel.stack.some(
           i => i instanceof ActivateSkillInstruction && isBladeCard(i.skill)),
       react: (instr) => { instr.fixed = true; },

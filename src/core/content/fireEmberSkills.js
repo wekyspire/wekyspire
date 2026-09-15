@@ -208,13 +208,14 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
 
 // 控火术：灼 B（2026-09 由 C 改 B）—— 下次你发动的攻击：每造成 3 伤害，赋予目标燃烧 1。
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
-// floor(dealt/3) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、
-// 目标为敌方的下一次伤害结算（燃烧跳伤无来源，天然不触发）。
+// floor(dealt/3) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、目标为
+// 敌方的下一次**主级**伤害结算（2026-09-15 拆分：附级被动伤害不算「你发动的攻击」）。
 registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy', {
   use(sctx) {
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', window: 'once',
       filter: (instr) => instr.source === sctx.player
+        && instr.type === 'major'
         && instr.target.side === 'enemy' && !instr.target.isDead(),
       react: (instr, ctx) => {
         const stacks = Math.floor((instr.result?.dealt ?? 0) / 3);

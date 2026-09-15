@@ -14,7 +14,7 @@
 import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DealDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainActionPointsInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instructions/turn.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
@@ -338,8 +338,10 @@ turtleStanceCard('turtleStance', '龟守姿态', 'A', 1, 2, 1, null);
 turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 2, null);
 turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null);
 
-// 武术链（咏唱2，格挡转攻击）：激活期间，玩家为来源的每一条伤害指令 PRE 加
+// 武术链（咏唱2，格挡转攻击）：激活期间，玩家为来源的每一条**主级**伤害指令 PRE 加
 // 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。
+// 主级过滤是精通病灶的修复本体（2026-09-15 用户报）：精通/无双每抽一张牌发一条
+// 附级伤害，此前每条都吃「格挡×N」加成——一回合几十上百的爆炸伤害即由此来。
 // 与贯心的逐层破伤天然咬合（§3「天一+贯心」斩杀线的引擎件）。
 const martialStanceCard = (id, name, tier, ap, per, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
@@ -351,7 +353,8 @@ const martialStanceCard = (id, name, tier, ap, per, promotesTo) => registerSkill
   activated: {
     subscriptions: (sctx) => [{
       when: DealDamageInstruction, phase: 'pre',
-      filter: (instr) => instr.source === sctx.player && !instr.fixed,
+      filter: (instr) => instr.source === sctx.player && !instr.fixed
+        && instr.type === 'major',
       react: (instr) => {
         const stacks = sctx.player.getEffectStacks('block');
         if (stacks > 0) instr.setPayload('damage', instr.payload.damage + stacks * per);
@@ -574,8 +577,10 @@ const prepareCard = (id, name, tier, ap, block, promotesTo = null) => registerSk
   use(sctx) {
     const owner = `prepare:${sctx.self.uniqueID}`;
     let hurt = false;
+    // 挂应用原语 POST（受击侧掉血检测，2026-09-15 拆分）：「受伤」口径=实际生命损失
+    // （dealt>0，含 DoT）——是状态检测不是响应触发，不筛主/附级。
     sctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'post', owner,
+      when: ApplyDamageInstruction, phase: 'post', owner,
       filter: (instr) => instr.target === sctx.player && (instr.result?.dealt ?? 0) > 0,
       react: () => { hurt = true; },
     });

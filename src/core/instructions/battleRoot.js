@@ -92,10 +92,12 @@ export class PreBattleInstruction extends BattleInstruction {
 
       // 玩家最后攻击目标追踪（瑞米索敌口径：跟随主角最后攻击过的敌人）。
       // POST = 攻击已结算；直接写 battleState 标量（纯记账，非世界变更）。
+      // 只认主级（2026-09-15 拆分）：附级随机伤（精通）不该指挥瑞米索敌。
       ctx.kernel.addSubscription({
         when: DealDamageInstruction,
         phase: 'post',
-        filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy',
+        filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy'
+          && instr.type === 'major',
         react: (instr, c) => { c.battleState.lastPlayerTarget = instr.target.uniqueID; },
         owner: 'tracker:lastPlayerTarget',
       });

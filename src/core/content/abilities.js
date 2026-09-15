@@ -2,7 +2,7 @@ import { registerAbility } from '../abilities/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction, ConsumeActionPointsInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { aliveEnemies } from '../state/battleState.js';
@@ -84,6 +84,7 @@ registerAbility({
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'pre',
     filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
+      && instr.type === 'major'
       && instr.tags?.includes('aoe') && aliveEnemies(ctx.battleState).length === 1,
     react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 1.5)),
   }],
@@ -99,6 +100,7 @@ registerAbility({
     return [{
       when: DealDamageInstruction, phase: 'pre',
       filter: (instr, ctx) => !used && instr.source === ctx.player && !instr.fixed
+        && instr.type === 'major'
         && instr.skill && getSkillDefinition(instr.skill.defId)?.type === 'fire',
       react: (instr) => { used = true; instr.setPayload('damage', instr.payload.damage * 2); },
     }];
@@ -136,6 +138,7 @@ registerAbility({
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'pre',
     filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
+      && instr.type === 'major'
       && ctx.player.getEffectStacks('burn') > 0,
     react: (instr, ctx) => instr.setPayload('damage',
       instr.payload.damage + ctx.player.getEffectStacks('burn')),
@@ -261,13 +264,15 @@ registerAbility({
 });
 
 // 大师 **以攻为守**（前置：挡拆）：你每造成一次伤害（实际落血），获得 1 护盾。
-// source 空（燃烧/反伤）与被全挡（dealt 0）不计——只奖真实命中。
+// source 空（燃烧/反伤）与被全挡（dealt 0）不计——只奖**主级**真实命中
+// （2026-09-15 拆分定调：附级被动伤害不算「攻」）。
 registerAbility({
   id: 'shieldedOffense', name: '以攻为守', grade: 'master', requires: 'parryFist',
   description: '你每造成一次伤害，获得 1 护盾。',
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'post',
-    filter: (instr, ctx) => instr.source === ctx.player && (instr.result?.dealt ?? 0) > 0,
+    filter: (instr, ctx) => instr.source === ctx.player
+      && instr.type === 'major' && (instr.result?.dealt ?? 0) > 0,
     react: (instr, ctx) => ctx.kernel.submitInstruction(
       new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
   }],
@@ -308,12 +313,14 @@ registerAbility({
 
 // 精英 **武者**：格挡 ≥3 层时，受攻击从减免 50% 变为减免 75%（block 减半后再折半；
 // 持有武帝时被覆盖）。priority -10 = 必须在 block 的 PRE（默认 0）之后跑。
+// 2026-09-15 拆分：随 block 同迁**应用原语 PRE**（同为格挡响应链，只认主级）。
 registerAbility({
   id: 'warrior', name: '武者', grade: 'elite',
   description: '格挡不少于 3 层时，受攻击减免 75% 伤害。',
   subscriptions: () => [{
-    when: DealDamageInstruction, phase: 'pre', priority: -10,
+    when: ApplyDamageInstruction, phase: 'pre', priority: -10,
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
+      && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 3
       && !ctx.player.abilities.includes('warEmperor'),
     react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage / 2)),
@@ -325,8 +332,9 @@ registerAbility({
   id: 'warEmperor', requires: 'warrior', name: '武帝', grade: 'master',
   description: '格挡不少于 5 层时，受攻击减免 90% 伤害。',
   subscriptions: () => [{
-    when: DealDamageInstruction, phase: 'pre', priority: -10,
+    when: ApplyDamageInstruction, phase: 'pre', priority: -10,
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
+      && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 5,
     react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage / 5)),
   }],
@@ -405,12 +413,13 @@ registerAbility({
 });
 
 // ---- 木·瘴毒 大师 **瘟疫之源**：敌方单位死亡时，其余所有敌人中毒2 ----
-// 死亡判据 = POST 伤害指令的 target 已是尸体（毒/燃/直伤致死全走 DealDamageInstruction）。
+// 死亡判据 = 应用原语 POST 的 target 已是尸体（毒/燃/直伤致死全走伤害应用；
+// 2026-09-15 拆分后死亡检测挂应用原语——死亡发生在受击结算处，不筛主/附级）。
 registerAbility({
   id: 'plagueSource', requires: 'blightLord', name: '瘟疫之源', grade: 'master',
   description: '敌方单位死亡时，其余所有敌人中毒2。',
   subscriptions: () => [{
-    when: DealDamageInstruction, phase: 'post',
+    when: ApplyDamageInstruction, phase: 'post',
     filter: (instr) => instr.target?.side === 'enemy' && instr.target.isDead(),
     react: (instr, ctx) => {
       for (const e of aliveEnemies(ctx.battleState)) {

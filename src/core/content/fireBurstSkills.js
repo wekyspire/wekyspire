@@ -12,7 +12,7 @@
 import { registerSkill, getSkillDefinition } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import BattleInstruction from '../kernel/BattleInstruction.js';
-import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DrawCardsInstruction, BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
@@ -412,7 +412,7 @@ registerSkill({
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'post',
       filter: (instr) => instr.target === sctx.player && instr.tags?.includes('burn'),
       react: (instr, ctx) => {

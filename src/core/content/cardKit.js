@@ -72,11 +72,13 @@ export function isFirstPlayThisTurn(sctx) {
 
 // 造成伤害。amount 已是最终数值（攻击卡请先过 attackAmount）。
 // 伤害指令携带 skill 引用（sctx.self）——「第一张火灵脉攻击牌」之类的能力按它反查卡定义。
+// type：'major' 主级（缺省，出牌直接伤害）| 'minor' 附级（反伤/抽卡伤害/tick 等被动伤害，
+// 不吃任何加成、不触发任何响应——见 instructions/combat.js 两原语注释）。
 export function dealDamage(sctx, amount, {
-  target = null, pierce = false, fixed = false, tags = [], source = sctx.player,
+  target = null, pierce = false, fixed = false, tags = [], source = sctx.player, type = 'major',
 } = {}) {
   const instr = new DealDamageInstruction({
-    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self,
+    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self, type,
   });
   sctx.kernel.submitInstruction(instr);
   return instr;

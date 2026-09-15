@@ -1,6 +1,6 @@
 import { registerEffect, getEffectDefinition } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
-import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction, ClearShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction, ClearShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
@@ -29,7 +29,7 @@ registerEffect({
       ctx.kernel.submitInstruction(new DealDamageInstruction({
         source: null, target: unit,
         amount: Math.max(0, stacks - unit.getEffectStacks('flameAffinity')),
-        fixed: true, tags: ['burn'],
+        fixed: true, tags: ['burn'], type: 'minor',
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'burn', stacks: -1,
@@ -39,8 +39,10 @@ registerEffect({
 });
 
 // 格挡（体修·拆体系核心资源，BODY_CULTIVATION_CARDS §0）：buff 层数，≠ 护盾池。
-// 受攻击时伤害减半（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
+// 受主级攻击时伤害减半（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
 // 原型验证：test/posture.test.js（此处为正式落地，语义不变）。
+// 两原语拆分（2026-09-15）：挂**应用原语 PRE**（受击侧最后修正）+ 只认主级——
+// 附级伤害（荆棘反伤/精通抽卡伤/tick）是格挡「响应」不该拦的东西，吃盾但不动格挡层。
 registerEffect({
   id: 'block',
   type: 'buff',
@@ -50,10 +52,10 @@ registerEffect({
   icon: '🛡️',
   color: 'blue',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'pre',
     // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错
-    filter: (instr) => instr.target === unit && !instr.fixed,
+    filter: (instr) => instr.target === unit && !instr.fixed && instr.type === 'major',
     react: (instr, ctx) => {
       instr.setPayload('damage', Math.floor(instr.payload.damage / 2));
       ctx.kernel.submitInstruction(
@@ -65,15 +67,17 @@ registerEffect({
 // 忍耐（拆组合机制词，2026-09-14）：每受到一次伤害获得层数相当的格挡；自己的回合
 // 开始时整体消散（不逐层衰减——它是「撑过这个敌方回合」的一次性姿态）。触发口径：
 // 实际造成生命值伤害的结算（被护盾全额吸收不算）；自伤付费（selfcost 标记，狂拳类
-// 失去生命是代价不是挨打）不算；敌方攻击与环境 DoT（燃烧/中毒）都算。
+// 失去生命是代价不是挨打）不算；**主级**伤害才算（2026-09-15 两原语拆分定调：附级
+// 反伤/抽卡伤是格挡响应不该触发的东西）。
 registerEffect({
   id: 'endure', type: 'buff', stacking: 'count',
   name: '忍耐',
   description: '每受到一次伤害，获得层数相当的格挡；自己回合开始时消失。',
   icon: '🪨', color: 'blue',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction, phase: 'post',
+    when: ApplyDamageInstruction, phase: 'post',
     filter: (instr) => instr.target === unit
+      && instr.type === 'major'
       && !instr.tags?.includes('selfcost')
       && (instr.result?.dealt ?? 0) > 0
       && !unit.isDead(),
@@ -143,11 +147,12 @@ registerEffect({
   }],
 });
 
-// 荆棘：受到攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡；
+// 荆棘：受到主级攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡；
 // 无来源的环境伤害不反）。2026-09 定调：反伤不再穿透——穿透固定伤害过强。
 // 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。效果条目见 skills/EFFECTS.md。
-// ⚠️ 双方同时持有会互相递归（A 反 B、B 反 A…直到一方死亡，单次攻击内连锁结算完）：
-// 做玩家侧反伤遗物前必须先定连锁策略（仅一方生效 / 限一次 / 限层数）。
+// 两原语拆分（2026-09-15）：挂**应用原语 POST**（受击响应）+ 只认主级；反伤本身是
+// **附级**伤害（type:'minor'）——不吃加成、不触发对面再响应，天然不连锁（原先靠
+// tags 'thorns' 过滤防互弹，现在类型口径就是防递归的本体）。
 registerEffect({
   id: 'thorns',
   type: 'buff',
@@ -157,18 +162,15 @@ registerEffect({
   icon: '🌵',
   color: 'green',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'post',
-    // 荆棘反伤本身（tags 含 'thorns'）不再触发荆棘——否则双方互持荆棘时反伤互为
-    // 攻击源无限递归（d-blade 试玩实报：玩家荆棘1 × 针鼠荆棘3 互弹 15 轮直到玩家
-    // 暴毙，期间回合结构完全停摆）。这就是上方约定的连锁策略：荆棘不连锁。
     filter: (instr) => instr.target === unit && instr.source && !instr.source.isDead()
-      && !(instr.tags ?? []).includes('thorns'),
+      && instr.type === 'major',
     react: (instr, ctx) => {
       const stacks = unit.getEffectStacks('thorns');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: instr.source, amount: stacks, tags: ['thorns'],
+        source: unit, target: instr.source, amount: stacks, tags: ['thorns'], type: 'minor',
       }), instr);
     },
   }],
@@ -237,7 +239,7 @@ registerEffect({
   icon: '🧯',
   color: 'blue',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'pre',
     filter: (instr) => instr.target === unit && instr.tags?.includes('burn'),
     react: (instr, ctx) => ctx.kernel.veto(instr, 'fireproof'),
@@ -274,7 +276,10 @@ registerEffect({
   subscriptions: (unit) => [{
     when: DealDamageInstruction,
     phase: 'post',
+    // 发动侧特效附加（两原语拆分 2026-09-15）：留在结算原语 POST + 只认主级——
+    // 附级伤害（荆棘反伤/精通抽卡伤）不附带燃烧。
     filter: (instr) => instr.source === unit && !unit.isDead()
+      && instr.type === 'major'
       && (instr.result?.dealt ?? 0) > 0
       && !instr.tags?.includes('burn') && !instr.target.isDead(),
     react: (instr, ctx) => {
@@ -288,7 +293,8 @@ registerEffect({
 // 暴怒（卡达斯体系效果，2026-09-13 用户定）：受伤时获得等同**当前层数**的力量；
 // 己方回合开始时层数清零（力量不清——压力设计：打它越狠，它下一拍越痛，
 // 但层数不跨回合复利）。读 result.dealt（护盾/防御吸收后的实际生命损失）；
-// 固定伤害（燃烧跳伤）不算「被打」——它只回应真正的攻击。
+// 只回应**主级**攻击（2026-09-15 两原语拆分落地：附级反伤/抽卡伤/tick 不算「被打」
+// ——此前注释就这么宣称，但 filter 没排除，燃烧跳伤一直在偷偷叠层，本次拆分顺手修正）。
 registerEffect({
   id: 'rage',
   type: 'buff',
@@ -299,9 +305,10 @@ registerEffect({
   color: 'red',
   subscriptions: (unit) => [
     {
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'post',
       filter: (instr) => instr.target === unit && !unit.isDead()
+        && instr.type === 'major'
         && (instr.result?.dealt ?? 0) > 0,
       react: (instr, ctx) => {
         const stacks = unit.getEffectStacks('rage');
@@ -344,7 +351,7 @@ registerEffect({
       const stacks = unit.getEffectStacks('poison');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: unit, amount: stacks, pierce: true, tags: ['poison'],
+        source: null, target: unit, amount: stacks, pierce: true, tags: ['poison'], type: 'minor',
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'poison', stacks: -1,
@@ -490,12 +497,14 @@ registerEffect({
   icon: '💨',
   color: 'cyan',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'pre',
+    // 两原语拆分（2026-09-15）：挂应用原语 PRE（受击侧拦截）+ 只认主级——
+    // 附级伤害（原先靠排除 burn/poison tag）现在被类型口径天然排除，且荆棘反伤、
+    // 精通抽卡伤也不再消耗闪避层。
     filter: (instr) => instr.target === unit
       && instr.source
-      && !instr.tags?.includes('burn')
-      && !instr.tags?.includes('poison'),
+      && instr.type === 'major',
     react: (instr, ctx) => ctx.kernel.veto(instr, 'dodge', [
       new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: -1 }),
     ]),
@@ -574,10 +583,10 @@ registerEffect({
       }), instr);
       if (stacks <= 1) {
         // 层数归零：奇迹终结即死亡。amount = hp + shield 保证落到 0（fixed 不过防御，
-        // 护盾先吸掉 shield、余额正好打空生命）。
+        // 护盾先吸掉 shield、余额正好打空生命）。附级：系统结算，不该触发任何响应。
         ctx.kernel.submitInstruction(new DealDamageInstruction({
           source: null, target: unit, amount: unit.hp + unit.shield,
-          fixed: true, tags: ['miracle'],
+          fixed: true, tags: ['miracle'], type: 'minor',
         }), instr);
       }
     },
@@ -618,7 +627,7 @@ registerEffect({
   icon: '🩸',
   color: 'purple',
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'pre',
     filter: (instr) => instr.target === unit && !instr.fixed,
     react: (instr) => {
@@ -686,7 +695,7 @@ registerEffect({
   color: 'cyan',
   subscriptions: (unit) => [
     {
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'pre',
       filter: (instr) => instr.target === unit && unit.getEffectStacks('stasis') > 0,
       react: (instr, ctx) => ctx.kernel.veto(instr, 'stasis'),
@@ -764,10 +773,12 @@ registerEffect({
     attack: (stacks) => stacks,
   },
   subscriptions: (unit) => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'post',
-    // 被打中护盾也算「受攻击」（电是接触即放）；无来源的环境伤害不触发
-    filter: (instr) => instr.target === unit && instr.source && !unit.isDead(),
+    // 被打中护盾也算「受攻击」（电是接触即放）；无来源的环境伤害不触发；附级伤害
+    // 不触发（2026-09-15 拆分：泄放是受击响应，只认主级攻击）
+    filter: (instr) => instr.target === unit && instr.source
+      && instr.type === 'major' && !unit.isDead(),
     react: (instr, ctx) => {
       const stacks = unit.getEffectStacks('charge');
       if (stacks <= 0) return;

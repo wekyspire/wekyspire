@@ -4,7 +4,7 @@ import { getEffectDefinition } from '../effects/registry.js';
 import { AddCardInstruction, DrawCardsInstruction, MoveCardInstruction, BurnCardInstruction, LockCardsInstruction } from '../instructions/cards.js';
 import Enemy from '../state/enemy.js';
 import {
-  DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
+  DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
 } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UnitSpawnInstruction } from '../instructions/units.js';
@@ -1105,10 +1105,14 @@ registerEnemy({
   id: 'pufferToad', name: '鼓腹蟾',
   createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 20 }),
   onBattleStart(ctx, unit) {
+    // 受击响应挂应用原语 POST + 只认主级（2026-09-15 拆分）：「被攻击膨胀」——
+    // 附级伤害（玩家荆棘反伤/毒 tick）不喂膨胀（此前 filter 只查 source 非空，
+    // 荆棘反伤 source=敌方 unit，会白喂膨胀=同族病灶，本次顺手修正）。
     ctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'post',
+      when: ApplyDamageInstruction, phase: 'post',
       owner: `enemy:${unit.uniqueID}:inflate`,
-      filter: (instr) => instr.target === unit && instr.source && !unit.isDead(),
+      filter: (instr) => instr.target === unit && instr.source
+        && instr.type === 'major' && !unit.isDead(),
       react: () => {
         unit._inflated = (unit._inflated ?? 0) + 1;
         unit.attack += 1; // 膨胀：攻击面板直接涨（difficultyScaling 同款直改口径）
@@ -2132,9 +2136,10 @@ registerEnemy({
     const owner = `enemy:${unit.uniqueID}:drone`;
     // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 马上净化全部效果 + 凝滞1 + 排转阶段
     //（净化在前：转阶段前堆上的 DOT 一并清空，冻结前不留账；如山在场，盾只会因伤害
-    // 归零——回合开始的例行清盾被 veto——不会误触发）。
+    // 归零——回合开始的例行清盾被 veto——不会误触发）。挂应用原语 POST（2026-09-15
+    // 拆分：盾在受击结算处碎，不筛主/附级——毒磨穿的盾也是碎盾）。
     ctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'post', owner,
+      when: ApplyDamageInstruction, phase: 'post', owner,
       filter: (instr) => instr.target === unit
         && !unit._stasisArmed && !unit._phase2
         && (instr.result?.shieldAbsorbed ?? 0) > 0 && unit.shield <= 0,
@@ -2151,8 +2156,10 @@ registerEnemy({
     });
     // 死亡协议拦截（致命判定写在 react、priority 压到修饰者之后——_collect 契约）：
     // 第一次致死伤害 veto 并改判「保留 1 血 + 无敌」，进入自爆倒计时。
+    // 挂**应用原语 PRE**（2026-09-15 拆分：免死类拦截不关心伤害出自什么原因，
+    // 不筛主/附级）；改判的补刀伤害是附级（系统结算，不触发任何响应）。
     ctx.kernel.addSubscription({
-      when: DealDamageInstruction, phase: 'pre', priority: -100, owner,
+      when: ApplyDamageInstruction, phase: 'pre', priority: -100, owner,
       filter: (instr) => instr.target === unit && !unit._detonated,
       react: (instr, c) => {
         if (!wouldBeLethal(instr, unit)) return;
@@ -2161,7 +2168,7 @@ registerEnemy({
           new DealDamageInstruction({
             source: instr.source, target: unit,
             amount: Math.max(unit.hp - 1, 0) + unit.shield,
-            fixed: true, tags: ['droneLockdown'],
+            fixed: true, tags: ['droneLockdown'], type: 'minor',
           }),
           new AddEffectInstruction({ target: unit, effectId: 'invulnerable', stacks: 1 }),
         ]);

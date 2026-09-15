@@ -25,10 +25,11 @@ import {
   attackDamage, gainShield, addEffect, drawCards, resolvedDamageText, enemyTarget,
 } from './cardKit.js';
 
-// ---- 共用：卖血（失去生命 = 无来源穿透伤害，标签 'blood' 供未来联动检索）----
+// ---- 共用：卖血（失去生命 = 无来源穿透**附级**伤害，标签 'blood' 供未来联动检索；
+// 附级 = 失去生命是代价不是攻击，不触发任何加成与响应）----
 function loseHp(sctx, amount) {
   sctx.kernel.submitInstruction(new DealDamageInstruction({
-    source: null, target: sctx.player, amount, pierce: true, tags: ['blood'],
+    source: null, target: sctx.player, amount, pierce: true, tags: ['blood'], type: 'minor',
   }));
 }
 
