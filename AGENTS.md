@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-**魏启尖塔**：单人 Roguelike 卡牌战斗网页游戏。玩家扮演「灵御」沿 44 层塔（4 章 × 10 普通层 + 1 Boss 层）线性爬塔（无岔路），在「战斗 → 战后奖励 → 奖励房（**营地·训练合并房** / 事件 / 老虎机）→ 战前准备」的循环中成长。无尽与故事两种模式（存档隔离）。纯前端 SPA，无自建后端，产物是静态站点。
+**魏启尖塔**：单人 Roguelike 卡牌爬塔网页游戏（无尽/故事两模式，存档隔离）；纯前端 SPA，无自建后端，产物是静态站点。核心循环与塔结构的设计见 `battle_gameplay/RUN_DESIGN.md`。
 
 ## 技术栈与配置
 
@@ -43,7 +43,7 @@ npm test           # vitest（存量；维护已暂停，见「测试」节）
 ## 版本与 changelog
 
 - 玩家可见更新日志 = `public/changelog.md`（开始界面「更新日志」弹层直接读它）。一条版本 = `## YYYY.M.D [Alpha X.Y.Z]` + `- 签名：Hineven` + 小节；新条目**加在文件最上方**，并把 `package.json` 的 `version` 同步改掉（两者必须一致）。
-- **写得短**：整条版本正文 ≤120 字、归纳 2~3 条；只写玩家能感知的变化（新内容 / 体验手感 / 修好的明显 bug）。不逐条罗列 commit、不写内部术语（模块名/架构词）、不贴代码参数。小节用「新增 / 改进与修复 / 已知问题」这类朴素词，空小节不留壳。
+- **写得短（红线：整条版本正文 ≤150 字，超线即违规）**：归纳 2~3 条，只写玩家能感知的变化（新内容 / 体验手感 / 修好的明显 bug）。不逐条罗列 commit、不写内部术语（模块名/架构词）、不贴代码参数。小节用「新增 / 改进与修复 / 已知问题」这类朴素词，空小节不留壳。
 
 ## 架构：四层单向依赖
 
@@ -57,15 +57,9 @@ src/
 └── shell/       # Vue 薄壳：场景编排、Vue 浮层、存档、设置
 ```
 
-### 三个场景层级
+### 场景层级
 
-由 `src/shell/App.vue` 编排（`phase` / `gameStage`）：
-
-1. **菜单层**：纯 Vue（StartScreen / GameMenu / EndPanel / MenuDialog·MenuPopup / ChangeLog / 全局 toast）。
-2. **大世界层（塔楼层）**：`MapStage`（Three.js 夜空 + 塔楼 + 玩家状态栏 + 资源条 + **全部阶段操作面板**）。
-3. **战斗层（房间层）**：`BattleStage`（Three.js 战场 + HUD 物件）+ `BattleHud`（Vue，仅战斗日志/回合数）。
-
-MapStage / BattleStage / RoomStage 共享同一 canvas，由 `StageManager` 切换。run 的 `gameStage`（prep/battle/reward/room/ascension/end）决定构建哪块 Three 面板（`PANEL_BUILDERS` 分发）与挂哪些 Vue 浮层。对话/幕间内容 = `shell/overlay/CutsceneOverlay.vue`；**幕间黑幕是独立一层**（`sceneWipe.js` + `SceneWipeOverlay.vue`，z 压过内容层）。
+三层场景（菜单纯 Vue / 塔楼 MapStage / 战斗+房间 Three 化）、`gameStage → PANEL_BUILDERS` 面板映射的权威说明在 `README.md`「场景层级」。此处只记两条实现铁律：仍由 Vue 渲染的只有对话 / cutscene / tooltip / `BattleHud`（战斗日志/回合数）与菜单层组件；**幕间黑幕是独立一层**（`sceneWipe.js` + `SceneWipeOverlay.vue`，z 压过内容层）——黑幕的目的地可以是任何东西（3D 舞台或一段 cutscene 内容），wipe 在全黑中点调下一步的 `preStage()` 让内容幕后就位。
 
 ### Core（`src/core/`）
 
@@ -73,13 +67,9 @@ MapStage / BattleStage / RoomStage 共享同一 canvas，由 `StageManager` 切�
 - **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位尾插，下回合起参战，敌方意图 kinds 含 'summon'）。
 - **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/burnt/pending）、种子 rng、`skillRuntime`（定义/运行时分离）。初始值常量：`PLAYER_BASE_HP / PLAYER_BASE_MONEY / PLAYER_BASE_AP`（禁止裸数字）。
 - **`flow/battle.js`** — 战斗装配：`createBattle/startBattle/playerUseSkill/playerEndTurn/respondInput`。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
-- **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK，自动应答/自动开包）、rewards / ascension / prep、`rooms/`（camp、event、slotMachine、bank、shop、gurpas、training）。
-  - **奖励卡包制**：战后先选卡包再包内三选一。体修包（现名「基础卡包」）恒开（门禁 `player.bodyLevel`）；灵脉包需对应维度 ≥1（0 级 D/C、1 级 B、2 级 A——专精昂贵是设计意图）；木/空无内容时自动隐藏；训练房抓牌走「已解锁卡包并集」。**通用灰卡包**按 `COMMON_INJECT` 概率+保底替换任意包三选一中的一张。**开包等阶按体系等级查五档分布表**（高等级仍出低阶卡）；S 卡仅白名单小概率直出；Boss/精英战后的奖励按更高等级分布抽（纯奖励通道）。
-  - **进阶节奏**：营地与训练场是同一房（`campTraining`，原训练层 4N-2 与 Boss 前保底层），两部分**各可做一次、也都可以不做**（训练面板没有「跳过」键，直接「继续前进」离开；营地未休整只给软提示）。首进阶仅需 1 次训练，此后每 2 次训练 +1 级；封顶 `maxAscensions: 6`。进阶事件 = 幕间接棒 + 对话择维度。**跳过进阶** = 隐藏体修等级 +1 + 生命上限 +3 + 一次删卡（不回血、不加魏启上限）。种子包 = 灵脉首次 0→1 时九选三（该维度 D/C 基石，排除组合件与晋升链员）。
-  - **事件系统**：事件 = **对话 + 选项 + 逻辑**，定义进 `core/events/registry.js`，内容在 `core/content/events/`（一文件一事件，字段 `{id,name,art,mode,weight,requires,pages,choices,resolve}`）；抽取确定性（记 `run.roomData.eventId`，同次不重抽）。**效果由 `resolve` 直接调 `core/run/runEffects.js` 原语**（gainMoney/healPlayer/gainRelic/gainCard/spendMoney/setFlag 等），原语负责改 run + 记 log + 声明表现意图；`resolve` 只返回结果页。run 级表现走 `createRunContext` 的 `presenter.showcase` → Shell 侧 `runPresenter.js` **排队**、由 runController 在退出切幕之后统一 `drain()`。剧情分支记忆 = `run.eventFlags`。
-  - **老虎机**（`rooms/slotMachine.js`）：资源交换——单价 5 起、每次 +6；保底 = 小奖 18%+7%/次、大奖 2%+2%/次；产出挂 `run.slotPending`（可放弃），未处理不许再拉杆/离房。**吞噬**：累积 7 次 roll 可粉碎遗物/卡换金币。**银行机**（`rooms/bank.js`）：存款每层结息、死亡清空；超额取款 → **恶魔 roll**（三转轮即诅咒词条，效果挂 `run.pendingDebuffs` 入档）。
-  - **商店**：4/8、15/19、25/29、36/40 层整层商店房（`rooms/shop.js`，`ensureShopStock` 进房掷货架、同层不重掷）；「买到即开」卡包挂 `run.shopPending`，三选一可放弃。瑞米联动仅故事模式。35 层固定**古尔帕斯之店**（`rooms/gurpas.js`：S 遗物 + 删卡 + 收购 A/S 遗物，`acquisition: ['gurpas']` 的遗物只在她这卖）。
-  - **遗物系统**：字段 `rarity`(C/B/A/S) / `cost`(槽位**权重** 0–3，Σcost ≤ relicSlots=3) / `nonSlot`(非槽位式拾起恒生效) / `requires`(灵脉门禁) / `acquisition`(来源标签) / `onAcquire` / `onCampRest` / `runModifiers`(**从 `player.baseStats` 重算，不增量累加**——增量会逐战叠加) / `onBattleStart` / `subscriptions`。**一局内遗物唯一**（池空兜底件除外）。**抽选一律走 `core/relics/draft.js`**（稀有度权重+门禁+已拥有排除+兜底），老虎机/商店/事件/Boss 掉落不得各自随机。
+- **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK，自动应答/自动开包）、`rewards.js` / `ascension.js` / `prep.js` / `promotion.js`（局外晋升）、`rooms/`（campTraining/event/slotMachine/bank/shop/gurpas/training）。**玩法细则不在本文件**——卡包门禁与开包分布、进阶节奏与跳过补偿见 `battle_gameplay/RUN_DESIGN.md`，老虎机/银行/恶魔 roll 见 `SLOT_MACHINE.md`，商店见 `SHOP.md`。实现侧口径：开包等阶分布与 S 直出白名单的事实源是 `rewards.js` 的 `PACK_TIER_TABLE`/`S_SPAWN_WHITELIST`；房间产出挂 `run.slotPending`/`shopPending`/`pendingDebuffs`，未处理完不许离房。
+  - **事件系统**：事件 = 对话 + 选项 + 逻辑，定义进 `core/events/registry.js`，内容在 `core/content/events/`（一文件一事件，`content/events.js` 显式装配；字段 `{id,name,art,mode,weight,requires,pages,choices,resolve}`）；抽取确定性、记 `run.roomData.eventId`（同次不重抽）。**效果由 `resolve` 直接调 `core/run/runEffects.js` 原语**（原语负责改 run + 记 log + 声明表现意图），`resolve` 只返回结果页——Shell 对「事件做了什么」一无所知，加新效果不必改编排器。run 级表现走 `createRunContext` 的 `presenter.showcase` → `shell/runPresenter.js` 排队、runController 在**退出切幕之后**统一 `drain()`（获得演出排揭幕后，否则被黑幕吞半截）。剧情分支记忆 = `run.eventFlags`。
+  - **遗物系统**：字段契约 = `rarity`(C/B/A/S) / `cost`(槽位**权重** 0–3，Σ ≤ relicSlots) / `nonSlot`(非槽位式拾起恒生效) / `requires`(灵脉门禁) / `acquisition`(来源标签，`gurpas`/`event` = 只走该渠道) / `onAcquire` / `onCampRest` / `runModifiers`(**从 `player.baseStats` 重算，不增量累加**——增量会逐战叠加) / `onBattleStart` / `subscriptions`。一局内遗物唯一（池空兜底件除外）。**抽选一律走 `core/relics/draft.js`**（稀有度权重 + 门禁 + 已拥有排除 + 兜底集中于此），老虎机/商店/事件/Boss 掉落不得各自随机。遗物个体设计见 `battle_gameplay/RELICS.md`。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 产出同构注册表：skills/abilities/enemies/allies/relics/effects/events。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。
 - **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。
@@ -142,10 +132,9 @@ MapStage / BattleStage / RoomStage 共享同一 canvas，由 `StageManager` 切�
 ## 权威设计文档
 
 - `README.md` — 场景层级总纲与数据系统说明。
-- `battle_gameplay/battle.md` — 战斗玩法总则（回合轮转/阶段/胜负/资源/牌区/结算时序公理/数值基准）。
-- `battle_gameplay/skills/` — 各体系卡牌设计稿 + `EFFECTS.md` 效果目录 + `SKILL_DESIGN_PRINCIPLES.md`（`src/core/skills/` 下）。
-- `battle_gameplay/ENEMIES_1.md` / `ENEMY_GENERATION.md` — 敌人设计卡与生成总纲；`ENEMY_ART_LIST.md` 立绘待办。
-- `quest_prompts/` — 重构与玩法设计文档（THREE_REFACTOR_PLAN / RUN_DESIGN / STAGE_DESIGN / SCENE_* 等）。
+- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）、`ENEMY_ART_LIST.md`（立绘待办）。
+- `battle_gameplay/skills/` — 各体系卡牌设计稿 + `EFFECTS.md` 效果目录；`SKILL_DESIGN_PRINCIPLES.md` 在 `src/core/skills/` 下。
+- `quest_prompts/` — 重构与实现设计文档（THREE_REFACTOR_PLAN / STAGE_DESIGN / SCENE_* / THREE_UI_MIGRATION 等）。
 - `handoffs/` — 历史交接记录（含关键约定，注意核对时效）。
 
 ## 安全注意事项
