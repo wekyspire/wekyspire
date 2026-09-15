@@ -311,32 +311,33 @@ registerAbility({
 // ---- 体修·拆（§3.4）----
 
 
-// 精英 **武者**：格挡 ≥3 层时，受攻击从减免 50% 变为减免 75%（block 减半后再折半；
-// 持有武帝时被覆盖）。priority -10 = 必须在 block 的 PRE（默认 0）之后跑。
+// 精英 **武者**：格挡 ≥3 层时，受攻击总减免 60%（block 减半后 ×0.8；持有武帝时被覆盖）。
+// priority -10 = 必须在 block 的 PRE（默认 0）之后跑。2026-09-16 用户定：75%→60%。
 // 2026-09-15 拆分：随 block 同迁**应用原语 PRE**（同为格挡响应链，只认主级）。
 registerAbility({
   id: 'warrior', name: '武者', grade: 'elite',
-  description: '格挡不少于 3 层时，受攻击减免 75% 伤害。',
+  description: '格挡不少于 3 层时，受攻击减免 60% 伤害。',
   subscriptions: () => [{
     when: ApplyDamageInstruction, phase: 'pre', priority: -10,
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 3
       && !ctx.player.abilities.includes('warEmperor'),
-    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage / 2)),
+    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 0.8)),
   }],
 });
 
-// 大师 **武帝**：格挡 ≥5 层时，减免 90% 伤害（block 减半后再折到 1/5；武者的上位）。
+// 大师 **武帝**：格挡 ≥5 层时，受攻击总减免 70%（block 减半后 ×0.6；武者的上位）。
+// 2026-09-16 用户定：90%→70%。
 registerAbility({
   id: 'warEmperor', requires: 'warrior', name: '武帝', grade: 'master',
-  description: '格挡不少于 5 层时，受攻击减免 90% 伤害。',
+  description: '格挡不少于 5 层时，受攻击减免 70% 伤害。',
   subscriptions: () => [{
     when: ApplyDamageInstruction, phase: 'pre', priority: -10,
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 5,
-    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage / 5)),
+    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 0.6)),
   }],
 });
 

@@ -543,11 +543,12 @@ registerSkill({
 
 // ==== 散卡（2026-09 设计稿新增）=============================================
 
-// 快如雨（C）/ 疾如风（B）：1AP 冷却1——打出时按**本回合已打出的牌数**结算：
+// 快如雨（C）/ 疾如风（B）：0费 冷却1——打出时按**本回合已打出的牌数**结算：
 // 每 4 张（B：每 3 张）获得 1 层格挡（向下取整，不含自身——发动卡结算时尚未计入）。
+// 2026-09-16 用户定：1AP→0费（原强度偏低）。
 const rapidBlockCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   promotesTo,

@@ -345,14 +345,13 @@ registerSkill({
 // 计数器放 skillRuntime（chantCount，plain data 可序列化），跨回合累积不清零；
 // 自身发动/解除不计入（filter 按 uniqueID 排除）。
 
-// weight 全链统一 3（2026-09-13 用户定：升级链路上咏唱压力应一致或减少，否则升级会变成
-// 负面事件；太极作为 A 阶跨回合抽牌引擎是超模卡，3 也是尊重到位）。
+// weight 全链统一 2（2026-09-16 用户定：强度偏低，3→2 减咏唱压力；原 2026-09-13 定 3）。
 function registerPlayCountChant({ id, name, tier, every, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 3,
+    cardMode: 'chant', chantWeight: 2,
     promotesTo,
     use() { return true; },
     activated: {
