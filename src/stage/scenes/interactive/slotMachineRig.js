@@ -485,6 +485,16 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     st.win = null;
     st.shake = Math.max(st.shake, 0.12);            // 拉杆瞬间整机一顿（起转的"踹一脚"）
     st.shakeAmp = Math.max(st.shakeAmp, 0.03);
+    // 未中奖（symbols 未指定）的随机落面**不许三同**：三同是中奖的视觉语言
+    // （樱桃×3=小奖 / 7×3=大奖，见 machines/slotMachine.js 的 symbolsForTier），
+    // 纯随机面有 1/SYM² 概率撞出"宝石×3"这类伪中奖组合，玩家会拿着它问为什么没中奖。
+    let randomK = null;
+    if (!symbols) {
+      randomK = reels.map(() => Math.floor(Math.random() * SYM));
+      if (randomK.length > 1 && randomK.every((k) => k === randomK[0])) {
+        randomK[randomK.length - 1] = (randomK[0] + 1) % SYM;
+      }
+    }
     st.spin = {
       elapsed: 0,
       tier,
@@ -492,7 +502,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       // 每轮的整段动画计划在拉杆瞬间一次算定（后端此时已给结果）——解析式求值，
       // 圈数让"自然停车位"落在槽位稍前方，末段卡入位把它拉回槽位。
       plans: reels.map((r, i) => {
-        const s = symbols?.[i];
+        const s = symbols?.[i] ?? randomK?.[i];
         const k = Number.isInteger(s) ? s % SYM : Math.floor(Math.random() * SYM);
         return planReel(r.rotation.x, k, SYM, CRUISE_T[i % CRUISE_T.length]);
       }),
