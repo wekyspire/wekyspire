@@ -19,7 +19,8 @@ import {
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
 export const SKY_BOTTOM = 0xd9e2ea;    // 地平线：雪白（雾色同源，地平线无缝）
-export const FOG_DENSITY = 0.0031;     // 指数雾密度：塔身 ~25% 融雾，远端雪原 ~85% 融天
+export const FOG_DENSITY = 0.016;      // 指数雾密度：~50 单位能见度（50 处融 ~47%，
+                                       // 120 处 ~98%）——塔身约半透雾感、雪原远端全融天
 export const GROUND_BASE_Y = -58;      // 雪原基准高度（画面下缘附近；低楼层时动态上抬贴塔基）
 const DOME_RADIUS = 900;
 
@@ -44,6 +45,32 @@ export function towerFacingY(from = { x: 0, z: 0 }) {
   return Math.atan2(cam.x - from.x, cam.z - from.z);
 }
 
+/**
+ * 塔楼层专属机位（用户定 2026-09-15：塔楼投影至少占屏 1/3）：
+ * 沿世界相机基准方向（az/el 同角）拉近到塔前 `dist` 处，视线锚在塔中心向画面
+ * 左侧偏 `lateral`——塔落在画面右侧（常驻面板在左，长期构图不挡塔）。
+ * 世界相机是三舞台共享的，机位借用走「onEnter 设、onExit restoreBaseCamera」协议。
+ * @returns { position: THREE.Vector3, lookAt: THREE.Vector3 }
+ */
+export function towerCameraPose({
+  towerX = 58, towerY = -15, towerZ = -10, dist = 50, lateral = 10,
+} = {}) {
+  const az = THREE.MathUtils.degToRad(CAMERA_AZIMUTH);
+  const el = THREE.MathUtils.degToRad(CAMERA_ELEVATION);
+  // 视线方向（相机 → 场景），与 StageManager 基准机位同角
+  const dir = new THREE.Vector3(
+    -Math.sin(az) * Math.cos(el),
+    -Math.sin(el),
+    -Math.cos(az) * Math.cos(el),
+  );
+  // 画面右向（水平）：dir × up 的水平归一化
+  const right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+  const tower = new THREE.Vector3(towerX, towerY, towerZ);
+  const lookAt = tower.clone().addScaledVector(right, -lateral);
+  const position = lookAt.clone().addScaledVector(dir, -dist);
+  return { position, lookAt };
+}
+
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -57,6 +84,7 @@ const SNOW_VERT = /* glsl */`
   uniform float uScale;   // 尺寸衰减基准 = 画布高/2（1080p 假设 540）
   uniform vec3 uVolMin;
   uniform vec3 uVolSpan;
+  varying float vDepth;   // 视深（片元做雾衰减：远处雪片融雾淡出，掩盖体积盒边缘）
   void main() {
     // 下落（逐粒速度差 6~14 世界单位/秒）+ 盒内回绕
     float fall = 6.0 + 8.0 * fract(aSeed * 17.31);
@@ -68,6 +96,7 @@ const SNOW_VERT = /* glsl */`
     base.z += cos(uTime * (0.4 + fract(aSeed * 5.3)) + aSeed * 2.0) * sway * 0.6;
     vec4 wp = modelMatrix * vec4(base, 1.0);
     vec4 mv = viewMatrix * wp;
+    vDepth = -mv.z;
     gl_PointSize = uSize * (0.6 + 0.9 * fract(aSeed * 11.3)) * uScale / max(1.0, -mv.z);
     gl_Position = projectionMatrix * mv;
   }
@@ -75,9 +104,12 @@ const SNOW_VERT = /* glsl */`
 const SNOW_FRAG = /* glsl */`
   precision highp float;
   uniform float uOpacity;
+  uniform float uFogDensity;  // 与场景 FogExp2 同值同公式（squared exp）——远处雪片自然融雾
+  varying float vDepth;
   void main() {
     float d = length(gl_PointCoord - 0.5);
     float a = smoothstep(0.5, 0.15, d) * uOpacity;
+    a *= exp(-uFogDensity * uFogDensity * vDepth * vDepth);
     gl_FragColor = vec4(0.95, 0.97, 1.0, a);
   }
 `;
@@ -105,6 +137,7 @@ function buildSnowfall({ count = 720 } = {}) {
     uVolMin: { value: VOL_MIN },
     uVolSpan: { value: span },
     uOpacity: { value: 0.8 },
+    uFogDensity: { value: FOG_DENSITY },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -152,7 +185,10 @@ export function buildTowerWilderness({ towerX = 58, towerZ = -10 } = {}) {
       varying vec3 vLocal;
       void main() {
         float h = clamp(vLocal.y / ${DOME_RADIUS.toFixed(1)} * 0.5 + 0.5, 0.0, 1.0);
-        vec3 col = mix(uBottom, uTop, pow(h, 0.85));
+        // 地平线雾带压平：浓雾天观感——下半球到略高于地平线整段都是雾白
+        // （与 FogExp2 融掉的远端雪原无缝相接），往上才 smoothstep 渐入天顶灰蓝
+        float t = smoothstep(0.56, 0.92, h);
+        vec3 col = mix(uBottom, uTop, t);
         gl_FragColor = vec4(col, 1.0);
       }
     `,

@@ -16,7 +16,7 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { sharedTowerArtCache } from '../art/towerArt.js';
-import { buildTowerWilderness, towerFacingY } from '../scenes/towerWilderness.js';
+import { buildTowerWilderness, towerFacingY, towerCameraPose } from '../scenes/towerWilderness.js';
 
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
@@ -431,11 +431,25 @@ export class MapStage {
       this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
       this._bubbles.update(dt);
     });
+    // 塔楼层专属机位（用户定：塔楼投影至少占屏 1/3）——世界相机三舞台共享，
+    // 走借还协议：onEnter 设、onExit restoreBaseCamera（假 manager 无相机则跳过）
+    this._mgr = manager ?? null;
+    const cam = manager?.camera;
+    if (cam) {
+      const { position, lookAt } = towerCameraPose({
+        towerX: TOWER_X, towerY: TOWER_Y, towerZ: TOWER_Z,
+      });
+      cam.position.copy(position);
+      cam.lookAt(lookAt);
+    }
   }
 
   onExit() {
     this._unsubTick?.();
     this._unsubTick = null;
+    // 还原世界相机基准机位（塔楼层专属机位不外泄到战斗/房间层）
+    this._mgr?.restoreBaseCamera?.();
+    this._mgr = null;
   }
 
   dispose() {
