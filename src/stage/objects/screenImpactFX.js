@@ -38,9 +38,14 @@ export function damageSeverity(dealt, shieldAbsorbed) {
 }
 
 export class ScreenShake {
-  /** @param {{ cameras: THREE.Camera[] }} options 每帧施加偏移的相机集（基位在构造时锁定） */
+  /** @param {{ cameras: THREE.Camera[] }} options 每帧施加偏移的相机集（基位在震荡启动时采样） */
   constructor({ cameras = [] } = {}) {
-    this._cams = [...cameras].map(cam => ({ cam, base: cam.position.clone() }));
+    // 基位不能在构造时锁：BattleStage 的构造点早于上一舞台还相机（塔楼专属机位在
+    // setStage → onExit 才 restoreBaseCamera），构造时 clone 会把借用的塔楼机位
+    // 焊成基位——首次受击震荡结束把相机"复位"到塔楼取景（错位放大、战斗单位出画，
+    // 2026-09-15 塔楼 3D 化后暴露）。改为震荡启动那一刻采样当前位：战斗期间世界
+    // 相机只被本类移动，启动位即基位，对构造时机免疫。
+    this._cams = [...cameras].map(cam => ({ cam, base: null }));
     this._amp = 0;   // 当前幅度（世界单位）
     this._dur = 0;   // 本次震荡总时长（秒）
     this._t = 0;     // 包络时间
@@ -58,6 +63,9 @@ export class ScreenShake {
     // 不叠加（防连续小额伤害叠出超限抖动），但也不让前一击把后一击吃掉
     const remain = this._active ? this._amp * (1 - this._t / this._dur) : 0;
     const remainTime = this._active ? this._dur - this._t : 0;
+    if (!this._active) {
+      for (const c of this._cams) c.base = c.cam.position.clone();
+    }
     this._amp = Math.max(remain, amp);
     this._dur = Math.max(remainTime, dur);
     this._t = 0;
@@ -86,10 +94,13 @@ export class ScreenShake {
     for (const { cam, base } of this._cams) cam.position.set(base.x + ox, base.y + oy, base.z);
   }
 
-  /** 退场复位：相机回基位（舞台 dispose 时必须调，防把偏移泄漏给下一舞台）。 */
+  /** 退场复位：相机回基位（舞台 dispose 时必须调，防把偏移泄漏给下一舞台）。
+   *  从未震荡过的实例没有基位——不碰相机（否则会把构造时位姿强写回共享相机）。 */
   dispose() {
     this._active = false;
-    for (const { cam, base } of this._cams) cam.position.copy(base);
+    for (const { cam, base } of this._cams) {
+      if (base) cam.position.copy(base);
+    }
   }
 }
 
