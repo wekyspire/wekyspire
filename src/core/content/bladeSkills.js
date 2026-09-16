@@ -529,12 +529,14 @@ sheathCard('sheathEdge', '藏锋', 'A', 48, 3);
 // （content/effects.js：弃牌 POST 监听 + 回合末自清，生命周期与效果实例绑定——
 // 被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，同样计入；
 // 打出自身不是弃牌（pending→burnt 的消耗路径）。
-// 阶梯：C 纯抽 / B 抽+格挡1力量1 / A 抽+格挡2力量2（B→A 翻倍，潜锋23→藏锋48 的包络内；
+// 阶梯：C 纯抽 / B 抽+格挡1 / A 抽+格挡2（B→A 翻倍，潜锋23→藏锋48 的包络内；
 // 三阶同为整战一次，阶差全在效果强度）。
+// 2026-09-16 用户裁决（马拉松 r14/r15 数据：武者呼吸+情况不对单回合力量5+格挡5 过强）：
+// ① 全系费用 1AP→2AP；② 武者/完美呼吸移除力量加成（只留格挡）。
 const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, promotesTo = null }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['exhaust'],
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: 2 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   promotesTo,
@@ -550,8 +552,8 @@ const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, promote
     + (strength > 0 ? `，/effect{力量}${strength}` : ''),
 });
 breathCard('breath', '呼吸', 'C', { effectId: 'breath', promotesTo: 'warriorBreath' });
-breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, strength: 1, promotesTo: 'perfectBreath' });
-breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 2, strength: 2 });
+breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, promotesTo: 'perfectBreath' });
+breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 2 });
 
 // ==== 培植系列（养刀）==========================================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
