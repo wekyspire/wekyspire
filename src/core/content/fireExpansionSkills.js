@@ -186,13 +186,15 @@ registerSkill({
 
 // ==== 敌方 debuff 链（爆裂冲击 C → 轰灭 B）：伤残放大一切后续伤害 ====
 
-// 爆裂冲击 C：2魏 13伤 + 目标伤残2（对标火箭术 C 15抽2：13<15，伤残2=后续每次受伤+2，
-// 与燃烧跳伤/固伤天然联动）。
+// 爆裂冲击 C：2魏 13伤 + 目标伤残2（对标火箭术 C 14抽2：13<14，伤残2=后续每次
+// 受伤+2，与燃烧跳伤/固伤天然联动）。2026-09-17 用户定：**转消耗卡**
+// （伤残是延时价值，消耗防长局无限复用同一份伤残）。
 registerSkill({
   id: 'blastShock', name: '爆裂冲击', type: 'fire', tier: 'C', series: 'shock',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
+  keywords: ['exhaust'],
   promotesTo: 'doomBlast',
   use(sctx) {
     const target = enemyTarget(sctx);
@@ -205,12 +207,13 @@ registerSkill({
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, 13)}，赋予/effect{伤残}2`,
 });
 
-// 轰灭 B：2魏 22伤 + 伤残3（对标火球术 B 25抽2）。
+// 轰灭 B：2魏 22伤 + 伤残3（对标火球术 B 24抽2）。2026-09-17 同轮转消耗。
 registerSkill({
   id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'B', series: 'shock',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
+  keywords: ['exhaust'],
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;

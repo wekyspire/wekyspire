@@ -62,22 +62,28 @@ export class DealDamageInstruction extends BattleInstruction {
       this.result = { damage: 0, defenseBlocked: 0, shieldAbsorbed: 0, dealt: 0, targetDead: true, skipped: true };
       return true;
     }
-    // 结算原语未被取消 → 插入应用原语（子节点，同节拍内结算）。
-    // 类型 + 属性 + 来源 + 最终数字全部透传；结算明细经 result 回填给本原语的 POST 订阅。
-    const apply = new ApplyDamageInstruction({
-      source: this.source,
-      target,
-      amount: this.fixed ? this.amount : this.payload.damage,
-      pierce: this.fixed ? false : this.payload.pierce,
-      fixed: this.fixed,
-      type: this.type,
-      tags: this.tags,
-      skill: this.skill,
-    });
-    ctx.kernel.submitInstruction(apply, this);
-    // 应用原语被 veto（闪避/免死改判）→ 结算明细置零并标记 cancelled，
-    // 发动侧 POST 订阅（filter 读 dealt>0）天然忽略。
-    this.result = apply.result ?? {
+    // 结算原语未被取消 → 插入应用原语（子节点）。**两段式**（return false）：应用原语
+    // 连同其 POST 子树完整结算后本指令才完成——本原语的 POST 订阅才能读到回填后的
+    // 结算明细。旧版此处 return true：POST 先于子节点执行，result 恒为占位 0
+    // （dealt>0 类订阅全部静默失效：肾上腺素/以攻为守/炎魔/控火灼，2026-09-17 修）。
+    if (this._stage === 0) {
+      const apply = new ApplyDamageInstruction({
+        source: this.source,
+        target,
+        amount: this.fixed ? this.amount : this.payload.damage,
+        pierce: this.fixed ? false : this.payload.pierce,
+        fixed: this.fixed,
+        type: this.type,
+        tags: this.tags,
+        skill: this.skill,
+      });
+      this._apply = apply;
+      ctx.kernel.submitInstruction(apply, this);
+      return false;
+    }
+    // 应用原语被 veto（闪避/免死改判）→ 未执行、result 未置 → 结算明细置零并标记
+    // cancelled，发动侧 POST 订阅（filter 读 dealt>0）天然忽略。
+    this.result = this._apply.result ?? {
       damage: 0, defenseBlocked: 0, shieldAbsorbed: 0, dealt: 0, cancelled: true,
     };
     return true;

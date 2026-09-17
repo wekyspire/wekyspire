@@ -53,6 +53,10 @@ export function freshHistory() {
     // 本回合打出的卡 defId 明细（按打出顺序）——「打出过 N 张瞬击/火牌」类判据用；
     // 只在 turn 级有意义（battle 级不累计，freshHistory 共用工厂照带一份无害）。
     playedCards: [],
+    // 本回合累计消耗的魏启（实付量：X 费全押/透支/减免都按 clamp 后真值）——
+    // 「每消耗过 N 蓝回 M 蓝」类引擎卡（余热系列）的读数口径；由 battleRoot 的
+    // core:manaLedger 订阅累加，resetTurnHistory 随回合重置。
+    manaConsumed: 0,
   });
   return { turn: counters(), battle: counters() };
 }

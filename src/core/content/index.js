@@ -13,6 +13,7 @@ import './fireExpansionSkills.js';
 import './woodSkills.js';
 import './airSkills.js';
 import './commonSkills.js';
+import './gmSkills.js';
 import './enemies.js';
 import './allies.js';
 import './abilities.js';

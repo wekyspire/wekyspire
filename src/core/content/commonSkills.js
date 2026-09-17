@@ -230,8 +230,8 @@ stimulant('fullStimulant', '充分激发', 'B', 1, 2);
 
 // ---- 灵能护盾系列（MP 换纯护盾，2026-09 设计稿新增）----
 
-// 灵力护盾 C / 灵能护盾 B：2MP，冷却1：12/18 护盾。通用包的纯防御位——
-// 无纳气、无格挡，性价比随等阶拉开。
+// 灵力护盾 C / 灵能护盾 B：2MP，冷却1：10/16 护盾。通用包的纯防御位——
+// 无纳气、无格挡，性价比随等阶拉开。2026-09-17 用户定削 2（原 12/18）。
 const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
   cost: { mana: 2, actionPoint: 0 },
@@ -244,8 +244,8 @@ const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-psiShield('psiShield', '灵力护盾', 'C', 12, 'greaterPsiShield');
-psiShield('greaterPsiShield', '灵能护盾', 'B', 18);
+psiShield('psiShield', '灵力护盾', 'C', 10, 'greaterPsiShield');
+psiShield('greaterPsiShield', '灵能护盾', 'B', 16);
 
 // ---- §2 散卡 ----
 

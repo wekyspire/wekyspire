@@ -13,6 +13,7 @@ import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
 import { TurnStartInstruction } from './turn.js';
 import { DealDamageInstruction, ClearShieldInstruction } from './combat.js';
+import { ConsumeManaInstruction } from './resources.js';
 
 // 战斗根指令：完成 = 战斗结束。子节点固定为 战前 → 回合循环 → 战后。
 export class BattleRootInstruction extends BattleInstruction {
@@ -142,6 +143,20 @@ export class PreBattleInstruction extends BattleInstruction {
           }
         },
         owner: 'core:shieldReset',
+      });
+
+      // 本回合魏启消耗台账（余热系列「每消耗过 N 蓝回 M 蓝」的读数源）：只记实付
+      // （result.consumed，X 费/透支/减免后均为 clamp 真值），回合开始随
+      // resetTurnHistory 归零。回蓝（GainMana）不入账——只数消耗方向。
+      ctx.kernel.addSubscription({
+        when: ConsumeManaInstruction,
+        phase: 'post',
+        priority: -60, // 最后记账：其余 POST 反应先跑，读到的是本拍之前的台账
+        filter: (instr) => (instr.result?.consumed ?? 0) > 0,
+        react: (instr, c) => {
+          c.battleState.history.turn.manaConsumed += instr.result.consumed;
+        },
+        owner: 'core:manaLedger',
       });
 
       // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；
