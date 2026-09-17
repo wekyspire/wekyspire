@@ -133,7 +133,7 @@ export function finishBattle(run, verdict, battle = null) {
     }
     run.gameStage = 'reward';
     // 奖励事件通道（用户 2026-09-14 定）：Boss/精英战后是「纯奖励事件」——卡包分布按
-    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出白名单 S；精英 → B：2 级表），
+    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出 S；精英 → B：2 级表），
     // 保证这些场景总能开出高阶卡。encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
     const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
     const isEliteFight = (run.encounter ?? []).some(e => getEnemyDefinition(defIdOf(e))?.difficulty?.elite);

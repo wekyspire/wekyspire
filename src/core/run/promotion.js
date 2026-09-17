@@ -21,11 +21,16 @@ export function promotionTargets(def) {
   return ids.filter(hasSkill);
 }
 
-// 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）
+// 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
+// S 阶不可经晋升获得（2026-09 定）：训练场/营地/老虎机升级一律到不了 S——晋升链
+// 本身保留（作为未来特殊事件的升 S 通道数据），S 的常规来源只有卡包直出。
 export function gatedPromotionTargets(run, def) {
   const cap = TIER_RANK[maxRewardTier(run, packOf(def))] ?? Infinity;
-  return promotionTargets(def).filter(id =>
-    (TIER_RANK[getSkillDefinition(id).tier] ?? Infinity) <= cap);
+  return promotionTargets(def).filter(id => {
+    const target = getSkillDefinition(id);
+    if (target.tier === 'S') return false;
+    return (TIER_RANK[target.tier] ?? Infinity) <= cap;
+  });
 }
 
 // deck 内某张 runtime 是否可升级（需传 run 以过等阶门禁）

@@ -368,8 +368,10 @@ const horizontalCleave = (id, name, tier, damage, promotesTo = null) => register
   describe: () => `群伤${damage}`,
   battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}`,
 });
-horizontalCleave('cleave', '横劈', 'D', 8, 'skyCleave');
-horizontalCleave('skyCleave', '裂空劈', 'C', 11, 'huashanCleave');
+// 注意 C 阶 id 不得撞斩链 S「开天斩」skyCleave（2026-09 修复：原误用同 id，
+// 注册表对重复 id 静默覆盖，导致开天斩被裂空劈顶掉、斩链升到第五阶串线）
+horizontalCleave('cleave', '横劈', 'D', 8, 'riftCleave');
+horizontalCleave('riftCleave', '裂空劈', 'C', 11, 'huashanCleave');
 horizontalCleave('huashanCleave', '力劈华山', 'B', 14);
 
 // ==== 飞刀系列（邻牌献祭）======================================================
