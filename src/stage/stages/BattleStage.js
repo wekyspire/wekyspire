@@ -418,6 +418,7 @@ export class BattleStage {
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
     this._updateDoomMarks();   // 将弃名单随快照变化（新视图补挂/离场视图摘除）
+    this._updateLockMarks();   // 锁定名单随快照变化（常驻标记，同上对账）
   }
 
   _syncUnits(proj) {
@@ -860,6 +861,9 @@ export class BattleStage {
     // 此前战斗层写的是「移除」）；候选与意图都由 kit 的 UPGRADE_SOURCES 表给出。
     return this._pickerKit.openUpgradePicker('bossRemove', this._panelSnap);
   }
+
+  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
+  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
 
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
@@ -1878,6 +1882,18 @@ export class BattleStage {
     for (const [id, view] of this._views) {
       const on = !!victims?.has(id);
       if (!!view._doomOn !== on) { view._doomOn = on; view.setDoomMark(on); }
+    }
+  }
+
+  // 「锁定」标记（无人战体「解除威胁/反反反反制」）：被锁定的手牌挂琥珀四角括号
+  // （CardFxLayer.setLocked）——常驻展示（区别于将弃的 hover 触发：锁定持续整个回合，
+  // 玩家要看着它决定打出还是留下）。名单来自投影 hand[].locked。
+  _updateLockMarks() {
+    const locked = this._snapshot?.hand?.filter(c => c.locked) ?? null;
+    const set = locked?.length ? new Set(locked.map(c => c.uniqueID)) : null;
+    for (const [id, view] of this._views) {
+      const on = !!set?.has(id);
+      if (!!view._lockOn !== on) { view._lockOn = on; view.setLockMark(on); }
     }
   }
 

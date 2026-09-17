@@ -13,10 +13,10 @@ import { gainMaxMana, gainMaxHp } from './prep.js';
 // 而不是靠后续单张奖励慢慢凑。
 // 门槛数值全部占位（§9 留坑），能力授予池当前最小化为空。
 
-// 可升级维度：木/空灵脉内容待实装，先屏蔽（用户 2026-09 定）；内容落地后加回。
+// 可升级维度：木/空灵脉内容已实装（2026-09-14，WOOD/AIR_VEIN_CARDS），三维度全开放。
 // 体修不再是灵脉维度——它走隐藏的 player.bodyLevel（进阶事件「跳过」时 +1）。
 // player.leino 仍保留四键（旧档兼容），totalLeino 照旧求和（body 恒 0）。
-export const LEINO_DIMENSIONS = ['fire'];
+export const LEINO_DIMENSIONS = ['fire', 'wood', 'air'];
 
 export const ASCENSION_PLACEHOLDER = {
   firstTrainings: 1,    // 首进阶门槛：第 2 层训练房即触发（快速特化，用户 2026-09 定）
@@ -34,6 +34,8 @@ export const SEED_OFFERING = Object.freeze({ cards: 9, picks: 3, rerolls: 1 });
 // 改为获赠直发后该标记移除——九选三回到纯自选，不再强制复发已有基石。
 export const FIRST_ASCENSION_GRANT = Object.freeze({
   fire: Object.freeze({ cards: ['inflame', 'fireBolt'], ability: 'fireVein' }),
+  wood: Object.freeze({ cards: ['poisonSting', 'breathOfLife'], ability: 'woodVein' }),
+  air: Object.freeze({ cards: ['windBlade', 'atEase'], ability: 'airVein' }),
 });
 
 // 种子池排除表：需要前置储备才生效的「组合件」出在九选三里等于废牌。
@@ -47,6 +49,8 @@ const SEED_EXCLUDED = new Set([
   'fireControlSpread', 'fireControlHarvest', 'fireControlDisturb',
   'fireControlDetonate', 'fireControlGather', 'fireControlRefine', 'fireControlSupreme',
   'heatSurge', 'meltFlame', 'mirrorBurn', 'flameHeal', 'patience',
+  // 扩容批（2026-09-14）：需燃烧储备的收割/条件件（燃爆/回火/热浪——同激热/焰愈口径）
+  'burnSnap', 'backfire', 'heatWave',
   // 体修：花刀/飞刀系（吃手牌与邻位）、呼吸系（吃弃牌）、培植/开刃/砺刀系（吃刀法牌）、
   // 斩进阶链（只经转化获得）、纯格挡转化（壁垒系）、完美门槛卡（精准一击/精心一击）、
   // 手牌数量条件咏唱（以无胜有/以有胜无）
@@ -56,8 +60,12 @@ const SEED_EXCLUDED = new Set([
   'whetstone', 'honeEdgeMid', 'razorEdge', 'honeEdge', 'annihilatingEdge', 'practiceBlade',
   'bladeArt', 'bladeHeart',
   'barrier', 'fortress', 'bronzeCity', 'soulOfWar',
+  // 扩容批（2026-09-14）：混元需弃牌引擎储备（同呼吸系口径）
+  'hunYuan',
   'perfectStrike', 'carefulStrike',
   'fastRain', 'fastWind', // 需大回合铺垫才生效，种子池里是废牌
+  // 木灵脉：卖血卡（0 练度卖血是负收益——血祭/血藤都带 'blood'）
+  'bloodSacrifice', 'bloodVine',
 ]);
 
 export function totalLeino(run) {
@@ -76,13 +84,22 @@ export function ascensionReady(run) {
 }
 
 // 能力授予池（2026-09-13 实装，设计稿 FIRE_VEIN_CARDS §1.4/§2.3 + BODY §1.4/§2.5/§3.4）：
-//   灵脉 2 级 → 该维度**精英**池；3 级 → **大师**池；体修看隐藏 bodyLevel（同门槛）。
+//   灵脉 2 级 → 该维度**精英**池；3 级 + 体系内已持 ≥2 精英 → **大师**池（2026-09-14
+//   用户定：大师需双精英垫背，不再是等级一到就开的捷径）；体修看隐藏 bodyLevel（同门槛）。
 // 每次进阶至多授予一项（对话选择制）；已持有的不再出现，同池其余能力留给后续进阶
 // 慢慢取（设计：一局后期约可解锁两个子体系卡池——想多取就得多投入进阶机会）。
 const ABILITY_POOLS = Object.freeze({
   fire: Object.freeze({
     elite: Object.freeze(['pyroBlast', 'fireWard', 'scorchVein', 'fireBlower']),
     master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
+  }),
+  wood: Object.freeze({
+    elite: Object.freeze(['renew', 'blightLord']),
+    master: Object.freeze(['forestHeart', 'plagueSource']),
+  }),
+  air: Object.freeze({
+    elite: Object.freeze(['galeFury', 'wanderClouds']),
+    master: Object.freeze(['windLord', 'voidness']),
   }),
   body: Object.freeze({
     elite: Object.freeze(['boxer', 'bladeMaster', 'warrior', 'parryFist', 'bladeUnity']),
@@ -91,22 +108,25 @@ const ABILITY_POOLS = Object.freeze({
 });
 
 // 能力授予候选：按当前修为聚合「已达标且未持有」的能力（授予幕间据此出选项）。
-// 大师能力双铁律（2026-09-13 用户定）：①前置精英未持有则大师不入选（def.requires）；
-// ②已持有的能力永不重复入选（下方 filter；chooseAscensionAbility 落账侧另有防御）。
+// 大师能力三铁律：①前置精英未持有则大师不入选（def.requires）；②已持有的能力
+// 永不重复入选（下方 filter；chooseAscensionAbility 落账侧另有防御）；③**体系内
+// 已持有 ≥2 个精英能力才开大师池**（2026-09-14 用户定：此前只看等级——第二次拿
+// 能力就能直接拿大师，超模；大师必须有双精英垫背，成为体系深耕的终点而非捷径）。
 export function abilityOffering(run) {
   const p = run?.player;
   if (!p) return [];
   const out = [];
+  const ownedElites = (dim) => ABILITY_POOLS[dim].elite.filter(id => p.abilities.includes(id)).length;
   for (const dim of LEINO_DIMENSIONS) {
     const pool = ABILITY_POOLS[dim];
     if (!pool) continue;
     const lv = p.leino?.[dim] ?? 0;
     if (lv >= 2) out.push(...pool.elite);
-    if (lv >= 3) out.push(...pool.master);
+    if (lv >= 3 && ownedElites(dim) >= 2) out.push(...pool.master);
   }
   const bodyLv = p.bodyLevel ?? 0;
   if (bodyLv >= 2) out.push(...ABILITY_POOLS.body.elite);
-  if (bodyLv >= 3) out.push(...ABILITY_POOLS.body.master);
+  if (bodyLv >= 3 && ownedElites('body') >= 2) out.push(...ABILITY_POOLS.body.master);
   return [...new Set(out)].filter(id => {
     if (p.abilities.includes(id)) return false;
     const req = getAbilityDefinition(id)?.requires;
@@ -128,7 +148,8 @@ function chainTargets() {
   return targets;
 }
 
-// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡 + 进阶链只留链头
+// 该维度的种子池：D/C 基石卡 + 排除组合件 + 排除衍生/不可出池卡 + 进阶链只留链头。
+// 深入卡一律不进（种子包发生在首次进阶，此刻必无任何精英能力，门禁必然没开）。
 export function seedPool(run, dimension) {
   const chained = chainTargets();
   return allSkills().filter(def =>
@@ -136,6 +157,7 @@ export function seedPool(run, dimension) {
     && (def.tier === 'D' || def.tier === 'C')
     && def.canSpawnAsReward !== false
     && def.seedEligible !== false
+    && !def.deep
     && !SEED_EXCLUDED.has(def.id)
     && !chained.has(def.id));
 }
@@ -191,10 +213,13 @@ export function chooseSeedCards(run, defIds) {
 // ---- 进阶事件主流程 ----
 
 // 结算进阶事件。dimension = 灵脉维度 id，或 null = 「跳过」（体修隐藏等级 +1）。
-// 跳过不触发种子包（体修是初始体系，开局已有小 build），但同样消耗一次进阶机会、
-// 享受定量恢复与魏启上限提升——这是故事模式暗线（体修大成）的成长通道。
-// 第 7 轮裁决：跳过再 +3 生命上限——E 报告实测「跳过的账不值」（收益延迟到第 10 层、
-// 与灵脉首进阶即得 3 卡+能力差距过大），给跳过一根即时的、不依赖卡池的补偿杠杆。
+// 跳过不触发种子包（体修是初始体系，开局已有小 build），但同样消耗一次进阶机会
+// ——这是故事模式暗线（体修大成）的成长通道。
+// 跳过补偿（用户定 2026-09-14 收紧）：**只给 +3 生命上限与一次可选删卡**——不回血、
+// 不提魏启。体修吃**牌组纯净度**，删卡就是这条路线的成型资源；血量/魏启这类通用
+// 资源不再白送（此前四项全给，六路试玩里全跳过路线横扫 44/38/32 三席，「难成型、
+// 成型后极强」的定位倒挂成最易成型路线）。第 7 轮裁决的 +3 生命上限保留——跳过
+// 需要一根即时的、不依赖卡池的补偿杠杆。
 export function chooseAscension(run, dimension = null) {
   if (run.gameStage !== 'ascension') {
     throw new Error(`run 阶段不符：期望 'ascension'，实际 '${run.gameStage}'`);
@@ -206,14 +231,11 @@ export function chooseAscension(run, dimension = null) {
     throw new Error('进阶次数已封顶');
   }
   if (run.cardOffering) throw new Error('种子卡尚未选定');
+  // 能力授予待选时同一次进阶事件不可再点火——否则「跳过（留着能力抉择）→ dim 火」
+  // 一次事件吃两份奖励（shop 试玩报告抓出的双吃）；与上面种子卡守卫同一铁律。
+  if (run.ascensionOffer) throw new Error('能力授予尚未选定');
 
   run.player.ascensionCount += 1;
-  // 魏启上限提升：必须走 gainMaxMana（同时抬 baseStats）——直写会被下一场 PreBattle 的
-  // refreshRunModifiers 重算抹掉（2026-09-11 修的 bug：进阶 +1 实际上从未生效）。
-  gainMaxMana(run, ASCENSION_PLACEHOLDER.manaGain);
-  run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
-  // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「跳过/点火」无脑化，回满血留给 Boss 通关）
-  run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);
 
   if (dimension === null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）
@@ -224,6 +246,15 @@ export function chooseAscension(run, dimension = null) {
     run.pendingCardRemoval = (run.pendingCardRemoval ?? 0) + 1;
     return proceedAfterLevelUp(run);
   }
+
+  // 灵脉路径：+1 魏启上限并回满、定量回血——点火即时战力（跳过路径已不给这两项，
+  // 见函数头注释）。魏启上限提升必须走 gainMaxMana（同时抬 baseStats）——直写会被
+  // 下一场 PreBattle 的 refreshRunModifiers 重算抹掉（2026-09-11 修的 bug：进阶 +1
+  // 实际上从未生效）。
+  gainMaxMana(run, ASCENSION_PLACEHOLDER.manaGain);
+  run.player.mana = run.player.maxMana;                 // 全恢复（魏启）
+  // 生命定量恢复（2026-09 试玩反馈定案：全恢复使「点火」无脑化，回满血留给 Boss 通关）
+  run.player.hp = Math.min(run.player.maxHp, run.player.hp + ASCENSION_PLACEHOLDER.healAmount);
 
   run.player.leino[dimension] += 1;
   // 首次 0→1：获赠体系基石卡与体系能力（FIRE_VEIN_CARDS §0）→ 开种子包（九选三），

@@ -19,6 +19,7 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 import { getSkillDefinition } from '../skills/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { grantRelic } from './prep.js';
+import { promoteCard } from './promotion.js';
 import { recordEffect } from './runContext.js';
 
 /** 获得金币（amount ≤ 0 视为无事发生：不记账、不演出）。 */
@@ -91,6 +92,28 @@ export function gainCard(ctx, defId, { source = '' } = {}) {
   recordEffect(ctx, { kind: 'card', defId, name: def.name, source });
   ctx.presenter.showcase({ kind: 'card', defId, title: def.name, desc: source });
   return defId;
+}
+
+/**
+ * 卡牌晋升（局外升级）：晋升 deck 内一张卡 + 声明「卡牌升级」变身演出意图
+ * （原卡金闪变新卡后飞入牌库——Shell 在揭幕后排水播放，见 runShowcase）。
+ * @param targetId 分叉目标（缺省且多分叉时按 run.rng 随机取一条，同 promoteCard）
+ * @returns 晋升后的 runtime；无可用目标（内容缺省/被等阶门禁挡下）返回 null，内容自行叙述
+ */
+export function upgradeCard(ctx, uniqueID, targetId = null, { source = '' } = {}) {
+  const rt = ctx.run.player.deck.find(s => s.uniqueID === uniqueID);
+  if (!rt) throw new Error(`卡组中不存在该卡：${uniqueID}`);
+  const fromDefId = rt.defId;
+  const next = promoteCard(ctx.run, uniqueID, targetId);
+  if (!next) return null;
+  const fromName = getSkillDefinition(fromDefId).name;
+  const toDef = getSkillDefinition(next.defId);
+  recordEffect(ctx, { kind: 'upgrade', defId: next.defId, name: `${fromName}→${toDef.name}`, source });
+  ctx.presenter.showcase({
+    kind: 'cardUpgrade', fromDefId, toDefId: next.defId,
+    title: toDef.name, desc: `${fromName} → ${toDef.name}`,
+  });
+  return next;
 }
 
 // ---- 剧情旗标（故事模式的"记忆"；run 内存续，跨 run 的进度放 run.profile）----

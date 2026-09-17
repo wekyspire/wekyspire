@@ -1,5 +1,5 @@
 // 火灵脉·爆炎组合 + 通用散卡（FIRE_VEIN_CARDS §1、§3）。
-// 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 忍耐 / 回响烈焰·背水一战·放手一搏
+// 火球术 / 爆裂术 / 凝焰 / 高热 / 可燃 / 火雨 / 添柴 / 先发 / 熬焰 / 回响烈焰·背水一战·放手一搏
 // + 通用（火源归一/含焰术/膨胀/灭火/火焰精通/火焰眷顾）。
 //
 // 数值口径备注（全文件通用）：
@@ -12,15 +12,16 @@
 import { registerSkill, getSkillDefinition } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import BattleInstruction from '../kernel/BattleInstruction.js';
-import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction, BurnCardInstruction } from '../instructions/cards.js';
+import { DrawCardsInstruction, BurnCardInstruction, MoveCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
 import { applyBattleModifier } from '../run/prep.js';
+import { deactivateChant } from '../skills/helpers.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
-  drawCards, burnCard, requestHandSelection, selected, gainPower,
+  drawCards, burnCard, requestHandSelection, selected, gainPower, addCard,
 } from './cardKit.js';
 
 // ====================================================================
@@ -57,6 +58,7 @@ function cardConsumingMana(instr) {
 // ====================================================================
 
 // 火球系列工厂：N 魏启直伤（可多段）+ 抽牌。伤害走 F1 面板轨（见文件头）。
+// 2026-09-17 用户定：全系伤害 -1（爆裂链前期靠火球开路，只轻削不伤筋骨）。
 function fireBallCard({ id, name, tier, damage, hits = 1, draw, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireBall',
@@ -75,15 +77,15 @@ function fireBallCard({ id, name, tier, damage, hits = 1, draw, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}${hits > 1 ? `${hits}次` : ''}${draw ? `，抽${draw}` : ''}`,
   });
 }
-fireBallCard({ id: 'fireBolt', name: '火弹术', tier: 'D', damage: 15, draw: 1, promotesTo: 'fireArrow' });
-fireBallCard({ id: 'fireArrow', name: '火箭术', tier: 'C', damage: 15, draw: 2, promotesTo: 'fireBall' });
-fireBallCard({ id: 'fireBall', name: '火球术', tier: 'B', damage: 25, draw: 2 });
+fireBallCard({ id: 'fireBolt', name: '火弹术', tier: 'D', damage: 14, draw: 1, promotesTo: 'fireArrow' });
+fireBallCard({ id: 'fireArrow', name: '火箭术', tier: 'C', damage: 14, draw: 2, promotesTo: 'fireBall' });
+fireBallCard({ id: 'fireBall', name: '火球术', tier: 'B', damage: 24, draw: 2 });
 // 火球连发（A，多段分叉）与大火球术（A，单发大数字）是 B 位之后的两条并列分叉，
 // 不设 promotesTo（升阶链止于 B 的双选）。
-fireBallCard({ id: 'fireBarrage', name: '火球连发', tier: 'A', damage: 15, hits: 2, draw: 3 });
-fireBallCard({ id: 'greaterFireBall', name: '大火球术', tier: 'A', damage: 38, draw: 2 });
+fireBallCard({ id: 'fireBarrage', name: '火球连发', tier: 'A', damage: 14, hits: 2, draw: 3 });
+fireBallCard({ id: 'greaterFireBall', name: '大火球术', tier: 'A', damage: 37, draw: 2 });
 
-// 蓄热火球（C）：8 直伤；每次打出后**自身**伤害永久 +12（本场战斗内，其他卡
+// 蓄热火球（C）：7 直伤；每次打出后**自身**伤害永久 +12（本场战斗内，其他卡
 // 吃不到——平衡口径见 2026-09 反馈）。加成由 runtime.power 承载（伤害公式
 // 基数+面板+power 同源，卡面威力直读）；先结算本拍再+12：本次打出不享受。
 registerSkill({
@@ -92,12 +94,12 @@ registerSkill({
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
-    attackDamage(sctx, 8);
+    attackDamage(sctx, 7);
     gainPower(sctx, sctx.self, 12);   // 本拍结算完再+12：本次打出不享受（公共放缩节拍走 gainPower）
     return true;
   },
-  describe: () => '8伤害，/named{蓄热}（伤害+12）',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 8)}，/named{蓄热}（伤害+12）`,
+  describe: () => '7伤害，/named{蓄热}（伤害+12）',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 7)}，/named{蓄热}（伤害+12）`,
 });
 
 // ====================================================================
@@ -105,19 +107,25 @@ registerSkill({
 // ====================================================================
 
 // 爆裂术工厂。语义假设（设计稿「每消耗1魏启伤害+5。终止：30群伤」）：
-// - 发动（4魏启）仅点亮咏唱，无即时效果；发动费在订阅注册前结算，**不计入**蓄能。
+// - 发动（1魏启）仅点亮咏唱，无即时效果；发动费在订阅注册前结算，**不计入**蓄能。
 // - 激活期间玩家**任意来源**的魏启消耗（其他卡的费用、X 费全耗等）每 1 点为
 //   终止伤害 +系数（计数挂 skillRuntime，不藏闭包）。
 // - 「终止」= 咏唱熄灭（再次打出免费解除 / 离手），onDisable 时按 基数+蓄能
 //   对所有存活敌人打出群伤；熄灭路径由指令层统一走 deactivateChant，本卡不焚毁
 //   （无消耗关键词），解除后回牌库底。
-function burstChantCard({ id, name, tier, base, perMana }) {
-  registerSkill({
-    id, name, type: 'fire', tier, series: 'burst',
-    // 第 7 轮裁决：发动费 4→2 魏启（4 费点亮一张无即时收益的咏唱 = 整回合空转，没人点）
-    cost: { mana: 2, actionPoint: 0 },
+// 费用沿革：4（设计稿）→ 2（第 7 轮裁决）→ 1（2026-09-17 用户定：全系发动费 1，
+// 点亮即廉价、重点亮无负担——蓄能价值全部转移给「激活期间倾蓝」）。等阶阶梯
+// C→B→A→S：基伤 10/25/35/45 起跳，每魏蓄能 3/5/7/9。
+// 固有 + 咏唱2（2026-09-17 用户定）：终止需要「再打出一次」，激活的咏唱常驻手中
+// ——固有保证开局必在手（点一次管全场，不存在「池满了卡在库底」的干瞪眼）；
+// 代价是激活后占 2 个手位（吃咏唱压力是爆裂体系的本分）。
+function burstChantCard({ id, name, tier, base, perMana, promotesTo = null }) {
+  const def = {
+    name, type: 'fire', tier, series: 'burst',
+    cost: { mana: 1, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 1,
+    cardMode: 'chant', chantWeight: 2,
+    keywords: ['innate'],
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable
     activated: {
       // 激活演出自定（火焰橙——默认是金色脉冲，见 BattleStage _chantActivateBeat）
@@ -136,11 +144,282 @@ function burstChantCard({ id, name, tier, base, perMana }) {
     },
     describe: () => `每消耗1魏启，/named{终止}伤害+${perMana}。/named{终止}：${base}群伤`,
     battleDescribe: () => `每消耗1魏启，/named{终止}伤害+${perMana}；/named{终止}：${base}群伤`,
+  };
+  registerSkill({ ...def, id, promotesTo });
+  // 咏唱开销 0 镜像：「爆炸艺术——发现同阶爆裂术并将其咏唱开销置 0」的载体。
+  // **咏唱开销 = 咏唱值（chantWeight：激活后占手牌上限的权重），≠ 发动费**（用户
+  // 2026-09-17 纠正：咏唱0不等于0费）——镜像保持 1 费发动，但点亮后不占手牌压力，
+  // 蓄能期白嫖一个手位。咏唱值是定义级字段、无逐卡覆写通道，镜像化整为零
+  // （控火无上的 Zero 池同范式），不进奖励池。
+  registerSkill({
+    ...def, id: `${id}Unbound`,
+    chantWeight: 0,
+    canSpawnAsReward: false,
   });
 }
+// 烟花术（C，2026-09-17 用户新增）：爆裂链的低阶入口——此前系列 B 起步，前期
+// 卡包摸不到这条线。升阶接小爆裂（B）。
+burstChantCard({ id: 'fireworks', name: '烟花术', tier: 'C', base: 10, perMana: 3, promotesTo: 'smallBurst' });
 burstChantCard({ id: 'smallBurst', name: '小爆裂术', tier: 'B', base: 25, perMana: 5 });
 burstChantCard({ id: 'karadiaBurst', name: '卡拉狄亚爆裂术', tier: 'A', base: 35, perMana: 7 });
 burstChantCard({ id: 'qimingBlaze', name: '齐明天炎', tier: 'S', base: 45, perMana: 9 });
+
+// ====================================================================
+// §1.1 熔融 / 炎魔决（2026-09-17 用户新增：爆裂侧的高蓝耗大件）
+// ====================================================================
+
+// 熔融（B，4魏，消耗）：消耗自身所有燃烧，赋予所有敌人虚弱2，每消耗4层燃烧再+1。
+// 等阶未定档（用户口述「蓝耗高效果强的系列消耗卡」），暂挂 B——4 费在初始上限 3
+// 之下本就打不出，天然是进阶后的中期件。虚弱=每层攻击-1（全体削锋）：撑到爆裂
+// 终止收割的防御支柱；自燃烧是火系的代价货币（可燃血液/高热攒的层在此二次变现）。
+// 0 燃烧打出 = 只有基础虚弱2（不设门槛，不白退）。
+registerSkill({
+  id: 'meltDown', name: '熔融', type: 'fire', tier: 'B', series: 'melt',
+  cost: { mana: 4, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  use(sctx) {
+    const stacks = sctx.player.getEffectStacks('burn');
+    if (stacks > 0) addEffect(sctx, 'burn', -stacks);
+    const weak = 2 + Math.floor(stacks / 4);
+    for (const e of aliveEnemies(sctx.battleState)) addEffect(sctx, 'weaken', weak, e);
+    return true;
+  },
+  describe: () => '消耗自身所有/effect{燃烧}，赋予所有敌人/effect{虚弱}2，每消耗4层+1',
+  battleDescribe: (sctx) => {
+    const stacks = sctx.player.getEffectStacks('burn');
+    return `消耗自身所有/effect{燃烧}（当前${stacks}层）：全体/effect{虚弱}${2 + Math.floor(stacks / 4)}`;
+  },
+});
+
+// 炎魔决（A，6魏）：获得炎魔1——主级伤害每次命中附带燃烧1（效果 flameDemon，
+// 与体系能力同款、可叠层）。多段卡（火花/炽流/连珠火）与火球链每击皆触发，
+// 「撑到收割」的过程同时变成铺燃烧。6 费 > 初始上限 3：进阶/遗物抬上限后才可出
+// （canUse 费用门槛）——高蓝耗高收益的定位本体，非消耗（回库循环再见）。
+registerSkill({
+  id: 'flameDemonPact', name: '炎魔决', type: 'fire', tier: 'A', series: 'burst',
+  cost: { mana: 6, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  use(sctx) {
+    addEffect(sctx, 'flameDemon', 1);
+    return true;
+  },
+  describe: () => '获得/effect{炎魔}1',
+  battleDescribe: () => '获得/effect{炎魔}1',
+});
+
+// ====================================================================
+// §1.1 吃蓝量消耗系列（2026-09-17 用户第二批：爆裂术难找 → 补「消耗量变现」件）
+// ====================================================================
+
+// 爆炸艺术 C/B/A（3魏，消耗）：发现同阶爆裂术（咏唱开销 0 镜像）入手。定向检索位
+// ——爆裂链在奖励池稀缺（B 起步、仅四张），本系列保证「想玩爆裂就能摸到爆裂」；
+// 咏唱开销置 0 = 点亮后不占手牌上限权重（蓄能期白嫖手位，长蓄爆裂的真正痛点）。
+// 3 费本身同时喂已激活爆裂的蓄能（消耗即蓄能的双收口径，数值已按此压）。
+// 手牌满时 addCard 按 §7.3 降级入牌库。
+const BURST_TIER_TWIN = { C: 'fireworksUnbound', B: 'smallBurstUnbound', A: 'karadiaBurstUnbound', S: 'qimingBlazeUnbound' };
+function explosiveArtCard({ id, tier, promotesTo }) {
+  const twin = BURST_TIER_TWIN[tier];
+  registerSkill({
+    id, name: '爆炸艺术', type: 'fire', tier, series: 'explosiveArt',
+    cost: { mana: 3, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      if (twin) addCard(sctx, twin, { toZone: 'hand' });
+      return true;
+    },
+    describe: () => `/named{发现}/card{${twin}}（咏唱开销为0）`,
+    battleDescribe: () => `/named{发现}/card{${twin}}（咏唱开销为0）`,
+  });
+}
+explosiveArtCard({ id: 'explosiveArt', tier: 'C', promotesTo: 'explosiveArtPlus' });
+explosiveArtCard({ id: 'explosiveArtPlus', tier: 'B', promotesTo: 'explosiveArtMaster' });
+explosiveArtCard({ id: 'explosiveArtMaster', tier: 'A' });
+
+// 火焰旋风 C/B/A（0费，咏唱2，用户定）：激活期间每消耗 1 魏启，立刻造成一次
+// **次级（附级）群伤**（2/3/4——用户 2026-09-17 定档：主级太逆天）。次级 = 不吃
+// 攻击加成、不触发任何响应（炎魔附燃/控火灼/伤残/格挡都不连锁）——旋风是消耗的
+// 回声，不是攻击；与爆裂术同亮时同一笔消耗吃双份回报（蓄能 + 即时群伤）仍成立，
+// 但不再与炎魔互喂滚雪球。即时+可叠加是溢价，每点数值压在爆裂 deferred 系数之下。
+function fireWhirlCard({ id, tier, dmg, promotesTo }) {
+  registerSkill({
+    id, name: '火焰旋风', type: 'fire', tier, series: 'fireWhirl',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'chant', chantWeight: 2,
+    promotesTo,
+    use() { return true; },
+    activated: {
+      subscriptions: (sctx) => [{
+        when: ConsumeManaInstruction,
+        phase: 'post',
+        filter: (instr) => (instr.result?.consumed ?? 0) > 0,
+        react: (instr) => {
+          for (let i = 0; i < instr.result.consumed; i++) {
+            for (const e of aliveEnemies(sctx.battleState)) {
+              if (!e.isDead()) dealDamage(sctx, dmg, { target: e, type: 'minor', tags: ['aoe'] });
+            }
+          }
+        },
+      }],
+    },
+    describe: () => `每消耗1魏启，立刻造成${dmg}次级群伤`,
+    battleDescribe: () => `每消耗1魏启，立刻造成${dmg}次级群伤`,
+  });
+}
+fireWhirlCard({ id: 'fireWhirl', tier: 'C', dmg: 2, promotesTo: 'fireWhirlPlus' });
+fireWhirlCard({ id: 'fireWhirlPlus', tier: 'B', dmg: 3, promotesTo: 'fireWhirlMaster' });
+fireWhirlCard({ id: 'fireWhirlMaster', tier: 'A', dmg: 4 });
+
+// 余热 C/B/A/S（0费，消耗，用户定档）：本回合每消耗过 N 蓝回复 M 蓝——
+// C 4/2、B 3/2、A 3/3、S 3/4。读 history.turn.manaConsumed（core:manaLedger
+// 台账，实付口径），打出时点快照（之后的消耗不追溯）；回蓝是 Gain，不入台账、
+// 不计爆裂蓄能——余热只回收已发生的消耗，自身不制造消耗事件（防自馈循环）。
+// S 位不进直出白名单：只能 A 升阶拿到（余热是引擎件，白名单留给身份卡）。
+function residualHeatCard({ id, tier, per, back, promotesTo }) {
+  registerSkill({
+    id, name: '余热', type: 'fire', tier, series: 'residualHeat',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      const consumed = sctx.battleState.history.turn.manaConsumed ?? 0;
+      const refund = Math.floor(consumed / per) * back;
+      if (refund > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: refund }));
+      return true;
+    },
+    describe: () => `本回合每消耗过${per}魏启，回复${back}魏启`,
+    battleDescribe: (sctx) => {
+      const consumed = sctx.battleState.history.turn.manaConsumed ?? 0;
+      return `本回合已消耗${consumed}魏启：回复${Math.floor(consumed / per) * back}魏启`;
+    },
+  });
+}
+residualHeatCard({ id: 'residualHeat', tier: 'C', per: 4, back: 2, promotesTo: 'residualHeatPlus' });
+residualHeatCard({ id: 'residualHeatPlus', tier: 'B', per: 3, back: 2, promotesTo: 'residualHeatMaster' });
+residualHeatCard({ id: 'residualHeatMaster', tier: 'A', per: 3, back: 3, promotesTo: 'residualHeatStar' });
+residualHeatCard({ id: 'residualHeatStar', tier: 'S', per: 3, back: 4 });
+
+// 火焰淬炼 C/B（3魏，冷却1）：立刻回复 3/4 魏启，并获得 4 护盾——萃取系列的火系
+// 镜像，效果弱一档（盾 4 vs 12、蓝量 -1）换「不延迟一回合」（萃取走纳气 = 下回合
+// 开闸）。盾是用户 2026-09-17 补的兜底位：没有蓝耗引擎（无爆裂/旋风/余热可喂）时
+// 它也是一张 3 换 3 蓝 + 4 盾的可用功能卡，不至于变成死牌。净蓝量为零（3 换 3），
+// 在爆裂体系里「消耗 3」本身就是燃料：喂蓄能/旋风/余热台账——一次过蓝多份回报。
+function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
+  registerSkill({
+    id, name, type: 'fire', tier, series: 'fireTemper',
+    cost: { mana: 3, actionPoint: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal', targetMode: 'none',
+    promotesTo,
+    use(sctx) {
+      sctx.kernel.submitInstruction(new GainManaInstruction({ amount: mana }));
+      gainShield(sctx, shield);
+      return true;
+    },
+    describe: () => `立刻回复${mana}魏启，${shield}护盾`,
+    battleDescribe: () => `立刻回复${mana}魏启，${shield}护盾`,
+  });
+}
+fireTemperCard({ id: 'fireTemper', name: '火焰淬炼', tier: 'C', mana: 3, shield: 4, promotesTo: 'fireTemperPlus' });
+fireTemperCard({ id: 'fireTemperPlus', name: '烈焰淬炼', tier: 'B', mana: 4, shield: 4 });
+
+// 烫手 C/B/A（2魏，用户定）：抽 4/5/6，**冷却 1**（2026-09-17 用户裁决补挂：非
+// 消耗 + FIFO 回库 = 每轮必再见，2 蓝买 4~6 张的周转率会滚成永动式过牌引擎，
+// 冷却限频保住「烫手山芋扔了又回来」的循环意象）——爆裂体系的过牌引擎（此前
+// 火系可持续过牌只有火球链的抽 1~3，撑不起高蓝耗卡组的手牌吞吐）。刻意的高斜率：
+// 抽到的牌仍要付蓝/AP 才变现，手牌上限（6 起步）是天然刹车；对标大火球 2 魏 37
+// 伤抽 2 的「费用换资源」档。
+function hotHandsCard({ id, tier, draw, promotesTo }) {
+  registerSkill({
+    id, name: '烫手', type: 'fire', tier, series: 'hotHands',
+    cost: { mana: 2, actionPoint: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal', targetMode: 'none',
+    promotesTo,
+    use(sctx) {
+      drawCards(sctx, draw);
+      return true;
+    },
+    describe: () => `抽${draw}`,
+    battleDescribe: () => `抽${draw}`,
+  });
+}
+hotHandsCard({ id: 'hotHands', tier: 'C', draw: 4, promotesTo: 'hotHandsPlus' });
+hotHandsCard({ id: 'hotHandsPlus', tier: 'B', draw: 5, promotesTo: 'hotHandsMaster' });
+hotHandsCard({ id: 'hotHandsMaster', tier: 'A', draw: 6 });
+
+// ====================================================================
+// §1.1 爆裂防御（2026-09-17 用户定稿：沉默 + 泄压阀）
+// ====================================================================
+
+// 沉默 C/B/A（0费，消耗）：终止你激活的**所有**咏唱卡，获得 9/13/17 护盾——爆裂
+// 体系的专用防卡兼**远程引爆器**：终止走指令层统一熄灭路径（deactivateChant →
+// 各咏唱自己的 onDisable），爆裂术的终止群伤由它代为引爆；不止爆裂，可燃血液/
+// 旋风等一切激活咏唱一并熄灭——沉默之名。当回合即时盾是火系「铺垫型防御」里
+// 唯一的大盾位；代价是烧掉全部咏唱引擎（熄灭的卡回牌库底、要再摸回再点亮，
+// 引擎重启成本即其 balancing）。
+function silenceCard({ id, tier, shield, promotesTo }) {
+  registerSkill({
+    id, name: '沉默', type: 'fire', tier, series: 'silence',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      for (const c of [...sctx.battleState.zones.hand]) {
+        if (c.isActivated) deactivateChant(sctx, c, 'silenced');
+      }
+      gainShield(sctx, shield);
+      return true;
+    },
+    describe: () => `终止你激活的所有咏唱，获得${shield}护盾`,
+    battleDescribe: (sctx) => {
+      const n = sctx.battleState.zones.hand.filter(c => c.isActivated).length;
+      return `终止你激活的所有咏唱（${n}张），获得${shield}护盾`;
+    },
+  });
+}
+silenceCard({ id: 'silence', tier: 'C', shield: 9, promotesTo: 'silencePlus' });
+silenceCard({ id: 'silencePlus', tier: 'B', shield: 13, promotesTo: 'silenceMaster' });
+silenceCard({ id: 'silenceMaster', tier: 'A', shield: 17 });
+
+// 泄压阀 C/B/A（X魏，消耗）：每消耗 1 魏启获得 5/6/7 护盾（B 位 6/魏 为原定档，
+// 两侧 +1 成阶）——即时、可调档的防御位，而这笔消耗照常喂爆裂蓄能/旋风/余热
+// 台账：一张把防御买成引擎燃料的卡。每魏对标：灵力/灵能护盾 5~8/魏（非消耗、
+// 定值）、火焰精通 3/魏（永续咏唱）——泄压阀居中，消耗+弹性是它的档位语言。
+// 原案名「泄洪」（洪联想水，不合火系主题，用户 2026-09-17 更名）。
+function reliefValveCard({ id, tier, perMana, promotesTo }) {
+  registerSkill({
+    id, name: '泄压阀', type: 'fire', tier, series: 'relief',
+    cost: { mana: 'X', actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      const X = sctx.self.xCost?.mana ?? 0;
+      if (X > 0) gainShield(sctx, X * perMana);
+      return true;
+    },
+    describe: () => `每消耗1魏启，获得${perMana}护盾`,
+    battleDescribe: (sctx) => {
+      const X = sctx.self.xCost?.mana ?? sctx.player.mana; // 未打出时按当前魏启预估
+      return `获得${X * perMana}护盾（${X}魏启全耗）`;
+    },
+  });
+}
+reliefValveCard({ id: 'reliefValve', tier: 'C', perMana: 5, promotesTo: 'reliefValvePlus' });
+reliefValveCard({ id: 'reliefValvePlus', tier: 'B', perMana: 6, promotesTo: 'reliefValveMaster' });
+reliefValveCard({ id: 'reliefValveMaster', tier: 'A', perMana: 7 });
 
 // ====================================================================
 // §1.1 凝焰系列（X魏启 = 消耗所有现有魏启，NAMED「消耗为X」）
@@ -249,7 +528,8 @@ kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', 
 // §1.1 火雨系列（低耗群伤）
 // ====================================================================
 
-// 火雨（C）：3魏启，对所有敌人 12 伤害（每敌一枚 aoe 标记指令）。
+// 火雨（C）：3魏启，对所有敌人 14 伤害（每敌一枚 aoe 标记指令）。
+// 2026-09-17 用户定 +2（原 12：单敌 4/魏明显低于火球锚，群伤系列裸值小幅回填）。
 registerSkill({
   id: 'fireRain', name: '火雨', type: 'fire', tier: 'C', series: 'fireRain',
   cost: { mana: 3, actionPoint: 0 },
@@ -257,10 +537,10 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo: 'fireStream',
   use(sctx) {
-    aoeDamage(sctx, 12, enemyTarget(sctx));
+    aoeDamage(sctx, 14, enemyTarget(sctx));
     return true;
   },
-  describe: () => '群伤12',
+  describe: () => '群伤14',
 });
 
 // 火流（A）：两波群伤。分两个 stage 提交——第二波提交时重读存活敌人，
@@ -271,10 +551,10 @@ registerSkill({
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx, stage) {
-    aoeDamage(sctx, 12, enemyTarget(sctx));
+    aoeDamage(sctx, 14, enemyTarget(sctx));
     return stage === 0 ? false : true; // stage 0 第一波，stage 1 第二波（重读存活）
   },
-  describe: () => '群伤12×2',
+  describe: () => '群伤14×2',
 });
 
 // ====================================================================
@@ -398,21 +678,21 @@ firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'B', damage: 
 // 「免费开路 + 滤牌」的先发身份，但不再是一抓即赢的比率。升阶 delta 保持 +4。
 
 // ====================================================================
-// §1.1 散卡·忍耐（燃烧受伤转魏启）
+// §1.1 散卡·熬焰（燃烧受伤转魏启；2026-09-14 由「忍耐」更名——让位拆组合机制词）
 // ====================================================================
 
-// 忍耐（C，咏唱1）：激活期间每**累计**受到 5 点燃烧伤害回 1 魏启，余数保留
+// 熬焰（C，咏唱1）：激活期间每**累计**受到 5 点燃烧伤害回 1 魏启，余数保留
 // （计数挂 skillRuntime，跨回合累积；重复熄灭/再激活不清零——计数属于卡牌身份）。
 // 读 result.dealt（燃烧为固定伤害，dealt 即护盾吸收后的实际生命损失；被防火 veto 的结算无 POST）。
 registerSkill({
-  id: 'patience', name: '忍耐', type: 'fire', tier: 'C', series: 'patience',
+  id: 'patience', name: '熬焰', type: 'fire', tier: 'C', series: 'patience',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'post',
       filter: (instr) => instr.target === sctx.player && instr.tags?.includes('burn'),
       react: (instr, ctx) => {
@@ -530,6 +810,34 @@ registerSkill({
   describe: () => '抽5，焚毁牌库中所有卡，每张回复2魏启',
   battleDescribe: (sctx) =>
     `抽5，焚毁牌库中所有卡（现存${sctx.battleState.zones.deck.length}张），每张回复2魏启`,
+});
+
+// 烟花秀（A，消耗，深入，2026-09-17 用户定稿）：抽出牌库中**所有**爆裂术——爆裂
+// 体系后期成长的最后拼图：多张爆裂同亮分层蓄能（每张独立池），配合沉默/自解除
+// 的收割节奏全部握在手里。「抽出」术语首个用例（定向检索：牌库没有则无事发生，
+// 不白给不空转）；满手按 §7.3 降级入牌库（MoveCardInstruction 自带）。Unbound
+// 镜像同属 burst 系列，万一经降级落过牌库也一并抽出（无差别待遇）。
+registerSkill({
+  id: 'fireworkShow', name: '烟花秀', type: 'fire', tier: 'A', series: 'depth', deep: 'burst',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  keywords: ['exhaust'],
+  use(sctx) {
+    // 提交不即执行（子节点在收尾后跑），快照仅为防御性写法
+    for (const c of [...sctx.battleState.zones.deck]) {
+      if (getSkillDefinition(c.defId)?.series === 'burst') {
+        sctx.kernel.submitInstruction(new MoveCardInstruction({ uniqueID: c.uniqueID, toZone: 'hand' }));
+      }
+    }
+    return true;
+  },
+  describe: () => '/named{抽出}牌库中所有爆裂术',
+  battleDescribe: (sctx) => {
+    const n = sctx.battleState.zones.deck
+      .filter(c => getSkillDefinition(c.defId)?.series === 'burst').length;
+    return `/named{抽出}牌库中所有爆裂术（现存${n}张）`;
+  },
 });
 
 // ====================================================================

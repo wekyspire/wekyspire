@@ -72,11 +72,13 @@ export function isFirstPlayThisTurn(sctx) {
 
 // 造成伤害。amount 已是最终数值（攻击卡请先过 attackAmount）。
 // 伤害指令携带 skill 引用（sctx.self）——「第一张火灵脉攻击牌」之类的能力按它反查卡定义。
+// type：'major' 主级（缺省，出牌直接伤害）| 'minor' 附级（反伤/抽卡伤害/tick 等被动伤害，
+// 不吃任何加成、不触发任何响应——见 instructions/combat.js 两原语注释）。
 export function dealDamage(sctx, amount, {
-  target = null, pierce = false, fixed = false, tags = [], source = sctx.player,
+  target = null, pierce = false, fixed = false, tags = [], source = sctx.player, type = 'major',
 } = {}) {
   const instr = new DealDamageInstruction({
-    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self,
+    source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self, type,
   });
   sctx.kernel.submitInstruction(instr);
   return instr;
@@ -85,6 +87,17 @@ export function dealDamage(sctx, amount, {
 // 攻击伤害：基数自动叠加攻击面板与 power
 export function attackDamage(sctx, base, opts = {}) {
   return dealDamage(sctx, attackAmount(sctx, base), opts);
+}
+
+// 群伤原语：对每个存活敌人一枚 aoe 标记攻击（面板/power 逐枚结算）；返回命中敌人数。
+// 体修扫腿/刀组横劈共用（火系 aoeDamage 是「选定敌人最后命中」的局部特化，不复用）。
+export function aoeAttack(sctx, base) {
+  let struck = 0;
+  for (const e of aliveEnemies(sctx.battleState)) {
+    attackDamage(sctx, base, { target: e, tags: ['aoe'] });
+    struck++;
+  }
+  return struck;
 }
 
 /**

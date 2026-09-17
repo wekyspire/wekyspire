@@ -2,6 +2,7 @@ import { createRunState } from '../state/runState.js';
 import { createBattle } from '../flow/battle.js';
 import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
+import { getEnemyDefinition } from '../enemies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
 import { ensureShopStock, isShopFloor } from './rooms/shop.js';
@@ -90,8 +91,13 @@ export function enterBattle(run) {
 // 按当前 run 装配战斗单位与种子。单一事实源：headless（createRunBattle）与
 // 真实游戏（runController → createBridge）共用，瑞米出战/种子派生规则改一处即可。
 export function assembleBattle(run) {
+  const enemies = run.encounter.map(spawnEnemy); // 描述符（楼层缩放终值）| 裸 id（测试直塞兼容）
+  // 敌人开局被动（2026-09-14 第四章高压敌）：onSpawn(unit, enemies) 在进战斗前执行——
+  // 持盾像的群体初始盾要赶在玩家先手前生效（真·抗首回合爆发）。战斗内时点的开局特性
+  // （塞牌类）不走此钩子，走敌方首拍行动（AddCard 只有战斗内才有 zones 可落）。
+  for (const unit of enemies) getEnemyDefinition(unit.defId)?.onSpawn?.(unit, enemies);
   return {
-    enemies: run.encounter.map(spawnEnemy), // 描述符（楼层缩放终值）| 裸 id（测试直塞兼容）
+    enemies,
     allies: run.remi.drivenOff ? [] : [getAllyDefinition('remi').createUnit()],
     seed: deriveBattleSeed(run.seed, run.floor),
   };
@@ -126,7 +132,12 @@ export function finishBattle(run, verdict, battle = null) {
       if (relicId) grantRelic(run, relicId);
     }
     run.gameStage = 'reward';
-    spawnRewards(run);
+    // 奖励事件通道（用户 2026-09-14 定）：Boss/精英战后是「纯奖励事件」——卡包分布按
+    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出白名单 S；精英 → B：2 级表），
+    // 保证这些场景总能开出高阶卡。encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
+    const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
+    const isEliteFight = (run.encounter ?? []).some(e => getEnemyDefinition(defIdOf(e))?.difficulty?.elite);
+    spawnRewards(run, { minTier: isBossFloor(run.floor) ? 'A' : (isEliteFight ? 'B' : null) });
   } else {
     run.gameStage = 'end';
     run.result = 'defeat';

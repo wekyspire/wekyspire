@@ -29,5 +29,18 @@ export function writeSession(name, data) {
   // 原子写（tmp+rename）：读侧不再可能拿到半个文件
   const tmpFile = `${sessionPath(name)}.tmp-${process.pid}`;
   fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
-  fs.renameSync(tmpFile, sessionPath(name));
+  // Windows 上 rename 偶发 EPERM（杀毒/索引器瞬时锁，试玩实报）——短退避重试几次即可，
+  // 失败重试不污染状态（tmp 文件按 pid 命名，重写同一路径）
+  let lastErr = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      fs.renameSync(tmpFile, sessionPath(name));
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (e?.code !== 'EPERM' && e?.code !== 'EBUSY') throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30 * (attempt + 1));
+    }
+  }
+  throw lastErr;
 }

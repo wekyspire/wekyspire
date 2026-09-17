@@ -16,7 +16,7 @@ import { draftRelics } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
 import {
   availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK,
-  packCardPool, tierWeight,
+  packCardPool, packLevel, packTierTable, tierCapOfLevel,
 } from '../rewards.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 
@@ -166,22 +166,19 @@ const TIER_ORDER = ['D', 'C', 'B', 'A', 'S'];
 /**
  * 货品的 hover 说明（纯文本 tooltip 载荷 { title, body }）。
  * 恢复药剂/苹果这类没有卡面的东西 **必须**有说明，否则玩家不知道买了会怎样（用户定 2026-09-12）；
- * 卡包则给出「随机 3 张 + 概率分布」——分布按 reward 的等阶加权口径实算（tierWeight 归一），
- * 与开包时的真实抽取同源，不写死数字。
+ * 卡包则给出「随机 3 张 + 概率分布」——分布按等级分布表（PACK_TIER_TABLE）在池内实际
+ * 存在的等阶上归一，与开包时的真实抽取同源，不写死数字。
  */
 export function shopItemTip(run, it) {
   if (!it) return null;
   if (it.kind === 'pack' && it.packId) {
-    const cap = maxRewardTier(run, it.packId);
-    const pool = packCardPool(run, it.packId, cap);
-    const byTier = new Map();
-    for (const d of pool) {
-      const w = tierWeight(d, cap);
-      if (w > 0 && !byTier.has(d.tier)) byTier.set(d.tier, w);
-    }
-    const total = [...byTier.values()].reduce((s, w) => s + w, 0);
-    const dist = TIER_ORDER.filter(t => byTier.has(t))
-      .map(t => `${t} 级 ${Math.round((byTier.get(t) / total) * 100)}%`)
+    const lv = packLevel(run, it.packId);
+    const pool = packCardPool(run, it.packId, tierCapOfLevel(lv));
+    const table = packTierTable(lv);
+    const tiers = TIER_ORDER.filter(t => pool.some(d => d.tier === t) && (table[t] ?? 0) > 0);
+    const total = tiers.reduce((s, t) => s + table[t], 0);
+    const dist = tiers
+      .map(t => `${t} 级 ${Math.round((table[t] / total) * 100)}%`)
       .join(' ｜ ');
     return {
       title: it.name ?? '卡包',

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>雪云陈列页</title>
+    <script>
+      window.__errs = [];
+      window.__ready = false;
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+      #cloud-canvas { display: block; }
+      #cloud-overlay {
+        position: fixed; top: 10px; left: 12px; pointer-events: none;
+        font: 13px/1.7 monospace; color: #cfd8e3;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+        max-height: calc(100vh - 20px); overflow-y: auto;
+      }
+      #cloud-overlay h1 { margin: 0 0 2px; font: 600 15px/1.4 monospace; color: #e8eef8; }
+      #cloud-overlay button {
+        pointer-events: auto; margin: 4px 4px 0 0; background: #10141f; color: #cfd8e3;
+        border: 1px solid #3a465c; border-radius: 4px; padding: 3px 10px; font: 12px monospace;
+      }
+      #cloud-knobs { margin-top: 8px; }
+      #cloud-knobs label { display: block; pointer-events: auto; font-size: 12px; }
+      #cloud-knobs input[type="range"] { pointer-events: auto; width: 170px; vertical-align: middle; }
+      #cloud-knobs .val { color: #8fa3bd; }
+    </style>
+  </head>
+  <body>
+    <div id="cloud-overlay">
+      <h1>雪云陈列页 · cloudGallery</h1>
+      <div id="cloud-info">fps —</div>
+      <div>
+        <button id="preset-under">云层下方</button>
+        <button id="preset-inside">云层内部</button>
+        <button id="preset-above">云层上方</button>
+        <button id="preset-tower">塔楼机位</button>
+      </div>
+      <div id="cloud-knobs"></div>
+      <div style="margin-top: 6px;">拖拽旋转 ｜ 滚轮推拉 ｜ Shift+滚轮 升降</div>
+    </div>
+    <script type="module" src="/src/debug/cloudGallery.js"></script>
+  </body>
+</html>

@@ -15,7 +15,7 @@ import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
-import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -75,14 +75,17 @@ flameHealSkill({ id: 'blazingHeal', name: '炽愈', tier: 'B', base: 7, per: 2 }
 flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'A', base: 10, per: 3 });
 
 // ==== 焚天系列（2026-09-12 设计稿改版：燃烧层数倍增）=========================
-// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），冷却1
-// （星炎无冷却）。作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
+// 爆燃 C / 焚烧 B / 焚天 A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），全系列冷却 2
+// （用户定 2026-09-15：倍增器复读是火系过强的主要推手；链内 AP 3/2/1/1、倍率 2/2/2/3、
+// 冷却持平——每一级仍是完全上位。注意冷却只约束同一张：打出回库底须重抽，大牌组里
+// 冷却常被抽牌循环盖过，多份同回合不受限——多份密度归 S 直出频率管）。
+// 作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
 // 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
-const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, cooldown = 1 }) => registerSkill({
+const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null }) => registerSkill({
   id, name, type: 'fire', tier, series: 'burnDoubler',
   cost: { mana: 0, actionPoint: ap },
-  charges: cooldown ? { max: 1, cooldownTurns: cooldown } : { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 2 },
   cardMode: 'normal',
   promotesTo,
   use(sctx) {
@@ -102,13 +105,14 @@ const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, cooldown = 1
 burnDoubler({ id: 'burnBurst', name: '爆燃', tier: 'C', ap: 3, mult: 2, promotesTo: 'burnBurstPlus' });
 burnDoubler({ id: 'burnBurstPlus', name: '焚烧', tier: 'B', ap: 2, mult: 2, promotesTo: 'burnBurstGrand' });
 burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, promotesTo: 'burnBurstStar' });
-burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, cooldown: 0 });
+burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
 // 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
-// 口径：伤害指令只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
+// 口径：伤害应用只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
+// 死亡检测挂应用原语 POST（2026-09-15 拆分：死亡发生在受击结算处，不筛主/附级）；
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 registerSkill({
@@ -119,7 +123,7 @@ registerSkill({
   use() { return true; },
   activated: {
     subscriptions: () => [{
-      when: DealDamageInstruction, phase: 'post',
+      when: ApplyDamageInstruction, phase: 'post',
       filter: (instr) => instr.target.side === 'enemy'
         && instr.result?.targetDead === true
         && instr.target.getEffectStacks('burn') > 0,

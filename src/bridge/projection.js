@@ -55,6 +55,7 @@ export const KEYWORD_LABELS = Object.freeze({
   transient: '短暂',
   slowStart: '慢热',
   anchored: '锁定',
+  blood: '卖血',
 });
 
 export function projectCardFull(battle, rt) {
@@ -115,7 +116,9 @@ export function projectBattle(battle) {
       const def = getSkillDefinition(rt.defId);
       const blocked = (!usable && def?.cardMode === 'chant' && !rt.isActivated
         && !chantActivationLegal(ctx, rt, def)) ? 'chantPressure' : null;
-      return { ...projectCardFull(battle, rt), usable, blocked };
+      // locked（无人战体「解除威胁」）：被锁定的卡——回合结束时仍在手则被焚毁，
+      // 离手即免除；不影响任何操作（BattleStage 据此挂四角锁定标记）
+      return { ...projectCardFull(battle, rt), usable, blocked, locked: !!rt.locked };
     }),
     // 结算区（发动/被跨节拍处理的卡）：仅 id 列表——手牌来源的卡视图已在离手前
     // 的 hand 投影中建好；牌库来源（如斩进阶的宾语转化）无既有卡面，由 presenter

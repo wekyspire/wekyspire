@@ -69,6 +69,7 @@ export class UseSkillInstruction extends BattleInstruction {
       case 2: {
         ctx.battleState.history.turn.played += 1;
         ctx.battleState.history.battle.played += 1;
+        ctx.battleState.history.turn.playedCards.push(this.skill.defId);
         // 发动合法性（嵌套强发兜底）：结算中的卡放回手位后按加权口径判定
         if (sctx.def.cardMode === 'chant' && !this._chantOff) {
           moveCard(ctx.battleState, this.skill.uniqueID, 'hand',

@@ -31,27 +31,38 @@
 import { CardScrollPickerObject } from './objects/CardScrollPickerObject.js';
 import { RelicScrollPickerObject } from './objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from './objects/ItemShowcaseObject.js';
+import { CardObject } from './objects/CardObject.js';
+import { CARD_WIDTH, CARD_HEIGHT } from './objects/cardMetrics.js';
 import { renderRichTextBlock } from './richtext/texture.js';
 import { playCardGrantFlight } from './cardGrantFlight.js';
+import { playCardUpgradeFlight } from './cardUpgradeFlight.js';
+import { getSkillDefinition } from '../core/skills/registry.js';
+import { cardViewFromDef } from '../core/skills/cardView.js';
+import { withLabels } from './panels/shared.js';
 
 // ---- 「升级 / 焚毁 / 删除」类选卡入口的统一来源表 ----
 // 每项 = 从快照取候选段 + 确认后上行的意图 + 三行文案（标题/提示/确认键）。
 // 本次合并取**并集**（塔楼层多出 gurpasRemove/bossRemove，房间层多出 slot），
 // 文案漂移一律以玩家可见的一致性为准（删卡统一「删除」，不再有「移除」）。
 const UPGRADE_SOURCES = {
+  // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
+  // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
   camp: {
+    upgrade: true,
     cards: (s) => s?.camp?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'campChoose', option: 'upgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
   training: {
+    upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'trainingUpgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
     hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
   },
   bankUpgrade: {
+    upgrade: true,
     cards: (s) => s?.bank?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'bankUpgradeOffer', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
@@ -64,6 +75,7 @@ const UPGRADE_SOURCES = {
     hint: '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页',
   },
   slot: {
+    upgrade: true,
     cards: (s) => s?.slot?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'slotPickUpgrade', uniqueID, targetId }),
     title: '选择要升级的卡', confirmLabel: '确认升级',
@@ -114,6 +126,8 @@ export function createStagePickerKit({
   // 「择卡得卡」演出进行中（商店卡包）：routeClick/routeHover 据此吞掉一切指针
   // （演出期间选卡界面已关、意图尚未上行，放任点击会绕过确认流直接戳到下面的面板）
   let grantBusy = false;
+  // 「卡牌升级」变身演出进行中（升级选卡确认 / 事件升级排水）：同上吞指针
+  let upgradeBusy = false;
 
   const pickerNow = () => pickerRef ?? (typeof getPicker === 'function' ? getPicker() : null);
   const busNow = () => {
@@ -169,6 +183,53 @@ export function createStagePickerKit({
     return relicPicker;
   }
 
+  /**
+   * 卡牌升级演出（通用入口，cardUpgradeFlight.js 的宿主侧包装）：原卡金闪变身新卡，
+   * 然后飞入牌库锚点（getAnchor；锚点缺席 = 原地缩小淡出）。所有「局外晋升」的地方
+   * 都调这里——升级选卡确认（openUpgradePicker 的 confirmHook）、事件升级（run 级
+   * 声明排水）共用同一份表演。
+   * @param {object} payload
+   *   card: 现成的原卡 CardObject（选卡界面 takeEntry 摘下的那张；演完由演出接管销毁）。
+   *         缺省时按 fromDefId/fromView 在亮相位新建一张
+   *   fromDefId / fromView: 新建时的原卡面（card 缺席时二选一必给）
+   *   toDefId / toView: 升级后的卡面（setCard 换面目标，二选一必给）
+   *   at: 新建卡的亮相位（缺省屏幕中央 = uiScene 原点）
+   *   onDone: 演出结束回调，**恰好一次**（受理失败也同步调——上行意图绝不被吞）
+   * @returns 是否受理
+   */
+  function playCardUpgrade({ card = null, fromDefId = null, fromView = null, toDefId = null, toView = null, at = null, onDone = null } = {}) {
+    let obj = card;
+    // defId → 卡面投影（应用前口径；调用方给了现成 view 就不投影——快照 view 与界面同源）
+    const viewOfDef = (id) => {
+      try {
+        const def = getSkillDefinition(id);
+        return def ? withLabels(cardViewFromDef(def)) : null;
+      } catch { return null; }   // 未注册等异常：退回字符串（bakeFace 占位），不拦确认流
+    };
+    if (!obj) {
+      const fromData = fromView ?? viewOfDef(fromDefId) ?? fromDefId;
+      if (!bakeFace || !fromData) { onDone?.(); return false; }
+      obj = new CardObject({
+        uniqueID: 'upgrade:flight',   // 演出卡不进拾取，id 只为日志区分
+        cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace,
+      });
+      obj.setCard(fromData);
+      obj.position.set(at?.x ?? 0, at?.y ?? 0, at?.z ?? 0);
+      obj.scale.set(0.95, 0.95, 1);   // 亮相缩放（已在亮相位，gather 拍自动跳过）
+    }
+    scene()?.add(obj);   // takeEntry 摘出的卡已不在场景；新建的同样要挂
+    const toCard = toView ?? viewOfDef(toDefId) ?? toDefId;
+    upgradeBusy = true;
+    return playCardUpgradeFlight({
+      card: obj,
+      toCard,
+      target: typeof getAnchor === 'function' ? getAnchor() : null,
+      center: at ?? null,
+      sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
+      onDone: () => { upgradeBusy = false; onDone?.(); },
+    });
+  }
+
   return {
     bakeText,
 
@@ -177,8 +238,13 @@ export function createStagePickerKit({
     get relicPicker() { return relicPicker; },
     /** 特写是否在播（宿主据此吞掉面板输入 / 压暗常驻按钮）。 */
     get showcasing() { return !!showcase?.busy; },
-    /** 是否有套件级模态覆盖层在屏幕上（特写在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
-    get uiBusy() { return grantBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
+    /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
+    get upgrading() { return upgradeBusy; },
+    /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
+    get uiBusy() { return grantBusy || upgradeBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
+
+    /** 卡牌升级演出（通用入口）：薄暴露内部 playCardUpgrade（见其注释）。 */
+    playCardUpgrade(payload) { return playCardUpgrade(payload); },
 
     /**
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
@@ -199,6 +265,29 @@ export function createStagePickerKit({
         const intent = def.intent(uniqueID, targetId);
         if (intent) onIntent?.(intent);
       };
+      // 晋升类入口的确认钩子：**先播「变身收编」演出再上行**（状态变更发生在演出之后，
+      // 同 openShopPackPicker 的节拍哲学）。⚠ 必须设在 picker.open() 之后——open 会
+      // 重置 confirmHook（设反了钩子被清，演出静默失效）。
+      // 换面目标卡面优先取快照 toViews 里现成的投影（与界面 hover 预览同源，所见即所得；
+      // 裸 defId 会被 bakeFace 当无字段数据烘成空卡）。
+      const targetViewOf = (c, defId) => {
+        const v = c?.toViews?.find(t => t.defId === defId)?.view ?? null;
+        return v ? withLabels(v) : null;
+      };
+      const hookMain = () => {
+        if (!def.upgrade) { picker.confirmHook = null; return; }
+        picker.confirmHook = (keys) => {
+          const c = cards.find(x => x.uniqueID === keys[0]) ?? null;
+          const entry = c ? picker.takeEntry(keys[0]) : null;   // 摘下原卡（不随 close 释放）
+          picker.close();
+          playCardUpgrade({
+            card: entry?.obj ?? null,
+            fromDefId: c?.defId ?? null, fromView: c?.view ?? null,
+            toDefId: c?.tipDefId ?? null, toView: targetViewOf(c, c?.tipDefId),
+            onDone: () => fire(keys[0]),
+          });
+        };
+      };
       const openMain = () => {
         confirmFn = (ids) => {
           const c = cards.find(x => x.uniqueID === ids[0]);
@@ -212,6 +301,7 @@ export function createStagePickerKit({
           cards: cards.map(toCardEntry),
           confirmLabel: def.confirmLabel,
         });
+        hookMain();
       };
       const openBranch = (c) => {
         confirmFn = (ids) => fire(c.uniqueID, ids[0]);  // 子面板候选 key = 目标 defId
@@ -224,6 +314,19 @@ export function createStagePickerKit({
           })),
           confirmLabel: '确认晋升',
         });
+        if (def.upgrade) {
+          // 分叉确认时面板上摆的是目标卡面而非原卡——演出卡按原卡面在屏幕中央新建
+          picker.confirmHook = (keys) => {
+            picker.close();
+            playCardUpgrade({
+              fromDefId: c.defId, fromView: c.view,
+              toDefId: keys[0], toView: targetViewOf(c, keys[0]),
+              onDone: () => fire(c.uniqueID, keys[0]),
+            });
+          };
+        } else {
+          picker.confirmHook = null;
+        }
       };
       picker.attachPicker(pickerNow());
       openMain();
@@ -242,7 +345,17 @@ export function createStagePickerKit({
       confirmFn = (ids) => { onIntent?.({ action: 'takeShopCard', defId: ids[0] }); };
       cancelFn = () => { onIntent?.({ action: 'takeShopCard', defId: null }); };
       picker.attachPicker(pickerNow());
-      // 得卡演出钩子：接管确认后的关闭与上行时机（ScrollPickerObject 的 CONFIRM 分支）
+      picker.open({
+        title: `${pend.packId} · 卡包`,
+        hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
+        cards: pend.cards.map(c => ({
+          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+        })),
+        confirmLabel: '加入牌组',
+      });
+      // 得卡演出钩子：接管确认后的关闭与上行时机（ScrollPickerObject 的 CONFIRM 分支）。
+      // ⚠ 必须在 open() **之后**设——open 会重置 confirmHook（此前设在 open 前，钩子被
+      // 清、演出静默失效：卡包确认后直接跳过飞行，是本批接入升级演出时发现的存量 bug）。
       picker.confirmHook = (keys) => {
         const entry = picker.takeEntry(keys[0]);   // 摘下被选中的那张（不随 close 释放）
         picker.close();
@@ -257,14 +370,6 @@ export function createStagePickerKit({
           onDone: done,
         });
       };
-      picker.open({
-        title: `${pend.packId} · 卡包`,
-        hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
-        cards: pend.cards.map(c => ({
-          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
-        })),
-        confirmLabel: '加入牌组',
-      });
       return true;
     },
 
@@ -357,7 +462,7 @@ export function createStagePickerKit({
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的 hover 逻辑）
      */
     routeHover(hit, x, y) {
-      if (grantBusy) return true;
+      if (grantBusy || upgradeBusy) return true;
       if (showcase?.busy) return true;
       if (cardPicker?.opened) { cardPicker.onHover(hit, x, y); return true; }
       if (relicPicker?.opened) { relicPicker.onHover(hit, x, y); return true; }
@@ -365,11 +470,11 @@ export function createStagePickerKit({
     },
 
     /**
-     * 点击路由前言：得卡演出在播 → 吞掉；特写在播 → 点任意处退出；某界面开着 → 转它的 onClick。
+     * 点击路由前言：得卡/升级演出在播 → 吞掉；特写在播 → 点任意处退出；某界面开着 → 转它的 onClick。
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的点击逻辑）
      */
     routeClick(hit) {
-      if (grantBusy) return true;
+      if (grantBusy || upgradeBusy) return true;
       if (showcase?.busy) { showcase.onClick(hit); return true; }
       if (cardPicker?.opened) { cardPicker.onClick(hit); return true; }
       if (relicPicker?.opened) { relicPicker.onClick(hit); return true; }
@@ -405,6 +510,8 @@ export function createStagePickerKit({
       confirmFn = null;
       cancelFn = null;
       pickerRef = null;
+      grantBusy = false;
+      upgradeBusy = false;
     },
   };
 }

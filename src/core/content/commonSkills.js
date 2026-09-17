@@ -13,6 +13,7 @@ import { GainActionPointsInstruction, GainManaInstruction } from '../instruction
 import { PlayerTurnEndInstruction } from '../instructions/turn.js';
 import {
   AddCardInstruction, DiscardCardInstruction, MoveCardInstruction, TransformCardInstruction,
+  DrawCardsInstruction,
 } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 
@@ -37,6 +38,67 @@ registerSkill({
     }), instr),
   }],
   describe: () => '无法打出。回合结束时，若此卡在手牌中，受到2点伤害',
+});
+
+// 迷眼粉尘（嗡嗡虫塞入的状态牌，2026-09-14 章1「塔基爆发」）：灼伤的**轻量版**
+// （1 伤，第一章口径）——无法打出，回合结束时若还在手牌中受到 1 点固定伤害。
+// 与粘液（软卡手：1AP 抽 1 的处理税）构成两档卡手语言；dump 弃牌与焚毁类是它的出口。
+registerSkill({
+  id: 'dustCloud', name: '迷眼粉尘', type: 'normal', tier: 'Z',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  canSpawnAsReward: false,
+  canUse: () => false,
+  use() { return true; },
+  subscriptions: (sctx) => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(new DealDamageInstruction({
+      source: null, target: ctx.player, amount: 1, fixed: true, tags: ['dustCloud'],
+    }), instr),
+  }],
+  describe: () => '无法打出。回合结束时，若此卡在手牌中，受到1点伤害',
+});
+
+// 墨渍（第四章高压敌塞入的状态牌，2026-09-14 用户设计）：灼伤同款口径、数值加重一档
+// （在手回合末受 3 伤）——档案馆巨像/墨海母核的持续干扰件。处理出口同为 dump/焚毁。
+registerSkill({
+  id: 'inkBlot', name: '墨渍', type: 'normal', tier: 'Z',
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  canSpawnAsReward: false,
+  canUse: () => false,
+  use() { return true; },
+  subscriptions: (sctx) => [{
+    when: PlayerTurnEndInstruction, phase: 'post',
+    filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(new DealDamageInstruction({
+      source: null, target: ctx.player, amount: 3, fixed: true, tags: ['inkBlot'],
+    }), instr),
+  }],
+  describe: () => '无法打出。回合结束时，若此卡在手牌中，受到3点伤害',
+});
+
+// 活页（装订巨蟒塞入的重物牌，2026-09-14 用户设计「开局塞大卡」）：不是纯死重——
+// 2AP 打出可自伤 4 换抽 2，是「付代价的清障选择」：留着占手牌位挤容量，打掉付血换过牌。
+// 消耗（打出即焚）；Z 阶 + canSpawnAsReward:false 双保险永不入奖励池。
+registerSkill({
+  id: 'looseLeaf', name: '活页', type: 'normal', tier: 'Z',
+  keywords: ['exhaust'],
+  cost: { mana: 0, actionPoint: 2 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'none',
+  canSpawnAsReward: false,
+  use(sctx) {
+    sctx.kernel.submitInstruction(new DealDamageInstruction({
+      source: null, target: sctx.player, amount: 4, fixed: true, tags: ['looseLeaf'],
+    }));
+    sctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'looseLeaf' }));
+    return true;
+  },
+  describe: () => '消耗。自伤4，抽2',
 });
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
@@ -168,8 +230,8 @@ stimulant('fullStimulant', '充分激发', 'B', 1, 2);
 
 // ---- 灵能护盾系列（MP 换纯护盾，2026-09 设计稿新增）----
 
-// 灵力护盾 C / 灵能护盾 B：2MP，冷却1：12/18 护盾。通用包的纯防御位——
-// 无纳气、无格挡，性价比随等阶拉开。
+// 灵力护盾 C / 灵能护盾 B：2MP，冷却1：10/16 护盾。通用包的纯防御位——
+// 无纳气、无格挡，性价比随等阶拉开。2026-09-17 用户定削 2（原 12/18）。
 const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
   cost: { mana: 2, actionPoint: 0 },
@@ -182,8 +244,8 @@ const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-psiShield('psiShield', '灵力护盾', 'C', 12, 'greaterPsiShield');
-psiShield('greaterPsiShield', '灵能护盾', 'B', 18);
+psiShield('psiShield', '灵力护盾', 'C', 10, 'greaterPsiShield');
+psiShield('greaterPsiShield', '灵能护盾', 'B', 16);
 
 // ---- §2 散卡 ----
 

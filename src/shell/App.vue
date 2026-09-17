@@ -79,13 +79,13 @@ function dismissMenuToast(id) {
   menuToasts.value = menuToasts.value.filter(t => t.id !== id);
 }
 
-function newGame({ storyMode = false, loadSave = null } = {}) {
+function newGame({ storyMode = false, loadSave = null, gmMode = false } = {}) {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
   detachTooltipForward = null;
   mapStage?.dispose?.();
   mapStage = new MapStage({});
-  ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode });
+  ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode, gmMode });
   // 地图舞台的输入通道 + 常驻 tooltip 转发：装配点在此（同时持有 stageManager 与 animBus）
   mapStage.attachInput({ stageManager, bus: ctrl.value.animBus });
   detachTooltipForward = attachTooltipForwarding(ctrl.value.animBus);
@@ -97,8 +97,8 @@ function newGame({ storyMode = false, loadSave = null } = {}) {
   window.__shell = { ctrl, stageManager, newGame };
 }
 
-function onStart({ storyMode, loadSave }) {
-  newGame({ storyMode, loadSave });
+function onStart({ storyMode, loadSave, gmMode }) {
+  newGame({ storyMode, loadSave, gmMode });
 }
 
 function toTitle() {

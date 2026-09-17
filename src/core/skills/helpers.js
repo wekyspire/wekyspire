@@ -31,8 +31,15 @@ export function canUseSkill(ctx, self) {
   // X 费（'X'）消耗全部现有资源，X 可为 0 → 恒可打出
   const manaCost = def.cost?.mana ?? 0;
   const apCost = def.cost?.actionPoint ?? 0;
-  const manaOk = free || manaCost === 'X' || ctx.player.mana >= manaCost;
-  const apOk = free || apCost === 'X' || ctx.player.actionPoints >= apCost;
+  // 免费窗口豁免（2026-09-14）：battleState.freePlays > 0 时费用检查放行——
+  // 逍遥游「下 N 张打出的牌无开销」挂在出牌侧 PRE 置 0，但若玩家资源低于牌面费用，
+  // canUse 会在结算前就拒绝出牌，免费窗口对贵牌失效。计数器放 battleState
+  // （turnDrawBonus 同通道先例，可序列化），扣减由出牌侧 PRE 按牌计数（同一张卡的
+  // AP/蓝两次消耗只扣一份）。万变拳的 PRE-only 旧口径不同步接入（只免 AP 且已知
+  // 局限：3AP 卡仍需 3AP 在手才能启动豁免——保留现状，不与全免通道混流）。
+  const freePlay = (ctx.battleState?.freePlays ?? 0) > 0;
+  const manaOk = free || freePlay || manaCost === 'X' || ctx.player.mana >= manaCost;
+  const apOk = free || freePlay || apCost === 'X' || ctx.player.actionPoints >= apCost;
   if (manaOk && apOk) return true;
   const budget = { manaOk, apOk };
   for (const id of ctx.player.abilities ?? []) {

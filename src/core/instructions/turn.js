@@ -138,13 +138,13 @@ export class PlayerTurnInstruction extends BattleInstruction {
         const t = ctx.battleState.turn.count;
         if (d?.dotFromTurn && t >= d.dotFromTurn.turn) {
           ctx.kernel.submitInstruction(new DealDamageInstruction({
-            target: ctx.player, amount: d.dotFromTurn.amount, tags: ['demonDot'],
+            target: ctx.player, amount: d.dotFromTurn.amount, tags: ['demonDot'], type: 'minor',
           }), this);
         }
         if (d?.deathAtTurnEnd && t === d.deathAtTurnEnd) {
           // 绝望：第 N 回合结束时死亡——穿透一切（护盾/防御都不该救）
           ctx.kernel.submitInstruction(new DealDamageInstruction({
-            target: ctx.player, amount: 9999, pierce: true, tags: ['despair'],
+            target: ctx.player, amount: 9999, pierce: true, tags: ['despair'], type: 'minor',
           }), this);
         }
         if (d) {

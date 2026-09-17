@@ -6,13 +6,14 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
-import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
 import { AddEffectInstruction } from './effects.js';
+import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { DrawCardsInstruction } from './cards.js';
 import { TurnStartInstruction } from './turn.js';
 import { DealDamageInstruction, ClearShieldInstruction } from './combat.js';
+import { ConsumeManaInstruction } from './resources.js';
 
 // 战斗根指令：完成 = 战斗结束。子节点固定为 战前 → 回合循环 → 战后。
 export class BattleRootInstruction extends BattleInstruction {
@@ -83,19 +84,33 @@ export class PreBattleInstruction extends BattleInstruction {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
       }
+      // 防御效果化（2026-09-16 用户定）：defense 不再是角色数值——前端数值面板显示不出，
+      // 改走效果轨（EFFECTS.md「防御」词条对齐）。各单位 base 防御在 PreBattle 统一转为
+      // 「防御」效果：敌人 createUnit 的 defense、遗物 runModifiers（龙鳞碎片=战斗开始
+      // 防御2）**零改动自动入轨可见**；此后对防御的一切增减一律 AddEffect（不再直改字段）。
+      for (const unit of [player, ...aliveEnemies(battleState), ...battleState.allies]) {
+        if (unit.defense > 0) {
+          ctx.kernel.submitInstruction(new AddEffectInstruction({
+            target: unit, effectId: 'defense', stacks: unit.defense,
+          }), this);
+          unit.defense = 0;
+        }
+      }
       // 敌人开场效果（2026-09-13：Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
       // def.onBattleStart(ctx, unit)：订阅型效果必须经 AddEffectInstruction 入列（走正常
-      // 挂载管线），只有 shield/defense 这类标量才适合直改字段。
+      // 挂载管线），只有 shield 这类标量才适合直改字段（防御已效果化，同样走 AddEffect）。
       for (const unit of aliveEnemies(battleState)) {
         getEnemyDefinition(unit.defId)?.onBattleStart?.(ctx, unit);
       }
 
       // 玩家最后攻击目标追踪（瑞米索敌口径：跟随主角最后攻击过的敌人）。
       // POST = 攻击已结算；直接写 battleState 标量（纯记账，非世界变更）。
+      // 只认主级（2026-09-15 拆分）：附级随机伤（精通）不该指挥瑞米索敌。
       ctx.kernel.addSubscription({
         when: DealDamageInstruction,
         phase: 'post',
-        filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy',
+        filter: (instr, c) => instr.source === c.player && instr.target?.side === 'enemy'
+          && instr.type === 'major',
         react: (instr, c) => { c.battleState.lastPlayerTarget = instr.target.uniqueID; },
         owner: 'tracker:lastPlayerTarget',
       });
@@ -128,6 +143,20 @@ export class PreBattleInstruction extends BattleInstruction {
           }
         },
         owner: 'core:shieldReset',
+      });
+
+      // 本回合魏启消耗台账（余热系列「每消耗过 N 蓝回 M 蓝」的读数源）：只记实付
+      // （result.consumed，X 费/透支/减免后均为 clamp 真值），回合开始随
+      // resetTurnHistory 归零。回蓝（GainMana）不入账——只数消耗方向。
+      ctx.kernel.addSubscription({
+        when: ConsumeManaInstruction,
+        phase: 'post',
+        priority: -60, // 最后记账：其余 POST 反应先跑，读到的是本拍之前的台账
+        filter: (instr) => (instr.result?.consumed ?? 0) > 0,
+        react: (instr, c) => {
+          c.battleState.history.turn.manaConsumed += instr.result.consumed;
+        },
+        owner: 'core:manaLedger',
       });
 
       // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；

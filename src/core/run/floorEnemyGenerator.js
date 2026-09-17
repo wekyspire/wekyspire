@@ -70,7 +70,7 @@ const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
   { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
-  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §7）——
+  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §4）——
   // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
   // 2026-09-11 用户试玩后削：原「爆囊×2 + 石茧×2」四敌同时施压（两只石茧苏醒后每回合 20+ 伤
   // 叠爆囊死亡反伤）堪比精英，删掉一只石茧 → 三敌；难度份额改由前三槽分摊。
@@ -79,6 +79,22 @@ const TEMPLATES = [
   // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
   { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
   { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
+  // —— 章1「塔基爆发」编队（2026-09-14 用户设计；wiki 魔物爆发：F/E 级杂鱼起步，
+  // 机制随烈度爬升：塞卡 → DoT → 滚雪球 → 时机 → 集群 → 组合；预算按楼层难度 2-7 配平）——
+  // 虫群风暴（E）：嗡嗡虫集群塞粉尘——「卡手」主题的入门场（min 1+1+1+1=4 / max 8）
+  { id: 'infestation', name: '虫群风暴', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'buzzbug' }, { fixed: 'buzzbug' }, { fixed: 'buzzbug' }, {}] },
+  // 草丛（F-E）：刺刺草 DoT 教学 + 杂鱼（min 2+2+1=5 / max 8）
+  { id: 'thornPatch', name: '草丛', minFloor: 3, maxFloor: 10, slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, {}] },
+  // 静电原野（E）：双毛球充能滚雪球——「不打它越充越强」的镜像抉择场（min 2 / max 6）
+  { id: 'staticField', name: '静电原野', minFloor: 4, maxFloor: 12, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
+  // 掘地场（E）：双鼹鼠错相位遁地——转火时机教学（min 4+1=5 / max 10）
+  { id: 'digSite', name: '掘地场', minFloor: 5, maxFloor: 12, slots: [{ fixed: 'diggerMole' }, { fixed: 'diggerMole' }, {}] },
+  // 甲虫潮（E）：集群啃牌 + 亡语病菌——AOE 甜蜜点带代价（min 3+1=4 / max 8）
+  { id: 'beetleTide', name: '甲虫潮', minFloor: 6, maxFloor: 14, slots: [{ fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, {}] },
+  // 共振带（E+）：毛球×2+鼹鼠——双机制组合的章1 收官难度（min 5 / max 10）
+  { id: 'resonance', name: '共振带', minFloor: 8, maxFloor: 14, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'diggerMole' }] },
+  // 腐蔓园（E）：紧勒+DoT+塞牌三重卡手主题战——「腾手」能力的第一次大考（min 5 / max 8）
+  { id: 'rotGarden', name: '腐蔓园', minFloor: 6, maxFloor: 12, slots: [{ fixed: 'mossBall' }, { fixed: 'thornWeed' }, { fixed: 'buzzbug' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
   // —— 第二~四章主题编队（2026-09-13 总策划批次，与新敌补池同波，设计卡 tmp/design-monsters-wave1.mjs）——
@@ -90,8 +106,33 @@ const TEMPLATES = [
   // 章4 图书馆：防线锚 + 群狼连击（min 15 ≤ 17 / max 25 ≥ 21）
   { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
-  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'rockshell' }, {}] },
-  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 43, slots: [{ fixed: 'gargoyle' }, {}] },
+  // 血牛互斥（2026-09-14 马拉松修复）：钉死位已有一只龟/像时，通配位排除其余血牛
+  // （岩甲龟/石像卫士/禁书守卫）——防线怪的单体马拉松已由蓄势/再生递减治理，
+  // 编成层面再防「双龟」「龟+像」这类叠加组合。
+  { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] }, // 血牛模板随 gargoyle/rockshell 收窄至章3（2026-09-16）
+  // —— 第四章特色战斗（2026-09-14 用户设计定稿，古尔帕斯商店 35 层之后的中后期）：
+  // 三族（玻璃连炮/巨兽渐强/机制反制）+ 机制四件套组合。每场是一个有破解方程的谜题，
+  // 设计红线：开局 2 拍 ≤25（A 系齐射除外）、单回合峰值 30-40、滚雪球 6-8 回合进
+  // 不可挡区、多源爆发错拍、大伤害意图预告可见——「高压但有解」，考大成牌组。 ——
+  // 族A 玻璃连炮：开局重压+异常轮转，杀一只少一份（守像阵型共鸣）
+  { id: 'guardQuad', name: '典礼方阵', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }] },
+  { id: 'guardPhalanx', name: '受戒典礼', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'shieldBearer' }] },
+  { id: 'forkDuet', name: '音叉双鸣', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'tuningFork' }, { fixed: 'tuningFork' }] },
+  { id: 'candleSwarm', name: '烛火群', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }] },
+  // 族B 巨兽渐强：血牛（终值 200+）+ 塞牌干扰 + 回合账单，启动窗口温和
+  { id: 'archiveTitan', name: '档案巨像', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'archiveColossus' }] },
+  { id: 'devourLair', name: '噬书巢穴', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'bookDevourer' }, {}] },
+  { id: 'inkTide', name: '墨海涨潮', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'inkTideCore' }, { fixed: 'bookWorm' }] },
+  // 族C 机制反制：读构筑/行为的镜子
+  { id: 'mirrorHall', name: '镜厅', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'oracleOrb' }, { fixed: 'galeGolem' }] },
+  { id: 'scriptorium', name: '禁阅室', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'censorScribe' }] },
+  { id: 'ledgerOffice', name: '账房', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'ledgerImp' }] },
+  { id: 'monitorPost', name: '监察岗', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'acadMonitor' }, {}] },
+  // 机制四件套组合：增益核心+闪避多段打手 / 抗爆发阵型 / 开局塞重物
+  { id: 'consecration', name: '受戒仪仗', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'riteAltar' }, { fixed: 'galeGolem' }, { fixed: 'shieldBearer' }] },
+  { id: 'phalanxWall', name: '方阵阻击', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'repeaterBallista' }, { fixed: 'shieldBearer' }, {}] },
+  { id: 'binderVault', name: '装订库', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'binderPython' }, { fixed: 'tomeWarden' }] },
   // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）：1-2 敌，
   // 恒含一只高难精英（elite 槽从当层精英池按份额取材），余量可带一名杂鱼随从
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
@@ -102,15 +143,20 @@ const TEMPLATES = [
 // 第三波（2026-09-13）：44 层塔心（孤身巨石三阶段体力考）上岗，pyro 占位卸任。
 // 第四波（2026-09-13，用户设计）：11 层改为**火主题 Boss 三候选池**——燃焰术士（重做）/
 // 卡达斯/MEFM-1，每场 Boss 战由战斗种子确定性抽一只（同一层重打 = 同一只）。
+// 第五波（2026-09-14，用户设计）：33 层改为候选池——饕餮领主 / 完好的无人战体
+// （三灯状态机 + 锁牌 + 盾碎转段 + 自爆收场的机体考）/ 温室之后（南孚妖蝶集群意识体：
+// 同律集群 + 舞步滚雪球 + 清场窗口反转）/ 渊素食客（堕落考核官：三段单向堕落 +
+// 增益掠夺 + 渊素共鸣对赌）——清杂考、手牌考、指向与节奏考、增益对赌考一届配齐。
 // 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
 // 自 22 层起每个 Boss 必带燃烧交互纹理
 //（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
-//  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环）。
+//  塔心的反制 = 每次换阶段蜕壳净化全部燃烧——堆层→引爆必须在一个阶段内闭环；
+//  无人战体的反制 = 红灯转段净化全部燃烧，同理）。
 const BOSS_OF_FLOOR = Object.freeze({
   11: ['pyro', 'kardas', 'mefm1'],
   // 批次 16（2026-09-13）：章二池三题错开——阵型（骑士长）/ 外挂时钟·手牌节奏（守钟人）/ debuff 对冲（主教）
   22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
-  33: 'gluttonLord', 44: 'towerHeart',
+  33: ['gluttonLord', 'intactDrone', 'greenhouseQueen', 'essenceEater'], 44: 'towerHeart',
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 
@@ -134,10 +180,15 @@ function eligibleAtFloor(def, floor) {
   return Boolean(d) && floor >= d.floorMin && floor <= d.floorMax;
 }
 
-// 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池
+// 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池。
+// slot.exclude（2026-09-14 马拉松修复）：通配位排除指定敌 id——「龟甲阵/巨像」这类
+// 血牛钉死位的搭档不许再抽到其他血牛（双龟/龟+像组合是 15~20+ 回合无风险马拉松的
+// 直接来源，两份试玩死于 32 层双岩甲龟）。exclude 只过滤选材池（templateRange 与
+// 份额分配同用此池），不影响预算逻辑本身。
 function slotPool(slot, floor) {
   if (slot.fixed) return [getEnemyDefinition(slot.fixed)];
-  return eligiblePool(floor, slot.elite === true);
+  const pool = eligiblePool(floor, slot.elite === true);
+  return slot.exclude?.length ? pool.filter(def => !slot.exclude.includes(def.id)) : pool;
 }
 
 // 模板在指定层的难度可达区间 [minSum, maxSum]：各槽取材池的 min 最小值 /
@@ -244,6 +295,30 @@ export function generateEncounter(run) {
       out[i] = descriptorOf('stoneCocoon', d, { wakeDelay: 2, wakeStrength: 1 });
     }
   }
+  // 同种错拍（用户 2026-09-16 定）：同 defId 的多只个体按 0/1 交错起始节拍——
+  // 「四只风狸＝两只先攻两只先闪避」，而不是四只同拍齐动齐停（齐拍要么瞬间爆炸、
+  // 要么整拍零压力，是节奏锯齿）。特意安排齐拍的（典礼方阵开局齐射）与自带错拍
+  // 特殊处理的（石茧/音叉 wakeDelay）不在此列。跨种组合的主题节奏（阵型先架盾、
+  // 血牛先回春、醉鬼先喝酒）由各敌 act 自身表达，不受影响。
+  const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork', 'stoneCocoon']);
+  const nthOf = new Map();
+  for (let i = 0; i < out.length; i++) {
+    const s = out[i];
+    if (SYNC_EXEMPT.has(s.defId) || s.wakeDelay != null) continue;
+    const n = (nthOf.get(s.defId) ?? 0) + 1;
+    nthOf.set(s.defId, n);
+    if (n % 2 === 0) out[i] = { ...s, actionIndex: 1 }; // 第 2、4…只错一拍
+  }
+  // 音叉群（2026-09-14 第四章特色战斗）：第二只起 wakeDelay=1 且难度 -1——两台大振
+  // 恒错拍，任意回合最多一次大振（同拍双大振 = 单回合 50+ 直伤，踩红线）。
+  const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);
+  if (forks.length > 1) {
+    const def = getEnemyDefinition('tuningFork');
+    for (const i of forks.slice(1)) {
+      const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
+      out[i] = descriptorOf('tuningFork', d, { wakeDelay: 1 });
+    }
+  }
   return out;
 }
 
@@ -264,5 +339,6 @@ export function spawnEnemy(entry) {
   if (entry.attack != null) unit.attack = entry.attack;
   if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;       // 石茧等：苏醒回合参数
   if (entry.wakeStrength != null) unit.wakeStrength = entry.wakeStrength;
+  if (entry.actionIndex != null) unit.actionIndex = entry.actionIndex; // 同种错拍（2026-09-16）
   return unit;
 }

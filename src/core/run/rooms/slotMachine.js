@@ -1,6 +1,7 @@
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 import {
-  availablePacks, packCardPool, commonPool, maxRewardTier, tierWeight, TIER_RANK,
+  availablePacks, packCardPool, commonPool, packLevel, packTierTable, tierCapOfLevel,
+  rollTiered, TIER_RANK,
 } from '../rewards.js';
 import { draftRelic, draftRelics } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
@@ -154,20 +155,6 @@ export function slotView(run) {
 // ---- 奖项构造 ----
 
 /** 从池里按等阶加权取 count 张互不重复的卡（capTier 决定各档权重）。 */
-function pickCards(run, pool, count, capTier) {
-  const out = [];
-  const left = [...pool];
-  while (out.length < count && left.length) {
-    const weights = left.map(d => Math.max(1, Math.round(tierWeight(d, capTier) * 100)));
-    const total = weights.reduce((s, w) => s + w, 0);
-    let roll = run.rng.next() * total;
-    let idx = 0;
-    for (let i = 0; i < left.length; i++) { roll -= weights[i]; if (roll < 0) { idx = i; break; } }
-    out.push(left.splice(idx, 1)[0]);
-  }
-  return out;
-}
-
 const choiceOf = (defs) => ({
   choices: defs.map(d => ({ id: d.id, name: d.name ?? d.id })),
 });
@@ -193,24 +180,27 @@ function makeMinor(run, kind) {
       const packs = availablePacks(run).map(p => p.id);
       if (!packs.length) return null;
       const packId = packs[Math.floor(run.rng.next() * packs.length)];
-      const defs = pickCards(run, packCardPool(run, packId, maxRewardTier(run, packId)), 3, maxRewardTier(run, packId));
+      const lv = packLevel(run, packId);
+      const defs = rollTiered(run, packCardPool(run, packId, tierCapOfLevel(lv)), 3, lv);
       return defs.length ? { packId, ...choiceOf(defs) } : null;
     }
     case 'highCard': {
-      // 「任意一张高级卡」：给当前解锁最高等阶的三选一（适配灵脉等级）
+      // 「任意一张高级卡」：当前解锁最高两档的池（高等级下 A/S 都算「高级」）
       const packs = availablePacks(run).map(p => p.id);
-      const pool = packs.flatMap(p => packCardPool(run, p, maxRewardTier(run, p)));
-      const cap = Math.max(...packs.map(p => TIER_RANK[maxRewardTier(run, p)] ?? 0));
-      const top = pool.filter(d => (TIER_RANK[d.tier] ?? 0) === cap);
-      if (!top.length) return null;
-      return choiceOf(pickCards(run, top, 3, maxRewardTier(run, packs[0])));
+      const lv = packs.reduce((m, p) => Math.max(m, packLevel(run, p)), 0);
+      const cap = tierCapOfLevel(lv);
+      const pool = packs.flatMap(p => packCardPool(run, p, cap))
+        .filter(d => (TIER_RANK[d.tier] ?? 0) >= TIER_RANK[cap] - 1);
+      if (!pool.length) return null;
+      return choiceOf(rollTiered(run, pool, 3, lv));
     }
     case 'commonCard': {
       // 「低于目前等级的低级灰卡」：通用池里取低于当前上限的
-      const capTier = maxRewardTier(run, 'body');
+      const lv = packLevel(run, 'body');
+      const capTier = tierCapOfLevel(lv);
       const pool = commonPool(run, capTier).filter(d => (TIER_RANK[d.tier] ?? 0) < (TIER_RANK[capTier] ?? 0));
       const use = pool.length ? pool : commonPool(run, capTier);
-      return use.length ? choiceOf(pickCards(run, use, 3, capTier)) : null;
+      return use.length ? choiceOf(rollTiered(run, use, 3, lv)) : null;
     }
     case 'upgradeCopy': {
       const target = rollUpgradeCopy(run);
@@ -228,33 +218,33 @@ function makeMinor(run, kind) {
   }
 }
 
-/** 大奖：返回 payload。 */
+/** 大奖：返回 payload。卡包类奖项走「大奖等级钳制」：分布至少按 3 级表
+ *  （10/20/30/30/10——含直出白名单 S 的 10%），纯奖励事件总能开出高阶卡。 */
 function makeMajor(run, kind) {
   switch (kind) {
     case 'moneyBig': return { money: intIn(SLOT.moneyBig, run.rng) };
     case 'fullRestore': return { fullRestore: true };
     case 'packAbove': {
-      // 「齐平甚至超越灵脉等级」：把上限抬一阶
+      // 「齐平甚至超越灵脉等级」：等级 +1 且至少 3 级分布（大奖通道）
       const packs = availablePacks(run).map(p => p.id);
       const packId = packs[Math.floor(run.rng.next() * packs.length)];
-      const cap = TIER_RANK[maxRewardTier(run, packId)] ?? 0;
-      const raised = ['D', 'C', 'B', 'A'][Math.min(3, cap + 1)];
-      const pool = packCardPool(run, packId, raised);
-      return pool.length ? { packId, raised, ...choiceOf(pickCards(run, pool, 3, raised)) } : null;
+      const lv = Math.max(packLevel(run, packId) + 1, 3);
+      const pool = packCardPool(run, packId, tierCapOfLevel(lv));
+      return pool.length ? { packId, ...choiceOf(rollTiered(run, pool, 3, lv)) } : null;
     }
     case 'packSix': {
-      // 「平时无法获取的 6 选 1 任意系高级卡包」：跨全部已解锁卡包取高阶，六选一
+      // 「平时无法获取的 6 选 1 任意系高级卡包」：跨全部已解锁卡包取高阶（A/S 池）
       const packs = availablePacks(run).map(p => p.id);
-      const cap = packs.reduce((m, p) => Math.max(m, TIER_RANK[maxRewardTier(run, p)] ?? 0), 0);
-      const top = ['D', 'C', 'B', 'A'][Math.min(3, cap)];
-      const pool = packs.flatMap(p => packCardPool(run, p, top)).filter(d => (TIER_RANK[d.tier] ?? 0) === cap);
-      const use = pool.length ? pool : packs.flatMap(p => packCardPool(run, p, top));
-      return use.length ? { six: true, ...choiceOf(pickCards(run, use, 6, top)) } : null;
+      const lv = Math.max(packs.reduce((m, p) => Math.max(m, packLevel(run, p)), 0), 3);
+      const pool = packs.flatMap(p => packCardPool(run, p, tierCapOfLevel(lv)))
+        .filter(d => (TIER_RANK[d.tier] ?? 0) >= TIER_RANK.A);
+      const use = pool.length ? pool : packs.flatMap(p => packCardPool(run, p, tierCapOfLevel(lv)));
+      return use.length ? { six: true, ...choiceOf(rollTiered(run, use, 6, lv)) } : null;
     }
     case 'commonPack': {
-      const cap = maxRewardTier(run, 'body');
-      const pool = commonPool(run, cap);
-      return pool.length ? { common: true, ...choiceOf(pickCards(run, pool, 3, cap)) } : null;
+      const lv = packLevel(run, 'body');
+      const pool = commonPool(run, tierCapOfLevel(lv));
+      return pool.length ? { common: true, ...choiceOf(rollTiered(run, pool, 3, lv)) } : null;
     }
     case 'freeUpgrade': {
       // 没有可升级的卡就不发这个奖（否则会挂起一个无法收尾的选卡请求 = 卡死）

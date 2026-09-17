@@ -1,7 +1,7 @@
 import { registerRelic } from '../relics/registry.js';
 import { TurnStartInstruction, PlayerTurnEndInstruction, PlayerTurnInstruction } from '../instructions/turn.js';
 import {
-  DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
+  DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
 } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
 import { DrawCardsInstruction, AddCardInstruction, MoveCardInstruction, DumpCardsInstruction, DiscardOverflowInstruction } from '../instructions/cards.js';
@@ -176,6 +176,61 @@ registerRelic({
   }],
 });
 
+// 木灵脉专属（2026-09-14 随木体系落地补簇；门禁与卡包同一口径）
+registerRelic({
+  id: 'poisonIvyVial', name: '毒藤瓶', rarity: 'C', cost: 1, requires: { leino: 'wood', min: 1 },
+  description: '战斗开始时，赋予所有敌人中毒 2。',
+  flavor: '瓶口的藤蔓还活着，时不时往里缩一缩',
+  // 对标埃文石（A·群敌虚弱1）：群毒2 = 每敌 3 点延迟伤害，C 档一口闷
+  onBattleStart(ctx) {
+    for (const e of ctx.battleState.enemies) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: e, effectId: 'poison', stacks: 2 }));
+    }
+  },
+});
+
+registerRelic({
+  id: 'hardwoodBadge', name: '硬木盾徽', rarity: 'B', cost: 1, requires: { leino: 'wood', min: 1 },
+  description: '战斗开始时，获得荆棘 2。',
+  flavor: '别用拳头打招呼',
+  // 对标针鼠荆棘3（一次性）：常驻荆棘2，反伤随受击次数兑现
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: ctx.player, effectId: 'thorns', stacks: 2,
+    }));
+  },
+});
+
+// 空灵脉专属（闪避类效果必须挂 T1 回合开始 POST——战斗开始直接上会被蒸发，见 abilities.js airVein）
+registerRelic({
+  id: 'windChime', name: '风铃', rarity: 'B', cost: 1, requires: { leino: 'air', min: 1 },
+  description: '第一回合开始时，获得闪避 2。',
+  flavor: '风还没到，它先响了',
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
+    react: (instr, c) => {
+      c.kernel.submitInstruction(new AddEffectInstruction({
+        target: c.player, effectId: 'dodge', stacks: 2,
+      }), instr);
+    },
+  }],
+});
+
+registerRelic({
+  id: 'willowFluff', name: '柳絮', rarity: 'C', cost: 1, requires: { leino: 'air', min: 1 },
+  description: '第一回合开始时，抽 1 张牌。',
+  flavor: '它落进你手里之前，谁也不知道它会落进谁手里',
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
+    react: (instr, c) => c.kernel.submitInstruction(
+      new DrawCardsInstruction({ count: 1, reason: '柳絮' }), instr),
+  }],
+});
+
 // ---- 回合节奏 ----
 
 registerRelic({
@@ -280,8 +335,9 @@ function dartVolley() {
     react: (instr, c) => {
       for (const e of c.battleState.enemies) {
         if (e.isDead()) continue;
+        // 附级：被动群伤（2026-09-15 拆分），不吃加成不触发响应
         c.kernel.submitInstruction(new DealDamageInstruction({
-          source: c.player, target: e, amount: 2, tags: ['aoe'],
+          source: c.player, target: e, amount: 2, tags: ['aoe'], type: 'minor',
         }), instr);
       }
     },
@@ -309,7 +365,7 @@ registerRelic({
   description: '每次受伤后，获得 1 护盾。',
   flavor: '为什么大锤有这个效果？',
   subscriptions: () => [{
-    when: DealDamageInstruction,
+    when: ApplyDamageInstruction,
     phase: 'post',
     filter: (instr, c) => instr.target === c.player && (instr.result?.dealt ?? 0) > 0,
     react: (instr, c) => c.kernel.submitInstruction(
@@ -326,7 +382,8 @@ registerRelic({
     return [{
       when: DealDamageInstruction,
       phase: 'post',
-      filter: (instr, c) => !fired && instr.source === c.player && (instr.result?.dealt ?? 0) > 15,
+      filter: (instr, c) => !fired && instr.source === c.player
+        && instr.type === 'major' && (instr.result?.dealt ?? 0) > 15,
       react: (instr, c) => {
         fired = true;
         c.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'relic' }), instr);
@@ -411,8 +468,9 @@ registerRelic({
 });
 
 // ---- 塞西莉亚之恩赐（S·事件专属）：致命一击延迟一回合 ----
-// 实现＝「致命拦截 + 奇迹1」；拦截点是伤害指令的 PRE（PRE 在 execute 之前跑，
-// 是唯一能改变本次结算结果的时机）。语义见 effects.js 的 miracle。
+// 实现＝「致命拦截 + 奇迹1」；拦截点是**应用原语**的 PRE（2026-09-15 两原语拆分：
+// 免死类拦截挂受击侧、在受击结算前改变结果——它不关心伤害出自什么千奇百怪的原因，
+// 不筛主/附级；改判的补刀伤害是附级系统结算）。语义见 effects.js 的 miracle。
 registerRelic({
   id: 'ceciliaBlessing', name: '塞西莉亚之恩赐', rarity: 'S', cost: 1, acquisition: ['event'],
   description: '每场战斗一次：你将死亡时，改为保留 1 点生命并获得奇迹 1（自己回合结束时奇迹 -1，归零即死亡）。',
@@ -420,7 +478,7 @@ registerRelic({
   subscriptions: () => {
     let used = false; // 每场战斗重置：subscriptions 在战前装配时调用一次
     return [{
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'pre',
       // 致命判定写在 react 而不是 filter：内核 _collect 先对所有订阅跑 filter、再按
       // priority 排序跑 react，故 filter 里读到的是**所有伤害修饰之前**的 payload。
@@ -437,7 +495,7 @@ registerRelic({
         c.kernel.veto(instr, 'cecilia', [
           new DealDamageInstruction({
             source: instr.source, target: p,
-            amount: Math.max(p.hp - 1, 0) + p.shield, fixed: true, tags: ['ceciliaGuard'],
+            amount: Math.max(p.hp - 1, 0) + p.shield, fixed: true, tags: ['ceciliaGuard'], type: 'minor',
           }),
           new AddEffectInstruction({ target: p, effectId: 'miracle', stacks: 1 }),
         ]);
@@ -522,7 +580,7 @@ registerRelic({
     phase: 'post',
     filter: (instr) => instr.side === 'player',
     react: (instr, c) => c.kernel.submitInstruction(
-      new DealDamageInstruction({ target: c.player, amount: 2, tags: ['relic'] }), instr),
+      new DealDamageInstruction({ target: c.player, amount: 2, tags: ['relic'], type: 'minor' }), instr),
   }],
 });
 
@@ -533,7 +591,7 @@ registerRelic({
   subscriptions: () => {
     let used = false; // 每场战斗一次（工厂每场调用一次）
     return [{
-      when: DealDamageInstruction,
+      when: ApplyDamageInstruction,
       phase: 'post',
       filter: (instr, c) => !used && instr.target === c.player && c.player.hp > 0
         && c.player.hp * 2 <= c.player.maxHp,
@@ -562,7 +620,7 @@ registerRelic({
       for (const u of all) {
         if (u.isDead()) continue;
         c.kernel.submitInstruction(new DealDamageInstruction({
-          target: u, amount: 1, fixed: true, tags: ['relic'],
+          target: u, amount: 1, fixed: true, tags: ['relic'], type: 'minor',
         }), instr);
       }
     },
@@ -579,7 +637,7 @@ registerRelic({
     for (const e of ctx.battleState.enemies) {
       if (e.isDead()) continue;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: ctx.player, target: e, amount: 4, fixed: true, tags: ['relic'],
+        source: ctx.player, target: e, amount: 4, fixed: true, tags: ['relic'], type: 'minor',
       }));
       ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: e, effectId: 'weaken', stacks: 2 }));
@@ -791,7 +849,8 @@ registerRelic({
   subscriptions: () => [{
     when: DealDamageInstruction,
     phase: 'pre',
-    filter: (instr) => instr.source?.side === 'player' && instr.tags?.includes('perfect'),
+    filter: (instr) => instr.source?.side === 'player' && instr.tags?.includes('perfect')
+      && instr.type === 'major',
     react: (instr) => instr.setPayload('damage', instr.payload.damage + 8),
   }],
 });

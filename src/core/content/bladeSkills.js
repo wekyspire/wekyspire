@@ -3,6 +3,7 @@
 //   斩系列 —— 局内进阶链（打出即转化升阶；只在牌库中冷却；不可被焚毁；链首慢热）；
 //   花刀   —— 弃牌换护盾（选牌弃 / 弃掉所有无法打出的手牌，2026-09 稿改防御）；
 //   回旋斩 —— 牌库末抽牌（与牌库顶抽牌形成规划语言）；
+//   横劈   —— 真群伤（刀组的群伤答案：纯伤害无附加，数字带体系溢价）；
 //   飞刀   —— 邻牌献祭（两侧语义统一读「打出那一刻」，helpers.handNeighborsAtPlay）；
 //   藏锋   —— 高伤换滞气（stall：无法抽牌）；
 //   呼吸   —— 弃牌回补（同名效果承担弃牌监听 + 回合末自清，见 content/effects.js）；
@@ -34,7 +35,7 @@ import {
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
-  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower,
+  attackDamage, resolvedDamageText, gainShield, gainBlock, addEffect, gainPower, aoeAttack,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
   buildCardSelectionRequest, selected, isBladeCard,
@@ -349,6 +350,28 @@ cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1, 'cycloneBurst');   // 20
 cycloneCard('cycloneBurst', '回旋爆斩', 'B', 10, 2, 1, 'perfectCyclone'); // 2026-09-13 稿：11/抽3 → 10/抽2
 cycloneCard('perfectCyclone', '完美回斩', 'A', 15, 2, 0);   // 机制跃迁：无冷却
 
+// ==== 横劈系列（真群伤）========================================================
+// 刀组的群伤答案（2026-09-14 用户定）：纯伤害无附加——刀是全游戏最高伤害体系，群伤
+// 数字带体系溢价（D 8 对齐正常 D 底线、C 11 对标回旋斩 C 10 单发）；冷却1 是刀组
+// 攻击卡的常规节拍。作为刀法牌自动吃养刀/锻刀/练刀/刀圣的加成。
+const horizontalCleave = (id, name, tier, damage, promotesTo = null) => registerSkill({
+  id, name, type: 'normal', tier, series: 'blade',
+  keywords: ['blade'],
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal', targetMode: 'enemy',
+  promotesTo,
+  use(sctx) {
+    aoeAttack(sctx, damage);
+    return true;
+  },
+  describe: () => `群伤${damage}`,
+  battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}`,
+});
+horizontalCleave('cleave', '横劈', 'D', 8, 'skyCleave');
+horizontalCleave('skyCleave', '裂空劈', 'C', 11, 'huashanCleave');
+horizontalCleave('huashanCleave', '力劈华山', 'B', 14);
+
 // ==== 飞刀系列（邻牌献祭）======================================================
 // 两侧语义统一读「打出那一刻」（handNeighborsAtPlay：结算中自身已离手，按捕获手位
 // 换算 left=hand[i-1]、right=hand[i]；canUse 预览态回落实时邻位）。
@@ -360,6 +383,7 @@ function bothSidesPresent(sctx) {
 }
 
 // 弃两侧基型（飞刀/强力飞刀/绝灭飞刀）：伤害 + 丢弃两侧牌。
+// 2026-09-14 用户定整体提阶 C→B→A（原 D→C→A 跳档，C 与 A 之间无 B 衔接）。
 const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
@@ -378,9 +402,9 @@ const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSk
   describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
-sideDaggerCard('flyingDagger', '飞刀', 'D', 14, 'heavyDagger');        // 2026-09-13 稿：12→14
-sideDaggerCard('heavyDagger', '强力飞刀', 'C', 22, 'annihilateDagger'); // 2026-09-13 稿：20→22
-sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 32);
+sideDaggerCard('flyingDagger', '飞刀', 'C', 13, 'heavyDagger');
+sideDaggerCard('heavyDagger', '强力飞刀', 'B', 20, 'annihilateDagger');
+sideDaggerCard('annihilateDagger', '绝灭飞刀', 'A', 28);
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：弃两侧牌，抽2牌插回两侧原位。
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
@@ -505,12 +529,14 @@ sheathCard('sheathEdge', '藏锋', 'A', 48, 3);
 // （content/effects.js：弃牌 POST 监听 + 回合末自清，生命周期与效果实例绑定——
 // 被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，同样计入；
 // 打出自身不是弃牌（pending→burnt 的消耗路径）。
-// 阶梯：C 纯抽 / B 抽+格挡1力量1 / A 抽+格挡2力量2（B→A 翻倍，潜锋23→藏锋48 的包络内；
+// 阶梯：C 纯抽 / B 抽+格挡1 / A 抽+格挡2（B→A 翻倍，潜锋23→藏锋48 的包络内；
 // 三阶同为整战一次，阶差全在效果强度）。
+// 2026-09-16 用户裁决（马拉松 r14/r15 数据：武者呼吸+情况不对单回合力量5+格挡5 过强）：
+// ① 全系费用 1AP→2AP；② 武者/完美呼吸移除力量加成（只留格挡）。
 const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, promotesTo = null }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['exhaust'],
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: 2 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   promotesTo,
@@ -526,8 +552,8 @@ const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, promote
     + (strength > 0 ? `，/effect{力量}${strength}` : ''),
 });
 breathCard('breath', '呼吸', 'C', { effectId: 'breath', promotesTo: 'warriorBreath' });
-breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, strength: 1, promotesTo: 'perfectBreath' });
-breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 2, strength: 2 });
+breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, promotesTo: 'perfectBreath' });
+breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 2 });
 
 // ==== 培植系列（养刀）==========================================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
@@ -711,6 +737,7 @@ registerSkill({
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'pre', window: 'once',
       filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
+        && instr.type === 'major'
         && ctx.kernel.stack.some(
           i => i instanceof ActivateSkillInstruction && isBladeCard(i.skill)),
       react: (instr) => { instr.fixed = true; },
@@ -893,10 +920,14 @@ const swapCleaveCard = (id, name, tier, ap, promotesTo) => registerSkill({
 swapCleaveCard('quickCleave', '快速花刀', 'C', 1, 'quickCleavePlus');
 swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0);
 
-// 铁雨（B，消耗，设计稿未写费用 → 0费；2026-09-12 设计稿新增）：**打出手中所有的碎铁**。
+// 铁雨（B，消耗，设计稿未写费用 → 0费；2026-09-12 设计稿新增）：**打出所有碎铁**。
+// 2026-09-14 用户改：手中 → 所有（手牌+牌库）——原「打包手中碎铁」零增量（碎铁 0 费
+// 自带抽 1，手动逐张打毫无成本；试玩 24 局唯一一次入手即当废牌卡手），改成把斩链
+// 洗进牌库的碎铁**全部拉出来打**，才是真正的碎铁爆发件。
 // 口径：逐张**嵌套出牌**（UseSkillInstruction —— skill.js 头注声明的能力：技能逻辑直接提交，
-// 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride）。
-// 先快照手牌再逐张打：打出的会离手（pending → 焚毁），边遍历边打会错位。
+// 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride；其 moveCard 不要求来源
+// 是手牌，牌库碎铁直接进结算）。先快照（手牌+牌库）再逐张打：打出的会离手/离库，
+// 边遍历边打会错位；碎铁自带抽 1 翻上来的新碎铁不在快照内、不打（快照口径同 pending 惯例）。
 registerSkill({
   id: 'ironRain', name: '铁雨', type: 'normal', tier: 'B', series: 'blade',
   keywords: ['exhaust'],
@@ -904,16 +935,21 @@ registerSkill({
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
-    const shards = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard');
+    const bs = sctx.battleState;
+    const shards = [
+      ...bs.zones.hand.filter(c => c.defId === 'ironShard'),
+      ...bs.zones.deck.filter(c => c.defId === 'ironShard'),
+    ];
     for (const shard of shards) {
       sctx.kernel.submitInstruction(new UseSkillInstruction({ skill: shard }));
     }
     return true;
   },
-  describe: () => '打出手中所有/card{ironShard}',
+  describe: () => '打出所有/card{ironShard}（含牌库）',
   battleDescribe: (sctx) => {
-    const n = sctx.battleState.zones.hand.filter(c => c.defId === 'ironShard').length;
-    return `打出手中所有/card{ironShard}（当前${n}张）`;
+    const bs = sctx.battleState;
+    const n = [...bs.zones.hand, ...bs.zones.deck].filter(c => c.defId === 'ironShard').length;
+    return `打出所有/card{ironShard}（含牌库，共${n}张）`;
   },
 });
 
