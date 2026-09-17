@@ -60,7 +60,11 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: res.pages }] });
       // 退出切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
       // 黑幕盖住 → 阶段迁移 + 塔楼刷新 → 揭幕；获得演出排在揭幕之后（不然会被黑幕吞掉半截）。
-      await lifecycle.exitSceneAfterCutscene(() => lifecycle.completeRoomAndNotify());
+      // completeRoom 在此推进楼层 → 揭幕即排相机爬升（事件房不换台，swapRoomToMap 摸不到这里）。
+      await lifecycle.exitSceneAfterCutscene(() => {
+        lifecycle.completeRoomAndNotify();
+        lifecycle.arriveMapFloor();
+      });
       showcase.flushRunPresentations();          // 揭幕后播"到手那一拍"（内容在选中的那一拍声明的）
       return true;
     } catch (err) {
@@ -69,6 +73,7 @@ export function createRunCutsceneFlows(ctx) {
       try {
         if (!run.roomData?.eventResolved) resolveEvent(run, eventView(run, runCtx).choices[0]?.id ?? null, runCtx);
         if (run.gameStage === 'room') lifecycle.completeRoom();
+        lifecycle.arriveMapFloor();   // 兜底离房若推进了楼层，同样补爬升（幂等）
       } catch { /* 已经结算过/已离房：忽略 */ }
       runPresenter.clear();                     // 异常路径不补演出
       ctx.notify();
@@ -190,7 +195,8 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
       if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
       if (run.cardOffering) return true;              // 九选三面板收尾（chooseSeedCards 里再切幕）
-      await lifecycle.exitSceneAfterCutscene(() => ctx.notify());   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
+      // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
+      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
       // 跳过进阶的删卡反哺（用户定 2026-09-13）：揭幕后就地开全屏删卡界面（title「删一张卡」）。
       // 可跳过——「返回」只收起界面，机会经 prep 面板的「使用删卡机会」按钮长期保留。
       // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
@@ -208,7 +214,7 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      if (!run.cardOffering) await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+      if (!run.cardOffering) await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
     })();
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
@@ -218,7 +224,7 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
     })();
   }
 
@@ -230,7 +236,7 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => ctx.notify());
+      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
     })();
   }
   function rerollSeedOffering() {

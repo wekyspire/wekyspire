@@ -16,22 +16,33 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { sharedTowerArtCache } from '../art/towerArt.js';
-import { buildTowerWilderness, towerFacingY, towerCameraPose } from '../scenes/towerWilderness.js';
+import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, TOWER_X, TOWER_Z, TOWER_BASE_Y } from '../scenes/towerWilderness.js';
 
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
 // 战前准备/地图舞台：大雪荒原 + 孤立塔楼（2026-09-15 观感重做，替占位夜空+色块塔）。
 // 塔身 = billboard 纸片塔——每层一张模块贴片（assets/tower/，全部楼层同一模块直
-// 到后续章节素材落位），当前层恒居画面中心（y=0），低层在下、塔顶没入天空、塔底
-// 没入雪原雾中；贴图缺席（headless/加载中）退化为色块层。雪原/天空/雾/雪花在
-// scenes/towerWilderness.js（环境件），本舞台只持塔身（setFloor/arriveFloor 接口不变）。
+// 到后续章节素材落位）。塔是世界固定的（塔基轻吻雪面，锚 TOWER_BASE_Y）；相机随层沿
+// 塔身爬升表达「到层」（arriveFloor 上升动画，2026-09-16 用户定，替旧「当前层高亮
+// 长出」），爬升时雪盒/填充光同步跟随。贴图缺席（headless/加载中）退化为色块层。
+// 雪原/天空/雾/雪花在 scenes/towerWilderness.js（环境件），本舞台只持塔身
+// （setFloor/arriveFloor 接口不变）。
 // uiScene pass 绘左下角玩家状态栏（与战斗内 PlayerStatusObject 同物同位）。
 const FLOOR_GAP = 7;            // 层间纵向间距（世界单位）= 模块贴片高
 const MODULE_ASPECT = 2048 / 1199;  // 模块素材宽高比（层宽 = FLOOR_GAP × 此值）
-const TOWER_X = 58;             // 塔楼横向位置（右侧）
-const TOWER_Z = -10;
-const TOWER_Y = -15;            // 当前层中心的世界 y（相机取景中心对齐）
+// 塔世界位 TOWER_X/Z/BASE_Y 在 scenes/towerWilderness.js（塔环境共享锚点，本舞台 import 取用）
 const TOWER_MODULE = '第一章_基础';  // 全楼层共用的模块（后续按章换）
+// 鼠标视差（2026-09-16 用户定）：相机随鼠标绝对位置轻微平移——**二阶弹簧阻尼平滑**
+// （用户定：保留动量，一阶指数趋近太"黏"）。刚度/阻尼/幅度都是调参位：塔距相机 30、
+// 画面高 ~25 世界单位，1 单位平移 ≈ 画面 4%。ζ≈0.92 略欠阻尼，带一点惯性尾。
+export const MOUSE_SWAY = { unitsX: 0.8, unitsY: 0.48, stiffness: 5, damping: 4.1, maxDt: 0.1 };
+// 视差落相机的复用临时向量（tick 单协程，无重入）
+const _swayDir = new THREE.Vector3();
+const _swayRight = new THREE.Vector3();
+const _swayUp = new THREE.Vector3();
+const _swayOff = new THREE.Vector3();
+const _swayLook = new THREE.Vector3();
+const _swayWorldUp = new THREE.Vector3(0, 1, 0);
 
 export class MapStage {
   /**
@@ -48,11 +59,28 @@ export class MapStage {
     this._wilderness = buildTowerWilderness({ towerX: TOWER_X, towerZ: TOWER_Z });
     this.scene.add(this._wilderness.group);
     this.scene.fog = this._wilderness.fog;
-    // billboard 纸片塔：一次性朝向世界相机（塔楼层相机固定在基准机位）
+    // billboard 纸片塔：一次性朝向世界相机（塔楼层相机沿塔身爬升，朝向角只算一次）
     this._tower = new THREE.Group();
-    this._tower.position.set(TOWER_X, TOWER_Y, TOWER_Z);
+    this._tower.position.set(TOWER_X, TOWER_BASE_Y, TOWER_Z); // 塔是世界固定的（锚塔基）
     this._tower.rotation.y = towerFacingY({ x: TOWER_X, z: TOWER_Z });
     this.scene.add(this._tower);
+    // 相机所在层（爬升动画的起点锚）：setFloor 首次落位初始化，之后只由 arriveFloor
+    // 推进——战后换台 setFloor 摆新层模块但不动它，相机爬升才有可见起点
+    this._cameraFloor = null;
+    this._riseTween = null;
+    this._riseDone = null;
+    // 塔楼层世界 pass 由雪云管线接管（StageManager composeScene 钩子，BattleStage
+    // 体积光同范式）：mesh pass → 云 march（读场景深度）→ transmittance 合成。
+    // UI pass（uiScene）仍由 StageManager 在其后兜底渲染，不受影响。
+    this.composeScene = ({ renderer, scene, camera }) => {
+      this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
+    };
+    // 逻辑机位（视差的基座）：锚点摆位与爬升 tween 只写它，tick 统一把「机位 +
+    // 鼠标视差偏移」落到共享相机（onEnter 设/onExit 还协议不变）
+    this._basePose = null;
+    this._mouseTarget = { x: 0, y: 0 };  // 鼠标归一化目标 [-1,1]（x 右、y 上）
+    this._mouseSway = { x: 0, y: 0 };    // 二阶平滑：视差位置（弹簧位移）
+    this._mouseSwayVel = { x: 0, y: 0 }; // 二阶平滑：视差速度（保留的动量）
     // 塔楼模块贴图缓存（node/headless 为 null → 层块退化色块；浏览器共享单例，
     // 预载门 warm 过则首拍同步命中）
     this._towerArt = towerArt ?? ((typeof document !== 'undefined') ? sharedTowerArtCache : null);
@@ -370,6 +398,13 @@ export class MapStage {
 
   /** 指针移动：hover 拾取（Picker 内部发 tooltip:*）+ 面板悬浮态。 */
   handlePointerMove(x, y) {
+    // 鼠标视差目标：画布相对像素 → 归一化 [-1,1]（x 右、y 上）。绝对位置驱动，
+    // 鼠标静止时偏移保持，无需持续移动
+    const el = this._sm?._renderer?.domElement;
+    if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+      this._mouseTarget.x = (x / el.clientWidth) * 2 - 1;
+      this._mouseTarget.y = 1 - (y / el.clientHeight) * 2;
+    }
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
@@ -430,23 +465,20 @@ export class MapStage {
       this._wilderness?.update(dt);      // 荒原环境（雪花 GPU 推进）
       this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
       this._bubbles.update(dt);
+      this._applyMouseParallax(dt);      // 鼠标视差：机位+偏移 → 共享相机（每帧唯一落点）
     });
     // 塔楼层专属机位（用户定：塔楼投影至少占屏 1/3）——世界相机三舞台共享，
-    // 走借还协议：onEnter 设、onExit restoreBaseCamera（假 manager 无相机则跳过）
+    // 走借还协议：onEnter 设、onExit restoreBaseCamera（假 manager 无相机则跳过）。
+    // 锚在 _cameraFloor（相机所在的层）：战后换台时 setFloor 已摆新层模块，但相机
+    // 停在旧层——arriveFloor 的爬升动画由此出发，上升全程可见
     this._mgr = manager ?? null;
-    const cam = manager?.camera;
-    if (cam) {
-      const { position, lookAt } = towerCameraPose({
-        towerX: TOWER_X, towerY: TOWER_Y, towerZ: TOWER_Z,
-      });
-      cam.position.copy(position);
-      cam.lookAt(lookAt);
-    }
+    this._applyAnchorPose(this._cameraFloor ?? this._floorState?.floor ?? 1);
   }
 
   onExit() {
     this._unsubTick?.();
     this._unsubTick = null;
+    this._settleRise(); // 爬升中退场（如玩家爬升期间点进战斗）：停表 + 补回执，再还相机
     // 还原世界相机基准机位（塔楼层专属机位不外泄到战斗/房间层）
     this._mgr?.restoreBaseCamera?.();
     this._mgr = null;
@@ -492,11 +524,15 @@ export class MapStage {
     return tex;
   }
 
-  // 重建塔身：全楼层 billboard 贴片（视锥外的自动剔除）——低层在下（f-floor），
-  // 当前层恒在塔组原点（世界 y=TOWER_Y，画面中心）；当前层金 tint、Boss 层红 tint、
-  // 其余白（贴图原色）。贴图缺席（headless/首拍加载中）为纯色块层。
+  // 重建塔身：全楼层 billboard 贴片（视锥外的自动剔除）。塔是世界固定的——塔组锚
+  // TOWER_BASE_Y（塔基轻吻雪面 0.5），层 f 模块中心 = (f-0.5)×层高（层 1 坐在塔基
+  // 线上，只埋 0.5——旧 (f-1) 摆法把层 1 压低半层、79% 入土）；Boss 层红 tint、
+  // 其余白（贴图原色）。当前层金 tint 已移除（2026-09-16 用户定：「到层」改由相机
+  // 爬升表达，等美术资源到位后再做更多动画）。贴图缺席（headless/首拍加载中）为
+  // 纯色块层。受光材质（Lambert）吃荒原灯组，与雪原同一套光照。
   setFloor(floor, totalFloors) {
     this._floorState = { floor, totalFloors };
+    if (this._cameraFloor == null) this._cameraFloor = floor; // 首次落位初始化，之后只由 arriveFloor 推进
     for (const child of [...this._tower.children]) {
       child.geometry.dispose();
       child.material.dispose();
@@ -504,34 +540,116 @@ export class MapStage {
     }
     const w = FLOOR_GAP * MODULE_ASPECT;
     for (let f = 1; f <= totalFloors; f++) {
-      const color = f === floor ? 0xffd75e : (isBossFloor(f) ? 0x8a3548 : 0xffffff);
+      const color = isBossFloor(f) ? 0x8a3548 : 0xffffff;
       const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(w, FLOOR_GAP),
-        new THREE.MeshBasicMaterial({
+        new THREE.MeshLambertMaterial({
           color, map: this._towerTexture ?? null,
           transparent: true, alphaTest: 0.35, depthWrite: true,
         }),
       );
-      plane.position.set(0, (f - floor) * FLOOR_GAP, 0);
+      plane.position.set(0, (f - 0.5) * FLOOR_GAP, 0); // 层 f 中心 = 塔基 + (f-0.5)×层高（层 1 坐在塔基线上）
       this._tower.add(plane);
     }
-    // 低楼层时雪原上抬贴住塔基（塔基世界 y 随当前层漂移；中高楼层固定在基准高度，
-    // 塔底没入画面下缘的雾中——「塔从雪原里长出来」）
-    const towerBaseY = TOWER_Y + (1 - floor) * FLOOR_GAP - FLOOR_GAP / 2;
-    this._wilderness.setSnowfieldY(towerBaseY + 2);
   }
 
-  // 塔楼抵达动画（S5 pilot）：黑幕 reveal 后当前层高亮块自下而上"长出"。
-  // 由 run sequencer 指令驱动（onDone = 回执句柄）；duration 可缩（测试）
-  arriveFloor(floor, totalFloors, { onDone = null, duration = 0.6 } = {}) {
-    this.setFloor(floor, totalFloors); // 幂等落位（doSwap 已 setFloor 时等同重放）
-    const current = this._tower.children.find(c => c.position.y === 0);
-    if (!current) { onDone?.(); return; }
-    current.scale.set(1, 0.01, 1);
-    gsap.to(current.scale, {
-      y: 1, duration, ease: 'back.out(2.2)',
-      onComplete: onDone,
+  /** 层锚点世界 y：层 f 模块中心（塔基 + (f-1)×层高 + 半层）。 */
+  _floorAnchorY(floor) {
+    return TOWER_BASE_Y + (floor - 0.5) * FLOOR_GAP;
+  }
+
+  /** 相机落位到指定层的专属机位，环境件（雪盒/填充光/雪相配方）同步到锚点高度。 */
+  _applyAnchorPose(floor) {
+    const { position, lookAt } = towerCameraPose({
+      towerX: TOWER_X, towerY: this._floorAnchorY(floor), towerZ: TOWER_Z,
     });
+    if (!this._basePose) this._basePose = { position, lookAt };
+    else { this._basePose.position.copy(position); this._basePose.lookAt.copy(lookAt); }
+    this._wilderness?.setAnchorY(lookAt.y);
+    this._wilderness?.setStormLevel(towerStormLevel(floor), floor); // 雪相/云观感/雾随章
+    this._applyMouseParallax(0); // 立即落位（dt=0 不推进平滑，只按当前视差摆相机）
+  }
+
+  /** 相机当前锚定的层（战后/房间退出据此判断是否需要爬升）。 */
+  get cameraFloor() { return this._cameraFloor; }
+
+  /** 爬升收口：停表 + 补回执。gsap kill 不触发 onComplete——待回执的 sequencer
+   *  指令（awaitFloorArrive 的 ANIMATION_INSTRUCTION_FINISHED）若不手动补，会卡到
+   *  保险丝强杀才出队，堵住排在后面的战斗/剧本节拍（5s 慢爬 + 爬升中可备战进战斗
+   *  的窗口真实存在，2026-09-16）。 */
+  _settleRise() {
+    const tween = this._riseTween;
+    this._riseTween = null;
+    const done = this._riseDone;
+    this._riseDone = null;
+    tween?.kill();
+    done?.();
+  }
+
+  // 塔楼抵达动画（2026-09-16 用户定重做）：相机从上一层锚点沿塔身上升到当前层，
+  // 替代原「当前层高亮块自下而上长出」。由 run sequencer 指令驱动（onDone = 回执
+  // 句柄）；duration 可缩（测试）。默认 5s 慢爬（用户定：爬升期间玩家已可备战操作，
+  // 慢速更有攀爬感）；FLOOR_ARRIVE_MS=6000 的队列兜底宽于默认时长 1s。
+  arriveFloor(floor, totalFloors, { onDone = null, duration = 5 } = {}) {
+    this.setFloor(floor, totalFloors); // 幂等落位（doSwap 已 setFloor 时等同重放）
+    // 同层直落（本层有房间的战后路径 floor 不变）或无相机可动：立即回执，
+    // 不空转 5 秒白占队列节拍
+    if (this._cameraFloor === floor || !this._mgr) { onDone?.(); return; }
+    const from = towerCameraPose({
+      towerX: TOWER_X, towerY: this._floorAnchorY(this._cameraFloor), towerZ: TOWER_Z,
+    });
+    const to = towerCameraPose({
+      towerX: TOWER_X, towerY: this._floorAnchorY(floor), towerZ: TOWER_Z,
+    });
+    const fromFloor = this._cameraFloor; // 雪相插值起点（跨 11→12 爬升时雪渐变成风暴配方）
+    this._cameraFloor = floor;
+    this._settleRise(); // 串行队列下理论不可达，防御上一段未收的爬升
+    const proxy = { k: 0 };
+    this._riseDone = onDone;
+    this._riseTween = gsap.to(proxy, {
+      k: 1, duration, ease: 'power2.inOut',
+      onUpdate: () => {
+        if (!this._mgr?.camera) return;
+        // 两锚点仅 y 不同 → 插值即纯竖直升降，取景朝向全程不变。
+        // 只写逻辑机位：相机由 tick 的「机位+视差」统一落位，视差与爬升自然叠加。
+        this._basePose.position.lerpVectors(from.position, to.position, proxy.k);
+        this._basePose.lookAt.lerpVectors(from.lookAt, to.lookAt, proxy.k);
+        this._wilderness?.setAnchorY(this._basePose.lookAt.y); // 雪盒/跟随光跟相机爬
+        // 雪相/云观感/雾跨章渐变（爬过 11→16 边界时渐入风暴，雾在 33→38 渐小）
+        this._wilderness?.setStormLevel(
+          towerStormLevel(fromFloor) * (1 - proxy.k) + towerStormLevel(floor) * proxy.k,
+          fromFloor + (floor - fromFloor) * proxy.k);
+      },
+      onComplete: () => { this._riseTween = null; this._riseDone = null; onDone?.(); },
+    });
+  }
+
+  /** 鼠标视差（2026-09-16 用户定）：把逻辑机位加一个随鼠标的小幅平移后落到共享相机。
+   *  平滑 = **二阶弹簧阻尼**（保留动量：速度是显式状态，缓起缓收带惯性尾；dt 截断防
+   *  切页后大步长炸稳）。平移沿相机右/上轴（取景方向变了偏移方向也不跑偏），position
+   *  与 lookAt 加同一偏移 = 整体平移，画面同摆不旋转。与锚点摆位/爬升 tween（只写
+   *  _basePose）自然叠加。 */
+  _applyMouseParallax(dt) {
+    const cam = this._mgr?.camera;
+    const base = this._basePose;
+    if (!cam || !base) return;
+    const h = Math.min(dt ?? 0, MOUSE_SWAY.maxDt);
+    // 半隐式欧拉：先加速度更新速度，再用新速度推进位置（弹簧 k、阻尼 c）
+    for (const axis of ['x', 'y']) {
+      const target = this._mouseTarget[axis];
+      const pos = this._mouseSway[axis];
+      const vel = this._mouseSwayVel[axis];
+      const acc = MOUSE_SWAY.stiffness * (target - pos) - MOUSE_SWAY.damping * vel;
+      this._mouseSwayVel[axis] = vel + acc * h;
+      this._mouseSway[axis] = pos + this._mouseSwayVel[axis] * h;
+    }
+    _swayDir.subVectors(base.lookAt, base.position).normalize();
+    _swayRight.crossVectors(_swayDir, _swayWorldUp).normalize();
+    _swayUp.crossVectors(_swayRight, _swayDir);
+    _swayOff.copy(_swayRight).multiplyScalar(this._mouseSway.x * MOUSE_SWAY.unitsX)
+      .addScaledVector(_swayUp, this._mouseSway.y * MOUSE_SWAY.unitsY);
+    cam.position.copy(base.position).add(_swayOff);
+    cam.lookAt(_swayLook.copy(base.lookAt).add(_swayOff));
   }
 }
 

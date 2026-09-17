@@ -52,7 +52,7 @@ const DEFAULT_DECK = [...BODY_STARTER_DECK];
 const USE_PCG_ROOMS = true;
 
 // 塔楼抵达节拍时长（ms）：指令 durationMs 与等待侧兜底共用同一数值源
-const FLOOR_ARRIVE_MS = 4000;
+const FLOOR_ARRIVE_MS = 6000; // 抵达指令保险丝：≥ 爬升动画时长（5s）+ 揭幕余量
 
 /**
  * 等待塔楼抵达动画播完（塔楼高亮块"长出"）。
@@ -134,7 +134,7 @@ function restoreFromSave(run, save) {
   run.pendingDebuffs = (save.pendingDebuffs ?? []).map(d => ({ ...d }));
 }
 
-export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false } = {}) {
+export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, gmMode = false } = {}) {
   const runBus = mitt();
   // run 级共享演出队列（S2）：battle / room / tower / cutscene 指令在同一队列定序，
   // 跨层演出链（终局动画 → 幕间黑幕 → 塔楼抵达）由此成为可表达的结构
@@ -151,6 +151,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   if (save) restoreFromSave(run, save);
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
+    // 无敌模式（开始界面勾选，仅新开局生效）：直发 GM 卡「一拳」（999 群伤固有），
+    // 爬塔流程验证工具；读档不吃——GM 局的卡组本身已含此卡，随存档走
+    if (gmMode) run.player.deck.push(createSkillRuntime('onePunch'));
   }
   // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
   refreshRunModifiers(run);
@@ -302,6 +305,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       completeRoom: () => completeRoom(run),
       completeRoomAndNotify: () => { completeRoom(run); notify(); },
       completeRoomSwapToMap: () => { completeRoom(run); swapRoomToMap(); notify(); },
+      // 塔楼在台且楼层已推进 → 排相机爬升（幂等）。不换台的幕间退出（事件房/进阶收尾）
+      // 也走这里：升层可能发生在幕间内部（onChoice 同步结算），爬升的排期点统一放在
+      // 各条「揭幕回塔楼」的节拍上（2026-09-16 用户报：1 层事件房升 2 层没有爬升）。
+      arriveMapFloor: () => arriveMapFloor(),
       exitSceneAfterCutscene: (fn) => exitSceneAfterCutscene(fn),
     },
   });
@@ -470,25 +477,49 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    * （它的 uiScene 上挂着奖励面板，一并回收）。
    */
   function swapBattleToMap() {
-    if (stageManager && mapStage) {
-      mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画随后播
-      stageManager.setStage(mapStage);
-    }
-    battleStage?.dispose();   // 换台后释放（onExit 语义完整）
+    if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画随后播
+    // 先释放战斗舞台、**后**换台：BattleStage 无 onExit，全部清理在 dispose——其中
+    // shake.dispose 会把相机回基位。此前先 setStage 后 dispose，塔楼机位（onEnter 刚摆）
+    // 被回退到战斗基准机位：塔/雪原全在雾外，战后揭幕只剩天空穹的灰蓝（2026-09-16 用户报）。
+    // 换台发生在黑幕中点，先拆后换并不可见。
+    battleStage?.dispose();
     battleStage = null;
+    if (stageManager && mapStage) stageManager.setStage(mapStage);
     syncMapStatus();          // 面板/状态栏：随后 notify 推新阶段快照
     notify();
   }
 
   /** 把房间舞台换回塔楼（不排幕）：奖励/进阶等"多段演出"共用同一段换台代码。 */
   function swapRoomToMap() {
-    if (stageManager && mapStage) {
-      mapStage.setFloor(run.floor, run.totalFloors);
-      stageManager.setStage(mapStage);
-    }
+    if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors);
+    // 先释放房间舞台、后换台（同 swapBattleToMap）：dispose→onExit 的基准机位还原
+    // 不得晚于塔楼 onEnter 的新机位——此前顺序反了，只靠随后的爬升 tween 逐帧覆写
+    // 相机侥幸掩盖。
     roomStage?.dispose();
     roomStage = null;
+    if (stageManager && mapStage) {
+      stageManager.setStage(mapStage);
+      // 房间完成推进了楼层 → 排一段相机爬升（fire-and-forget：面板已随 swap 推上，
+      // 爬升期间可备战；后续剧本/进房节拍在同一串行队列里自然排在爬升之后；
+      // 爬升前 ~1s 在黑幕里起步属预期）
+      arriveMapFloor();
+    }
     syncMapStatus();
+  }
+
+  /**
+   * 塔楼在台且 run.floor 已越过相机锚层 → 排一段相机爬升（幂等：未推进/无舞台即无动作）。
+   * 所有「阶段迁移后回到塔楼画面」的节拍都调它——换台路径（swapRoomToMap）与不换台的
+   * 幕间退出（事件房/进阶收尾，见 lifecycle.arriveMapFloor）同一条规则：升层不只发生在
+   * 战后，谁推进了楼层谁负责在揭幕时补爬升。
+   */
+  function arriveMapFloor() {
+    if (!(stageManager && mapStage)) return;
+    if (run.floor > mapStage.cameraFloor) {
+      void awaitFloorArrive(runSequencer, mapStage, {
+        floor: run.floor, totalFloors: run.totalFloors,
+      });
+    }
   }
 
   async function exitRestRoomScene(beforeSwap = null) {

@@ -1,10 +1,12 @@
 <template>
   <div class="start-screen">
+    
     <!-- 背景常驻同一元素：模式切换只换 class（blur 渐清 + zoom 渐近，暗示距离上靠近），
-         transition 被打断时也能平滑续接，支持快速反复切换 -->
+    transition 被打断时也能平滑续接，支持快速反复切换 -->
     <div class="bg" :class="{ story: isStory }" :style="{ backgroundImage: `url(${startBg})` }"></div>
     <div v-if="isStory" ref="snowLayer" class="snow-layer"></div>
     <div class="contents">
+      <div class="dev-banner">开发中版本，内容随时变更</div>
       <!-- 定高槽位：两种模式的元素各占固定高度容器，切换时排版不跳动 -->
       <div class="slot title-slot">
         <Transition name="swing-fade" mode="out-in">
@@ -12,7 +14,6 @@
           <h1 v-else key="story" class="title">魏启尖塔 <span class="subtitle">故事</span></h1>
         </Transition>
       </div>
-      <div class="dev-banner">开发中版本，内容随时变更</div>
       <div class="slot btn-slot">
         <Transition name="swing-fade" mode="out-in">
           <button v-if="!isStory" key="infinite" class="main-btn-rogue" @click="launch(null)">肉鸽模式</button>
@@ -27,15 +28,16 @@
             <button class="continue-btn" @click="launch(save)">继续存档</button>
             <div v-if="saveText" class="save-info">{{ saveText }}</div>
           </div>
-          <div v-else :key="saveKey" class="save-block">
-            <div class="save-title">存档</div>
-            <div class="save-empty">暂无存档</div>
-          </div>
         </Transition>
       </div>
       <div class="story-toggle">
         <input id="story-checkbox" type="checkbox" v-model="isStory" />
         <label for="story-checkbox">故事模式</label>
+      </div>
+      <!-- 无敌模式：仅新开局生效（读档不吃）——开局直发 GM 卡「一拳」（999 群伤固有），爬塔流程验证用 -->
+      <div class="story-toggle">
+        <input id="gm-checkbox" type="checkbox" v-model="isGm" />
+        <label for="gm-checkbox">无敌模式</label>
       </div>
     </div>
     <ChangeLog />
@@ -62,7 +64,16 @@ const showMenuPopup = inject('showMenuPopup'); // App.vue 挂载的全局共享 
 
 // 模式选择持久化：回主菜单后复选框保持上次选择；默认肉鸽（故事模式未开放）
 const isStory = ref(settings.menuStoryMode === true);
+// 无敌模式（会话级，不持久化——验证时手动勾，平时忘关也不会污染正常局）
+const isGm = ref(false);
 watch(isStory, (v) => {
+  // 暂时关闭故事模式切换
+  if (v) {
+    isStory.value = false;
+    // 取消checkbox选中状态，提示故事模式尚未制作
+    showMenuPopup('故事模式尚未制作');
+    return;
+  }
   settings.menuStoryMode = v;
   persistSettings();
   syncAmbience();
@@ -70,7 +81,8 @@ watch(isStory, (v) => {
 
 // 当前模式对应的存档（两模式槽位隔离）
 const save = computed(() => isStory.value ? props.saves.story : props.saves.infinite);
-const canContinue = computed(() => !!save.value); // readSave 版本不符已归 null，此处只判有无
+// Story mode不能选择重新开始游戏，进入尖塔即为开始游戏
+const canContinue = computed(() => !!save.value && !isStory); // readSave 版本不符已归 null，此处只判有无
 const saveText = computed(() => {
   const s = save.value;
   if (!s || !canContinue.value) return '';
@@ -85,7 +97,7 @@ async function launch(loadSave) {
   // 读档以存档自身的模式为准；新开局以当前复选框为准
   const story = loadSave ? loadSave.storyMode !== false : isStory.value;
   if (story) {
-    showMenuPopup('故事模式暂未开放');
+    showMenuPopup('故事模式尚未制作');
     return;
   }
   // 新开局且本模式已有存档：确认覆盖（弹窗全局组件的首个使用实例）
@@ -99,8 +111,8 @@ async function launch(loadSave) {
     });
     if (!ok) return; // 取消：留在开始界面，存档不动
   }
-  // 肉鸽模式：无开场滚动动画，直接开始
-  emit('start', { storyMode: false, loadSave });
+  // 肉鸽模式：无开场滚动动画，直接开始（无敌模式仅新开局生效，读档不吃）
+  emit('start', { storyMode: false, loadSave, gmMode: !loadSave && isGm.value });
 }
 
 // ---------- 故事模式氛围：雪花粒子 + 标题音乐 ----------
@@ -187,17 +199,27 @@ onBeforeUnmount(() => {
   margin: 0; font-size: 54px; letter-spacing: 8px; color: #eef4ff;
   text-shadow: 0 2px 10px rgba(0, 0, 0, .55);
 }
-.subtitle { font-size: 24px; letter-spacing: 4px; color: #9fc0e8; vertical-align: super; }
+.subtitle { font-size: 24px; letter-spacing: 4px; color: #ff7b23; vertical-align: super; }
 .dev-banner { font-size: 22px; font-weight: bold; color: #ff6b63; letter-spacing: 4px; }
+
+.main-btn-story {
+  font-family: inherit; font-size: 18px; color: #eaf1fb; cursor: pointer;
+  padding: 10px 44px; border-radius: 5px;
+  background: rgba(212, 60, 0, 0.92); border: 1px solid #da7e5a;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+
+.main-btn-story:hover, .continue-btn:hover { background: rgba(252, 135, 25, 0.95); }
+
 /* 主按钮：白字 + 淡蓝描边 + 深底（扁平，无渐变发光） */
-.main-btn-rogue, .main-btn-story, .continue-btn {
+.main-btn-rogue, .continue-btn {
   font-family: inherit; font-size: 18px; color: #eaf1fb; cursor: pointer;
   padding: 10px 44px; border-radius: 5px;
   background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c;
   transition: background .15s, border-color .15s, transform .15s;
 }
 
-.main-btn-rogue:hover, .main-btn-story:hover, .continue-btn:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+.main-btn-rogue:hover, .continue-btn:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
 .continue-btn { font-size: 14px; padding: 7px 30px; }
 .save-info { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
 .story-toggle { margin-top: 14px; color: #eaf1fb; font-size: 14px; display: flex; gap: 8px; align-items: center; }

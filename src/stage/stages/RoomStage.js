@@ -347,6 +347,7 @@ export class RoomStage {
     clearTimeout(this._camFuse);
     this._camFuse = null;
     this._sm?.restoreBaseCamera?.();   // 借过机位必须还：否则塔楼层带着推近的取景
+    this._sm = null;   // 一次性：dispose 会再走 onExit，已退场的舞台不得再碰共享相机
     this._focused = null;
     this._panelKind = null;
     this._removePanel();
