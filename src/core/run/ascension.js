@@ -5,7 +5,8 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 import { packOf } from './rewards.js';
 import { gainMaxMana, gainMaxHp } from './prep.js';
 
-// 进阶事件（RUN_DESIGN §5.3）：离开训练房时训练次数达标 → 直接进入（无延后、无随机性）。
+// 进阶事件（RUN_DESIGN §5.3）：训练开始那一刻达标 → 在房内直接进入（2026-09-18 训练改版：
+// beginTraining 挂起、播完回房，无延后、无随机性；离房时的 completeRoom 检查保留为兜底）。
 // 内容：选一条主维度升级 + 定量恢复（healAmount 10，2026-09 定案——全恢复使「跳过/点火」
 // 无脑化，回满血留给 Boss 通关）+ 魏启上限提升 +（达标时）能力授予。
 // 2026-09 追加：维度**首次 0→1** 时获赠体系基石卡与体系能力（FIRST_ASCENSION_GRANT），
@@ -73,8 +74,9 @@ export function totalLeino(run) {
   return l.fire + l.wood + l.air + l.body;
 }
 
-// 触发判定（离开训练房时调用）：训练次数达到下一次进阶门槛且未封顶。
-// 门槛曲线：首进阶 1 次训练（第 2 层），此后每 2 次训练 +1 级（累计 1/3/5/7/9…）。
+// 触发判定（训练开始时调用，见 beginTraining；completeRoom 留作离房兜底）：训练次数达到
+// 下一次进阶门槛且未封顶。门槛曲线：首进阶 1 次训练（第 2 层），此后每 2 次训练 +1 级
+// （累计 1/3/5/7/9…）。
 export function ascensionReady(run) {
   const count = run.player.ascensionCount;
   const need = ASCENSION_PLACEHOLDER.firstTrainings
@@ -304,7 +306,14 @@ function proceedAfterLevelUp(run) {
   return completeAscension(run);
 }
 
-// 进阶事件结束 → 推进到下一层 prep（advanceFloor 内部处理登顶终局）
+// 进阶事件结束 → 推进到下一层 prep（advanceFloor 内部处理登顶终局）。
+// 例外（2026-09-18 训练改版）：**房内升阶**——beginTraining 在训练开始那一刻挂起的进阶
+// （gameStage 切 'ascension' 但 currentRoom/roomData 原地保留）播完后**切回 'room'**：
+// 训练的可选段（4 选 1 抓卡 + 尾款升级）与篝火还等着，楼层推进仍由 completeRoom 负责。
 function completeAscension(run) {
+  if (run.currentRoom) {
+    run.gameStage = 'room';
+    return run;
+  }
   return advanceFloor(run);
 }

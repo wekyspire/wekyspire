@@ -68,7 +68,14 @@ export function projectCardFull(battle, rt) {
     type: def.type ?? 'normal',
     series: def.series ?? null,
     image: def.image ?? null,
-    cost: def.cost ?? { mana: 0, actionPoint: 0 },
+    // 费用徽章同口径带上逐卡动态加价（manaCostDelta，如蓄热火球链「每次打出+1」）——
+    // 手牌 sig 含 cost，蓄热次数变化会触发卡面重烘，徽章不漂移
+    cost: (() => {
+      const c = def.cost ?? { mana: 0, actionPoint: 0 };
+      if (typeof c.mana !== 'number') return c;
+      const d = def.manaCostDelta?.(sctx) ?? 0;
+      return d ? { ...c, mana: c.mana + d } : c;
+    })(),
     keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
     chantWeight: def.chantWeight ?? null,

@@ -70,7 +70,7 @@ const herbCard = (id, name, tier, ap, heal, { regen = 0, cleanse = false, promot
     }
     return true;
   },
-  describe: () => `治疗${heal}${regen > 0 ? `，/effect{再生}${regen}` : ''}${cleanse ? '，清除自身/effect{中毒}与/effect{燃烧}' : ''}`,
+  describe: () => `治疗${heal}${regen > 0 ? `，/effect{再生}${regen}` : ''}${cleanse ? '，清除/effect{中毒}与/effect{燃烧}' : ''}`,
   battleDescribe: (sctx) => `治疗${heal}${regen > 0 ? `，再生${regen}` : ''}${cleanse ? `（当前中毒${sctx.player.getEffectStacks('poison')}/燃烧${sctx.player.getEffectStacks('burn')}）` : ''}`,
 });
 herbCard('herbPaste', '草药膏', 'D', 1, 4, { promotesTo: 'cureGrass' });
@@ -117,7 +117,7 @@ const healChantCard = ({ id, name, tier, heal, promotesTo = null }) => registerS
       },
     }],
   },
-  describe: () => `每回合开始：治疗你${heal}`,
+  describe: () => `每回合开始：治疗${heal}`,
   battleDescribe: () => `每回合开始：治疗你${heal}`,
 });
 healChantCard({ id: 'breathOfLife', name: '生息', tier: 'C', heal: 1, promotesTo: 'vitalBreath' });
@@ -160,7 +160,7 @@ registerSkill({
     addEffect(sctx, 'regen', desperate ? 8 : 4);
     return true;
   },
-  describe: () => '治疗12，/effect{再生}4；若你生命不高于一半，改为治疗24，/effect{再生}8',
+  describe: () => '治疗12，/effect{再生}4；生命不高于一半时，改为治疗24，/effect{再生}8',
   battleDescribe: (sctx) => (sctx.player.hp * 2 <= sctx.player.maxHp
     ? '治疗24，再生8（残血翻倍）' : '治疗12，再生4'),
 });
@@ -247,7 +247,7 @@ registerSkill({
     addEffect(sctx, 'regen', 3);
     return true;
   },
-  describe: () => '失去4生命，施加/effect{中毒}6，自身/effect{再生}3',
+  describe: () => '失去4生命，施加/effect{中毒}6，/effect{再生}3',
   battleDescribe: () => '失去4生命，中毒6，再生3',
 });
 
@@ -309,7 +309,7 @@ registerSkill({
     sctx.kernel.addSubscription(poisonAmpSubscription(1));
     return true;
   },
-  describe: () => '所有敌人/effect{中毒}4；本场战斗你施加的中毒+1',
+  describe: () => '所有敌人/effect{中毒}4；本场战斗施加的/effect{中毒}+1',
   battleDescribe: () => '所有敌人中毒4；你施加的中毒+1',
 });
 
@@ -341,6 +341,6 @@ registerSkill({
     sctx.kernel.addSubscription(poisonAmpSubscription(2));
     return true;
   },
-  describe: () => '本场战斗你施加的/effect{中毒}+2',
+  describe: () => '本场战斗施加的/effect{中毒}+2',
   battleDescribe: () => '你施加的中毒+2',
 });

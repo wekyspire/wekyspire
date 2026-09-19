@@ -133,7 +133,7 @@ export function finishBattle(run, verdict, battle = null) {
     }
     run.gameStage = 'reward';
     // 奖励事件通道（用户 2026-09-14 定）：Boss/精英战后是「纯奖励事件」——卡包分布按
-    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出白名单 S；精英 → B：2 级表），
+    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出 S；精英 → B：2 级表），
     // 保证这些场景总能开出高阶卡。encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
     const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
     const isEliteFight = (run.encounter ?? []).some(e => getEnemyDefinition(defIdOf(e))?.difficulty?.elite);
@@ -167,12 +167,16 @@ export function completeRewards(run) {
 }
 
 // room 阶段完成（房间内部逻辑在 rooms/，本函数只迁移阶段）。
-// 离开训练房时训练次数达标 → 直接进入进阶事件（§4.1/§5.3，不再延后）。
+// 2026-09-18 训练改版：训练 = 必做阶段且先于篝火——campTraining/training 房未训练不许离房；
+// 抓卡尾款（pendingUpgrade）未清不许离房。进阶事件已在训练开始时房内先行（beginTraining），
+// 下面的达标检查保留为兜底（编排层异常漏播时离房仍能接上）。
 export function completeRoom(run) {
   expectStage(run, 'room');
-  // 训练「先升后抓」的强绑尾款：升级已发生、抓牌未领 → 不允许离房（GUI/headless 同一守卫）
-  if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取，不能离开房间');
   const room = run.currentRoom;
+  if (room === 'training' || room === 'campTraining') {
+    if (!run.roomData?.trained) throw new Error('训练是必做阶段：先完成训练才能离开');
+    if (run.roomData?.pendingUpgrade) throw new Error('抓到的卡还欠一次升级，不能离开房间');
+  }
   run.currentRoom = null;
   run.roomData = null;
   if ((room === 'training' || room === 'campTraining') && ascensionReady(run)) {

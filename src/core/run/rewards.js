@@ -8,13 +8,16 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 // 等阶门禁按**该体系自己的等级**（专精昂贵是设计意图，用户 2026-09 定调）：
 //   灵脉包看 leino[维度]，基础包看隐藏的 player.bodyLevel（跳过进阶时 +1）。
 // 抽取概率 = **按体系等级的绝对分布表**（PACK_TIER_TABLE，用户 2026-09-14 定）：
-//   高等级仍保留低阶概率（升级后奖励继续有提升空间），3 级起小概率直出白名单 S 卡。
+//   高等级仍保留低阶概率（升级后奖励继续有提升空间），3 级起小概率直出 S 卡。
 // 奖励事件通道（minTier）：Boss/精英战后、老虎机大奖等「纯奖励」场景把分布按等级
 //   下限钳制（B → 至少按 2 级分布，A → 至少按 3 级），保证总能开出高阶卡。
 // 通用包（汲取/魏启罐/激发/杂技）**不可直接选择**：以 COMMON_INJECT 概率混入任意卡包，
 // 并有保底计数（每 pity 次开包必出一次）；「保证其价值」= 池内存在 C 以上卡时剔除 D。
-// Z（诅咒）恒不入池；S 仅白名单（S_SPAWN_WHITELIST）可直出；
-// canSpawnAsReward=false 的衍生牌不入池。
+// Z（诅咒）恒不入池；**S 默认随包直出**（2026-09 定：能否 spawn 由卡牌注册表的
+// canSpawnAsReward 字段声明——斩链等转化专属卡即用该字段排除自己，开包侧不再持有
+// 白名单硬编码）；canSpawnAsReward=false 的衍生牌不入池。
+// 另：S 不可经训练场/营地晋升获得（promotion.js 晋升目标排除 S）——S 的稀缺性
+// 靠「只出不升」保住，升 S 的特殊事件通道后续再开。
 // 木/空灵脉内容待实装：其卡包在池子为空时自动隐藏（见 availablePacks）。
 
 export const REWARDS_PLACEHOLDER = {
@@ -37,21 +40,11 @@ export const PACK_TIER_TABLE = Object.freeze([
   Object.freeze({ D: 5, C: 10, B: 20, A: 45, S: 20 }),   // lv4+（钳制）
 ]);
 
-// S 直出白名单（用户 2026-09-14 定）：仅这些 S 可经开包/训练房直接开出（小概率奖励
-// 事件）；养成顶点（断神斩/开天斩/神龟姿态等晋升终点）不入列——它们是局内成长目标。
-export const S_SPAWN_WHITELIST = Object.freeze([
-  'qimingBlaze',    // 火：齐明天炎（爆裂咏唱顶点）
-  'burnBurstStar',  // 火：星炎（燃烧×3）
-  'emptyFist',      // 体修：空形拳（后手 55 伤）
-  'voidFist',       // 体修：虚形拳（后手抽满手牌）
-  'pluckStar',      // 体修：摘星手（完美 S）
-]);
-
 // 奖励事件的等阶下限 → 等级下限（minTier 通道）：Boss/精英战后、老虎机大奖把分布
 // 钳到至少该等级（B → 2 级表 20/30/30/20；A/S → 3 级表含 10% S）。
 export const MIN_TIER_LEVEL = Object.freeze({ C: 0, B: 2, A: 3, S: 3 });
 
-// 等级 → 可见等阶上限（池过滤用）：3 级起 S（白名单）可见。
+// 等级 → 可见等阶上限（池过滤用）：3 级起 S 可见。
 export function tierCapOfLevel(lv) {
   if (lv >= 3) return 'S';
   if (lv >= 2) return 'A';
@@ -117,7 +110,7 @@ export function packLevel(run, packId) {
   return run?.player?.leino?.[packId] ?? 0;
 }
 
-// 某卡包当前可见的最高等阶（按该体系自己的等级；S 仅白名单卡实际入池）
+// 某卡包当前可见的最高等阶（按该体系自己的等级；S 默认入池，canSpawnAsReward 声明例外）
 export function maxRewardTier(run, packId = 'body') {
   return tierCapOfLevel(packLevel(run, packId));
 }
@@ -138,14 +131,14 @@ export function deepGateOpen(run, def) {
   return (DEEP_GATES[def.deep] ?? []).some(id => run?.player?.abilities?.includes(id));
 }
 
-// 单包卡池：包归属 + 该体系等阶门禁 + 排除 Z 与 canSpawnAsReward=false + 深入卡门禁
-// + S 白名单（仅白名单 S 可直出）。capTier 可覆写门禁（通用注入跟随所开卡包的上限）。
+// 单包卡池：包归属 + 该体系等阶门禁 + 排除 Z 与 canSpawnAsReward=false + 深入卡门禁。
+// S 与普通卡同判：默认可直出，例外由注册表 canSpawnAsReward 声明（不再有白名单）。
+// capTier 可覆写门禁（通用注入跟随所开卡包的上限）。
 export function packCardPool(run, packId = 'body', capTier = null) {
   const cap = TIER_RANK[capTier ?? maxRewardTier(run, packId)];
   return allSkills().filter(def =>
     packOf(def) === packId
     && def.canSpawnAsReward !== false && def.tier !== 'Z'
-    && (def.tier !== 'S' || S_SPAWN_WHITELIST.includes(def.id))
     && (TIER_RANK[def.tier] ?? Infinity) <= cap
     && deepGateOpen(run, def));
 }

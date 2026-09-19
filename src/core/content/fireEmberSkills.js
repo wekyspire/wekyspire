@@ -68,26 +68,32 @@ function totalEnemyBurn(sctx) {
     (n, e) => n + e.getEffectStacks('burn'), 0);
 }
 
-// 燃元 B：1AP，消耗。每有 4 层（敌方）燃烧，魏启上限 +1。
+// 燃元 B/A：1AP（A 级不再消耗 AP），消耗。每有 4 层（敌方）燃烧，魏启上限 +1。
 // 口径：上限抬升「战斗内永久」——写进 battleState.modifiers（本场修正），
 // 随战斗对象一起消失，故**不需要战后回滚**，也不再往 skillRuntime 上挂记账字段。
-registerSkill({
-  id: 'emberOrigin', name: '燃元', type: 'fire', tier: 'B', series: 'ember',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal',
-  keywords: ['exhaust'],
-  use(sctx) {
-    const gain = Math.floor(totalEnemyBurn(sctx) / 4);
-    if (gain > 0) applyBattleModifier(sctx, 'maxMana', gain);
-    return true;
-  },
-  describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1（本场战斗内）',
-  battleDescribe: (sctx) => {
-    const total = totalEnemyBurn(sctx);
-    return `敌方/effect{燃烧}共${total}层：魏启上限+${Math.floor(total / 4)}（本场战斗内）`;
-  },
-});
+// 2026-09-18 设计稿扩 A 阶：效果同构，A 免 AP（高阶把「腾出手」的代价也省了）。
+function emberOriginCard({ id, tier, ap, promotesTo }) {
+  registerSkill({
+    id, name: '燃元', type: 'fire', tier, series: 'ember',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      const gain = Math.floor(totalEnemyBurn(sctx) / 4);
+      if (gain > 0) applyBattleModifier(sctx, 'maxMana', gain);
+      return true;
+    },
+    describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1',
+    battleDescribe: (sctx) => {
+      const total = totalEnemyBurn(sctx);
+      return `敌方/effect{燃烧}共${total}层：魏启上限+${Math.floor(total / 4)}（本场战斗内）`;
+    },
+  });
+}
+emberOriginCard({ id: 'emberOrigin', tier: 'B', ap: 1, promotesTo: 'emberOriginMaster' });
+emberOriginCard({ id: 'emberOriginMaster', tier: 'A', ap: 0 });
 
 // 炼心 A：1AP。每有 4 层（敌方）燃烧，获得 1 魏启（走上限截断管线）。
 registerSkill({
@@ -109,30 +115,39 @@ registerSkill({
   },
 });
 
-// 激热 C：0 费。触发目标一次燃烧结算——完全复刻 burn 效果的回合开始行为：
-// 无来源固定伤害（tags:['burn']，防火经该标记 veto；烈焰亲和就地减免）+ 层数 -1。
-// 语义：把下一次自然跳伤提前到现在（提前一拍爆发/收尾）。
-registerSkill({
-  id: 'heatSurge', name: '激热', type: 'fire', tier: 'C', series: 'ember',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  use(sctx) {
-    const target = enemyTarget(sctx);
-    if (!target) return true;
-    const stacks = target.getEffectStacks('burn');
-    if (stacks <= 0) return true; // 无燃烧：落空
-    dealDamage(sctx, Math.max(0, stacks - target.getEffectStacks('flameAffinity')),
-      { target, source: null, fixed: true, tags: ['burn'] });
-    addEffect(sctx, 'burn', -1, target);
-    return true;
-  },
-  describe: () => '触发一次目标/effect{燃烧}结算',
-  battleDescribe: (sctx) => {
-    const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-    return `触发一次/effect{燃烧}结算（当前${stacks}层）`;
-  },
-});
+// 激热 C/B/A（2026-09-18 设计稿扩阶）：触发目标一次燃烧结算——完全复刻 burn 效果
+// 的回合开始行为：无来源固定伤害（tags:['burn']，防火经该标记 veto；烈焰亲和就地
+// 减免）+ 层数 -1。语义：把下一次自然跳伤提前到现在（提前一拍爆发/收尾）。
+// 开销随阶收敛（设计稿口径）：C = 1AP + 消耗（一次性），B = 1AP（回库循环），
+// A = 0AP（免手续费的提前拍）。
+function heatSurgeCard({ id, tier, ap, exhaust, promotesTo }) {
+  registerSkill({
+    id, name: '激热', type: 'fire', tier, series: 'ember',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'enemy',
+    keywords: exhaust ? ['exhaust'] : [],
+    promotesTo,
+    use(sctx) {
+      const target = enemyTarget(sctx);
+      if (!target) return true;
+      const stacks = target.getEffectStacks('burn');
+      if (stacks <= 0) return true; // 无燃烧：落空
+      dealDamage(sctx, Math.max(0, stacks - target.getEffectStacks('flameAffinity')),
+        { target, source: null, fixed: true, tags: ['burn'] });
+      addEffect(sctx, 'burn', -1, target);
+      return true;
+    },
+    describe: () => '触发一次目标/effect{燃烧}结算',
+    battleDescribe: (sctx) => {
+      const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
+      return `触发一次/effect{燃烧}结算（当前${stacks}层）`;
+    },
+  });
+}
+heatSurgeCard({ id: 'heatSurge', tier: 'C', ap: 1, exhaust: true, promotesTo: 'heatSurgePlus' });
+heatSurgeCard({ id: 'heatSurgePlus', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeMaster' });
+heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
 
 // 化焰 C：0 费。被动：每一点溢出魏启，为所有单位（敌我双方）施加燃烧 1。
 // 口径假设：设计稿未注明生效区，按「在手时生效」落地（与猛拳「在手时」语言同类；
@@ -157,7 +172,7 @@ registerSkill({
       }
     },
   }],
-  describe: () => '在手时：每一点溢出魏启，为所有单位赋予/effect{燃烧}1',
+  describe: () => '在手时：每点溢出魏启，为所有单位赋予/effect{燃烧}1',
 });
 
 // ==== 控火系列（多功能散牌）===================================================
@@ -196,7 +211,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
     attackDamage(sctx, 12 + target.getEffectStacks('burn'), { target });
     return true;
   },
-  describe: () => '12伤害；目标每层/effect{燃烧}，伤害+1',
+  describe: () => '12伤害；目标每层/effect{燃烧}，+1',
   battleDescribe: (sctx) => {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
@@ -228,7 +243,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy',
     });
     return true;
   },
-  describe: () => '你下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
+  describe: () => '下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
 }, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
@@ -358,7 +373,7 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
       gainShield(sctx, shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0));
       return true;
     },
-    describe: () => `护盾${shield}。若你有/effect{燃烧}，再+${bonus}`,
+    describe: () => `护盾${shield}；有/effect{燃烧}时再+${bonus}`,
     battleDescribe: (sctx) => `护盾${shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0)}`
       + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
   });
@@ -409,6 +424,6 @@ registerSkill({
     addCard(sctx, defId, { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
-  battleDescribe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
+  describe: () => '/named{发现}一张0费控火术',
+  battleDescribe: () => '/named{发现}一张0费控火术',
 });

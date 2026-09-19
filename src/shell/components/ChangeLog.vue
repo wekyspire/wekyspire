@@ -10,10 +10,11 @@ const contentHtml = ref('');
 let hideTimer = null;
 let loading = null;
 
-// 版本行：v{版本} · {进入页面的当天日期}（版本取自 package.json，见 shell/version.js）
-const pad2 = (n) => String(n).padStart(2, '0');
-const now = new Date();
-const VERSION_LINE = `v${APP_VERSION} · ${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+// 版本行：v{版本} · {最新版本日期}——两者都在构建期注入（编号 = package.json，
+// 日期 = changelog 顶部条目 `## YYYY.M.D`，见 vite.config.js 的一致性校验）。
+// 旧口径「进页面当天的日期」已废（2026-09-18 用户报：应显示最新版本日期）。
+const APP_DATE = typeof __CHANGELOG_DATE__ !== 'undefined' ? __CHANGELOG_DATE__ : '';
+const VERSION_LINE = `v${APP_VERSION}${APP_DATE ? ` · ${APP_DATE}` : ''}`;
 
 function escapeHtml(s) {
   return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');

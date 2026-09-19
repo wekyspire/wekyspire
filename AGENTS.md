@@ -42,7 +42,8 @@ npm test           # vitest（存量；维护已暂停，见「测试」节）
 
 ## 版本与 changelog
 
-- 玩家可见更新日志 = `public/changelog.md`（开始界面「更新日志」弹层直接读它）。一条版本 = `## YYYY.M.D [Alpha X.Y.Z]` + `- 签名：Hineven` + 小节；新条目**加在文件最上方**，并把 `package.json` 的 `version` 同步改掉（两者必须一致）。
+- 玩家可见更新日志 = `public/changelog.md`（开始界面「更新日志」弹层直接读它）。一条版本 = `## YYYY.M.D [Alpha X.Y.Z]` + `- 签名：Hineven` + 小节；新条目**加在文件最上方**，并把 `package.json` 的 `version` 同步改掉（两者必须一致——**vite.config.js 构建期已自动校验**：不一致直接构建失败；开始界面版本行的编号/日期也由此注入，日期 = changelog 顶部条目日期，不是当天日期）。
+- **版本号纪律（2026-09-18 用户定）：只有「大更新」才升中版本号（X.Y.0）**——限五类：成体系重构、全新底层机制、大规模视觉效果更新、全新系统加入、大主题成批内容加入。除此之外（数值平衡调整、新卡补簇、流程改版、bug 修复、文案精简……）**一律只升修订号**（0.8.3 → 0.8.4）。
 - **写得短（红线：整条版本正文 ≤150 字，超线即违规）**：归纳 2~3 条，只写玩家能感知的变化（新内容 / 体验手感 / 修好的明显 bug）。不逐条罗列 commit、不写内部术语（模块名/架构词）、不贴代码参数。小节用「新增 / 改进与修复 / 已知问题」这类朴素词，空小节不留壳。
 
 ## 架构：四层单向依赖
@@ -122,7 +123,7 @@ src/
 - **UI 风格：扁平 / 白字 / 淡蓝按钮**：按钮与面板走"深底 + 白字 + 淡蓝细描边"（`richtext/buttonFace.js` 的 THEMES 是唯一事实源——**无渐变、无自体发光**），面板不大圆角（按钮可小圆角，其余 ≤4px）；**金色只留给金钱相关内容**，标题与提示用白 `#e8eefb` / 淡蓝灰 `#c3cee0`。对话框 = 黑色半透明扁平框。内容语义色（稀有度 `RARITY_COLORS`、灵脉维度色、敌人名红）不受此约束。
 - **公共"获得演出"三件套**：任何"到手一拍"都应走 `Stage.showcaseItem(payload)`（`skippable: true` + `onSkip/onDismiss` 表示可放弃）；无素材的 key 由组件程序化占位。新增获得路径不要绕过它自画 UI。
 - **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词（消耗/固有/短暂/锁定/缓启）走徽章与页脚词条行（`cardFace.js` 的 `drawFooter`），**不要在 `describe`/`battleDescribe` 里复述**（如「冷却8」「消耗。」）。咏唱卡的「咏唱N：」前缀由渲染层自动加（`chantPrefixedText`），**激活前后文案不变**。
-- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数），卡面 markup 用 `/named{术语}`；机制本体写进 def 字段/订阅，不要把长机制文本摊在卡面上。
+- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数），卡面 markup 用 `/named{术语}`；机制本体写进 def 字段/订阅，不要把长机制文本摊在卡面上。**词条双轨**（2026-09-18 定）：`describe` = 玩家版（短文案）；`agent` = headless/LLM 版（「幼稚园模式」程序化细则——触发时机/判定口径/不生效情形写全，防 agent 误读规则），headless 的 `terms` 视图读 agent 版（`listNamedTerms({ agent: true })`）；新词条两版都要写。
 - **卡间引用走 `/card{卡id, k=v, ...}`**：卡面文本提及另一张卡一律用 id 引用（改名不失配），hover 热区弹**整卡预览**；不要写「卡名」裸文本。
 - **卡牌威力提升（power）一律走 `cardKit.gainPower(sctx, card, n)`**，不要裸改 `card.power += n`：它还发 `presenter.cardPowerUp` → `ANIM_CARD_POWER_UP` 公共节拍——「这张牌状态变了」玩家要看得见。
 - **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场/弃/焚/迁移/视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次重算兜底——空窗期里 idle 的卡会被弹簧从展示位拉回手牌锚点（「打出 → 飞回手牌 → 再飞牌库」病灶已多次回归）。
@@ -132,7 +133,7 @@ src/
 ## 权威设计文档
 
 - `README.md` — 场景层级总纲与数据系统说明。
-- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）、`ENEMY_ART_LIST.md`（立绘待办）。
+- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`REWARD.md`（卡包等阶分布/通用注入/训练抓牌的调参表）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）、`ENEMY_ART_LIST.md`（立绘待办）。
 - `battle_gameplay/skills/` — 各体系卡牌设计稿 + `EFFECTS.md` 效果目录；`SKILL_DESIGN_PRINCIPLES.md` 在 `src/core/skills/` 下。
 - `quest_prompts/` — 重构与实现设计文档（THREE_REFACTOR_PLAN / STAGE_DESIGN / SCENE_* / THREE_UI_MIGRATION 等）。
 - `handoffs/` — 历史交接记录（含关键约定，注意核对时效）。

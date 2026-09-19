@@ -337,7 +337,7 @@ registerSkill({
       react: (instr) => instr.setPayload('damage', instr.payload.damage * 2),
     }],
   },
-  describe: () => '你的肘击卡伤害翻倍',
+  describe: () => '肘击卡伤害翻倍',
   battleDescribe: (sctx) => '你的肘击卡伤害翻倍',
 });
 
@@ -548,7 +548,7 @@ const fistPressCard = ({ id, tier, damage, per, promotesTo = null }) => register
     attackDamage(sctx, damage + instantStrikesThisTurn(sctx) * per);
     return true;
   },
-  describe: () => `${damage}伤害；本回合每打出过1/card{instantStrike}，伤害+${per}`,
+  describe: () => `${damage}伤害；本回合每打出过1/card{instantStrike}，+${per}`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage + instantStrikesThisTurn(sctx) * per)}`
     + `（${damage}+${instantStrikesThisTurn(sctx) * per}）`,
 });
@@ -587,7 +587,7 @@ registerSkill({
     attackDamage(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9);
     return true;
   },
-  describe: () => '9伤害；若你的手牌不少于5张，+5',
+  describe: () => '9伤害；手牌不少于5张时，+5',
   battleDescribe: (sctx) => resolvedDamageText(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9),
 });
 
@@ -664,11 +664,12 @@ registerSkill({
 // 拳（真拳系列 D，skills.js）×3 + 盾（盾系列 D，skills.js）×3 + 抱头（格挡系列 D，
 // blockSkills.js）×1 + 肾上腺素（C）×1 + 情况不对（D）×1：三系种子齐备
 // （拳的出牌、盾的自保、拆的格挡），肾上腺素做节奏阀、情况不对做鬼抽保险。
+// 斩已于 2026-09-18 移出初始卡组：改由开局遗物「大剑」（默认装备、0 槽）在每场
+// 战斗开始时洗入 1 张斩——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([
   'punch', 'punch', 'punch',
   'guard', 'guard', 'guard',
   'duckHead',
   'adrenaline',
   'badOmen',
-  'slash', // 斩链起点（2026-09）：开局自带进阶引擎，靠局内打出逐阶生长
 ]);

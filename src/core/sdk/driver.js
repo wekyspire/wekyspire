@@ -27,11 +27,18 @@ export class BattleDriver {
     seed = 1,
     config = {},          // { initialDraw, drawPerTurn }
     trace = false,        // 记录内核结算追踪（tracer）
+    starterRelics = false, // true = 保留 createRunState 的开局默认遗物（大剑=每场注入斩）；
+                          // 缺省卸下——BattleDriver 的契约是「卡组即所给」，默认不受遗物污染
+                          // （要测大剑本体的用例显式传 true）
   } = {}) {
     this.presenter = createRecordingPresenter();
     const runState = createRunState({
       player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP, ...player }),
     });
+    if (!starterRelics) {
+      runState.player.relics.length = 0;
+      runState.player.equippedRelics.length = 0;
+    }
     runState.player.deck = deck.map(d => {
       if (typeof d === 'string') return createSkillRuntime(d);
       const { defId, ...overrides } = d;

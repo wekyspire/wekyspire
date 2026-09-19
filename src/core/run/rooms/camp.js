@@ -4,10 +4,18 @@ import { activeRelics } from '../prep.js';
 
 // 营地（RUN_DESIGN §4.3）：三选一；Boss 前保底由 runFlow.roomOfFloor 调度。
 // 选项随 run 状态动态可见：找回瑞米（仅被打跑时）、休整、升级卡（仅有可升级卡时）。
+// 2026-09-18 用户定：合并房里**训练先于篝火**——训练没开始（或抓卡尾款未清）时
+// 篝火不可用（UI 据快照 camp.locked 压暗提示，core 侧同一守卫拦连点/直调）。
 
 export const CAMP_PLACEHOLDER = {
   restHealRatio: 0.35, // 休整恢复最大生命比例（§4.3；2026-09 试玩调参：30%→35% 总生命）
 };
+
+// 合并房的篝火门：训练必做且先行（campTraining 房专属；单房 'camp' 无训练概念）
+export function campLocked(run) {
+  return run.currentRoom === 'campTraining'
+    && (!run.roomData?.trained || !!run.roomData?.pendingUpgrade);
+}
 
 export function campOptions(run) {
   const opts = [];
@@ -20,6 +28,7 @@ export function campOptions(run) {
 // 休整：玩家 35% 生命 + 全部魏启 + 瑞米全部状态（占位：瑞米每场战斗按满血出战）
 // 每房一次的营地动作守卫（合并房里训练部分有自己的计时，互不干扰）
 function markCampUsed(run) {
+  if (campLocked(run)) throw new Error('先完成训练，才能使用篝火');
   if (run.roomData?.campUsed) throw new Error('本房的营地动作已经用过了');
   run.roomData = { ...(run.roomData ?? {}), campUsed: true };
 }

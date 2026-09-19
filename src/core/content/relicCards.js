@@ -49,7 +49,7 @@ registerSkill({
     drawCards(sctx, 1, { reason: 'suppressionFire' });
     return true;
   },
-  describe: () => '15伤害（所有敌人），抽1',
+  describe: () => '15群伤，抽1',
 });
 
 // 〈贯穿射击〉：低语苍鹰 Z 战斗开始时洗入牌库。
@@ -64,5 +64,5 @@ registerSkill({
     drawCards(sctx, 1, { reason: 'piercingShot' });
     return true;
   },
-  describe: () => '18穿透伤害，抽1',
+  describe: () => '18/named{穿透}伤害，抽1',
 });

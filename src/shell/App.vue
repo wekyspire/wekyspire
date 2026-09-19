@@ -117,12 +117,18 @@ function toTitle() {
 // 画在战斗舞台的 uiScene 上，背景保持战斗房间，直到领奖后的切幕中点才换回塔楼）；
 // 休息房 = 场景式 RoomStage（仅赌厅这类有休息房配方的房间才有，占位房间回退 MapStage）；
 // 其余阶段（prep/ascension/end）都是地图舞台上的 Three 面板。
+// ⚠ 房内进阶（2026-09-18 训练改版）期间 gameStage 是 'ascension' 但 RoomStage 仍存活
+// 且仍是**渲染中的舞台**——种子包等阶段模态面板画在它的 uiScene 上。此时指针必须继续
+// 喂 RoomStage，否则会喂给不可见的 MapStage（它也建了同一份面板：tooltip 走全局总线
+// 照常弹、点击却在操作看不见的副本——用户报「种子包 hover/点选失效」的病灶）。
+// 离房路径的 ascension（completeRoom 已拆 roomStage）不满足 roomStage 存活条件，自然回地图。
 function activeStage() {
   const c = ctrl.value;
   if (!c) return null;
   const battle = c.getBattleStage();
   if (battle) return battle;   // 战斗 / 战后奖励：战斗舞台存在期间由它接管指针
-  if (c.run.gameStage === 'room') return c.getRoomStage() ?? mapStage;
+  const room = c.getRoomStage();
+  if (room && (c.run.gameStage === 'room' || c.run.gameStage === 'ascension')) return room;
   return mapStage;
 }
 

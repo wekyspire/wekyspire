@@ -1,5 +1,7 @@
 // 合并房陈设（营地·训练场）：篝火 / 训练桩——**没有 rig 的交互物样板**（浮标 + 拾取 + 推近）。
 // 逻辑自 RoomStage 原样下沉：本模块只提供取景/面板/义务门，机器 rig 的创建交给默认（null）。
+// 2026-09-18 训练改版：训练 = 必做阶段且先于篝火——「继续前进」的硬门相应换成
+// 未训练 / 尾款升级未清（可重复拦，不像篝火软提示那样放行一次后就放行）。
 import * as THREE from 'three';
 import { buildCampPartPanel, buildTrainingPartPanel } from '../panels/index.js';
 
@@ -20,7 +22,22 @@ function bowlSubject(entry) { return upperSubject(entry, 0.42); }
 export function createCampTrainingMachine(ctx) {
   let nudged = false;   // 「还没在火边歇过」的提示只弹一次（再点继续即离房）
 
-  /** 还没在火边歇过就想走：把镜头拉回**篝火**并给一句泡泡（训练不做无妨，不再拦）。 */
+  /** 把镜头拉到训练桩并冒一句泡泡（训练没开始 / 尾款未清时的硬门提示）。 */
+  function _nudgeTraining(text) {
+    const name = ctx.markers().some(m => m.name === 'training') ? 'training' : ctx.focused();
+    if (name && ctx.focused() !== name) ctx.focusMachine(name);
+    const entry = ctx.entryOf('training') ?? ctx.markers()[0]?.entry;
+    if (!entry) return;
+    ctx.bubbles().say('room:trainingHint', {
+      ...ctx.midAnchorOf(entry, 1.5),
+      text,
+      kind: 'thought',
+      duration: 2.6,
+      tint: 0xe8ecfa,
+    });
+  }
+
+  /** 还没在火边歇过就想走：把镜头拉回**篝火**并给一句泡泡（软提示，训练收尾后才开始计次）。 */
   function _nudgeCampRest() {
     const name = ctx.markers().some(m => m.name === 'camp') ? 'camp' : 'training';
     const entry = ctx.entryOf(name);
@@ -36,23 +53,6 @@ export function createCampTrainingMachine(ctx) {
     });
   }
 
-  /** 强绑抓牌未领时点「继续前进」：把镜头拉到训练桩并冒一句泡泡（"先挑卡"）——比"按钮没反应"清楚。 */
-  function _nudgeForcedPick() {
-    const target = ctx.markers().some(m => m.name === 'training') ? 'training' : ctx.focused();
-    if (target) ctx.focusMachine(target);
-    const entry = ctx.entryOf('training');
-    const anchor = entry ?? ctx.markers()[0]?.entry;
-    if (anchor) {
-      ctx.bubbles().say('room:hint', {
-        ...ctx.midAnchorOf(anchor, 1.5),
-        text: '还没把挑好的卡放进牌组呢。',
-        kind: 'thought',
-        duration: 2.6,
-        tint: 0xe8ecfa,
-      });
-    }
-  }
-
   return {
     // 陈设型：无 rig（不设 createRig）
     kinds: ['camp', 'training'],
@@ -65,32 +65,44 @@ export function createCampTrainingMachine(ctx) {
     // 合并房（营地·训练场）：**点谁开谁的面板**（用户定 2026-09-12 修正）——篝火只给营地选项、
     // 训练桩只给训练选项。早期版本两件都开同一份"营地+训练"合并面板，用户报"点了没区别、
     // 交互物形同虚设"；两件东西各司其职，玩家点哪件就知道自己在处理哪半边。
+    // （篝火面板在训练未收尾时显示锁定行——快照 camp.locked。）
     panel: (name, snap) => (name === 'camp' ? buildCampPartPanel(snap) : buildTrainingPartPanel(snap)),
 
     /**
      * 义务门贡献（null = 这段不欠事）：
-     *   · 'forced' —— 升级后的强绑抓牌（硬拦）；
-     *   · 'camp'   —— 休整是**可选收益**（训练同理，用户定 2026-09-12），属软提示（见 onContinue）。
+     *   · 'train'          —— 训练没开始（硬拦，训练必做且先于篝火）；
+     *   · 'pendingUpgrade' —— 抓卡后的尾款升级（硬拦）；
+     *   · 'camp'           —— 休整是**可选收益**（用户定 2026-09-12），属软提示（见 onContinue）。
      */
     pendingDuty(snap) {
       if (!snap) return null;
-      if (snap.training?.forced) return 'forced';                  // 升级后的强绑抓牌
+      const t = snap.training ?? {};
+      if (snap.room === 'campTraining' || snap.room === 'training') {
+        if (!t.started) return 'train';
+        if (t.pendingUpgrade) return 'pendingUpgrade';
+      }
       if (snap.room !== 'campTraining') return null;
       const c = snap.camp ?? {};
-      if (!c.used && (c.options?.length ?? 0) > 0) return 'camp';
+      if (!c.used && !c.locked && (c.options?.length ?? 0) > 0) return 'camp';
       return null;
     },
 
     /**
-     * 点「继续前进」时接管：强绑抓牌未领 → 拉镜头提示；营地没歇过 → **只提示一次**再点即离房
-     * （软提示而非硬拦——玩家想省下这层收益是他的自由，不能被按着头点）。
+     * 点「继续前进」时接管：训练没开始 / 尾款未清 → 拉镜头提示（硬拦，每次都拦）；
+     * 营地没歇过 → **只提示一次**再点即离房（软提示——玩家想省下这层收益是他的自由，
+     * 不能被按着头点）。
      */
     onContinue() {
       const snap = ctx.snap();
-      if (snap?.training?.forced) { _nudgeForcedPick(); return true; }
-      if (snap?.room === 'campTraining') {
+      if (!snap) return false;
+      const t = snap.training ?? {};
+      if (snap.room === 'campTraining' || snap.room === 'training') {
+        if (!t.started) { _nudgeTraining('先开始训练，才能继续赶路。'); return true; }
+        if (t.pendingUpgrade) { _nudgeTraining('抓到的卡还欠一次升级呢。'); return true; }
+      }
+      if (snap.room === 'campTraining') {
         const c = snap.camp ?? {};
-        if (!c.used && (c.options?.length ?? 0) > 0 && !nudged) { nudged = true; _nudgeCampRest(); return true; }
+        if (!c.used && !c.locked && (c.options?.length ?? 0) > 0 && !nudged) { nudged = true; _nudgeCampRest(); return true; }
       }
       return false;
     },

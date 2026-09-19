@@ -22,12 +22,13 @@ import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest } from './cardKit.js';
 
-// ==== 自焚系列（§2.1：自伤换高伤）============================================
-// 玩火 D / 引焰 C / 焚灭 B：0 费攻击（设计稿未写费用 = 免费，battle.md §7.2 缺省约定），
-// 冷却 1（charges 1 格 + 冷却 1 回合——零费卡若无冷却就是无限的免费自伤泵）；
-// 伤害吃攻击面板轨（F1：基数 + 攻击面板 + power），燃烧作为体系副作用落在自己身上。
+// ==== 自焚系列（§2.1：自伤换高伤，2026-09-18 设计稿四阶）======================
+// 玩火 D / 引焰 C / 焚烧 B / 焚灭 A：0 费攻击（设计稿未写费用 = 免费，battle.md §7.2
+// 缺省约定），冷却 1（零费卡若无冷却就是无限的免费自伤泵）；自燃烧全阶统一 4
+// （代价恒定，档位差只在伤害：12/17/23/30）。伤害吃攻击面板轨（F1：基数 + 攻击
+// 面板 + power），燃烧作为体系副作用落在自己身上。
 // 敌人全灭时结算退化为裸面板值（enemyTarget 落 null 由 cardKit 兜底口径处理）。
-function selfImmolate({ id, name, tier, base, burn }) {
+function selfImmolate({ id, name, tier, base }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'selfImmolate',
     cost: { mana: 0, actionPoint: 0 },
@@ -35,17 +36,18 @@ function selfImmolate({ id, name, tier, base, burn }) {
     cardMode: 'normal', targetMode: 'enemy',
     use(sctx) {
       attackDamage(sctx, base);
-      addEffect(sctx, 'burn', burn); // 默认 target = sctx.player：代价给自己
+      addEffect(sctx, 'burn', 4); // 默认 target = sctx.player：代价给自己
       return true;
     },
-    describe: () => `${base}伤害，自身/effect{燃烧}${burn}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，自身/effect{燃烧}${burn}`,
+    describe: () => `${base}伤害，/effect{燃烧}4`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，/effect{燃烧}4`,
   });
 }
 
-selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 12, burn: 2 });
-selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 17, burn: 3 });
-selfImmolate({ id: 'immolate', name: '焚灭', tier: 'B', base: 24, burn: 5 });
+selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 12 });
+selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 17 });
+selfImmolate({ id: 'immolate', name: '焚烧', tier: 'B', base: 23 });
+selfImmolate({ id: 'immolateGrand', name: '焚灭', tier: 'A', base: 30 });
 
 // ==== 焰愈系列（§2.1：燃烧换恢复）============================================
 // 焰愈 C / 炽愈 B / 涅槃 A：1AP 消耗，治疗量 = 基础值 + 自身燃烧层数 × 每层加成。
@@ -65,7 +67,7 @@ function flameHealSkill({ id, name, tier, base, per }) {
       }));
       return true;
     },
-    describe: () => `回复${base}生命；每层/effect{燃烧}使治愈+${per}`,
+    describe: () => `回复${base}生命；每层/effect{燃烧}，+${per}`,
     battleDescribe: (sctx) => `回复${amountOf(sctx)}生命`,
   });
 }
@@ -108,7 +110,7 @@ burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, p
 burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
-// 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
+// 鬼火 B（1AP，咏唱1，2026-09-18 设计稿挂上 1AP 发动费）｜敌人死亡时，其燃烧传播给所有敌人。
 // 口径：伤害应用只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
@@ -117,7 +119,7 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 registerSkill({
   id: 'willOWisp', name: '鬼火', type: 'fire', tier: 'B', series: 'willOWisp',
-  cost: { mana: 0, actionPoint: 0 },
+  cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
@@ -136,11 +138,11 @@ registerSkill({
       },
     }],
   },
-  describe: () => '敌人死亡时，其燃烧传播给所有敌人',
-  battleDescribe: (sctx) => '敌人死亡时，其燃烧传播给所有敌人',
+  describe: () => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
+  battleDescribe: (sctx) => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
 });
 
-// ==== 镜燃系列（§2.1：获得反哺）==============================================
+// ==== 镜燃系列（§2.1：获得反哺；镜燃 2026-09-18 设计稿 C→B）======================
 // 镜燃 C / 业火 A｜自己获得燃烧时，把本次增加的层数等量施加给
 // 随机敌人 / 所有敌人。
 // 口径：「获得」= AddEffect(burn) 落在玩家身上且本次变化量为正
@@ -154,7 +156,7 @@ function burnMirror({ id, name, tier, spread }) {
     id, name, type: 'fire', tier, series: 'mirrorBurn',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 3,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
@@ -170,13 +172,13 @@ function burnMirror({ id, name, tier, spread }) {
         },
       }],
     },
-    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
-    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
+    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
+    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
   });
 }
 
 burnMirror({
-  id: 'mirrorBurn', name: '镜燃', tier: 'C',
+  id: 'mirrorBurn', name: '镜燃', tier: 'B',
   spread: {
     targetText: '随机敌人',
     apply: (ctx, stacks, emit) => {
@@ -270,12 +272,12 @@ registerSkill({
       },
     }],
   },
-  describe: () => '若你正在燃烧，获得9护盾',
-  battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
+  describe: () => '正在/effect{燃烧}时，获得9护盾',
+  battleDescribe: (sctx) => `/effect{燃烧}${sctx.player.getEffectStacks('burn')}层：获得9护盾`,
 });
 
-// 炼化/炼解 C/B｜咏唱1（2026-09-13 用户新文档新增）：每回合 P5 选 1 张手牌焚毁，
-// 获得 1/2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
+// 炼化/炼解 C/B｜1AP，咏唱1（2026-09-13 用户新文档新增；2026-09-18 设计稿挂上
+// 1AP 发动费）：每回合 P5 选 1 张手牌焚毁，获得 1/2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
 // 火系两条「每回合变现」轴：高热烧自己，炼化烧手牌。选牌请求走 cardKit 唯一
 // 形状（min/max 1/1）；空手时不发起请求（空集守卫，静默落空）。选到激活态的
 // 咏唱卡也照烧（含引擎自身——烧自己=立即止损，与刀法咏唱的选弃口径一致）。
@@ -313,7 +315,7 @@ class BurnHandForManaInstruction extends BattleInstruction {
 }
 const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
   id, name, type: 'fire', tier, series: 'fireChant',
-  cost: { mana: 0, actionPoint: 0 },
+  cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
   promotesTo,
@@ -326,13 +328,14 @@ const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
         instr),
     }],
   },
-  describe: () => `选1张手牌焚毁，获得${mana}魏启`,
-  battleDescribe: (sctx) => `选1张手牌焚毁，获得${mana}魏启`,
+  describe: () => `选1手牌焚毁，获得${mana}魏启`,
+  battleDescribe: (sctx) => `选1手牌焚毁，获得${mana}魏启`,
 });
 smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'C', mana: 1, promotesTo: 'smeltCardPlus' });
 smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'B', mana: 2 });
 
-// 绝炎 A｜1AP，咏唱3（2026-09-13 权重分档：少量强卡 3-4 咏），任何燃烧层数免疫消耗和下降。
+// 绝炎 A｜1AP，咏唱1（2026-09-18 设计稿咏唱 5→1——燃烧免疫的价值在常亮不在门槛），
+// 任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
 // 的 AddEffect(burn) 负层数（自然递减 -1 / 驱散 -N）一律 PRE veto；
 // 跳伤结算不受影响：燃烧照常按层数跳固定伤害，只是不再衰减——
@@ -342,7 +345,7 @@ registerSkill({
   id: 'absoluteFlame', name: '绝炎', type: 'fire', tier: 'A', series: 'fireChant',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: () => [{
@@ -352,6 +355,6 @@ registerSkill({
       react: (instr, ctx) => ctx.kernel.veto(instr, 'absoluteFlame'),
     }],
   },
-  describe: () => '所有单位的/effect{燃烧}层数免疫消耗和下降',
-  battleDescribe: (sctx) => '所有单位的/effect{燃烧}层数免疫消耗和下降',
+  describe: () => '任何/effect{燃烧}层数免疫消耗和下降',
+  battleDescribe: (sctx) => '任何/effect{燃烧}层数免疫消耗和下降',
 });

@@ -13,6 +13,13 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
   p.relics ??= [];                // 遗物背包 [relicId]
   p.equippedRelics ??= [];        // 装备中的遗物（受 relicSlots 上限约束，§4.5）
   p.relicSlots ??= 3;   // 激活槽总数（RELICS.md：初始 3；槽位是**权重和**口径，见 prep.js）
+  // 开局默认遗物「大剑」（2026-09-18 用户定：斩移出初始卡组，改由它每场战斗开始时
+  // 洗入）——幂等：fixture 传入的预构造 Player 已带则不重复。老存档不走 createRunState，
+  // 其卡组里仍有斩，两者自洽、不回填。
+  if (!p.relics.includes('greatSword')) {
+    p.relics.push('greatSword');
+    p.equippedRelics.push('greatSword');
+  }
 
   return {
     seed,

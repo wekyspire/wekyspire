@@ -98,7 +98,7 @@ registerSkill({
     sctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'looseLeaf' }));
     return true;
   },
-  describe: () => '消耗。自伤4，抽2',
+  describe: () => '自伤4，抽2',
 });
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
