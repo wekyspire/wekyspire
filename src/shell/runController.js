@@ -551,8 +551,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
   // 训练节拍：开始（beginTraining，达标则切 'ascension' 由进阶幕间接力播完自动回房）→
   // 可选段（4 选 1 抓一张 → 抓了就欠一次升级 pendingUpgrade）→ 篝火解锁（营地/训练各自一次）。
-  // roomData 同时承载两个部分的记账，「训练是否可用」看 trained/drawChoices/pendingUpgrade。
-  const trainingLocked = () => !!run.roomData?.trained || run.gameStage !== 'room';
+  // roomData 同时承载两个部分的记账，各动作的合法性由 core 守卫兜（已开局/已收束/
+  // 尾款未清都有明确报错）——shell 侧只挡 gameStage 与重复 begin。
   const campLocked = () => !!run.roomData?.campUsed || campGateLocked(run);
   // 合并房不自动离房（两部分都要给机会），单房保持原语义「做完即离房」
   function maybeLeaveRoom() {
@@ -576,8 +576,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     trainUpgrade(run, uniqueID, targetId); // 分叉目标由升级子面板传入
     maybeLeaveRoom();
   }
+  // 可选段开局：掷四选一候选。⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**
+  // （曾因沿用旧「trained=已锁」语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；
+  // 是否已开局/已收束由 trainDrawChoices 的 core 守卫兜。
   function trainingDrawRoll() {
-    if (run.gameStage !== 'room' || trainingLocked() || run.roomData?.pendingUpgrade) return;
+    if (run.gameStage !== 'room' || run.roomData?.pendingUpgrade) return;
     trainDrawChoices(run);
     notify();
   }
