@@ -231,8 +231,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕随后
   // 才盖住（用户 2026-09-12 报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
   // 不用"有配方"直接推断——无舞台/占位路径仍要把面板留给塔楼层。
+  // 2026-09-18 训练改版：**房内进阶**期间（gameStage 'ascension' 且 roomStage 存活——
+  // currentRoom/roomData 原地保留）也按"房间场景呈现中"处理——阶段模态面板（种子包九选三）
+  // 画在 RoomStage 上，塔楼不得再建一份不可见的重复面板（指针已路由到 RoomStage，
+  // 见 App.vue activeStage）。离房路径的 ascension 已清 currentRoom/roomStage，条件自然不成立。
   let roomScenePending = false;   // 进房演出待/在切换（进房那一刻由 claimReward 置位）
-  const roomPresentedOnScene = () => run.gameStage === 'room' && !!stageManager
+  const roomPresentedOnScene = () => (run.gameStage === 'room' || run.gameStage === 'ascension')
+    && !!stageManager
     && (roomScenePending || !!roomStage)
     && (run.currentRoom === 'event' || !!restRecipeFor(run.currentRoom));
   const notify = () => {
