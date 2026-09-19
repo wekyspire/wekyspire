@@ -337,7 +337,7 @@ registerSkill({
       react: (instr) => instr.setPayload('damage', instr.payload.damage * 2),
     }],
   },
-  describe: () => '你的肘击卡伤害翻倍',
+  describe: () => '肘击卡伤害翻倍',
   battleDescribe: (sctx) => '你的肘击卡伤害翻倍',
 });
 
@@ -548,7 +548,7 @@ const fistPressCard = ({ id, tier, damage, per, promotesTo = null }) => register
     attackDamage(sctx, damage + instantStrikesThisTurn(sctx) * per);
     return true;
   },
-  describe: () => `${damage}伤害；本回合每打出过1/card{instantStrike}，伤害+${per}`,
+  describe: () => `${damage}伤害；本回合每打出过1/card{instantStrike}，+${per}`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage + instantStrikesThisTurn(sctx) * per)}`
     + `（${damage}+${instantStrikesThisTurn(sctx) * per}）`,
 });
@@ -587,7 +587,7 @@ registerSkill({
     attackDamage(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9);
     return true;
   },
-  describe: () => '9伤害；若你的手牌不少于5张，+5',
+  describe: () => '9伤害；手牌不少于5张时，+5',
   battleDescribe: (sctx) => resolvedDamageText(sctx, effectiveHandCount(sctx) >= 5 ? 14 : 9),
 });
 

@@ -746,7 +746,7 @@ registerSkill({
     });
     return true;
   },
-  describe: () => '你的下一次刀法牌伤害变为固定伤害',
+  describe: () => '下一次刀法牌伤害变为固定伤害',
   battleDescribe: () => '你的下一次刀法牌伤害变为固定伤害',
 });
 

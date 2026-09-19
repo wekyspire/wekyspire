@@ -361,7 +361,7 @@ const martialStanceCard = (id, name, tier, ap, per, promotesTo) => registerSkill
       },
     }],
   },
-  describe: () => `每层/effect{格挡}令你的伤害+${per}`,
+  describe: () => `每层/effect{格挡}，伤害+${per}`,
   battleDescribe: (sctx) => `每层/effect{格挡}令你的伤害+${per}`,
 });
 martialStanceCard('martialStance', '武术姿态', 'C', 2, 2, 'masterStance');
@@ -385,7 +385,7 @@ const berserkStanceCard = (id, name, tier, ap, promotesTo) => registerSkill({
       react: (instr, ctx) => addEffect(sctx, 'strength', 1, ctx.player),
     }],
   },
-  describe: () => '获得/effect{格挡}时也/effect{力量}1',
+  describe: () => '获得/effect{格挡}时，/effect{力量}1',
   battleDescribe: (sctx) => '获得/effect{格挡}时也/effect{力量}1',
 });
 berserkStanceCard('berserkStance', '狂战姿态', 'B', 1, 'berserkMastery');

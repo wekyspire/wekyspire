@@ -185,7 +185,7 @@ function burnSnapCard({ id, tier, per, exhaust, promotesTo }) {
     battleDescribe: (sctx) => {
       const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
       const consume = Math.floor(stacks / 2);
-      return `消耗目标一半/effect{燃烧}（当前${stacks}层）：${consume * per}固定伤害`;
+      return `消耗目标一半/effect{燃烧}：${consume * per}固定伤害`;
     },
   });
 }
@@ -258,8 +258,8 @@ function flashBurnCard({ id, tier, mana, promotesTo }) {
       addEffect(sctx, 'burn', 4);
       return true;
     },
-    describe: () => `获得${mana}魏启，自身/effect{燃烧}4`,
-    battleDescribe: () => `获得${mana}魏启，自身/effect{燃烧}4`,
+    describe: () => `获得${mana}魏启，/effect{燃烧}4`,
+    battleDescribe: () => `获得${mana}魏启，/effect{燃烧}4`,
   });
 }
 flashBurnCard({ id: 'flashBurn', tier: 'D', mana: 2, promotesTo: 'flashBurnPlus' });
@@ -281,7 +281,7 @@ function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
       attackDamage(sctx, burning ? 6 + bonus : 6);
       return true;
     },
-    describe: () => `6伤害；若你正在/effect{燃烧}，+${bonus}`,
+    describe: () => `6伤害；正在/effect{燃烧}，+${bonus}`,
     battleDescribe: (sctx) => resolvedDamageText(sctx,
       sctx.player.getEffectStacks('burn') > 0 ? 6 + bonus : 6),
   });
@@ -303,9 +303,9 @@ registerSkill({
     attackDamage(sctx, backfireAmount(sctx));
     return true;
   },
-  describe: () => '8伤害；自身每有3层/effect{燃烧}，伤害+4',
+  describe: () => '8伤害；每有3层/effect{燃烧}，+4',
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, backfireAmount(sctx))}`
-    + `（8+${Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4}）`,
+    + `（+${Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4}）`,
 });
 function backfireAmount(sctx) {
   return 8 + Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4;
@@ -331,8 +331,8 @@ function heatWaveCard({ id, tier, bonus, promotesTo }) {
     battleDescribe: (sctx) => {
       const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
       return stacks >= 5
-        ? `${resolvedDamageText(sctx, 10 + bonus)}（燃烧${stacks}层，已达成）`
-        : `${resolvedDamageText(sctx, 10)}（燃烧${stacks}层）`;
+        ? resolvedDamageText(sctx, 10 + bonus)
+        : `${resolvedDamageText(sctx, 10)}（燃${stacks}/5）`;
     },
   });
 }
@@ -355,8 +355,8 @@ function ashRakeCard({ id, tier, extraDraw, promotesTo }) {
       if (sctx.battleState.zones.burnt.length >= 4) drawCards(sctx, extraDraw);
       return true;
     },
-    describe: () => `抽1牌；若坟墓里有至少4张牌，再抽${extraDraw}`,
-    battleDescribe: (sctx) => `抽1牌（坟墓${sctx.battleState.zones.burnt.length}张）`,
+    describe: () => `抽1；坟墓不少于4张牌时，再抽${extraDraw}`,
+    battleDescribe: (sctx) => `抽1（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
 ashRakeCard({ id: 'ashRake', tier: 'D', extraDraw: 1, promotesTo: 'ashRakePlus' });

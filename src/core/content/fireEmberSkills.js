@@ -85,7 +85,7 @@ function emberOriginCard({ id, tier, ap, promotesTo }) {
       if (gain > 0) applyBattleModifier(sctx, 'maxMana', gain);
       return true;
     },
-    describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1（本场战斗内）',
+    describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1',
     battleDescribe: (sctx) => {
       const total = totalEnemyBurn(sctx);
       return `敌方/effect{燃烧}共${total}层：魏启上限+${Math.floor(total / 4)}（本场战斗内）`;
@@ -172,7 +172,7 @@ registerSkill({
       }
     },
   }],
-  describe: () => '在手时：每一点溢出魏启，为所有单位赋予/effect{燃烧}1',
+  describe: () => '在手时：每点溢出魏启，为所有单位赋予/effect{燃烧}1',
 });
 
 // ==== 控火系列（多功能散牌）===================================================
@@ -211,7 +211,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
     attackDamage(sctx, 12 + target.getEffectStacks('burn'), { target });
     return true;
   },
-  describe: () => '12伤害；目标每层/effect{燃烧}，伤害+1',
+  describe: () => '12伤害；目标每层/effect{燃烧}，+1',
   battleDescribe: (sctx) => {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
@@ -243,7 +243,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy',
     });
     return true;
   },
-  describe: () => '你下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
+  describe: () => '下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
 }, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
@@ -373,7 +373,7 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
       gainShield(sctx, shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0));
       return true;
     },
-    describe: () => `护盾${shield}。若你有/effect{燃烧}，再+${bonus}`,
+    describe: () => `护盾${shield}；有/effect{燃烧}时再+${bonus}`,
     battleDescribe: (sctx) => `护盾${shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0)}`
       + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
   });
@@ -424,6 +424,6 @@ registerSkill({
     addCard(sctx, defId, { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
-  battleDescribe: () => '/named{发现}一张0费控火术入手（八种之中随机）',
+  describe: () => '/named{发现}一张0费控火术',
+  battleDescribe: () => '/named{发现}一张0费控火术',
 });

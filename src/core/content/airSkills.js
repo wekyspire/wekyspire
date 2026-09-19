@@ -286,6 +286,6 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '抽3；你下2张打出的牌无开销',
+  describe: () => '抽3；下2张打出的牌无开销',
   battleDescribe: (sctx) => `抽3；下${sctx.battleState.freePlays ?? 2}张牌无开销`,
 });

@@ -39,8 +39,8 @@ function selfImmolate({ id, name, tier, base }) {
       addEffect(sctx, 'burn', 4); // 默认 target = sctx.player：代价给自己
       return true;
     },
-    describe: () => `${base}伤害，自身/effect{燃烧}4`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，自身/effect{燃烧}4`,
+    describe: () => `${base}伤害，/effect{燃烧}4`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，/effect{燃烧}4`,
   });
 }
 
@@ -67,7 +67,7 @@ function flameHealSkill({ id, name, tier, base, per }) {
       }));
       return true;
     },
-    describe: () => `回复${base}生命；每层/effect{燃烧}使治愈+${per}`,
+    describe: () => `回复${base}生命；每层/effect{燃烧}，+${per}`,
     battleDescribe: (sctx) => `回复${amountOf(sctx)}生命`,
   });
 }
@@ -138,8 +138,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '敌人死亡时，其燃烧传播给所有敌人',
-  battleDescribe: (sctx) => '敌人死亡时，其燃烧传播给所有敌人',
+  describe: () => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
+  battleDescribe: (sctx) => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
 });
 
 // ==== 镜燃系列（§2.1：获得反哺；镜燃 2026-09-18 设计稿 C→B）======================
@@ -172,8 +172,8 @@ function burnMirror({ id, name, tier, spread }) {
         },
       }],
     },
-    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
-    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量燃烧`,
+    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
+    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
   });
 }
 
@@ -272,8 +272,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '若你正在燃烧，获得9护盾',
-  battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
+  describe: () => '正在/effect{燃烧}时，获得9护盾',
+  battleDescribe: (sctx) => `/effect{燃烧}${sctx.player.getEffectStacks('burn')}层：获得9护盾`,
 });
 
 // 炼化/炼解 C/B｜1AP，咏唱1（2026-09-13 用户新文档新增；2026-09-18 设计稿挂上
@@ -328,8 +328,8 @@ const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
         instr),
     }],
   },
-  describe: () => `选1张手牌焚毁，获得${mana}魏启`,
-  battleDescribe: (sctx) => `选1张手牌焚毁，获得${mana}魏启`,
+  describe: () => `选1手牌焚毁，获得${mana}魏启`,
+  battleDescribe: (sctx) => `选1手牌焚毁，获得${mana}魏启`,
 });
 smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'C', mana: 1, promotesTo: 'smeltCardPlus' });
 smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'B', mana: 2 });
@@ -355,6 +355,6 @@ registerSkill({
       react: (instr, ctx) => ctx.kernel.veto(instr, 'absoluteFlame'),
     }],
   },
-  describe: () => '所有单位的/effect{燃烧}层数免疫消耗和下降',
-  battleDescribe: (sctx) => '所有单位的/effect{燃烧}层数免疫消耗和下降',
+  describe: () => '任何/effect{燃烧}层数免疫消耗和下降',
+  battleDescribe: (sctx) => '任何/effect{燃烧}层数免疫消耗和下降',
 });

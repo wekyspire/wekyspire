@@ -105,10 +105,10 @@ function heatBallCard({ id, name, tier, damage, ramp, promotesTo }) {
       gainPower(sctx, sctx.self, ramp);   // 本拍结算完再+ramp：本次打出不享受（公共放缩节拍走 gainPower）
       return true;
     },
-    describe: () => `${damage}伤害，/named{蓄热}（伤害+${ramp}、费用+1）`,
+    describe: () => `${damage}伤害，/named{蓄热}${ramp}`,
     battleDescribe: (sctx) => {
       const n = sctx.self.heatRamp ?? 0;
-      return `${resolvedDamageText(sctx, damage)}（已蓄热${n}次：伤害+${n * ramp}、费用${2 + n}魏启）`;
+      return `${resolvedDamageText(sctx, damage)}（+${n * ramp}）`;
     },
   });
 }
@@ -156,8 +156,8 @@ function burstChantCard({ id, name, tier, base, perMana, promotesTo = null }) {
         aoeDamage(sctx, total, enemyTarget(sctx)); // 解除时带目标：选定敌人最后命中
       },
     },
-    describe: () => `每消耗1魏启，/named{终止}伤害+${perMana}。/named{终止}：${base}群伤`,
-    battleDescribe: () => `每消耗1魏启，/named{终止}伤害+${perMana}；/named{终止}：${base}群伤`,
+    describe: () => `每消耗1魏启，伤害+${perMana}。/named{终止}：${base}群伤`,
+    battleDescribe: () => `每消耗1魏启，伤害+${perMana}；/named{终止}：${base}群伤`,
   };
   registerSkill({ ...def, id, promotesTo });
   // 咏唱开销 0 镜像：「爆炸艺术——发现同阶爆裂术并将其咏唱开销置 0」的载体。
@@ -208,7 +208,7 @@ function meltCard({ id, name, tier, weak, per, promotesTo }) {
     describe: () => `消耗自身所有/effect{燃烧}，赋予所有敌人/effect{虚弱}${weak}，每消耗${per}层+1`,
     battleDescribe: (sctx) => {
       const stacks = sctx.player.getEffectStacks('burn');
-      return `消耗自身所有/effect{燃烧}（当前${stacks}层）：全体/effect{虚弱}${weak + Math.floor(stacks / per)}`;
+      return `消耗自身所有/effect{燃烧}：赋予所有敌人/effect{虚弱}${weak + Math.floor(stacks / per)}`;
     },
   });
 }
@@ -228,8 +228,8 @@ registerSkill({
     addEffect(sctx, 'flameDemon', 1);
     return true;
   },
-  describe: () => '获得/effect{炎魔}1',
-  battleDescribe: () => '获得/effect{炎魔}1',
+  describe: () => '/effect{炎魔}1',
+  battleDescribe: () => '/effect{炎魔}1',
 });
 
 // ====================================================================
@@ -255,8 +255,8 @@ function explosiveArtCard({ id, tier, promotesTo }) {
       if (twin) addCard(sctx, twin, { toZone: 'hand' });
       return true;
     },
-    describe: () => `/named{发现}/card{${twin}}（咏唱开销为0）`,
-    battleDescribe: () => `/named{发现}/card{${twin}}（咏唱开销为0）`,
+    describe: () => `/named{发现}0咏唱权重的/card{${twin}}`,
+    battleDescribe: () => `/named{发现}0咏唱权重的/card{${twin}}`,
   });
 }
 explosiveArtCard({ id: 'explosiveArt', tier: 'C', promotesTo: 'explosiveArtPlus' });
@@ -290,8 +290,8 @@ function fireWhirlCard({ id, tier, dmg, promotesTo }) {
         },
       }],
     },
-    describe: () => `每消耗1魏启，立刻造成${dmg}次级群伤`,
-    battleDescribe: () => `每消耗1魏启，立刻造成${dmg}次级群伤`,
+    describe: () => `每消耗1魏启，${dmg}次级群伤`,
+    battleDescribe: () => `每消耗1魏启，${dmg}次级群伤`,
   });
 }
 fireWhirlCard({ id: 'fireWhirl', tier: 'C', dmg: 2, promotesTo: 'fireWhirlPlus' });
@@ -347,8 +347,8 @@ function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
       gainShield(sctx, shield);
       return true;
     },
-    describe: () => `立刻回复${mana}魏启，${shield}护盾`,
-    battleDescribe: () => `立刻回复${mana}魏启，${shield}护盾`,
+    describe: () => `回复${mana}魏启，${shield}护盾`,
+    battleDescribe: () => `回复${mana}魏启，${shield}护盾`,
   });
 }
 fireTemperCard({ id: 'fireTemper', name: '火焰淬炼', tier: 'C', mana: 3, shield: 4, promotesTo: 'fireTemperPlus' });
@@ -407,10 +407,10 @@ function silenceCard({ id, tier, shield, promotesTo }) {
       gainShield(sctx, shield);
       return true;
     },
-    describe: () => `终止你激活的所有咏唱，获得${shield}护盾`,
+    describe: () => `终止所有激活咏唱，获得${shield}护盾`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => c.isActivated).length;
-      return `终止你激活的所有咏唱（${n}张），获得${shield}护盾`;
+      return `终止所有激活咏唱（${n}张），获得${shield}护盾`;
     },
   });
 }
@@ -439,7 +439,7 @@ function reliefValveCard({ id, tier, perMana, promotesTo }) {
     describe: () => `每消耗1魏启，获得${perMana}护盾`,
     battleDescribe: (sctx) => {
       const X = sctx.self.xCost?.mana ?? sctx.player.mana; // 未打出时按当前魏启预估
-      return `获得${X * perMana}护盾（${X}魏启全耗）`;
+      return `获得${X * perMana}护盾`;
     },
   });
 }
@@ -505,7 +505,7 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
         },
       }],
     },
-    describe: () => `/effect{纳气}${naqi}，自身/effect{燃烧}4`,
+    describe: () => `/effect{纳气}${naqi}，/effect{燃烧}4`,
   });
 }
 feverChantCard({ id: 'fever', name: '发烧', tier: 'C', naqi: 1, promotesTo: 'highFever' });
@@ -541,12 +541,12 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
         when: ChantTriggerInstruction, phase: 'post',
         react: () => {
           gainShield(sctx, shield);
-          addEffect(sctx, 'burn', 3);
+          addEffect(sctx, 'burn', 4); // 自燃 4（2026-09-18 文档调值，原 3）
         },
       }],
     },
-    describe: () => `护盾${shield}，自身/effect{燃烧}3`,
-    battleDescribe: (sctx) => `护盾${shield}，自身/effect{燃烧}3`,
+    describe: () => `护盾${shield}，/effect{燃烧}4`,
+    battleDescribe: (sctx) => `护盾${shield}，/effect{燃烧}4`,
   });
 }
 kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 11, ap: 1, promotesTo: 'kindlingBloodPlus' });
@@ -570,7 +570,7 @@ function fireRainCard({ id, tier, damage, promotesTo }) {
       aoeDamage(sctx, damage, enemyTarget(sctx));
       return true;
     },
-    describe: () => `群伤${damage}`,
+    describe: () => `${damage}群伤`,
   });
 }
 fireRainCard({ id: 'fireRain', tier: 'C', damage: 14, promotesTo: 'fireRainPlus' });
@@ -587,7 +587,7 @@ registerSkill({
     aoeDamage(sctx, 14, enemyTarget(sctx));
     return stage === 0 ? false : true; // stage 0 第一波，stage 1 第二波（重读存活）
   },
-  describe: () => '群伤14×2',
+  describe: () => '14×2群伤',
 });
 
 // ====================================================================
@@ -701,8 +701,8 @@ function firstStrikeCard({ id, name, tier, damage, promotesTo }) {
       drawCards(sctx, 1);
       return true;
     },
-    describe: () => `${damage}伤害，抽1牌`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，抽1牌`,
+    describe: () => `${damage}伤害，抽1`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，抽1`,
   });
 }
 firstStrikeCard({ id: 'firstShot', name: '先发火弹', tier: 'D', damage: 5, promotesTo: 'firstArrow' });
@@ -766,8 +766,8 @@ registerSkill({
   activated: {
     canUseSkill: (sctx) => sctx.player.mana > 0,
   },
-  describe: () => '蓝量大于0时，可以透支蓝量出牌',
-  battleDescribe: () => '蓝量大于0时，可以透支蓝量出牌',
+  describe: () => '魏启大于0时，可以透支魏启出牌',
+  battleDescribe: () => '魏启大于0时，可以透支魏启出牌',
 });
 
 // ====================================================================
@@ -816,10 +816,10 @@ function lastStandCard({ id, tier, draw }) {
       drawCards(sctx, draw);
       return true;
     },
-    describe: () => `焚毁所有未激活咏唱的手牌，每张回复2魏启，抽${draw}`,
+    describe: () => `焚毁所有/named{自由}手牌，每张回复2魏启，抽${draw}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `焚毁${n}张手牌：回复${n * 2}魏启，抽${draw}`;
+      return `焚毁${n}手牌：回复${n * 2}魏启，抽${draw}`;
     },
   });
 }
@@ -889,11 +889,11 @@ function fireworkShowCard({ id, name, tier, manaBack = 0, promotesTo }) {
       if (manaBack > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: manaBack }));
       return true;
     },
-    describe: () => `/named{抽出}牌库中所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`,
+    describe: () => `/named{抽出}所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.deck
         .filter(c => getSkillDefinition(c.defId)?.series === 'burst').length;
-      return `/named{抽出}牌库中所有爆裂术（现存${n}张）${manaBack ? `，回复${manaBack}魏启` : ''}`;
+      return `/named{抽出}所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`;
     },
   });
 }
@@ -959,7 +959,7 @@ registerSkill({
     addEffect(sctx, 'burn', 5);
     return true;
   },
-  describe: () => '手牌上限+1，自身/effect{燃烧}5',
+  describe: () => '手牌上限+1，/effect{燃烧}5',
 });
 
 // 灭火（C，消耗，2026-09-13 用户新文档新增）：驱散自身所有燃烧。
@@ -977,7 +977,7 @@ registerSkill({
     return true;
   },
   describe: () => '驱散自身所有/effect{燃烧}',
-  battleDescribe: (sctx) => `驱散自身所有/effect{燃烧}（当前${sctx.player.getEffectStacks('burn')}层）`,
+  battleDescribe: (sctx) => `驱散自身所有/effect{燃烧}`,
 });
 
 // ====================================================================
