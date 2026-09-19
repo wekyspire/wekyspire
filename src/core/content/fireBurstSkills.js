@@ -774,48 +774,57 @@ registerSkill({
 // §1.2 深入卡
 // ====================================================================
 
-// 回响烈焰（B，消耗）：每张坟墓（zones.burnt）中的卡提供 1 魏启，抽3。
+// 回响烈焰 B/A（消耗）：每张坟墓（zones.burnt）中的卡提供 1 魏启，抽 3/5
+// （2026-09-18 设计稿扩 A 阶——回蓝同构，A 位抽牌翻倍）。
 // 计数时点 = 打出时（自身尚未落位，不把自己算进去）。
-registerSkill({
-  id: 'echoingFlames', name: '回响烈焰', type: 'fire', tier: 'B', series: 'depth', deep: 'burst',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'none',
-  keywords: ['exhaust'],
-  use(sctx) {
-    const graves = sctx.battleState.zones.burnt.length;
-    if (graves > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: graves }));
-    drawCards(sctx, 3);
-    return true;
-  },
-  battleDescribe: (sctx) => `坟墓${sctx.battleState.zones.burnt.length}张：获得等量魏启，抽3`,
-  describe: () => '每张坟墓中的卡牌提供1魏启，抽3',
-});
+function echoingFlamesCard({ id, tier, draw }) {
+  registerSkill({
+    id, name: '回响烈焰', type: 'fire', tier, series: 'depth', deep: 'burst',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    use(sctx) {
+      const graves = sctx.battleState.zones.burnt.length;
+      if (graves > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: graves }));
+      drawCards(sctx, draw);
+      return true;
+    },
+    battleDescribe: (sctx) => `坟墓${sctx.battleState.zones.burnt.length}张：获得等量魏启，抽${draw}`,
+    describe: () => `每张坟墓中的卡牌提供1魏启，抽${draw}`,
+  });
+}
+echoingFlamesCard({ id: 'echoingFlames', tier: 'B', draw: 3 });
+echoingFlamesCard({ id: 'echoingFlamesMaster', tier: 'A', draw: 5 });
 
-// 背水一战（B，消耗，2026-09-13 用户新文档新增）：焚毁所有未激活咏唱的手牌，
-// 每张回复 2 魏启，抽3。已激活的咏唱卡豁免——点亮的咏唱是构筑引擎本身，
-// 烧引擎换蓝等于自拆台（旧版放手一搏的全烧口径下放到 B 阶时收的口子）。
-registerSkill({
-  id: 'lastStand', name: '背水一战', type: 'fire', tier: 'B', series: 'depth', deep: 'burst',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'none',
-  keywords: ['exhaust'],
-  use(sctx) {
-    const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
-    for (const c of hand) burnCard(sctx, c.uniqueID);
-    if (hand.length > 0) {
-      sctx.kernel.submitInstruction(new GainManaInstruction({ amount: hand.length * 2 }));
-    }
-    drawCards(sctx, 3);
-    return true;
-  },
-  describe: () => '焚毁所有未激活咏唱的手牌，每张回复2魏启，抽3',
-  battleDescribe: (sctx) => {
-    const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-    return `焚毁${n}张手牌：回复${n * 2}魏启，抽3`;
-  },
-});
+// 背水一战 B/A（消耗，2026-09-13 用户新文档新增；2026-09-18 扩 A 阶）：焚毁所有
+// 未激活咏唱的手牌，每张回复 2 魏启，抽 3/5。已激活的咏唱卡豁免——点亮的咏唱是
+// 构筑引擎本身，烧引擎换蓝等于自拆台（旧版放手一搏的全烧口径下放到 B 阶时收的口子）。
+function lastStandCard({ id, tier, draw }) {
+  registerSkill({
+    id, name: '背水一战', type: 'fire', tier, series: 'depth', deep: 'burst',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    use(sctx) {
+      const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
+      for (const c of hand) burnCard(sctx, c.uniqueID);
+      if (hand.length > 0) {
+        sctx.kernel.submitInstruction(new GainManaInstruction({ amount: hand.length * 2 }));
+      }
+      drawCards(sctx, draw);
+      return true;
+    },
+    describe: () => `焚毁所有未激活咏唱的手牌，每张回复2魏启，抽${draw}`,
+    battleDescribe: (sctx) => {
+      const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
+      return `焚毁${n}张手牌：回复${n * 2}魏启，抽${draw}`;
+    },
+  });
+}
+lastStandCard({ id: 'lastStand', tier: 'B', draw: 3 });
+lastStandCard({ id: 'lastStandMaster', tier: 'A', draw: 5 });
 
 // 放手一搏（A，消耗，2026-09-13 用户新文档重做）：先抽 5 补手，再焚毁牌库中
 // 所有卡，每张回 2 魏启。裸奔不加保护窗（拍板：烧完牌库本身就是玩法——空库后
@@ -1000,33 +1009,39 @@ registerSkill({
   describe: () => '每消耗1魏启，获得3护盾',
 });
 
-// 火焰眷顾（B，消耗，咏唱2）：激活期间火灵脉牌的魏启消耗 -1。
+// 火焰眷顾 B/A（消耗，咏唱3/2，2026-09-18 设计稿扩 A + 咏唱分档）：激活期间
+// 火灵脉牌的魏启消耗 -1（低阶咏唱压力大、高阶压力小——档位差全在负担侧）。
 // 判定方式：沿 ConsumeManaInstruction 的父链上溯取「正在打出的卡」
 // （cardConsumingMana），type==='fire' 才减免——X 费火卡（凝焰系列，ConsumeMana
 // 由 use 内直接提交，父链同样可达持卡指令）一并享受减免。
 // PRE 只做 payload 修饰（费用管线与数值管线同构，R2）；最低减到 0。
-registerSkill({
-  id: 'fireAffinity', name: '火焰眷顾', type: 'fire', tier: 'B', series: 'common',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 2,
-  keywords: ['exhaust'],
-  use() { return true; },
-  activated: {
-    subscriptions: () => [{
-      when: ConsumeManaInstruction,
-      phase: 'pre',
-      filter: (instr) => {
-        const card = cardConsumingMana(instr);
-        return card != null && getSkillDefinitionSafe(card.defId) === 'fire';
-      },
-      react: (instr) => {
-        instr.setPayload('amount', Math.max(0, instr.payload.amount - 1));
-      },
-    }],
-  },
-  describe: () => '火灵脉牌的魏启消耗-1',
-});
+function fireAffinityCard({ id, tier, chantWeight, promotesTo }) {
+  registerSkill({
+    id, name: '火焰眷顾', type: 'fire', tier, series: 'common',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'chant', chantWeight,
+    keywords: ['exhaust'],
+    promotesTo,
+    use() { return true; },
+    activated: {
+      subscriptions: () => [{
+        when: ConsumeManaInstruction,
+        phase: 'pre',
+        filter: (instr) => {
+          const card = cardConsumingMana(instr);
+          return card != null && getSkillDefinitionSafe(card.defId) === 'fire';
+        },
+        react: (instr) => {
+          instr.setPayload('amount', Math.max(0, instr.payload.amount - 1));
+        },
+      }],
+    },
+    describe: () => '火灵脉牌的魏启消耗-1',
+  });
+}
+fireAffinityCard({ id: 'fireAffinity', tier: 'B', chantWeight: 3, promotesTo: 'fireAffinityMaster' });
+fireAffinityCard({ id: 'fireAffinityMaster', tier: 'A', chantWeight: 2 });
 
 // type 读取（定义缺失防御：非注册卡不参与减免）
 function getSkillDefinitionSafe(defId) {

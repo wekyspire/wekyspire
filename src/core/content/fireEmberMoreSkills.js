@@ -22,12 +22,13 @@ import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest } from './cardKit.js';
 
-// ==== 自焚系列（§2.1：自伤换高伤）============================================
-// 玩火 D / 引焰 C / 焚灭 B：0 费攻击（设计稿未写费用 = 免费，battle.md §7.2 缺省约定），
-// 冷却 1（charges 1 格 + 冷却 1 回合——零费卡若无冷却就是无限的免费自伤泵）；
-// 伤害吃攻击面板轨（F1：基数 + 攻击面板 + power），燃烧作为体系副作用落在自己身上。
+// ==== 自焚系列（§2.1：自伤换高伤，2026-09-18 设计稿四阶）======================
+// 玩火 D / 引焰 C / 焚烧 B / 焚灭 A：0 费攻击（设计稿未写费用 = 免费，battle.md §7.2
+// 缺省约定），冷却 1（零费卡若无冷却就是无限的免费自伤泵）；自燃烧全阶统一 4
+// （代价恒定，档位差只在伤害：12/17/23/30）。伤害吃攻击面板轨（F1：基数 + 攻击
+// 面板 + power），燃烧作为体系副作用落在自己身上。
 // 敌人全灭时结算退化为裸面板值（enemyTarget 落 null 由 cardKit 兜底口径处理）。
-function selfImmolate({ id, name, tier, base, burn }) {
+function selfImmolate({ id, name, tier, base }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'selfImmolate',
     cost: { mana: 0, actionPoint: 0 },
@@ -35,17 +36,18 @@ function selfImmolate({ id, name, tier, base, burn }) {
     cardMode: 'normal', targetMode: 'enemy',
     use(sctx) {
       attackDamage(sctx, base);
-      addEffect(sctx, 'burn', burn); // 默认 target = sctx.player：代价给自己
+      addEffect(sctx, 'burn', 4); // 默认 target = sctx.player：代价给自己
       return true;
     },
-    describe: () => `${base}伤害，自身/effect{燃烧}${burn}`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，自身/effect{燃烧}${burn}`,
+    describe: () => `${base}伤害，自身/effect{燃烧}4`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, base)}，自身/effect{燃烧}4`,
   });
 }
 
-selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 12, burn: 2 });
-selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 17, burn: 3 });
-selfImmolate({ id: 'immolate', name: '焚灭', tier: 'B', base: 24, burn: 5 });
+selfImmolate({ id: 'playWithFire', name: '玩火', tier: 'D', base: 12 });
+selfImmolate({ id: 'drawFlame', name: '引焰', tier: 'C', base: 17 });
+selfImmolate({ id: 'immolate', name: '焚烧', tier: 'B', base: 23 });
+selfImmolate({ id: 'immolateGrand', name: '焚灭', tier: 'A', base: 30 });
 
 // ==== 焰愈系列（§2.1：燃烧换恢复）============================================
 // 焰愈 C / 炽愈 B / 涅槃 A：1AP 消耗，治疗量 = 基础值 + 自身燃烧层数 × 每层加成。
@@ -154,7 +156,7 @@ function burnMirror({ id, name, tier, spread }) {
     id, name, type: 'fire', tier, series: 'mirrorBurn',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 3,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
