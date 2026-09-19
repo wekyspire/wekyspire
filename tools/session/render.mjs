@@ -476,8 +476,9 @@ export function renderRelics(S) {
 }
 
 export function renderTerms() {
-  const L = ['【词条表】（卡面关键词的完整释义，等同游戏内悬浮说明）'];
-  for (const { name, text } of listNamedTerms()) L.push(`  ${name} — ${text}`);
+  // agent 口径（幼稚园模式）：程序化细则——触发时机/判定口径/不生效情形写全，防 LLM 误读规则
+  const L = ['【词条表】（卡面关键词的完整释义，程序化细则口径）'];
+  for (const { name, text } of listNamedTerms({ agent: true })) L.push(`  ${name} — ${text}`);
   L.push('【效果表】（状态栏图标释义）');
   for (const def of allEffects()) {
     L.push(`  ${def.name}（${def.type === 'buff' ? '增益' : '减益'}） — ${def.description}`);

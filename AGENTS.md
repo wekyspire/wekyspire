@@ -122,7 +122,7 @@ src/
 - **UI 风格：扁平 / 白字 / 淡蓝按钮**：按钮与面板走"深底 + 白字 + 淡蓝细描边"（`richtext/buttonFace.js` 的 THEMES 是唯一事实源——**无渐变、无自体发光**），面板不大圆角（按钮可小圆角，其余 ≤4px）；**金色只留给金钱相关内容**，标题与提示用白 `#e8eefb` / 淡蓝灰 `#c3cee0`。对话框 = 黑色半透明扁平框。内容语义色（稀有度 `RARITY_COLORS`、灵脉维度色、敌人名红）不受此约束。
 - **公共"获得演出"三件套**：任何"到手一拍"都应走 `Stage.showcaseItem(payload)`（`skippable: true` + `onSkip/onDismiss` 表示可放弃）；无素材的 key 由组件程序化占位。新增获得路径不要绕过它自画 UI。
 - **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词（消耗/固有/短暂/锁定/缓启）走徽章与页脚词条行（`cardFace.js` 的 `drawFooter`），**不要在 `describe`/`battleDescribe` 里复述**（如「冷却8」「消耗。」）。咏唱卡的「咏唱N：」前缀由渲染层自动加（`chantPrefixedText`），**激活前后文案不变**。
-- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数），卡面 markup 用 `/named{术语}`；机制本体写进 def 字段/订阅，不要把长机制文本摊在卡面上。
+- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数），卡面 markup 用 `/named{术语}`；机制本体写进 def 字段/订阅，不要把长机制文本摊在卡面上。**词条双轨**（2026-09-18 定）：`describe` = 玩家版（短文案）；`agent` = headless/LLM 版（「幼稚园模式」程序化细则——触发时机/判定口径/不生效情形写全，防 agent 误读规则），headless 的 `terms` 视图读 agent 版（`listNamedTerms({ agent: true })`）；新词条两版都要写。
 - **卡间引用走 `/card{卡id, k=v, ...}`**：卡面文本提及另一张卡一律用 id 引用（改名不失配），hover 热区弹**整卡预览**；不要写「卡名」裸文本。
 - **卡牌威力提升（power）一律走 `cardKit.gainPower(sctx, card, n)`**，不要裸改 `card.power += n`：它还发 `presenter.cardPowerUp` → `ANIM_CARD_POWER_UP` 公共节拍——「这张牌状态变了」玩家要看得见。
 - **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场/弃/焚/迁移/视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次重算兜底——空窗期里 idle 的卡会被弹簧从展示位拉回手牌锚点（「打出 → 飞回手牌 → 再飞牌库」病灶已多次回归）。
