@@ -333,10 +333,22 @@ export class RoomStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
+    // 阶段级模态面板（房内进阶的种子包等）在台：hover 全归它，机器/浮标/继续键/停靠面板
+    // 一律不亮——模态语义（2026-09-18 用户报「种子包只能刷新不能选卡」的病灶之一：
+    // 阶段面板收不到 hover/click 路由）。
+    if (this._stagePanel) {
+      this._hoverName = null;
+      for (const [, rig] of this._rigs) rig.setHover?.(false);
+      for (const m of this._markers) m.hover = false;
+      this._continue.setHovered(false);
+      this._panel?.onHover?.(null);
+      this._stagePanel.onHover?.(hit);
+      return;
+    }
     // 各机器的吞掉型 hover（安慰奖演出中只认两件货）
     for (const m of this._machines) if (m.handleHover?.(hit)) return;
     // 恶魔 roll 选择阶段：转轮自己的 tooltip token 由 Picker 发（此处不吞 hover）
-    if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     const name = this._focused ? null : this._machineOf(hit);
     // zoom-in（已聚焦某台）期间不响应 hover：hover 放大/提亮是**全景下的可交互暗示**
     // （"这东西能点"），推近之后玩家已经在跟它交互了，再跟着鼠标缩放只会让人以为画面在抖
@@ -364,9 +376,15 @@ export class RoomStage {
     const hit = this._picker.pick(x, y);
     const down = this._downHit;
     this._downHit = null;
-    // 各机器的 pointerUp 点选（先于 pickerKit 路由）：安慰奖演出中选一件货
+    // 各机器的 pointerUp 点选（先于面板路由）：安慰奖演出中选一件货
     for (const m of this._machines) if (m.handlePointerUp?.(hit)) return;
     if (this._pickerKit.routeClick(hit)) return;   // 特写点任意处退出 / 全屏界面接管
+    // 阶段级模态面板在台：一切点击归它——未命中的落点被背板吞掉，不落到机器/停靠面板/
+    // 相机聚焦（模态期间点空白不得收面板拉远镜头）。
+    if (this._stagePanel) {
+      if (down && hit && down.kind === hit.kind && down.id === hit.id) this._stagePanel.onClick?.(hit);
+      return;
+    }
     if (down && hit && down.kind === hit.kind && down.id === hit.id) {
       this._activate(hit);
       return;
@@ -478,6 +496,7 @@ export class RoomStage {
 
   _activate(hit) {
     if (this._grantBusy) return;   // 得卡演出中：吞掉一切点击（机器/继续键/面板都先让路）
+    if (this._stagePanel) { this._stagePanel.onClick?.(hit); return; }   // 模态在台：点击全归它（冗余保险，Up 路径已拦）
     // 各机器的吞掉型点击（恶魔词条 / 投料口 / 商品卡）：命中即消化
     for (const m of this._machines) if (m.handleClick?.(hit)) return;
     if (!hit || hit.kind === 'background') {
