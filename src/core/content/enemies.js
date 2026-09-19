@@ -181,9 +181,11 @@ registerEnemy({
 // lore：魏启大陆「魔物爆发」——周期性出现的狂躁魔化古姆拉，S 级「死亡魔兽」，
 // 獠牙利爪电离空气产生等离子体，魏启储能于肌体）。
 // 开场自带炎魔1+暴怒1（暴怒：受伤时获得层数层力量，回合开始清零——打它越狠它越痛）。
-// 一阶段四拍：攻5×2 → 攻5×3 → 攻18+暴怒1 → 防10。
+// 一阶段四拍：攻2×2 → 攻2×3 → 攻15+暴怒1 → 防10。
 // 转段：血量跌至 50 以下的行动拍——回血25+暴怒2，结束回合（嘶吼），进二阶段。
-// 二阶段三拍：攻10×2+暴怒2 → 攻8×3+暴怒2 → 攻30+暴怒2。
+// 二阶段三拍：攻7×2+暴怒2 → 攻5×3+暴怒2 → 攻27+暴怒2。
+// 2026-09-19 用户裁决（0918 马拉松 9 败数据）：全系攻击基础伤害 -3/段（多段每段同砍）
+// 整体变弱，暴怒不动——保住「多段喂力量」的极化检定属性。
 registerEnemy({
   difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
   id: 'kardas', name: '卡达斯',
@@ -213,32 +215,32 @@ registerEnemy({
     }
     if (!unit._phase2) {
       const beat = unit.actionIndex % 4;
-      if (beat === 0) hit(2, 5);
-      else if (beat === 1) hit(3, 5);
-      else if (beat === 2) { hit(1, 18); rageUp(1); }
+      if (beat === 0) hit(2, 2);
+      else if (beat === 1) hit(3, 2);
+      else if (beat === 2) { hit(1, 15); rageUp(1); }
       else actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
       return;
     }
     const beat = (unit._phaseBeat ?? 0) % 3;
     unit._phaseBeat = (unit._phaseBeat ?? 0) + 1;
-    if (beat === 0) { hit(2, 10); rageUp(2); }
-    else if (beat === 1) { hit(3, 8); rageUp(2); }
-    else { hit(1, 30); rageUp(2); }
+    if (beat === 0) { hit(2, 7); rageUp(2); }
+    else if (beat === 1) { hit(3, 5); rageUp(2); }
+    else { hit(1, 27); rageUp(2); }
   },
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
       if (unit.hp < 50) return { kinds: ['buff'], note: '嘶吼：回复25血、暴怒2，进入二阶段' };
       const beat = unit.actionIndex % 4;
-      if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 5 + atk };
-      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 5 + atk };
-      if (beat === 2) return { kinds: ['attack', 'buff'], hits: 1, damage: 18 + atk, note: '暴怒1' };
+      if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 2 + atk };
+      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 2 + atk };
+      if (beat === 2) return { kinds: ['attack', 'buff'], hits: 1, damage: 15 + atk, note: '暴怒1' };
       return { kinds: ['defend'], note: '自身护盾+10' };
     }
     const beat = (unit._phaseBeat ?? 0) % 3;
-    if (beat === 0) return { kinds: ['attack', 'buff'], hits: 2, damage: 10 + atk, note: '暴怒2' };
-    if (beat === 1) return { kinds: ['attack', 'buff'], hits: 3, damage: 8 + atk, note: '暴怒2' };
-    return { kinds: ['attack', 'buff'], hits: 1, damage: 30 + atk, note: '撕碎：暴怒2' };
+    if (beat === 0) return { kinds: ['attack', 'buff'], hits: 2, damage: 7 + atk, note: '暴怒2' };
+    if (beat === 1) return { kinds: ['attack', 'buff'], hits: 3, damage: 5 + atk, note: '暴怒2' };
+    return { kinds: ['attack', 'buff'], hits: 1, damage: 27 + atk, note: '撕碎：暴怒2' };
   },
 });
 
