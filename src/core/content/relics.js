@@ -12,7 +12,6 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getEffectDefinition } from '../effects/registry.js';
 import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
 import { isBossFloor } from '../run/runFlow.js';
-import { effectiveHandCount } from '../skills/helpers.js';
 
 // 遗物内容（RELICS.md 2026-09-10 第一批：只上「不需要新机制」的那些，见 todos/ 记录）。
 //
@@ -95,8 +94,8 @@ registerRelic({
 // 的战斗克隆：斩只存在于本场牌库，构筑视图/删卡/升级不再见到它。
 registerRelic({
   id: 'greatSword', name: '大剑', rarity: 'C', cost: 0, acquisition: [],
-  description: '战斗开始时，洗入1张「斩」。',
-  flavor: '武者出鞘前的伙伴',
+  description: '战斗开始时，向牌库洗入1张斩。',
+  flavor: '一把大剑罢了',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'slash', index: 'random' }));
   },
@@ -219,16 +218,16 @@ registerRelic({
 
 // 空灵脉专属（闪避类效果必须挂 T1 回合开始 POST——战斗开始直接上会被蒸发，见 abilities.js airVein）
 registerRelic({
-  id: 'windChime', name: '风铃', rarity: 'B', cost: 1, requires: { leino: 'air', min: 1 },
-  description: '第一回合开始时，获得闪避 2。',
-  flavor: '风还没到，它先响了',
+  id: 'windChime', name: '风铃', rarity: 'A', cost: 1, requires: { leino: 'air', min: 1 },
+  description: '第一回合开始时，获得闪避 1。',
+  flavor: '如果没有风，它还会响吗？',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
     filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
     react: (instr, c) => {
       c.kernel.submitInstruction(new AddEffectInstruction({
-        target: c.player, effectId: 'dodge', stacks: 2,
+        target: c.player, effectId: 'dodge', stacks: 1,
       }), instr);
     },
   }],
@@ -835,10 +834,10 @@ registerRelic({
 // 轴心：给两级手牌/弃牌/咏唱/超载/自燃博弈这些第 6 轮验证过的新机制各配一件构筑杠杆。
 // 分布：C·1槽×3 / B·1槽×2 / B·2槽×1 / A·2槽×1 / A·非槽×1。
 
-// 拾荒者的口袋（C·1槽）——弃牌轴：每回合你第一次弃牌时，抽 1 张牌。
+// 拾荒者的口袋（B·1槽，2026-09-18 与架势镜稀有度互换）——弃牌轴：每回合你第一次弃牌时，抽 1 张牌。
 // 软补 dump 不补牌的痛点；限每回合 1 次，不破坏「弃牌=止损」的定位。
 registerRelic({
-  id: 'scavengerPouch', name: '拾荒者的口袋', rarity: 'C', cost: 1,
+  id: 'scavengerPouch', name: '拾荒者的口袋', rarity: 'B', cost: 1,
   description: '每回合你第一次弃牌时，抽 1 张牌。',
   flavor: '破铜烂铁也是钱',
   subscriptions: () => {
@@ -855,13 +854,13 @@ registerRelic({
   },
 });
 
-// 架势镜（B·2槽）——完美轴：你的完美卡伤害 +8。
+// 架势镜（C·2槽，2026-09-18 与拾荒者口袋稀有度互换）——完美轴：你的完美卡伤害 +8。
 // 完美是战术挑战（条件不动），这件给 payoff 再加一根杠杆。完美卡的伤害指令带
 // tags:['perfect']（blockSkills.js 六个出牌点统一打标）。
 registerRelic({
-  id: 'stanceMirror', name: '架势镜', rarity: 'B', cost: 2,
+  id: 'stanceMirror', name: '架势镜', rarity: 'C', cost: 2,
   description: '你的完美卡伤害 +8。',
-  flavor: '照出你架势里的每一处破绽',
+  flavor: '孤芳自赏',
   subscriptions: () => [{
     when: DealDamageInstruction,
     phase: 'pre',
@@ -871,19 +870,14 @@ registerRelic({
   }],
 });
 
-// 胀满的背包（A·1槽）——容量轴：手牌上限 +1，超载上限 +2（回合内抽牌爆发空间 5→7）。
-// 第 7 轮裁决：原「仅超载 +2」DOA（超载区结构不可达），加手牌上限 +1 成常驻收益。
-// 2026-09-13 用户判「得削」：C·1槽 局局见、见必拿（试玩 MVP）。裁决升 A 而非 B·2槽——
-// 它的病是出现率不是占槽；+1 手牌上限常驻与无限魏启罐（A·1槽）同为 run 塑形级，
-// 升 A 降频保惊喜，2 槽反而会把它削成「不想要」。
+// 胀满的背包（A·1槽）——容量轴：手牌上限 +1。
+// 2026-09-18 用户削：去掉超载上限 +2（回合内爆发空间 +2 过强）。
+// 沿革：原「仅超载 +2」DOA → 加手牌上限 +1 常驻（第 7 轮）→ C 升 A 降频（2026-09-13）。
 registerRelic({
   id: 'bulgingPack', name: '胀满的背包', rarity: 'A', cost: 1,
-  description: '手牌上限 +1，超载上限 +2。',
-  flavor: '塞得下，就都是你的',
+  description: '手牌上限 +1。',
+  flavor: '不能再塞了！',
   runModifiers: { maxHandSize: 1 },
-  onBattleStart(ctx) {
-    ctx.battleState.overloadBonus = (ctx.battleState.overloadBonus ?? 0) + 2;
-  },
 });
 
 // 守夜灯（B·1槽）——尾弃轴：每回合尾弃时，每弃 1 张牌获得 2 护盾。
@@ -891,7 +885,7 @@ registerRelic({
 registerRelic({
   id: 'nightLantern', name: '守夜灯', rarity: 'B', cost: 1,
   description: '每回合尾弃时，每弃 1 张牌获得 2 护盾。',
-  flavor: '丢掉的，替你守夜',
+  flavor: '特别防风',
   subscriptions: () => [{
     when: DiscardOverflowInstruction,
     phase: 'post',
@@ -905,9 +899,9 @@ registerRelic({
 // 「与燃烧博弈，收益与风险并存」的新玩具——自燃变盾，和亲和/防火形成三角。
 // 第 7 轮裁决：半额转盾 dud（自燃流全是负收益），改全额——自燃变盾才成立。
 registerRelic({
-  id: 'chestnutFromFire', name: '火中取栗', rarity: 'B', cost: 1,
+  id: 'chestnutFromFire', name: '火中栗', rarity: 'B', cost: 1,
   description: '每当你获得燃烧时，获得等量的护盾。',
-  flavor: '敢伸手，才有栗子吃',
+  flavor: '这就是你抢救出来的东西？',
   subscriptions: () => [{
     when: AddEffectInstruction,
     phase: 'post',
@@ -920,28 +914,28 @@ registerRelic({
   }],
 });
 
-// 共鸣石（A·2槽）——咏唱轴：你激活的咏唱卡权重 -1（最低 1）。咏唱构筑的核心件。
+// 共鸣石（S·2槽，2026-09-18 升 S）——咏唱轴：权重高于 1 的激活咏唱卡权重 -1
+// （与旧「-1 最低 1」等价，措辞改写）。咏唱构筑的核心件。
 registerRelic({
-  id: 'resonanceStone', name: '共鸣石', rarity: 'A', cost: 2,
-  description: '你激活的咏唱卡权重 -1（最低 1）。',
+  id: 'resonanceStone', name: '共鸣石', rarity: 'S', cost: 2,
+  description: '你权重高于1的激活的咏唱卡权重 -1。',
   flavor: '万籁同频',
   onBattleStart(ctx) {
     ctx.battleState.chantWeightDiscount = (ctx.battleState.chantWeightDiscount ?? 0) + 1;
   },
 });
 
-// 松鼠的囤积（C·1槽）——留存轴：玩家回合结束时若加权手牌 ≤ 3，下回合抽牌 +1。
-// 打空流的另一条腿（能打就打空，空了多抽一张）。
-// 第 7 轮裁决：按张数 ≤2 太苛刻（咏唱加权下几乎不触发），改加权口径 ≤3；
-// 文案说清「多抽 = 占用超载空间顶过容量拿牌」（E 报告：按字面读成「手牌上限 +1」是误读）。
+// 囤囤鼠之宝藏（C·1槽，2026-09-18 更名+改口径）——留存轴：回合结束时自由牌 ≤ 2，
+// 下回合抽牌 +1。自由牌 = 未激活咏唱的手牌（激活咏唱不占判定——囤的是「还没打的牌」）。
+// 沿革：松鼠的囤积 加权手牌 ≤3 → 用户 2026-09-18 收紧为自由牌 ≤2（咏唱引擎不吃这件收益）。
 registerRelic({
-  id: 'squirrelHoard', name: '松鼠的囤积', rarity: 'C', cost: 1,
-  description: '你的回合结束时，若加权手牌不多于 3 张，下回合多抽 1 张（可顶过手牌上限）。',
-  flavor: '藏起来的，才算数',
+  id: 'squirrelHoard', name: '囤囤鼠之宝藏', rarity: 'C', cost: 1,
+  description: '你的回合结束时，若自由牌不多于 2 张，下回合多抽 1 张。',
+  flavor: '囤囤囤囤囤',
   subscriptions: () => [{
     when: PlayerTurnEndInstruction,
     phase: 'post',
-    filter: (instr, c) => effectiveHandCount(c) <= 3,
+    filter: (instr, c) => c.battleState.zones.hand.filter(x => !x.isActivated).length <= 2,
     react: (instr, c) => {
       c.battleState.turnDrawBonus = (c.battleState.turnDrawBonus ?? 0) + 1;
     },
@@ -951,8 +945,8 @@ registerRelic({
 // 破釜沉舟（A·非槽位）——残血博弈：以生命 ≤ 15 进入战斗时，本场 AP 上限 +1。
 // battleModifiers 在 PreBattle 折入（读的是进战时点的生命），随战斗消失，无需回滚。
 registerRelic({
-  id: 'brokenCauldron', name: '破釜沉舟', rarity: 'A', nonSlot: true,
+  id: 'brokenCauldron', name: '破釜', rarity: 'A', nonSlot: true,
   description: '以生命不多于 15 进入战斗时，本场战斗行动力上限 +1。',
-  flavor: '没有退路的时候，路最宽',
+  flavor: '无路可退！',
   battleModifiers: (p) => (p.hp <= 15 ? { maxActionPoints: 1 } : {}),
 });
