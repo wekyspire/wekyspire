@@ -259,10 +259,14 @@ export class BattleStage {
       this.animator.register(`pile:${key}`, pile);
     }
 
-    // 手牌容量灯珠（批次 13，用户定 2026-09-13）：手牌扇下方居中一排——
-    // 最左咏唱容量珠（蓝），其余手牌珠（绿=普通/黄=溢出咏唱/灰=空）；数据=投影 handCapacity
+    // 手牌容量指示条（批次 13，用户定 2026-09-13；2026-09-18 改版）：手牌扇**上方**居中一排——
+    // 最左咏唱容量珠（蓝），其余手牌珠（绿=普通/黄=溢出咏唱/灰=空）；数据=投影 handCapacity。
+    // 摆位铁律：旧版摆在扇内 y=-56.5 被 26×35 的卡面永久盖住（"永远看不见"病灶）——卡顶缘
+    // ≈ baseY+半高 = -33.75，取 y=-30 落在扇形上缘与战线（-20）之间的空带；x=9 = 扇形中心
+    // （minX/maxX 中点）。z=20：压过静息手牌（10+n·0.5 ≤ 15）、低于悬浮/瞄准牌（30.5+）——
+    // 与状态栏 z=24 同惯例（悬浮牌可临时盖住，静息永不盖）。
     this._capacityBeads = new CapacityBeadsObject();
-    this._capacityBeads.position.set(8, -56.5, 5);
+    this._capacityBeads.position.set(9, -30, 20);
     this.uiScene.add(this._capacityBeads);
 
     this._buttons = {};

@@ -1,16 +1,20 @@
-// CapacityBeadsObject：手牌容量灯珠（批次 13，用户定 2026-09-13）。
-// 手牌扇下方一排圆珠，与 headless 文本/投影 handCapacity 同口径：
+// CapacityBeadsObject：手牌容量指示条（批次 13，用户定 2026-09-13；2026-09-18 改版）。
+// 手牌扇上方一排小圆角方片（轮廓呼应卡牌，比旧圆珠更小更紧凑），与 headless 文本/
+// 投影 handCapacity 同口径：
 //   最左 chantCap 颗 = 咏唱容量珠（蓝系）：激活咏唱的权重（共鸣石折扣后）先占它——点亮=占用，暗=空。
 //   其余 max 颗 = 手牌珠：绿 = 普通卡占用，黄 = 溢出容量的激活咏唱占用，灰 = 空。
 // 超载状态无指示器（铁律）。
 // 纯展示件：只读投影 setValue，不挂拾取、不进动画注册表；珠数签名不变不重建网格。
+// 摆放/层级由宿主（BattleStage）决定——必须放在手牌扇覆盖区之外的可见带，
+// z 压过静息手牌（≤15）但低于悬浮/瞄准牌（30.5+），见 BattleStage 装配处注释。
 
 import * as THREE from 'three';
 
-const BEAD_R = 1.05;       // 珠半径（世界单位）
-const BEAD_STEP = 2.9;     // 组内珠距
-const GROUP_GAP = 2.0;     // 咏唱组与手牌组之间的额外间隔
-const SEGMENTS = 20;
+const BEAD_W = 1.7;        // 方片宽（世界单位）
+const BEAD_H = 2.3;        // 方片高（宽高比 ≈ 卡牌 26:35.1 的轮廓回声）
+const BEAD_R = 0.5;        // 圆角半径
+const BEAD_STEP = 2.15;    // 组内珠距（间隙 0.45——紧凑排）
+const GROUP_GAP = 1.1;     // 咏唱组与手牌组之间的额外间隔
 
 // 扁平配色（无发光，与 UI 铁律一致）：内容语义色不受「金色=金钱」约束
 const COLORS = {
@@ -20,6 +24,24 @@ const COLORS = {
   chantOverflow: 0xe8c85a, // 溢出容量的激活咏唱占用
   empty: 0x363d4d,      // 手牌位·空
 };
+
+// 圆角方形 Shape（中心在原点）
+function roundedRectShape(w, h, r) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+const BEAD_GEO = new THREE.ShapeGeometry(roundedRectShape(BEAD_W, BEAD_H, BEAD_R));
 
 export class CapacityBeadsObject extends THREE.Group {
   constructor() {
@@ -79,7 +101,7 @@ export class CapacityBeadsObject extends THREE.Group {
       const isChant = i < chantCap;
       if (i === chantCap && chantCap > 0 && max > 0) x += GROUP_GAP;
       const mesh = new THREE.Mesh(
-        new THREE.CircleGeometry(BEAD_R, SEGMENTS),
+        BEAD_GEO,
         new THREE.MeshBasicMaterial({ color: COLORS.empty, transparent: true, opacity: 0.95 }),
       );
       mesh.position.set(x, 0, 0);
@@ -91,7 +113,7 @@ export class CapacityBeadsObject extends THREE.Group {
 
   dispose() {
     for (const bead of this._beads) {
-      bead.mesh.geometry.dispose();
+      this.remove(bead.mesh);
       bead.mesh.material.dispose();
     }
     this._beads = [];
