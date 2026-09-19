@@ -86,6 +86,22 @@ registerRelic({
   },
 });
 
+// ---- 开局默认（每局自动入手并装备；全渠道不可再获得）----
+
+// 大剑（开局遗物，0 槽，2026-09-18 用户定）：战斗开始时，向牌库随机位洗入 1 张「斩」。
+// 斩已移出初始卡组——带不带斩进战由玩家装卸本遗物自选（0 槽不占激活位，卸下只失去
+// 效果）。acquisition: [] = 不进任何获取渠道（抽取/售货机/古尔帕斯/事件全部排除，
+// 见 draft.js sourcesOf）；一局内唯一由「已拥有即排除」兜底。注入走 AddCardInstruction
+// 的战斗克隆：斩只存在于本场牌库，构筑视图/删卡/升级不再见到它。
+registerRelic({
+  id: 'greatSword', name: '大剑', rarity: 'C', cost: 0, acquisition: [],
+  description: '战斗开始时，洗入1张「斩」。',
+  flavor: '武者出鞘前的伙伴',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'slash', index: 'random' }));
+  },
+});
+
 // ---- 战斗开始时（资源 / 状态）----
 
 registerRelic({
