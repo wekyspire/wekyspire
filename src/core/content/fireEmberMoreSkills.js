@@ -108,7 +108,7 @@ burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, p
 burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播，2026-09-12 由「焚原」改名而来）=================
-// 鬼火 B（咏唱1）｜敌人死亡时，其燃烧传播给所有敌人。
+// 鬼火 B（1AP，咏唱1，2026-09-18 设计稿挂上 1AP 发动费）｜敌人死亡时，其燃烧传播给所有敌人。
 // 口径：伤害应用只改生命，效果轨不随死亡清零（AddEffect 仅在层数扣尽时移除），
 // 故 POST 阶段读 target 的燃烧 = 「死亡瞬间的瞬时层数」——若死于燃烧跳伤，
 // 跳伤后的 -1 递减指令排在跳伤之后提交，读到的同样是跳伤当拍的整量；
@@ -117,7 +117,7 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 registerSkill({
   id: 'willOWisp', name: '鬼火', type: 'fire', tier: 'B', series: 'willOWisp',
-  cost: { mana: 0, actionPoint: 0 },
+  cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
@@ -140,7 +140,7 @@ registerSkill({
   battleDescribe: (sctx) => '敌人死亡时，其燃烧传播给所有敌人',
 });
 
-// ==== 镜燃系列（§2.1：获得反哺）==============================================
+// ==== 镜燃系列（§2.1：获得反哺；镜燃 2026-09-18 设计稿 C→B）======================
 // 镜燃 C / 业火 A｜自己获得燃烧时，把本次增加的层数等量施加给
 // 随机敌人 / 所有敌人。
 // 口径：「获得」= AddEffect(burn) 落在玩家身上且本次变化量为正
@@ -176,7 +176,7 @@ function burnMirror({ id, name, tier, spread }) {
 }
 
 burnMirror({
-  id: 'mirrorBurn', name: '镜燃', tier: 'C',
+  id: 'mirrorBurn', name: '镜燃', tier: 'B',
   spread: {
     targetText: '随机敌人',
     apply: (ctx, stacks, emit) => {
@@ -274,8 +274,8 @@ registerSkill({
   battleDescribe: (sctx) => `若你正在燃烧（当前/effect{燃烧}${sctx.player.getEffectStacks('burn')}），获得9护盾`,
 });
 
-// 炼化/炼解 C/B｜咏唱1（2026-09-13 用户新文档新增）：每回合 P5 选 1 张手牌焚毁，
-// 获得 1/2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
+// 炼化/炼解 C/B｜1AP，咏唱1（2026-09-13 用户新文档新增；2026-09-18 设计稿挂上
+// 1AP 发动费）：每回合 P5 选 1 张手牌焚毁，获得 1/2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
 // 火系两条「每回合变现」轴：高热烧自己，炼化烧手牌。选牌请求走 cardKit 唯一
 // 形状（min/max 1/1）；空手时不发起请求（空集守卫，静默落空）。选到激活态的
 // 咏唱卡也照烧（含引擎自身——烧自己=立即止损，与刀法咏唱的选弃口径一致）。
@@ -313,7 +313,7 @@ class BurnHandForManaInstruction extends BattleInstruction {
 }
 const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
   id, name, type: 'fire', tier, series: 'fireChant',
-  cost: { mana: 0, actionPoint: 0 },
+  cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
   promotesTo,
@@ -332,7 +332,8 @@ const smeltChantCard = ({ id, name, tier, mana, promotesTo }) => registerSkill({
 smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'C', mana: 1, promotesTo: 'smeltCardPlus' });
 smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'B', mana: 2 });
 
-// 绝炎 A｜1AP，咏唱3（2026-09-13 权重分档：少量强卡 3-4 咏），任何燃烧层数免疫消耗和下降。
+// 绝炎 A｜1AP，咏唱1（2026-09-18 设计稿咏唱 5→1——燃烧免疫的价值在常亮不在门槛），
+// 任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
 // 的 AddEffect(burn) 负层数（自然递减 -1 / 驱散 -N）一律 PRE veto；
 // 跳伤结算不受影响：燃烧照常按层数跳固定伤害，只是不再衰减——
@@ -342,7 +343,7 @@ registerSkill({
   id: 'absoluteFlame', name: '绝炎', type: 'fire', tier: 'A', series: 'fireChant',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
     subscriptions: () => [{

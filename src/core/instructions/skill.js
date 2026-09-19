@@ -137,8 +137,13 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
       const free = freeChantToggle(def, this.skill);
-      const rawMana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
+      let rawMana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
       const rawAp = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      // 逐卡动态费用（runtime 计数加价，如蓄热火球链）：只叠在**定义费用**上——
+      // costOverride（嵌套强发的费用豁免/覆写）与免费窗口不叠加
+      if (!free && !this.costOverride && typeof rawMana === 'number') {
+        rawMana += def.manaCostDelta?.(makeSkillCtx(ctx, this.skill)) ?? 0;
+      }
       // 【X 费】cost 为 'X' = 打出时点的全部现有资源（NAMED「消耗为X」）。实付量记在
       // runtime.xCost 上供卡牌效果读取——支付先于 use()，效果读不到余额。
       const mana = rawMana === 'X' ? ctx.player.mana : rawMana;

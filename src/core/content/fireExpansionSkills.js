@@ -5,7 +5,7 @@
 //   * 燃烧收割（燃爆）——「燃烧→即时伤害」的 D/C 变现出口（激热是提前一拍，收/爆在 B/A）；
 //   * 敌方 debuff（爆裂冲击链）——伤残放大燃烧固定伤，「烧得皮开肉绽」语言；
 //   * 瞬发资源/条件件（急燃/焰刃/回火/扒灰/热浪）——自焚流的节奏与斩杀件；
-//   * 反制防御（烫甲）——被攻击上燃烧，火墙家族的反伤分岔。
+//   * 咏唱反甲（熔岩铠甲，2026-09-18 接替已除名的烫甲）——被攻击上燃烧。
 // 数值对标同阶白板（无条件部分不超白板，加成才是体系溢价）；D 卡全部 promotesTo
 // 现有链位或新链（用户定：不接链的 D 卡是「拿了升不上去的负资产」）。
 
@@ -13,9 +13,9 @@ import { registerSkill } from '../skills/registry.js';
 import { DealDamageInstruction, ApplyDamageInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
-import { ChantTriggerInstruction, PlayerTurnStartInstruction } from '../instructions/turn.js';
+import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
-  enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, drawCards, resolvedDamageText,
+  enemyTarget, dealDamage, attackDamage, addEffect, addCard, drawCards, resolvedDamageText,
 } from './cardKit.js';
 
 // ==== 多段链（火花 D → 连珠火 C → 炽流 B）：每段独立结算，吃「每段触发」面板 ====
@@ -184,32 +184,39 @@ registerSkill({
   },
 });
 
-// ==== 敌方 debuff 链（爆裂冲击 C → 轰灭 B）：伤残放大一切后续伤害 ====
+// ==== 敌方 debuff 链（爆裂冲击 C → 爆裂冲击 B → 轰灭 A）：伤残放大一切后续伤害 ====
+// 2026-09-18 设计稿重排：原「C 爆裂冲击 / B 轰灭」扩为三阶——B 位承袭爆裂冲击之名
+// （22伤 伤残2），轰灭升 A（22伤 伤残4）；B→A 档位差全在伤残深度（延时价值）。
 
-// 爆裂冲击 C：2魏 13伤 + 目标伤残2（对标火箭术 C 14抽2：13<14，伤残2=后续每次
-// 受伤+2，与燃烧跳伤/固伤天然联动）。2026-09-17 用户定：**转消耗卡**
+// 爆裂冲击 C/B：2魏 13/22 伤 + 目标伤残2（C 对标火箭术 C 14抽2：13<14，伤残2=
+// 后续每次受伤+2，与燃烧跳伤/固伤天然联动）。2026-09-17 用户定：**转消耗卡**
 // （伤残是延时价值，消耗防长局无限复用同一份伤残）。
-registerSkill({
-  id: 'blastShock', name: '爆裂冲击', type: 'fire', tier: 'C', series: 'shock',
-  cost: { mana: 2, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  keywords: ['exhaust'],
-  promotesTo: 'doomBlast',
-  use(sctx) {
-    const target = enemyTarget(sctx);
-    if (!target) return true;
-    attackDamage(sctx, 13, { target });
-    addEffect(sctx, 'maim', 2, target);
-    return true;
-  },
-  describe: () => '13伤害，赋予/effect{伤残}2',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 13)}，赋予/effect{伤残}2`,
-});
+function blastShockCard({ id, tier, damage, maim, promotesTo }) {
+  registerSkill({
+    id, name: '爆裂冲击', type: 'fire', tier, series: 'shock',
+    cost: { mana: 2, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'enemy',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      const target = enemyTarget(sctx);
+      if (!target) return true;
+      attackDamage(sctx, damage, { target });
+      addEffect(sctx, 'maim', maim, target);
+      return true;
+    },
+    describe: () => `${damage}伤害，赋予/effect{伤残}${maim}`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，赋予/effect{伤残}${maim}`,
+  });
+}
+blastShockCard({ id: 'blastShock', tier: 'C', damage: 13, maim: 2, promotesTo: 'blastShockPlus' });
+blastShockCard({ id: 'blastShockPlus', tier: 'B', damage: 22, maim: 2, promotesTo: 'doomBlast' });
 
-// 轰灭 B：2魏 22伤 + 伤残3（对标火球术 B 24抽2）。2026-09-17 同轮转消耗。
+// 轰灭 A：2魏 22伤 + 伤残4（对标火球连发 A 14×2抽3：单发 22 与 B 持平，
+// 伤残 4 是 A 位溢价——延时价值型斩杀铺垫）。
 registerSkill({
-  id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'B', series: 'shock',
+  id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'A', series: 'shock',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -218,31 +225,38 @@ registerSkill({
     const target = enemyTarget(sctx);
     if (!target) return true;
     attackDamage(sctx, 22, { target });
-    addEffect(sctx, 'maim', 3, target);
+    addEffect(sctx, 'maim', 4, target);
     return true;
   },
-  describe: () => '22伤害，赋予/effect{伤残}3',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 22)}，赋予/effect{伤残}3`,
+  describe: () => '22伤害，赋予/effect{伤残}4',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 22)}，赋予/effect{伤残}4`,
 });
 
 // ==== 自焚流的节奏与斩杀件（散卡，挂现有链）====
 
-// 急燃 D：0费 冷却1——获得 2 魏启，自身燃烧2（发烧咏唱版的瞬发镜像：一次性、
-// 立刻兑现；自焚是代价也是燃料——镜燃/焰愈/灼脉都吃它）。
-registerSkill({
-  id: 'flashBurn', name: '急燃', type: 'fire', tier: 'D', series: 'fever',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal',
-  promotesTo: 'fever',
-  use(sctx) {
-    sctx.kernel.submitInstruction(new GainManaInstruction({ amount: 2 }));
-    addEffect(sctx, 'burn', 2);
-    return true;
-  },
-  describe: () => '获得2魏启，自身/effect{燃烧}2',
-  battleDescribe: () => '获得2魏启，自身/effect{燃烧}2',
-});
+// 急燃链 D/C/B/A（0费 冷却1，2026-09-18 设计稿扩为四阶）：获得 2/3/4/5 魏启，
+// 自身燃烧4（发烧咏唱版的瞬发镜像：一次性、立刻兑现；自焚是代价也是燃料——
+// 镜燃/焰愈/灼脉都吃它。原 D 位燃烧 2 同步上调到 4，全阶统一）。
+function flashBurnCard({ id, tier, mana, promotesTo }) {
+  registerSkill({
+    id, name: '急燃', type: 'fire', tier, series: 'fever',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal',
+    promotesTo,
+    use(sctx) {
+      sctx.kernel.submitInstruction(new GainManaInstruction({ amount: mana }));
+      addEffect(sctx, 'burn', 4);
+      return true;
+    },
+    describe: () => `获得${mana}魏启，自身/effect{燃烧}4`,
+    battleDescribe: () => `获得${mana}魏启，自身/effect{燃烧}4`,
+  });
+}
+flashBurnCard({ id: 'flashBurn', tier: 'D', mana: 2, promotesTo: 'flashBurnPlus' });
+flashBurnCard({ id: 'flashBurnPlus', tier: 'C', mana: 3, promotesTo: 'flashBurnGrand' });
+flashBurnCard({ id: 'flashBurnGrand', tier: 'B', mana: 4, promotesTo: 'flashBurnMaster' });
+flashBurnCard({ id: 'flashBurnMaster', tier: 'A', mana: 5 });
 
 // 焰刃 D：1AP 8伤；若你正在燃烧 +6（自焚流的 D 阶条件件——燃烧管理好就是 D 阶最强拳）。
 registerSkill({
@@ -281,77 +295,88 @@ function backfireAmount(sctx) {
   return 8 + Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4;
 }
 
-// 热浪 C：1魏 10伤；目标燃烧 ≥5 层时 +8（斩杀/条件爆发——叠炎的「火候到了」一击）。
-registerSkill({
-  id: 'heatWave', name: '热浪', type: 'fire', tier: 'C', series: 'ignite',
-  cost: { mana: 1, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'fireBall',
-  use(sctx) {
-    const target = enemyTarget(sctx);
-    const hot = (target?.getEffectStacks('burn') ?? 0) >= 5;
-    attackDamage(sctx, hot ? 18 : 10);
-    return true;
-  },
-  describe: () => '10伤害；目标/effect{燃烧}不少于5层时，+8',
-  battleDescribe: (sctx) => {
-    const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-    return stacks >= 5
-      ? `${resolvedDamageText(sctx, 18)}（燃烧${stacks}层，已达成）`
-      : `${resolvedDamageText(sctx, 10)}（燃烧${stacks}层）`;
-  },
-});
+// 热浪链 C/B/A（1魏，2026-09-18 设计稿扩为三阶）：10 伤；目标燃烧 ≥5 层时
+// +8/+13/+20（斩杀/条件爆发——叠炎的「火候到了」一击）。门槛恒 5 不变，
+// 档位差全在加成斜率。
+function heatWaveCard({ id, tier, bonus, promotesTo }) {
+  registerSkill({
+    id, name: '热浪', type: 'fire', tier, series: 'ignite',
+    cost: { mana: 1, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'enemy',
+    promotesTo,
+    use(sctx) {
+      const target = enemyTarget(sctx);
+      const hot = (target?.getEffectStacks('burn') ?? 0) >= 5;
+      attackDamage(sctx, hot ? 10 + bonus : 10, { target });
+      return true;
+    },
+    describe: () => `10伤害；目标/effect{燃烧}不少于5层时，+${bonus}`,
+    battleDescribe: (sctx) => {
+      const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
+      return stacks >= 5
+        ? `${resolvedDamageText(sctx, 10 + bonus)}（燃烧${stacks}层，已达成）`
+        : `${resolvedDamageText(sctx, 10)}（燃烧${stacks}层）`;
+    },
+  });
+}
+heatWaveCard({ id: 'heatWave', tier: 'C', bonus: 8, promotesTo: 'heatWavePlus' });
+heatWaveCard({ id: 'heatWavePlus', tier: 'B', bonus: 13, promotesTo: 'heatWaveMaster' });
+heatWaveCard({ id: 'heatWaveMaster', tier: 'A', bonus: 20 });
 
-// 扒灰 D：0费 冷却1——抽 1 牌；坟墓里有至少 4 张牌时再抽 1
-// （回响烈焰 B 的 D 阶教学：火系的坟场语言从前期就有踪迹）。
-registerSkill({
-  id: 'ashRake', name: '扒灰', type: 'fire', tier: 'D', series: 'fuel',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal',
-  promotesTo: 'fuelTheFire',
-  use(sctx) {
-    drawCards(sctx, 1);
-    if (sctx.battleState.zones.burnt.length >= 4) drawCards(sctx, 1);
-    return true;
-  },
-  describe: () => '抽1牌；若坟墓里有至少4张牌，再抽1',
-  battleDescribe: (sctx) => `抽1牌（坟墓${sctx.battleState.zones.burnt.length}张）`,
-});
+// 扒灰链 D/C/B（0费 冷却1，2026-09-18 设计稿扩为三阶）：抽 1 牌；坟墓里有
+// 至少 4 张牌时再抽 1/2/3（回响烈焰 B 的 D 阶教学：火系的坟场语言从前期
+// 就有踪迹）。门槛恒 4，档位差在追加抽牌数。
+function ashRakeCard({ id, tier, extraDraw, promotesTo }) {
+  registerSkill({
+    id, name: '扒灰', type: 'fire', tier, series: 'fuel',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: 1, cooldownTurns: 1 },
+    cardMode: 'normal',
+    promotesTo,
+    use(sctx) {
+      drawCards(sctx, 1);
+      if (sctx.battleState.zones.burnt.length >= 4) drawCards(sctx, extraDraw);
+      return true;
+    },
+    describe: () => `抽1牌；若坟墓里有至少4张牌，再抽${extraDraw}`,
+    battleDescribe: (sctx) => `抽1牌（坟墓${sctx.battleState.zones.burnt.length}张）`,
+  });
+}
+ashRakeCard({ id: 'ashRake', tier: 'D', extraDraw: 1, promotesTo: 'ashRakePlus' });
+ashRakeCard({ id: 'ashRakePlus', tier: 'C', extraDraw: 2, promotesTo: 'ashRakeMaster' });
+ashRakeCard({ id: 'ashRakeMaster', tier: 'B', extraDraw: 3 });
 
-// ==== 反制防御（烫甲 C → [火壁 B]）：火墙家族的反伤分岔 ====
-
-// 烫甲 C：1AP 冷却1——6盾；到你的下回合开始前，你每受到一次攻击，
-// 对攻击者施加燃烧2（受击判定挂应用原语 POST + 只认主级（2026-09-15 拆分）：
-// 有来源的**主级**伤害才算攻击——附级反伤/毒 tick 不触发；「本回合」按敌方攻击的
-// 实际发生窗口实现——battle 窗口订阅 + 下回合开始自清）。
-registerSkill({
-  id: 'scaldArmor', name: '烫甲', type: 'fire', tier: 'C', series: 'fireWall',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
-  cardMode: 'normal',
-  promotesTo: 'fireWallMaster',
-  use(sctx) {
-    gainShield(sctx, 6);
-    const owner = `scaldArmor:${sctx.self.uniqueID}`;
-    sctx.kernel.addSubscription({
-      when: ApplyDamageInstruction, phase: 'post', owner,
-      filter: (instr) => instr.target === sctx.player
-        && instr.source && !instr.source.isDead() && instr.source.side === 'enemy'
-        && instr.type === 'major',
-      react: (instr, ctx) => {
-        ctx.kernel.submitInstruction(new AddEffectInstruction({
-          target: instr.source, effectId: 'burn', stacks: 2,
-        }), instr);
-      },
-    });
-    sctx.kernel.addSubscription({
-      when: PlayerTurnStartInstruction, phase: 'post', owner,
-      react: (instr, ctx) => ctx.kernel.removeSubscriptionsByOwner(owner),
-    });
-    return true;
-  },
-  describe: () => '护盾6。到你的下回合开始，你每受到一次攻击，对攻击者施加/effect{燃烧}2',
-  battleDescribe: () => '护盾6。到你的下回合开始，你每受到一次攻击，对攻击者施加/effect{燃烧}2',
-});
+// ==== 咏唱反甲（熔岩铠甲 B/A）：受攻击给攻击方上燃烧 ====
+// 烫甲（C，一次性护盾 + 一回合反甲）已于 2026-09-18 设计稿除名——同机制的咏唱
+// 化版本熔岩铠甲顶上：不再是一次性买盾，点亮期间**每次**被攻击都灼烧攻击者
+// （1AP 咏唱1：受攻击时赋予攻击方 2/3 层燃烧）。受击判定挂应用原语 POST +
+// 只认主级（2026-09-15 拆分）：有来源的**主级**伤害才算攻击——附级反伤/毒 tick
+// 不触发；订阅挂卡牌 owner，熄灭自动注销，无回合窗自清（咏唱常驻即反甲常驻）。
+function magmaArmorCard({ id, tier, burn, promotesTo }) {
+  registerSkill({
+    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmor',
+    cost: { mana: 0, actionPoint: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'chant', chantWeight: 1,
+    promotesTo,
+    use() { return true; },
+    activated: {
+      subscriptions: (sctx) => [{
+        when: ApplyDamageInstruction, phase: 'post',
+        filter: (instr) => instr.target === sctx.player
+          && instr.source && !instr.source.isDead() && instr.source.side === 'enemy'
+          && instr.type === 'major',
+        react: (instr, ctx) => {
+          ctx.kernel.submitInstruction(new AddEffectInstruction({
+            target: instr.source, effectId: 'burn', stacks: burn,
+          }), instr);
+        },
+      }],
+    },
+    describe: () => `受攻击时，赋予攻击方/effect{燃烧}${burn}`,
+    battleDescribe: () => `受攻击时，赋予攻击方/effect{燃烧}${burn}`,
+  });
+}
+magmaArmorCard({ id: 'magmaArmor', tier: 'B', burn: 2, promotesTo: 'magmaArmorMaster' });
+magmaArmorCard({ id: 'magmaArmorMaster', tier: 'A', burn: 3 });

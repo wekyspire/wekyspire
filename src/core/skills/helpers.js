@@ -29,7 +29,13 @@ export function canUseSkill(ctx, self) {
   if (def.canUse && !def.canUse(makeSkillCtx(ctx, self))) return false;
   const free = freeChantToggle(def, self);
   // X 费（'X'）消耗全部现有资源，X 可为 0 → 恒可打出
-  const manaCost = def.cost?.mana ?? 0;
+  const baseMana = def.cost?.mana ?? 0;
+  // 逐卡动态费用（runtime 计数加价，如蓄热火球链「每次打出费用+1」）：只加在
+  // 定义费用上（X 费/免费窗口不叠加），纯读 runtime，无副作用
+  const manaDelta = typeof baseMana === 'number'
+    ? (def.manaCostDelta?.(makeSkillCtx(ctx, self)) ?? 0)
+    : 0;
+  const manaCost = baseMana === 'X' ? 'X' : baseMana + manaDelta;
   const apCost = def.cost?.actionPoint ?? 0;
   // 免费窗口豁免（2026-09-14）：battleState.freePlays > 0 时费用检查放行——
   // 逍遥游「下 N 张打出的牌无开销」挂在出牌侧 PRE 置 0，但若玩家资源低于牌面费用，
