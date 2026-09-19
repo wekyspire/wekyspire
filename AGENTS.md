@@ -132,7 +132,7 @@ src/
 ## 权威设计文档
 
 - `README.md` — 场景层级总纲与数据系统说明。
-- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）、`ENEMY_ART_LIST.md`（立绘待办）。
+- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`REWARD.md`（卡包等阶分布/通用注入/训练抓牌的调参表）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）、`ENEMY_ART_LIST.md`（立绘待办）。
 - `battle_gameplay/skills/` — 各体系卡牌设计稿 + `EFFECTS.md` 效果目录；`SKILL_DESIGN_PRINCIPLES.md` 在 `src/core/skills/` 下。
 - `quest_prompts/` — 重构与实现设计文档（THREE_REFACTOR_PLAN / STAGE_DESIGN / SCENE_* / THREE_UI_MIGRATION 等）。
 - `handoffs/` — 历史交接记录（含关键约定，注意核对时效）。
