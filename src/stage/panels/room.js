@@ -12,13 +12,13 @@ export function buildRoomPanel(snap) {
   const w = [];
   roomHeader(w, snap);
 
-  // 合并房（营地 · 训练场）：两个部分各一次；训练抉择中优先占屏，营地组在下方仍然可用
-  // 合并房（营地 · 训练场）：两个部分各一次；训练抉择中优先占屏，营地组在下方仍然可用
+  // 合并房（营地 · 训练场）：训练必做且先于篝火；训练抉择中优先占屏，营地组在下方仍会给锁定行
   if (snap.room === 'campTraining') {
     trainingWidgets(w, snap);
     campWidgets(w, snap);
-    // 离房（强绑抓牌未领时不允许——completeRoom 也会拦，这里不给按钮以免误导）
-    if (!(snap.training ?? {}).forced) {
+    // 离房（训练未开局 / 尾款未清时不允许——completeRoom 也会拦，这里不给按钮以免误导）
+    const t = snap.training ?? {};
+    if (t.started && !t.pendingUpgrade) {
       w.push({ kind: 'button', id: 'room:leave', label: '离开', width: 240, size: 'sub', action: { action: 'leaveRoom' } });
     }
     return w;

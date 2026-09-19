@@ -35,8 +35,8 @@ import {
   chooseAscension, chooseAscensionAbility, chooseSeedCards, rerollSeedOffering,
   ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from '../../src/core/run/ascension.js';
-import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../../src/core/run/rooms/training.js';
-import { campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER } from '../../src/core/run/rooms/camp.js';
+import { trainUpgrade, trainDrawChoices, trainDraw, beginTraining } from '../../src/core/run/rooms/training.js';
+import { campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER, campLocked } from '../../src/core/run/rooms/camp.js';
 import { playEvent } from '../../src/core/run/rooms/event.js';
 import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
@@ -502,16 +502,16 @@ function execRoom(S, t) {
   const room = run.currentRoom;
   const merged = room === 'campTraining';
   const campUsed = merged ? !!run.roomData?.campUsed : !!S.roomDone;
-  const trainDone = merged ? !!run.roomData?.trained : !!S.roomDone;
   // 合并房按**动作名**分流（营地动作 / 训练动作各一套），避免落到对方的报错分支
   const goCamp = room === 'camp' || (merged && ['rest', 'remi', 'upgrade'].includes(a));
-  const goTraining = room === 'training' || (merged && ['up', 'draw', 'take', 'skipdraw', 'skip'].includes(a));
+  const goTraining = room === 'training' || (merged && ['train', 'up', 'draw', 'take', 'skipdraw'].includes(a));
   if (S.roomDone && !merged) throw new Error('本房间动作已完成，用 next 离开');
   if (goCamp) return execRoomCamp(S, t, campUsed);
-  if (goTraining) return execRoomTraining(S, t, trainDone);
+  if (goTraining) return execRoomTraining(S, t);
   if (merged) {
-    throw new Error('合并房动作（营地）：act rest | act remi | act upgrade <构筑#> <卡名>'
-      + '｜（训练）：act up <构筑#> <卡名> | act draw | act take <#> | act skipdraw | act skip'
+    throw new Error('合并房动作（训练，必做先行）：act train 开局'
+      + '｜（训练）：act draw | act take <#> | act skipdraw | act up <构筑#> <卡名>'
+      + '｜（营地，训练收尾后）：act rest | act remi | act upgrade <构筑#> <卡名>'
       + '｜离开：next');
   }
   if (room === 'gurpas') return execRoomGurpas(S, t);
@@ -627,20 +627,19 @@ function execRoomCamp(S, t, campUsed) {
 }
 
 // 训练场（非合并房的 training，或合并房的训练部分）
-function execRoomTraining(S, t, trainDone) {
+// 2026-09-18 改版：训练必做且先于篝火——act train 开局（升阶，达标当场切进阶，
+// 用 dim/seed/ability 解完自动回房）→ 可选段 act draw / act take（四选一抓卡，
+// 抓了欠一次升级）→ act up 清尾款。开局后的动作合法性由 core 守卫兜（旧版
+// 「trained=已完成」的总闸已废——trained 现在只表示"已开局"）。
+function execRoomTraining(S, t) {
   const run = S.run;
   const [, a, b] = t;
-  if (trainDone) throw new Error('本房的训练已经完成了（合并房里营地部分仍可用）');
-  if (a === 'up') {
-    const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
-    const gateErr = upgradeGateError(run, card);
-    if (gateErr) throw new Error(gateErr);
-    const before = defOf(card).name;
-    trainUpgrade(run, card.uniqueID);
-    // 强绑候选直接列出（与 act draw 同口径：不许盲选）
-    const names = run.roomData.drawChoices
-      .map((id, i) => `${i + 1}.${getSkillDefinition(id)?.name ?? id}`).join(' ');
-    S.lastOutcome = `升级：${before} → ${defOf(card).name}（训练场，强制三选一抓牌：${names}）`;
+  if (a === 'train') {
+    const due = beginTraining(run);
+    S.lastOutcome = due
+      ? '开始训练（训练次数+1）——修行达标，进阶事件当场引动！'
+        + '（当前已在进阶：dim 火|木|空|跳过 → 首次点亮再 seed 编号 卡名×3 → ability <#>|skip，解完自动回房）'
+      : `开始训练（训练次数+1，累计 ${run.player.trainingCount}）——可选段：act draw 看四选一候选，不抓就处理营地/next 离开`;
     return;
   }
   if (a === 'draw') {
@@ -648,7 +647,7 @@ function execRoomTraining(S, t, trainDone) {
     // 候选直接列出（此前只回执"已生成"，玩家只能盲选编号、靠报错反推）
     const names = run.roomData.drawChoices
       .map((id, i) => `${i + 1}.${getSkillDefinition(id)?.name ?? id}`).join(' ');
-    S.lastOutcome = `训练抓牌候选已生成：${names}`;
+    S.lastOutcome = `训练抓牌候选（可选·抓了欠一次升级）：${names}`;
     return;
   }
   if (a === 'take') {
@@ -656,13 +655,27 @@ function execRoomTraining(S, t, trainDone) {
     const defId = resolveChoiceStrict(choices, b, t[3], '抓牌候选',
       id => getSkillDefinition(id)?.name ?? id);
     trainDraw(run, defId);
-    S.roomDone = true;
-    S.lastOutcome = `训练抓牌：${getSkillDefinition(defId).name}`;
+    S.lastOutcome = run.roomData?.pendingUpgrade
+      ? `训练抓牌：${getSkillDefinition(defId).name}——抓了卡欠一次升级：act up <构筑#> <卡名>`
+      : `训练抓牌：${getSkillDefinition(defId).name}（牌组升无可升，尾款免除）`;
     return;
   }
-  if (a === 'skipdraw') { trainDraw(run, null); S.roomDone = true; S.lastOutcome = '跳过训练抓牌'; return; }
-  if (a === 'skip') { skipTraining(run); S.roomDone = true; S.lastOutcome = '跳过训练（计一次训练）'; return; }
-  throw new Error('训练动作：act up <构筑#> <卡名> | act draw | act take <#> <卡名> | act skipdraw | act skip');
+  if (a === 'skipdraw') {
+    trainDraw(run, null);
+    S.lastOutcome = '放弃本次抓牌（可选段作罢）';
+    return;
+  }
+  if (a === 'up') {
+    const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
+    const gateErr = upgradeGateError(run, card);
+    if (gateErr) throw new Error(gateErr);
+    const before = defOf(card).name;
+    trainUpgrade(run, card.uniqueID);
+    S.lastOutcome = `尾款升级：${before} → ${defOf(card).name}（训练收束）`;
+    return;
+  }
+  throw new Error('训练动作：act train（必做开局）｜act draw | act take <#> <卡名> | act skipdraw'
+    + '｜act up <构筑#> <卡名>（尾款升级）');
 }
 
 // 古尔帕斯之店（35 层固定房）：buy/claim/sell/remove
@@ -1051,8 +1064,11 @@ function execNext(S) {
   const stage = run.gameStage;
   if (stage === 'reward') { completeRewards(run); S.roomDone = false; S.lastOutcome = '离开奖励'; return; }
   if (stage === 'room') {
-    // 训练强绑尾款未领不允许离场（UI 契约：forced 状态只给三选一不给跳过）
-    if (run.roomData?.forced) throw new Error('升级后的强绑抓牌必须领取：act take <#>');
+    // 训练必做且先于篝火（2026-09-18 改版）：没开局 / 尾款未清不许离场（GUI 义务门同口径）
+    if (run.currentRoom === 'campTraining' || run.currentRoom === 'training') {
+      if (!run.roomData?.trained) throw new Error('训练是必做阶段：act train 开始训练（达标当场进阶），完成后才能离开');
+      if (run.roomData?.pendingUpgrade) throw new Error('抓到的卡还欠一次升级：act up <构筑#> <卡名>');
+    }
     // 老虎机安慰奖欠着不允许离场（真游戏：点继续前进每次都被吞去强制二选一，不能跳过）
     if (slotGiftDue(run)) throw new Error('老虎机的安慰奖还没领取：act gift <cola|chicken>');
     // 老虎机产出挂着不允许离场（R10-A 实报可直接 next 走掉；GUI 口径：继续前进压暗）
@@ -1061,10 +1077,11 @@ function execNext(S) {
     if (run.bank?.pendingRoll) throw new Error('恶魔 roll 的词条还没承受：先选一个词条');
     // 售货机卡包/遗物包三选一挂着不允许离场（GUI：点继续前进会被拉回货架）
     if (run.shopPending) throw new Error('卡包/遗物包还没选完：act shop claim <#>（-1 放弃）');
-    // 营地休整软提示（对齐前端 campTraining.onContinue：第一次点继续只提示，再点一次才离房）
+    // 营地休整软提示（对齐前端 campTraining.onContinue：第一次点继续只提示，再点一次才离房；
+    // 训练未收尾时篝火锁定，不提示——那是硬门不是软提示）
     // ⚠ 必须作为**成功动作**入档而非抛错：replay 全量重放只重演入档动作——抛错不入档，
     // 重放时「第二次 next」会退化成「第一次」被再拦一次（行为漂移）
-    if (run.currentRoom === 'campTraining' && !run.roomData?.campUsed && !S.campNudged) {
+    if (run.currentRoom === 'campTraining' && !run.roomData?.campUsed && !campLocked(run) && !S.campNudged) {
       S.campNudged = true;
       S.lastOutcome = '🔥 还没在火边歇过呢（营地休整未用：act rest 恢复约 35% 生命；再 next 一次直接离房）';
       return;

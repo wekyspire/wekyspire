@@ -21,7 +21,7 @@ import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/
 import { getRelicDefinition } from '../core/relics/registry.js';
 import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
 import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
-import { trainUpgrade, trainDrawChoices, trainDraw, skipTraining } from '../core/run/rooms/training.js';
+import { trainUpgrade, trainDrawChoices, trainDraw, beginTraining } from '../core/run/rooms/training.js';
 import { campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
 import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
@@ -130,10 +130,11 @@ mapStage.setPanelIntentHandler((intent) => {
     else if (a === 'chooseRewardPack') chooseRewardPack(run, intent.packId);
     else if (PANEL === 'room') {
       // 房间层：真走 core，并让「老虎机演出 → 回执 → 揭示」在陈列页也跑通
-      if (a === 'trainingUpgrade') trainUpgrade(run, intent.uniqueID);
+      // （2026-09-18 训练改版：train 开局 → 可选四选一 → 尾款升级；陈列页不播房内进阶幕间）
+      if (a === 'trainingBegin') { if (beginTraining(run)) { chooseAscension(run, null); } }
+      else if (a === 'trainingUpgrade') trainUpgrade(run, intent.uniqueID);
       else if (a === 'trainingDrawRoll') trainDrawChoices(run);
-      else if (a === 'trainingDraw') { trainingDraw(run, intent.defId ?? null); completeRoom(run); }
-      else if (a === 'trainingSkip') { skipTraining(run); completeRoom(run); }
+      else if (a === 'trainingDraw') { trainingDraw(run, intent.defId ?? null); }
       else if (a === 'campChoose') {
         if (intent.option === 'rest') campRest(run);
         else if (intent.option === 'recoverRemi') campRecoverRemi(run);

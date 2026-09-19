@@ -19,8 +19,8 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
-import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
-import { campOptions, campRest, campRecoverRemi, campUpgrade } from '../core/run/rooms/camp.js';
+import { upgradableCards, beginTraining, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
+import { campOptions, campRest, campRecoverRemi, campUpgrade, campLocked as campGateLocked } from '../core/run/rooms/camp.js';
 import { SLOT } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { createRunContext } from '../core/run/runContext.js';
@@ -542,15 +542,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     return true;
   }
 
-  // ---- rooms（每房一次免费操作后即离房；消费/重复交互待后续细化）----
+  // ---- rooms（2026-09-18 训练改版：训练必做且先于篝火；进阶在训练开始那一刻房内先行）----
   // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
-  // 训练房「先升后抓」：升级动作只挂起强制三选一（roomData.forced）不离房，
-  // 抓牌领取/跳过/阶段一跳过三种终端任一发生才 completeRoom。
-  // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
-  // 合并房（campTraining）：营地与训练各自一次；roomData 同时承载两个部分的记账，
-  // 所以「训练是否可用」不能再用 roomData 的真假判断，改看 trained/drawChoices。
-  const trainingLocked = () => !!run.roomData?.trained || !!run.roomData?.drawChoices;
-  const campLocked = () => !!run.roomData?.campUsed;
+  // 训练节拍：开始（beginTraining，达标则切 'ascension' 由进阶幕间接力播完自动回房）→
+  // 可选段（4 选 1 抓一张 → 抓了就欠一次升级 pendingUpgrade）→ 篝火解锁（营地/训练各自一次）。
+  // roomData 同时承载两个部分的记账，「训练是否可用」看 trained/drawChoices/pendingUpgrade。
+  const trainingLocked = () => !!run.roomData?.trained || run.gameStage !== 'room';
+  const campLocked = () => !!run.roomData?.campUsed || campGateLocked(run);
   // 合并房不自动离房（两部分都要给机会），单房保持原语义「做完即离房」
   function maybeLeaveRoom() {
     if (run.gameStage !== 'room') return;
@@ -558,20 +556,31 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRoom(run);
     notify();
   }
-  function trainingUpgrade(uniqueID, targetId = null) {
-    if (run.gameStage !== 'room' || trainingLocked()) return;
-    trainUpgrade(run, uniqueID, targetId); // 内部已 roll 强制抓牌候选；分叉目标由升级子面板传入
+  // 开始训练（必做阶段的开局）：记一次训练（升阶）。达标 → 进阶幕间当场接棒
+  // （playAscensionScene 的「已在 ascension 阶段」路径：wipe → 对话 → 揭幕回房间场景，
+  // 阶段已被 completeAscension 切回 'room'，快照随揭幕刷新出可选段）。
+  function trainingBegin() {
+    if (run.gameStage !== 'room' || run.roomData?.trained) return;
+    const ascensionDue = beginTraining(run);
+    if (ascensionDue) { void cutsceneFlows.playAscensionScene(); return; }
     notify();
   }
+  // 尾款升级：抓卡后欠下的那一次（pendingUpgrade 挂着时的唯一出口）
+  function trainingUpgrade(uniqueID, targetId = null) {
+    if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
+    trainUpgrade(run, uniqueID, targetId); // 分叉目标由升级子面板传入
+    maybeLeaveRoom();
+  }
   function trainingDrawRoll() {
-    if (run.gameStage !== 'room' || trainingLocked()) return;
+    if (run.gameStage !== 'room' || trainingLocked() || run.roomData?.pendingUpgrade) return;
     trainDrawChoices(run);
     notify();
   }
   function trainingDraw(defId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.drawChoices) return;
-    trainDraw(run, defId); // forced 状态下 null 由核心抛错拦截（UI 不渲染跳过入口）
-    maybeLeaveRoom();
+    trainDraw(run, defId); // 欠升级态没有跳过出口（UI 不渲染），null 只会是放弃候选
+    if (run.roomData?.pendingUpgrade) notify();
+    else maybeLeaveRoom();
   }
   function campChoose(option, uniqueID = null, targetId = null) {
     if (run.gameStage !== 'room' || campLocked()) return;
@@ -585,9 +594,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   function leaveRoom() {
     if (run.gameStage !== 'room') return;
-    if (run.roomData?.forced) return;   // 强绑抓牌未领：不让走（核心也会拦，这里先不给动作）
-    // 训练达标 → 离开即进进阶事件：**由进阶幕间接棒这段切幕**（黑幕中点做迁移 + 换台，
-    // 揭幕揭开的就是进阶对话）——若先揭幕回塔楼再开进阶幕，会闪一下塔楼（用户定 2026-09-12）
+    // 训练必做 + 尾款未清：不让走（核心同款硬门；这里先不给动作，提示交给房间义务门泡泡）
+    if (!run.roomData?.trained && (run.currentRoom === 'campTraining' || run.currentRoom === 'training')) return;
+    if (run.roomData?.pendingUpgrade) return;
+    // 兜底路径：训练开始时的房内进阶因异常漏播 → 离房时接棒（黑幕中点迁移 + 换台，
+    // 揭幕揭开的就是进阶对话）。正常流程到这里 ascensionReady 必为 false。
     if ((run.currentRoom === 'campTraining' || run.currentRoom === 'training') && ascensionReady(run)) {
       void cutsceneFlows.playAscensionScene({ fromRoom: true });
       return;
@@ -598,7 +609,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
-    if (run.roomData?.forced) return;
+    if (run.roomData?.pendingUpgrade) return;
     void exitRestRoomScene(() => { completeRoom(run); notify(); });   // 同 leaveRoom：迁移压进黑幕
   }
 
@@ -619,6 +630,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     startBattle: () => startBattle(),
     chooseRewardPack: (i) => chooseRewardPack(i.packId),
     claimReward: (i) => claimReward(i.defId ?? null),
+    trainingBegin: () => trainingBegin(),
     trainingUpgrade: (i) => trainingUpgrade(i.uniqueID, i.targetId ?? null),
     trainingDrawRoll: () => trainingDrawRoll(),
     trainingDraw: (i) => trainingDraw(i.defId ?? null),
@@ -663,7 +675,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       return getEnemyDefinition(id)?.name ?? id;
     },
     isBossFloor,
-    trainingMode: () => trainingMode(run),
     upgradableCards: () => upgradableCards(run),
     campOptions: () => campOptions(run),
     getBattleBridge: () => battleBridge,
@@ -671,7 +682,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getRoomStage: () => roomStage,   // 场景式休息房舞台（App 的指针路由据此转发）
     enterRestRoomScene,              // 显式进入场景式休息房（读档/调试/测试用；正常路径由 claimReward 触发）
     startBattle, claimReward, chooseRewardPack,
-    trainingUpgrade, trainingDrawRoll, trainingDraw,
+    trainingBegin, trainingUpgrade, trainingDrawRoll, trainingDraw,
     campChoose, leaveRoom, bankDo: machines.bankDo, gurpasDo: machines.gurpasDo, spin: machines.spin, reportSlotAnimDone: machines.reportSlotAnimDone, leaveSlot, triggerEvent: cutsceneFlows.triggerEvent, leaveEvent: cutsceneFlows.leaveEvent,
     playEventScene: cutsceneFlows.playEventScene,                 // 显式播事件幕间（正常路径由进房自动触发；幂等）
     enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）

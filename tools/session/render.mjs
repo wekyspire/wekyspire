@@ -9,8 +9,8 @@ import { getRelicDefinition } from '../../src/core/relics/registry.js';
 import { gatedPromotionTargets } from '../../src/core/run/promotion.js';
 import { PACKS, maxRewardTier } from '../../src/core/run/rewards.js';
 import { ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT } from '../../src/core/run/ascension.js';
-import { campOptions } from '../../src/core/run/rooms/camp.js';
-import { trainingMode, upgradableCards } from '../../src/core/run/rooms/training.js';
+import { campOptions, campLocked } from '../../src/core/run/rooms/camp.js';
+import { upgradableCards } from '../../src/core/run/rooms/training.js';
 import { slotView, SLOT } from '../../src/core/run/rooms/slotMachine.js';
 import { bankView, pendingDebuffViews } from '../../src/core/run/rooms/bank.js';
 import { gurpasView } from '../../src/core/run/rooms/gurpas.js';
@@ -143,12 +143,17 @@ function renderReward(S, L) {
 function renderRoom(S, L) {
   const run = S.run;
   const room = run.currentRoom;
-  // 合并房（campTraining）两部分独立计时：完成态看 run.roomData 的双旗标，不看
+  // 合并房（campTraining）两部分独立计时：完成态看 run.roomData 的旗标，不看
   // S.roomDone——它是单旗标，任一部分动作都会置位，按它早退会把另一部分的动作入口
-  // 连同强绑抓牌候选一起藏掉（"先休整后训练 → 候选不可见、显示已完成"的病灶）
+  // 一起藏掉。2026-09-18 训练改版：训练的"完成"= 开局（trained）且可选段收束
+  // （optionalDone 或从未掷候选也不欠尾款）。
+  const trainingSettled = !!run.roomData?.trained
+    && !run.roomData?.drawChoices && !run.roomData?.pendingUpgrade;
   const roomDone = room === 'campTraining'
-    ? (!!run.roomData?.campUsed && !!run.roomData?.trained)
-    : S.roomDone;
+    ? (!!run.roomData?.campUsed && trainingSettled)
+    : room === 'training'
+      ? trainingSettled
+      : S.roomDone;
   L.push(roomDone
     ? '状态：本房间动作已完成 → next 离开（售货机不受限，仍可 act shop buy）'
     : '状态：房间动作未完成（可选动作见下）');
@@ -199,43 +204,54 @@ function renderRoomShop(S, L) {
 }
 
 // 营地部分与训练部分各自一段；合并房（campTraining）两段都渲染
+// 2026-09-18 训练改版：训练必做且先于篝火；可选段 = 四选一抓卡（抓了欠一次升级）
 function renderRoomCampTraining(S, L, room) {
   const run = S.run;
   const renderCamp = () => {
+    if (campLocked(run)) {
+      L.push('营地：锁定（先把训练收尾——act train 开局 / act up 清尾款）');
+      return;
+    }
     const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
     L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}`
       + `（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比）`);
   };
   const renderTraining = () => {
-    L.push(`训练场（累计训练 ${run.player.trainingCount} 次）。模式: ${trainingMode(run) === 'upgrade' ? '先升后抓' : '退化抓牌'}`);
+    const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
+    if (!run.roomData?.trained) {
+      L.push(`训练场（必做·先训练后篝火；累计训练 ${run.player.trainingCount} 次）`);
+      L.push('→ act train 开始训练（修行次数达标会当场引动进阶事件：dim → seed → ability）');
+      return;
+    }
+    L.push(`训练场（已开局，累计训练 ${run.player.trainingCount} 次）`);
     if (run.roomData?.drawChoices) {
-      L.push(`抓牌候选:`);
+      L.push('抓牌候选（可选·抓了欠一次升级）:');
       run.roomData.drawChoices.forEach((id, i) => {
         const def = getSkillDefinition(id);
         const nameTag = def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·${def.name}` : def.name;
-        L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」${run.roomData.forced ? '' : '（可跳过）'}`);
+        L.push(`  [${i + 1}] ${nameTag} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
       });
-      L.push(`→ act take <#> <卡名>${run.roomData.forced ? '（升级强绑，不可跳过）' : ' / act skipdraw'}`);
-    } else if (trainingMode(run) === 'upgrade') {
-      const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
-      L.push(`可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
-      L.push(`→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）/ act skip`);
+      L.push('→ act take <#> <卡名> / act skipdraw 放弃本次抓牌');
+    } else if (run.roomData?.pendingUpgrade) {
+      L.push(`尾款升级——可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
+      L.push('→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）');
+    } else if (!run.roomData?.optionalDone) {
+      L.push('→ act draw（看四选一候选）/ 不抓就直接处理营地或 next 离开');
     } else {
-      L.push(`→ act draw（看候选）/ act skip`);
+      L.push('训练部分：已完成（每房一次）');
     }
   };
   if (room !== 'training') {
     if (run.roomData?.campUsed) L.push('营地部分：已用过（每房一次）');
     else renderCamp();
   }
-  if (room !== 'camp') {
-    if (run.roomData?.trained) L.push('训练部分：已完成（每房一次）');
-    else renderTraining();
-  }
+  if (room !== 'camp') renderTraining();
   if (room === 'campTraining') {
-    L.push(run.roomData?.forced
-      ? '（升级强绑抓牌未领：必须 act take <#>）'
-      : '（营地与训练各自可做一次，随时 next 离开）');
+    L.push(run.roomData?.pendingUpgrade
+      ? '（抓卡尾款未清：必须 act up <构筑#> <卡名>）'
+      : !run.roomData?.trained
+        ? '（训练必做：act train 开局后才能用营地/离开）'
+        : '（营地与训练各自可做一次，收尾后 next 离开）');
   }
 }
 

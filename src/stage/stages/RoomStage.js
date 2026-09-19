@@ -30,6 +30,7 @@ import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
 import { playCardGrantFlight } from '../cardGrantFlight.js';
 import { MACHINE_FACTORIES } from '../machines/index.js';
+import { PANEL_BUILDERS } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
@@ -77,6 +78,10 @@ export class RoomStage {
     this._bus = bus;
     this._panel = null;          // 下沿停靠的机器操作面板（惰性建）
     this._panelKind = null;      // 当前面板对应的机器（null = 收起）
+    this._stagePanel = null;     // 阶段级模态面板（非 room 快照，如进阶种子包；见 setPanel）
+    this._stagePanelKind = null;
+    this._stageSnap = null;
+    this._stagePanelUi = null;   // 阶段面板本地交互态（种子包勾选缓冲）
     this._focused = null;        // 聚焦的机器名
     this._hoverName = null;      // 当前 hover 的交互物名（聚焦时恒 null，见 handlePointerMove）
     this._downHit = null;
@@ -196,13 +201,54 @@ export class RoomStage {
 
   /** 房间面板快照下行（notify 每次都推）：存下 + 按需重绘已打开的机器面板。 */
   setPanel(snap) {
-    // ⚠ 只认**房间快照**：离房时编排器会先推一份新阶段的快照（prep/…），若照单全收，
-    // 已打开的机器面板会用错快照重绘一次（用户报"点继续后营地 UI 突变了一下"——那一帧
-    // 正是营地面板拿 prep 快照重绘的结果，随后才被幕间黑幕盖住）。非房间快照一律忽略。
-    if (!snap || snap.kind !== 'room') return;
+    // 非 room 快照 = **阶段级模态面板**（如房内进阶的种子包九选三——2026-09-18 训练改版：
+    // beginTraining 达标即切 'ascension'，进阶在房间舞台上播，快照 kind 变 'ascension'）。
+    // 以 PANEL_BUILDERS 模态托管（与 MapStage 同一 builder 表）；kind 变化自然拆装。
+    if (!snap || snap.kind !== 'room') {
+      this._snap = null;
+      if (snap) this._setStagePanel(snap);
+      else this._removeStagePanel();
+      return;
+    }
+    // ⚠ 房间快照只重绘**已打开的机器面板**：离房时编排器会先推一份新阶段的快照（prep/…），
+    // 那一份走上面的模态分支拆掉；这里若照单全收机器面板，已打开的面板会用错快照重绘一次
+    // （用户报"点继续后营地 UI 突变了一下"——那一帧正是营地面板拿 prep 快照重绘的结果，
+    // 随后才被幕间黑幕盖住）。
+    this._removeStagePanel();
     this._snap = snap;
     if (this._panelKind) this._renderPanel();
     for (const m of this._machines) m.sync?.(snap);   // 各机器按快照同步（spin/货架/屏幕/恶魔起止）
+  }
+
+  // ---- 阶段级模态面板（非 room 快照：进阶种子包等；对齐 MapStage.setPanel 的托管口径）----
+
+  _setStagePanel(snap) {
+    const entry = PANEL_BUILDERS[snap.kind];
+    if (!entry) { this._removeStagePanel(); return; }
+    if (!this._stagePanel || this._stagePanelKind !== snap.kind) {
+      this._removeStagePanel();
+      this._stagePanelUi = { selected: new Set() }; // 换面板 = 清空面板本地交互态（勾选缓冲）
+      this._stagePanel = new PanelObject({
+        form: entry.form,
+        onIntent: (a, info) => this._onPanelAction(a, info),
+        bakeFace: this._bakeFace,
+      });
+      this._stagePanelKind = snap.kind;
+      this.uiScene.add(this._stagePanel);
+    }
+    this._stageSnap = snap;
+    this._stagePanel.setWidgets(snap.kind, entry.build(snap, { selected: this._stagePanelUi.selected }));
+    this._stagePanel.attachPicker(this._picker);
+  }
+
+  _removeStagePanel() {
+    if (!this._stagePanel) return;
+    this.uiScene.remove(this._stagePanel);
+    this._stagePanel.dispose();
+    this._stagePanel = null;
+    this._stagePanelKind = null;
+    this._stageSnap = null;
+    this._stagePanelUi = null;
   }
 
   /** 状态栏（与塔楼层同物同位，编排器每次阶段迁移后推）。 */
@@ -366,6 +412,7 @@ export class RoomStage {
     this._continue.dispose();
     this._pickerKit.dispose();   // 选卡/选遗物/特写（未创建的实例无事发生）
     this._removePanel();
+    this._removeStagePanel();
     for (const m of this._markers) m.marker?.dispose?.();
     this._statusBar.dispose();
     this._topBar.dispose();
@@ -663,8 +710,21 @@ export class RoomStage {
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
+      if (action.action === 'toggleSeed') {
+        // 种子包勾选（阶段级模态面板的本地交互态）：确认前是纯 UI 态，就地重绘
+        const sel = this._stagePanelUi?.selected;
+        if (sel) {
+          const id = action.defId;
+          if (sel.has(id)) sel.delete(id);
+          else if (sel.size < (this._stageSnap?.offering?.picks ?? 0)) sel.add(id);
+          if (this._stageSnap) this._setStagePanel(this._stageSnap);
+        }
+        return;
+      }
       return;
     }
+    // 刷新种子候选：旧勾选指向已被换掉的卡，先清掉（确认键可用性据此重算）
+    if (action.action === 'rerollSeedOffering') this._stagePanelUi?.selected.clear();
     // 得卡标记（老虎机卡多选一 / 训练抓牌）：摘下被点的卡 → 收起操纵条 → 播「择卡得卡」
     // 演出（脉冲→飞向玩家状态栏，sequencer 指令化）→ 落袋才上行意图。
     // 操纵条整体 _removePanel 而不是藏起：dock 非模态不吞指针（点击由 _grantBusy 守），

@@ -23,8 +23,7 @@ import {
   LEINO_DIMENSIONS, SEED_OFFERING, ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from './ascension.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
-import { trainingMode } from './rooms/training.js';
-import { campOptions } from './rooms/camp.js';
+import { campOptions, campLocked } from './rooms/camp.js';
 import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
@@ -226,10 +225,10 @@ export function roomSnapshot(run, extra = {}) {
   if (room === 'training' || room === 'campTraining') {
     const choices = run.roomData?.drawChoices ?? null;
     snap.training = {
-      mode: trainingMode(run),            // 'upgrade'（免费升一）| 'draw'（退化抓牌）
-      forced: !!run.roomData?.forced,     // 升级后的强制尾款 → 不给跳过
-      done: !!run.roomData?.trained,      // 本房训练已完成（合并房里两个部分各自一次）
-      choices,                            // 候选 defId 列表；null = 还没开局
+      started: !!run.roomData?.trained,  // 训练已开始（升阶已记；合并房里篝火门看它）
+      optionalDone: !!run.roomData?.optionalDone, // 可选段已收束（领过或放弃，不再给抓牌入口）
+      pendingUpgrade: !!run.roomData?.pendingUpgrade, // 抓卡后的尾款升级 → 不给跳过出口
+      choices,                            // 候选 defId 列表；null = 还没掷（可选段未开局/已收束）
       choicesCards: (choices ?? []).map(id => ({
         defId: id,
         view: cardViewFromDef(getSkillDefinition(id), { player: p }),
@@ -245,6 +244,7 @@ export function roomSnapshot(run, extra = {}) {
       options: campOptions(run),
       upgradeCards,
       used: !!run.roomData?.campUsed,     // 本房营地动作已用过（合并房各自一次）
+      locked: campLocked(run),            // 训练未做/尾款未清 → 篝火不可用（先训练后篝火）
     };
     return snap;
   }

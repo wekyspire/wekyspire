@@ -11,7 +11,7 @@ import {
 } from './runFlow.js';
 import { chooseSkillReward, chooseRewardPack, isRewardsClaimed } from './rewards.js';
 import { chooseAscension, chooseAscensionAbility, chooseSeedCards, SEED_OFFERING } from './ascension.js';
-import { trainingMode, upgradableCards, trainUpgrade, trainDrawChoices, trainDraw } from './rooms/training.js';
+import { upgradableCards, beginTraining, trainDrawChoices, trainDraw, trainUpgrade } from './rooms/training.js';
 import { campOptions, campRest, campRecoverRemi } from './rooms/camp.js';
 import { playEvent } from './rooms/event.js';
 
@@ -124,6 +124,9 @@ export class RunDriver {
       case 'room':
         this.onRoom?.(this.run);
         this.defaultRoomAction(this.run);
+        // 训练开始那一刻可能把阶段切到 'ascension'（房内升阶）：本步到此为止，
+        // 进阶在下一步解掉并回房，再下一步继续房内剩余部分（可选段/篝火）→ completeRoom
+        if (this.run.gameStage === 'ascension') return true;
         completeRoom(this.run);
         return true;
       case 'ascension':
@@ -146,23 +149,29 @@ export class RunDriver {
   defaultRoomAction(run) {
     switch (run.currentRoom) {
       case 'training':
-        // 先升后抓：升级后强制三选一，headless 缺省取首张候选
-        if (trainingMode(run) === 'upgrade') {
-          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+      case 'campTraining':
+        // 2026-09-18 训练改版：必做训练（升阶，达标则本步切 'ascension' 由后续步解掉）→
+        // 可选段缺省全做（4 选 1 取首张 + 尾款升级首张可升级卡）→（合并房）篝火。
+        // 幂等：房内升阶回房后会再进本分支，已做的部分直接跳过。
+        if (!run.roomData?.trained) {
+          beginTraining(run);
+          if (run.gameStage === 'ascension') break;
+        }
+        if (!run.roomData?.drawChoices && !run.roomData?.pendingUpgrade) {
+          trainDrawChoices(run);
           trainDraw(run, run.roomData.drawChoices[0]);
-        } else { trainDrawChoices(run); trainDraw(run, null); } // 抓牌分支缺省跳过
+        }
+        if (run.roomData?.pendingUpgrade && upgradableCards(run).length) {
+          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+        }
+        if (run.currentRoom === 'campTraining') {
+          // 篝火缺省同 'camp'：瑞米被打跑则找回，否则休整（保命优先）
+          if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
+          else campRest(run);
+        }
         break;
       case 'camp':
         // 缺省：瑞米被打跑则找回，否则休整（保命优先）
-        if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
-        else campRest(run);
-        break;
-      case 'campTraining':
-        // 合并房（2026-09-11）：训练部分缺省同 'training'，营地部分缺省同 'camp'（两部分各一次）
-        if (trainingMode(run) === 'upgrade') {
-          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
-          trainDraw(run, run.roomData.drawChoices[0]);
-        } else { trainDrawChoices(run); trainDraw(run, null); }
         if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
         else campRest(run);
         break;
