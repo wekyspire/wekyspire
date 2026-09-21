@@ -26,13 +26,24 @@ const saved = readJson(KEY) ?? {};
 export const settings = reactive({
   soundOn: saved.soundOn !== false, // 默认开启
   menuStoryMode: saved.menuStoryMode === true, // 开始界面模式选择（默认肉鸽：故事模式未开放），回主菜单后保持
+  // 调试模式（仅调试用）：开 = 新开局进调试会话（F9 面板 / 存档写 debug 槽 / 开局发一拳）。
+  // 持久化只是开发期省事（每次手勾很烦）；调试会话**永不写真实存档槽**，
+  // 所以「忘关」也不会污染正常局——与旧「无敌模式」不持久化的取舍一致。
+  debugMode: saved.debugMode === true,
 });
 
 export function persistSettings() {
-  writeJson(KEY, { soundOn: settings.soundOn, menuStoryMode: settings.menuStoryMode });
+  writeJson(KEY, {
+    soundOn: settings.soundOn, menuStoryMode: settings.menuStoryMode, debugMode: settings.debugMode,
+  });
 }
 
 export function toggleSound() {
   settings.soundOn = !settings.soundOn;
+  persistSettings();
+}
+
+export function setDebugMode(on) {
+  settings.debugMode = !!on;
   persistSettings();
 }

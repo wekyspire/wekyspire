@@ -208,6 +208,11 @@ export function buyShopItem(run, index) {
   if (it.sold) throw new Error('这件已经卖掉了');
   if (run.player.money < it.price) throw new Error(`金币不足（需要 ${it.price}）`);
   if (it.kind === 'apple' && !run.storyMode) throw new Error('这个货架在肉鸽模式里没有苹果');
+  // 待选是**单槽**：连买第二件包会静默覆盖第一件，先买的钱白花（2026-09-19 试玩实报）。
+  // 先领完（act shop claim）再买；非包类货品不占槽，不受影响。
+  if (run.shopPending && (it.kind === 'pack' || it.kind === 'relic')) {
+    throw new Error('先把待选的卡包/遗物包选完，再买下一件');
+  }
 
   run.player.money -= it.price;
   it.sold = true;

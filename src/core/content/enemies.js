@@ -8,9 +8,9 @@ import {
 } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { UnitSpawnInstruction } from '../instructions/units.js';
-import { PlayerTurnEndInstruction } from '../instructions/turn.js';
+import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { GainManaInstruction } from '../instructions/resources.js';
-import { aliveEnemies, aliveAllies, zoneOf } from '../state/battleState.js';
+import { aliveEnemies, aliveAllies, allAliveUnits, zoneOf } from '../state/battleState.js';
 
 // 敌人定义总集。约定：
 //   * 行动序列固定循环，按 unit.actionIndex 取模分支；行动即提交指令，无特判；
@@ -26,6 +26,27 @@ import { aliveEnemies, aliveAllies, zoneOf } from '../state/battleState.js';
 //     'defend' / 'buff'（自我/友军增强，含再生/荆棘/蓄势/自愈）/ 'debuff'（赋予
 //     玩家削弱，含燃烧/虚弱/滞气）/ 'summon'（召唤援军，附 unitSpawned）。
 //     前端只按种类画图标，不写详细信息。
+
+// 【过热自保】受压计数挂载（无人战体 / 神兵躯壳共用；2026-09-21 用户设计）：
+//   玩家回合开始清零 → 累计本回合该单位受到的**生命值伤害**（`result.dealt`）。
+//   **被护盾挡下、以及被防御/格挡减免的部分不算**（2026-09-21 用户口径：没穿盾就不算压力；
+//   格挡免伤属"实际落血"折算，已含在 dealt 里）；自身来源（自焚类）不计。
+//   阈值用法：穿透拍 resolve 前读 `unit._pressure`，压过阈值就取消开火、改起盾。
+//   ⚠ 意图预告必须写明这是「生命值伤害」——口径不写清，玩家会按总输出估算而误判。
+function attachPressureCounter(kernel, unit, owner) {
+  kernel.addSubscription({
+    when: PlayerTurnStartInstruction, phase: 'post', owner,
+    filter: () => true,
+    react: () => { unit._pressure = 0; },
+  });
+  kernel.addSubscription({
+    when: ApplyDamageInstruction, phase: 'post', owner,
+    filter: (instr) => instr.target === unit && instr.source !== unit,
+    react: (instr) => {
+      unit._pressure = (unit._pressure ?? 0) + ((instr.result?.dealt) ?? 0);
+    },
+  });
+}
 
 // ① 固定行动序列杂鱼：攻 6 → 盾 4 循环
 registerEnemy({
@@ -245,7 +266,7 @@ registerEnemy({
 });
 
 // ②″ 11 层 Boss · MEFM-1（章1 火主题 Boss 池之一，2026-09-13 用户设计；
-// lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击减半）。
+// lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击免伤；2026-09-20 后格挡免伤 25%）。
 // 一阶段三拍：攻3×2 → 攻3×3 → 炎魔1+格挡1（积焰）。
 // 转段：血量跌至 80 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
 // 二阶段：首拍获得炎魔2，随后 攻2×3 → 攻2×4 交替（积焰已久的点燃海）。
@@ -587,102 +608,291 @@ registerEnemy({
   },
 });
 
-// ②‴ 44 层终塔 Boss · 塔心（孤身巨石 · 三阶段，Boss 波 3 上岗 2026-09-13；设计定稿见
-// tmp/design-final-boss.md——整塔唯一一场 1v1 巨石战：无召唤无随从，靠体量与换形态压场，
-// 与波 2 两只召唤轴 Boss 反其道，避免「终极战又在清小怪」）。
-// 阶段由自身 hp 比例驱动（>66% P1 塔心之怒 / 33–66% P2 塔心之壁 / ≤33% P3 塔心崩落）；
-// 每次跨入新阶段的第一拍改为「蜕壳」宣言拍：不攻击，净化自身全部燃烧 + 自盾 15
-// （燃烧交互铁律：换壳即剥落——火系要在一个阶段内完成「堆层→引爆」闭环，不能跨阶段囤层）。
-//   P1 快攻考（盾线跟不跟得上连击）：三连击(6+atk×3) → 攻16 → 三连击，三拍循环；
-//   P2 持久输出考（盾墙里维持 DPS）：自盾20+蓄势2 → 攻10 → 自盾20 → 攻14，四拍循环；
-//   P3 终局竞速（它也在死）：攻14 → 攻14 → 大崩落（攻22+自身燃烧6）——自焚是设计好的
-//   败亡曲线，玩家正解从「抢伤害」切换为「全防御拖它自焚」（赢 = 不死）。
-// 阶段内节拍用 _phaseBeat 独立计数（换阶段重置），蜕壳拍不消耗节拍。
-const towerHeartPhaseOf = (unit) => {
-  const r = unit.hp / unit.maxHp;
-  return r > 2 / 3 ? 1 : r > 1 / 3 ? 2 : 3;
-};
+// ②‴ 44 层终塔 Boss · 神兵躯壳（孤身神机 · 三阶段 · 300 血 + 200 盾；2026-09-20 用户
+// 设计稿，取代旧占位「塔心」）。本注释即设计定稿。
+//
+// 背景（wekyland 技术谱系）：古南圣国军事遗留的自律兵器，魏启驱动的造物。谱系三代——
+//   MEFM-1（11 层）残次原型，铁壳积热、笨重带锈 →
+//   完好的无人战体（33 层）量产成品，三灯状态机、智能经岁月严重错乱 →
+//   **神兵躯壳**（44 层）塔顶封存的最上位机：装甲已换成灵脉驱壳（200 盾 + 如山），
+//   智能只剩「程序」。它和无人战体是同一套技术，只是更先进——无人战体还带「警戒→
+//   错乱→自爆」的智能残留，神兵躯壳的行为全是**协议**，直到协议本身烧穿。
+//
+// 定位（用户定）：数值碾压式终局——300 血 + 200 盾是**入场券**，需要攻防一体的大伤害
+// 卡组正面碾过去。它每拍都在起盾，且「如山」在身（回合开始的清盾被否决）、盾只增不减，
+// 靠 DOT 慢慢磨是下策：拖长只会越垒越厚。
+//
+// 【阶段一 · 协议完好】四拍循环（每轮 40 盾在记账）：
+//   【直觉】盾40 + 攻20 → 【蓄能】锁定你**最先抽到的三张牌**（牌库顶三张，抽到手即带标、
+//   你的回合结束时仍在手则焚毁）+ 5×5 → 【光能炮】攻50 →
+//   【错误重启】力量4（此后每一拍都带着 +4，第二循环起压力翻倍）。
+// 【转阶段① · 盾碎】第一次被打穿 → **马上**净化自身全部效果 + 凝滞1（无人战体同款：
+//   先净化后冻结——此前堆的 DOT 一并清空，冻结期间玩家剩余输出打不动它；如山随之剥落，
+//   此后的盾按常规在它回合开始清空）。
+// 【阶段二 · 战术失控】首拍【回忆】往你牌库**洗入 7 张【躲闪】**（1AP 消耗，令它下次
+//   扫射段数 -2）——设计给玩家的解题件。扫射是**段数伤害**（护盾按段分摊），单发大盾
+//   吃得下，要命的是段数，所以答案不在「更厚的盾」而在「按段拆」；同一张卡也是污染
+//   （7 张稀释牌库、打出即焚），答案自带代价。此后是固定序列（不循环，走到头就重复尾拍）：
+//   【羽翼扫射】10×5 + 盾15 → 【腾空】闪避3 + 盾30 → 【羽翼风暴】10×8 → 【轰落】攻65
+//   → 【怜悯】净化自身全部效果后**空过一拍**（唯一的白给窗，也是它甩掉 DOT 的机会）；
+//   此后若仍未进第三阶段，就一直重复【处决扫射】14×4 **穿透**（防御/护盾/格挡都不减免）
+//   ——拖到这一步，答案只剩下「在这之前打死它」。**【过热自保】（2026-09-21 用户设计，
+//   穿透反制）**：这一拍结算前先看它**本回合受到的生命值伤害**（没穿盾的不算），>90 就取消
+//   扫射、改起盾 50（意图当场翻成防御并写明口径）——大回合即免伤，把"穿透无解"改回
+//   "输出换生存"的交换。
+// 【转阶段② · 将被击杀】致死伤害被拦截（无人战体同款范式：改判保留 1 血）+ 净化 + 凝滞1
+//   → 进第三阶段。凝滞冻结生命/护盾/效果的一切变更，所以那 1 血在它的下一拍之前打不掉。
+// 【阶段三 · 过载自焚】首拍【过载重启】**回满生命值**、空过一拍（此形态不再加盾，也不再
+//   有死亡拦截）——玩家此前打掉的 300 血在这一刻被抹掉，真正的终局从这里开始，也是它
+//   最后一次重启。此后：【高热】焚毁你全部手牌 + 14×4 扫射 → 【自焚】全场燃烧25 + 25×3
+//   扫射 → 【停顿】自扣50血 → 循环【爆发】全场燃烧30 + 攻100。
+//   燃烧打在它自己身上（「全场」含它自己），叠上【停顿】的自伤，就是设计好的败亡曲线：
+//   终局胜负手从「抢伤害」变成「活着看它烧完自己」——但它每拍 100 伤 + 全场燃烧，
+//   想活着看完同样要命（坦度与回复是这一战的第二道门）。
+//
+// 读数口径：伤害一律「基数 + unit.attack」（F1 同源算式），故力量4 计入后续每一拍；
+// getIntention 用同一算式预告（所见即所算），且预告已含**弹道干扰**的段数减免
+// （躲闪打进几层，预告就少几段——段数清零时预告改示「本拍不发射」）。
+// 神兵的「净化」= 移除自身全部效果（与无人战体盾碎净化同口径，逐条负向 AddEffect 走指令层）。
+// 【过热自保】阈值：阶段二【处决扫射】14×4 穿透是全场最硬的一拍（护盾与格挡都不减免——
+// 格挡链整链不参与穿透，2026-09-21 口径统一，见 effects.js 的 block），
+// 本回合被灌进 >90 点伤害 → 取消这次扫射、改起盾 50（玩家回合的意图预告同步翻成防御）。
+const SHELL_OVERHEAT = 90;
+
+const purgeEffectInstructions = (unit) => [...unit.effects].map((e) => new AddEffectInstruction({
+  target: unit, effectId: e.effectId, stacks: -e.stacks,
+}));
+
 registerEnemy({
-  difficulty: { base: 18, min: 18, max: 18, floorMin: 44, floorMax: 44 },
-  id: 'towerHeart', name: '塔心',
-  createUnit: () => new Enemy({ defId: 'towerHeart', name: '塔心', maxHp: 44 }),
+  // elite:true 仅借「锚点=base」的缩放语义（章4 Boss 难度18 → hpMult=1），让 300 血
+  // 精确落地；floorMin/Max=44 + BOSS_IDS 排除保证它不进任何精英/通配取材池。
+  difficulty: { base: 18, min: 18, max: 18, floorMin: 44, floorMax: 44, elite: true },
+  id: 'divineShell', name: '神兵躯壳',
+  createUnit: () => new Enemy({ defId: 'divineShell', name: '神兵躯壳', maxHp: 300 }),
+  onBattleStart(ctx, unit) {
+    unit.shield += 200; // 灵脉护壳（如山存续）：只增不减，必须真打穿
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 3 }));
+    const owner = `enemy:${unit.uniqueID}:divineShell`;
+    attachPressureCounter(ctx.kernel, unit, owner); // 【过热自保】：阶段二穿透拍的受压反制（见 SHELL_OVERHEAT）
+    // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 净化全部效果 + 凝滞1 + 就地翻阶段
+    //（阶段号与节拍一起改写——它的下一拍就是阶段二的【回忆】，玩家的意图预告同步翻新）。
+    ctx.kernel.addSubscription({
+      when: ApplyDamageInstruction, phase: 'post', owner,
+      filter: (instr) => instr.target === unit
+        && (unit._phase ?? 1) === 1
+        && (instr.result?.shieldAbsorbed ?? 0) > 0 && unit.shield <= 0,
+      react: (instr, c) => {
+        unit._phase = 2;
+        unit._beat = 0;
+        for (const i of purgeEffectInstructions(unit)) c.kernel.submitInstruction(i, instr);
+        c.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'stasis', stacks: 1 }), instr);
+      },
+    });
+    // 死亡拦截（PRE，priority 压到修饰者之后——_collect 契约）：第一次致死伤害改判
+    // 「保留 1 血 + 净化 + 凝滞1」并进第三阶段。补刀是附级固定伤害（系统结算，不触发
+    // 任何响应）；凝滞必须排在最后——顺序反了冻结会挡下自己的净化与改判。
+    // ⚠ 铁律（BattleKernel.preview 契约，2026-09-21 实战抓出）：PRE 反应里**禁止直改状态**
+    //   —— 卡面/描述的干跑会完整跑一遍 PRE 管线，直接写 unit._phase 会从干跑泄漏到真实
+    //   单位上。实战症状：Boss 只剩 91 血时，卡面预览了一发 115 伤的【摧山斩】，预览的
+    //   致死判定成立 → 阶段号被写成 3，而 1 血/凝滞（走 veto 替补、干跑中被丢弃）一个都
+    //   没落地。所以阶段号改写改挂**替补伤害的 POST**（干跑不跑 POST）。
+    ctx.kernel.addSubscription({
+      when: ApplyDamageInstruction, phase: 'pre', priority: -100, owner,
+      // 同批次第二发致死不需要额外门槛：替补批次里紧跟着的凝滞会先把后续伤害 veto 掉
+      // （_collect 按 priority 降序，凝滞优先级 0 高于本反应 -100）。
+      filter: (instr) => instr.target === unit && (unit._phase ?? 1) === 2,
+      react: (instr, c) => {
+        if (!wouldBeLethal(instr, unit)) return;
+        c.kernel.veto(instr, 'divineShellOverdrive', [
+          ...purgeEffectInstructions(unit),
+          new DealDamageInstruction({
+            source: instr.source, target: unit,
+            amount: Math.max(unit.hp - 1, 0) + unit.shield,
+            fixed: true, tags: ['divineShellOverdrive'], type: 'minor',
+          }),
+          new AddEffectInstruction({ target: unit, effectId: 'stasis', stacks: 1 }),
+        ]);
+      },
+    });
+    // 替补伤害真落地 = 改判成立 → 此刻才翻阶段（POST；干跑不会走到这里）
+    ctx.kernel.addSubscription({
+      when: ApplyDamageInstruction, phase: 'post', owner,
+      filter: (instr) => instr.target === unit && instr.tags?.includes('divineShellOverdrive'),
+      react: () => { unit._phase = 3; unit._beat = 0; },
+    });
+    // 锁定结算：【蓄能】锁的是**牌库顶三张**（你最先抽到的牌），所以标要活到那几张牌
+    // 抽进手里为止——本轮只结算「已在手」的锁定卡（回合末仍在手则焚毁），牌库里的标
+    // 留给下一拍继续等；手牌/焚毁/待结算区的标随本轮清掉（离手即免除）。
+    ctx.kernel.addSubscription({
+      when: PlayerTurnEndInstruction, phase: 'post', owner,
+      filter: () => !unit.isDead(),
+      react: (instr, c) => {
+        for (const card of [...c.battleState.zones.hand]) {
+          if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
+            c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
+          }
+        }
+        for (const zone of ['hand', 'burnt', 'pending']) {
+          for (const card of c.battleState.zones[zone]) card.locked = false;
+        }
+      },
+    });
+  },
   act(actx) {
-    const { unit } = actx;
+    const { unit, player, battleState: bs } = actx;
     const atk = unit.getStat('attack');
-    const phase = towerHeartPhaseOf(unit);
-    // 蜕壳：跨入新阶段的第一拍（宣言拍，不攻击）
-    if (phase !== (unit._phase ?? 1)) {
-      unit._phase = phase;
-      unit._phaseBeat = 0;
-      const b = unit.getEffectStacks('burn');
-      if (b > 0) {
+    const phase = unit._phase ?? 1;
+    const beat = unit._beat ?? 0;
+    unit._beat = beat + 1;
+
+    const hit = (dmg, pierce = false) => actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player, amount: dmg + atk, pierce }));
+    // 扫射 = 段数伤害。弹道干扰整量消耗：本次段数 = 基数 − 2×干扰层数（最低 0 段）。
+    const jam = unit.getEffectStacks('scatterJam');
+    const scatter = (baseHits, dmg, pierce = false) => {
+      if (jam > 0) actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'scatterJam', stacks: -jam }));
+      const hits = Math.max(0, baseHits - 2 * jam);
+      for (let i = 0; i < hits; i++) hit(dmg, pierce);
+    };
+    // 全场燃烧（含它自己——自焚是它自己的败亡曲线，玩家能做的只是活到那一刻）
+    const burnAll = (stacks) => {
+      for (const u of allAliveUnits(bs, player)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: 'burn', stacks: -b }));
+          target: u, effectId: 'burn', stacks }));
       }
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
-      return;
-    }
-    const beat = (unit._phaseBeat ?? 0) % (phase === 2 ? 4 : 3);
-    unit._phaseBeat = (unit._phaseBeat ?? 0) + 1;
+    };
+
+    // ---- 阶段一 · 协议完好（四拍循环）----
     if (phase === 1) {
-      // 三连击 → 攻16 → 三连击
-      if (beat !== 1) {
-        for (let i = 0; i < 3; i++) {
-          actx.kernel.submitInstruction(new DealDamageInstruction({
-            source: unit, target: actx.player, amount: 6 + atk }));
+      const b = beat % 4;
+      if (b === 0) {
+        // 【直觉】盾40 + 攻20
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 40 }));
+        hit(20);
+      } else if (b === 1) {
+        // 【蓄能】锁定你最先抽到的三张牌（牌库顶三张）+ 5×5
+        const top = bs.zones.deck.slice(0, 3);
+        if (top.length > 0) {
+          actx.kernel.submitInstruction(new LockCardsInstruction({
+            uniqueIDs: top.map((c) => c.uniqueID) }));
         }
+        for (let i = 0; i < 5; i++) hit(5);
+      } else if (b === 2) {
+        hit(50); // 【光能炮】
       } else {
-        actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: actx.player, amount: 16 + atk }));
+        // 【错误重启】力量4
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 4 }));
       }
       return;
     }
+
+    // ---- 阶段二 · 战术失控（首拍回忆，此后固定序列，走到头重复处决扫射）----
     if (phase === 2) {
-      // 自盾20+蓄势2 → 攻10 → 自盾20 → 攻14
-      if (beat === 0 || beat === 2) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 20 }));
-        if (beat === 0) {
-          actx.kernel.submitInstruction(new AddEffectInstruction({
-            target: unit, effectId: 'focus', stacks: 2 }));
+      if (beat === 0) {
+        // 【回忆】洗入 7 张躲闪（随机插入牌库——不是牌库顶，得自己找）
+        for (let i = 0; i < 7; i++) {
+          actx.kernel.submitInstruction(new AddCardInstruction({
+            defId: 'sidestep', toZone: 'deck', index: 'random' }));
         }
+      } else if (beat === 1) {
+        scatter(5, 10); // 【羽翼扫射】
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
+      } else if (beat === 2) {
+        // 【腾空】闪避3 + 盾30（单发大额被吃一发；多段流只被吃一段）
+        actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: 3 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 30 }));
+      } else if (beat === 3) {
+        scatter(8, 10); // 【羽翼风暴】
+      } else if (beat === 4) {
+        hit(65); // 【轰落】
+      } else if (beat === 5) {
+        // 【怜悯】净化自身全部效果，本拍不攻击（唯一的白给窗）
+        for (const i of purgeEffectInstructions(unit)) actx.kernel.submitInstruction(i);
       } else {
-        actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: actx.player, amount: (beat === 1 ? 10 : 14) + atk }));
+        // 【处决扫射】14×4 穿透；【过热自保】（2026-09-21 用户设计）：本回合被灌进
+        // >90 点伤害 → 取消这次扫射、改起盾 50（意图同步改成防御）。穿透不吃护盾，
+        // 是这条线最没得选的一拍，阈值反制给"能打出大回合"的牌组留一条活路。
+        if ((unit._pressure ?? 0) > SHELL_OVERHEAT) {
+          actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 50 }));
+          return;
+        }
+        scatter(4, 14, true); // 【处决扫射】14×4 穿透
       }
       return;
     }
-    // P3：攻14 → 攻14 → 大崩落（攻22 + 自身燃烧6，自焚累积不再蜕壳）
-    if (beat === 2) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 22 + atk }));
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'burn', stacks: 6 }));
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 14 + atk }));
+
+    // ---- 阶段三 · 过载自焚 ----
+    if (beat === 0) {
+      // 【过载重启】回满生命值、空过一拍；此形态不再加盾
+      if (unit.hp < unit.maxHp) {
+        actx.kernel.submitInstruction(new ApplyHealInstruction({
+          target: unit, amount: unit.maxHp - unit.hp }));
+      }
+      return;
     }
+    if (beat === 1) {
+      // 【高热】焚毁你全部手牌 + 14×4 扫射
+      for (const card of [...bs.zones.hand]) {
+        actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }));
+      }
+      scatter(4, 14);
+      return;
+    }
+    if (beat === 2) {
+      // 【自焚】全场燃烧25 + 25×3 扫射
+      burnAll(25);
+      scatter(3, 25);
+      return;
+    }
+    if (beat === 3) {
+      // 【停顿】自扣50血（穿透：不吃自己的防御/护盾/格挡）
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: unit, amount: 50, pierce: true, tags: ['overheatPause'] }));
+      return;
+    }
+    // 【爆发】全场燃烧30 + 攻100（循环到此为止：不结束战斗就一直爆发）
+    burnAll(30);
+    hit(100);
   },
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
-    const phase = towerHeartPhaseOf(unit);
-    // 预告与实际同轨：下一拍若是蜕壳（即将跨入新阶段），预告宣言
-    if (phase !== (unit._phase ?? 1)) {
-      return { kinds: ['buff'], note: '蜕壳：净化自身全部燃烧，自身护盾+15' };
-    }
-    const beat = (unit._phaseBeat ?? 0) % (phase === 2 ? 4 : 3);
+    const phase = unit._phase ?? 1;
+    const beat = unit._beat ?? 0;
+    const jam = unit.getEffectStacks('scatterJam'); // 预告与实际同口径：躲闪的段数减免照算
+    const scatterPreview = (base, dmg, note, kinds = ['attack']) => {
+      const hits = Math.max(0, base - 2 * jam);
+      return hits <= 0
+        ? { kinds: ['defend'], note: `${note}：段数已被【躲闪】清零` }
+        : { kinds, hits, damage: dmg + atk, note };
+    };
     if (phase === 1) {
-      return beat !== 1
-        ? { kinds: ['attack'], hits: 3, damage: 6 + atk, note: '塔心之怒' }
-        : { kinds: ['attack'], hits: 1, damage: 16 + atk, note: '塔心之怒' };
+      const b = beat % 4;
+      if (b === 0) return { kinds: ['defend', 'attack'], hits: 1, damage: 20 + atk, note: '直觉：自身护盾+40' };
+      if (b === 1) return { kinds: ['attack', 'debuff'], hits: 5, damage: 5 + atk, note: '蓄能：锁定你最先抽到的3张牌（回合结束时仍在手则焚毁）' };
+      if (b === 2) return { kinds: ['attack'], hits: 1, damage: 50 + atk, note: '光能炮' };
+      return { kinds: ['buff'], note: '错误重启：力量+4' };
     }
     if (phase === 2) {
-      if (beat === 0) return { kinds: ['defend', 'buff'], note: '塔心之壁：自身护盾+20，蓄势2' };
-      if (beat === 2) return { kinds: ['defend'], note: '塔心之壁：自身护盾+20' };
-      return { kinds: ['attack'], hits: 1, damage: (beat === 1 ? 10 : 14) + atk, note: '塔心之壁' };
+      if (beat === 0) return { kinds: ['debuff'], note: '回忆：向你牌库洗入7张【躲闪】' };
+      if (beat === 1) return scatterPreview(5, 10, '羽翼扫射：自身护盾+15', ['attack', 'defend']);
+      if (beat === 2) return { kinds: ['defend', 'buff'], note: '腾空：闪避+3，自身护盾+30' };
+      if (beat === 3) return scatterPreview(8, 10, '羽翼风暴');
+      if (beat === 4) return { kinds: ['attack'], hits: 1, damage: 65 + atk, note: '轰落' };
+      if (beat === 5) return { kinds: ['buff'], note: '怜悯：净化自身全部效果，本拍不攻击' };
+      if ((unit._pressure ?? 0) > SHELL_OVERHEAT) {
+        return { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${SHELL_OVERHEAT}，取消扫射，自身护盾+50` };
+      }
+      return scatterPreview(4, 14, `处决扫射：穿透伤害（本回合生命值伤害 >${SHELL_OVERHEAT} 则改为起盾 50）`);
     }
-    return beat === 2
-      ? { kinds: ['attack'], hits: 1, damage: 22 + atk, note: '大崩落：塔心自身燃烧+6' }
-      : { kinds: ['attack'], hits: 1, damage: 14 + atk, note: '塔心崩落' };
+    if (beat === 0) return { kinds: ['buff'], note: '过载重启：回满生命值（此形态不再加盾）' };
+    if (beat === 1) return scatterPreview(4, 14, '高热：焚毁你的全部手牌', ['attack', 'debuff']);
+    if (beat === 2) return scatterPreview(3, 25, '自焚：全场燃烧+25', ['attack', 'debuff']);
+    if (beat === 3) return { kinds: ['unknown'], note: '停顿：自身失去50生命' };
+    return { kinds: ['attack', 'debuff'], hits: 1, damage: 100 + atk, note: '爆发：全场燃烧+30' };
   },
 });
 
@@ -1363,6 +1573,42 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 3 < 2
     ? { kinds: ['buff'], note: '喝酒：自愈5，力量+1' }
     : { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack'), note: '醉拳' }),
+});
+
+// ㉒ 筹算灵（章3·反出牌量；2026-09-20 用户设计稿）——「出牌多就挨打」的记账敌人：
+// 每拍固定「记账 → 起盾 → 攻 12」，护盾 = 3 + 你**上一回合**打出的牌数 × 2。
+// 它考的不是数值而是节奏：多段小伤引擎（瞬击/碎铁/多段拳）打出的每一张牌都会变成
+// 它的甲，出牌越多越打不穿、回合拖得越长越难破——破局只有三条路：压缩出牌量、
+// 换大单发穿甲，或在它把账记厚之前结束战斗。放在 23-27 层（章3 庄园段），
+// 与贪杯鬼（越拖越强）同为「渐强型」压力位，方向互补：贪杯鬼罚慢，筹算灵罚碎。
+// 数值锚点：d=6/7/8 → 78/90/102 血（与贪杯鬼同档），攻击 12 + 面板（F1 同源算式）。
+// 护盾不随难度缩放——它的强弱轴是玩家的出牌量，不是楼层。
+// 意图预告读 unit._tally（上一回合的实际出牌数，act 时落账）：预告与实际严格同值；
+// 首拍尚无台账时回落「本回合已打出数」，随出牌实时爬升，把记账规则当场演示给玩家。
+registerEnemy({
+  difficulty: { base: 7, min: 6, max: 8, floorMin: 23, floorMax: 27 },
+  id: 'tallySpirit', name: '筹算灵',
+  createUnit: () => new Enemy({ defId: 'tallySpirit', name: '筹算灵', maxHp: 30 }),
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const played = bs.history?.turn?.playedCards?.length ?? 0;
+    unit._tally = played; // 台账：本次（刚结束的玩家回合）打出的牌数
+    actx.kernel.submitInstruction(new GainShieldInstruction({
+      target: unit, amount: 3 + played * 2,
+    }));
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player, amount: 12 + unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit, bs) => {
+    const tally = unit._tally ?? (bs?.history?.turn?.playedCards?.length ?? 0);
+    return {
+      kinds: ['attack', 'defend'],
+      hits: 1,
+      damage: 12 + unit.getStat('attack'),
+      note: `记账：自身护盾+${3 + tally * 2}（按你上回合打出的 ${tally} 张牌）`,
+    };
+  },
 });
 
 // ㉒ 庄园主（章3 精英·召唤主题：大史莱姆退役后接班）——四拍循环：
@@ -2111,6 +2357,10 @@ registerEnemy({
   },
 });
 
+// 【过热自保】阈值：红灯① 【锁定要害，清除】穿透35 是它最硬的一拍（防御/护盾都不减免），
+// 本回合被灌进 >50 点伤害 → 取消开火、改起盾 50（玩家回合的意图预告同步翻成防御）。
+const DRONE_OVERHEAT = 50;
+
 // ⑤″ 33 层 Boss · 完好的无人战体（章3 Boss 池之二，2026-09-14 用户设计；原型参考
 // wekyland「无人战体」词条：古南圣国军事遗留的自律战斗机器，「完好的」= 装备无损的
 // 个体——灰烬装甲可用、拟态基质未失活，所以它带着 150 初始盾与「如山+纯净」的完好
@@ -2120,7 +2370,9 @@ registerEnemy({
 //     解除威胁'（攻10+焚牌库顶2）。盾逐轮累积不清（如山），玩家迟早打穿——破盾越快，
 //     黄灯期越短（少挨锁定/焚库）；
 //   红灯（转阶段后三拍循环）：锁定要害，清除（穿透35+自身格挡1）→ 反反反反制
-//     （锁定全部手牌+5×7）→ 重启....失失失失败（空转）。
+//     （锁定全部手牌+5×7）→ 重启....失失失失败（空转）。**【过热自保】（2026-09-21 用户
+//     设计，穿透反制）**：穿透那一拍结算前先看它**本回合受到的生命值伤害**（没穿盾的不算），
+//     >50 就取消开火、改起盾 50（意图当场翻成防御并写明口径）。
 // 转阶段：盾第一次被打穿 → **马上**净化自身全部效果 + 凝滞1（先净化后冻结——转阶段
 //   前堆上的 DOT 一并清空，不会在净化之前再吃一口 tick；一切状态无法变更，破盾那回合
 //   玩家的剩余输出打不动冻结的机器）→ 其回合开始凝滞解除，行动拍播【系统统统错误，
@@ -2138,6 +2390,7 @@ registerEnemy({
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 4 }));
     const owner = `enemy:${unit.uniqueID}:drone`;
+    attachPressureCounter(ctx.kernel, unit, owner); // 【过热自保】：红灯穿透拍的受压反制（见 DRONE_OVERHEAT）
     // 盾碎检测（POST：伤害已结算）：第一次被打穿 → 马上净化全部效果 + 凝滞1 + 排转阶段
     //（净化在前：转阶段前堆上的 DOT 一并清空，冻结前不留账；如山在场，盾只会因伤害
     // 归零——回合开始的例行清盾被 veto——不会误触发）。挂应用原语 POST（2026-09-15
@@ -2162,12 +2415,16 @@ registerEnemy({
     // 第一次致死伤害 veto 并改判「保留 1 血 + 无敌」，进入自爆倒计时。
     // 挂**应用原语 PRE**（2026-09-15 拆分：免死类拦截不关心伤害出自什么原因，
     // 不筛主/附级）；改判的补刀伤害是附级（系统结算，不触发任何响应）。
+    // ⚠ 2026-09-21（神兵躯壳同款 bug 排查时抓出）：`unit._detonated = true` 原来写在 PRE 里，
+    //   而 BattleKernel.preview 契约明确「PRE 里直改状态会在干跑中泄漏」——卡面/描述预览一发
+    //   致死级伤害就会把这台机器的死亡协议提前作废（真打死时不再改判 1 血、不再自爆）。
+    //   改判标志移挂**替补伤害的 POST**（干跑不跑 POST）；同批次第二发致死由替补批次里的
+    //   无敌/凝滞先一步 veto（无敌/凝滞优先级高于本反应）。
     ctx.kernel.addSubscription({
       when: ApplyDamageInstruction, phase: 'pre', priority: -100, owner,
       filter: (instr) => instr.target === unit && !unit._detonated,
       react: (instr, c) => {
         if (!wouldBeLethal(instr, unit)) return;
-        unit._detonated = true;
         c.kernel.veto(instr, 'droneLockdown', [
           new DealDamageInstruction({
             source: instr.source, target: unit,
@@ -2177,6 +2434,12 @@ registerEnemy({
           new AddEffectInstruction({ target: unit, effectId: 'invulnerable', stacks: 1 }),
         ]);
       },
+    });
+    // 替补伤害真落地 = 改判成立 → 此刻才进自爆倒计时（POST；干跑不会走到这里）
+    ctx.kernel.addSubscription({
+      when: ApplyDamageInstruction, phase: 'post', owner,
+      filter: (instr) => instr.target === unit && instr.tags?.includes('droneLockdown'),
+      react: () => { unit._detonated = true; },
     });
     // 锁定结算：玩家回合结束时，手牌中的锁定卡焚毁（离手即免除），随后全 zone 清标
     // ——本轮锁定结算完毕，离手的卡不带标回库/回手。
@@ -2257,7 +2520,14 @@ registerEnemy({
     const beat = unit._redBeat % 3;
     unit._redBeat += 1;
     if (beat === 0) {
-      // 【锁定要害，清除】穿透35（奇异射线：防御与护盾都不减免）+ 自身格挡1
+      // 【锁定要害，清除】穿透35（奇异射线：防御、护盾、格挡都不减免）+ 自身格挡1。
+      // 【过热自保】（2026-09-21 用户设计）：本回合被灌进 >50 点伤害 → **取消开火**，
+      // 改起盾 50（意图同步改成防御）。穿透不吃防御/护盾/格挡，是玩家最没得选的一拍——
+      // 这条给"打得出大回合"的牌组一个明确反制：压过阈值，这一拍就不挨枪。
+      if ((unit._pressure ?? 0) > DRONE_OVERHEAT) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 50 }));
+        return;
+      }
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 35 + atk, pierce: true }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -2289,7 +2559,9 @@ registerEnemy({
       return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：焚毁牌库顶2张' };
     }
     const beat = unit._redBeat % 3;
-    if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 35 + atk, note: '锁定要害，清除：穿透伤害，自身格挡+1' };
+    if (beat === 0) return (unit._pressure ?? 0) > DRONE_OVERHEAT
+      ? { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${DRONE_OVERHEAT}，取消开火，自身护盾+50` }
+      : { kinds: ['attack'], hits: 1, damage: 35 + atk, note: `锁定要害，清除：穿透伤害，自身格挡+1（本回合生命值伤害 >${DRONE_OVERHEAT} 则改为起盾 50）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 7, damage: 5 + atk, note: '反反反反制：锁定你的全部手牌' };
     return { kinds: ['unknown'], note: '重启....失失失失败' };
   },

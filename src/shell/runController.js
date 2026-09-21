@@ -8,6 +8,7 @@ import {
   assembleBattle, isBossFloor, advanceFloor,
 } from '../core/run/runFlow.js';
 import { chooseSkillReward, chooseRewardPack as chooseRewardPackCore } from '../core/run/rewards.js';
+import { restoreRunFromSave } from '../core/run/saveRestore.js';
 import { gatedPromotionTargets } from '../core/run/promotion.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEnemyDefinition } from '../core/enemies/registry.js';
@@ -36,6 +37,7 @@ import { RunEvents } from './runEvents.js';
 import { createCutscenePlayer } from './overlay/cutscenePlayer.js';
 import { createSceneWipe } from './overlay/sceneWipe.js';
 import { createRunCutsceneFlows } from './runCutsceneFlows.js';
+import { createRunDebug } from './runDebug.js';
 import { recordSave } from './saves.js';
 
 export { RunEvents };
@@ -82,59 +84,7 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
   });
 }
 
-// 存档快照 → run：advanceFloor 推进层数（遭遇/房间按 seed 确定性，无需回放），
-// 再覆盖养成字段。存档语义 = 检查点：落盘只在 prep，故恢复后必处 prep。
-function restoreFromSave(run, save) {
-  while (run.floor < save.floor) advanceFloor(run);
-  // rng 状态直存直取：回放 advanceFloor 不消耗 run.rng（遭遇用派生种子），
-  // 若不恢复状态，读档后的房间派发会偏离活局时间线（旧档无此字段=维持回放语义）
-  if (save.rngState != null) run.rng.setState(save.rngState);
-  const p = run.player;
-  const sp = save.player;
-  p.hp = sp.hp; p.maxHp = sp.maxHp;
-  p.mana = sp.mana; p.maxMana = sp.maxMana;
-  p.maxActionPoints = sp.maxActionPoints; p.actionPoints = sp.maxActionPoints;
-  p.money = sp.money;
-  p.deck = sp.deck.map(rt => ({ ...rt }));
-  p.abilities = [...sp.abilities];
-  p.relics = [...sp.relics];
-  p.equippedRelics = [...sp.equippedRelics];
-  p.relicSlots = sp.relicSlots;
-  p.leino = { ...sp.leino };
-  p.trainingCount = sp.trainingCount;
-  p.ascensionCount = sp.ascensionCount;
-  p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
-  p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
-  // 旧档无 baseStats：以当前值为基准兜底；随后 refreshRunModifiers 会把遗物修正重算回去
-  p.baseStats = sp.baseStats ? { ...sp.baseStats } : {
-    maxHp: p.maxHp, maxMana: p.maxMana, maxActionPoints: p.maxActionPoints,
-    attack: p.attack, defense: p.defense, maxHandSize: p.maxHandSize,
-  };
-  Object.assign(run.remi, save.remi);
-  run.pendingCardRemoval = save.pendingCardRemoval;
-  run.eventFlags = { ...(save.eventFlags ?? {}) }; // 旧档无此字段 → 空旗标
-  run.relicUses = { ...save.relicUses };
-  run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;
-  run.shopPending = save.shopPending ? { ...save.shopPending, choices: [...save.shopPending.choices] } : null;
-  run.shopAppleBought = !!save.shopAppleBought;
-  run.slot = save.slot ? { ...save.slot } : null;
-  run.slotPending = save.slotPending ? { ...save.slotPending } : null;
-  run.slotUpgradePending = !!save.slotUpgradePending;
-  run.slotDevour = save.slotDevour ?? 0;
-  run.slotFreeRolls = save.slotFreeRolls ?? 0;
-  run.slotApples = save.slotApples ?? 0;
-  // 银行机状态与跨战斗恶魔词条（旧档无此字段 → 视为未访问过银行机 / 无词条）
-  run.bank = save.bank ? {
-    ...save.bank,
-    blackCleared: [...(save.bank.blackCleared ?? [])],
-    offers: [...(save.bank.offers ?? [])],
-    pendingRoll: save.bank.pendingRoll
-      ? { ...save.bank.pendingRoll, options: [...(save.bank.pendingRoll.options ?? [])] } : null,
-  } : null;
-  run.pendingDebuffs = (save.pendingDebuffs ?? []).map(d => ({ ...d }));
-}
-
-export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, gmMode = false } = {}) {
+export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false } = {}) {
   const runBus = mitt();
   // run 级共享演出队列（S2）：battle / room / tower / cutscene 指令在同一队列定序，
   // 跨层演出链（终局动画 → 幕间黑幕 → 塔楼抵达）由此成为可表达的结构
@@ -144,20 +94,23 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 跨场景存活（battle/room/tower），各 Stage 只是它的视图。Phase 1 收编卡牌注册表
   const displayModel = new DisplayModel();
   const isStory = save?.storyMode ?? storyMode; // 读档优先用存档自身的模式
+  // 调试局标记：读档以存档自身为准（造档工具产出的档自带 debugMode: true）
+  const isDebug = save?.debugMode ?? debugMode;
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
   }));
-  if (save) restoreFromSave(run, save);
+  if (save) restoreRunFromSave(run, save); // 恢复原语在 core（headless 工具共用同一份）
   else {
     run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
-    // 无敌模式（开始界面勾选，仅新开局生效）：直发 GM 卡「一拳」（999 群伤固有），
-    // 爬塔流程验证工具；读档不吃——GM 局的卡组本身已含此卡，随存档走
-    if (gmMode) run.player.deck.push(createSkillRuntime('onePunch'));
+    // 调试模式（开始界面勾选 / ?debug=1，仅新开局生效）：直发 GM 卡「一拳」（999 群伤固有）
+    // ——爬塔流程验证工具；读档不吃（调试局的卡组本身已含此卡，随存档走）
+    if (isDebug) run.player.deck.push(createSkillRuntime('onePunch'));
   }
   // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
   refreshRunModifiers(run);
   run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
+  run.debugMode = isDebug; // 调试局：存档走 debug 槽（saves.modeOf）+ 面板可开
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
   // 房间层舞台侧瞬态（不进 core run）：老虎机演出播放态。
@@ -182,8 +135,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     };
   });
   // 瑞米区视图（run 快照）：被打跑 = 未出战整区隐藏；战斗外恒满血（营地语义：
-  // 每场按满血出战）。满血值借 createUnit 读（内容定义无静态面板字段可查）；
-  // 攻/盾横幅暂走状态栏展示常量（盾=每回合赋盾量口径，行为未实装 0 占位）
+  // 每场按满血出战）。满血值借 createUnit 读（内容定义无静态面板字段可查）。
+  // （攻/盾横幅已删 2026-09-20 用户定：瑞米意图显示其行动）
   const remiMaxHp = getAllyDefinition('remi')?.createUnit().maxHp ?? null;
   const remiView = () => (!remiMaxHp || run.remi.drivenOff)
     ? { present: false }
@@ -208,6 +161,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   };
   // 面板快照的舞台侧瞬态：老虎机演出播放态不在 core run 里（见 roomSnapshot 注释）
   const panelExtras = () => ({ slot });
+  // 存档检查点：只在 prep（层首）与 end（终局）落盘；战斗内退出 = 回到本层战前。
+  // 调试局（debugMode，含"改过状态的普通局"）写独立的 debug 槽（saves.modeOf）——
+  // 真实存档永不被调试动作污染，这是调试模式的安全边界。
+  const persist = () => {
+    if (run.gameStage !== 'prep' && run.gameStage !== 'end') return;
+    recordSave(run);
+  };
   // ---- 获得演出（遗物差分 / 老虎机 / 恶魔 roll / 售货机 / 离开安慰奖）----
   // 「到手那一拍」的编排整体在 runShowcase.js：core 结算已发生，那边只管时序与舞台。
   // 这里的引用全部**晚绑定**（箭头闭包捕获词法绑定，运行期才取值）：panelStage/notify 是
@@ -226,8 +186,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   });
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
   mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
-  if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run); // 初始即检查点（首层开局/读档落位）
-  // 该房间是否由**幕间/房间场景**呈现（事件幕间 or 有休息房配方）——呈现中塔楼层**不渲染房间面板**：
+  if (run.gameStage === 'prep' || run.gameStage === 'end') persist(); // 初始即检查点（首层开局/读档落位）  // 该房间是否由**幕间/房间场景**呈现（事件幕间 or 有休息房配方）——呈现中塔楼层**不渲染房间面板**：
   // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕随后
   // 才盖住（用户 2026-09-12 报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
   // 不用"有配方"直接推断——无舞台/占位路径仍要把面板留给塔楼层。
@@ -256,7 +215,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
     if (run.gameStage === 'prep') preloadBattleArt({ deck: run.player.deck, ...assembleBattle(run) });
     // 存档检查点：prep（层首）与 end（终局）落盘；战斗内退出 = 回到本层战前。
-    if (run.gameStage === 'prep' || run.gameStage === 'end') recordSave(run);
+    persist();
     runBus.emit(RunEvents.STAGE_CHANGED, { stage: run.gameStage, floor: run.floor });
     // 新遗物 → 特写（差分见 runShowcase.js）：放在最后，确保面板/资源行已按新状态重绘
     showcase.diffNewRelics();
@@ -316,6 +275,22 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       arriveMapFloor: () => arriveMapFloor(),
       exitSceneAfterCutscene: (fn) => exitSceneAfterCutscene(fn),
     },
+  });
+
+  // ---- 调试模式（面板/脚本的唯一入口；见 shell/runDebug.js）----
+  // 与 machines/cutsceneFlows 同构：域模块 + 晚绑定 ctx；改 core 状态走 core/debug/ops.js，
+  // 本处只管"改完之后前端怎么刷新"（状态栏 / 面板 / 换台 / 进房演出）。
+  const runDebug = createRunDebug({
+    run,
+    notify: () => notify(),
+    syncMapStatus: () => syncMapStatus(),
+    swapAnyToMap: () => swapAnyToMap(),
+    mapStage,
+    enterRoomPresentation: () => enterRoomPresentation(),
+    getBattleStage: () => battleStage,
+    getBattleBridge: () => battleBridge,
+    cutscene,
+    playAscensionScene: (opts) => cutsceneFlows.playAscensionScene(opts),
   });
 
   // ---- 战斗 ----
@@ -513,6 +488,26 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
 
   /**
+   * **调试用**：把当前舞台无条件换回塔楼（战斗/房间舞台全拆，含各自的 uiScene 覆盖层）。
+   * 不推进任何 core 阶段——core 状态由 runDebug 的原语负责，这里只管"画面别留在旧场景里"。
+   * 同时复位几个"正在切换"的重入闸（battlePending/restEntering/roomScenePending）：
+   * 调试跳层可能发生在切幕中途，闸不放开后续动作会被静默吞掉。
+   */
+  function swapAnyToMap() {
+    battleStage?.dispose(); battleStage = null;
+    roomStage?.dispose(); roomStage = null;
+    battlePending = false;
+    restEntering = false;
+    roomScenePending = false;
+    slot.lastSpin = null; slot.anim = null;
+    if (stageManager && mapStage) {
+      mapStage.setFloor(run.floor, run.totalFloors);
+      stageManager.setStage(mapStage);
+    }
+    syncMapStatus();
+  }
+
+  /**
    * 塔楼在台且 run.floor 已越过相机锚层 → 排一段相机爬升（幂等：未推进/无舞台即无动作）。
    * 所有「阶段迁移后回到塔楼画面」的节拍都调它——换台路径（swapRoomToMap）与不换台的
    * 幕间退出（事件房/进阶收尾，见 lifecycle.arriveMapFloor）同一条规则：升层不只发生在
@@ -699,5 +694,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     chooseAscensionDimension: cutsceneFlows.chooseAscensionDimension, skipAscension: cutsceneFlows.skipAscension, chooseSeedCards: cutsceneFlows.chooseSeedCards, rerollSeedOffering: cutsceneFlows.rerollSeedOffering,
     playAscensionScene: cutsceneFlows.playAscensionScene,             // 进阶幕间（正常路径由 leaveRoom 接棒；调试/测试可用）
     equip, unequip, useRelic,
+    debug: runDebug,               // 调试模式门面（面板/脚本唯一入口；普通局也可开，改动即转调试局）
   };
 }

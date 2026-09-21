@@ -9,7 +9,6 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { getSkillDefinition } from '../skills/registry.js';
-import { getEffectDefinition } from '../effects/registry.js';
 import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
 import { isBossFloor } from '../run/runFlow.js';
 
@@ -44,9 +43,9 @@ registerRelic({
 
 registerRelic({
   id: 'northMountainRock', name: '北山岩', rarity: 'C', nonSlot: true,
-  description: '拾起时，获得 2 最大生命。',
-  flavor: '一块大陆北方的石头，让你回想起那个年代',
-  onAcquire: (run) => gainMaxHp(run, 2),
+  description: '拾起时，获得 3 最大生命。',
+  flavor: '不能吃',
+  onAcquire: (run) => gainMaxHp(run, 3),
 });
 
 registerRelic({
@@ -58,18 +57,19 @@ registerRelic({
 
 registerRelic({
   id: 'steelShard', name: '拟钢碎片', rarity: 'C', nonSlot: true, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '拾起时，获得 1 最大生命；战斗开始时获得 1 护盾。',
+  description: '拾起时，获得 2 最大生命；战斗开始时获得 4 护盾。',
   flavor: '现在它也能被称为遗物了',
-  onAcquire: (run) => gainMaxHp(run, 1),
+  onAcquire: (run) => gainMaxHp(run, 2),
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: ctx.player, amount: 1 }));
+    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: ctx.player, amount: 4 }));
   },
 });
 
 // 池空兜底件（唯一可重复获得的遗物；抽选 SDK 在「全部可抽遗物都已拥有」时发它）
 registerRelic({
-  id: 'towerGift', name: '塔的馈赠', rarity: 'C', nonSlot: true,
+  id: 'towerGift', name: '塔的石头', rarity: 'C', nonSlot: true,
   description: '拾起时，获得 1 最大生命。',
+  flavor: '塔的石头，道出塔的贫穷',
   onAcquire: (run) => gainMaxHp(run, 1),
 });
 
@@ -77,11 +77,11 @@ registerRelic({
 
 registerRelic({
   id: 'springFlask', name: '山泉壶', rarity: 'C', nonSlot: true,
-  description: '休息处休息时，额外恢复 5 点生命。',
+  description: '休息处休息时，额外恢复 8 点生命。',
   flavor: '这是一个壶，你可以用它装水喝。不一定非得是山泉水',
   onCampRest(run) {
     const p = run.player;
-    p.hp = Math.min(p.maxHp, p.hp + 5);
+    p.hp = Math.min(p.maxHp, p.hp + 8);
   },
 });
 
@@ -103,61 +103,73 @@ registerRelic({
 
 // ---- 战斗开始时（资源 / 状态）----
 
+// 龙心组织：第一回合开始时获得 3 行动力（2026-09-20 稿 2→3）。
+// ⚠ 必须挂 T1 回合开始 POST 而不是 onBattleStart：PlayerTurnInstruction stage 0 会把 AP
+// 无条件设回上限（跨回合不保留超出部分）——战斗开始直发会被 T1 回补瞬间抹掉，
+// 与风铃闪避被 T1 蒸发是同一类问题（该 bug 使本遗物自第一批起一直是无声空转）。
 registerRelic({
   id: 'dragonHeartTissue', name: '龙心组织', rarity: 'A', cost: 1,
-  description: '战斗开始时，获得 2 行动力。',
+  description: '第一回合开始时，获得 3 行动力。',
   flavor: '本来就没有生命的东西，却会不住地跳动',
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 2 }));
-  },
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
+    react: (instr, c) => c.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 3 }), instr),
+  }],
 });
 
 registerRelic({
-  id: 'seaCrystal', name: '海晶石', rarity: 'B', cost: 1,
-  description: '战斗开始时，获得 1 魏启。',
+  id: 'seaCrystal', name: '海晶石', rarity: 'C', cost: 1,
+  description: '战斗开始时，获得 4 魏启。',
   flavor: '一块宝石，它的外貌和魏启的图标很像',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }));
+    ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 4 }));
   },
 });
 
+// 卡达斯的獠牙（2026-09-20 稿机制更新）：战斗前四个回合，每回合开始时获得 4 魏启
+// （由「战斗开始一次性 +3」改为分期付款——总量 16，节奏红利换整局铺开）。
 registerRelic({
-  id: 'kadasFang', name: '卡达斯的獠牙', rarity: 'A', cost: 2,
-  description: '战斗开始时，获得 3 魏启。',
+  id: 'kadasFang', name: '卡达斯的獠牙', rarity: 'A', cost: 1,
+  description: '战斗前四个回合，每回合开始时获得 4 魏启。',
   flavor: '卡达斯的獠牙之一，内部是纯粹且暴躁的魏启',
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }));
-  },
+  subscriptions: () => [{
+    when: TurnStartInstruction,
+    phase: 'post',
+    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count <= 4,
+    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 4 }), instr),
+  }],
 });
 
 registerRelic({
   id: 'blackMountainRock', name: '黑山岩', rarity: 'C', cost: 1,
-  description: '战斗开始时，获得 4 护盾。',
+  description: '战斗开始时，获得 10 护盾。',
   flavor: '朴素的使用方式——揣在胸前以防护攻击',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: ctx.player, amount: 4 }));
+    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: ctx.player, amount: 10 }));
   },
 });
 
 registerRelic({
   id: 'evanStone', name: '埃文石', rarity: 'A', cost: 1,
-  description: '战斗开始时，赋予所有敌人虚弱 1。',
+  description: '战斗开始时，赋予所有敌人虚弱 3。',
   flavor: '蔑视',
   onBattleStart(ctx) {
     for (const e of ctx.battleState.enemies) {
-      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: e, effectId: 'weaken', stacks: 1 }));
+      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: e, effectId: 'weaken', stacks: 3 }));
     }
   },
 });
 
 // 火灵脉专属（门禁与卡包同一口径）
 registerRelic({
-  id: 'sunStone', name: '太阳石', rarity: 'A', ...COST0, requires: { leino: 'fire', min: 1 },
-  description: '战斗开始时，获得烈焰亲和 2。',
+  id: 'sunStone', name: '太阳石', rarity: 'A', cost: 1, requires: { leino: 'fire', min: 1 },
+  description: '战斗开始时，获得烈焰亲和 10。',
   flavor: '它能让你变得如同太阳一般耀眼——同时避免你被灼伤',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 2,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 10,
     }));
   },
 });
@@ -174,8 +186,8 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'whiteFireStone', name: '白火石', rarity: 'B', cost: 2, requires: { leino: 'fire', min: 1 },
-  description: '战斗第一回合开始时，赋予所有单位燃烧 2。',
+  id: 'whiteFireStone', name: '白火石', rarity: 'B', cost: 1, requires: { leino: 'fire', min: 1 },
+  description: '战斗第一回合开始时，赋予所有单位燃烧 5。',
   flavor: '这块宝石实际上只是白晶石的一种罢了，只是格外的热',
   subscriptions: () => [{
     when: TurnStartInstruction,
@@ -185,7 +197,7 @@ registerRelic({
       const all = [c.player, ...c.battleState.allies, ...c.battleState.enemies];
       for (const u of all) {
         if (u.isDead()) continue;
-        c.kernel.submitInstruction(new AddEffectInstruction({ target: u, effectId: 'burn', stacks: 2 }), instr);
+        c.kernel.submitInstruction(new AddEffectInstruction({ target: u, effectId: 'burn', stacks: 5 }), instr);
       }
     },
   }],
@@ -195,7 +207,7 @@ registerRelic({
 registerRelic({
   id: 'poisonIvyVial', name: '毒藤瓶', rarity: 'C', cost: 1, requires: { leino: 'wood', min: 1 },
   description: '战斗开始时，赋予所有敌人中毒 2。',
-  flavor: '瓶口的藤蔓还活着，时不时往里缩一缩',
+  flavor: '它记得每一只碰过它的手',
   // 对标埃文石（A·群敌虚弱1）：群毒2 = 每敌 3 点延迟伤害，C 档一口闷
   onBattleStart(ctx) {
     for (const e of ctx.battleState.enemies) {
@@ -236,7 +248,7 @@ registerRelic({
 registerRelic({
   id: 'willowFluff', name: '柳絮', rarity: 'C', cost: 1, requires: { leino: 'air', min: 1 },
   description: '第一回合开始时，抽 1 张牌。',
-  flavor: '它落进你手里之前，谁也不知道它会落进谁手里',
+  flavor: '轻若无物',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
@@ -249,13 +261,13 @@ registerRelic({
 // ---- 回合节奏 ----
 
 registerRelic({
-  id: 'endlessManaJar', name: '无限魏启罐', rarity: 'A', cost: 1,
-  description: '每 3 回合，回合开始时回复 1 魏启。',
+  id: 'endlessManaJar', name: '无限魏启罐', rarity: 'A', cost: 2,
+  description: '回合开始时，回复 1 魏启。',
   flavor: '它曾是一个普通的魏启罐，直到有一天一位冉姓公主亲吻了它',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
-    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count % 3 === 0,
+    filter: (instr) => instr.side === 'player',
     react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr),
   }],
 });
@@ -278,50 +290,46 @@ registerRelic({
 
 registerRelic({
   id: 'lubricant', name: '润滑油', rarity: 'C', cost: 1,
-  description: '第二回合开始时，抽 1 牌。',
+  description: '第二回合开始时，抽 4 牌。',
   flavor: '请正确、正当地使用此物品',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
     filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 2,
     react: (instr, c) => c.kernel.submitInstruction(
-      new DrawCardsInstruction({ count: 1, reason: 'relic' }), instr),
+      new DrawCardsInstruction({ count: 4, reason: 'relic' }), instr),
   }],
 });
 
 registerRelic({
   id: 'seed', name: '种子', rarity: 'A', cost: 1,
-  description: '第三回合到第五回合，每回合开始时恢复 1 生命。',
+  description: '每回合开始时恢复 1 生命。',
   flavor: '小小的种子，种下之后，收获小小的治愈',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
-    filter: (instr, c) => {
-      if (instr.side !== 'player') return false;
-      const t = c.battleState.turn.count;
-      return t >= 3 && t <= 5;
-    },
+    filter: (instr) => instr.side === 'player',
     react: (instr, c) => c.kernel.submitInstruction(
       new ApplyHealInstruction({ target: c.player, amount: 1 }), instr),
   }],
 });
 
 registerRelic({
-  id: 'remiCharm', name: '瑞米挂饰', rarity: 'B', cost: 2,
-  description: '第 5 回合开始时，获得闪避 1。',
+  id: 'remiCharm', name: '瑞米挂饰', rarity: 'B', cost: 1,
+  description: '第 5 回合开始时，获得闪避 2。',
   flavor: '有命买，没命花',
   subscriptions: () => [{
     when: TurnStartInstruction,
     phase: 'post',
     filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 5,
     react: (instr, c) => c.kernel.submitInstruction(
-      new AddEffectInstruction({ target: c.player, effectId: 'dodge', stacks: 1 }), instr),
+      new AddEffectInstruction({ target: c.player, effectId: 'dodge', stacks: 2 }), instr),
   }],
 });
 
 registerRelic({
   id: 'warHornItem', name: '号角', rarity: 'C', cost: 1,
-  description: '第一回合开始时获得力量 2；该回合结束时失去力量 2。',
+  description: '第一回合开始时获得力量 4；该回合结束时失去力量 4。',
   flavor: '冲锋！',
   subscriptions: () => [
     {
@@ -329,19 +337,19 @@ registerRelic({
       phase: 'post',
       filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
       react: (instr, c) => c.kernel.submitInstruction(
-        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 2 }), instr),
+        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 4 }), instr),
     },
     {
       when: PlayerTurnEndInstruction,
       phase: 'post',
       filter: (instr, c) => c.battleState.turn.count === 1,
       react: (instr, c) => c.kernel.submitInstruction(
-        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: -2 }), instr),
+        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: -4 }), instr),
     },
   ],
 });
 
-// 飞镖 / 迷你飞镖 共用：第一回合结束的群伤
+// 飞镖 / 迷你飞镖 共用：第一回合结束的群伤（2026-09-20 稿：2 → 7）
 function dartVolley() {
   return {
     when: PlayerTurnEndInstruction,
@@ -352,7 +360,7 @@ function dartVolley() {
         if (e.isDead()) continue;
         // 附级：被动群伤（2026-09-15 拆分），不吃加成不触发响应
         c.kernel.submitInstruction(new DealDamageInstruction({
-          source: c.player, target: e, amount: 2, tags: ['aoe'], type: 'minor',
+          source: c.player, target: e, amount: 7, tags: ['aoe'], type: 'minor',
         }), instr);
       }
     },
@@ -361,36 +369,40 @@ function dartVolley() {
 
 registerRelic({
   id: 'dart', name: '飞镖', rarity: 'C', cost: 1,
-  description: '第一回合结束时，对所有敌人造成 2 伤害。',
+  description: '第一回合结束时，对所有敌人造成 7 伤害。',
   flavor: '唯快不破',
   subscriptions: () => [dartVolley()],
 });
 
 registerRelic({
-  id: 'miniDart', name: '迷你飞镖', rarity: 'A', ...COST0,
-  description: '第一回合结束时，对所有敌人造成 2 伤害。',
+  id: 'miniDart', name: '迷你飞镖', rarity: 'B', ...COST0,
+  description: '第一回合结束时，对所有敌人造成 7 伤害。',
   flavor: '唯快不破',
   subscriptions: () => [dartVolley()],
 });
 
 // ---- 受击 / 出牌 反应 ----
 
+// 大锤（2026-09-20 稿机制更新：受击转盾 → 回合开始固定盾）。priority -100 同
+// 光滑小圆盾：回合开始的「出现类」效果必须排在护盾重置（-50）之后，否则刚发的盾
+// 会被同一拍的清盾抹掉。
 registerRelic({
   id: 'sledgehammer', name: '大锤', rarity: 'C', cost: 1,
-  description: '每次受伤后，获得 1 护盾。',
+  description: '回合开始时获得 2 护盾。',
   flavor: '为什么大锤有这个效果？',
   subscriptions: () => [{
-    when: ApplyDamageInstruction,
+    when: TurnStartInstruction,
     phase: 'post',
-    filter: (instr, c) => instr.target === c.player && (instr.result?.dealt ?? 0) > 0,
+    priority: -100,
+    filter: (instr) => instr.side === 'player',
     react: (instr, c) => c.kernel.submitInstruction(
-      new GainShieldInstruction({ target: c.player, amount: 1 }), instr),
+      new GainShieldInstruction({ target: c.player, amount: 2 }), instr),
   }],
 });
 
 registerRelic({
   id: 'adrenalineSyringe', name: '肾上腺素注射器', rarity: 'C', cost: 1,
-  description: '每场战斗中，第一次单次造成超过 15 点伤害后，抽 2 牌。',
+  description: '每场战斗中，第一次单次造成超过 15 点伤害后，抽 3 牌。',
   flavor: '其中装填的的的确确是肾上腺素，不要怀疑',
   subscriptions: () => {
     let fired = false; // 每场战斗一次（subscriptions 工厂每场战斗调用一次）
@@ -401,7 +413,7 @@ registerRelic({
         && instr.type === 'major' && (instr.result?.dealt ?? 0) > 15,
       react: (instr, c) => {
         fired = true;
-        c.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'relic' }), instr);
+        c.kernel.submitInstruction(new DrawCardsInstruction({ count: 3, reason: 'relic' }), instr);
       },
     }];
   },
@@ -415,7 +427,7 @@ registerRelic({
   // 任何构筑第 3 张牌都有正收益。
   // 铭刻（flavor：tooltip 效果描述后另起一段展示；RELICS.md 原文——叠炎体系
   // 「与燃烧博弈」的设计哲学注脚：收益与风险并存）
-  flavor: '不要玩火，不要玩火，玩火必自焚。',
+  flavor: '不要玩火，不要玩火，玩火必自焚',
   subscriptions: () => {
     let plays = 0;
     return [{
@@ -434,13 +446,13 @@ registerRelic({
 // S 级「诸神」恩赐：仅事件获得（acquisition: ['event']，故不进抽取/商店池）
 registerRelic({
   id: 'aovibonyBlessing', name: '奥薇邦妮之恩赐', rarity: 'S', cost: 1, acquisition: ['event'],
-  description: '你每次打空手牌时，恢复 2 魏启。',
+  description: '你每次打空手牌时，恢复 3 魏启。',
   flavor: '风一般轻盈',
   subscriptions: () => [{
     when: UseSkillInstruction,
     phase: 'post',
     filter: (instr, c) => (c.battleState.zones.hand?.length ?? 0) === 0,
-    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 2 }), instr),
+    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr),
   }],
 });
 
@@ -462,14 +474,14 @@ registerRelic({
 // ---- run 级数值修正（从 baseStats 重算，见 prep.refreshRunModifiers）----
 
 registerRelic({
-  id: 'dragonScale', name: '龙鳞碎片', rarity: 'A', cost: 3,
+  id: 'dragonScale', name: '龙鳞碎片', rarity: 'A', cost: 2,
   description: '战斗开始时，防御 2。',
   flavor: '在很久以前，它是魏启大陆上灵御们传说中的令物，不过现在它只是一块特硬的铁片罢了',
   runModifiers: { defense: 2 },
 });
 
 registerRelic({
-  id: 'tianqingStone', name: '天青石', rarity: 'A', cost: 3, requires: { leino: 'air', min: 2 },
+  id: 'tianqingStone', name: '天青石', rarity: 'A', cost: 2, requires: { leino: 'air', min: 2 },
   description: '行动力上限 +1。',
   flavor: '每个空系灵御的梦中宝石',
   runModifiers: { maxActionPoints: 1 },
@@ -527,29 +539,27 @@ registerRelic({
 
 // ---- 本场资源 / 上限 ----
 
+// 微型AWFD（2026-09-20 稿机制更新：去掉开战 +1 魏，上限增益 1 → 3）
 registerRelic({
   id: 'microAwfd', name: '微型AWFD', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，获得 1 魏启；本场战斗魏启上限 +1。',
+  description: '战斗开始时，本场战斗魏启上限 +3。',
   flavor: '有点太小了',
-  battleModifiers: { maxMana: 1 },
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }));
-  },
+  battleModifiers: { maxMana: 3 },
 });
 
 registerRelic({
-  id: 'ancientTome', name: '古书序章', rarity: 'B', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，抽 1 张牌；本场战斗手牌上限 +1。',
+  id: 'ancientTome', name: '古书序章', rarity: 'B', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  description: '战斗开始时，抽 2 张牌；本场战斗手牌上限 +1。',
   flavor: '很少有人在意这本书的内容了',
   battleModifiers: { maxHandSize: 1 },
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'relic' }));
+    ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'relic' }));
   },
 });
 
 registerRelic({
-  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗的前 3 个回合，你的手牌上限 -1；第 4 回合开始时，获得力量 5。',
+  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  description: '战斗的前 3 个回合，你的手牌上限 -1；第 4 回合开始时，获得力量 7。',
   flavor: '没人抡得动它',
   onBattleStart(ctx) {
     applyBattleModifier(ctx, 'maxHandSize', -1);
@@ -561,7 +571,7 @@ registerRelic({
     react: (instr, c) => {
       applyBattleModifier(c, 'maxHandSize', 1); // 撤销 -1：第 4 回合起手牌上限回归
       c.kernel.submitInstruction(
-        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 5 }), instr);
+        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 7 }), instr);
     },
   }],
 });
@@ -570,25 +580,25 @@ registerRelic({
 
 registerRelic({
   id: 'clearCrystal', name: '澈晶石', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '回合开始时，若你的魏启为 0，则获得 1 魏启。',
+  description: '回合开始时，若你的魏启为 0，则获得 2 魏启。',
   flavor: '辐射...有时候还是个好东西',
   // 时间点取 PlayerTurnInstruction 的 PRE：自然恢复（+1）是它的子指令，POST 时魏启已被抬过，
-  // 再也看不到 0——要「为 0 则补 1」必须读恢复前的值。
+  // 再也看不到 0——要「为 0 则补」必须读恢复前的值。
   subscriptions: () => [{
     when: PlayerTurnInstruction,
     phase: 'pre',
     filter: (instr, c) => c.player.mana === 0,
-    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr),
+    react: (instr, c) => c.kernel.submitInstruction(new GainManaInstruction({ amount: 2 }), instr),
   }],
 });
 
 registerRelic({
   id: 'blackCrystalShard', name: '黑晶剑残片', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，获得力量 2；每回合开始时，你受 2 伤害。',
+  description: '战斗开始时，获得力量 4；每回合开始时，你受 2 伤害。',
   flavor: '值得吗？',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(
-      new AddEffectInstruction({ target: ctx.player, effectId: 'strength', stacks: 2 }));
+      new AddEffectInstruction({ target: ctx.player, effectId: 'strength', stacks: 4 }));
   },
   subscriptions: () => [{
     when: TurnStartInstruction,
@@ -601,7 +611,7 @@ registerRelic({
 
 registerRelic({
   id: 'frostBrooch', name: '霜雪胸针', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '每场战斗一次：当你的生命降至一半以下时，获得力量 3 与格挡 3。',
+  description: '每场战斗一次：当你的生命降至一半以下时，获得力量 3，防御 3 与格挡 3。',
   flavor: '特殊的胸针。到底有多特殊？',
   subscriptions: () => {
     let used = false; // 每场战斗一次（工厂每场调用一次）
@@ -614,16 +624,18 @@ registerRelic({
         used = true;
         c.kernel.submitInstruction(
           new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
+        applyBattleModifier(c, 'defense', 3); // 防御 3（2026-09-20 稿：本场战斗修正，随战斗消失）
+        // 格挡 3 = block 效果层（旧实现误发护盾池，2026-09-20 对齐文档口径）
         c.kernel.submitInstruction(
-          new GainShieldInstruction({ target: c.player, amount: 3 }), instr);
+          new AddEffectInstruction({ target: c.player, effectId: 'block', stacks: 3 }), instr);
       },
     }];
   },
 });
 
 registerRelic({
-  id: 'ranCrystal', name: '冉晶石', rarity: 'A', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '每回合开始时，获得 1 魏启，并对所有单位造成 1 点固定伤害（含你自己）。',
+  id: 'ranCrystal', name: '冉晶石', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  description: '每回合开始时，获得 1 魏启，并对所有单位（包括自身）造成 2 点固定伤害。',
   flavor: '辐射！',
   subscriptions: () => [{
     when: TurnStartInstruction,
@@ -635,7 +647,7 @@ registerRelic({
       for (const u of all) {
         if (u.isDead()) continue;
         c.kernel.submitInstruction(new DealDamageInstruction({
-          target: u, amount: 1, fixed: true, tags: ['relic'], type: 'minor',
+          target: u, amount: 2, fixed: true, tags: ['relic'], type: 'minor',
         }), instr);
       }
     },
@@ -645,14 +657,14 @@ registerRelic({
 // ---- 战斗开始：群伤 / 负面 / 免疫 ----
 
 registerRelic({
-  id: 'evansCrown', name: '埃文斯冠冕', rarity: 'S', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，对所有敌人造成 4 点固定伤害，并赋予虚弱 2。',
+  id: 'evansCrown', name: '埃文斯冠冕', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  description: '战斗开始时，对所有敌人造成 8 点固定伤害，并赋予虚弱 2。',
   flavor: '这玩意被挖出来以后主要用来人工降雨',
   onBattleStart(ctx) {
     for (const e of ctx.battleState.enemies) {
       if (e.isDead()) continue;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: ctx.player, target: e, amount: 4, fixed: true, tags: ['relic'], type: 'minor',
+        source: ctx.player, target: e, amount: 8, fixed: true, tags: ['relic'], type: 'minor',
       }));
       ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: e, effectId: 'weaken', stacks: 2 }));
@@ -661,7 +673,7 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'resonanceRound', name: '谐振弹', rarity: 'B', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  id: 'resonanceRound', name: '谐振弹', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '非 Boss 战开始时，随机赋予一名敌人晕眩 1。',
   flavor: '对机械特攻',
   onBattleStart(ctx) {
@@ -676,33 +688,28 @@ registerRelic({
 
 registerRelic({
   id: 'oldTacticalGoggles', name: '老旧的战术目镜', rarity: 'C', cost: 1,
-  // RELICS.md 写的是「易伤 1」，EFFECTS.md 只有「伤残」＝受伤 +层数，按同口径落地
+  // RELICS.md 写的是「易伤 N」，EFFECTS.md 只有「伤残」＝受伤 +层数，按同口径落地
   // （术语待用户定名；若两者应不同机制，再补一条 EFFECTS.md 定义）。
-  description: '战斗开始时，随机赋予一名敌人伤残 1（受到的伤害 +1）。',
+  description: '战斗开始时，随机赋予一名敌人伤残 4（受到的伤害 +4）。',
   flavor: 'cosplay',
   onBattleStart(ctx) {
     const alive = ctx.battleState.enemies.filter(e => !e.isDead());
     if (!alive.length) return;
     const pick = alive[ctx.battleState.rng.int(0, alive.length - 1)];
     ctx.kernel.submitInstruction(
-      new AddEffectInstruction({ target: pick, effectId: 'maim', stacks: 1 }));
+      new AddEffectInstruction({ target: pick, effectId: 'maim', stacks: 4 }));
   },
 });
 
+// 界尘（2026-09-20 稿机制更新：免疫第一次负面 → 纯净 3——「纯净」效果本体
+// （每挡一次负面赋予 -1 层）已有，直接挂层数，多次免疫更直观也更可堆叠）。
 registerRelic({
   id: 'realmDust', name: '界尘', rarity: 'A', cost: 1,
-  description: '战斗开始后，免疫第一次负面效果赋予。',
+  description: '战斗开始时，获得纯净 3。',
   flavor: '罕见的宝贝，抑制超现实力量的武器，曾经被灵御们竞相争夺',
-  subscriptions: () => {
-    let used = false;
-    return [{
-      when: AddEffectInstruction,
-      phase: 'pre',
-      // 只拦「赋予」（层数 > 0）：扣减/清除负面效果不该被免疫挡掉
-      filter: (instr, c) => !used && instr.target === c.player && instr.stacks > 0
-        && getEffectDefinition(instr.effectId)?.type === 'debuff',
-      react: (instr, c) => { used = true; c.kernel.veto(instr, 'realmDust'); },
-    }];
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(
+      new AddEffectInstruction({ target: ctx.player, effectId: 'pure', stacks: 3 }));
   },
 });
 
@@ -771,20 +778,19 @@ class PickCardsInstruction extends AwaitPlayerInputInstruction {
   }
 }
 
-// 胚胎（S·1槽）：战斗开始时从牌库中寻找 1 张自选入手。
-// RELICS.md 标注「仅在古尔帕斯的店购买」——古尔帕斯之店尚未实装，故暂按可抽取处理
-// （与其他古尔帕斯货同口径：先让它能被拿到、能被试玩）。
+// 胚胎（S·1槽）：战斗开始时从牌库中寻找 2 张自选入手（2026-09-20 稿：1 → 2）。
 registerRelic({
   id: 'embryo', name: '胚胎', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，从牌库中寻找 1 张牌，自选加入手牌。',
+  description: '战斗开始时，从牌库中寻找 2 张牌，自选加入手牌。',
   flavor: '一个空壳罢了',
   onBattleStart(ctx) {
     const pool = ctx.battleState.zones.deck;
     if (!pool.length) return;   // 空集守卫：候选为空时不发起请求（否则界面无合法应答）
     ctx.kernel.submitInstruction(new PickCardsInstruction({
       request: {
-        kind: 'selectCards', source: 'deck', min: 1, max: 1, picker: 'overlay',
-        reason: '胚胎：寻找一张牌加入手牌',
+        kind: 'selectCards', source: 'deck', min: 1, max: Math.min(2, pool.length),
+        picker: 'overlay',
+        reason: '胚胎：寻找两张牌加入手牌',
         candidates: pool.map(c => c.uniqueID),
       },
       then: (c, sel, self) => {
@@ -796,10 +802,10 @@ registerRelic({
   },
 });
 
-// 原初拟态基质（A·3槽）：每场战斗一次，复制手牌中的一张牌。
+// 原初拟态基质（A·2槽，2026-09-20 稿：3→2 槽）：每场战斗一次，复制手牌中的一张牌。
 // 手牌要等初始抽牌之后才满（onBattleStart 早于 initialDraw）→ 挂首次抽牌的 POST。
 registerRelic({
-  id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 3, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗一次：复制你手牌中的一张牌。',
   flavor: '阿瓦凡的低劣仿造品',
   onBattleStart(ctx) {
@@ -854,19 +860,19 @@ registerRelic({
   },
 });
 
-// 架势镜（C·2槽，2026-09-18 与拾荒者口袋稀有度互换）——完美轴：你的完美卡伤害 +8。
+// 架势镜（C·1槽，2026-09-20 稿：+8→+10、2→1 槽）——完美轴：你的完美卡伤害 +10。
 // 完美是战术挑战（条件不动），这件给 payoff 再加一根杠杆。完美卡的伤害指令带
 // tags:['perfect']（blockSkills.js 六个出牌点统一打标）。
 registerRelic({
-  id: 'stanceMirror', name: '架势镜', rarity: 'C', cost: 2,
-  description: '你的完美卡伤害 +8。',
+  id: 'stanceMirror', name: '架势镜', rarity: 'C', cost: 1,
+  description: '你的完美卡伤害 +10。',
   flavor: '孤芳自赏',
   subscriptions: () => [{
     when: DealDamageInstruction,
     phase: 'pre',
     filter: (instr) => instr.source?.side === 'player' && instr.tags?.includes('perfect')
       && instr.type === 'major',
-    react: (instr) => instr.setPayload('damage', instr.payload.damage + 8),
+    react: (instr) => instr.setPayload('damage', instr.payload.damage + 10),
   }],
 });
 
@@ -880,26 +886,26 @@ registerRelic({
   runModifiers: { maxHandSize: 1 },
 });
 
-// 守夜灯（B·1槽）——尾弃轴：每回合尾弃时，每弃 1 张牌获得 2 护盾。
+// 守夜灯（B·1槽）——尾弃轴：每回合尾弃时，每弃 1 张牌获得 4 护盾（2026-09-20 稿：2→4）。
 // 尾弃从纯损失变对冲收入——与容量博弈的新玩具。
 registerRelic({
   id: 'nightLantern', name: '守夜灯', rarity: 'B', cost: 1,
-  description: '每回合尾弃时，每弃 1 张牌获得 2 护盾。',
+  description: '每回合尾弃时，每弃 1 张牌获得 4 护盾。',
   flavor: '特别防风',
   subscriptions: () => [{
     when: DiscardOverflowInstruction,
     phase: 'post',
     filter: (instr) => (instr.result?.discarded ?? 0) > 0,
     react: (instr, c) => c.kernel.submitInstruction(
-      new GainShieldInstruction({ target: c.player, amount: 2 * instr.result.discarded }), instr),
+      new GainShieldInstruction({ target: c.player, amount: 4 * instr.result.discarded }), instr),
   }],
 });
 
-// 火中取栗（B·1槽）——自燃博弈轴：每当你获得燃烧时，获得等量的护盾。
+// 火中取栗（A·1槽，2026-09-20 稿升 A）——自燃博弈轴：每当你获得燃烧时，获得等量的护盾。
 // 「与燃烧博弈，收益与风险并存」的新玩具——自燃变盾，和亲和/防火形成三角。
 // 第 7 轮裁决：半额转盾 dud（自燃流全是负收益），改全额——自燃变盾才成立。
 registerRelic({
-  id: 'chestnutFromFire', name: '火中栗', rarity: 'B', cost: 1,
+  id: 'chestnutFromFire', name: '火中栗', rarity: 'A', cost: 1,
   description: '每当你获得燃烧时，获得等量的护盾。',
   flavor: '这就是你抢救出来的东西？',
   subscriptions: () => [{

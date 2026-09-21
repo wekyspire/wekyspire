@@ -35,7 +35,7 @@ import { getSkillDefinition } from '../src/core/skills/registry.js';
 import { sceneIdForFloor } from '../src/stage/scenes/rooms/index.js';
 
 import {
-  freshState, exec, render, listSessions, readSession, sessionPath, stageCn, defOf,
+  freshState, freshStateFromSave, exec, render, listSessions, readSession, sessionPath, stageCn, defOf,
 } from './playSession.mjs';
 
 const argv = process.argv.slice(2);
@@ -79,7 +79,7 @@ function createRecordingForwardPresenter(target) {
  * @param onRecord (rec) => void 指令/生命周期记录出口
  * @param onBattle (S, battle) => void 战斗装配完成、startBattle 之前
  */
-function createObservedState(seed, { onRecord, onBattle = null }) {
+function createObservedState(seed, save, { onRecord, onBattle = null }) {
   const st = { battle: null, dirty: true, seq: 0, cached: null };
 
   const makePresenter = (S) => {
@@ -139,10 +139,13 @@ function createObservedState(seed, { onRecord, onBattle = null }) {
     return createRecordingForwardPresenter(presenter);
   };
 
-  return freshState(seed, {
+  const opts = {
     makePresenter,
     onBattle: (s, battle) => { st.battle = battle; onBattle?.(s, battle); },
-  });
+  };
+  // 会话可能是 `load <存档>` 建的（带内嵌存档快照）——照原样重建，否则观战端会按
+  // "从零开局"重放，与真实会话错位（层数/卡组全不对）。
+  return save ? freshStateFromSave(save, opts) : freshState(seed, opts);
 }
 
 // ---------- 战斗生命周期记录（观战页据此建/收舞台） ----------
@@ -279,7 +282,7 @@ class SessionWatcher {
     try { sub.res.write(`data: ${JSON.stringify(rec)}\n\n`); } catch { /* 忽略已断连接 */ }
   }
 
-  _reset(seed) {
+  _reset(seed, save = null) {
     this.seed = seed;
     this.streamed = 0;
     this.live = false;
@@ -287,7 +290,7 @@ class SessionWatcher {
     this.bufBytes = 0;
     this.acts = [];
     this.error = null;
-    this.S = createObservedState(seed, {
+    this.S = createObservedState(seed, save, {
       onRecord: (rec) => this._record(rec),
       onBattle: (S) => this._record(battleBeginRecord(S)),
     });
@@ -295,7 +298,7 @@ class SessionWatcher {
 
   /** 全量追赶：此期间记录只入缓冲，之后转入直播（首建 watcher / 会话被重写时用）。 */
   _rebaseline(data) {
-    this._reset(data.seed);
+    this._reset(data.seed, data.save ?? null);
     for (let i = 0; i < data.actions.length; i++) {
       if (!this._step(data.actions[i], i, true)) break;
     }
@@ -333,7 +336,7 @@ class SessionWatcher {
     const data = readSession(this.name);
     if (!data) return false; // 会话不存在或写入中途：下个轮询再试
     if (this.S === null) {
-      this._reset(data.seed);
+      this._reset(data.seed, data.save ?? null);
       const liveFrom = Math.max(0, data.actions.length - 1);
       for (let i = 0; i < liveFrom; i++) {
         if (!this._step(data.actions[i], i, true)) { this.live = true; return true; }
@@ -388,7 +391,7 @@ class SessionWatcher {
   replay(sub) {
     const data = readSession(this.name);
     if (!data) { this._send(sub, { t: 'error', message: '会话不存在' }); return () => {}; }
-    const S = createObservedState(data.seed, {
+    const S = createObservedState(data.seed, data.save ?? null, {
       onRecord: (rec) => this._send(sub, rec),
       onBattle: (s) => this._send(sub, battleBeginRecord(s)),
     });

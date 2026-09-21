@@ -6,6 +6,7 @@
 // §2 散卡：杂技（下一张进入牌库的卡抽回手牌）。
 
 import { registerSkill } from '../skills/registry.js';
+import { enemyTarget } from './skills.js';
 import { zoneOf } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
@@ -99,6 +100,31 @@ registerSkill({
     return true;
   },
   describe: () => '自伤4，抽2',
+});
+
+// 躲闪（神兵躯壳二阶段【回忆】洗入牌库 7 张的答案牌，2026-09-20 用户设计稿）：
+// 1AP，消耗——令神兵的下次扫射段数 -2（层数标记「弹道干扰」）。
+// 终塔 Boss 的扫射是**段数伤害**：护盾/格挡按段分摊，单发大盾吃得下，段数多才要命——
+// 所以答案不在「更厚的盾」而在「按段拆」。同一张卡也是**污染**（7 张稀释牌库，
+// 打出即焚、用一次少一张）——答案自带代价，这是它与「塞废牌」型 Boss 机制的镜像。
+// Z 阶 + canSpawnAsReward:false 双保险永不入奖励池。
+registerSkill({
+  id: 'sidestep', name: '躲闪', type: 'normal', tier: 'Z',
+  keywords: ['exhaust'],
+  cost: { mana: 0, actionPoint: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
+  cardMode: 'normal', targetMode: 'enemy',
+  canSpawnAsReward: false,
+  use(sctx) {
+    const target = enemyTarget(sctx); // 无存活敌人（收尾拍）时静默落空
+    if (target) {
+      sctx.kernel.submitInstruction(new AddEffectInstruction({
+        target, effectId: 'scatterJam', stacks: 1, // 1 张 = 1 层 = 下次扫射 -2 段
+      }));
+    }
+    return true;
+  },
+  describe: () => '令神兵的下次扫射次数下降2',
 });
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----

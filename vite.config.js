@@ -1,7 +1,28 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
+
+// 调试存档服务（**dev only**）：把 tmp/saves/*.json 挂在 /debug-saves/ 下，
+// 供调试模式用 `?debug=1&save=<名>` 直接从造好的存档起跑（tools/saveForge.mjs 产出）。
+// 只在 dev server 生效（configureServer 不进构建产物）；文件名白名单，避免任意文件读取。
+// tmp/ 是 gitignore 的一次性产物目录，故存档不会进仓库。
+function debugSavesPlugin(root) {
+  return {
+    name: 'wekyspire-debug-saves',
+    configureServer(server) {
+      server.middlewares.use('/debug-saves', (req, res, next) => {
+        const m = /^\/([A-Za-z0-9_-]+)\.json$/.exec((req.url ?? '').split('?')[0]);
+        if (!m) { next(); return; }
+        const file = path.join(root, 'tmp', 'saves', `${m[1]}.json`);
+        if (!existsSync(file) || !statSync(file).isFile()) { next(); return; }
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(readFileSync(file, 'utf-8'));
+      });
+    },
+  };
+}
 
 // 版本号单一事实源 = package.json；只在构建期注入 version 字段（不内联整份 JSON）
 const pkgVersion = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
@@ -38,7 +59,7 @@ export default defineConfig(({mode}) => {
           isCustomElement: (tag) => tag.startsWith('colored-')
         }
       }
-    })],
+    }), debugSavesPlugin(root)],
     resolve: {
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue'],
       alias: {

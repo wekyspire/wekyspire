@@ -35,7 +35,7 @@ import { Picker } from '../picker/Picker.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
-import { bakeBoldText } from '../objects/textBakers.js';
+import { bakeAutoLine } from '../objects/textBakers.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
@@ -655,12 +655,15 @@ export class RoomStage {
     this._renderPanel();
   }
 
-  /** 操纵条文本烘焙：白字 + 黑描边（bakeBoldText 的 stroke 口径），字号由调用方给。 */
+  /**
+   * 操纵条文本烘焙：白字 + 黑描边（bakeBoldText 的 stroke 口径），字号由调用方给。
+   * 走 auto：含 markup 的行（遗物效果引 /card{} 之类）切富文本，纯文本行与旧观感一致。
+   */
   _dockBakeText() {
     if (this._dockBake !== undefined) return this._dockBake;
     this._dockBake = (typeof document === 'undefined')
       ? null
-      : (text, { fontPx = 16 } = {}) => bakeBoldText(text, {
+      : (text, { fontPx = 16 } = {}) => bakeAutoLine(text, {
         fontPx, tint: '#ffffff', stroke: 'rgba(0,0,0,0.95)',
       });
     return this._dockBake;

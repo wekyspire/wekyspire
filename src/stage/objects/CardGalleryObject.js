@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { CardObject } from './CardObject.js';
-import { bakeBoldText } from './textBakers.js';
+import { bakeAutoLine } from './textBakers.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2; // UI pass 固定 16:9 取景（与 PlayerStatusObject 同推导）
@@ -31,7 +31,7 @@ export class CardGalleryObject extends THREE.Group {
    *   cardWidth/cardHeight: 卡面世界尺寸（与战场同参传入）
    *   bakeFace: 卡面烘焙（与战场同一函数，卡面/热区所见即所得）
    *   picker:   拾取器（卡/背板注册进同一拾取协议；可不传=纯展示）
-   *   bakeText: 标题烘焙 (text, {fontPx, tint}) => {texture,width,height}，缺省 bakeBoldText
+   *   bakeText: 标题烘焙 (text, {fontPx, tint}) => {texture,width,height}，缺省 bakeAutoLine
    */
   constructor({ cardWidth, cardHeight, bakeFace, picker = null, bakeText = null } = {}) {
     super();
@@ -222,5 +222,5 @@ function defaultBakeText(text, { fontPx = 20, tint = '#ffffff' } = {}) {
     texture.needsUpdate = true;
     return { texture, width: Math.max(1, fontPx * text.length * 0.7), height: fontPx * 1.4 };
   }
-  return bakeBoldText(text, { fontPx, tint });
+  return bakeAutoLine(text, { fontPx, tint });
 }

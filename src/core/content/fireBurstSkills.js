@@ -816,7 +816,7 @@ function lastStandCard({ id, tier, draw }) {
       drawCards(sctx, draw);
       return true;
     },
-    describe: () => `焚毁所有/named{自由}手牌，每张回复2魏启，抽${draw}`,
+    describe: () => `焚毁所有/named{自由牌}手牌，每张回复2魏启，抽${draw}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
       return `焚毁${n}手牌：回复${n * 2}魏启，抽${draw}`;

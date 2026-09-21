@@ -45,6 +45,9 @@ export function createRunShowcase(ctx) {
       title: def.name ?? def.id,
       desc: `遗物 · ${def.rarity ?? 'C'} 级 · ${cost}`,
       effect: def.description ?? '',
+      // 设计稿 RELICS.md 里该遗物的斜体文本（铭文）——获得演出最下方一行斜体
+      // （2026-09-21 用户定；定义侧 flavor 字段与设计稿逐字同步，见 smoke-relic-flavor）
+      flavor: def.flavor ?? null,
       artKey: def.name ?? def.id,
       tint: parseInt((RARITY_COLORS[def.rarity] ?? RARITY_COLORS.C).slice(1), 16),
     });

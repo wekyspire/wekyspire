@@ -6,7 +6,7 @@
 //   │  护盾徽章，0 盾淡出）              │                     │
 //   ├ 瑞米区（概念图新稿）              ┴────────────────────┤
 //   │ 小圆头像（金环装饰）叠骑士左下；心形+当前血量挂头像内；  │
-//   │ 右侧暗灰横幅：剑+攻击数 / 盾+每回合赋盾数               │
+//   │ （攻/盾横幅已删：瑞米意图显示其行动，数值面板无必要）    │
 //   └───────────────────────────────────────────────────────┘
 // 金币数值与遗物槽已拆至页面顶端居中的 TopResourceBarObject（本栏不再显示）。
 // 骑士护盾 = 盾形徽章数字（ShieldBadgeObject）+ 蓝色盾环（均仅护盾存在时显示）。
@@ -76,11 +76,6 @@ const BASE_LAYOUT = Object.freeze({
   REMI_AVATAR_R: 2.68,   // 瑞米肖像半径（≈ 骑士 AVATAR_R × 0.59）
   REMI_RING_T: 0.32,     // 金环厚（纯装饰：瑞米血量走心形数字，不走血环）
   REMI_HEART_SIZE: 1.05, // 瑞米心形边长（随骑士心形同语言缩小）
-  REMI_BANNER_W: 9.6,    // 攻/盾横幅（概念图暗灰笔刷条：剑+数 / 盾+数）
-  REMI_BANNER_H: 3.0,
-  REMI_BANNER_X: 7.9,    // 横幅中心（相对瑞米组原点=头像中心）：头像右缘外一线
-                         // = R 2.68 + 间隙 0.4 + 半宽 4.8；负值会把横幅推出面板左界
-  REMI_BANNER_Y: -3.6,
 });
 export const PLAYER_STATUS_LAYOUT = Object.freeze(
   Object.fromEntries(Object.entries(BASE_LAYOUT).map(([k, v]) => [k, v * STATUS_SCALE])),
@@ -102,11 +97,6 @@ export const PLAYER_STATUS_POS = Object.freeze({
   y: UI_BOTTOM + EDGE_PAD + PLAYER_STATUS_LAYOUT.PANEL_H / 2,
   z: 24,
 });
-
-// 瑞米横幅展示数值（占位）：攻击 = 当前行为定义实际伤害（act 内硬编码，前端无定义级
-// 面板字段可读）；盾 = 「每回合开始为自身+主角赋盾量」口径——行为逻辑尚未实装，0 占位。
-// 后端把面板数值暴露到定义/投影后，改由调用方经 setRemi 注入，本常量即缺省值。
-const REMI_PANEL = Object.freeze({ attack: 2, shield: 0 });
 
 export class PlayerStatusObject extends THREE.Group {
   /**
@@ -208,13 +198,14 @@ export class PlayerStatusObject extends THREE.Group {
     );
     this.add(this.playerShieldBadge);
 
-    // ---- 瑞米区（概念图新稿）：小圆头像叠骑士左下 + 金环 + 心形血量 + 攻/盾横幅 ----
+    // ---- 瑞米区：小圆头像叠骑士左下 + 金环 + 心形血量 ----
     // 金环为纯装饰（瑞米血量走心形当前值，不走血环）。圆缘遮搭骑士头像/外环，必须
     // 整区盖在其上：状态层法则下 z 差即层级差（见 statusifyPanel）。注意骑士血环
     // （RingGaugeObject）内件自带 +0.62/+0.66 偏移，面板内血环实际 z=1.22/1.26，
     // 故整组抬 z=0.6（各件面板 z 1.3~1.8）才压得住血环栈；仍低于盾徽 z=2，
     // 全组最高件 1.8 也不破坏面板对外「压静息手牌、让位悬浮牌」的 z 层级契约。
     // 未出战/被打跑整区隐藏（setRemi 驱动）。
+    // 攻/盾横幅已删（2026-09-20 用户定）：瑞米意图显示其行动，数值面板无存在必要。
     this._remi = new THREE.Group();
     this._remi.name = 'remi';
     this._remi.position.set(L.REMI_AVATAR_X, L.REMI_AVATAR_Y, 0.6);
@@ -267,16 +258,6 @@ export class PlayerStatusObject extends THREE.Group {
     this._remiHpOverlay.add(this._remiHpText);
     this._remiHpSig = null;
     this._remi.add(this._remiHpOverlay);
-
-    // 攻/盾横幅：整条（暗灰底 + 剑/盾图标 + 数字）单纹理烘焙，签名去抖重烘
-    this._remiBannerMaterial = new THREE.MeshBasicMaterial({ transparent: true });
-    if (typeof document === 'undefined') this._remiBannerMaterial.color.set(0x333846); // node 退化
-    this._remiBanner = new THREE.Mesh(
-      new THREE.PlaneGeometry(L.REMI_BANNER_W, L.REMI_BANNER_H), this._remiBannerMaterial);
-    this._remiBanner.name = 'remiBanner';
-    this._remiBanner.position.set(L.REMI_BANNER_X, L.REMI_BANNER_Y, 0.7);
-    this._remi.add(this._remiBanner);
-    this._remiBannerSig = null;
     this.add(this._remi);
 
     // ---- 右列：魏启水晶徽章（单水晶+大号数字） / AP 金币徽章 ----
@@ -355,11 +336,11 @@ export class PlayerStatusObject extends THREE.Group {
   }
 
   /**
-   * 瑞米区同步：{ present, hp, attack?, shield? }。present=false（被打跑/未出战）整区隐藏；
-   * hp = 心形当前血量（概念图口径只显当前值）。attack/shield 缺省走 REMI_PANEL 展示常量
-   * （盾 = 「每回合为自身+主角赋盾量」口径，非瑞米现有盾值；行为未实装前 0 占位）。
+   * 瑞米区同步：{ present, hp }。present=false（被打跑/未出战）整区隐藏；
+   * hp = 心形当前血量（概念图口径只显当前值）。
+   * （攻/盾横幅已删：瑞米意图显示其行动，数值面板无存在必要。）
    */
-  setRemi({ present = true, hp = null, attack = REMI_PANEL.attack, shield = REMI_PANEL.shield } = {}) {
+  setRemi({ present = true, hp = null } = {}) {
     this._remi.visible = !!present;
     if (!present || hp == null) return;
     const hpSig = `${hp}`;
@@ -383,19 +364,6 @@ export class PlayerStatusObject extends THREE.Group {
       const total = L.REMI_HEART_SIZE * 1.15 + lw;
       this._remiHpOverlay.children[0].position.x = -total / 2 + L.REMI_HEART_SIZE / 2;
       this._remiHpText.position.x = total / 2 - lw / 2;
-    }
-    const bannerSig = `${attack}:${shield}`;
-    if (bannerSig !== this._remiBannerSig) {
-      this._remiBannerSig = bannerSig;
-      const L = PLAYER_STATUS_LAYOUT;
-      if (typeof document !== 'undefined') {
-        const texture = bakeRemiStatsBanner(L.REMI_BANNER_W * this._ppw, L.REMI_BANNER_H * this._ppw, attack, shield);
-        const old = this._remiBannerMaterial.map;
-        this._remiBannerMaterial.map = texture;
-        this._remiBannerMaterial.color.set(0xffffff);
-        this._remiBannerMaterial.needsUpdate = true;
-        old?.dispose?.();
-      }
     }
   }
 
@@ -434,7 +402,7 @@ export class PlayerStatusObject extends THREE.Group {
   dispose() {
     this._unitArtUnsub?.();
     for (const mesh of [this._avatarBack, this._avatar, this.playerBorder,
-      this._remiAvatarBack, this._remiAvatar, this._remiRing, this._remiBanner]) {
+      this._remiAvatarBack, this._remiAvatar, this._remiRing]) {
       mesh.geometry.dispose();
       mesh.material.map?.dispose?.();
       mesh.material.dispose();
@@ -531,116 +499,3 @@ function bakeHeart(sizePx) {  const S = 2;
 
 // 粗体血量/盾值数字烘焙见 textBakers.js（两处共用同一语言）。
 // 遗物槽烘焙随遗物行迁移至 TopResourceBarObject.js。
-
-// 瑞米攻/盾横幅烘焙：整条单纹理（暗灰圆角底 + 剑图标+攻击数 / 盾图标+赋盾数），
-// 概念图语言（白粗体数字深描边；剑灰刃红柄、盾蓝渐变——与 ShieldBadge 盾面同语）。
-// wPx/hPx 为逻辑像素（×_ppw 换算自世界尺寸），内部 S=3 超采样。
-function bakeRemiStatsBanner(wPx, hPx, attack, shield) {
-  const S = 3;
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(wPx * S);
-  canvas.height = Math.ceil(hPx * S);
-  const ctx = canvas.getContext('2d');
-  ctx.scale(S, S);
-  const W = wPx;
-  const H = hPx;
-
-  // 暗灰圆角底（概念图笔刷条的整版语言）
-  const r = H * 0.3;
-  ctx.beginPath();
-  ctx.moveTo(r, 0);
-  ctx.arcTo(W, 0, W, H, r);
-  ctx.arcTo(W, H, 0, H, r);
-  ctx.arcTo(0, H, 0, 0, r);
-  ctx.arcTo(0, 0, W, 0, r);
-  ctx.closePath();
-  ctx.fillStyle = '#333846';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  const midY = H * 0.52;
-  drawSwordGlyph(ctx, W * 0.16, midY, H * 0.72);
-  drawBannerNum(ctx, W * 0.36, midY, H * 0.6, attack);
-  drawShieldGlyph(ctx, W * 0.62, midY, H * 0.68);
-  drawBannerNum(ctx, W * 0.82, midY, H * 0.6, shield);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
-// 横幅数字：与 bakeBoldText 同语言（白粗体 + 深描边），居中锚点
-function drawBannerNum(ctx, cx, cy, fontPx, value) {
-  ctx.font = `bold ${fontPx}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(3, fontPx * 0.2);
-  ctx.strokeStyle = 'rgba(5, 7, 12, 0.85)';
-  ctx.strokeText(String(value), cx, cy);
-  ctx.fillStyle = '#f4f6fa';
-  ctx.fillText(String(value), cx, cy);
-}
-
-// 剑图标（概念图：灰刃红柄，剑尖朝上）
-function drawSwordGlyph(ctx, cx, cy, h) {
-  const bw = h * 0.16;          // 刃宽
-  const bladeTop = cy - h / 2;
-  const guardY = cy + h * 0.18; // 护手位置（刃长约七成半）
-  // 刃：尖三角 + 直段，浅灰渐变
-  const grad = ctx.createLinearGradient(cx - bw, 0, cx + bw, 0);
-  grad.addColorStop(0, '#9aa0ac');
-  grad.addColorStop(0.5, '#d7dbe2');
-  grad.addColorStop(1, '#878d99');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.moveTo(cx, bladeTop);
-  ctx.lineTo(cx + bw, bladeTop + h * 0.3);
-  ctx.lineTo(cx + bw * 0.7, guardY);
-  ctx.lineTo(cx - bw * 0.7, guardY);
-  ctx.lineTo(cx - bw, bladeTop + h * 0.3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(10, 12, 18, 0.7)';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  // 护手横杆
-  ctx.fillStyle = '#6d7380';
-  ctx.fillRect(cx - h * 0.16, guardY, h * 0.32, h * 0.09);
-  // 红柄（缠绳感：两道深色环）+ 圆首
-  const gripW = h * 0.11;
-  ctx.fillStyle = '#a03434';
-  ctx.fillRect(cx - gripW / 2, guardY + h * 0.09, gripW, h * 0.22);
-  ctx.fillStyle = 'rgba(60, 12, 12, 0.9)';
-  ctx.fillRect(cx - gripW / 2, guardY + h * 0.15, gripW, h * 0.035);
-  ctx.fillRect(cx - gripW / 2, guardY + h * 0.24, gripW, h * 0.035);
-  ctx.beginPath();
-  ctx.arc(cx, guardY + h * 0.34, gripW * 0.75, 0, Math.PI * 2);
-  ctx.fillStyle = '#d7dbe2';
-  ctx.fill();
-}
-
-// 盾图标（纹章盾形 + 蓝渐变，ShieldBadge 盾面同语缩小版）
-function drawShieldGlyph(ctx, cx, cy, h) {
-  const w = h * 0.82;
-  const x0 = cx - w / 2;
-  const y0 = cy - h / 2;
-  ctx.beginPath();
-  ctx.moveTo(x0 + w * 0.1, y0 + h * 0.1);
-  ctx.quadraticCurveTo(cx, y0 + h * 0.16, x0 + w * 0.9, y0 + h * 0.1);
-  ctx.quadraticCurveTo(x0 + w * 0.94, y0 + h * 0.55, cx, y0 + h * 0.96);
-  ctx.quadraticCurveTo(x0 + w * 0.06, y0 + h * 0.55, x0 + w * 0.1, y0 + h * 0.1);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, y0, 0, y0 + h);
-  grad.addColorStop(0, '#6fb0e8');
-  grad.addColorStop(0.6, '#4a8ed8');
-  grad.addColorStop(1, '#2f6cb4');
-  ctx.fillStyle = grad;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(10, 26, 48, 0.85)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-}

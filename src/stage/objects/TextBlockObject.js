@@ -6,7 +6,7 @@
 // 锚点：默认左对齐到 (x, y)（面板的行流布局用左锚最省心）。
 
 import * as THREE from 'three';
-import { bakeBoldText } from './textBakers.js';
+import { bakeAutoLine } from './textBakers.js';
 
 const PX_PER_WU = 10;
 
@@ -67,7 +67,9 @@ export class TextBlockObject extends THREE.Mesh {
   }
 }
 
-// 缺省烘焙：浏览器走 bakeBoldText；node 无 document 退化为纯尺寸占位（不产 canvas）。
+// 缺省烘焙：浏览器走 bakeAutoLine（**含 markup 的行走富文本**——/card{} /named{} 渲染成
+// 图标 + 特征色名称，不再原样印出 markup；纯文本行与 bakeBoldText 同观感）；
+// node 无 document 退化为纯尺寸占位（不产 canvas）。
 function defaultBakeText(text, { fontPx = 16, tint = '#ffffff' } = {}) {
   if (typeof document === 'undefined') {
     const texture = new THREE.Texture();
@@ -75,5 +77,5 @@ function defaultBakeText(text, { fontPx = 16, tint = '#ffffff' } = {}) {
     // 占位尺寸按字符数粗估，保证 headless 下布局有合理非零值
     return { texture, width: Math.max(1, fontPx * 0.7 * String(text).length), height: fontPx * 1.4 };
   }
-  return bakeBoldText(text, { fontPx, tint });
+  return bakeAutoLine(text, { fontPx, tint });
 }

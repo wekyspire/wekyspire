@@ -16,10 +16,10 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 5);
+    attackDamage(sctx, 13);
     return true;
   },
-  describe: () => '5伤害',
+  describe: () => '13伤害',
 });
 
 // 〈点射〉：黑火 H-3 战斗开始时洗入牌库。
@@ -30,11 +30,11 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 10);
+    attackDamage(sctx, 16);
     drawCards(sctx, 1, { reason: 'pointShot' });
     return true;
   },
-  describe: () => '10伤害，抽1',
+  describe: () => '16伤害，抽1',
 });
 
 // 〈压制射击〉：祈祷制度战斗开始时洗入牌库。
@@ -45,11 +45,11 @@ registerSkill({
   cardMode: 'normal', targetMode: 'none',
   canSpawnAsReward: false,
   use(sctx) {
-    for (const e of aliveEnemies(sctx.battleState)) attackDamage(sctx, 15, { target: e, tags: ['aoe'] });
+    for (const e of aliveEnemies(sctx.battleState)) attackDamage(sctx, 19, { target: e, tags: ['aoe'] });
     drawCards(sctx, 1, { reason: 'suppressionFire' });
     return true;
   },
-  describe: () => '15群伤，抽1',
+  describe: () => '19群伤，抽1',
 });
 
 // 〈贯穿射击〉：低语苍鹰 Z 战斗开始时洗入牌库。
@@ -60,9 +60,9 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 18, { pierce: true });
+    attackDamage(sctx, 23, { pierce: true });
     drawCards(sctx, 1, { reason: 'piercingShot' });
     return true;
   },
-  describe: () => '18/named{穿透}伤害，抽1',
+  describe: () => '23/named{穿透}伤害，抽1',
 });
