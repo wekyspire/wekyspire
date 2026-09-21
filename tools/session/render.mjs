@@ -112,7 +112,7 @@ function renderBattle(S, L) {
   if (pi) {
     L.push(`  → 应答：in <候选#> [卡名] …（多选就重复写，如 in 1 拳 3 盾）`);
   }
-  L.push(`→ play <手牌#> <卡名> [敌#] / dump <手牌#> <卡名> [更多# 卡名…]（付费${swapCostOf(bs)}AP弃任意张） / end`
+  L.push(`→ play <手牌#> <卡名> [敌#] / dump（付费${swapCostOf(bs)}AP弃全部手牌） / end`
     + ` / why <手牌#> / lib 看牌库`);
   const log = battleLogText(S);
   if (log.length) {

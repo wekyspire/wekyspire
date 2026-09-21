@@ -17,14 +17,14 @@ export { defOf } from './session/format.mjs';
 export { sessionDir, sessionPath, listSessions, readSession, writeSession } from './session/files.mjs';
 
 export const HELP = `建档：
-  new <种子>               从零开一局（体修初始卡组）
+  new <种子> [路线]         从零开一局（路线 = body/fire/wood/air，缺省 body 体修）
   load <存档名|路径.json> [--force]  从**存档快照**起跑（saveForge 产出 / 面板「导出存档」导出的 JSON；
                            --force = 会话已存在时重建，迭代构筑时沿用同一会话名）
                            ——层数/卡组/遗物/能力/灵脉/体修等级/房内现场原样恢复；
                            存档名解析到 tmp/saves/<名>.json，带路径或 .json 后缀则按路径读。
 动作表（按当前阶段）：
-  战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | dump <手牌#> <卡名> [更多# 卡名…]
-        （付一次费弃任意张，首次免费之后逐次+1） | end | auto
+  战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | dump（2026-09-21 D3 一键全弃：
+        付一次费弃掉全部手牌，首次免费之后逐次+1；不接受挑选参数） | end | auto
         in <候选#> <卡名>（应答输入请求） | lib（查牌库——抽牌严格按顺序，可预知未来抽到什么）
   奖励: pack <#|基础|体修|火|通用> | take <候选#> <卡名> | take <卡名> | skip | next
   房间: act rest | act remi | act upgrade <构筑#> <卡名> | act up <构筑#> <卡名> | act draw
