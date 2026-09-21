@@ -158,11 +158,21 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
     demonRollWidgets(w, bk.pendingRoll, sceneChoice);
   } else {
     if (bk.money > 0) {
-      w.push({
-        kind: 'button', id: 'bank:deposit', width: 300, size: 'sub',
-        label: `存入全部（${bk.money} 金）`,
-        action: { action: 'bankDeposit' },
-      });
+      // 存款三档（2026-09-21 用户定：33% / 66% / 全部）——按持有金币取整；钱太少时
+      // 低档位取整为 0 的按钮直接隐藏（core.bankDeposit 本就收任意金额，缺省=全部）。
+      for (const { key, frac, label } of [
+        { key: 33, frac: 0.33, label: '存入 33%' },
+        { key: 66, frac: 0.66, label: '存入 66%' },
+        { key: 'all', frac: 1, label: '存入全部' },
+      ]) {
+        const n = Math.floor(bk.money * frac);
+        if (n <= 0) continue;
+        w.push({
+          kind: 'button', id: `bank:deposit:${key}`, width: 300, size: 'sub',
+          label: `${label}（${n} 金）`,
+          action: { action: 'bankDeposit', amount: n },
+        });
+      }
     }
     if (bk.deposit > 0) {
       w.push({
