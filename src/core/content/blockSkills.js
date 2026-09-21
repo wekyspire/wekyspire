@@ -26,8 +26,8 @@ import {
   breakAllBlock,
 } from './cardKit.js';
 
-// 抱头（格挡系列 C）：+1 层格挡（block 效果，非护盾池）。2026-09-21 大调 D→C——
-// 不再是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
+// 抱头（格挡系列 C）：+1 层格挡 + 4 护盾（2026-09-21 用户定：全系补 4 点盾量——
+// 裸 1 层格挡太废）。不再是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
 registerSkill({
   id: 'duckHead', name: '抱头', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -35,15 +35,14 @@ registerSkill({
   cardMode: 'normal',
   promotesTo: 'blockGuard',
   use(sctx) {
-    sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: sctx.player, effectId: 'block', stacks: 1,
-    }));
+    gainBlock(sctx, 1);
+    gainShield(sctx, 4);
     return true;
   },
-  describe: () => '/effect{格挡}1',
+  describe: () => '/effect{格挡}1，4护盾',
 });
 
-// 格挡（格挡系列 B）：+1 层格挡，**无冷却**（升阶 = 去冷却；2026-09-21 大调 C→B、格挡 2→1）。
+// 格挡（格挡系列 B）：+1 层格挡 + 4 护盾，**无冷却**（升阶 = 去冷却；2026-09-21 大调 C→B、格挡 2→1）。
 registerSkill({
   id: 'blockGuard', name: '格挡', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -51,15 +50,14 @@ registerSkill({
   cardMode: 'normal',
   promotesTo: 'blockGuardA',
   use(sctx) {
-    sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: sctx.player, effectId: 'block', stacks: 1,
-    }));
+    gainBlock(sctx, 1);
+    gainShield(sctx, 4);
     return true;
   },
-  describe: () => '/effect{格挡}1',
+  describe: () => '/effect{格挡}1，4护盾',
 });
 
-// 格挡（格挡系列 A）：+2 层格挡，无冷却。
+// 格挡（格挡系列 A）：+2 层格挡 + 4 护盾，无冷却。
 registerSkill({
   id: 'blockGuardA', name: '格挡', type: 'normal', tier: 'A', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -67,27 +65,25 @@ registerSkill({
   cardMode: 'normal',
   promotesTo: 'perfectBlock',
   use(sctx) {
-    sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: sctx.player, effectId: 'block', stacks: 2,
-    }));
+    gainBlock(sctx, 2);
+    gainShield(sctx, 4);
     return true;
   },
-  describe: () => '/effect{格挡}2',
+  describe: () => '/effect{格挡}2，4护盾',
 });
 
-// 完美格挡（格挡系列 S）：0 费 +2 层格挡（费用栏留空 → 无任何资源消耗）。
+// 完美格挡（格挡系列 S）：0 费 +2 层格挡 + 4 护盾（费用栏留空 → 无任何资源消耗）。
 registerSkill({
   id: 'perfectBlock', name: '完美格挡', type: 'normal', tier: 'S', series: 'block',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
-    sctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: sctx.player, effectId: 'block', stacks: 2,
-    }));
+    gainBlock(sctx, 2);
+    gainShield(sctx, 4);
     return true;
   },
-  describe: () => '/effect{格挡}2',
+  describe: () => '/effect{格挡}2，4护盾',
 });
 
 // ==== 精准系列（位置要求——与刀组共享"位置"语言）================================

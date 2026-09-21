@@ -217,9 +217,9 @@ registerSkill({
 
 // ==== 自焚流的节奏与斩杀件（散卡，挂现有链）====
 
-// 急燃 B/A（0费 冷却1，2026-09-21 大调收阶）：获得 3/4 魏启，自身燃烧4
+// 急燃 C/B/A（0费 冷却1）：获得 2/3/4 魏启，自身燃烧4
 // （一次性、立刻兑现的自焚节奏件——自焚是代价也是燃料——镜燃/焰愈/灼脉都吃它。
-//  D/C 位已随等阶扁平化删除）。
+//  C 位 2026-09-21 补回：火路线起始牌组的回蓝件——随开局直发）。
 function flashBurnCard({ id, tier, mana, promotesTo }) {
   registerSkill({
     id, name: '急燃', type: 'fire', tier, series: 'fever',
@@ -236,6 +236,7 @@ function flashBurnCard({ id, tier, mana, promotesTo }) {
     battleDescribe: () => `获得${mana}魏启，/effect{燃烧}4`,
   });
 }
+flashBurnCard({ id: 'flashBurn', tier: 'C', mana: 2, promotesTo: 'flashBurnPlus' });
 flashBurnCard({ id: 'flashBurnPlus', tier: 'B', mana: 3, promotesTo: 'flashBurnGrand' });
 flashBurnCard({ id: 'flashBurnGrand', tier: 'A', mana: 4 });
 

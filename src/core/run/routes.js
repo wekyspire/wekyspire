@@ -27,8 +27,8 @@ export const ROUTES = Object.freeze({
   }),
   fire: Object.freeze({
     id: 'fire', name: '火灵脉', leino: 'fire', ability: 'fireVein', apBonus: 0,
-    // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃（回蓝，B 阶破例随起始牌组直发）
-    deck: Object.freeze(['inflame', 'fireBolt', 'flashBurnPlus', ...FILLER_FIRE]),
+    // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃 C（回蓝——C 位 2026-09-21 为此补回）
+    deck: Object.freeze(['inflame', 'fireBolt', 'flashBurn', ...FILLER_FIRE]),
     blurb: '爆发与燃烧之脉——高蓝耗、高副作用，换爆炸输出',
   }),
   wood: Object.freeze({
