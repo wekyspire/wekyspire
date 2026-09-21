@@ -1905,10 +1905,20 @@ export class BattleStage {
     }
   }
 
+  // 滚轮：转发给选卡套件（全屏选卡界面的滚动）。战斗舞台此前漏了这一手（Map/Room 都有）
+  // ——战后删卡界面画在战斗舞台 uiScene 上，App 的 activeStage() 会把滚轮喂到这里，
+  // 缺这个方法时静默落空（用户 2026-09-21 报「删卡界面滚轮无响应」的病灶）。
+  handleWheel(deltaY) {
+    return this._pickerKit.handleWheel(deltaY);
+  }
+
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
-    if (this._pickerKit.cardPicker?.opened) return; // 全屏选卡（战后删卡机会）
+    if (this._pickerKit.cardPicker?.opened) {   // 全屏选卡（战后删卡机会）：滚动条拖拽从按下开始
+      this._pickerKit.routePointerDown?.(this.picker.pick(x, y), x, y);
+      return;
+    }
     if (this._panel) return;         // 面板模态中：只走面板自己的点按（不拖牌/不瞄准）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);

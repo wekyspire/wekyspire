@@ -482,6 +482,18 @@ export function createStagePickerKit({
     },
 
     /**
+     * 按下转发（2026-09-21 滚动条拖拽）：点击语义在各舞台是「抬起」判定，而滚动条拖拽
+     * 必须从按下那拍开始——宿主 handlePointerDown 里调这里，把按下（含指针坐标）交给
+     * 开着的全屏界面（当前只有选卡界面的滚动条用；其余界面没有按下语义，返回 false）。
+     */
+    routePointerDown(hit, x, y) {
+      if (grantBusy || upgradeBusy) return true;
+      if (cardPicker?.opened) return cardPicker.onPointerDown?.(hit, x, y) ?? false;
+      if (relicPicker?.opened) return relicPicker.onPointerDown?.(hit, x, y) ?? false;
+      return false;
+    },
+
+    /**
      * 拾取器注入/重连：向**已创建**的惰性实例转播（未创建的等创建时自取）。
      * 传 null 表示摘除（detachInput）。panel 与机器拾取物不归 kit（各舞台自己管）。
      */

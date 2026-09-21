@@ -366,6 +366,7 @@ export class RoomStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     this._downHit = this._picker.pick(x, y);
+    this._pickerKit.routePointerDown?.(this._downHit, x, y);   // 滚动条拖拽从按下开始
     if (this._downHit?.id === this._continue.pickId) this._continue.setPressed(true);
   }
 
