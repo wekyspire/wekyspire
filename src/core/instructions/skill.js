@@ -124,7 +124,11 @@ export class UseSkillInstruction extends BattleInstruction {
 }
 
 // 资源消耗：费用不直接扣，而是提交资源指令——费用修正（PRE 订阅）因此对技能费用生效。
-// costOverride 覆写定义费用（嵌套出牌的费用豁免）；激活态咏唱打出恒免费（关停语义）；
+// 费用取值优先级（2026-09-21 统一覆写通道）：激活态咏唱打出恒免费（关停语义）＞
+// 指令级 costOverride（嵌套出牌豁免：万变拳/铁雨/漂浮）＞ runtime costOverride
+// （随卡旅行的费用覆写：控火术：无上「发现 0 费」等——经 createSkillRuntime/addCard 的
+// overrides 盖章，对本场战斗存活期持续生效）＞ 定义费用 def.cost。
+// 逐卡动态加价（manaCostDelta）只叠在**定义费用**上，任何覆写命中即不叠加。
 // 充能消耗不受影响。
 export class ConsumeSkillResourcesInstruction extends BattleInstruction {
   constructor({ skill, costOverride = null }, opts = {}) {
@@ -137,11 +141,13 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
       const free = freeChantToggle(def, this.skill);
-      let rawMana = free ? 0 : this.costOverride?.mana ?? def.cost?.mana ?? 0;
-      const rawAp = free ? 0 : this.costOverride?.actionPoint ?? def.cost?.actionPoint ?? 0;
+      // 覆写链：指令级（嵌套强发）＞ runtime 级（随卡旅行）＞ 定义费用
+      const ov = this.costOverride ?? this.skill.costOverride ?? null;
+      let rawMana = free ? 0 : ov?.mana ?? def.cost?.mana ?? 0;
+      const rawAp = free ? 0 : ov?.actionPoint ?? def.cost?.actionPoint ?? 0;
       // 逐卡动态费用（runtime 计数加价，如蓄热火球链）：只叠在**定义费用**上——
-      // costOverride（嵌套强发的费用豁免/覆写）与免费窗口不叠加
-      if (!free && !this.costOverride && typeof rawMana === 'number') {
+      // 任何覆写（指令级/runtime 级）与免费窗口均不叠加
+      if (!free && !ov && typeof rawMana === 'number') {
         rawMana += def.manaCostDelta?.(makeSkillCtx(ctx, this.skill)) ?? 0;
       }
       // 【X 费】cost 为 'X' = 打出时点的全部现有资源（NAMED「消耗为X」）。实付量记在

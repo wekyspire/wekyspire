@@ -167,8 +167,8 @@ function burstChantCard({ id, name, tier, base, perMana, promotesTo = null }) {
   // 咏唱开销 0 镜像：「爆炸艺术——发现同阶爆裂术并将其咏唱开销置 0」的载体。
   // **咏唱开销 = 咏唱值（chantWeight：激活后占手牌上限的权重），≠ 发动费**（用户
   // 2026-09-17 纠正：咏唱0不等于0费）——镜像保持 1 费发动，但点亮后不占手牌压力，
-  // 蓄能期白嫖一个手位。咏唱值是定义级字段、无逐卡覆写通道，镜像化整为零
-  // （控火无上的 Zero 池同范式），不进奖励池。
+  // 蓄能期白嫖一个手位。咏唱值是定义级字段、覆写通道只覆盖费用（costOverride），
+  // 不覆盖 chantWeight——镜像化整为零，不进奖励池。
   registerSkill({
     ...def, id: `${id}Unbound`,
     chantWeight: 0,

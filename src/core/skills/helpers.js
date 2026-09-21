@@ -29,14 +29,17 @@ export function canUseSkill(ctx, self) {
   if (def.canUse && !def.canUse(makeSkillCtx(ctx, self))) return false;
   const free = freeChantToggle(def, self);
   // X 费（'X'）消耗全部现有资源，X 可为 0 → 恒可打出
-  const baseMana = def.cost?.mana ?? 0;
+  // 费用覆写通道（2026-09-21）：runtime costOverride 随卡旅行（如无上发现的 0 费控火术），
+  // 命中即替代定义费用；动态加价只叠在定义费用上（与结算侧 ConsumeSkillResources 同口径）
+  const ov = self.costOverride ?? null;
+  const baseMana = ov?.mana ?? def.cost?.mana ?? 0;
   // 逐卡动态费用（runtime 计数加价，如蓄热火球链「每次打出费用+1」）：只加在
-  // 定义费用上（X 费/免费窗口不叠加），纯读 runtime，无副作用
-  const manaDelta = typeof baseMana === 'number'
+  // 定义费用上（X 费/覆写/免费窗口不叠加），纯读 runtime，无副作用
+  const manaDelta = (!ov && typeof baseMana === 'number')
     ? (def.manaCostDelta?.(makeSkillCtx(ctx, self)) ?? 0)
     : 0;
   const manaCost = baseMana === 'X' ? 'X' : baseMana + manaDelta;
-  const apCost = def.cost?.actionPoint ?? 0;
+  const apCost = ov?.actionPoint ?? def.cost?.actionPoint ?? 0;
   // 免费窗口豁免（2026-09-14）：battleState.freePlays > 0 时费用检查放行——
   // 逍遥游「下 N 张打出的牌无开销」挂在出牌侧 PRE 置 0，但若玩家资源低于牌面费用，
   // canUse 会在结算前就拒绝出牌，免费窗口对贵牌失效。计数器放 battleState

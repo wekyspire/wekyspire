@@ -153,10 +153,10 @@ heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
 // 上燃烧的被动，与现行火系语言脱节；设计稿行与进阶种子池同步移除。）
 
 // ==== 控火系列（多功能散牌）===================================================
-// 「发现 0 费控火术」的卡池：费用是定义级字段、无运行时覆写通道（ConsumeSkillResources
-// 只读 def.cost），故每张控火术注册一份 0 费镜像 def（同效果同描述，canSpawnAsReward
-// 排除出奖励池），化整为零地承载「0 开销」语义。
-const FIRE_CONTROL_ZERO_IDS = [];
+// 「发现 0 费控火术」的卡池：2026-09-21 起走 runtime 费用覆写通道（skill.costOverride，
+// 见 instructions/skill.js ConsumeSkillResourcesInstruction）——候选与入手都直接
+// 用正式 def，费用覆写盖在 runtime 上随卡旅行；此前的 0 费镜像 def（xxxZero）已拆除。
+const FIRE_CONTROL_IDS = [];
 
 // 族内晋升分岔（用户定 2026-09-13）：升级必须提升等阶，故同族按等阶跨档互升——
 // C（燃/扰）→ B 三选一（散/收/灼）；B → A 三选一（爆/聚/炼）；S（无上）阶梯外不接。
@@ -165,19 +165,13 @@ const FIRE_CONTROL_B = ['fireControlSpread', 'fireControlHarvest', 'fireControlS
 const FIRE_CONTROL_A = ['fireControlDetonate', 'fireControlGather', 'fireControlRefine'];
 
 function registerFireControlPair(id, name, tier, mana, targetMode, def, promotesTo = null) {
-  const common = {
-    name, type: 'fire', tier, series: 'fireControl',
+  registerSkill({
+    id, name, type: 'fire', tier, series: 'fireControl',
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', ...def,
-  };
-  // promotesTo 只挂主卡：Zero 镜像是「发现 0 费」的瞬态件，不进牌组也就不参与局外晋升
-  registerSkill({ ...common, id, cost: { mana, actionPoint: 0 }, targetMode, promotesTo });
-  registerSkill({
-    ...common, id: `${id}Zero`,
-    cost: { mana: 0, actionPoint: 0 }, targetMode,
-    canSpawnAsReward: false,
+    cost: { mana, actionPoint: 0 }, targetMode, promotesTo,
   });
-  FIRE_CONTROL_ZERO_IDS.push(`${id}Zero`);
+  FIRE_CONTROL_IDS.push(id);
 }
 
 // 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
@@ -386,11 +380,10 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 4, 'enemy',
   describe: () => '目标每层/effect{燃烧}和每层负面效果两两抵消',
 });
 
-// 控火术：无上 S —— 选并发现一张 0 开销控火术（2026-09-21 用户修复：此前退化为
-// 随机获得——「现有输入种类没有从卡池选卡」的权宜；现在结算期输入协议支持
-// source 'pool' 的定义池选卡，见 cardKit.requestPoolSelection）。
-// 两段式：段 0 请求从 0 费镜像池选一张（池不含无上自身——防止 0 费无上自我复制
-// 形成无终止链），段 1 应答后入手；手牌满时按 §7.3 降级入牌库。
+// 控火术：无上 S —— 选并发现一张 0 开销控火术。
+// 两段式：段 0 请求从控火池选一张（池不含无上自身——防止 0 费无上自我复制形成
+// 无终止链；池内候选经请求 overrides 盖 0 费戳，卡面所见即所得），段 1 应答后入手——
+// 0 费走 runtime 费用覆写通道（addCard overrides 盖章，随卡旅行）；手牌满时按 §7.3 降级入牌库。
 registerSkill({
   id: 'fireControlSupreme', name: '控火术：无上', type: 'fire', tier: 'S', series: 'fireControl',
   cost: { mana: 1, actionPoint: 0 },
@@ -399,14 +392,15 @@ registerSkill({
   use(sctx, stage) {
     if (stage === 0) {
       sctx.self._find = requestPoolSelection(sctx, {
-        defs: FIRE_CONTROL_ZERO_IDS,
+        defs: FIRE_CONTROL_IDS,
+        overrides: { costOverride: { mana: 0, actionPoint: 0 } },
         reason: '控火术：无上——选一张 0 费控火术入手',
       });
       return sctx.self._find ? false : true;   // 池空（理论不发生）：无事发生收尾
     }
     const [defId] = selected(sctx.self._find);
     sctx.self._find = null;
-    if (defId) addCard(sctx, defId, { toZone: 'hand' });
+    if (defId) addCard(sctx, defId, { toZone: 'hand', overrides: { costOverride: { mana: 0, actionPoint: 0 } } });
     return true;
   },
   describe: () => '/named{发现}：选一张0费控火术入手',

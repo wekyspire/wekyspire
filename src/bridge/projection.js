@@ -70,9 +70,13 @@ export function projectCardFull(battle, rt) {
     series: def.series ?? null,
     image: def.image ?? null,
     // 费用徽章同口径带上逐卡动态加价（manaCostDelta，如蓄热火球链「每次打出+1」）——
-    // 手牌 sig 含 cost，蓄热次数变化会触发卡面重烘，徽章不漂移
+    // 手牌 sig 含 cost，蓄热次数变化会触发卡面重烘，徽章不漂移。
+    // runtime costOverride（2026-09-21 覆写通道）命中时直接显示覆写费用，动态加价不叠加
+    //（与结算/canUse 同口径）。
     cost: (() => {
       const c = def.cost ?? { mana: 0, actionPoint: 0 };
+      const ov = rt.costOverride;
+      if (ov) return { mana: ov.mana ?? c.mana, actionPoint: ov.actionPoint ?? c.actionPoint };
       if (typeof c.mana !== 'number') return c;
       const d = def.manaCostDelta?.(sctx) ?? 0;
       return d ? { ...c, mana: c.mana + d } : c;
@@ -105,11 +109,12 @@ export function projectBattle(battle) {
         // 「定义池选卡」（source 'pool'，发现类）：候选不在任何区——用一次性 runtime
         // 现投影（与真实区卡同形状，前端 _openPick 走 instantiate 分支直接实例化；
         // runtime 不入任何 zone，选完即弃，不影响对账）。
+        // req.overrides（如无上的 0 费覆写）盖进一次性 runtime，候选卡面显示覆写后费用。
         let poolCards = null;
         if (req?.source === 'pool') {
           poolCards = {};
           for (const id of req.candidates ?? []) {
-            try { poolCards[id] = projectCardFull(battle, createSkillRuntime(id)); }
+            try { poolCards[id] = projectCardFull(battle, createSkillRuntime(id, req.overrides ?? {})); }
             catch { poolCards[id] = null; }   // 定义缺失等异常：跳过该候选的渲染
           }
         }
