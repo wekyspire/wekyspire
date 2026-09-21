@@ -1080,7 +1080,7 @@ registerEnemy({
 // 震慑（雪狼衍生塞牌）：消耗，无效果，1AP——纯手牌淤积（占手牌位 + 打出收 AP 税），
 // 可换牌/弃牌处理。只经 AddCard 入场，不入奖励池（同碎铁口径）。
 registerSkill({
-  id: 'shockCard', name: '震慑', type: 'normal', tier: 'D', series: 'enemyJunk',
+  id: 'shockCard', name: '震慑', type: 'normal', tier: 'C', series: 'enemyJunk',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -1144,7 +1144,7 @@ registerEnemy({
 // 粘液 = 1AP 抽1 消耗的淤积牌（比震慑温和：能打出换手，但吃 AP、占牌库）。
 // 只经 AddCard 入场，不入奖励池。
 registerSkill({
-  id: 'gooCard', name: '粘液', type: 'normal', tier: 'D', series: 'enemyJunk',
+  id: 'gooCard', name: '粘液', type: 'normal', tier: 'C', series: 'enemyJunk',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',

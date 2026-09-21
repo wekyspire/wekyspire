@@ -175,7 +175,7 @@ function registerFireControlPair(id, name, tier, mana, targetMode, def, promotes
 }
 
 // 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
-registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
+registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -196,7 +196,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 3, 'enemy', {
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
 // floor(dealt/3) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、目标为
 // 敌方的下一次**主级**伤害结算（2026-09-15 拆分：附级被动伤害不算「你发动的攻击」）。
-registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy', {
+registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy', {
   use(sctx) {
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', window: 'once',
@@ -220,7 +220,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 3, 'enemy',
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
 // 口径：多成员时按「传播」语义——每名其它成员各获得全额层数（与鬼火
 // 「其燃烧传播给所有敌人」同语言）。
-registerFireControlPair('fireControlSpread', '控火术：散', 'B', 3, 'enemy', {
+registerFireControlPair('fireControlSpread', '控火术：散', 'B', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -240,7 +240,7 @@ registerFireControlPair('fireControlSpread', '控火术：散', 'B', 3, 'enemy',
 }, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：收 B —— 消耗目标所有燃烧，每 3 层获得 1 魏启（走上限截断管线）。
-registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 3, 'enemy', {
+registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -261,7 +261,7 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 3, 'enemy'
 }, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：扰 C（2026-09 由 B 改 C）—— 消耗自身所有燃烧，每层获得 3 护盾。
-registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 3, 'none', {
+registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none', {
   use(sctx) {
     const stacks = sctx.player.getEffectStacks('burn');
     if (stacks <= 0) return true;
@@ -280,7 +280,7 @@ registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 3, 'none',
 // （口径："敌人"取敌方全体——与同系列始终用"目标"指代单体的写法相区别；
 // 群伤总量 = 消耗层数总和，tags:['aoe'] 与爆裂术同语言；选定目标恒最后命中
 // ——瑞米跟随软指定，隐藏机制不明说）。
-registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 6, 'enemy', {
+registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 4, 'enemy', {
   use(sctx) {
     const chosen = enemyTarget(sctx);
     const enemies = aliveEnemies(sctx.battleState).filter(e => e !== chosen);
@@ -308,7 +308,7 @@ registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 6, 'enemy
 
 // 控火术：聚 A —— 场上所有燃烧迁移至目标（自身/盟友/其余敌人的燃烧全部转移，
 // 目标自身原有层数保留累加）。
-registerFireControlPair('fireControlGather', '控火术：聚', 'A', 6, 'enemy', {
+registerFireControlPair('fireControlGather', '控火术：聚', 'A', 4, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -325,14 +325,14 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'A', 6, 'enemy',
   describe: () => '场上所有/effect{燃烧}迁移至目标',
 });
 
-// ==== 火墙系列（火盾 D → 火墙 C → 火壁 B：火系的即时格挡补缺）==================
+// ==== 火墙系列（火盾 C → 火墙 B → 火壁 A：火系的即时格挡补缺）==================
 // 第 8 轮裁决新增（R8-C 与第 7 轮 D 跨轮复现的死因：火系输出碾压、但卡包里**盾牌 0 张**，
 // 所有防御都长在自燃转盾上、需要提前铺，被突袭时一张即时大盾都没有）。
 // 设计口径：单卡补洞，不动燃烧框架（火系框架冻结铁律）；「有燃烧再加成」奖励铺过自燃的
-// 火系构筑。数值（用户 2026-09-13 定）：**基础低、燃烧加成高**——无燃烧只是 7 盾白板
-// （对标 D 阶盾），有燃烧才是火系专属大盾；全阶冷却 1（彻底 0 开销卡必须
-// 谨慎：B 阶 0 费盾不冷却 = 每回合白嫖盾墙）。费用跃迁放 B 阶（与练刀同一跃迁语言）。
-// 2026-09-13 改名（用户新文档：相邻等阶异名=机制质变点，B 阶加成提至 +15）。
+// 火系构筑。数值：**基础低、燃烧加成高**——无燃烧只是 6 盾白板，有燃烧才是火系专属大盾；
+// 全阶 1AP + 冷却 1（彻底 0 开销卡必须谨慎：0 费盾不冷却 = 每回合白嫖盾墙）。
+// 2026-09-21 大调（D 阶移除）：火盾 D→C（7/+7 → 6/+7）；火墙 C→B（+11→+10）；
+// 火壁 B→A（费用由 0AP 收回 1AP，+15→+13）。
 function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireWall',
@@ -349,15 +349,15 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
       + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
   });
 }
-fireWallCard({ id: 'fireWall', name: '火盾', tier: 'D', ap: 1, shield: 7, bonus: 7, promotesTo: 'fireWallPlus' });
-fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'C', ap: 1, shield: 7, bonus: 11, promotesTo: 'fireWallMaster' });
-fireWallCard({ id: 'fireWallMaster', name: '火壁', tier: 'B', ap: 0, shield: 7, bonus: 15 });
+fireWallCard({ id: 'fireWall', name: '火盾', tier: 'C', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallPlus' });
+fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 10, promotesTo: 'fireWallMaster' });
+fireWallCard({ id: 'fireWallMaster', name: '火壁', tier: 'A', ap: 1, shield: 6, bonus: 13 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，
 // 三者皆排除）；配对数 = min(燃烧层数, 负面层数总和)；多层 debuff 按效果列表顺序
 // 贪心逐层扣减（先挂者先消）。
-registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 4, 'enemy', {
+registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
