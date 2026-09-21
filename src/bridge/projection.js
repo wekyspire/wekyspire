@@ -3,6 +3,7 @@ import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
 import { makeSkillCtx, canUseSkill, chantActivationLegal, pickOverflowVictims, handLimitOf, chantCapacityOf, handBreakdown } from '../core/skills/helpers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
+import { createSkillRuntime } from '../core/state/skillRuntime.js';
 
 // 状态投影：battleState → 前端只读视图（纯数据、可序列化）。
 // 约定：runtime 上 `_` 结尾的字段是后端私有（_input/_draw/_slots…），一律不外发；
@@ -99,7 +100,21 @@ export function projectBattle(battle) {
     result: battleState.result,
     waitingPlayerInput: isWaitingPlayerInput(battle),
     pendingInput: battleState.pendingInput
-      ? { request: battleState.pendingInput.request }
+      ? (() => {
+        const req = battleState.pendingInput.request;
+        // 「定义池选卡」（source 'pool'，发现类）：候选不在任何区——用一次性 runtime
+        // 现投影（与真实区卡同形状，前端 _openPick 走 instantiate 分支直接实例化；
+        // runtime 不入任何 zone，选完即弃，不影响对账）。
+        let poolCards = null;
+        if (req?.source === 'pool') {
+          poolCards = {};
+          for (const id of req.candidates ?? []) {
+            try { poolCards[id] = projectCardFull(battle, createSkillRuntime(id)); }
+            catch { poolCards[id] = null; }   // 定义缺失等异常：跳过该候选的渲染
+          }
+        }
+        return poolCards ? { request: req, poolCards } : { request: req };
+      })()
       : null,
     swapCost: swapCostOf(battleState),
     player: {

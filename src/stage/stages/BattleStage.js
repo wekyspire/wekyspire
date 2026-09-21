@@ -1065,14 +1065,18 @@ export class BattleStage {
     });
   }
 
-  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区） */
+  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区；定义池候选回退到
+   *  pendingInput.poolCards——source 'pool' 的发现类选卡，视图由投影层用一次性
+   *  runtime 现烘，候选不在任何区） */
   _findCardProj(uniqueID) {
     const zones = this._snapshot?.zones ?? {};
     for (const list of Object.values(zones)) {
       const hit = (list ?? []).find(c => c.uniqueID === uniqueID);
       if (hit) return hit;
     }
-    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID) ?? null;
+    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID)
+      ?? this._snapshot?.pendingInput?.poolCards?.[uniqueID]
+      ?? null;
   }
 
   _layoutAndTrack() {

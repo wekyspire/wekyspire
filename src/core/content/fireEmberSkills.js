@@ -19,7 +19,7 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { applyBattleModifier } from '../run/prep.js';
 import { getEffectDefinition } from '../effects/registry.js';
-import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, resolvedDamageText } from './cardKit.js';
+import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, resolvedDamageText, requestPoolSelection, selected } from './cardKit.js';
 
 // ==== 点火系列（基石：点火 C → 烈焰 B → 炙焰 A）===============================
 // 点火 C（3伤害 + 燃烧5）已在 skills.js 定义；此处补 B/A 两阶。
@@ -386,21 +386,29 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 4, 'enemy',
   describe: () => '目标每层/effect{燃烧}和每层负面效果两两抵消',
 });
 
-// 控火术：无上 S —— 选并发现一张 0 开销控火术。
-// 近似说明：现有输入种类只有 selectHandCard/selectDeckCard，无「从卡池三选一」；
-// 退化为随机获得一张 0 费控火术镜像入手（走种子 rng，可复现）。发现池不含无上自身
-// （防止 0 费无上自我复制形成无终止链）。手牌满时按 §7.3 降级入牌库。
+// 控火术：无上 S —— 选并发现一张 0 开销控火术（2026-09-21 用户修复：此前退化为
+// 随机获得——「现有输入种类没有从卡池选卡」的权宜；现在结算期输入协议支持
+// source 'pool' 的定义池选卡，见 cardKit.requestPoolSelection）。
+// 两段式：段 0 请求从 0 费镜像池选一张（池不含无上自身——防止 0 费无上自我复制
+// 形成无终止链），段 1 应答后入手；手牌满时按 §7.3 降级入牌库。
 registerSkill({
   id: 'fireControlSupreme', name: '控火术：无上', type: 'fire', tier: 'S', series: 'fireControl',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  use(sctx) {
-    const defId = FIRE_CONTROL_ZERO_IDS[
-      sctx.battleState.rng.int(0, FIRE_CONTROL_ZERO_IDS.length - 1)];
-    addCard(sctx, defId, { toZone: 'hand' });
+  use(sctx, stage) {
+    if (stage === 0) {
+      sctx.self._find = requestPoolSelection(sctx, {
+        defs: FIRE_CONTROL_ZERO_IDS,
+        reason: '控火术：无上——选一张 0 费控火术入手',
+      });
+      return sctx.self._find ? false : true;   // 池空（理论不发生）：无事发生收尾
+    }
+    const [defId] = selected(sctx.self._find);
+    sctx.self._find = null;
+    if (defId) addCard(sctx, defId, { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}一张0费控火术',
-  battleDescribe: () => '/named{发现}一张0费控火术',
+  describe: () => '/named{发现}：选一张0费控火术入手',
+  battleDescribe: () => '/named{发现}：选一张0费控火术入手',
 });
