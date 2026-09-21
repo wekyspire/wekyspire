@@ -99,17 +99,12 @@ export function packOf(def) {
 // 卡包等级：体修看隐藏的 player.bodyLevel（跳过进阶 +1），灵脉看 leino[维度]
 export function packLevel(run, packId) {
   if (packId === 'body') {
-    // 体修门禁 = max(体修等阶, 最高灵脉等级)（2026-09-13 第 10 轮裁决定调）：
-    // 此前只看隐藏的 bodyLevel——不跳进阶的玩家永远 0 级，太极/相刀等体修 B/A
-    // 对灵脉路线**永久不可见**（R9 三连 0 观测 + R10 六组再 0 观测的实锤病灶）。
-    // 灵脉修为反哺体术：跳进阶仍是体修内容的快车道（+3 血/删卡机会不稀释），
-    // 但灵脉大成者不该被体修高阶卡硬锁在门外。
-    // 反哺至多到 2 级（A 可见，2026-09-21 用户修复）：S 级体修卡是「跳过进阶」
-    // 路线的独占回报，纯灵脉修为不得直出——此前纯火局（fire=3）能在训练抓牌里
-    // 抽出虚形拳/摘星手等体修 S 卡，正是反哺没封顶漏出去的（第 10 轮裁定的诉求
-    // 本只是 B/A 可见性，S 不该跟着放开）。
-    const bestLeino = Math.max(0, ...Object.values(run?.player?.leino ?? {}));
-    return Math.max(run?.player?.bodyLevel ?? 0, Math.min(bestLeino, 2));
+    // 体修门禁 = 隐藏的 player.bodyLevel，**只看它**（2026-09-21 用户定：体修单立等级
+    // 后灵脉不再反哺——撤销 2026-09-13 第 10 轮的 max(体修, 最高灵脉) 反哺口径；
+    // 灵脉玩家想看体修高阶卡，走「跳过进阶」这条体修快车道）。沿革：反哺当年是为
+    // 「不跳进阶的玩家永远 0 级、体修 B/A 对灵脉路线永久不可见」开的口子，同日
+    // 曾先修过「反哺至多到 A、S 体修独占」，如今整条撤销、回归单立。
+    return run?.player?.bodyLevel ?? 0;
   }
   return run?.player?.leino?.[packId] ?? 0;
 }
