@@ -1286,7 +1286,7 @@ registerEnemy({
     unit._grip = (unit._grip ?? 0) + 1;
     actx.kernel.submitInstruction(new AddEffectInstruction({
       target: player, effectId: 'constrict', stacks: 1 }));
-    player.maxHandSize = Math.max(2, (player.maxHandSize ?? 6) - 1);
+    player.maxHandSize = Math.max(2, (player.maxHandSize ?? 5) - 1);
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 3 + unit.getStat('attack') }));

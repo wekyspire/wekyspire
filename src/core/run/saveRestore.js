@@ -27,7 +27,7 @@ export function restoreRunFromSave(run, save) {
   p.trainingCount = sp.trainingCount;
   p.ascensionCount = sp.ascensionCount;
   p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
-  p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
+  p.maxHandSize = sp.maxHandSize ?? 5; // 旧档（咏唱槽时代）无此字段：兜底默认
   // 旧档无 baseStats：以当前值为基准兜底；随后 refreshRunModifiers 会把遗物修正重算回去
   p.baseStats = sp.baseStats ? { ...sp.baseStats } : {
     maxHp: p.maxHp, maxMana: p.maxMana, maxActionPoints: p.maxActionPoints,

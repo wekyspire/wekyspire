@@ -15,8 +15,8 @@
 import { draftRelics } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
 import {
-  availablePacks, PACKS, rollSkillChoices, maxRewardTier, TIER_RANK,
-  packCardPool, packLevel, packTierTable, tierCapOfLevel,
+  availablePacks, PACKS, rollSkillChoices,
+  packCardPool, rewardTierTable, rewardTierCap,
 } from '../rewards.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 
@@ -56,10 +56,10 @@ function rollDiscount(run) {
 
 const priceIn = (range, rng) => range[0] + Math.floor(rng.next() * (range[1] - range[0] + 1));
 
-/** 卡包价格随门禁上浮（20–35）：解锁到 B +5、到 A +10，再加 0–5 随机。 */
+/** 卡包价格（20–25 区间随机）：2026-09-21 大调后开包分布与体系等级脱钩（来源制），
+ * 价格不再随门禁上浮。 */
 function packPrice(run, packId, rng) {
-  const rank = TIER_RANK[maxRewardTier(run, packId)] ?? 0;
-  return SHOP_PRICE.packBase + Math.min(10, rank * 5) + Math.floor(rng.next() * 6);
+  return SHOP_PRICE.packBase + Math.floor(rng.next() * 6);
 }
 
 /** 造一件货（价格已按折扣折过）。 */
@@ -161,20 +161,19 @@ export const canBuy = (run, index) => {
 };
 
 // 等阶显示序（概率分布行用）
-const TIER_ORDER = ['D', 'C', 'B', 'A', 'S'];
+const TIER_ORDER = ['C', 'B', 'A', 'S'];
 
 /**
  * 货品的 hover 说明（纯文本 tooltip 载荷 { title, body }）。
  * 恢复药剂/苹果这类没有卡面的东西 **必须**有说明，否则玩家不知道买了会怎样（用户定 2026-09-12）；
- * 卡包则给出「随机 3 张 + 概率分布」——分布按等级分布表（PACK_TIER_TABLE）在池内实际
- * 存在的等阶上归一，与开包时的真实抽取同源，不写死数字。
+ * 卡包则给出「随机 3 张 + 概率分布」——商店卡包走 normal 通道分布（REWARD_TIER_TABLE）
+ * 在池内实际存在的等阶上归一，与开包时的真实抽取同源，不写死数字。
  */
 export function shopItemTip(run, it) {
   if (!it) return null;
   if (it.kind === 'pack' && it.packId) {
-    const lv = packLevel(run, it.packId);
-    const pool = packCardPool(run, it.packId, tierCapOfLevel(lv));
-    const table = packTierTable(lv);
+    const pool = packCardPool(run, it.packId, rewardTierCap('normal'));
+    const table = rewardTierTable('normal');
     const tiers = TIER_ORDER.filter(t => pool.some(d => d.tier === t) && (table[t] ?? 0) > 0);
     const total = tiers.reduce((s, t) => s + table[t], 0);
     const dist = tiers
@@ -182,7 +181,7 @@ export function shopItemTip(run, it) {
       .join(' ｜ ');
     return {
       title: it.name ?? '卡包',
-      body: `包含随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡牌，按当前灵脉等级出卡`
+      body: `包含随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡牌`
         + (dist ? `。概率分布：${dist}。` : '。') + '买到即开，可三选一（也可以放弃）。',
     };
   }

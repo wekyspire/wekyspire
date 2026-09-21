@@ -1,7 +1,7 @@
 import { createSkillRuntime } from '../../state/skillRuntime.js';
 import {
-  availablePacks, packCardPool, commonPool, packLevel, packTierTable, tierCapOfLevel,
-  rollTiered, TIER_RANK,
+  availablePacks, packCardPool, commonPool, rewardTierTable, rewardTierCap,
+  rollTiered,
 } from '../rewards.js';
 import { draftRelic, draftRelics } from '../../relics/draft.js';
 import { grantRelic } from '../prep.js';
@@ -14,11 +14,14 @@ import { getEffectDefinition } from '../../effects/registry.js';
 //
 // 本文件是**引擎**（headless 与前端共用同一份）。前端目前是占位 UI（能用即可，视觉效果后做）。
 //
-// 已实装（第一批）
-//   · 涨价：单价 5 起，每次 roll 后 +6
+// 已实装
+//   · 赠抽：每次进老虎机房免费赠送 2 抽（2026-09-21 D5；免费抽照常计入粉碎/安慰奖/保底爬坡）
+//   · 涨价：单价 5 起，每次付费 roll 后 +3（2026-09-21 D4-a 自 +6 降——粉碎换金兼负删卡主渠道）
 //   · 保底：小奖 18% 起、每次未中 +7%；大奖 2% 起、每次未中 +2%；中奖后各自重置；
 //           小奖+大奖 > 100% 时小奖实际按 (100% − 大奖) 计
-//   · 奖项：小奖/大奖两档（档内权重见 MINOR/MAJOR），**产出总是可以放弃**
+//   · 奖项：小奖/大奖两档（档内权重见 MINOR/MAJOR），**产出总是可以放弃**；
+//           卡类奖项按 2026-09-21 D4 新等阶制重述：分布与体系等级脱钩——小奖走 normal
+//           通道（C/B），大奖走 elite 通道（B/A）；S 永不入包（「老虎机不出 S」天然一致）
 //   · 吞噬：累积 roll 每满 7 次可粉碎一件遗物或一张卡换金币（价值表按稀有度/等阶）；
 //           S 级嚼不动（吐出来）；诅咒卡 → 下次 roll 免费
 //   · 故事模式：第 5/11 次小奖必为瑞米的苹果；拿到两个后第 2 次大奖必为金苹果
@@ -28,11 +31,12 @@ import { getEffectDefinition } from '../../effects/registry.js';
 
 export const SLOT = Object.freeze({
   baseCost: 5,        // 首次单价
-  costStep: 6,        // 每次 roll 后涨价
+  costStep: 3,        // 每次付费 roll 后涨价（2026-09-21 自 6 降为 3）
+  freeRollsPerVisit: 2, // 每次进房赠送的免费抽数（D5）
   minorBase: 0.18, minorStep: 0.07,   // 小奖概率（未中即累加，中奖重置）
   majorBase: 0.02, majorStep: 0.02,   // 大奖概率
   devourEvery: 7,     // 每累积这么多次 roll 可吞噬一次
-  giftAfterPulls: 2,  // 拉过这么多次杆仍颗粒无收 → 离房时送安慰奖（可乐/鸡腿二选一）
+  giftAfterPulls: 4,  // 同一层拉过这么多次杆仍颗粒无收 → 离房时送安慰奖（D5 自 2 收紧到 4）
   // 档内权重（文档只给了档概率，档内分配是调参位）
   minorWeights: {
     moneySmall: 20, heal: 16, pack: 16, highCard: 10,
@@ -46,7 +50,7 @@ export const SLOT = Object.freeze({
   // 吞噬价值表（gold 区间，rng 定值）
   devourValue: {
     relic: { C: [20, 30], B: [40, 50], A: [60, 70] },   // S 嚼不动
-    card: { D: [0, 5], C: [3, 10], B: [10, 20], A: [20, 30] },
+    card: { C: [3, 10], B: [10, 20], A: [20, 30] },     // D 阶已移除（2026-09-21 D4）
   },
   moneySmall: [10, 30],
   moneyBig: [200, 400],
@@ -84,10 +88,11 @@ const rarOf = (def) => (['C', 'B', 'A', 'S'].includes(def?.rarity) ? def.rarity 
 
 // ---- 机器状态 ----
 
-/** 本次遇到的老虎机瞬态（进房时初始化；离房丢弃）。 */
+/** 本次遇到的老虎机瞬态（进房时初始化；离房丢弃）。每次进房赠送 2 次免费抽（D5）。 */
 function slotState(run) {
   if (!run.slot || run.slot.floor !== run.floor) {
     run.slot = { floor: run.floor, rolls: 0, sinceMinor: 0, sinceMajor: 0 };
+    run.slotFreeRolls = (run.slotFreeRolls ?? 0) + SLOT.freeRollsPerVisit;
   }
   return run.slot;
 }
@@ -104,7 +109,8 @@ export const devourReady = (run) => devourProgress(run) >= SLOT.devourEvery;
 export const slotPending = (run) => run.slotPending ?? null;
 
 /**
- * 离房安慰奖是否欠着：**本房拉过 2 次以上杆且一次都没中奖**、且还没领过。
+ * 离房安慰奖是否欠着：**同一层内累计拉杆 ≥ SLOT.giftAfterPulls 次且全程零获奖**、且还没领过
+ * （2026-09-21 D5 收紧：原为 ≥2 次）。免费抽也计入拉杆数（默认按「是」，见 REBALANCE D5 待钉）。
  * 只在"要离开房间"时兑现（见 takeSlotGift）——所以它是 leave 流程的一环，不是 pending 产出。
  */
 export function slotGiftDue(run) {
@@ -171,7 +177,8 @@ function rollUpgradeCopy(run) {
   return target ?? null;
 }
 
-/** 小奖：返回 payload（null = 该奖项当前无货，换一个再掷）。 */
+/** 小奖：返回 payload（null = 该奖项当前无货，换一个再掷）。
+ *  卡类奖项走 normal 通道（C/B，与体系等级脱钩——2026-09-21 D4 新等阶制）。 */
 function makeMinor(run, kind) {
   switch (kind) {
     case 'moneySmall': return { money: intIn(SLOT.moneySmall, run.rng) };
@@ -180,27 +187,23 @@ function makeMinor(run, kind) {
       const packs = availablePacks(run).map(p => p.id);
       if (!packs.length) return null;
       const packId = packs[Math.floor(run.rng.next() * packs.length)];
-      const lv = packLevel(run, packId);
-      const defs = rollTiered(run, packCardPool(run, packId, tierCapOfLevel(lv)), 3, lv);
+      const defs = rollTiered(run, packCardPool(run, packId, rewardTierCap('normal')), 3, rewardTierTable('normal'));
       return defs.length ? { packId, ...choiceOf(defs) } : null;
     }
     case 'highCard': {
-      // 「任意一张高级卡」：当前解锁最高两档的池（高等级下 A/S 都算「高级」）
+      // 「任意一张高级卡」：新等阶制下 = B 阶（normal 通道的顶档；A 直出是大奖/精英的特权）
       const packs = availablePacks(run).map(p => p.id);
-      const lv = packs.reduce((m, p) => Math.max(m, packLevel(run, p)), 0);
-      const cap = tierCapOfLevel(lv);
-      const pool = packs.flatMap(p => packCardPool(run, p, cap))
-        .filter(d => (TIER_RANK[d.tier] ?? 0) >= TIER_RANK[cap] - 1);
+      const high = packs.flatMap(p => packCardPool(run, p, 'B'))
+        .filter(d => d.tier === 'B');
+      const pool = high.length ? high : packs.flatMap(p => packCardPool(run, p, 'B'));
       if (!pool.length) return null;
-      return choiceOf(rollTiered(run, pool, 3, lv));
+      return choiceOf(rollTiered(run, pool, 3, rewardTierTable('normal')));
     }
     case 'commonCard': {
-      // 「低于目前等级的低级灰卡」：通用池里取低于当前上限的
-      const lv = packLevel(run, 'body');
-      const capTier = tierCapOfLevel(lv);
-      const pool = commonPool(run, capTier).filter(d => (TIER_RANK[d.tier] ?? 0) < (TIER_RANK[capTier] ?? 0));
-      const use = pool.length ? pool : commonPool(run, capTier);
-      return use.length ? choiceOf(rollTiered(run, use, 3, lv)) : null;
+      // 「低级灰卡」：新等阶制下 = C 阶通用卡
+      const low = commonPool(run, 'B').filter(d => d.tier === 'C');
+      const use = low.length ? low : commonPool(run, 'B');
+      return use.length ? choiceOf(rollTiered(run, use, 3, rewardTierTable('normal'))) : null;
     }
     case 'upgradeCopy': {
       const target = rollUpgradeCopy(run);
@@ -218,33 +221,31 @@ function makeMinor(run, kind) {
   }
 }
 
-/** 大奖：返回 payload。卡包类奖项走「大奖等级钳制」：分布至少按 3 级表
- *  （10/20/30/30/10——含直出白名单 S 的 10%），纯奖励事件总能开出高阶卡。 */
+/** 大奖：返回 payload。卡包类奖项走 elite 通道（B/A 分布——A 直出挂在大奖/精英/Boss，
+ *  见 2026-09-21 D4-d）；S 永不入包（D4-c），「超越」由 A 档承担。 */
 function makeMajor(run, kind) {
   switch (kind) {
     case 'moneyBig': return { money: intIn(SLOT.moneyBig, run.rng) };
     case 'fullRestore': return { fullRestore: true };
     case 'packAbove': {
-      // 「齐平甚至超越灵脉等级」：等级 +1 且至少 3 级分布（大奖通道）
+      // 「齐平甚至超越灵脉等级」→ 新等阶制：elite 通道卡包（B/A 分布）
       const packs = availablePacks(run).map(p => p.id);
       const packId = packs[Math.floor(run.rng.next() * packs.length)];
-      const lv = Math.max(packLevel(run, packId) + 1, 3);
-      const pool = packCardPool(run, packId, tierCapOfLevel(lv));
-      return pool.length ? { packId, ...choiceOf(rollTiered(run, pool, 3, lv)) } : null;
+      const pool = packCardPool(run, packId, rewardTierCap('elite'));
+      return pool.length ? { packId, ...choiceOf(rollTiered(run, pool, 3, rewardTierTable('elite'))) } : null;
     }
     case 'packSix': {
-      // 「平时无法获取的 6 选 1 任意系高级卡包」：跨全部已解锁卡包取高阶（A/S 池）
+      // 「平时无法获取的 6 选 1 任意系高级卡包」：跨全部已解锁卡包取 A 阶
+      //（普通卡包上限 B、S 永不入包——A 档正是「平时无法获取」的那档）
       const packs = availablePacks(run).map(p => p.id);
-      const lv = Math.max(packs.reduce((m, p) => Math.max(m, packLevel(run, p)), 0), 3);
-      const pool = packs.flatMap(p => packCardPool(run, p, tierCapOfLevel(lv)))
-        .filter(d => (TIER_RANK[d.tier] ?? 0) >= TIER_RANK.A);
-      const use = pool.length ? pool : packs.flatMap(p => packCardPool(run, p, tierCapOfLevel(lv)));
-      return use.length ? { six: true, ...choiceOf(rollTiered(run, use, 6, lv)) } : null;
+      const top = packs.flatMap(p => packCardPool(run, p, 'A'))
+        .filter(d => d.tier === 'A');
+      const use = top.length ? top : packs.flatMap(p => packCardPool(run, p, 'A'));
+      return use.length ? { six: true, ...choiceOf(rollTiered(run, use, 6, rewardTierTable('elite'))) } : null;
     }
     case 'commonPack': {
-      const lv = packLevel(run, 'body');
-      const pool = commonPool(run, tierCapOfLevel(lv));
-      return pool.length ? { common: true, ...choiceOf(rollTiered(run, pool, 3, lv)) } : null;
+      const pool = commonPool(run, rewardTierCap('elite'));
+      return pool.length ? { common: true, ...choiceOf(rollTiered(run, pool, 3, rewardTierTable('elite'))) } : null;
     }
     case 'freeUpgrade': {
       // 没有可升级的卡就不发这个奖（否则会挂起一个无法收尾的选卡请求 = 卡死）
@@ -464,7 +465,7 @@ export function devourableRelics(run) {
 export function devourableCards(run) {
   return (run.player.deck ?? []).map((rt, index) => {
     const def = getSkillDefinition(rt.defId);
-    return { index, uniqueID: rt.uniqueID, defId: rt.defId, name: def?.name ?? rt.defId, tier: def?.tier ?? 'D' };
+    return { index, uniqueID: rt.uniqueID, defId: rt.defId, name: def?.name ?? rt.defId, tier: def?.tier ?? 'C' };
   }).filter(c => SLOT.devourValue.card[c.tier]);
 }
 
@@ -493,7 +494,7 @@ export function devourSlot(run, { kind, relicId = null, uniqueID = null } = {}) 
     const idx = run.player.deck.findIndex(rt => rt.uniqueID === uniqueID);
     if (idx < 0) throw new Error(`牌库里没有这张卡：${uniqueID}`);
     const def = getSkillDefinition(run.player.deck[idx].defId);
-    gold = roll(SLOT.devourValue.card[def?.tier ?? 'D']);
+    gold = roll(SLOT.devourValue.card[def?.tier ?? 'C']);
     if (def?.curse) { freeRoll = true; } // 诅咒卡：老虎机吃得满意
     run.player.deck.splice(idx, 1);
   } else {

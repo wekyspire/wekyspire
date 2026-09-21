@@ -132,12 +132,12 @@ export function finishBattle(run, verdict, battle = null) {
       if (relicId) grantRelic(run, relicId);
     }
     run.gameStage = 'reward';
-    // 奖励事件通道（用户 2026-09-14 定）：Boss/精英战后是「纯奖励事件」——卡包分布按
-    // 等级下限钳制（Boss → A：至少按 3 级表，含 10% 直出 S；精英 → B：2 级表），
-    // 保证这些场景总能开出高阶卡。encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
+    // 来源通道（2026-09-21 D4-d，等阶门禁从等级制改为来源制）：精英/Boss 战后走
+    // elite 通道（B/A 分布——A 直出只挂在这里）；普通战后走 normal（C/B，上限 B）。
+    // encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
     const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
     const isEliteFight = (run.encounter ?? []).some(e => getEnemyDefinition(defIdOf(e))?.difficulty?.elite);
-    spawnRewards(run, { minTier: isBossFloor(run.floor) ? 'A' : (isEliteFight ? 'B' : null) });
+    spawnRewards(run, { channel: (isBossFloor(run.floor) || isEliteFight) ? 'elite' : 'normal' });
   } else {
     run.gameStage = 'end';
     run.result = 'defeat';
