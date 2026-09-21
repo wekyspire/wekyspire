@@ -47,6 +47,7 @@ export function snapshotRun(run) {
     debugMode: run.debugMode ?? false, // 调试局标记：读档走 debug 槽语义（恢复房/阶段，见 runController）
     floor: run.floor,
     totalFloors: run.totalFloors,
+    route: run.route ?? 'body',   // 开局路线（2026-09-21 D2）；旧档无此字段 → 体修口径
     gameStage: run.gameStage,
     result: run.result,
     // 房型房间的现场（只有调试局会读它：真实档语义 = 检查点，恒在 prep 恢复；

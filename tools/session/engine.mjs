@@ -65,10 +65,10 @@ import {
  * @param opts.onBattle (S, battle) => void —— 战斗装配完成、startBattle 之前回调
  *        （直播端在此发 battle:begin 并挂流式 tap）
  */
-export function freshState(seed, { makePresenter = null, onBattle = null } = {}) {
-  const run = createRun({ seed, player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }) });
-  run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
-  run.player.abilities = [];
+export function freshState(seed, { makePresenter = null, onBattle = null, route = 'body' } = {}) {
+  const run = createRun({ seed, player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }), route });
+  // 路线授予已铺好起始牌组与体系能力（2026-09-21 D2）；route=null 的裸开局回退旧体修牌组
+  if (!run.player.deck.length) run.player.deck = BODY_STARTER_DECK.map(id => createSkillRuntime(id));
   const S = { run, battle: null, lastOutcome: '', presenter: null, onBattle };
   S.presenter = makePresenter ? makePresenter(S) : createRecordingPresenter();
   return S;
@@ -84,6 +84,7 @@ export function freshStateFromSave(save, { makePresenter = null, onBattle = null
   const run = createRun({
     seed: save.seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
+    route: null,   // 读档恢复现场（restore 负责 route 字段），不重复结算路线授予
   });
   run.debugMode = save.debugMode ?? false; // 存档自身的调试标记：dev 动作/存档槽语义与浏览器一致
   run.storyMode = save.storyMode ?? false;

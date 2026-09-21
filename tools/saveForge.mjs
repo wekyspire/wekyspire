@@ -131,7 +131,9 @@ function buildFromSpec(spec) {
   const run = createRun({
     seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
+    route: null,   // 造档按 spec 逐字段摆现场，不吃路线授予（spec.route 仅落到存档字段）
   });
+  run.route = spec.route ?? 'body';
   run.storyMode = !!spec.storyMode;
   run.debugMode = true;   // 造出来的档一律是调试档（读档恢复 stage/room 现场）
 

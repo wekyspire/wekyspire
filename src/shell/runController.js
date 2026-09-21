@@ -32,7 +32,6 @@ import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { createRunShowcase } from './runShowcase.js';
 import { createRunMachines } from './runMachines.js';
 import { DisplayModel } from '../bridge/displayModel.js';
-import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
 import { createCutscenePlayer } from './overlay/cutscenePlayer.js';
 import { createSceneWipe } from './overlay/sceneWipe.js';
@@ -46,8 +45,7 @@ export { RunEvents };
 // run 本体经 reactive() 暴露（状态只存 id 与数字，代理安全）；
 // 每次阶段迁移经 runBus 发事件——阶段 8 的 cutscene/剧情在此订阅注入。
 
-// 默认起始卡组 = 体修基础卡组（BODY_CULTIVATION_CARDS §0：从拳/盾生长的三系种子）
-const DEFAULT_DECK = [...BODY_STARTER_DECK];
+// 起始卡组由开局路线授予（core/run/routes.js，2026-09-21 D2）——不再有全局默认卡组。
 
 // PCG 房型开关：true = 战斗房间按章节/Boss 走配方层（scenes/rooms），
 // false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
@@ -84,7 +82,7 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
   });
 }
 
-export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false } = {}) {
+export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false, route = 'body' } = {}) {
   const runBus = mitt();
   // run 级共享演出队列（S2）：battle / room / tower / cutscene 指令在同一队列定序，
   // 跨层演出链（终局动画 → 幕间黑幕 → 塔楼抵达）由此成为可表达的结构
@@ -99,10 +97,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
+    route: save ? null : route,   // 读档恢复现场，不重复结算路线授予
   }));
   if (save) restoreRunFromSave(run, save); // 恢复原语在 core（headless 工具共用同一份）
   else {
-    run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
     // 调试模式（开始界面勾选 / ?debug=1，仅新开局生效）：直发 GM 卡「一拳」（999 群伤固有）
     // ——爬塔流程验证工具；读档不吃（调试局的卡组本身已含此卡，随存档走）
     if (isDebug) run.player.deck.push(createSkillRuntime('onePunch'));

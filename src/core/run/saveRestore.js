@@ -12,6 +12,8 @@ export function restoreRunFromSave(run, save) {
   // rng 状态直存直取：回放 advanceFloor 不消耗 run.rng（遭遇用派生种子），
   // 若不恢复状态，读档后的房间派发会偏离活局时间线（旧档无此字段=维持回放语义）
   if (save.rngState != null) run.rng.setState(save.rngState);
+  if (save.route) run.route = save.route; // 开局路线（旧档无此字段 → 'body'：旧局全是体修开局）
+  else run.route = run.route ?? 'body';
   const p = run.player;
   const sp = save.player;
   p.hp = sp.hp; p.maxHp = sp.maxHp;

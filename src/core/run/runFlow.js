@@ -11,6 +11,7 @@ import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
 import { activeRelics, grantRelic } from './prep.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { draftRelic } from '../relics/draft.js';
+import { applyRoute } from './routes.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -66,10 +67,14 @@ export { generateEncounter }; // 转发保旧引用兼容（直接 import 自 ru
 // ---- 建局 ----
 // profile：跨局持久内容（故事模式接缝 §6.4；单次游玩传空，行为不变）。
 // totalFloors：塔高覆盖位（故事模式可变更塔结构；测试用）。
-export function createRun({ seed = 1, profile = null, player = null, totalFloors = TOTAL_FLOORS } = {}) {
+// route：开局路线（2026-09-21 D2，routes.js）——体系专属起始牌组 + 灵脉 1 级 +
+// 体系能力（体修 = AP+1，无灵脉赠送）。route = null 显式跳过（裸 fixture/调试用）；
+// 读档不经这里（restoreRunFromSave 恢复现场）。
+export function createRun({ seed = 1, profile = null, player = null, totalFloors = TOTAL_FLOORS, route = 'body' } = {}) {
   const run = createRunState({ seed, profile, player });
   run.totalFloors = totalFloors;
   run.encounter = generateEncounter(run);
+  if (route) applyRoute(run, route);
   return run;
 }
 
