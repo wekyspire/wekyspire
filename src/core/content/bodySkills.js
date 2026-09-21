@@ -796,14 +796,16 @@ registerSkill({
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
-// 拳（C）×5 + 盾（C）×5 + 肾上腺素 ×1 + 情况不对 ×1（2026-09-21 用户定：
-// 12 张加厚；抱头移出起始卡组——格挡链首强化后回奖励池正常流通）。
+// 拳（C）×5 + 盾（C）×4 + 抱头（C）×1 + 肾上腺素 ×1 + 情况不对 ×1
+// （2026-09-21 用户定：12 张加厚；抱头经「全系 +4 护盾」强化后换回一张盾归位——
+// 格挡链首重新成为体修开局种子）。
 // 肾上腺素做节奏阀、情况不对做鬼抽保险。
 // 斩已于 2026-09-18 移出初始卡组：改由开局遗物「大剑」（默认装备、0 槽）在每场
 // 战斗开始时洗入 1 张斩——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([
   'punch', 'punch', 'punch', 'punch', 'punch',
-  'guard', 'guard', 'guard', 'guard', 'guard',
+  'guard', 'guard', 'guard', 'guard',
+  'duckHead',
   'adrenaline',
   'badOmen',
 ]);
