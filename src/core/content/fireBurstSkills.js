@@ -157,7 +157,11 @@ function burstChantCard({ id, name, tier, base, perMana, promotesTo = null }) {
       },
     },
     describe: () => `每消耗1魏启，伤害+${perMana}。/named{终止}：${base}群伤`,
-    battleDescribe: () => `每消耗1魏启，伤害+${perMana}；/named{终止}：${base}群伤`,
+    // 战斗卡面动态预览（2026-09-21 用户定）：终止群伤 = 基伤 + 已蓄 burstPool
+    // （skillRuntime 计数，激活期每耗 1 魏启 +perMana），再吃攻击面板/威力与目标防御的
+    // 预览干跑——与 onDisable 的 aoeDamage 同算式；未激活时 burstPool 为空，与 describe 同值。
+    battleDescribe: (sctx) => `每消耗1魏启，伤害+${perMana}；/named{终止}：`
+      + `${resolvedDamageText(sctx, base + (sctx.self?.burstPool ?? 0)).replace('伤害', '')}群伤`,
   };
   registerSkill({ ...def, id, promotesTo });
   // 咏唱开销 0 镜像：「爆炸艺术——发现同阶爆裂术并将其咏唱开销置 0」的载体。
