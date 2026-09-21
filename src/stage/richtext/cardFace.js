@@ -16,19 +16,12 @@
 
 import * as THREE from 'three';
 import { parseRichText } from './parser.js';
-import { layoutRichText, DEFAULT_COLOR_TABLE } from './layout.js';
+import { layoutRichText } from './layout.js';
 import { drawPlacements, createCanvasMeasurer, defaultDrawIcon } from './texture.js';
-import { allEffects } from '../../core/effects/registry.js';
 import { getNamedTerm } from '../../core/skills/namedTerms.js';
-import { getSkillDefinition, hasSkill } from '../../core/skills/registry.js';
-
-// 效果外观解析（markup 里是效果显示名，按 name 反查定义；Stage→Core 查表是允许方向）。
-// 特征色：def.color 是 richtext 颜色名，经颜色表转 css；未注册/无色 → null（回落正文色）
-function effectLook(name) {
-  const def = allEffects().find(d => d.name === name);
-  const color = def?.color ? (DEFAULT_COLOR_TABLE[def.color] ?? def.color) : null;
-  return { color, icon: def?.icon ?? null };
-}
+import {
+  TIER_COLORS, cardTheme, seriesGlyph, effectLook, namedLook, cardLook,
+} from './appearance.js';
 
 // 牌面图标绘制器：effect 有 emoji 图标画 emoji（与效果行/tooltip 同一视觉语言），
 // 无图标或非 effect 回落通用徽章
@@ -49,43 +42,6 @@ function drawCardIcon(ctx, { iconType, name, x, y, size }) {
 
 export const CARD_FACE_SIZE = Object.freeze({ width: 200, height: 270 });
 
-const TIER_COLORS = Object.freeze({
-  D: '#8a8f9d', C: '#5aa2e8', B: '#a06ee8', A: '#e8b34c', S: '#e85a5a', Z: '#4a3a5a',
-});
-// 系列类型色（旧主题源，现作 series 未归口时的回落）；未知回落体修灰
-const TYPE_COLORS = Object.freeze({
-  normal: '#8a8f9d',
-  fire: '#e85a5a',
-  wood: '#4aa56e',
-  water: '#5aa2e8',
-  earth: '#b8894a',
-  thunder: '#e8d34c',
-  light: '#e8e0c0',
-  dark: '#7a5aa8',
-});
-// 灵脉主题色（大体系）：卡面整体色调（底板/边框/斜纹/分隔线/页脚）跟随灵脉——
-// 一眼区分系别（用户定）。等阶只保留在等阶标记上（徽章色 + 边框粗细/箔金），
-// 不再左右整卡色相。
-const LEINO_THEME = Object.freeze({
-  body: '#8a8f9d',  // 体修：岩灰
-  fire: '#e85a5a',  // 火
-  wood: '#4aa56e',  // 木
-  air: '#7ad0e8',   // 风
-});
-// 通用灰卡（pack='common'）：偏白主题色——与所有体系卡拉开距离，且区分方式同样是主题色
-const COMMON_THEME = '#e8e6e0';
-// series（技能家族）→ 灵脉归口：新体系内容落定后在此补一行；未归口回落类型色
-const SERIES_LEINO = Object.freeze({
-  fist: 'body', block: 'body', blade: 'body', punch: 'body', focusChant: 'body',
-  inflame: 'fire',
-});
-/** 卡面主题色：通用灰卡（偏白）优先 → 灵脉（series 归口）→ 类型色回落 → 体修灰。 */
-export function cardTheme(card) {
-  if (card?.pack === 'common') return COMMON_THEME;
-  const leino = SERIES_LEINO[card?.series];
-  if (leino && LEINO_THEME[leino]) return LEINO_THEME[leino];
-  return TYPE_COLORS[card?.type] ?? TYPE_COLORS.normal;
-}
 // 等阶 style：边框宽度 + 是否内描边（B 及以上）
 const TIER_FRAME = Object.freeze({
   D: { width: 2.5, inner: false },
@@ -119,16 +75,8 @@ export function mixHex(a, b, t) {
   return rgbToHex(ca.map((v, i) => v + (cb[i] - v) * t));
 }
 
-// 系列字形（无卡图时的占位水印字）；新系列登记定义后在此补一行
-const SERIES_GLYPHS = Object.freeze({
-  fist: '拳', blade: '刃', block: '盾',
-  fire: '炎', wood: '木', water: '水', earth: '岳', thunder: '雷', light: '光', dark: '冥',
-});
-
-/** 系列字形占位字：series 优先，回落 type，未知回落「技」。 */
-export function seriesGlyph(card) {
-  return SERIES_GLYPHS[card?.series] ?? SERIES_GLYPHS[card?.type] ?? '技';
-}
+// 色表与主题色（cardTheme/seriesGlyph/外观解析）统一在 appearance.js，本模块只消费
+export { TIER_COLORS, cardTheme, seriesGlyph } from './appearance.js';
 
 /** #rrggbb → rgba(r,g,b,a) */
 function hexA(hex, a) {
@@ -182,15 +130,11 @@ export function bakeCardFace(card, options = {}) {
     }),
     // named 术语特征色（斩/衰败等，core/skills/namedTerms.js 供表）
     resolveNamed: options.resolveNamed ?? ((name) => {
-      const term = getNamedTerm(name);
-      return term?.color ? { color: term.color } : {};
+      const { color } = namedLook(name);
+      return color ? { color } : {};
     }),
-    // card 引用：id 反查显示名（印出的名字永远等于定义名）+ 卡面主题色作特征色；
-    // 未注册 id 不抛错——回落印原文 id（注册表 get 对未知 id 抛异常，先 has 兜底）
-    resolveCard: options.resolveCard ?? ((cardId) => {
-      const def = hasSkill(cardId) ? getSkillDefinition(cardId) : null;
-      return def ? { name: def.name, color: cardTheme(def) } : {};
-    }),
+    // card 引用：id 反查显示名（印出的名字永远等于定义名）+ 卡面主题色作特征色
+    resolveCard: options.resolveCard ?? cardLook,
   });
   drawPlacements(ctx, layout.placements, { style: BODY_FONT, drawIcon, offsetX: 12, offsetY: bodyTop });
   const hitRegions = layout.hitRegions.map(r => ({

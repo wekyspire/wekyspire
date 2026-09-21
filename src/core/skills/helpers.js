@@ -106,11 +106,15 @@ export function handWeightOf(card) {
   return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 1) : 1;
 }
 
-// 共鸣石折扣（battleState.chantWeightDiscount，遗物挂载、随战斗消失）：
-// 激活咏唱的权重 -discount（最低 1）。一切加权口径（抽牌/尾弃/激活合法性）统一走这里。
+// 共鸣石折扣（battleState.chantWeightDiscount，遗物挂载、随战斗消失）。
+// 口径（用户 2026-09-20 重申）：折扣只作用于**权重 > 1** 的激活咏唱——每点 -1，
+// 且下限为 1；权重 1 的咏唱纹丝不动（绝不砍到 0）；权重 0（2026-09-20 稿：
+// 牢大 A / 混元 A 的显式零容量压力）折扣同样不作用、也不会被钳回 1。
+// 一切加权口径（抽牌/尾弃/激活合法性）统一走这里。
 function chantWeightOf(card, battleState) {
   const w = handWeightOf(card);
   if (!card.isActivated) return w;
+  if (w <= 0) return 0;
   const discount = battleState?.chantWeightDiscount ?? 0;
   return discount > 0 ? Math.max(1, w - discount) : w;
 }
@@ -147,8 +151,11 @@ export function pickOverflowVictims(hand, ctx) {
 // 兜住不占手牌，近似式会把它误算成占用、对无咏唱构筑多收 1（双重囤牌税，批次 13 勘定）。
 // 卡在手牌中调用（结算中的卡已离手，先放回再算）。
 export function chantActivationLegal(ctx, self, def = getSkillDefinition(self.defId)) {
+  const base = def.chantWeight ?? 1;
   const discount = ctx.battleState?.chantWeightDiscount ?? 0;
-  const weight = Math.max(1, (def.chantWeight ?? 1) - discount);
+  // 折扣地板与 chantWeightOf 同口径：只削权重 >1（下限 1，权重 1 不砍到 0）；
+  // 权重 0 = 显式零容量压力，折扣不作用。
+  const weight = base <= 0 ? 0 : Math.max(1, base - discount);
   const { normal, chantW } = handBreakdown(ctx.battleState);
   return (normal - 1) + Math.max(0, chantW + weight - chantCapacityOf(ctx)) <= handLimitOf(ctx);
 }

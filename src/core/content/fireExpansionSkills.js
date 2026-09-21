@@ -127,10 +127,10 @@ registerSkill({
   battleDescribe: () => '/named{洗入6}/card{emberMote}',
 });
 
-// 不灭火种 B：1魏 冷却1——洗入 6 张余烬并抽 3（潜伏量的即时兑现分岔：抽上来的
-// 立刻能打，代价是没有速生的全部到手）。
+// 不灭火种 A（2026-09-20 稿 B→A）：1魏 冷却1——洗入 6 张余烬并抽 3（潜伏量的
+// 即时兑现分岔：抽上来的立刻能打，代价是没有速生的全部到手）。
 registerSkill({
-  id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'B', series: 'ember',
+  id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',

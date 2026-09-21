@@ -46,15 +46,21 @@ export function handIndex(sctx) {
   return handIndexAtPlay(sctx);
 }
 
-// 【后手】：此牌作为手牌最后的非激活卡打出（2026-09-13 用户拍板「唯一非激活卡」口径）——
-// 激活咏唱是早已打出过的引擎，驻手不算「还没出的牌」，不挡后手；未激活咏唱仍是真实手牌，
-// 照样卡位。邻牌等物理位置语义不吃这套豁免（飞刀献祭照旧，用户划线）。
-// 结算中自身已离手（pending），其余手牌全为激活咏唱（或空）即成立；
-// 预览态（canUse/battleDescribe）自身仍在手，除自身外全为激活咏唱即成立。
+// 【后手】：此牌作为手牌中**最后一张自由牌**打出（2026-09-21 用户定，NAMED.md 同步）——
+// 判据是位置：打出那一刻其右侧没有别的自由牌（右侧全是激活咏唱不挡；左侧的牌不管）。
+// 旧口径（2026-09-13「唯一非激活卡」）要求清空整只手，过苛；新口径只需把它打在最右。
+// 邻牌等物理位置语义不受影响（飞刀献祭照旧，用户划线）。
+// 结算中自身已离手（pending），handIndexAtPlay 捕获打出时手位——其后的牌
+// （slice(i)）即当时位于它右侧的牌；预览态（canUse/battleDescribe）自身仍在手，
+// 右侧 = slice(selfIndex + 1)。
 export function isLastHandCardAtPlay(sctx) {
   const hand = sctx.battleState.zones.hand;
-  if (sctx.handIndexAtPlay != null) return hand.every(c => c.isActivated);
-  return hand.every(c => c.isActivated || c.uniqueID === sctx.self.uniqueID);
+  if (sctx.handIndexAtPlay != null) {
+    return hand.slice(sctx.handIndexAtPlay).every(c => c.isActivated);
+  }
+  const selfIndex = hand.findIndex(c => c.uniqueID === sctx.self.uniqueID);
+  if (selfIndex < 0) return false;
+  return hand.slice(selfIndex + 1).every(c => c.isActivated);
 }
 
 // 【先手】：此牌作为本回合打出的第一张牌（敏捷连击系判据，2026-09-13 用户拍板）——
@@ -76,9 +82,12 @@ export function isFirstPlayThisTurn(sctx) {
 // 不吃任何加成、不触发任何响应——见 instructions/combat.js 两原语注释）。
 export function dealDamage(sctx, amount, {
   target = null, pierce = false, fixed = false, tags = [], source = sctx.player, type = 'major',
+  skillDefId = null, // 日志归属覆写：结算时点卡已变身的场合（斩链打出拍先变身后结算），
+                    // 用打出时点的 defId 归属，避免「[削金斩] 30伤」这类名数错位
 } = {}) {
   const instr = new DealDamageInstruction({
     source, target: target ?? enemyTarget(sctx), amount, pierce, fixed, tags, skill: sctx.self, type,
+    skillDefId,
   });
   sctx.kernel.submitInstruction(instr);
   return instr;
@@ -92,12 +101,25 @@ export function attackDamage(sctx, base, opts = {}) {
 // 群伤原语：对每个存活敌人一枚 aoe 标记攻击（面板/power 逐枚结算）；返回命中敌人数。
 // 体修扫腿/刀组横劈共用（火系 aoeDamage 是「选定敌人最后命中」的局部特化，不复用）。
 export function aoeAttack(sctx, base) {
-  let struck = 0;
+  return aoeAttackProbes(sctx, base).length;
+}
+
+// 群伤的逐段探针版：需要「每命中 1 敌人」逐敌结算的效果（扫腿格挡、横劈碎铁）
+// 用它拿各段伤害指令，下一结算阶段经 damageLandedCount 读命中数。
+export function aoeAttackProbes(sctx, base) {
+  const probes = [];
   for (const e of aliveEnemies(sctx.battleState)) {
-    attackDamage(sctx, base, { target: e, tags: ['aoe'] });
-    struck++;
+    probes.push(attackDamage(sctx, base, { target: e, tags: ['aoe'] }));
   }
-  return struck;
+  return probes;
+}
+
+// 【命中】统一谓词（2026-09-21 用户定，与 NAMED 词条一致）：**造成伤害即命中**——
+// 打在护盾上（shieldAbsorbed）也算；被闪避/被 veto/目标已死（全零）算未命中。
+// 接受一组伤害指令（探针），返回命中的段数。多段伤害天然能触发多次。
+export function damageLandedCount(probes) {
+  return (probes ?? []).filter(
+    p => (p?.result?.dealt ?? 0) > 0 || (p?.result?.shieldAbsorbed ?? 0) > 0).length;
 }
 
 /**
@@ -184,18 +206,6 @@ export function triggerChant(sctx) {
   sctx.kernel.submitInstruction(new ChantTriggerInstruction());
 }
 
-// 【命中】：结算期探针。提交伤害后用 beginHitProbe 记录，下一阶段 hitLanded() 读
-// 实际生命值伤害（被 veto/被闪避/打空 → false；按 A4 取消无联动）。
-export function beginHitProbe(sctx, instr) {
-  sctx.self._hitProbe = instr;
-  return instr;
-}
-
-export function hitLanded(sctx) {
-  const probe = sctx.self._hitProbe;
-  sctx.self._hitProbe = null;
-  return (probe?.result?.dealt ?? 0) > 0;
-}
 
 // ---- 结算期选牌 ----
 

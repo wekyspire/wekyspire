@@ -6,7 +6,7 @@ import { GainManaInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction } from '../instructions/turn.js';
 
 // 应用后伤害文本（content 攻击卡通用）：基数 + 攻击面板 + power，再经
-// previewDamage 干跑吃 PRE 修正（下次伤害翻倍、目标格挡减半等）。
+// previewDamage 干跑吃 PRE 修正（下次伤害翻倍、目标格挡免伤等）。
 // 无存活敌人（战斗收尾）时退化为裸面板值。
 export function resolvedDamageText(sctx, base) {
   const amount = base + sctx.player.getStat('attack') + sctx.self.power;
@@ -33,6 +33,7 @@ registerSkill({
       source: sctx.player,
       target: enemyTarget(sctx),
       amount: 6 + sctx.player.getStat('attack') + sctx.self.power,
+      skill: sctx.self, // 伤害出处（日志归属；cardKit.dealDamage 缺省带，手搓路径要显式）
     }));
     return true;
   },
@@ -78,6 +79,7 @@ registerSkill({
     sctx.kernel.submitInstruction(new DealDamageInstruction({
       source: sctx.player, target,
       amount: 3 + sctx.player.getStat('attack') + sctx.self.power,
+      skill: sctx.self,
     }));
     sctx.kernel.submitInstruction(new AddEffectInstruction({
       target, effectId: 'burn', stacks: 5,

@@ -70,8 +70,10 @@ registerAbility({
 // 机制备忘：
 //   · 伤害修饰全走 PRE 流水线（payload.damage），多重能力按 priority 降序叠加；
 //   · 「同线精英/大师同时持有」取强者（吞日者覆盖吹火者、武帝覆盖武者），filter 里排他；
-//   · 武者/武帝的 priority 必须低于格挡 block 的 PRE（默认 0）——它们在 block 减半之后
-//     再折算（净减免 = 1/2 × 1/2 = 75%、1/2 × 1/5 = 90%），顺序反了数值会错。
+//   · 武者/武帝的 priority 必须低于格挡 block 的 PRE（默认 0）——它们在 block 的基础
+//     免伤（×0.75）之后**再折算**（净减免 = 1 − 0.75 × 0.8 = 40%、1 − 0.75 × 0.6 = 55%），
+//     顺序反了数值会错。2026-09-20：block 由减半降到免 25% 后，这两级能力成为格挡免伤
+//     的主要来源（基础层只留轻掩），乘子（0.8 / 0.6）不变即可落在 40% / 55%。
 // ============================================================================
 
 // ---- 火·爆炎（§1.4）----
@@ -131,17 +133,18 @@ registerAbility({
 
 // ---- 火·叠炎（§2.3）----
 
-// 精英 **灼脉**：你的每层燃烧为你提供全伤害 +1（PRE 加算，玩火自焚的正收益面）。
+// 精英 **灼脉**：你的每 2 层燃烧为你提供全伤害 +1（PRE 加算，玩火自焚的正收益面）。
+// 数值沿革：每层+1（初版）→ 2026-09-19 夜拟削弱但未落盘 → 每 2 层+1（2026-09-20 用户定）。
 registerAbility({
   id: 'scorchVein', name: '灼脉', grade: 'elite',
-  description: '你的每层燃烧为你提供全伤害 +1。',
+  description: '你的每 2 层燃烧为你提供全伤害 +1。',
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'pre',
     filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
       && instr.type === 'major'
-      && ctx.player.getEffectStacks('burn') > 0,
+      && ctx.player.getEffectStacks('burn') > 1,
     react: (instr, ctx) => instr.setPayload('damage',
-      instr.payload.damage + ctx.player.getEffectStacks('burn')),
+      instr.payload.damage + Math.floor(ctx.player.getEffectStacks('burn') / 2)),
   }],
 });
 
@@ -263,18 +266,21 @@ registerAbility({
   }],
 });
 
-// 大师 **以攻为守**（前置：挡拆）：你每造成一次伤害（实际落血），获得 1 护盾。
+// 大师 **以攻为守**（前置：挡拆）：你每**单次**造成 16 点以上伤害，获得 4 护盾
+// （2026-09-20 用户裁决：多段小额不再产盾——「攻防同源」拆成「重击换盾」，
+// 5 伤瞬击一类即抛牌彻底退出盾源，只有大单发能把伤害变现成防御）。
 // source 空（燃烧/反伤）与被全挡（dealt 0）不计——只奖**主级**真实命中
-// （2026-09-15 拆分定调：附级被动伤害不算「攻」）。
+// （2026-09-15 拆分定调：附级被动伤害不算「攻」）。读数口径沿用「实际落血」
+// （同肾上腺素注射器的「单次造成超过 15 点伤害」，所见即所算）。
 registerAbility({
   id: 'shieldedOffense', name: '以攻为守', grade: 'master', requires: 'parryFist',
-  description: '你每造成一次伤害，获得 1 护盾。',
+  description: '你每单次造成 16 点以上伤害，获得 4 护盾。',
   subscriptions: () => [{
     when: DealDamageInstruction, phase: 'post',
     filter: (instr, ctx) => instr.source === ctx.player
-      && instr.type === 'major' && (instr.result?.dealt ?? 0) > 0,
+      && instr.type === 'major' && (instr.result?.dealt ?? 0) >= 16,
     react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
+      new GainShieldInstruction({ target: ctx.player, amount: 4 }), instr),
   }],
 });
 
@@ -311,15 +317,18 @@ registerAbility({
 // ---- 体修·拆（§3.4）----
 
 
-// 精英 **武者**：格挡 ≥3 层时，受攻击总减免 60%（block 减半后 ×0.8；持有武帝时被覆盖）。
+// 精英 **武者**：格挡 ≥3 层时，受攻击总减免 40%（block ×0.75 之后 ×0.8；持有武帝时被覆盖）。
 // priority -10 = 必须在 block 的 PRE（默认 0）之后跑。2026-09-16 用户定：75%→60%。
+// 2026-09-20 用户定：block 基础免伤 50%→25% 后，本能力净额随之落到 40%（乘子不变）。
 // 2026-09-15 拆分：随 block 同迁**应用原语 PRE**（同为格挡响应链，只认主级）。
+// 2026-09-21 用户裁决修复：本能力是**格挡免伤链**的一段，穿透伤害整链不参与
+// （EFFECTS.md：穿透不吃防御/护盾/格挡）——filter 排除 basePierce。
 registerAbility({
   id: 'warrior', name: '武者', grade: 'elite',
-  description: '格挡不少于 3 层时，受攻击减免 60% 伤害。',
+  description: '格挡不少于 3 层时，受攻击减免 40% 伤害。',
   subscriptions: () => [{
     when: ApplyDamageInstruction, phase: 'pre', priority: -10,
-    filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
+    filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed && !instr.basePierce
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 3
       && !ctx.player.abilities.includes('warEmperor'),
@@ -327,14 +336,14 @@ registerAbility({
   }],
 });
 
-// 大师 **武帝**：格挡 ≥5 层时，受攻击总减免 70%（block 减半后 ×0.6；武者的上位）。
-// 2026-09-16 用户定：90%→70%。
+// 大师 **武帝**：格挡 ≥5 层时，受攻击总减免 55%（block ×0.75 之后 ×0.6；武者的上位）。
+// 2026-09-16 用户定：90%→70%。2026-09-20 用户定：block 基础免伤 50%→25% 后落到 55%。
 registerAbility({
   id: 'warEmperor', requires: 'warrior', name: '武帝', grade: 'master',
-  description: '格挡不少于 5 层时，受攻击减免 70% 伤害。',
+  description: '格挡不少于 5 层时，受攻击减免 55% 伤害。',
   subscriptions: () => [{
     when: ApplyDamageInstruction, phase: 'pre', priority: -10,
-    filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed
+    filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed && !instr.basePierce
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 5,
     react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 0.6)),

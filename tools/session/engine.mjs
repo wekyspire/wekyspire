@@ -30,6 +30,7 @@ import { swapCostOf } from '../../src/core/state/battleState.js';
 import {
   createRun, enterBattle, createRunBattle, finishBattle, completeRewards, completeRoom, isBossFloor,
 } from '../../src/core/run/runFlow.js';
+import { restoreRunFromSave } from '../../src/core/run/saveRestore.js';
 import { chooseSkillReward, chooseRewardPack, PACKS } from '../../src/core/run/rewards.js';
 import {
   chooseAscension, chooseAscensionAbility, chooseSeedCards, rerollSeedOffering,
@@ -73,6 +74,25 @@ export function freshState(seed, { makePresenter = null, onBattle = null } = {})
   return S;
 }
 
+/**
+ * 从**存档快照**建局（debug 造档 / 面板导出的档通用）：与浏览器读档共用同一份 core 原语
+ * （core/run/saveRestore.js），所以 headless 里看到的层数/卡组/遗物/能力/房内现场
+ * 与 `?debug=1&save=<名>` 起跑完全一致。
+ * @param save snapshotRun 形状的存档对象（tools/saveForge.mjs 产出 / 面板「导出存档」）
+ */
+export function freshStateFromSave(save, { makePresenter = null, onBattle = null } = {}) {
+  const run = createRun({
+    seed: save.seed,
+    player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
+  });
+  run.debugMode = save.debugMode ?? false; // 存档自身的调试标记：dev 动作/存档槽语义与浏览器一致
+  run.storyMode = save.storyMode ?? false;
+  restoreRunFromSave(run, save);
+  const S = { run, battle: null, lastOutcome: '', presenter: null, onBattle, saveName: save.name ?? null };
+  S.presenter = makePresenter ? makePresenter(S) : createRecordingPresenter();
+  return S;
+}
+
 /** 战斗动作直达：prep 阶段先自动开战（免 fight），再幂等装配本场战斗。 */
 export function ensureBattle(S) {
   if (S.run.gameStage === 'prep') enterBattle(S.run);
@@ -99,7 +119,8 @@ export function battleLogText(S, tail = 10) {
       case 'damage': {
         if ((p.dealt ?? 0) <= 0 && (p.shieldAbsorbed ?? 0) <= 0 && (p.defenseBlocked ?? 0) <= 0) break;
         const src = p.source?.name ?? (p.pierce ? '持续伤害' : '环境'); // 燃烧/中毒等无来源穿透伤
-        lines.push(`${src} → ${p.target?.name}: ${p.dealt}伤`
+        const via = p.skillDefId ? `[${getSkillDefinition(p.skillDefId)?.name ?? p.skillDefId}]` : '';
+        lines.push(`${src}${via} → ${p.target?.name}: ${p.dealt}伤`
           + `${p.pierce ? '（穿透）' : ''}${p.shieldAbsorbed ? `（盾挡${p.shieldAbsorbed}）` : ''}`
           + `${p.defenseBlocked ? `（防挡${p.defenseBlocked}）` : ''}`);
         break;

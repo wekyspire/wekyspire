@@ -54,8 +54,11 @@ registerEffect({
 });
 
 // 格挡（体修·拆体系核心资源，BODY_CULTIVATION_CARDS §0）：buff 层数，≠ 护盾池。
-// 受主级攻击时伤害减半（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
+// 受主级攻击时伤害减免 25%（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
 // 原型验证：test/posture.test.js（此处为正式落地，语义不变）。
+// 2026-09-20 用户裁决：减半 → 免 25%——格挡的基础免伤过强（体修拆体系靠层数堆免伤
+// 几乎等于无敌），基础层只留「轻掩」；真正的免伤深度交给**武者（40%）/ 武帝（55%）**
+// 两级能力抬高（见 abilities.js），即"想靠格挡活命必须投入能力位"。
 // 两原语拆分（2026-09-15）：挂**应用原语 PRE**（受击侧最后修正）+ 只认主级——
 // 附级伤害（荆棘反伤/精通抽卡伤/tick）是格挡「响应」不该拦的东西，吃盾但不动格挡层。
 registerEffect({
@@ -63,31 +66,36 @@ registerEffect({
   type: 'buff',
   stacking: 'count',
   name: '格挡',
-  description: '受到攻击时伤害减半，然后层数减少 1。',
+  description: '受到攻击时伤害减少 25%，然后层数减少 1。',
   icon: '🛡️',
   color: 'blue',
   subscriptions: (unit) => [{
     when: ApplyDamageInstruction,
     phase: 'pre',
-    // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错
-    filter: (instr) => instr.target === unit && !instr.fixed && instr.type === 'major',
+    // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错。
+    // 穿透伤害整条格挡响应链都不参与（2026-09-21 用户裁决修复）：EFFECTS.md 的伤害分类
+    // 写死「穿透伤害：防御、护盾、格挡都不减免」——此前 filter 漏了 pierce，穿透被照常
+    // 减 25%/40%/55%，还白吃一层格挡。读 basePierce（应用原语的穿透在受击侧不可改，
+    // 见 instructions/combat.js 的 modifiablePayload 注释）。
+    filter: (instr) => instr.target === unit && !instr.fixed && !instr.basePierce
+      && instr.type === 'major',
     react: (instr, ctx) => {
-      instr.setPayload('damage', Math.floor(instr.payload.damage / 2));
+      instr.setPayload('damage', Math.floor(instr.payload.damage * 0.75));
       ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: unit, effectId: 'block', stacks: -1 }), instr);
     },
   }],
 });
 
-// 忍耐（拆组合机制词，2026-09-14）：每受到一次伤害获得层数相当的格挡；自己的回合
-// 开始时整体消散（不逐层衰减——它是「撑过这个敌方回合」的一次性姿态）。触发口径：
-// 实际造成生命值伤害的结算（被护盾全额吸收不算）；自伤付费（selfcost 标记，狂拳类
-// 失去生命是代价不是挨打）不算；**主级**伤害才算（2026-09-15 两原语拆分定调：附级
-// 反伤/抽卡伤是格挡响应不该触发的东西）。
+// 忍耐（拆组合机制词，2026-09-14；2026-09-20 稿去掉「自己回合开始时消失」——
+// 常驻受击引擎，不再是一次性姿态）：每受到一次伤害获得层数相当的格挡。
+// 触发口径：实际造成生命值伤害的结算（被护盾全额吸收不算）；自伤付费（selfcost
+// 标记，狂拳类失去生命是代价不是挨打）不算；**主级**伤害才算（2026-09-15 两原语
+// 拆分定调：附级反伤/抽卡伤是格挡响应不该触发的东西）。
 registerEffect({
   id: 'endure', type: 'buff', stacking: 'count',
   name: '忍耐',
-  description: '每受到一次伤害，获得层数相当的格挡；自己回合开始时消失。',
+  description: '每受到一次伤害，获得层数相当的格挡。',
   icon: '🪨', color: 'blue',
   subscriptions: (unit) => [{
     when: ApplyDamageInstruction, phase: 'post',
@@ -100,15 +108,6 @@ registerEffect({
       const stacks = unit.getEffectStacks('endure');
       if (stacks > 0) ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: unit, effectId: 'block', stacks }), instr);
-    },
-  }, {
-    when: TurnStartInstruction, phase: 'post',
-    filter: (instr) => instr.side === unit.side && !unit.isDead()
-      && unit.getEffectStacks('endure') > 0,
-    react: (instr, ctx) => {
-      ctx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'endure', stacks: -unit.getEffectStacks('endure'),
-      }), instr);
     },
   }],
 });
@@ -755,6 +754,21 @@ registerEffect({
         new AddEffectInstruction({ target: unit, effectId: 'stasis', stacks: -1 }), instr),
     },
   ],
+});
+
+// 弹道干扰（神兵躯壳，2026-09-20 用户设计稿）：段数减免标记——每层令目标**下一次扫射**
+// 的段数 -2（整量消耗，扫射结算时清空）。首用：Boss【回忆】洗入玩家牌库的「躲闪」。
+// 纯标记效果（无订阅，读数与清除都写在神兵躯壳的 act/getIntention 里）。
+// type 定为 buff（与凝滞同一条理由）：这是打在机器上的干扰标记，不该被它自己的
+// 「纯净」当负面效果吃掉——纯净 3 若把它拦下，玩家手里 7 张躲闪就全是废牌。
+registerEffect({
+  id: 'scatterJam',
+  type: 'buff',
+  stacking: 'count',
+  name: '弹道干扰',
+  description: '下一次扫射的段数减少 2（每层）。扫射结算后清除。',
+  icon: '🎯',
+  color: 'cyan',
 });
 
 // 无敌：生命不会降到 1 以下（minHp 地板，与伤害管线同源）。无自动递减、不自杀——

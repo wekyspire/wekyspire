@@ -34,10 +34,11 @@
         <input id="story-checkbox" type="checkbox" v-model="isStory" />
         <label for="story-checkbox">故事模式</label>
       </div>
-      <!-- 无敌模式：仅新开局生效（读档不吃）——开局直发 GM 卡「一拳」（999 群伤固有），爬塔流程验证用 -->
+      <!-- 调试模式（仅调试用）：新开局进调试会话——F9 调试面板 / 存档写 debug 槽 / 开局发一拳。
+           取代了旧的「无敌模式」复选框：无敌只是这个模式里的一项（面板里随时开关，或直接发一拳） -->
       <div class="story-toggle">
-        <input id="gm-checkbox" type="checkbox" v-model="isGm" />
-        <label for="gm-checkbox">无敌模式</label>
+        <input id="debug-checkbox" type="checkbox" :checked="settings.debugMode" @change="toggleDebug" />
+        <label for="debug-checkbox">调试模式<span style="color: #ff0000;">（仅调试用）</span></label>
       </div>
     </div>
     <ChangeLog />
@@ -47,8 +48,9 @@
 <script setup>
 import { ref, computed, watch, inject, onMounted, onBeforeUnmount } from 'vue';
 import ChangeLog from './ChangeLog.vue';
-import { settings, persistSettings } from '../settings';
+import { settings, persistSettings, setDebugMode } from '../settings';
 import { showMenuDialog } from '../menuDialog';
+import { readSave } from '../saves';
 import { fadeInTitleMusic, fadeOutTitleMusic } from '../audio';
 import startBg from '../../assets/images/start-screen.webp';
 import titleMusicUrl from '../../assets/sounds/story-mode-intro.mp3';
@@ -64,8 +66,14 @@ const showMenuPopup = inject('showMenuPopup'); // App.vue 挂载的全局共享 
 
 // 模式选择持久化：回主菜单后复选框保持上次选择；默认肉鸽（故事模式未开放）
 const isStory = ref(settings.menuStoryMode === true);
-// 无敌模式（会话级，不持久化——验证时手动勾，平时忘关也不会污染正常局）
-const isGm = ref(false);
+// 「继续」的优先来源：调试模式开着就先看 debug 槽（各槽互不覆盖，见 saves.modeOf）
+const debugSave = ref(readSave('debug'));
+function toggleDebug(e) {
+  setDebugMode(e.target.checked);
+  debugSave.value = readSave('debug');   // 切模式时刷新可继续的调试档
+}
+// 回主菜单后 props.saves 整份换新，调试槽也顺手重读（与另外两槽同一节拍）
+watch(() => props.saves, () => { debugSave.value = readSave('debug'); });
 watch(isStory, (v) => {
   // 暂时关闭故事模式切换
   if (v) {
@@ -79,8 +87,10 @@ watch(isStory, (v) => {
   syncAmbience();
 });
 
-// 当前模式对应的存档（两模式槽位隔离）
-const save = computed(() => isStory.value ? props.saves.story : props.saves.infinite);
+// 当前模式对应的存档（三槽位隔离：肉鸽 / 故事 / 调试）
+const isDebug = computed(() => settings.debugMode === true);
+const save = computed(() => (isStory.value ? props.saves.story
+  : (isDebug.value ? debugSave.value : props.saves.infinite)));
 // Story mode不能选择重新开始游戏，进入尖塔即为开始游戏
 const canContinue = computed(() => !!save.value && !isStory); // readSave 版本不符已归 null，此处只判有无
 const saveText = computed(() => {
@@ -88,10 +98,14 @@ const saveText = computed(() => {
   if (!s || !canContinue.value) return '';
   const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
   const suffix = s.gameStage === 'end' ? '（已通关）' : '';
-  return `存档：第 ${s.floor}/${s.totalFloors} 层${suffix}${when ? ' · ' + when : ''}`;
+  const tag = s.debugMode ? '调试局 · ' : '';
+  return `存档：${tag}第 ${s.floor}/${s.totalFloors} 层${suffix}${when ? ' · ' + when : ''}`;
 });
 // 存档块 key 含模式：切模式时与标题/主按钮同一节奏切入切出，而非原地不动
-const saveKey = computed(() => `${isStory.value ? 'story' : 'infinite'}:${canContinue.value ? 'has' : 'none'}`);
+const saveKey = computed(() => {
+  const mode = isStory.value ? 'story' : (isDebug.value ? 'debug' : 'infinite');
+  return `${mode}:${canContinue.value ? 'has' : 'none'}`;
+});
 
 async function launch(loadSave) {
   // 读档以存档自身的模式为准；新开局以当前复选框为准
@@ -100,8 +114,10 @@ async function launch(loadSave) {
     showMenuPopup('故事模式尚未制作');
     return;
   }
-  // 新开局且本模式已有存档：确认覆盖（弹窗全局组件的首个使用实例）
-  if (!loadSave && canContinue.value) {
+  // 调试局读档：强制带调试标记（面板/槽位随档走）
+  const debug = loadSave ? !!loadSave.debugMode : isDebug.value;
+  // 新开局且**真实**槽已有存档：确认覆盖（调试局写独立 debug 槽，不需要问）
+  if (!loadSave && canContinue.value && !debug) {
     const { ok } = await showMenuDialog({
       title: '覆盖存档？',
       message: `已有进行中的存档（${saveText.value}），开始新游戏将覆盖它。`,
@@ -111,8 +127,8 @@ async function launch(loadSave) {
     });
     if (!ok) return; // 取消：留在开始界面，存档不动
   }
-  // 肉鸽模式：无开场滚动动画，直接开始（无敌模式仅新开局生效，读档不吃）
-  emit('start', { storyMode: false, loadSave, gmMode: !loadSave && isGm.value });
+  // 肉鸽模式：无开场滚动动画，直接开始
+  emit('start', { storyMode: false, loadSave, debugMode: debug });
 }
 
 // ---------- 故事模式氛围：雪花粒子 + 标题音乐 ----------

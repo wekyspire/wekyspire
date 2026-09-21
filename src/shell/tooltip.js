@@ -21,6 +21,7 @@ import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
 import { getSkillDefinition, hasSkill } from '../core/skills/registry.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
 import { getRelicDefinition, hasRelic } from '../core/relics/registry.js';
+import { hasMarkup } from '../stage/richtext/inline.js';
 
 // 整卡预览的估算尺寸（tooltipHub 边缘翻转用）：CardFacePreview 宽 200 + 宿主 padding
 export const CARD_PREVIEW_SIZE = Object.freeze({ w: 216, h: 294 });
@@ -31,7 +32,7 @@ export function tooltipModel(kind, payload = {}) {
     case 'card': return cardModel(payload);
     case 'cards': return cardsModel(payload);
     case 'relic': return relicModel(payload);
-    case 'item': return { title: payload.title ?? '', body: payload.body ?? '', tint: payload.tint };
+    case 'item': return { title: payload.title ?? '', body: payload.body ?? '', tint: payload.tint, markup: hasMarkup(payload.body) };
     case 'named': return namedModel(payload);
     case 'intention': return intentionModel(payload);
     case 'shift': return { title: payload.name ?? '', body: '' };
@@ -43,7 +44,7 @@ function effectModel({ effectId, name }) {
   const def = (effectId != null ? getEffectDefinition(effectId) : null)
     ?? allEffects().find(d => d.name === name);
   if (!def) return { title: `[effect] ${name ?? effectId}`, body: '' };
-  return { title: `${def.icon ?? ''}${def.name}`, body: def.description ?? '' };
+  return { title: `${def.icon ?? ''}${def.name}`, body: def.description ?? '', markup: hasMarkup(def.description) };
 }
 
 // card：整卡预览模型——文字只有标题兜底（定义缺失时），正常路径 TooltipOverlay
@@ -74,24 +75,29 @@ function cardsModel({ cardIds = [], params }) {
 }
 
 // relic：遗物效果预览（面板遗物行 / 顶端资源栏遗物槽 hover）。标题带稀有度与槽位
-// （购物与装卸都要看这两个数），正文即效果描述。
+// （购物与装卸都要看这两个数），正文即效果描述。**正文是富文本**：遗物效果里常
+// 引用具体卡牌（如「将 1 张/card{rapidFire}加入手牌」），渲染成卡名 + 系列徽章并
+// 支持 hover 弹整卡预览（markup 标记交给 TooltipOverlay → RichTextInline）。
 function relicModel({ relicId }) {
   if (relicId == null || !hasRelic(relicId)) return { title: `[relic] ${relicId}`, body: '' };
   const def = getRelicDefinition(relicId);
   const slot = def.nonSlot ? '非槽位式 · 恒生效' : `${def.cost ?? 1} 槽`;
   // flavor（铭刻）：效果描述之后另起一段的铭文（2026-09-13 用户补：宗师的心得；
-  // 纯文本第二段，靠 .tip-body 的 pre-line 换行）
-  const body = def.flavor ? `${def.description ?? ''}\n\n${def.flavor}` : (def.description ?? '');
+  // 靠 .tip-body 的 pre-line 换行）。铭刻是散文、不含 markup，与效果描述拼成一段
+  // 统一按 markup 解析——散文段原样落成纯文本片段
+  const effect = def.description ?? '';
+  const body = def.flavor ? `${effect}\n\n${def.flavor}` : effect;
   return {
     title: `${def.name ?? relicId}（${def.rarity ?? 'C'} · ${slot}）`,
     body,
+    markup: hasMarkup(body),
   };
 }
 
 function namedModel({ name }) {
   const term = getNamedTerm(name);
   return term
-    ? { title: `${term.name}${term.param ?? ''}`, body: term.text }
+    ? { title: `${term.name}${term.param ?? ''}`, body: term.text, markup: hasMarkup(term.text) }
     : { title: name ?? '', body: '' };
 }
 

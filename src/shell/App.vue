@@ -23,6 +23,9 @@ import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
 import SceneWipeOverlay from './overlay/SceneWipeOverlay.vue';
+import DebugOverlay from './components/DebugOverlay.vue';
+import { debugUi, toggleDebugPanel } from './debugState.js';
+import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
 
 const canvas = ref(null);
@@ -65,27 +68,29 @@ startAssetPreload();
 // 多条 toast 各自 3s 寿命独立消亡；新 toast 从底部进入，旧 toast 被顶起，消亡后其余平滑回落。
 const menuToasts = ref([]);
 let toastSeq = 0;
-provide('showMenuPopup', (title, text = '') => {
+function showPopup(title, text = '') {
   const id = ++toastSeq;
   const list = [...menuToasts.value, { id, title, text }];
   menuToasts.value = list.slice(-4); // 并发上限 4：超出立即挤掉最旧的（转入消亡动画）
   setTimeout(() => {
     menuToasts.value = menuToasts.value.filter(t => t.id !== id);
   }, 3000);
-});
+}
+provide('showMenuPopup', showPopup);
 
 // toast 手动关闭（× 按钮）：与 3s 自然寿命同一条移除路径
 function dismissMenuToast(id) {
   menuToasts.value = menuToasts.value.filter(t => t.id !== id);
 }
 
-function newGame({ storyMode = false, loadSave = null, gmMode = false } = {}) {
+function newGame({ storyMode = false, loadSave = null, debugMode = false } = {}) {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
   detachTooltipForward = null;
   mapStage?.dispose?.();
   mapStage = new MapStage({});
-  ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode, gmMode });
+  ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode, debugMode });
+  ctrl.value.debug.setToast((text) => showPopup('调试', text));   // 调试回执同时进全局 toast
   // 地图舞台的输入通道 + 常驻 tooltip 转发：装配点在此（同时持有 stageManager 与 animBus）
   mapStage.attachInput({ stageManager, bus: ctrl.value.animBus });
   detachTooltipForward = attachTooltipForwarding(ctrl.value.animBus);
@@ -93,12 +98,46 @@ function newGame({ storyMode = false, loadSave = null, gmMode = false } = {}) {
   stageManager.setStage(mapStage);
   phase.value = 'game';
   menuOpen.value = false;
+  // 调试档可能是"房内现场"（造档工具产出）：补一次进房派发（幂等：已在房内则只刷演出）
+  if (ctrl.value.run.gameStage === 'room') ctrl.value.enterRoomPresentation?.();
+  if (settings.debugMode) debugUi.open = true;   // 调试模式开着就默认把面板摆出来（省一次 F9）
   // 冒烟/控制台钩子
   window.__shell = { ctrl, stageManager, newGame };
 }
 
-function onStart({ storyMode, loadSave, gmMode }) {
-  newGame({ storyMode, loadSave, gmMode });
+function onStart({ storyMode, loadSave, debugMode }) {
+  newGame({ storyMode, loadSave, debugMode });
+}
+
+/** 调试面板的「重载局面/导入 JSON」：以给定快照重开一局（调试面板发起 → 恒为调试局）。 */
+function onDebugRestart({ loadSave } = {}) {
+  newGame({ loadSave, debugMode: loadSave?.debugMode ?? true });
+}
+
+/**
+ * URL 起跑（调试用）：`?debug=1` 打开调试模式；`?save=<名>` 取 /debug-saves/<名>.json
+ * （tools/saveForge.mjs 产出，dev 中间件提供）并**直接从该存档开局**——这是「快速复现
+ * 任意 bug」的入口：不用逐层打过去，一次跳转就在现场，前后端链路全真实。
+ * 失败不阻塞正常流程（提示后落在开始界面）。
+ */
+async function autoStartFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const wantDebug = params.get('debug') === '1';
+  const saveName = params.get('save');
+  if (!wantDebug && !saveName) return;
+  if (wantDebug) settings.debugMode = true;
+  debugUi.open = true;
+  if (!saveName) return;
+  try {
+    const res = await fetch(`./debug-saves/${saveName}.json`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const save = await res.json();
+    if (!save?.player?.deck) throw new Error('不是一份合法存档');
+    console.log('[debug] 从存档起跑：', saveName, save);
+    newGame({ loadSave: { ...save, debugMode: true }, debugMode: true });
+  } catch (err) {
+    showPopup('调试起跑失败', `${saveName}：${err?.message ?? err}（先跑 tools/saveForge.mjs --out ${saveName}）`);
+  }
 }
 
 function toTitle() {
@@ -168,10 +207,17 @@ onMounted(() => {
   fitFrame();
   window.addEventListener('resize', fitFrame);
   stageManager.start();
-  // Esc = 游戏内弹出菜单开关（菜单级界面不响应；全局模态弹窗打开时让位，Esc 归弹窗取消）
+  void autoStartFromUrl();
+  // Esc = 游戏内弹出菜单开关（菜单级界面不响应；全局模态弹窗打开时让位，Esc 归弹窗取消）；
+  // F9 = 调试面板开关（仅调试模式开着时响应——面板本身在同一条件下才渲染）
   keyHandler = (e) => {
     if (e.key === 'Escape' && phase.value === 'game' && !menuDialogState().open) {
       menuOpen.value = !menuOpen.value;
+      return;
+    }
+    if (e.key === 'F9' && settings.debugMode && phase.value === 'game') {
+      e.preventDefault();
+      toggleDebugPanel();
     }
   };
   window.addEventListener('keydown', keyHandler);
@@ -206,6 +252,12 @@ onBeforeUnmount(() => {
       <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>
+      <!-- 调试面板入口（仅调试模式）：F9 或点这里开合；面板 z 压过幕间层，卡住时也能用 -->
+      <button v-if="settings.debugMode" class="menu-fab debug-fab" @click="toggleDebugPanel()">
+        调试<template v-if="ctrl.run.debugMode">*</template>
+      </button>
+      <DebugOverlay v-if="settings.debugMode && debugUi.open" :ctrl="ctrl"
+        @close="debugUi.open = false" @restart="onDebugRestart" />
       <GameMenu v-if="menuOpen" :ctrl="ctrl" @close="menuOpen = false" @toTitle="toTitle" />
       <!-- cutscene 内容层：对话/CG/渐变剧本，激活时阻塞一切流程（游戏流程手动驱动） -->
       <CutsceneOverlay v-if="ctrl.cutscene.state.mode !== 'idle'" :player="ctrl.cutscene" />
@@ -236,4 +288,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
   background: rgba(16, 22, 34, .9); color: #eaf1fb; border: 1px solid #3f5f8c;
 }
 .menu-fab:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+/* 调试入口与「菜单」并排（menu-fab 是 right:14px，这里让到它左边） */
+.debug-fab { right: 84px; color: #ffd479; border-color: #8c7a3f; }
+.debug-fab:hover { border-color: #ffd479; }
 </style>

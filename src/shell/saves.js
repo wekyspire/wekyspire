@@ -1,17 +1,26 @@
 // 存档（菜单级）：run 状态快照的持久化。
 // runState 纪律 = 只存 id 与数字（§6.4），故快照 = 纯字段摘取，JSON 直存。
 // 存档语义 = 检查点：仅在 prep / end 阶段落盘；战斗内退出 = 回到本层战前。
-// 模式隔离：肉鸽与故事各占一个存档槽，互不覆盖。
+// 槽位隔离：肉鸽 / 故事 / **调试** 各占一个槽，互不覆盖——调试局（改过状态的局）只写
+// debug 槽，真实存档永不被污染（见 runController 的 persist 守卫与 modeOf）。
 
 const KEYS = Object.freeze({
   infinite: 'wekyspire:save:infinite',
   story: 'wekyspire:save:story',
+  debug: 'wekyspire:save:debug',
 });
 const VERSION = 1;
 
 const memory = new Map(); // 无 localStorage 环境（vitest node）的回退存储
 
-const keyOf = (storyMode) => storyMode ? KEYS.story : KEYS.infinite;
+/** run → 槽位名（调试局优先：debugMode 一旦置位就只认 debug 槽）。 */
+export const modeOf = (run) => (run?.debugMode ? 'debug' : (run?.storyMode ? 'story' : 'infinite'));
+
+// 槽位名归一（mode 可为 'infinite'|'story'|'debug'；旧的布尔 storyMode 写法仍兼容）
+const keyOf = (mode) => {
+  const m = (mode === true || mode === 'story') ? 'story' : (mode === 'debug' ? 'debug' : 'infinite');
+  return KEYS[m];
+};
 
 function readRaw(key) {
   try { return localStorage.getItem(key); }
@@ -35,10 +44,18 @@ export function snapshotRun(run) {
     seed: run.seed,
     rngState: run.rng.getState(), // run 级 rng 内部态（uint32）：读档后续房间派发与活局时间线一致（旧档无此字段 = 维持旧回放语义）
     storyMode: run.storyMode ?? false, // 读档回到存档自身的模式（肉鸽/故事）
+    debugMode: run.debugMode ?? false, // 调试局标记：读档走 debug 槽语义（恢复房/阶段，见 runController）
     floor: run.floor,
     totalFloors: run.totalFloors,
     gameStage: run.gameStage,
     result: run.result,
+    // 房型房间的现场（只有调试局会读它：真实档语义 = 检查点，恒在 prep 恢复；
+    // 见 runController.restoreFromSave 的 debugMode 分支）
+    currentRoom: run.currentRoom ?? null,
+    roomData: run.roomData ? JSON.parse(JSON.stringify(run.roomData)) : null,
+    // 本层遭遇（描述符数组）：调试档据此复现指定的敌人编成；真实档读档时由
+    // advanceFloor 按 seed+floor 重新确定性生成，故旧档没有此字段也不影响
+    encounter: run.encounter ? run.encounter.map(e => (e && typeof e === 'object' ? { ...e } : e)) : null,
     pendingCardRemoval: run.pendingCardRemoval,
     eventFlags: { ...(run.eventFlags ?? {}) }, // 剧情旗标（事件分支记忆；故事模式必需）
     relicUses: { ...run.relicUses },
@@ -83,11 +100,12 @@ export function snapshotRun(run) {
 }
 
 export function recordSave(run) {
-  writeRaw(keyOf(run.storyMode), JSON.stringify(snapshotRun(run)));
+  writeRaw(keyOf(modeOf(run)), JSON.stringify(snapshotRun(run)));
 }
 
-export function readSave(storyMode = false) {
-  const raw = readRaw(keyOf(storyMode));
+/** 读存档。mode 可为 'infinite' | 'story' | 'debug'（旧的布尔 storyMode 写法仍兼容）。 */
+export function readSave(mode = 'infinite') {
+  const raw = readRaw(keyOf(mode));
   if (!raw) return null;
   try {
     const save = JSON.parse(raw);
@@ -95,6 +113,6 @@ export function readSave(storyMode = false) {
   } catch { return null; }
 }
 
-export function clearSave(storyMode = false) {
-  removeRaw(keyOf(storyMode));
+export function clearSave(mode = 'infinite') {
+  removeRaw(keyOf(mode));
 }

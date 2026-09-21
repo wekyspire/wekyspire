@@ -121,6 +121,7 @@ export const DEEP_GATES = Object.freeze({
   burst: Object.freeze(['pyroBlast', 'fireWard']), // 爆炎深入：回响烈焰/背水一战/放手一搏
   fist: Object.freeze(['boxer']),                  // 拳深入：万变拳/假动作/拳压…
   blade: Object.freeze(['bladeMaster']),           // 刀深入：练刀/开刃/斩灭…
+  block: Object.freeze(['warrior']),               // 拆深入：架势（2026-09-21 稿同步补装）
   renew: Object.freeze(['renew']),                 // 生息深入：世界树之心
   blight: Object.freeze(['blightLord']),           // 瘴毒深入：瘟神附体
   gale: Object.freeze(['galeFury']),               // 御风深入：天闪
@@ -131,8 +132,29 @@ export function deepGateOpen(run, def) {
   return (DEEP_GATES[def.deep] ?? []).some(id => run?.player?.abilities?.includes(id));
 }
 
-// 单包卡池：包归属 + 该体系等阶门禁 + 排除 Z 与 canSpawnAsReward=false + 深入卡门禁。
-// S 与普通卡同判：默认可直出，例外由注册表 canSpawnAsReward 声明（不再有白名单）。
+// ---- 牌组门槛与定向亲和（2026-09-20 用户稿：体修肘击小体系「持有肘击才进卡包、
+// 肘击越多权重越高」的通用落地；def 声明、rewards 解释，内容侧不侵入本文件）----
+//   def.requiresAnyOf = [卡id…]：牌组中不持有其中任一张 → 不入奖励池（牢大/牢大归来/坠机）。
+//   def.affinityCards = [卡id…]：牌组中每持有 1 张，档内权重 +35%（至多计 4 张，
+//   与体系亲和 SERIES_AFFINITY 同参数——同源杠杆，不另立数值）。
+export function deckGateOpen(run, def) {
+  const ids = def?.requiresAnyOf;
+  if (!ids?.length) return true;
+  const owned = new Set((run?.player?.deck ?? []).map(rt => rt.defId));
+  return ids.some(id => owned.has(id));
+}
+
+/** 持卡亲和乘数：1 + perCard × min(牌组中 affinityCards 卡的张数, maxCount)。 */
+export function deckAffinityWeight(run, def) {
+  const ids = def?.affinityCards;
+  if (!ids?.length) return 1;
+  const want = new Set(ids);
+  const n = (run?.player?.deck ?? []).reduce((s, rt) => s + (want.has(rt.defId) ? 1 : 0), 0);
+  return 1 + SERIES_AFFINITY.perCard * Math.min(n, SERIES_AFFINITY.maxCount);
+}
+
+// 单包卡池：包归属 + 该体系等阶门禁 + 排除 Z 与 canSpawnAsReward=false + 深入卡门禁
+// + 牌组门槛。S 与普通卡同判：默认可直出，例外由注册表 canSpawnAsReward 声明（不再有白名单）。
 // capTier 可覆写门禁（通用注入跟随所开卡包的上限）。
 export function packCardPool(run, packId = 'body', capTier = null) {
   const cap = TIER_RANK[capTier ?? maxRewardTier(run, packId)];
@@ -140,7 +162,8 @@ export function packCardPool(run, packId = 'body', capTier = null) {
     packOf(def) === packId
     && def.canSpawnAsReward !== false && def.tier !== 'Z'
     && (TIER_RANK[def.tier] ?? Infinity) <= cap
-    && deepGateOpen(run, def));
+    && deepGateOpen(run, def)
+    && deckGateOpen(run, def));
 }
 
 // 通用注入池：跟随所开卡包门禁。门禁达 B 以上时剔除 D 级通用卡（后期 D 卡是废牌，
@@ -287,7 +310,7 @@ export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLD
   const lv = effectivePackLevel(run, packId, minTier);
   const counts = seriesCounts(run);
   return rollTiered(run, packCardPool(run, packId, tierCapOfLevel(lv)), count, lv,
-    def => seriesAffinityWeight(run, def, counts))
+    def => seriesAffinityWeight(run, def, counts) * deckAffinityWeight(run, def))
     .map(def => def.id);
 }
 
@@ -378,7 +401,7 @@ export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoice
     run, pool,
     weightOf,
     count,
-    def => seriesAffinityWeight(run, def, counts), // 档内子体系亲和（与开包同口径）
+    def => seriesAffinityWeight(run, def, counts) * deckAffinityWeight(run, def), // 档内亲和（体系 + 持卡，同口径）
   ).map(def => def.id); // 先取 id：注入会原地替换元素
   const caps = availablePacks(run).map(p => TIER_RANK[maxRewardTier(run, p.id)]);
   const capTier = Object.keys(TIER_RANK).find(t => TIER_RANK[t] === Math.max(...caps)) ?? 'C';

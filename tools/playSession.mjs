@@ -11,12 +11,18 @@
 // 实现在 tools/session/：engine.mjs（状态机 + 动作解释器）/ render.mjs（状态渲染）/
 // format.mjs（中文文本）/ addressing.mjs（编号+卡名寻址）/ files.mjs（会话文件）。
 // 本文件只做汇总再导出，故 import 路径保持 `tools/playSession.mjs` 不变。
-export { freshState, exec, stageCn } from './session/engine.mjs';
+export { freshState, freshStateFromSave, exec, stageCn } from './session/engine.mjs';
 export { render, renderDeck, renderLib, renderRelics, renderTerms } from './session/render.mjs';
 export { defOf } from './session/format.mjs';
 export { sessionDir, sessionPath, listSessions, readSession, writeSession } from './session/files.mjs';
 
-export const HELP = `动作表（按当前阶段）：
+export const HELP = `建档：
+  new <种子>               从零开一局（体修初始卡组）
+  load <存档名|路径.json> [--force]  从**存档快照**起跑（saveForge 产出 / 面板「导出存档」导出的 JSON；
+                           --force = 会话已存在时重建，迭代构筑时沿用同一会话名）
+                           ——层数/卡组/遗物/能力/灵脉/体修等级/房内现场原样恢复；
+                           存档名解析到 tmp/saves/<名>.json，带路径或 .json 后缀则按路径读。
+动作表（按当前阶段）：
   战斗: play <手牌#> <卡名> [敌#] | play <卡名> [敌#] | dump <手牌#> <卡名> [更多# 卡名…]
         （付一次费弃任意张，首次免费之后逐次+1） | end | auto
         in <候选#> <卡名>（应答输入请求） | lib（查牌库——抽牌严格按顺序，可预知未来抽到什么）

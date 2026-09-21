@@ -27,7 +27,7 @@
 import * as THREE from 'three';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { OVERLAY_Z } from './PanelObject.js';
-import { bakeBoldText } from './textBakers.js';
+import { bakeBoldText, bakeAutoLine } from './textBakers.js';
 import { sharedPropArtCache } from '../art/propArt.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 
@@ -42,7 +42,10 @@ const T_IN = 0.62;
 const T_OUT = 0.34;
 // 物品图（世界单位）：整幅特写的主体
 const ART = { size: 34, y: UI_CAMERA_LOOK_AT_Y + 6.5 };
-const TEXT = { titleY: UI_CAMERA_LOOK_AT_Y - 14, descY: UI_CAMERA_LOOK_AT_Y - 19.5, effectY: UI_CAMERA_LOOK_AT_Y - 25.5 };
+const TEXT = {
+  titleY: UI_CAMERA_LOOK_AT_Y - 14, descY: UI_CAMERA_LOOK_AT_Y - 19.5,
+  effectY: UI_CAMERA_LOOK_AT_Y - 25.5, flavorY: UI_CAMERA_LOOK_AT_Y - 31,
+};
 
 /** 非线性的"弹出"缓动：过冲再回位（用户要的弹跳感）。k 越大过冲越明显。 */
 function easeOutBack(t, k = 1.7) {
@@ -156,7 +159,7 @@ export class ItemShowcaseObject extends THREE.Group {
   /**
    * @param {object} options
    *   onDismiss(): 退出回调（宿主据此清焦点/继续流程）
-   *   bakeLine: 可选的外部文本烘焙（缺省用内置的 bakeBoldText）
+   *   bakeLine: 可选的外部文本烘焙（缺省用内置的 bakeAutoLine）
    *   art: 可选的外部取图函数 (key) => THREE.Texture|null（缺省查 道具图/遗物图 两张表）
    */
   constructor({ onDismiss = null, art = null } = {}) {
@@ -229,12 +232,15 @@ export class ItemShowcaseObject extends THREE.Group {
     this._item.add(plate, art);
     this.add(this._item);
 
-    // ④ 文本三行（名称 / 斜体描述 / 作用）
+    // ④ 文本四行（名称 / 斜体描述 / 作用 / 斜体铭文——flavor 行是遗物设计稿里的
+    //    斜体文本（RELICS.md `_..._`，2026-09-21 用户定：获得演出下方额外一行斜体），
+    //    非遗物特写不传即隐藏）
     this._lines = [];
     for (const [key, spec] of Object.entries({
       title: { y: TEXT.titleY, fontPx: 34, italic: false, tint: '#fdf6e3' },
       desc: { y: TEXT.descY, fontPx: 20, italic: true, tint: '#d8e4f2' },
       effect: { y: TEXT.effectY, fontPx: 22, italic: false, tint: '#ffe6ad' },
+      flavor: { y: TEXT.flavorY, fontPx: 19, italic: true, tint: '#c3cee0' },
     })) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
@@ -278,7 +284,9 @@ export class ItemShowcaseObject extends THREE.Group {
     if (!text) { mesh.visible = false; return; }
     mesh.visible = true;
     if (typeof document === 'undefined') return;       // node：不烘（视觉门在浏览器）
-    const { texture, width, height } = bakeBoldText(text, {
+    // auto 烘焙：纯文本行与旧观感一致（粗体 + 深描边；desc 行保留斜体），
+    // 含 markup 的行（遗物 effect 行常引 /card{}）走富文本，不把 markup 原样印出来
+    const { texture, width, height } = bakeAutoLine(text, {
       fontPx: spec.fontPx, tint: spec.tint, italic: spec.italic,
     });
     this._baked.push(texture);
@@ -296,6 +304,7 @@ export class ItemShowcaseObject extends THREE.Group {
    *   title:  名称（粗体，必填）
    *   desc:   斜体描述（可为空）
    *   effect: 具体作用（药水=喝下后的效果；金币之类=名称+效果）
+   *   flavor: 斜体铭文（最下方一行；遗物 = 设计稿 RELICS.md 里的斜体文本，可空 → 隐藏）
    *   artKey: 素材 key（assets/items|props，可空 → 色块代替）
    *   tint:   色块/托底色（可空 → 金）
    *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
@@ -317,6 +326,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._setLine('title', item.title ?? '');
     this._setLine('desc', item.desc ?? '');
     this._setLine('effect', item.effect ?? '');
+    this._setLine('flavor', item.flavor ?? '');
     // 物品图：有素材用素材；没有就用程序化占位（金币堆）/ tint 色块（"没有就拿色块代替"）
     let tex = item.artKey ? this._artOf(item.artKey) : null;
     if (!tex && item.artKey) tex = this._placeholderOf(item.artKey);

@@ -14,7 +14,7 @@ import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
 //     └─ execute：未被取消 → 把「类型 + 属性 + 来源 + 最终数字」透传，插入 ↓
 //
 //   ApplyDamageInstruction（应用原语·第二阶段）
-//     ├─ PRE：受击侧最后修正（格挡减半）与**致命拦截**（闪避 veto、无人战体/塞西莉亚
+//     ├─ PRE：受击侧最后修正（格挡免伤 25%）与**致命拦截**（闪避 veto、无人战体/塞西莉亚
 //     │        之恩赐的免死改判）——「奇迹阻止即将让人死亡的伤害」类监听挂这里，
 //     │        它们不关心伤害出自什么千奇百怪的原因
 //     ├─ execute：固定公式（防御减免 → 护盾吸收 → 扣 HP → minHp 地板 → 死亡亡语）
@@ -32,7 +32,7 @@ import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
 // 为空（伤害不可被 PRE 改写），但结算仍可被 veto（防火"跳过结算"）。中毒等环境伤害用。
 // minHp 地板：经 getStat('minHp') 读轨（不灭等效果的 statModifiers 提供），默认 0。
 export class DealDamageInstruction extends BattleInstruction {
-  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [], skill = null, type = 'major' }, opts = {}) {
+  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [], skill = null, type = 'major', skillDefId = null }, opts = {}) {
     super(opts);
     this.source = source;       // Unit | null（环境伤害等无来源）
     this.target = target;       // Unit
@@ -43,6 +43,7 @@ export class DealDamageInstruction extends BattleInstruction {
     this.skill = skill;         // 造成此伤害的卡牌 runtime（dealDamage 透传；环境/敌方直造为 null）
     this.type = type;           // 'major' 主级（出牌/敌方行动的直接伤害）| 'minor' 附级
                                 // （反伤/抽卡伤害/tick/亡语等被动伤害）——跨原语透传到应用原语
+    this.skillDefId = skillDefId; // 日志归属覆写（打出时点卡名，见 cardKit.dealDamage）
   }
 
   get modifiablePayload() { return this.fixed ? [] : ['damage', 'pierce']; }
@@ -76,6 +77,7 @@ export class DealDamageInstruction extends BattleInstruction {
         type: this.type,
         tags: this.tags,
         skill: this.skill,
+        skillDefId: this.skillDefId,
       });
       this._apply = apply;
       ctx.kernel.submitInstruction(apply, this);
@@ -93,7 +95,7 @@ export class DealDamageInstruction extends BattleInstruction {
 // 应用原语（受击侧）：固定结算公式 + 受击响应位。公式只此一处（防住即免燃、
 // 忍耐 dealt>0 等口径都读 result.dealt = 实际生命损失）。
 export class ApplyDamageInstruction extends BattleInstruction {
-  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [], skill = null, type = 'major' }, opts = {}) {
+  constructor({ source = null, target, amount, pierce = false, fixed = false, tags = [], skill = null, type = 'major', skillDefId = null }, opts = {}) {
     super(opts);
     this.source = source;
     this.target = target;
@@ -103,9 +105,10 @@ export class ApplyDamageInstruction extends BattleInstruction {
     this.tags = tags;
     this.skill = skill;
     this.type = type;
+    this.skillDefId = skillDefId;
   }
 
-  // 受击侧只可改数字（格挡减半）；穿透属性是发动侧定死的结算口径，不可改
+  // 受击侧只可改数字（格挡免伤）；穿透属性是发动侧定死的结算口径，不可改
   get modifiablePayload() { return this.fixed ? [] : ['damage']; }
 
   buildPayload() {
@@ -155,6 +158,10 @@ export class ApplyDamageInstruction extends BattleInstruction {
     ctx.presenter?.damage?.({
       source: this.source, target, dealt: dmg,
       defenseBlocked, shieldAbsorbed, pierce,
+      // 伤害出处卡（标量 id，可序列化）：日志/观战按它归属「哪张牌打的」——
+      // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡（r21-a6 实报）。
+      // skillDefId 覆写优先：斩链打出拍「先变身后结算」，self.defId 已是下一阶名
+      skillDefId: this.skillDefId ?? this.skill?.defId ?? null,
     });
     if (target.isDead()) {
       ctx.presenter?.unitDeath?.({ unit: target });
@@ -252,7 +259,7 @@ export class GainShieldInstruction extends BattleInstruction {
 
 // 伤害预估（卡面"应用后"描述用）：走真实 PRE 管线的干跑探针——**两段**（两原语同构）：
 // 先干跑结算原语（发动侧修饰：斩灭翻倍、姿态加成……），再用其最终数字干跑应用原语
-// （受击侧修正：格挡减半、闪避 veto……）。少一段预览就会丢那一侧的修正。
+// （受击侧修正：格挡免伤、闪避 veto……）。少一段预览就会丢那一侧的修正。
 // 返回 { dodged, damage }——damage 为两侧修正后的伤害，不含防御/护盾吸收（那是结算期
 // 对 HP 的影响，非伤害本身）。只在等待玩家输入（泵静止）时调用；探针的子反应被丢弃，
 // 真实状态不变（契约见 BattleKernel.preview）。
