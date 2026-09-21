@@ -15,6 +15,9 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 // 不会再触发首进阶赠送）。
 
 const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard']);
+// 火路线填充加厚（2026-09-21 用户定：拳 4 盾 5）——基石三张已覆盖过牌/叠炎/回蓝，
+// 填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线
+const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard', 'guard']);
 
 export const ROUTES = Object.freeze({
   body: Object.freeze({
@@ -24,7 +27,8 @@ export const ROUTES = Object.freeze({
   }),
   fire: Object.freeze({
     id: 'fire', name: '火灵脉', leino: 'fire', ability: 'fireVein', apBonus: 0,
-    deck: Object.freeze(['inflame', 'fireBolt', ...FILLER]),
+    // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃（回蓝，B 阶破例随起始牌组直发）
+    deck: Object.freeze(['inflame', 'fireBolt', 'flashBurnPlus', ...FILLER_FIRE]),
     blurb: '爆发与燃烧之脉——高蓝耗、高副作用，换爆炸输出',
   }),
   wood: Object.freeze({
