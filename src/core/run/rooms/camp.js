@@ -1,11 +1,11 @@
-import { promoteCard, canPromoteRuntime } from '../promotion.js';
 import { getRelicDefinition } from '../../relics/registry.js';
 import { activeRelics } from '../prep.js';
 
-// 营地（RUN_DESIGN §4.3）：三选一；Boss 前保底由 runFlow.roomOfFloor 调度。
-// 选项随 run 状态动态可见：找回瑞米（仅被打跑时）、休整、升级卡（仅有可升级卡时）。
+// 营地（RUN_DESIGN §4.3）：Boss 前保底由 runFlow.roomOfFloor 调度。
+// 选项随 run 状态动态可见：找回瑞米（仅被打跑时）、休整。
 // 2026-09-18 用户定：合并房里**训练先于篝火**——训练没开始（或抓卡尾款未清）时
 // 篝火不可用（UI 据快照 camp.locked 压暗提示，core 侧同一守卫拦连点/直调）。
+// 2026-09-21 D4：营地不再能升级卡（升级全部收进训练房新制）——只保留回血/找回瑞米。
 
 export const CAMP_PLACEHOLDER = {
   restHealRatio: 0.35, // 休整恢复最大生命比例（§4.3；2026-09 试玩调参：30%→35% 总生命）
@@ -21,7 +21,6 @@ export function campOptions(run) {
   const opts = [];
   if (run.remi.drivenOff) opts.push('recoverRemi');
   opts.push('rest');
-  if (run.player.deck.some(rt => canPromoteRuntime(rt, run))) opts.push('upgrade');
   return opts;
 }
 
@@ -49,13 +48,5 @@ export function campRecoverRemi(run) {
   if (!run.remi.drivenOff) throw new Error('瑞米未被打跑，无需找回');
   markCampUsed(run);
   run.remi.drivenOff = false;
-  return run;
-}
-
-// 升级一张卡（营地升级不计训练次数）
-export function campUpgrade(run, uniqueID, targetId = null) {
-  markCampUsed(run);
-  const result = promoteCard(run, uniqueID, targetId);
-  if (!result) throw new Error('该卡暂无可用晋升目标，无法升级');
   return run;
 }

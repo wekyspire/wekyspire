@@ -36,8 +36,8 @@ import {
   chooseAscension, chooseAscensionAbility, chooseSeedCards, rerollSeedOffering,
   ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from '../../src/core/run/ascension.js';
-import { trainUpgrade, trainDrawChoices, trainDraw, beginTraining } from '../../src/core/run/rooms/training.js';
-import { campRest, campRecoverRemi, campUpgrade, CAMP_PLACEHOLDER, campLocked } from '../../src/core/run/rooms/camp.js';
+import { trainUpgrade, trainUpgradeStart, trainDrawChoices, trainDraw, beginTraining } from '../../src/core/run/rooms/training.js';
+import { campRest, campRecoverRemi, CAMP_PLACEHOLDER, campLocked } from '../../src/core/run/rooms/camp.js';
 import { playEvent } from '../../src/core/run/rooms/event.js';
 import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
@@ -525,14 +525,14 @@ function execRoom(S, t) {
   const campUsed = merged ? !!run.roomData?.campUsed : !!S.roomDone;
   // 合并房按**动作名**分流（营地动作 / 训练动作各一套），避免落到对方的报错分支
   const goCamp = room === 'camp' || (merged && ['rest', 'remi', 'upgrade'].includes(a));
-  const goTraining = room === 'training' || (merged && ['train', 'up', 'draw', 'take', 'skipdraw'].includes(a));
+  const goTraining = room === 'training' || (merged && ['train', 'up', 'upmode', 'draw', 'take', 'skipdraw'].includes(a));
   if (S.roomDone && !merged) throw new Error('本房间动作已完成，用 next 离开');
   if (goCamp) return execRoomCamp(S, t, campUsed);
   if (goTraining) return execRoomTraining(S, t);
   if (merged) {
     throw new Error('合并房动作（训练，必做先行）：act train 开局'
-      + '｜（训练）：act draw | act take <#> | act skipdraw | act up <构筑#> <卡名>'
-      + '｜（营地，训练收尾后）：act rest | act remi | act upgrade <构筑#> <卡名>'
+      + '｜（训练）：act draw | act take <#> <卡名> | act skipdraw | act upmode c|b → act up <构筑#> <卡名>'
+      + '｜（营地，训练收尾后）：act rest | act remi'
       + '｜离开：next');
   }
   if (room === 'gurpas') return execRoomGurpas(S, t);
@@ -634,17 +634,7 @@ function execRoomCamp(S, t, campUsed) {
     return;
   }
   if (a === 'remi') { campRecoverRemi(run); S.roomDone = true; S.lastOutcome = '找回瑞米'; return; }
-  if (a === 'upgrade') {
-    const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
-    const gateErr = upgradeGateError(run, card);
-    if (gateErr) throw new Error(gateErr);
-    const before = defOf(card).name;
-    campUpgrade(run, card.uniqueID);
-    S.roomDone = true;
-    S.lastOutcome = `升级：${before} → ${defOf(card).name}（营地）`;
-    return;
-  }
-  throw new Error('营地动作：act rest | act remi | act upgrade <构筑#> <卡名>');
+  throw new Error('营地动作：act rest | act remi（2026-09-21 D4：营地不再能升级卡——升级走训练房尾款）');
 }
 
 // 训练场（非合并房的 training，或合并房的训练部分）
@@ -677,7 +667,7 @@ function execRoomTraining(S, t) {
       id => getSkillDefinition(id)?.name ?? id);
     trainDraw(run, defId);
     S.lastOutcome = run.roomData?.pendingUpgrade
-      ? `训练抓牌：${getSkillDefinition(defId).name}——抓了卡欠一次升级：act up <构筑#> <卡名>`
+      ? `训练抓牌：${getSkillDefinition(defId).name}——抓了卡欠升级：act upmode c|b 选模式，再 act up <构筑#> <卡名>`
       : `训练抓牌：${getSkillDefinition(defId).name}（牌组升无可升，尾款免除）`;
     return;
   }
@@ -686,17 +676,29 @@ function execRoomTraining(S, t) {
     S.lastOutcome = '放弃本次抓牌（可选段作罢）';
     return;
   }
+  if (a === 'upmode') {
+    // 尾款第一拍（2026-09-21 新制）：act upmode c（升 2 张 C→B）| b（升 1 张 B→A）
+    const mode = b === 'c' ? 'twoC' : b === 'b' ? 'oneB' : null;
+    if (!mode) throw new Error('用法：act upmode c（升 2 张 C→B）| act upmode b（升 1 张 B→A）');
+    trainUpgradeStart(run, mode);
+    const p = run.roomData.pendingUpgrade;
+    S.lastOutcome = `尾款模式选定：${mode === 'twoC' ? '升 2 张 C→B' : '升 1 张 B→A'}`
+      + `——act up <构筑#> <卡名>（还需 ${p.remaining} 张，只收 ${mode === 'twoC' ? 'C' : 'B'} 阶）`;
+    return;
+  }
   if (a === 'up') {
     const card = run.player.deck[resolveHandStrict(run.player.deck, b, t[3], '构筑卡')];
     const gateErr = upgradeGateError(run, card);
     if (gateErr) throw new Error(gateErr);
     const before = defOf(card).name;
     trainUpgrade(run, card.uniqueID);
-    S.lastOutcome = `尾款升级：${before} → ${defOf(card).name}（训练收束）`;
+    const p = run.roomData?.pendingUpgrade;
+    S.lastOutcome = `尾款升级：${before} → ${defOf(card).name}`
+      + (p ? `（还需 ${p.remaining} 张）` : '（训练收束）');
     return;
   }
   throw new Error('训练动作：act train（必做开局）｜act draw | act take <#> <卡名> | act skipdraw'
-    + '｜act up <构筑#> <卡名>（尾款升级）');
+    + '｜act upmode c|b（选尾款模式）→ act up <构筑#> <卡名>（逐张晋升）');
 }
 
 // 古尔帕斯之店（35 层固定房）：buy/claim/sell/remove
@@ -1088,7 +1090,7 @@ function execNext(S) {
     // 训练必做且先于篝火（2026-09-18 改版）：没开局 / 尾款未清不许离场（GUI 义务门同口径）
     if (run.currentRoom === 'campTraining' || run.currentRoom === 'training') {
       if (!run.roomData?.trained) throw new Error('训练是必做阶段：act train 开始训练（达标当场进阶），完成后才能离开');
-      if (run.roomData?.pendingUpgrade) throw new Error('抓到的卡还欠一次升级：act up <构筑#> <卡名>');
+      if (run.roomData?.pendingUpgrade) throw new Error('抓到的卡还欠升级：act upmode c|b 选模式，再 act up <构筑#> <卡名>');
     }
     // 老虎机安慰奖欠着不允许离场（真游戏：点继续前进每次都被吞去强制二选一，不能跳过）
     if (slotGiftDue(run)) throw new Error('老虎机的安慰奖还没领取：act gift <cola|chicken>');

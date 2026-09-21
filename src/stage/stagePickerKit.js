@@ -47,13 +47,7 @@ import { withLabels } from './panels/shared.js';
 const UPGRADE_SOURCES = {
   // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
   // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
-  camp: {
-    upgrade: true,
-    cards: (s) => s?.camp?.upgradeCards,
-    intent: (uniqueID, targetId = null) => ({ action: 'campChoose', option: 'upgrade', uniqueID, targetId }),
-    title: '选择要升级的卡', confirmLabel: '确认升级',
-    hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
-  },
+  // （camp 源 2026-09-21 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,

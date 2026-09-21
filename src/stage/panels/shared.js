@@ -32,15 +32,16 @@ export const ROOM_META = {
 };
 
 /**
- * 「升级一张卡」入口（训练场/营地共用）：按一下进入**全屏选卡界面**
+ * 「升级一张卡」入口（训练场尾款用）：按一下进入**全屏选卡界面**
  * （本动作由舞台本地消化——界面里的卡来自快照的 upgradeCards；确认时才把选中的卡上报 core）。
  */
-export const upgradeButton = (source) => ({
+export const upgradeButton = (source, label = '升级一张卡') => ({
   kind: 'button', id: `${source}:upgrade`, width: 300, size: 'main',
-  label: '升级一张卡', action: { action: 'openUpgradePicker', source, local: true },
+  label, action: { action: 'openUpgradePicker', source, local: true },
 });
 
-/** 营地动作瓦片（休整/找回瑞米 + 免费升级入口）：占位面板与场景式面板共用（模块作用域）。 */
+/** 营地动作瓦片（休整/找回瑞米）：占位面板与场景式面板共用（模块作用域）。
+ *  2026-09-21 D4：营地不再能升级卡（升级全部收进训练房新制）。 */
 export const pushCampGroup = (w, c = { options: [] }) => {
   const tiles = [];
   if (c.options.includes('recoverRemi')) {
@@ -55,10 +56,6 @@ export const pushCampGroup = (w, c = { options: [] }) => {
   if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
   if (c.options.includes('rest')) {
     w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '休整 = 回复 35% 最大生命，并把魏启全部回满' });
-  }
-  if (c.options.includes('upgrade')) {
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '或免费升级一张卡：' });
-    w.push(upgradeButton('camp'));
   }
 };
 

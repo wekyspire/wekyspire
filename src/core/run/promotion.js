@@ -10,7 +10,7 @@ import { maxRewardTier, packOf, TIER_RANK } from './rewards.js';
 // 走 `battlePromotesTo`，本模块不可见，斩卡因此永远不会出现在营地/训练场的升级候选里。
 //
 // 等阶门禁（§5.2，与抓牌同口径）：晋升目标等阶不得超过该卡**所属体系**当前解锁的
-// 最高等阶（体修看隐藏 bodyLevel，灵脉看 leino 维度；0 级 → D/C，1 级 → B，2 级 → A）。
+// 最高等阶（体修看隐藏 bodyLevel，灵脉看 leino 维度；0 级 → C，1 级 → B，2 级 → A）。
 // 体修 0 级升出 A 级揽云手的事故即门禁漏接所致——抓牌侧（rewards.js）有门禁，
 // 晋升侧也必须过同一道闸。
 
@@ -21,44 +21,19 @@ export function promotionTargets(def) {
   return ids.filter(hasSkill);
 }
 
-// 这条晋升链（沿 promotesTo 上溯，含分叉）是否最终能到 S。
-// 「一次升两阶」只给**到不了 S 的短链**（链顶止步 A/B）：晚局单步价值太薄；能一路
-// 通往 S 的链（如斩灭 A→S，尽管 S 目标本身被门禁排除）保持单步——通往 S 的每一阶
-// 都有长期价值。（2026-09-21 用户定）
-function chainReachesS(def) {
-  const seen = new Set();
-  const queue = [def?.id];
-  while (queue.length) {
-    const id = queue.pop();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const d = getSkillDefinition(id);
-    if (d?.tier === 'S') return true;
-    queue.push(...promotionTargets(d));
-  }
-  return false;
-}
+// 通用填充卡（拳/盾，2026-09-21 D2/D4）：不走体修路线无法升级——填充卡是全体系
+// 起始牌组的凑数位，晋升通道是体修路线的专属甜头（StS Strike/Defend 不可升级的变体口径）。
+const FILLER_STARTERS = new Set(['punch', 'guard']);
 
 // 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
-// S 阶不可经晋升获得（2026-09 定）：训练场/营地/老虎机升级一律到不了 S——晋升链
-// 本身保留（作为未来特殊事件的升 S 通道数据），S 的常规来源只有卡包直出。
-// 一次升两阶（2026-09-21 用户定）：门禁已开高、单步目标还低于上限、且这条链到不了 S
-// 的低阶卡，直接给**两阶后**的目标（D→B、C→A）——晚局升一张 D/C 卡不再只挪一小格。
-// 只在链线性时跳（单目标→单目标）；分叉保持原样走升级子面板抉择。
+// S 阶不可经晋升获得（2026-09 定）：训练场/老虎机升级一律到不了 S——晋升链
+// 本身保留（作为未来特殊事件的升 S 通道数据），S 的常规来源只有事件直出。
+// 2026-09-21 D4：「一次升两阶」随训练新制（升 2 张 C→B / 升 1 张 B→A）废除——
+// 升级收益刻意做小（等阶扁平化），单步晋升是唯一口径。
 export function gatedPromotionTargets(run, def) {
+  if (FILLER_STARTERS.has(def?.id) && run.route !== 'body') return [];
   const cap = TIER_RANK[maxRewardTier(run, packOf(def))] ?? Infinity;
-  let targets = promotionTargets(def);
-  if (targets.length === 1 && !chainReachesS(def)) {
-    const child = getSkillDefinition(targets[0]);
-    if ((TIER_RANK[child?.tier] ?? Infinity) < cap) {   // 单步目标低于上限 = 还有余量
-      const grand = promotionTargets(child);
-      if (grand.length === 1) {
-        const g = getSkillDefinition(grand[0]);
-        if (g && g.tier !== 'S') targets = grand;       // 两阶跳（≤cap 由下方过滤兜底）
-      }
-    }
-  }
-  return targets.filter(id => {
+  return promotionTargets(def).filter(id => {
     const target = getSkillDefinition(id);
     if (target.tier === 'S') return false;
     return (TIER_RANK[target.tier] ?? Infinity) <= cap;

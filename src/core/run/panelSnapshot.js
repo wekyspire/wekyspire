@@ -24,6 +24,7 @@ import {
 } from './ascension.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { campOptions, campLocked } from './rooms/camp.js';
+import { trainUpgradeModes } from './rooms/training.js';
 import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } from './rooms/slotMachine.js';
 import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
@@ -224,25 +225,34 @@ export function roomSnapshot(run, extra = {}) {
   // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地·训练场合并房）共用
   if (room === 'training' || room === 'campTraining') {
     const choices = run.roomData?.drawChoices ?? null;
+    const pending = run.roomData?.pendingUpgrade;   // 2026-09-21 新制：{mode, remaining}
+    const modes = trainUpgradeModes(run);
     snap.training = {
       started: !!run.roomData?.trained,  // 训练已开始（升阶已记；合并房里篝火门看它）
       optionalDone: !!run.roomData?.optionalDone, // 可选段已收束（领过或放弃，不再给抓牌入口）
-      pendingUpgrade: !!run.roomData?.pendingUpgrade, // 抓卡后的尾款升级 → 不给跳过出口
+      pendingUpgrade: !!pending,                    // 抓卡后的尾款升级 → 不给跳过出口
+      upgradeMode: typeof pending === 'object' ? pending.mode : null,   // 已选模式（null = 待选模式）
+      upgradeRemaining: typeof pending === 'object' ? pending.remaining : 0,
+      // 两模式实况（面板按钮门禁与文案同源）：张数够才亮
+      upgradeModes: { twoC: modes.twoC.length, oneB: modes.oneB.length },
       choices,                            // 候选 defId 列表；null = 还没掷（可选段未开局/已收束）
       choicesCards: (choices ?? []).map(id => ({
         defId: id,
         view: cardViewFromDef(getSkillDefinition(id), { player: p }),
       })),
-      upgradeCards,
+      // 选卡界面的候选：模式选定后只列该等阶（twoC→C、oneB→B）；未选模式时给空（先选模式）
+      upgradeCards: (typeof pending === 'object' && pending.mode)
+        ? upgradeCards.filter(c => getSkillDefinition(c.defId)?.tier === (pending.mode === 'twoC' ? 'C' : 'B') && c.enabled)
+        : [],
     };
     if (room === 'training') return snap;
   }
 
   // 营地部分：'camp'（旧单房，兼容保留）与合并房共用
+  // 2026-09-21 D4：营地不再能升级卡——不再下发 upgradeCards
   if (room === 'camp' || room === 'campTraining') {
     snap.camp = {
       options: campOptions(run),
-      upgradeCards,
       used: !!run.roomData?.campUsed,     // 本房营地动作已用过（合并房各自一次）
       locked: campLocked(run),            // 训练未做/尾款未清 → 篝火不可用（先训练后篝火）
     };
