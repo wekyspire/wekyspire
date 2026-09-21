@@ -21,12 +21,44 @@ export function promotionTargets(def) {
   return ids.filter(hasSkill);
 }
 
+// 这条晋升链（沿 promotesTo 上溯，含分叉）是否最终能到 S。
+// 「一次升两阶」只给**到不了 S 的短链**（链顶止步 A/B）：晚局单步价值太薄；能一路
+// 通往 S 的链（如斩灭 A→S，尽管 S 目标本身被门禁排除）保持单步——通往 S 的每一阶
+// 都有长期价值。（2026-09-21 用户定）
+function chainReachesS(def) {
+  const seen = new Set();
+  const queue = [def?.id];
+  while (queue.length) {
+    const id = queue.pop();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const d = getSkillDefinition(id);
+    if (d?.tier === 'S') return true;
+    queue.push(...promotionTargets(d));
+  }
+  return false;
+}
+
 // 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
 // S 阶不可经晋升获得（2026-09 定）：训练场/营地/老虎机升级一律到不了 S——晋升链
 // 本身保留（作为未来特殊事件的升 S 通道数据），S 的常规来源只有卡包直出。
+// 一次升两阶（2026-09-21 用户定）：门禁已开高、单步目标还低于上限、且这条链到不了 S
+// 的低阶卡，直接给**两阶后**的目标（D→B、C→A）——晚局升一张 D/C 卡不再只挪一小格。
+// 只在链线性时跳（单目标→单目标）；分叉保持原样走升级子面板抉择。
 export function gatedPromotionTargets(run, def) {
   const cap = TIER_RANK[maxRewardTier(run, packOf(def))] ?? Infinity;
-  return promotionTargets(def).filter(id => {
+  let targets = promotionTargets(def);
+  if (targets.length === 1 && !chainReachesS(def)) {
+    const child = getSkillDefinition(targets[0]);
+    if ((TIER_RANK[child?.tier] ?? Infinity) < cap) {   // 单步目标低于上限 = 还有余量
+      const grand = promotionTargets(child);
+      if (grand.length === 1) {
+        const g = getSkillDefinition(grand[0]);
+        if (g && g.tier !== 'S') targets = grand;       // 两阶跳（≤cap 由下方过滤兜底）
+      }
+    }
+  }
+  return targets.filter(id => {
     const target = getSkillDefinition(id);
     if (target.tier === 'S') return false;
     return (TIER_RANK[target.tier] ?? Infinity) <= cap;

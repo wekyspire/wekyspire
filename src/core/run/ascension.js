@@ -43,13 +43,13 @@ export const FIRST_ASCENSION_GRANT = Object.freeze({
 // 内容侧也可用 def.seedEligible === false 单卡标注；本表是当前统一调参位。
 const SEED_EXCLUDED = new Set([
   // 火灵脉：添柴系（需手牌燃料）、需已有燃烧的控火术（散/收/扰/爆/聚/炼/无上）、
-  // 燃烧转化/反哺（激热/化焰/镜燃）、焰愈系（按自身燃烧缩放）、忍耐（需燃烧受伤）；
+  // 燃烧转化/反哺（激热/镜燃；化焰 2026-09-21 删卡）、焰愈系（按自身燃烧缩放）、忍耐（需燃烧受伤）；
   // 控火术：燃 与 火墙链 可独立生效，保留在种子池中（灼 2026-09 改 B 阶，自然出 D/C 池；
   // 灭 2026-09-13 已删卡）
   'fuelTheFire', 'roaringFire', 'blazeUp', 'wildfire',
   'fireControlSpread', 'fireControlHarvest', 'fireControlDisturb',
   'fireControlDetonate', 'fireControlGather', 'fireControlRefine', 'fireControlSupreme',
-  'heatSurge', 'meltFlame', 'mirrorBurn', 'flameHeal', 'patience',
+  'heatSurge', 'mirrorBurn', 'flameHeal', 'patience',
   // 扩容批（2026-09-14）：需燃烧储备的收割/条件件（燃爆/回火/热浪——同激热/焰愈口径）
   'burnSnap', 'backfire', 'heatWave',
   // 体修：花刀/飞刀系（吃手牌与邻位）、呼吸系（吃弃牌）、培植/开刃/砺刀系（吃刀法牌）、

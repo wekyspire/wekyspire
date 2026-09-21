@@ -13,7 +13,7 @@
 //     无存活敌人时静默落空（战斗通常已终局，此处仅防御性兜底）。
 
 import { registerSkill } from '../skills/registry.js';
-import { zoneOf, aliveEnemies, unitsOfSide, allAliveUnits } from '../state/battleState.js';
+import { aliveEnemies, unitsOfSide, allAliveUnits } from '../state/battleState.js';
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
@@ -149,31 +149,8 @@ heatSurgeCard({ id: 'heatSurge', tier: 'C', ap: 1, exhaust: true, promotesTo: 'h
 heatSurgeCard({ id: 'heatSurgePlus', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeMaster' });
 heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
 
-// 化焰 C：0 费。被动：每一点溢出魏启，为所有单位（敌我双方）施加燃烧 1。
-// 口径假设：设计稿未注明生效区，按「在手时生效」落地（与猛拳「在手时」语言同类；
-// 打出即失效回库，占手是其代价）。溢出 = payload.amount - result.gained
-// （GainManaInstruction 的截断量可从结算结果可靠读出）。
-registerSkill({
-  id: 'meltFlame', name: '化焰', type: 'fire', tier: 'C', series: 'ember',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal',
-  use() { return true; }, // 纯被动：打出本身无效果（0 费循环/腾手）
-  subscriptions: (sctx) => [{
-    when: GainManaInstruction, phase: 'post',
-    filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand'
-      && (instr.payload.amount - (instr.result?.gained ?? 0)) > 0,
-    react: (instr, ctx) => {
-      const overflow = instr.payload.amount - instr.result.gained;
-      for (const unit of allAliveUnits(ctx.battleState, ctx.player)) {
-        ctx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: 'burn', stacks: overflow,
-        }), instr);
-      }
-    },
-  }],
-  describe: () => '在手时：每点溢出魏启，为所有单位赋予/effect{燃烧}1',
-});
+// （化焰 C 已于 2026-09-21 删除——用户裁决「机制老旧」：驻手监听溢出魏启为全场
+// 上燃烧的被动，与现行火系语言脱节；设计稿行与进阶种子池同步移除。）
 
 // ==== 控火系列（多功能散牌）===================================================
 // 「发现 0 费控火术」的卡池：费用是定义级字段、无运行时覆写通道（ConsumeSkillResources
