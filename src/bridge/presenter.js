@@ -93,6 +93,9 @@ export function createBridgePresenter({
     shield: (p) => { anim(EventNames.ANIM_SHIELD, p); syncState(); },
     resource: (p) => { anim(EventNames.ANIM_RESOURCE, p); syncState(); },
     effect: (p) => { anim(EventNames.ANIM_EFFECT, p); syncState(); },
+    // 通用剧本闸口（fx 架构）：纯演出节拍，不带状态迁移，故**不跟 syncState**——
+    // 剧本引用的世界状态（单位位置等）以最近的 sync 为准，参数必须全标量（wire 过线）
+    playScript: (p) => { anim(EventNames.ANIM_SCRIPT, p); },
     unitDeath: (p) => {
       anim(EventNames.ANIM_UNIT_DEATH, p);
       syncState();

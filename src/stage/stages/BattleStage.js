@@ -57,6 +57,8 @@ import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
 import { resolveDamageRecipe, resolveUnitAuras } from '../fx/recipes.js';
 import { AuraHost } from '../fx/aura.js';
+import { Cast } from '../fx/cast.js';
+import { getScript } from '../fx/scripts/index.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
@@ -231,6 +233,9 @@ export class BattleStage {
     // 单位常驻 aura（fx/aura.js）：uniqueID → AuraHost。由显示状态 diff 驱动
     // （_syncUnits 里对账），观战端经同一份 state sync 自动一致
     this._unitAuras = new Map();
+    // 命名寻址注册表（fx/cast.js）：剧本/相机经名字拿句柄。战斗内登记
+    // unit:<uniqueID> 与 role:player；anchor/light 由场景层登记（Phase 3+）
+    this._cast = new Cast();
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
     this._bubbles = new BubbleLayer();
@@ -456,6 +461,9 @@ export class BattleStage {
         this.picker.addPickable(unitProj.uniqueID, obj, { kind: 'unit' });
         this._applyUnitArtTo(obj);
       }
+      // cast 命名寻址登记（幂等；同句柄重登不告警）
+      this._cast.register(`unit:${unitProj.uniqueID}`, obj);
+      if (side === 'player') this._cast.register('role:player', obj);
       // 战线轴槽位：位置/缩放/z 由 scene 定义换算（假透视：近大远小、近处压远处）。
       // 死亡单位不重放 scale——否则 reconcile 会把死亡收殓补间踩回去
       const tr = slotTransform(this._sceneDef, side, index, count);
@@ -479,6 +487,7 @@ export class BattleStage {
       if (!seen.has(id)) {
         this.picker.removePickable(id);
         this.animator.unregister(id);
+        this._cast.unregister(`unit:${id}`, this._units.get(id));
         this._unitAuras.get(id)?.dispose(); // 单位视图消亡：aura 瞬收（不播 exit）
         this._unitAuras.delete(id);
         this.scene.remove(obj);
@@ -1275,6 +1284,8 @@ export class BattleStage {
     }
 
     const target = this._findAnimTarget(payload);
+    // 通用剧本闸口（fx 架构）：剧本自寻址（cast/unitById），不走 target 投影
+    if (type === EventNames.ANIM_SCRIPT) return this._scriptBeat(payload, finish);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
     if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, finish);
     if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
@@ -1450,7 +1461,34 @@ export class BattleStage {
     return sm.screenToWorld(px.x, px.y, 70, sm.uiCamera);
   }
 
-  // 受伤演出（2026-09-22 fx 架构 Phase 1：查表化 + 协程化——配方决议走 fx/recipes.js，
+  // 通用剧本节拍（fx 架构 ANIM_SCRIPT 闸口）：core 只报「剧本 id + 标量参数」，
+  // 内容全在 fx/scripts/ 注册表。阻塞节拍——剧本跑完才 finish；未知 id 静默回落收拍
+  // （观战端/旧档遇到新剧本 id 不炸队列，铁律同 hitFx 注册表）。
+  _scriptBeat(payload, finish) {
+    const fn = getScript(payload?.script);
+    if (!fn) {
+      console.warn(`[fx/scripts] 未知剧本（静默收拍）：${payload?.script}`);
+      return finish();
+    }
+    const h = runScript(async (ctx) => {
+      await fn({
+        ctx,
+        args: payload ?? {},
+        cast: this._cast,
+        particles: this.particles,
+        shake: this.shake,
+        vignette: this._vignette,
+        unitById: (id) => this._units.get(id) ?? null,
+      });
+    }, { animator: this.animator });
+    this._fxScripts.add(h);
+    h.promise.then(() => {
+      this._fxScripts.delete(h);
+      finish();
+    });
+  }
+
+
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
   //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放）；
   //   附级伤害（type='minor'，燃烧/中毒/荆棘 tick 等）：配方降规格——小数字、无翻红、
@@ -2236,6 +2274,7 @@ export class BattleStage {
     this._fxScripts.clear();
     for (const auras of this._unitAuras.values()) auras.dispose(); // 常驻 aura 全瞬收
     this._unitAuras.clear();
+    this._cast.clear(); // 命名寻址随舞台销毁（下一场 beginBattle 重建）
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);
       window.removeEventListener('keyup', this._onShiftKeyUp);

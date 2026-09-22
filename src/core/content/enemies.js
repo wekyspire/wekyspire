@@ -124,6 +124,9 @@ registerEnemy({
     const { unit, battleState: bs } = actx;
     if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {
       unit._phase2 = true; unit._phaseBeat = 0; // 转段首拍空转（蓄力）
+      // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT）：core 只报 id+标量参数，
+      // 内容全在 stage 侧 fx/scripts/bosses/pyro.js；观战端同源重放
+      actx.presenter?.playScript?.({ script: 'bosses/pyroP2', unit: unit.uniqueID });
       return;
     }
     const atk = unit.getStat('attack');

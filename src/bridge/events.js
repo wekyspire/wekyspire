@@ -35,6 +35,11 @@ export const EventNames = {
   // 公共节拍——养刀术/锻刀术/练刀/火光爆发等任何会改 runtime.power 的效果都走它
   // （presenter.cardPowerUp，见 core/content/cardKit.gainPower）。
   ANIM_CARD_POWER_UP: 'anim:card-power-up',
+  // 通用剧本闸口（2026-09-22 fx 架构，唯一的新增口子）：core 只报「放哪个剧本 + 标量参数」
+  // （presenter.playScript({ script, ...args })），内容全在 stage 侧 fx/scripts/ 注册表——
+  // Boss 转阶段/特殊演出走这里，伤害类特效仍蹲 _damageHit 节拍内（铁律不变）。
+  // wire 描述符同源：观战端拿同 id 重放同剧本。
+  ANIM_SCRIPT: 'anim:script',
   // 状态同步节拍：前端**显示状态**只在此时推进（快照在 start 时拉取，合并此前全部变更）。
   // 精髓（老版设计）：后端状态与前端显示状态是两套状态；显示状态不随后端即时变，
   // 而由本指令在动画队列中按节拍应用——因此"先播受伤动画再扣血""卡牌飞进坟堆数字才+1"
@@ -80,5 +85,6 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_CARD_TRANSFORMED]: 3000,
   [EventNames.ANIM_CARDS_DUMPED]: 2500,
   [EventNames.ANIM_CARD_POWER_UP]: 2000,   // 放缩脉冲 ~130ms + 回位；非阻塞语义（见 BattleStage 节拍）
+  [EventNames.ANIM_SCRIPT]: 15000,  // 剧本不定长（Boss 转阶段等），保险丝按最宽档
   [EventNames.ANIM_STATE_SYNC]: 2000,   // 实际时长≈0（Stage 应用快照即回 finish），兜底同理
 };
