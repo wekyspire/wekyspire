@@ -5,8 +5,9 @@
 // 在 kit/behaviors.js，参数在道具），notify 按 cast 里 prop: 前缀圈选 + 半径过滤分发。
 //
 // 句柄形态（composeRoom notifiables 契约）：{ name, object, interactions: {
-//   impact: { radius?, respond(handle, payload) }, ... } }
+//   impact: { radius?, respond(handle, payload), dispose?(handle) }, ... } }
 // respond 一律 fire-and-forget（自己起补间/粒子），异常只告警不炸分发。
+// dispose 可选：舞台销毁时由 hub.dispose() 逐件回调（杀在途补间等收尾）。
 
 export function createNotifyHub({ cast }) {
   const notify = (event, payload = {}) => {
@@ -28,5 +29,13 @@ export function createNotifyHub({ cast }) {
       }
     }
   };
-  return { notify };
+  /** 舞台销毁收尾：逐件回调各事件 spec 的 dispose（在途补间杀掉，不留活补间写死对象）。 */
+  const dispose = () => {
+    for (const { handle } of cast.query('prop:')) {
+      for (const spec of Object.values(handle?.interactions ?? {})) {
+        try { spec.dispose?.(handle); } catch (_) {}
+      }
+    }
+  };
+  return { notify, dispose };
 }

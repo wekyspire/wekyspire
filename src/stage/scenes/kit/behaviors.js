@@ -39,6 +39,15 @@ export function flutterOnImpact({ radius = 95, tilt = 0.05, durationMs = 450, sw
             },
           });
         },
+        // 舞台销毁收尾（hub.dispose 逐件回调）：杀在途震颤 + 回基准姿态，
+        // 不留活补间写死对象
+        dispose(handle) {
+          const obj = handle?.object;
+          if (!obj) return;
+          try { obj.userData._flutterTween?.kill?.(); } catch (_) {}
+          obj.userData._flutterTween = null;
+          if (obj.userData._baseRz !== undefined) obj.rotation.z = obj.userData._baseRz;
+        },
       },
     },
   };

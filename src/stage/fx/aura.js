@@ -52,7 +52,7 @@ export class AuraHost {
     this._records.set(key, record);
     this._object3D.add(aura.group);
     if (typeof def.enter === 'function') {
-      record.script = runScript(async () => { await def.enter(aura); }, { animator: {} });
+      record.script = runScript(async () => { await def.enter(aura); }, { animator: null });
       record.script.promise.then(({ killed }) => {
         // 收尾转态：仅当仍在 entering 且未被 kill（kill 路径由触发方负责转态）
         if (!killed && aura._state === 'entering') aura._state = 'active';
@@ -111,7 +111,7 @@ export class AuraHost {
   // exit 过渡剧本：完成后 teardown；被 kill（attach 重入 / dispose）则转态由触发方负责
   _playExit(rec) {
     const { aura } = rec;
-    rec.script = runScript(async () => { await aura.def.exit(aura); }, { animator: {} });
+    rec.script = runScript(async () => { await aura.def.exit(aura); }, { animator: null });
     rec.script.promise.then(({ killed }) => {
       if (killed) return;
       if (aura._state === 'exiting') this._teardown(rec);

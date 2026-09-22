@@ -40,8 +40,9 @@ export class CameraDirector {
   // ---- 运镜 ----
 
   /**
-   * 飞到机位（后到先赢：掐断在途飞行）。返回完成 Promise。
-   * 剧本里用法：await ctx 包装或裸 await director.flyTo('bossIntro', { durationMs: 800 })。
+   * 飞到机位（后到先赢：掐断在途飞行）。返回完成 Promise——**必达**：
+   * 正常到位 resolve(true)；被后来的 flyTo 抢飞 / dispose 掐断 resolve(false)
+   * （契约同 runScript：await 它的剧本协程永不停在半空）。
    */
   flyTo(poseOrName, { durationMs = 600, ease = 'power2.inOut' } = {}) {
     const pose = typeof poseOrName === 'string' ? this._poses.get(poseOrName) : poseOrName;
@@ -56,12 +57,15 @@ export class CameraDirector {
       : { x: this._lookAt.x, y: this._lookAt.y, z: this._lookAt.z };
     return new Promise((resolve) => {
       const tl = gsap.timeline({
-        onComplete: () => { this._flight = null; resolve(true); },
+        onComplete: () => {
+          if (this._flight?.tl === tl) this._flight = null;
+          resolve(true);
+        },
       });
       tl.to(cam.position, { x: pose.position.x, y: pose.position.y, z: pose.position.z, duration: durationMs / 1000, ease }, 0);
       tl.to(this._lookAt, { ...look, duration: durationMs / 1000, ease,
         onUpdate: () => cam.lookAt(this._lookAt) }, 0);
-      this._flight = tl;
+      this._flight = { tl, resolve };
     });
   }
 
@@ -109,17 +113,21 @@ export class CameraDirector {
     this.current?.controller.onTick?.(dtSeconds, this);
   }
 
-  /** 舞台退出收尾：清空栈 + 掐断在途飞行 + 还原基准机位。 */
+  /** 舞台退出收尾：清空栈 + 掐断在途飞行 + 清空机位库 + 还原基准机位（换场即忘）。 */
   dispose() {
     this._killFlight();
     while (this._stack.length) this.popOverride(this._stack[this._stack.length - 1].id);
+    this._poses.clear(); // 机位随舞台走：Boss push 的命名机位不漏进下一场
     this._sm.restoreBaseCamera();
   }
 
+  // 掐断在途飞行：promise 也一并 resolve(false)——await 方不许挂死
   _killFlight() {
-    if (!this._flight) return;
-    try { this._flight.kill(); } catch (_) {}
+    const f = this._flight;
+    if (!f) return;
     this._flight = null;
+    try { f.tl.kill(); } catch (_) {}
+    f.resolve(false);
   }
 }
 

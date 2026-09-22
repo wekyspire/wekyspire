@@ -2,10 +2,12 @@
 // 剧本/相机/配方要驱动「火堆」「Boss」「主光源」时，不该知道具体类与 3D 层级——
 // 一律经 cast 按名字拿句柄。命名约定（纯字符串前缀，查询用）：
 //   unit:<uniqueID>      战斗单位视图（BattleStage 建视图时登记）
-//   role:player / role:boss  角色别名（boss = Boss 战那只，普通战不挂）
-//   anchor:<名>          场景锚点（'bonfire' 等，PCG/房型在搭建时登记）
-//   light:<名>           可调光灯（lighting 预设登记，供光照切换剧本）
-//   prop:<名>            有交互声明的 PCG 道具（notify 分发按前缀圈选）
+//   role:player          角色别名（BattleStage 登记）
+//   prop:<名>            有交互声明的 PCG 道具（composeRoom notifiables，notify 按前缀圈选）
+// 规划中、登记方随内容落地（Phase 5+，写剧本前确认有登记方，别照文档臆测）：
+//   role:boss            Boss 战那只（暂无登记方——Boss 剧本目前经 args.unit 拿目标）
+//   anchor:<名>          场景锚点（'bonfire' 等，PCG/房型搭建侧）
+//   light:<名>           可调光灯（lighting 预设侧，供光照切换剧本）
 // 句柄是任意对象（UnitObject / THREE.Light / 锚点数据），cast 不解释内容。
 // 作用域 = 每个舞台实例一份；舞台销毁即 clear，不跨场景泄漏。
 

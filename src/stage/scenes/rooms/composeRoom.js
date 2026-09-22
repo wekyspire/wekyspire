@@ -150,6 +150,15 @@ export function composeRoom(recipeId, seed = 'dev') {
   liveRoot.name = 'room:live';
   const interactives = new Map();   // name -> { object, def, placement, kind }
   const notifiables = [];           // 被动响应件（behaviors 声明）：{ name, object, interactions }
+  // behaviors[] → interactions 表组装（同名事件后者覆盖前者）；同名碰撞加序号后缀
+  // （cast 按名登记，重名异对象会告警）
+  const pushNotifiable = (baseName, obj, behaviors) => {
+    const interactions = {};
+    for (const b of behaviors) Object.assign(interactions, b?.interactions ?? {});
+    let name = baseName;
+    for (let n = 2; notifiables.some(x => x.name === name); n++) name = `${baseName}#${n}`;
+    notifiables.push({ name, object: obj, interactions });
+  };
   const floorRoot = new THREE.Group();
   floorRoot.name = 'room:floor';
   const decalRoot = new THREE.Group();
@@ -578,8 +587,12 @@ export function composeRoom(recipeId, seed = 'dev') {
     const fx = f.x + nudge[0];
     const fz = f.z + nudge[1];
     const obj = def.build({ rng: createRng(`${seed}:${recipeId}:f:${f.id}`) });
-    track(def, obj, { x: fx, y: ty(fx, fz), z: fz, ry: Math.atan2(0 - fx, -10 - fz), scale: fsc });
+    // 火源也是构图定点件：带 behaviors 的（火盆受击震颤等）同样排除出静态合批、
+    // 登记 notifiables——战斗房的火盆全走这条 fires 路径，漏登记 = notify 无人接
+    const fireNotifiable = (def.behaviors?.length ?? 0) > 0;
+    track(def, obj, { x: fx, y: ty(fx, fz), z: fz, ry: Math.atan2(0 - fx, -10 - fz), scale: fsc, root: fireNotifiable ? liveRoot : staticRoot });
     claim(fx, fz, fhx, fhz);
+    if (fireNotifiable) pushNotifiable(f.name ?? f.id, obj, def.behaviors);
     fireAnchors.push({ x: fx, y: FLOOR_Y + Math.min(measure(obj).height * 0.75, 5), z: fz });
   }
   for (const g of recipe.guaranteed || []) {
@@ -607,12 +620,7 @@ export function composeRoom(recipeId, seed = 'dev') {
         x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
       });
     }
-    if (notifiable) {
-      // behaviors[] → interactions 表组装（同名事件后者覆盖前者）
-      const interactions = {};
-      for (const b of def.behaviors) Object.assign(interactions, b?.interactions ?? {});
-      notifiables.push({ name: g.name ?? g.id, object: obj, interactions });
-    }
+    if (notifiable) pushNotifiable(g.name ?? g.id, obj, def.behaviors);
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
     lampAnchors.push(...lampAnchorOf(placements[placements.length - 1]));

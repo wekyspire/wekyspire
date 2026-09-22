@@ -1486,6 +1486,8 @@ export class BattleStage {
         particles: this.particles,
         shake: this.shake,
         vignette: this._vignette,
+        camera: this._sm.cameraDirector, // 与 fxServices() 同袋：运镜剧本在节拍里也能飞相机
+        notify: this.notify,
         unitById: (id) => this._units.get(id) ?? null,
       });
     }, { animator: this.animator });
@@ -2310,6 +2312,7 @@ export class BattleStage {
     this._fxScripts.clear();
     for (const auras of this._unitAuras.values()) auras.dispose(); // 常驻 aura 全瞬收
     this._unitAuras.clear();
+    this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
     this._cast.clear(); // 命名寻址随舞台销毁（下一场 beginBattle 重建）
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);

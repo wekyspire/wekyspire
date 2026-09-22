@@ -122,6 +122,8 @@ export class StageAnimator {
   /**
    * 指令动画：推到指定变换。进入 animating，完成后自动回落 idle。
    * @returns 完成回调在 opts.onComplete
+   * opts.onInterrupt：补间被**他杀**（同 id 新动画/状态切换/unregister）时触发——
+   *   gsap kill 不放 onComplete，等待方（fx 剧本协程）靠它收拍，不许挂死。
    */
   animate(id, to, opts = {}) {
     const entry = this._registry.get(id);
@@ -132,14 +134,20 @@ export class StageAnimator {
     }
     this._killTweens(id);
     entry.state = ANIMATOR_STATES.ANIMATING;
+    const { onInterrupt = null, ...tweenOpts } = opts;
+    const record = { handle: null, onInterrupt, done: false };
     const handle = this._tween(entry.object3D, to, {
-      ...opts,
+      ...tweenOpts,
       onComplete: () => {
+        record.done = true;
+        const i = entry.tweens.indexOf(record);
+        if (i >= 0) entry.tweens.splice(i, 1);
         entry.state = ANIMATOR_STATES.IDLE;
         opts.onComplete?.();
       },
     });
-    entry.tweens.push(handle);
+    record.handle = handle;
+    if (!record.done) entry.tweens.push(record); // 同步假 tween 已完成的直接弃记录
     return handle;
   }
 
@@ -157,7 +165,7 @@ export class StageAnimator {
    * onUpdate 只在真 gsap 下逐帧触发；同步测试 tween 至少保证 onComplete
    * （调用方在 onComplete 里硬化终态，使无 onUpdate 的路径也能落位）。
    */
-  animateCustom(id, { durationMs = 300, ease, delayMs = 0, onUpdate = null, onComplete } = {}) {
+  animateCustom(id, { durationMs = 300, ease, delayMs = 0, onUpdate = null, onComplete = null, onInterrupt = null } = {}) {
     const entry = this._registry.get(id);
     if (!entry) {
       onComplete?.();
@@ -166,14 +174,19 @@ export class StageAnimator {
     this._killTweens(id);
     entry.state = ANIMATOR_STATES.ANIMATING;
     const proxy = { t: 0 };
+    const record = { handle: null, onInterrupt, done: false };
     const handle = this._tween(proxy, { t: 1 }, {
       durationMs, ease, delayMs, onUpdate,
       onComplete: () => {
+        record.done = true;
+        const i = entry.tweens.indexOf(record);
+        if (i >= 0) entry.tweens.splice(i, 1);
         entry.state = ANIMATOR_STATES.IDLE;
         onComplete?.();
       },
     });
-    entry.tweens.push(handle);
+    record.handle = handle;
+    if (!record.done) entry.tweens.push(record);
     return handle;
   }
 
@@ -186,13 +199,18 @@ export class StageAnimator {
     const handle = this._tween(entry.object3D, {
       x: anchor.x, y: anchor.y, z: anchor.z, scale: anchor.scale, rotation: anchor.rotation,
     }, { durationMs, ease: TRACKING_EASE });
-    entry.tweens.push(handle);
+    entry.tweens.push({ handle, onInterrupt: null, done: false });
   }
 
+  // 他杀补间：kill 句柄后回发 onInterrupt——gsap kill 不放 onComplete，
+  // fx 剧本协程的 ctx.tween/custom 靠它把挂起的 await 收掉（resolve 提前到位语义）
   _killTweens(id) {
     const entry = this._registry.get(id);
     if (!entry) return;
-    for (const t of entry.tweens) { try { t.kill(); } catch (_) {} }
+    for (const t of entry.tweens) {
+      try { t.handle.kill(); } catch (_) {}
+      try { t.onInterrupt?.(); } catch (_) {}
+    }
     entry.tweens = [];
   }
 }

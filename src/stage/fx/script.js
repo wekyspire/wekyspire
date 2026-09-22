@@ -46,10 +46,17 @@ export class ScriptContext {
     this._killHooks.push(fn);
   }
 
-  /** 补间注册对象（单位/卡牌，走 StageAnimator 状态机）。未注册 id 按 animator 约定立即完成。 */
+  /** 补间注册对象（单位/卡牌，走 StageAnimator 状态机）。未注册 id 按 animator 约定立即完成。
+   *  补间被他杀（同 id 新动画/状态切换/unregister——第三方接管了对象）时**提前 resolve**：
+   *  协程不停在半空（gsap kill 不放 onComplete），但剧本也不中断——后续步骤若依赖
+   *  到位语义请自行校验对象状态。 */
   tween(id, to, opts = {}) {
     return this._track((done, setCancel) => {
-      const handle = this._animator?.animate(id, to, { ...opts, onComplete: () => done() }) ?? null;
+      const handle = this._animator?.animate(id, to, {
+        ...opts,
+        onComplete: () => done(),
+        onInterrupt: () => done(),
+      }) ?? null;
       setCancel(() => { try { handle?.kill(); } catch (_) {} });
       if (!handle) done(); // 无 animator 或未注册：幂等，无害
     });
@@ -63,11 +70,14 @@ export class ScriptContext {
     });
   }
 
-  /** 自管轨迹补间（animateCustom 包装：onUpdate(t) 逐帧进度，t∈[0,1]）。 */
+  /** 自管轨迹补间（animateCustom 包装：onUpdate(t) 逐帧进度，t∈[0,1]）。
+   *  他杀提前 resolve（同 tween 的语义，见上）。 */
   custom(id, { durationMs = 300, ease, delayMs = 0, onUpdate = null } = {}) {
     return this._track((done, setCancel) => {
       const handle = this._animator?.animateCustom(id, {
-        durationMs, ease, delayMs, onUpdate, onComplete: () => done(),
+        durationMs, ease, delayMs, onUpdate,
+        onComplete: () => done(),
+        onInterrupt: () => done(),
       }) ?? null;
       setCancel(() => { try { handle?.kill(); } catch (_) {} });
       if (!handle) done();

@@ -452,6 +452,7 @@ export class RoomStage {
     this._rigs.clear();
     for (const h of this._fxScripts) h.kill(); // 在途剧本协程统一取消
     this._fxScripts.clear();
+    this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
     this._cast.clear();
   }
 
@@ -485,8 +486,13 @@ export class RoomStage {
   /** 登记一件交互物：机器类（由机器模块的 createRig 决定）才建 rig；普通陈设只要浮标 + 拾取 + 推近。 */
   _addInteractive(name, entry) {
     {
-      // 交互物同时登记进 fx cast（cutscene 剧本可经 prop:<名字> 寻址机器/陈设）
-      this._cast.register(`prop:${name}`, { name, object: entry.object, interactions: null });
+      // 交互物同时登记进 fx cast（cutscene 剧本可经 prop:<名字> 寻址机器/陈设）。
+      // 双身份道具（live 机器 + behaviors 响应件，如营地篝火）：notifiables 已登记在先，
+      // 同对象跳过——整只覆盖会把既有 interactions 抹掉（notify 响应静默失效）
+      const prev = this._cast.get(`prop:${name}`);
+      if (prev?.object !== entry.object) {
+        this._cast.register(`prop:${name}`, { name, object: entry.object, interactions: null });
+      }
       // rig 的创建归口到机器模块（没有 createRig 的陈设 = 无 rig，只有浮标 + 聚焦）
       const rig = this._moduleOfKind[entry.kind]?.createRig?.(entry) ?? null;
       if (rig) this._rigs.set(name, rig);
