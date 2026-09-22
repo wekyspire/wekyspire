@@ -54,6 +54,8 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
+import { runScript } from '../fx/script.js';
+import { resolveDamageRecipe } from '../fx/recipes.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
@@ -221,6 +223,10 @@ export class BattleStage {
     this.shake = new ScreenShake({ cameras: [stageManager.camera, stageManager.uiCamera] });
     this._vignette = new DamageVignette();
     this.uiScene.add(this._vignette.object);
+
+    // 在途 fx 协程剧本（伤害命中等节拍本体）：dispose 时统一 kill（结构化取消，
+    // 防舞台拆除后残段继续改对象）；promise 必达，节拍 finish 链不会断
+    this._fxScripts = new Set();
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
     this._bubbles = new BubbleLayer();
@@ -1431,8 +1437,12 @@ export class BattleStage {
     return sm.screenToWorld(px.x, px.y, 70, sm.uiCamera);
   }
 
-  // 受伤演出：按伤害落点分流——
-  //   生命值受伤（dealt>0）：闪红 + 红色火花 + 伤害数字 + 短促击退（节拍阻塞）；
+  // 受伤演出（2026-09-22 fx 架构 Phase 1：查表化 + 协程化——配方决议走 fx/recipes.js，
+  // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
+  //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放）；
+  //   附级伤害（type='minor'，燃烧/中毒/荆棘 tick 等）：配方降规格——小数字、无翻红、
+  //     无击退、无震荡、短节拍（减法即丰富：tick 不再每次满屏红闪）；
+  //   致命击（killed）：配方加重——震荡加成 + 数字放大；
   //   护盾吸收（absorbed>0）：蓝色火花 + 灰色吸收数字（较小、偏移开）；
   //     吸穿护盾的最后一击（显示盾量 - 吸收 ≤ 0）追加破碎粒子——破碎只由伤害驱动，
   //     自然消失（回合开始清零）只是保护框随 sync 静默隐去；
@@ -1441,11 +1451,11 @@ export class BattleStage {
   _damageHit(unit, payload, finish) {
     const dealt = payload?.dealt ?? 0;
     const absorbed = payload?.shieldAbsorbed ?? 0;
+    const r = resolveDamageRecipe(payload);
 
-    // 全屏受击演出：震荡烈度 = 生命值伤害 + 护盾吸收 ×0.2（护盾受击严重度低）；
-    // 收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕。均为 non-blocking FX，
-    // 与闪红/粒子/读数并行，不占队列节拍
-    const severity = damageSeverity(dealt, absorbed);
+    // 全屏受击演出（non-blocking 旁路，不占队列节拍）：烈度 = 基础烈度 × 配方震荡
+    // 系数（附级 = 0）+ 致命加成；收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕
+    const severity = damageSeverity(dealt, absorbed) * r.shakeScale + (dealt > 0 ? r.shakeBonus : 0);
     if (severity > 0) {
       this.shake.impulse(severity);
       if (unit.side !== 'enemy') this._vignette.pulse(severity);
@@ -1457,61 +1467,54 @@ export class BattleStage {
         count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
       });
       const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
-      this.particles.spawnText(
-        p.x, p.y,
-        `-${absorbed}`,
-        {
-          fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
-          vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
-          gravity: -50, ttl: 0.85, scalePop: 0.3,
-          space: 'ui',
-        },
-      );
+      this.particles.spawnText(p.x, p.y, `-${absorbed}`, {
+        fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
+        vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
+        gravity: -50, ttl: 0.85, scalePop: 0.3,
+        space: 'ui',
+      });
       if (this._displayShieldOf(unit.uniqueID) - absorbed <= 0) this._shieldBreakFx(unit);
     }
 
-    if (dealt > 0) {
-      unit.flash?.(0xff2222);
-      // 受击火花双色爆发：主簇暖红橙 + 高速亮黄白迸溅（系统内亮度抖动再分层）
-      this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 24, color: 0xff6a3d, speed: 22, size: 1.6, z: unit.position.z,
-      });
-      this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 10, color: 0xffd9a0, speed: 30, ttl: 0.8, size: 1.1, z: unit.position.z,
-      });
-      // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
-      const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
-      this.particles.spawnText(
-        p.x, p.y,
-        `-${dealt}`,
-        {
-          fontSize: Math.min(34 + dealt * 2.4, 96), color: '#ff4d4d',
-          vx: (Math.random() - 0.5) * 10, vy: 22 + Math.random() * 8,
-          gravity: -65, ttl: Math.min(0.85 + dealt * 0.02, 1.3), scalePop: 0.5,
+    const h = runScript(async (ctx) => {
+      if (dealt > 0) {
+        const flashed = r.flash != null;
+        if (flashed) unit.flash?.(r.flash);
+        for (const s of r.sparks) {
+          this.particles.spawn(unit.position.x, unit.position.y + 2, { ...s, z: unit.position.z });
+        }
+        // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
+        const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
+        this.particles.spawnText(p.x, p.y, `-${dealt}`, {
+          fontSize: Math.min(r.number.base + dealt * r.number.per, r.number.max) * r.numberScale,
+          color: r.number.color,
+          vx: (Math.random() - 0.5) * 10, vy: r.number.vy + Math.random() * 8,
+          gravity: -65,
+          ttl: Math.min(r.number.ttlBase + dealt * r.number.ttlPer, r.number.ttlMax),
+          scalePop: r.number.scalePop,
           space: 'ui',
-        },
-      );
-      const id = unit.uniqueID;
-      const x0 = unit.position.x;
-      // 击退幅度随伤害缩放（与震荡同语言）：轻伤轻晃、重伤踉跄
-      const knock = 1.1 + Math.min(dealt, 20) * 0.055;
-      this.animator.animate(id, { x: x0 + knock }, {
-        durationMs: 80,
-        ease: 'power1.in',
-        onComplete: () => {
-          this.animator.animate(id, { x: x0 }, {
-            durationMs: 120,
-            onComplete: () => {
-              unit.restoreColor?.();
-              finish();
-            },
-          });
-        },
-      });
-      return;
-    }
-    // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
-    this.animator.animate(unit.uniqueID, {}, { delayMs: 80, onComplete: finish });
+        });
+        if (r.knockback) {
+          const x0 = unit.position.x;
+          // 击退幅度随伤害缩放（与震荡同语言）：轻伤轻晃、重伤踉跄
+          const knock = 1.1 + Math.min(dealt, 20) * 0.055;
+          await ctx.tween(unit.uniqueID, { x: x0 + knock }, { durationMs: 80, ease: 'power1.in' });
+          await ctx.tween(unit.uniqueID, { x: x0 }, { durationMs: 120 });
+          if (flashed) unit.restoreColor?.();
+          return;
+        }
+        if (flashed) unit.restoreColor?.();
+        await ctx.wait(r.beatMs); // 附级：短节拍即收
+        return;
+      }
+      // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
+      await ctx.wait(80);
+    }, { animator: this.animator });
+    this._fxScripts.add(h);
+    h.promise.then(() => {
+      this._fxScripts.delete(h);
+      finish();
+    });
   }
 
   // 单位入场演出（召唤，用户定 2026-08）：与死亡倾倒同轴的语言反演——
@@ -2216,6 +2219,8 @@ export class BattleStage {
     this._removePanel();
     this._pickerKit.dispose();   // 全屏选卡界面（_removePanel 只 close，真正释放在这里）
     this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
+    for (const h of this._fxScripts) h.kill(); // 在途演出协程统一取消（结构化取消，promise 必达）
+    this._fxScripts.clear();
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);
       window.removeEventListener('keyup', this._onShiftKeyUp);

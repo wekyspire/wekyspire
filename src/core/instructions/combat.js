@@ -162,6 +162,10 @@ export class ApplyDamageInstruction extends BattleInstruction {
       // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡（r21-a6 实报）。
       // skillDefId 覆写优先：斩链打出拍「先变身后结算」，self.defId 已是下一阶名
       skillDefId: this.skillDefId ?? this.skill?.defId ?? null,
+      // 演出语义透传（2026-09-22 fx 架构 Phase 1）：附级伤害（燃烧/中毒/荆棘 tick）
+      // 靠 type='minor' 在舞台侧降规格（小数字、无击退、无震荡）；tags 供配方表配色；
+      // killed 供致命击加重。全是标量，wire 描述符可序列化，观战端同源一致。
+      type: this.type, tags: [...this.tags], fixed: this.fixed, killed: target.isDead(),
     });
     if (target.isDead()) {
       ctx.presenter?.unitDeath?.({ unit: target });
