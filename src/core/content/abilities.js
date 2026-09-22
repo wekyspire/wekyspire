@@ -22,15 +22,14 @@ registerAbility({
 });
 
 // 火灵脉体系能力（FIRE_VEIN_CARDS §0，2026-09 定）：首次点亮火灵脉时自动授予，
-// 战斗开始获得 烈焰亲和3 + 炎魔1。订阅型效果必须经 AddEffectInstruction 入列
-// （状态级 addEffect 不挂订阅），不能照抄战意的直改写法。
+// 战斗开始获得 炎魔1（2026-09-22 用户定：移除烈焰亲和3——基础能力白给的燃烧免税
+// 额度让自焚代价形同虚设；烈焰亲和的获取收归精英/大师能力避火术/避焰决）。
+// 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅），
+// 不能照抄战意的直改写法。
 registerAbility({
   id: 'fireVein', name: '火灵脉',
-  description: '战斗开始时，获得烈焰亲和3与炎魔1。',
+  description: '战斗开始时，获得炎魔1。',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 3,
-    }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({
       target: ctx.player, effectId: 'flameDemon', stacks: 1,
     }));
@@ -109,24 +108,26 @@ registerAbility({
   },
 });
 
-// 精英 **避火术**：战斗开始时，获得烈焰亲和4。
+// 精英 **避火术**：战斗开始时，获得烈焰亲和6（2026-09-22 用户定，自 4 加强——
+// 基础能力不再白送烈焰亲和，免税额度集中到精英/大师线上）。
 registerAbility({
   id: 'fireWard', name: '避火术', grade: 'elite',
-  description: '战斗开始时，获得烈焰亲和4。',
+  description: '战斗开始时，获得烈焰亲和6。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 4,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 6,
     }));
   },
 });
 
-// 大师 **避焰决**：战斗开始时，获得烈焰亲和5。
+// 大师 **避焰决**：战斗开始时，获得烈焰亲和8（2026-09-22 自 5 抬到 8——
+// 精英已 6，大师必须压过其上位的精英，否则阶梯倒挂）。
 registerAbility({
   id: 'flameSever', requires: 'fireWard', name: '避焰决', grade: 'master',
-  description: '战斗开始时，获得烈焰亲和5。',
+  description: '战斗开始时，获得烈焰亲和8。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 5,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 8,
     }));
   },
 });
@@ -357,7 +358,7 @@ registerAbility({
 // 进阶事件授予池（灵脉 2 级出精英、3 级出大师，大师 requires 前置精英）。
 // ============================================================================
 
-// ---- 获赠：木灵脉（战斗开始 再生2+荆棘1，对标火灵脉 烈焰亲和3+炎魔1）----
+// ---- 获赠：木灵脉（战斗开始 再生2+荆棘1，对标火灵脉 炎魔1；火灵脉 2026-09-22 起不再送烈焰亲和）----
 registerAbility({
   id: 'woodVein', name: '木灵脉',
   description: '战斗开始时，获得再生2与荆棘1。',

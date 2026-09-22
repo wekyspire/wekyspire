@@ -133,8 +133,12 @@ export function deckAffinityWeight(run, def) {
 // 单包卡池：包归属 + 排除 Z/S 与 canSpawnAsReward=false + 深入卡门禁 + 牌组门槛。
 // S 永不入包（2026-09-21 D4-c：S 只走事件投放）；capTier 由通道上限给出（来源制，
 // 与体系等级脱钩）。
+// **例外（2026-09-22 用户定）：体修卡的出池上限仍看隐藏体修等级**——不走体修
+// （bodyLevel 0）时，通道上限再高，基础包/训练抓牌/老虎机大奖里也只有 C 阶体修卡。
+// 灵脉包保持 D4 脱钩（概率只看来源通道）；通用注入走 'common' 包，不吃此钳制。
 export function packCardPool(run, packId = 'body', capTier = null) {
-  const cap = TIER_RANK[capTier ?? rewardTierCap()];
+  let cap = TIER_RANK[capTier ?? rewardTierCap()];
+  if (run && packId === 'body') cap = Math.min(cap, TIER_RANK[maxRewardTier(run, 'body')]);
   return allSkills().filter(def =>
     packOf(def) === packId
     && def.canSpawnAsReward !== false && def.tier !== 'Z' && def.tier !== 'S'
