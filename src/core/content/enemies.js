@@ -85,7 +85,7 @@ function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
 registerEnemy({
   difficulty: { base: 5, min: 4, max: 8, floorMin: 12, floorMax: 30 },
   id: 'bigSlime', name: '大史莱姆',
-  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 44 }),
+  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 34 }), // 2026-09-21 用户定：44→34（二章坦克削血提攻）
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (bigSlimeCanSummon(unit, bs)) {
@@ -96,14 +96,16 @@ registerEnemy({
       }));
       return;
     }
+    // 2026-09-21 用户定（二章坦克削血提攻）：攻击 10→13、自盾 8→4——从「打不动的肉桩」
+    // 改成「打得动但锤人疼」。
     actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: actx.player, amount: 10 + unit.getStat('attack'),
+      source: unit, target: actx.player, amount: 13 + unit.getStat('attack'),
     }));
-    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 })); // 数值意识（2026-09-16）：5→8
+    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 4 }));
   },
   getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
     ? { kinds: ['summon'], note: '召唤史莱姆' }
-    : { kinds: ['attack', 'defend'], hits: 1, damage: 10 + unit.getStat('attack'), note: '自身护盾+5' }),
+    : { kinds: ['attack', 'defend'], hits: 1, damage: 13 + unit.getStat('attack'), note: '自身护盾+4' }),
 });
 
 // ② 11 层 Boss · 燃焰术士（章1 火主题 Boss 池之一，2026-09-13 用户重做稿）：
@@ -116,7 +118,8 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 45 }),
+  // 2026-09-21 用户定：一章 Boss 集体加强——基础 +7，经 11 层 ×3.4 缩放 ≈ 实战 +24（153→177）
+  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 52 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {
@@ -210,7 +213,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
   id: 'kardas', name: '卡达斯',
-  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 27 }),
+  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 34 }), // 2026-09-21：+7 基础 ≈ 实战 +24（92→116）
   onBattleStart(ctx, unit) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
       target: unit, effectId: 'flameDemon', stacks: 1 }));
@@ -273,7 +276,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
-  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 47 }),
+  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 54 }), // 2026-09-21：+7 基础 ≈ 实战 +24（160→184）
   onBattleStart(ctx, unit) {
     // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
     ctx.kernel.submitInstruction(new AddEffectInstruction({
