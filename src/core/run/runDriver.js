@@ -11,8 +11,9 @@ import {
 } from './runFlow.js';
 import { chooseSkillReward, chooseRewardPack, isRewardsClaimed } from './rewards.js';
 import { chooseAscension, chooseAscensionAbility, chooseSeedCards, SEED_OFFERING } from './ascension.js';
-import { upgradableCards, beginTraining, trainDrawChoices, trainDraw, trainUpgrade } from './rooms/training.js';
+import { upgradableCards, beginTraining, trainDrawChoices, trainDraw, trainUpgrade, trainUpgradeStart, trainUpgradeModes } from './rooms/training.js';
 import { campOptions, campRest, campRecoverRemi } from './rooms/camp.js';
+import { getSkillDefinition } from '../skills/registry.js';
 import { playEvent } from './rooms/event.js';
 
 // Headless 整局 SDK（类比 BattleDriver，RUN_DESIGN §6.5）：一行驱动完整爬塔，
@@ -151,7 +152,7 @@ export class RunDriver {
       case 'training':
       case 'campTraining':
         // 2026-09-18 训练改版：必做训练（升阶，达标则本步切 'ascension' 由后续步解掉）→
-        // 可选段缺省全做（4 选 1 取首张 + 尾款升级首张可升级卡）→（合并房）篝火。
+        // 可选段缺省全做（4 选 1 取首张 + 尾款新制：优先 2C 模式逐张升，其次 1B）→（合并房）篝火。
         // 幂等：房内升阶回房后会再进本分支，已做的部分直接跳过。
         if (!run.roomData?.trained) {
           beginTraining(run);
@@ -161,8 +162,18 @@ export class RunDriver {
           trainDrawChoices(run);
           trainDraw(run, run.roomData.drawChoices[0]);
         }
-        if (run.roomData?.pendingUpgrade && upgradableCards(run).length) {
-          trainUpgrade(run, upgradableCards(run)[0].uniqueID);
+        // 尾款（2026-09-21 新制）：未选模式先选（能 2C 就 2C，否则 1B），再逐张升该等阶首张
+        // （twoC 要升满 2 张才清尾款——while 循环到清；候选意外耗尽时 break 防死循环）
+        while (run.roomData?.pendingUpgrade) {
+          const pending = run.roomData.pendingUpgrade;
+          if (typeof pending !== 'object' || !pending.mode) {
+            const modes = trainUpgradeModes(run);
+            trainUpgradeStart(run, modes.twoC.length >= 2 ? 'twoC' : 'oneB');
+          }
+          const tier = run.roomData.pendingUpgrade.mode === 'twoC' ? 'C' : 'B';
+          const card = upgradableCards(run).find(rt => getSkillDefinition(rt.defId)?.tier === tier);
+          if (!card) break;
+          trainUpgrade(run, card.uniqueID);
         }
         if (run.currentRoom === 'campTraining') {
           // 篝火缺省同 'camp'：瑞米被打跑则找回，否则休整（保命优先）

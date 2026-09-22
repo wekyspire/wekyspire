@@ -12,6 +12,8 @@ export function restoreRunFromSave(run, save) {
   // rng 状态直存直取：回放 advanceFloor 不消耗 run.rng（遭遇用派生种子），
   // 若不恢复状态，读档后的房间派发会偏离活局时间线（旧档无此字段=维持回放语义）
   if (save.rngState != null) run.rng.setState(save.rngState);
+  if (save.route) run.route = save.route; // 开局路线（旧档无此字段 → 'body'：旧局全是体修开局）
+  else run.route = run.route ?? 'body';
   const p = run.player;
   const sp = save.player;
   p.hp = sp.hp; p.maxHp = sp.maxHp;
@@ -27,7 +29,7 @@ export function restoreRunFromSave(run, save) {
   p.trainingCount = sp.trainingCount;
   p.ascensionCount = sp.ascensionCount;
   p.bodyLevel = sp.bodyLevel ?? 0; // 旧档无此字段：隐藏体修等级从 0 起
-  p.maxHandSize = sp.maxHandSize ?? 7; // 旧档（咏唱槽时代）无此字段：兜底默认
+  p.maxHandSize = sp.maxHandSize ?? 5; // 旧档（咏唱槽时代）无此字段：兜底默认
   // 旧档无 baseStats：以当前值为基准兜底；随后 refreshRunModifiers 会把遗物修正重算回去
   p.baseStats = sp.baseStats ? { ...sp.baseStats } : {
     maxHp: p.maxHp, maxMana: p.maxMana, maxActionPoints: p.maxActionPoints,

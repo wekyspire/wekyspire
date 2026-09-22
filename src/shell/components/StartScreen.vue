@@ -20,6 +20,16 @@
           <button v-else key="story" class="main-btn-story" @click="launch(null)">进入尖塔</button>
         </Transition>
       </div>
+      <!-- 开局路线（2026-09-21 D2，杀戮尖塔式选角）：只影响新开局；读档以存档现场为准 -->
+      <div class="route-row">
+        <button
+          v-for="r in routeList" :key="r.id"
+          class="route-chip" :class="{ on: route === r.id }"
+          :style="route === r.id ? { borderColor: r.color, color: r.color } : {}"
+          @click="route = r.id"
+        >{{ r.name }}</button>
+      </div>
+      <div class="route-blurb">{{ routeBlurb }}</div>
       <div class="slot save-slot">
         <!-- 标题与内容作为整体随 Transition 切入切出；key 含模式（两模式存档独立，切换时随标题一起 swing） -->
         <Transition name="swing-fade" mode="out-in">
@@ -51,6 +61,7 @@ import ChangeLog from './ChangeLog.vue';
 import { settings, persistSettings, setDebugMode } from '../settings';
 import { showMenuDialog } from '../menuDialog';
 import { readSave } from '../saves';
+import { ROUTES, ROUTE_IDS } from '../../core/run/routes.js';
 import { fadeInTitleMusic, fadeOutTitleMusic } from '../audio';
 import startBg from '../../assets/images/start-screen.webp';
 import titleMusicUrl from '../../assets/sounds/story-mode-intro.mp3';
@@ -66,6 +77,12 @@ const showMenuPopup = inject('showMenuPopup'); // App.vue 挂载的全局共享 
 
 // 模式选择持久化：回主菜单后复选框保持上次选择；默认肉鸽（故事模式未开放）
 const isStory = ref(settings.menuStoryMode === true);
+// 开局路线（D2）：持久化到 settings，默认体修
+const route = ref(ROUTE_IDS.includes(settings.menuRoute) ? settings.menuRoute : 'body');
+const ROUTE_COLORS = { body: '#b8894a', fire: '#e85a5a', wood: '#4aa56e', air: '#5aa2e8' };
+const routeList = ROUTE_IDS.map(id => ({ id, name: ROUTES[id].name, color: ROUTE_COLORS[id] }));
+const routeBlurb = computed(() => ROUTES[route.value]?.blurb ?? '');
+watch(route, (v) => { settings.menuRoute = v; persistSettings(); });
 // 「继续」的优先来源：调试模式开着就先看 debug 槽（各槽互不覆盖，见 saves.modeOf）
 const debugSave = ref(readSave('debug'));
 function toggleDebug(e) {
@@ -128,7 +145,7 @@ async function launch(loadSave) {
     if (!ok) return; // 取消：留在开始界面，存档不动
   }
   // 肉鸽模式：无开场滚动动画，直接开始
-  emit('start', { storyMode: false, loadSave, debugMode: debug });
+  emit('start', { storyMode: false, loadSave, debugMode: debug, route: route.value });
 }
 
 // ---------- 故事模式氛围：雪花粒子 + 标题音乐 ----------
@@ -236,6 +253,17 @@ onBeforeUnmount(() => {
 }
 
 .main-btn-rogue:hover, .continue-btn:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+/* 开局路线（D2）：小芯片一排，扁平深底白字；选中吃体系色描边 */
+.route-row { display: flex; gap: 10px; }
+.route-chip {
+  font-family: inherit; font-size: 14px; color: #c3cee0; cursor: pointer;
+  padding: 6px 18px; border-radius: 4px;
+  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.route-chip:hover { background: rgba(52, 84, 126, .95); }
+.route-chip.on { background: rgba(30, 42, 64, .95); }
+.route-blurb { font-size: 12px; color: #9aa3c0; min-height: 16px; }
 .continue-btn { font-size: 14px; padding: 7px 30px; }
 .save-info { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
 .story-toggle { margin-top: 14px; color: #eaf1fb; font-size: 14px; display: flex; gap: 8px; align-items: center; }

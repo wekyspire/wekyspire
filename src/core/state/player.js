@@ -8,10 +8,10 @@ export const PLAYER_BASE_HP = 65;
 // 初始金币（2026-09-11 用户定：开局给 30 金——前期能买得起一件 30 金量级的药剂/C 遗物，
 // 而不是「一层收入只够二选一」）。所有建局入口都走 Player 的缺省值，故改这一处即全局生效。
 export const PLAYER_BASE_MONEY = 30;
-// 初始行动力上限（2026-09-13 用户定：3→4 放宽试验——抽到容量体系下 AP 是绝对硬约束，
-// 四份试玩报告一致）。与 HP/金币同口径：一切建局入口引用此常量，禁止再写裸数字
-// （此前五处入口各自硬编码 3，把 Player 缺省 4 全线盖掉——第 6 轮试玩 agent 实测发现）。
-export const PLAYER_BASE_AP = 4;
+// 初始行动力上限（2026-09-21 大调 D1：4→3——法师每回合 1~2 张高费牌，4AP 永不构成约束；
+// 体修经基础能力 +1AP 实质维持 4，形成「体修吃 AP、法师吃魏启」的分工轴）。
+// 与 HP/金币同口径：一切建局入口引用此常量，禁止再写裸数字。
+export const PLAYER_BASE_AP = 3;
 
 // 玩家：run 级实体，跨战斗存活。hp/money/deck/abilities/leino 是持久状态；
 // 魏启（mana）为战斗内资源——入战置为上限一半、每回合开始 +1（battle.md §6），
@@ -31,9 +31,9 @@ export default class Player extends Unit {
     // 隐藏体修等级：不随灵脉加点增长，只在进阶事件「跳过」时 +1（故事模式暗线，
     // 见 RUN_DESIGN；决定体修卡包的等阶门禁）。
     this.bodyLevel = opts.bodyLevel ?? 0;
-    // 手牌上限（2026-09-13 批次 13 起 7→6；加权口径：激活咏唱先吃咏唱容量、
+    // 手牌上限（2026-09-21 大调 D1：6→5；加权口径：激活咏唱先吃咏唱容量、
     // 溢出部分才吃手牌容量——见 helpers.effectiveHandCount）。
-    this.maxHandSize = opts.maxHandSize ?? 6;
+    this.maxHandSize = opts.maxHandSize ?? 5;
     // 咏唱容量（激活咏唱的免费占用额度，按咏唱开销计数不按卡数；空系未来的改造钩子）。
     this.chantCapacity = opts.chantCapacity ?? 1;
 

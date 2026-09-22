@@ -17,11 +17,11 @@ export function resolvedDamageText(sctx, base) {
   return `${damage}伤害`;
 }
 
-// ① 纯伤害攻击牌（真拳系列 D 位：拳→快拳→炮拳→真拳）
+// ① 纯伤害攻击牌（真拳系列 C 位：拳→快拳→炮拳→真拳）
 registerSkill({
-  // D− 初始卡：不进任何奖励池（批次 14，2026-09-13 用户定——正常 D 卡都比它们强，
-  // 杀戮尖塔 Strike/Defend 同款：开包即提升）。
-  id: 'punch', name: '拳', type: 'normal', tier: 'D', series: 'punch',
+  // 通用填充卡（2026-09-21 D2/D4：拳/盾是全体系起始牌组的填充位，不走体修路线
+  // 无法升级）；不进任何奖励池——开包即提升，填充卡不占奖励位（StS Strike 同款）。
+  id: 'punch', name: '拳', type: 'normal', tier: 'C', series: 'punch',
   canSpawnAsReward: false,
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -49,12 +49,13 @@ export function enemyTarget(sctx) {
     : firstAliveEnemy(sctx.battleState);
 }
 
-// ② 获得护盾牌：盾系列 D 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾，2026-09 稿 4→5）。
+// ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
+// 2026-09-21 大调：D→C 且去掉冷却（冷却1 移给 B 坚固盾——升阶的阶差）。
 registerSkill({
-  id: 'guard', name: '盾', type: 'normal', tier: 'D', series: 'block',
-  canSpawnAsReward: false, // D− 初始卡，不进奖励池（批次 14）
+  id: 'guard', name: '盾', type: 'normal', tier: 'C', series: 'block',
+  canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   promotesTo: 'solidShield',
   use(sctx) {

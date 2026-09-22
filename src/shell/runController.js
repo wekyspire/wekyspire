@@ -20,8 +20,8 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
-import { upgradableCards, beginTraining, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
-import { campOptions, campRest, campRecoverRemi, campUpgrade, campLocked as campGateLocked } from '../core/run/rooms/camp.js';
+import { upgradableCards, beginTraining, trainUpgradeStart, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
+import { campOptions, campRest, campRecoverRemi, campLocked as campGateLocked } from '../core/run/rooms/camp.js';
 import { SLOT } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { createRunContext } from '../core/run/runContext.js';
@@ -32,7 +32,6 @@ import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { createRunShowcase } from './runShowcase.js';
 import { createRunMachines } from './runMachines.js';
 import { DisplayModel } from '../bridge/displayModel.js';
-import { BODY_STARTER_DECK } from '../core/content/bodySkills.js';
 import { RunEvents } from './runEvents.js';
 import { createCutscenePlayer } from './overlay/cutscenePlayer.js';
 import { createSceneWipe } from './overlay/sceneWipe.js';
@@ -46,8 +45,7 @@ export { RunEvents };
 // run 本体经 reactive() 暴露（状态只存 id 与数字，代理安全）；
 // 每次阶段迁移经 runBus 发事件——阶段 8 的 cutscene/剧情在此订阅注入。
 
-// 默认起始卡组 = 体修基础卡组（BODY_CULTIVATION_CARDS §0：从拳/盾生长的三系种子）
-const DEFAULT_DECK = [...BODY_STARTER_DECK];
+// 起始卡组由开局路线授予（core/run/routes.js，2026-09-21 D2）——不再有全局默认卡组。
 
 // PCG 房型开关：true = 战斗房间按章节/Boss 走配方层（scenes/rooms），
 // false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
@@ -84,7 +82,7 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
   });
 }
 
-export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false } = {}) {
+export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false, route = 'body' } = {}) {
   const runBus = mitt();
   // run 级共享演出队列（S2）：battle / room / tower / cutscene 指令在同一队列定序，
   // 跨层演出链（终局动画 → 幕间黑幕 → 塔楼抵达）由此成为可表达的结构
@@ -99,10 +97,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const run = reactive(createRun({
     seed: save?.seed ?? seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
+    route: save ? null : route,   // 读档恢复现场，不重复结算路线授予
   }));
   if (save) restoreRunFromSave(run, save); // 恢复原语在 core（headless 工具共用同一份）
   else {
-    run.player.deck = DEFAULT_DECK.map(id => createSkillRuntime(id));
     // 调试模式（开始界面勾选 / ?debug=1，仅新开局生效）：直发 GM 卡「一拳」（999 群伤固有）
     // ——爬塔流程验证工具；读档不吃（调试局的卡组本身已含此卡，随存档走）
     if (isDebug) run.player.deck.push(createSkillRuntime('onePunch'));
@@ -565,11 +563,17 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (ascensionDue) { void cutsceneFlows.playAscensionScene(); return; }
     notify();
   }
-  // 尾款升级：抓卡后欠下的那一次（pendingUpgrade 挂着时的唯一出口）
+  // 尾款升级（2026-09-21 新制两拍）：先选模式（升 2 张 C→B / 升 1 张 B→A），再逐张晋升
+  function trainingUpgradeMode(mode) {
+    if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
+    trainUpgradeStart(run, mode);
+    notify();
+  }
   function trainingUpgrade(uniqueID, targetId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
     trainUpgrade(run, uniqueID, targetId); // 分叉目标由升级子面板传入
-    maybeLeaveRoom();
+    if (run.roomData?.pendingUpgrade) notify();  // twoC 还剩一张：原地刷新候选
+    else maybeLeaveRoom();
   }
   // 可选段开局：掷四选一候选。⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**
   // （曾因沿用旧「trained=已锁」语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；
@@ -585,11 +589,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.roomData?.pendingUpgrade) notify();
     else maybeLeaveRoom();
   }
-  function campChoose(option, uniqueID = null, targetId = null) {
+  function campChoose(option) {
     if (run.gameStage !== 'room' || campLocked()) return;
     if (option === 'rest') campRest(run);
     else if (option === 'recoverRemi') campRecoverRemi(run);
-    else if (option === 'upgrade') campUpgrade(run, uniqueID, targetId); // 分叉目标由升级子面板传入
     maybeLeaveRoom();
   }
   // 合并房的主动离房（单房由动作自动离房，不需要这个）
@@ -634,10 +637,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     chooseRewardPack: (i) => chooseRewardPack(i.packId),
     claimReward: (i) => claimReward(i.defId ?? null),
     trainingBegin: () => trainingBegin(),
+    trainingUpgradeMode: (i) => trainingUpgradeMode(i.mode),
     trainingUpgrade: (i) => trainingUpgrade(i.uniqueID, i.targetId ?? null),
     trainingDrawRoll: () => trainingDrawRoll(),
     trainingDraw: (i) => trainingDraw(i.defId ?? null),
-    campChoose: (i) => campChoose(i.option, i.uniqueID ?? null, i.targetId ?? null),
+    campChoose: (i) => campChoose(i.option),
     leaveRoom: () => leaveRoom(),
     leaveSlot: () => leaveSlot(),
     ...machines.intents,
@@ -685,7 +689,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getRoomStage: () => roomStage,   // 场景式休息房舞台（App 的指针路由据此转发）
     enterRestRoomScene,              // 显式进入场景式休息房（读档/调试/测试用；正常路径由 claimReward 触发）
     startBattle, claimReward, chooseRewardPack,
-    trainingBegin, trainingUpgrade, trainingDrawRoll, trainingDraw,
+    trainingBegin, trainingUpgradeMode, trainingUpgrade, trainingDrawRoll, trainingDraw,
     campChoose, leaveRoom, bankDo: machines.bankDo, gurpasDo: machines.gurpasDo, spin: machines.spin, reportSlotAnimDone: machines.reportSlotAnimDone, leaveSlot, triggerEvent: cutsceneFlows.triggerEvent, leaveEvent: cutsceneFlows.leaveEvent,
     playEventScene: cutsceneFlows.playEventScene,                 // 显式播事件幕间（正常路径由进房自动触发；幂等）
     enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）

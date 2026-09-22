@@ -43,15 +43,16 @@ export const FIRST_ASCENSION_GRANT = Object.freeze({
 // 内容侧也可用 def.seedEligible === false 单卡标注；本表是当前统一调参位。
 const SEED_EXCLUDED = new Set([
   // 火灵脉：添柴系（需手牌燃料）、需已有燃烧的控火术（散/收/扰/爆/聚/炼/无上）、
-  // 燃烧转化/反哺（激热/化焰/镜燃）、焰愈系（按自身燃烧缩放）、忍耐（需燃烧受伤）；
+  // 燃烧转化/反哺（激热/镜燃；化焰 2026-09-21 删卡）、焰愈系（按自身燃烧缩放）、忍耐（需燃烧受伤）；
   // 控火术：燃 与 火墙链 可独立生效，保留在种子池中（灼 2026-09 改 B 阶，自然出 D/C 池；
   // 灭 2026-09-13 已删卡）
   'fuelTheFire', 'roaringFire', 'blazeUp', 'wildfire',
   'fireControlSpread', 'fireControlHarvest', 'fireControlDisturb',
   'fireControlDetonate', 'fireControlGather', 'fireControlRefine', 'fireControlSupreme',
-  'heatSurge', 'meltFlame', 'mirrorBurn', 'flameHeal', 'patience',
-  // 扩容批（2026-09-14）：需燃烧储备的收割/条件件（燃爆/回火/热浪——同激热/焰愈口径）
-  'burnSnap', 'backfire', 'heatWave',
+  'heatSurge', 'mirrorBurn', 'flameHeal', 'patience',
+  // 扩容批（2026-09-14）：需燃烧储备的收割/条件件（燃爆/热浪——同激热/焰愈口径；
+  // 回火 2026-09-21 随设计稿删卡）
+  'burnSnap', 'heatWave',
   // 体修：花刀/飞刀系（吃手牌与邻位）、呼吸系（吃弃牌）、培植/开刃/砺刀系（吃刀法牌）、
   // 斩进阶链（只经转化获得）、纯格挡转化（壁垒系）、完美门槛卡（精准一击/精心一击）、
   // 手牌数量条件咏唱（以无胜有/以有胜无）
@@ -61,9 +62,9 @@ const SEED_EXCLUDED = new Set([
   'whetstone', 'honeEdgeMid', 'razorEdge', 'honeEdge', 'annihilatingEdge', 'practiceBlade',
   'bladeArt', 'bladeHeart',
   'barrier', 'fortress', 'bronzeCity', 'soulOfWar',
-  // 扩容批（2026-09-14）：混元需弃牌引擎储备（同呼吸系口径）
-  'hunYuan',
-  'perfectStrike', 'carefulStrike',
+  // 混元链需弃牌引擎储备（同呼吸系口径；2026-09-21 大调收阶后链首是 hunYuanPlus）
+  'hunYuanPlus',
+  'carefulStrike',
   'fastRain', 'fastWind', // 需大回合铺垫才生效，种子池里是废牌
   // 木灵脉：卖血卡（0 练度卖血是负收益——血祭/血藤都带 'blood'）
   'bloodSacrifice', 'bloodVine',

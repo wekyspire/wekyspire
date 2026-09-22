@@ -9,7 +9,7 @@
 // 参考实现：test/asyncInput.test.js、test/deckCraft.test.js。
 
 import { zoneOf, aliveEnemies } from '../state/battleState.js';
-import { getSkillDefinition } from '../skills/registry.js';
+import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { handIndexAtPlay, handLimitOf, effectiveHandCount } from '../skills/helpers.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
@@ -230,8 +230,22 @@ export function triggerChant(sctx) {
  */
 export function buildCardSelectionRequest(sctx, {
   source = 'hand', min = 1, max = null, filter = null, reason = null, zone = null,
-  overlay = null,
+  overlay = null, defs = null, overrides = null,
 } = {}) {
+  // 「定义池选卡」（source 'pool'，发现类）：候选不在任何区——candidates 直接给 defId
+  //（投影层会用一次性 runtime 现视图，见 bridge/projection.js pendingInput.poolCards）。
+  // overrides：盖进候选一次性 runtime 的字段（如 costOverride——候选卡面显示覆写后费用，
+  // 与入手时 addCard 的 overrides 同口径，所见即所得）。
+  if (source === 'pool') {
+    const poolDefs = (defs ?? []).filter(hasSkill);
+    if (poolDefs.length === 0) return null;                 // 空集守卫：不发起请求
+    const lo = Math.max(1, Math.min(min, poolDefs.length));
+    const hi = Math.max(lo, Math.min(max ?? lo, poolDefs.length));
+    return {
+      kind: 'selectCards', source: 'pool', min: lo, max: hi, reason,
+      picker: 'overlay', candidates: poolDefs, ...(overrides ? { overrides } : null),
+    };
+  }
   const zoneName = zone ?? (source === 'deck' ? 'deck' : 'hand');
   const pool = (sctx.battleState.zones[zoneName] ?? []).filter(c => (filter ? filter(c) : true));
   if (pool.length === 0) return null;                       // 空集守卫：不发起请求
@@ -243,6 +257,12 @@ export function buildCardSelectionRequest(sctx, {
     picker: useOverlay ? 'overlay' : undefined,
     candidates: pool.map(c => c.uniqueID),
   };
+}
+
+// 定义池选牌请求（发现类：从一组 defId 里选，如控火术：无上的「选一张 0 费控火术」）
+// overrides：候选一次性 runtime 的盖章字段（如 costOverride），卡面按覆写后口径显示
+export function requestPoolSelection(sctx, { defs, count = 1, reason = null, overrides = null } = {}) {
+  return requestCardSelection(sctx, { source: 'pool', defs, min: count, max: count, reason, overrides });
 }
 
 export function requestCardSelection(sctx, opts = {}) {

@@ -417,6 +417,7 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     this._downHit = this._picker.pick(x, y);
+    this._pickerKit.routePointerDown?.(this._downHit, x, y);   // 滚动条拖拽从按下开始
   }
 
   /** 抬起：按压与抬起命中一致才算一次点击（防拖出/误触）。 */

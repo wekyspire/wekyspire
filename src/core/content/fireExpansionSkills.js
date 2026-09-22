@@ -17,12 +17,11 @@ import {
   enemyTarget, dealDamage, attackDamage, addEffect, addCard, drawCards, resolvedDamageText,
 } from './cardKit.js';
 
-// ==== 多段链（火花 D/C/B → 终极火花 A）：每段独立结算，吃「每段触发」面板 ====
-// 2026-09-18 设计稿拍平：全链同名同机制（纯多段小伤，档位差只在段数/段伤）——
-// 原连珠火 C 的「每段上燃」骑乘已删（机制在等级间漂移会让升级变成换玩法）。
+// ==== 多段链（火花 C/B → 终极火花 A）：每段独立结算，吃「每段触发」面板 ====
+// 2026-09-21 大调（D 阶移除）：火花 D/C/B 4/5/6×3/3/4 → C/B 4/5×4（fireChain 位删除），
+// 终极火花 A 6×6 → 5×5。全链同名同机制（纯多段小伤，档位差只在段数/段伤）。
 
-// 火花 D/C/B：2魏 4/5/6 伤 ×3/3/4（对标火弹 D 2魏15抽1 / 火箭 C 2魏15抽2 /
-// 火球 B 2魏25抽2：多段触发面是溢价，总伤压白板之下）。
+// 火花 C/B：2魏 4/5 伤 ×4（多段触发面是溢价，总伤压白板之下）。
 function sparkCard({ id, tier, damage, hits, promotesTo }) {
   registerSkill({
     id, name: '火花', type: 'fire', tier, series: 'spark',
@@ -38,114 +37,95 @@ function sparkCard({ id, tier, damage, hits, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}×${hits}`,
   });
 }
-sparkCard({ id: 'fireSpark', tier: 'D', damage: 4, hits: 3, promotesTo: 'fireChain' });
-sparkCard({ id: 'fireChain', tier: 'C', damage: 5, hits: 3, promotesTo: 'blazingStream' });
-sparkCard({ id: 'blazingStream', tier: 'B', damage: 6, hits: 4, promotesTo: 'sparkStorm' });
+sparkCard({ id: 'fireSpark', tier: 'C', damage: 4, hits: 4, promotesTo: 'blazingStream' });
+sparkCard({ id: 'blazingStream', tier: 'B', damage: 5, hits: 4, promotesTo: 'sparkStorm' });
 
-// 终极火花 A：2魏 6×6（总伤 36 对标大火球 37 抽2——不抽牌，段数触发面是溢价）。
+// 终极火花 A：2魏 5×5。
 registerSkill({
   id: 'sparkStorm', name: '终极火花', type: 'fire', tier: 'A', series: 'spark',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
-    for (let i = 0; i < 6; i++) attackDamage(sctx, 6);
+    for (let i = 0; i < 5; i++) attackDamage(sctx, 5);
     return true;
   },
-  describe: () => '6伤害×6',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6)}×6`,
+  describe: () => '5伤害×5',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 5)}×5`,
 });
 
-// ==== 余烬链（2026-09-18 设计稿重做）：火种 D/C + 三张 B 分岔 + 衍生牌余烬 ====
-// 余烬 = 火系的造牌语言：0 费即抛的燃烧施加。造出来的牌吃爆燃翻倍、鬼火传播、
-// 控火散/收/聚的一切搬运——叠炎的节奏件。原续燃 C（咏唱注入）/撒火 B（发现 3）
-// 已随重做除名：注入节奏统一收进火种本体，B 位三分岔各管一种兑现方式。
+// ==== 余烬链（2026-09-21 大调收阶）：火种 C + 两张 B 分岔 + A 不灭 + 衍生牌余烬 ====
+// 余烬 = 火系的造牌语言：0 费即抛的燃烧施加。造出来的牌吃焚天翻倍、鬼火传播、
+// 控火散/收/聚的一切搬运——叠炎的节奏件。
+// （火绒 D 已从设计稿移除：敌方燃烧入口由 C 阶点火承担；sparkSeedPlus 档删除，
+//  火种 C 直分岔到 B 双选。）
 
-// 火绒 D：0费 3伤 + 目标燃烧2（D 阶敌方燃烧入口——此前上敌方燃烧最低是 C 阶点火）。
+// 火种 C：1魏 冷却1——向牌库随机位洗入 3 张「余烬」，抽2。
 registerSkill({
-  id: 'tinder', name: '火绒', type: 'fire', tier: 'D', series: 'ignite',
-  cost: { mana: 0, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'inflame',
+  id: 'sparkSeed', name: '火种', type: 'fire', tier: 'C', series: 'ember',
+  cost: { mana: 1, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
+  cardMode: 'normal',
+  promotesTo: ['quickSpark', 'latentSpark'],
   use(sctx) {
-    const target = enemyTarget(sctx);
-    if (!target) return true;
-    attackDamage(sctx, 3, { target });
-    addEffect(sctx, 'burn', 2, target);
+    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    drawCards(sctx, 2);
     return true;
   },
-  describe: () => '3伤害，赋予/effect{燃烧}2',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}2`,
+  describe: () => '/named{洗入3}/card{emberMote}，抽2',
+  battleDescribe: () => '/named{洗入3}/card{emberMote}，抽2',
 });
 
-// 火种 D/C：1魏 冷却1——向牌库随机位洗入 2/4 张「余烬」（蓄力 D 的火版镜像；
-// 2026-09-18 设计稿：0费改 1魏——白嫖造牌引擎过强，费用与档位同涨）。
-function sparkSeedCard({ id, tier, count, promotesTo }) {
-  registerSkill({
-    id, name: '火种', type: 'fire', tier, series: 'ember',
-    cost: { mana: 1, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
-    cardMode: 'normal',
-    promotesTo,
-    use(sctx) {
-      for (let i = 0; i < count; i++) addCard(sctx, 'emberMote', { index: 'random' });
-      return true;
-    },
-    describe: () => `/named{洗入${count}}/card{emberMote}`,
-  });
-}
-sparkSeedCard({ id: 'sparkSeed', tier: 'D', count: 2, promotesTo: 'sparkSeedPlus' });
-sparkSeedCard({ id: 'sparkSeedPlus', tier: 'C', count: 4, promotesTo: ['quickSpark', 'latentSpark', 'eternalSpark'] });
-
-// 速生火种 B：1魏 冷却1——发现 4 张余烬直接进手（注入量最大，但要从手里一张张
-// 打出去——手牌吞吐是它的天花板）。
+// 速生火种 B：1魏 冷却1——发现 3 张余烬直接进手，抽2（从手里一张张打出去——
+// 手牌吞吐是它的天花板）。
 registerSkill({
   id: 'quickSpark', name: '速生火种', type: 'fire', tier: 'B', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    for (let i = 0; i < 4; i++) addCard(sctx, 'emberMote', { toZone: 'hand' });
+    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { toZone: 'hand' });
+    drawCards(sctx, 2);
     return true;
   },
-  describe: () => '/named{发现}4/card{emberMote}',
-  battleDescribe: () => '/named{发现}4/card{emberMote}',
+  describe: () => '/named{发现}3/card{emberMote}，抽2',
+  battleDescribe: () => '/named{发现}3/card{emberMote}，抽2',
 });
 
-// 潜伏火种 B：1魏 冷却1——洗入 6 张余烬（量大管饱，但沉在库里要靠抽牌慢慢兑现）。
+// 潜伏火种 B：1魏 冷却1——洗入 5 张余烬，抽2（量大管饱，但沉在库里要靠抽牌慢慢兑现）。
 registerSkill({
   id: 'latentSpark', name: '潜伏火种', type: 'fire', tier: 'B', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    for (let i = 0; i < 6; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    for (let i = 0; i < 5; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    drawCards(sctx, 2);
     return true;
   },
-  describe: () => '/named{洗入6}/card{emberMote}',
-  battleDescribe: () => '/named{洗入6}/card{emberMote}',
+  describe: () => '/named{洗入5}/card{emberMote}，抽2',
+  battleDescribe: () => '/named{洗入5}/card{emberMote}，抽2',
 });
 
-// 不灭火种 A（2026-09-20 稿 B→A）：1魏 冷却1——洗入 6 张余烬并抽 3（潜伏量的
-// 即时兑现分岔：抽上来的立刻能打，代价是没有速生的全部到手）。
+// 不灭火种 A：1魏 冷却1——洗入 5 张余烬并抽 3（潜伏量的即时兑现分岔）。
 registerSkill({
   id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    for (let i = 0; i < 6; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    for (let i = 0; i < 5; i++) addCard(sctx, 'emberMote', { index: 'random' });
     drawCards(sctx, 3);
     return true;
   },
-  describe: () => '/named{洗入6}/card{emberMote}，抽3',
-  battleDescribe: () => '/named{洗入6}/card{emberMote}，抽3',
+  describe: () => '/named{洗入5}/card{emberMote}，抽3',
+  battleDescribe: () => '/named{洗入5}/card{emberMote}，抽3',
 });
 
 // 余烬（衍生牌）：0费即抛——赋予目标燃烧3，打出即焚毁。只经造牌入场。
+// （等阶记 C——2026-09-21 移除 D 阶，衍生牌等阶只是账务口径。）
 registerSkill({
-  id: 'emberMote', name: '余烬', type: 'fire', tier: 'D', series: 'ember',
+  id: 'emberMote', name: '余烬', type: 'fire', tier: 'C', series: 'ember',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -160,11 +140,12 @@ registerSkill({
   battleDescribe: () => '赋予/effect{燃烧}3',
 });
 
-// ==== 燃烧收割（燃爆 C/B/A，2026-09-18 设计稿扩阶）：燃烧→即时固定伤害的变现出口 ====
-// 消耗目标一半燃烧层数（向下取整），每层转 1/1/2（A）点固定伤害（固定伤不吃面板、
-// 护盾仍可吸收，与燃烧跳伤同语言；8层 → 耗4层换 4/4/8 固伤）。C 位消耗、B 起免消耗
+// ==== 燃烧收割（燃爆 B/A，2026-09-21 大调收阶）：燃烧→即时固定伤害的变现出口 ====
+// 消耗目标一半燃烧层数（向下取整），每层转 2 点固定伤害（固定伤不吃面板、
+// 护盾仍可吸收，与燃烧跳伤同语言；8层 → 耗4层换 8 固伤）。B 位消耗、A 起免消耗
 // ——低阶一次性防复用，高阶走 FIFO 回库循环。无燃烧打出 = 落空。
-function burnSnapCard({ id, tier, per, exhaust, promotesTo }) {
+// （C 位燃爆与 burnSnapGrand 档已随 D 移除/扁平化删除。）
+function burnSnapCard({ id, tier, exhaust, promotesTo }) {
   registerSkill({
     id, name: '燃爆', type: 'fire', tier, series: 'fireControl',
     cost: { mana: 1, actionPoint: 0 },
@@ -178,27 +159,21 @@ function burnSnapCard({ id, tier, per, exhaust, promotesTo }) {
       const consume = Math.floor(target.getEffectStacks('burn') / 2);
       if (consume <= 0) return true; // 无燃烧：落空
       addEffect(sctx, 'burn', -consume, target);
-      dealDamage(sctx, consume * per, { target, source: null, fixed: true });
+      dealDamage(sctx, consume * 2, { target, source: null, fixed: true });
       return true;
     },
-    describe: () => `消耗目标一半/effect{燃烧}，每层造成${per}固定伤害`,
+    describe: () => '消耗目标一半/effect{燃烧}，每层造成2固定伤害',
     battleDescribe: (sctx) => {
       const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-      const consume = Math.floor(stacks / 2);
-      return `消耗目标一半/effect{燃烧}：${consume * per}固定伤害`;
+      return `消耗目标一半/effect{燃烧}：${Math.floor(stacks / 2) * 2}固定伤害`;
     },
   });
 }
-burnSnapCard({ id: 'burnSnap', tier: 'C', per: 1, exhaust: true, promotesTo: 'burnSnapPlus' });
-burnSnapCard({ id: 'burnSnapPlus', tier: 'B', per: 1, exhaust: false, promotesTo: 'burnSnapGrand' });
-burnSnapCard({ id: 'burnSnapGrand', tier: 'A', per: 2, exhaust: false });
+burnSnapCard({ id: 'burnSnap', tier: 'B', exhaust: true, promotesTo: 'burnSnapPlus' });
+burnSnapCard({ id: 'burnSnapPlus', tier: 'A', exhaust: false });
 
-// ==== 敌方 debuff 链（爆裂冲击 C → 爆裂冲击 B → 轰灭 A）：伤残放大一切后续伤害 ====
-// 2026-09-18 设计稿重排：原「C 爆裂冲击 / B 轰灭」扩为三阶——B 位承袭爆裂冲击之名
-// （22伤 伤残2），轰灭升 A（22伤 伤残4）；B→A 档位差全在伤残深度（延时价值）。
-
-// 爆裂冲击 C/B：2魏 13/22 伤 + 目标伤残2（C 对标火箭术 C 14抽2：13<14，伤残2=
-// 后续每次受伤+2，与燃烧跳伤/固伤天然联动）。2026-09-17 用户定：**转消耗卡**
+// ==== 敌方 debuff 链（爆裂冲击 C/B → 轰灭 A）：伤残放大一切后续伤害 ====
+// 2026-09-21 大调：B 22伤 → 16伤，轰灭 22伤/伤残4 → 16伤/伤残3。全阶转消耗
 // （伤残是延时价值，消耗防长局无限复用同一份伤残）。
 function blastShockCard({ id, tier, damage, maim, promotesTo }) {
   registerSkill({
@@ -220,10 +195,9 @@ function blastShockCard({ id, tier, damage, maim, promotesTo }) {
   });
 }
 blastShockCard({ id: 'blastShock', tier: 'C', damage: 13, maim: 2, promotesTo: 'blastShockPlus' });
-blastShockCard({ id: 'blastShockPlus', tier: 'B', damage: 22, maim: 2, promotesTo: 'doomBlast' });
+blastShockCard({ id: 'blastShockPlus', tier: 'B', damage: 16, maim: 2, promotesTo: 'doomBlast' });
 
-// 轰灭 A：2魏 22伤 + 伤残4（对标火球连发 A 14×2抽3：单发 22 与 B 持平，
-// 伤残 4 是 A 位溢价——延时价值型斩杀铺垫）。
+// 轰灭 A：2魏 16伤 + 伤残3（与 B 同伤，伤残 3 是 A 位溢价——延时价值型斩杀铺垫）。
 registerSkill({
   id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'A', series: 'shock',
   cost: { mana: 2, actionPoint: 0 },
@@ -233,19 +207,19 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
-    attackDamage(sctx, 22, { target });
-    addEffect(sctx, 'maim', 4, target);
+    attackDamage(sctx, 16, { target });
+    addEffect(sctx, 'maim', 3, target);
     return true;
   },
-  describe: () => '22伤害，赋予/effect{伤残}4',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 22)}，赋予/effect{伤残}4`,
+  describe: () => '16伤害，赋予/effect{伤残}3',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 16)}，赋予/effect{伤残}3`,
 });
 
 // ==== 自焚流的节奏与斩杀件（散卡，挂现有链）====
 
-// 急燃链 D/C/B/A（0费 冷却1，2026-09-18 设计稿扩为四阶）：获得 2/3/4/5 魏启，
-// 自身燃烧4（发烧咏唱版的瞬发镜像：一次性、立刻兑现；自焚是代价也是燃料——
-// 镜燃/焰愈/灼脉都吃它。原 D 位燃烧 2 同步上调到 4，全阶统一）。
+// 急燃 C/B/A（0费 冷却1）：获得 2/3/4 魏启，自身燃烧4
+// （一次性、立刻兑现的自焚节奏件——自焚是代价也是燃料——镜燃/焰愈/灼脉都吃它。
+//  C 位 2026-09-21 补回：火路线起始牌组的回蓝件——随开局直发）。
 function flashBurnCard({ id, tier, mana, promotesTo }) {
   registerSkill({
     id, name: '急燃', type: 'fire', tier, series: 'fever',
@@ -262,13 +236,12 @@ function flashBurnCard({ id, tier, mana, promotesTo }) {
     battleDescribe: () => `获得${mana}魏启，/effect{燃烧}4`,
   });
 }
-flashBurnCard({ id: 'flashBurn', tier: 'D', mana: 2, promotesTo: 'flashBurnPlus' });
-flashBurnCard({ id: 'flashBurnPlus', tier: 'C', mana: 3, promotesTo: 'flashBurnGrand' });
-flashBurnCard({ id: 'flashBurnGrand', tier: 'B', mana: 4, promotesTo: 'flashBurnMaster' });
-flashBurnCard({ id: 'flashBurnMaster', tier: 'A', mana: 5 });
+flashBurnCard({ id: 'flashBurn', tier: 'C', mana: 2, promotesTo: 'flashBurnPlus' });
+flashBurnCard({ id: 'flashBurnPlus', tier: 'B', mana: 3, promotesTo: 'flashBurnGrand' });
+flashBurnCard({ id: 'flashBurnGrand', tier: 'A', mana: 4 });
 
-// 焰刃链 D/C/B/A（2026-09-18 设计稿四阶化）：1AP 6 伤；你正在燃烧时 +5/+10/+15/+22
-// （自焚流的条件件——基础伤恒 6，档位差全在燃烧加成斜率；全阶同机制同名前缀）。
+// 焰刃链 C/B/A（2026-09-21 大调）：1AP 4 伤；你正在燃烧时 +6/+10/+14
+// （自焚流的条件件——基础伤恒 4，档位差全在燃烧加成斜率；原 D 位焰刃删除）。
 function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'selfImmolate',
@@ -278,42 +251,20 @@ function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
     promotesTo,
     use(sctx) {
       const burning = sctx.player.getEffectStacks('burn') > 0;
-      attackDamage(sctx, burning ? 6 + bonus : 6);
+      attackDamage(sctx, burning ? 4 + bonus : 4);
       return true;
     },
-    describe: () => `6伤害；正在/effect{燃烧}，+${bonus}`,
+    describe: () => `4伤害；正在/effect{燃烧}，+${bonus}`,
     battleDescribe: (sctx) => resolvedDamageText(sctx,
-      sctx.player.getEffectStacks('burn') > 0 ? 6 + bonus : 6),
+      sctx.player.getEffectStacks('burn') > 0 ? 4 + bonus : 4),
   });
 }
-flameEdgeCard({ id: 'flameEdge', name: '焰刃', tier: 'D', bonus: 5, promotesTo: 'redHotBlade' });
-flameEdgeCard({ id: 'redHotBlade', name: '红热焰刃', tier: 'C', bonus: 10, promotesTo: 'goldHotBlade' });
-flameEdgeCard({ id: 'goldHotBlade', name: '金热焰刃', tier: 'B', bonus: 15, promotesTo: 'whiteHotBlade' });
-flameEdgeCard({ id: 'whiteHotBlade', name: '白热焰刃', tier: 'A', bonus: 22 });
+flameEdgeCard({ id: 'redHotBlade', name: '红热焰刃', tier: 'C', bonus: 6, promotesTo: 'goldHotBlade' });
+flameEdgeCard({ id: 'goldHotBlade', name: '金热焰刃', tier: 'B', bonus: 10, promotesTo: 'whiteHotBlade' });
+flameEdgeCard({ id: 'whiteHotBlade', name: '白热焰刃', tier: 'A', bonus: 14 });
 
-// 回火 C：1魏 8伤；自身每有 3 层燃烧，伤害 +4（自烧越狠打得越痛——
-// 自焚烧血流的攻击位，与可燃血液/焰愈的防御位互补）。
-registerSkill({
-  id: 'backfire', name: '回火', type: 'fire', tier: 'C', series: 'selfImmolate',
-  cost: { mana: 1, actionPoint: 0 },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'immolate',
-  use(sctx) {
-    attackDamage(sctx, backfireAmount(sctx));
-    return true;
-  },
-  describe: () => '8伤害；每有3层/effect{燃烧}，+4',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, backfireAmount(sctx))}`
-    + `（+${Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4}）`,
-});
-function backfireAmount(sctx) {
-  return 8 + Math.floor(sctx.player.getEffectStacks('burn') / 3) * 4;
-}
-
-// 热浪链 C/B/A（1魏，2026-09-18 设计稿扩为三阶）：10 伤；目标燃烧 ≥5 层时
-// +8/+13/+20（斩杀/条件爆发——叠炎的「火候到了」一击）。门槛恒 5 不变，
-// 档位差全在加成斜率。
+// 热浪链 C/B/A（1魏，2026-09-21 大调）：8 伤；目标燃烧 ≥5 层时 +8/+12/+16
+// （斩杀/条件爆发——叠炎的「火候到了」一击）。门槛恒 5 不变，档位差全在加成斜率。
 function heatWaveCard({ id, tier, bonus, promotesTo }) {
   registerSkill({
     id, name: '热浪', type: 'fire', tier, series: 'ignite',
@@ -324,26 +275,25 @@ function heatWaveCard({ id, tier, bonus, promotesTo }) {
     use(sctx) {
       const target = enemyTarget(sctx);
       const hot = (target?.getEffectStacks('burn') ?? 0) >= 5;
-      attackDamage(sctx, hot ? 10 + bonus : 10, { target });
+      attackDamage(sctx, hot ? 8 + bonus : 8, { target });
       return true;
     },
-    describe: () => `10伤害；目标/effect{燃烧}不少于5层时，+${bonus}`,
+    describe: () => `8伤害；目标/effect{燃烧}不少于5层时，+${bonus}`,
     battleDescribe: (sctx) => {
       const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
       return stacks >= 5
-        ? resolvedDamageText(sctx, 10 + bonus)
-        : `${resolvedDamageText(sctx, 10)}（燃${stacks}/5）`;
+        ? resolvedDamageText(sctx, 8 + bonus)
+        : `${resolvedDamageText(sctx, 8)}（燃${stacks}/5）`;
     },
   });
 }
 heatWaveCard({ id: 'heatWave', tier: 'C', bonus: 8, promotesTo: 'heatWavePlus' });
-heatWaveCard({ id: 'heatWavePlus', tier: 'B', bonus: 13, promotesTo: 'heatWaveMaster' });
-heatWaveCard({ id: 'heatWaveMaster', tier: 'A', bonus: 20 });
+heatWaveCard({ id: 'heatWavePlus', tier: 'B', bonus: 12, promotesTo: 'heatWaveMaster' });
+heatWaveCard({ id: 'heatWaveMaster', tier: 'A', bonus: 16 });
 
-// 扒灰链 D/C/B（0费 冷却1，2026-09-18 设计稿扩为三阶）：抽 1 牌；坟墓里有
-// 至少 4 张牌时再抽 1/2/3（回响烈焰 B 的 D 阶教学：火系的坟场语言从前期
-// 就有踪迹）。门槛恒 4，档位差在追加抽牌数。
-function ashRakeCard({ id, tier, extraDraw, promotesTo }) {
+// 扒灰链 C/B/A（0费 冷却1，2026-09-21 大调）：抽 1 牌；坟墓里有至少 3/2/2 张牌时
+// 再抽 1/1/2（回响烈焰 B 的低阶教学：火系的坟场语言从前期就有踪迹）。
+function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
   registerSkill({
     id, name: '扒灰', type: 'fire', tier, series: 'fuel',
     cost: { mana: 0, actionPoint: 0 },
@@ -352,16 +302,16 @@ function ashRakeCard({ id, tier, extraDraw, promotesTo }) {
     promotesTo,
     use(sctx) {
       drawCards(sctx, 1);
-      if (sctx.battleState.zones.burnt.length >= 4) drawCards(sctx, extraDraw);
+      if (sctx.battleState.zones.burnt.length >= threshold) drawCards(sctx, extraDraw);
       return true;
     },
-    describe: () => `抽1；坟墓不少于4张牌时，再抽${extraDraw}`,
+    describe: () => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
     battleDescribe: (sctx) => `抽1（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
-ashRakeCard({ id: 'ashRake', tier: 'D', extraDraw: 1, promotesTo: 'ashRakePlus' });
-ashRakeCard({ id: 'ashRakePlus', tier: 'C', extraDraw: 2, promotesTo: 'ashRakeMaster' });
-ashRakeCard({ id: 'ashRakeMaster', tier: 'B', extraDraw: 3 });
+ashRakeCard({ id: 'ashRake', tier: 'C', threshold: 3, extraDraw: 1, promotesTo: 'ashRakePlus' });
+ashRakeCard({ id: 'ashRakePlus', tier: 'B', threshold: 2, extraDraw: 1, promotesTo: 'ashRakeMaster' });
+ashRakeCard({ id: 'ashRakeMaster', tier: 'A', threshold: 2, extraDraw: 2 });
 
 // ==== 咏唱反甲（熔岩铠甲 B/A）：受攻击给攻击方上燃烧 ====
 // 烫甲（C，一次性护盾 + 一回合反甲）已于 2026-09-18 设计稿除名——同机制的咏唱

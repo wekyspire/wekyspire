@@ -43,14 +43,16 @@ const file = sessionPath(sessionName);
 
 if (argv[0] === 'new') {
   const seed = Number.parseInt(argv[1] ?? '', 10);
-  if (!Number.isInteger(seed)) { console.error('用法: new <种子数字>'); process.exit(1); }
+  if (!Number.isInteger(seed)) { console.error('用法: new <种子数字> [路线]（路线 = body/fire/wood/air，缺省 body）'); process.exit(1); }
+  const route = argv[2] ?? 'body';
+  if (!['body', 'fire', 'wood', 'air'].includes(route)) { console.error(`未知路线：${route}（可选 body/fire/wood/air）`); process.exit(1); }
   if (fs.existsSync(file)) {
     console.error(`会话已存在：${file}`);
     console.error(`（不用再 new：直接给动作即可，例如 node tools/headlessPlay.mjs ${sessionName} state）`);
     process.exit(1);
   }
-  fs.writeFileSync(file, JSON.stringify({ seed, actions: [] }, null, 2));
-  console.log(`已建档 ${sessionName}（种子 ${seed}）`);
+  fs.writeFileSync(file, JSON.stringify({ seed, route, actions: [] }, null, 2));
+  console.log(`已建档 ${sessionName}（种子 ${seed} · 路线 ${route}）`);
   process.exit(0);
 }
 // load：从**存档快照**建档（核心是 core/run/saveRestore.js——与浏览器读档同一份原语，
@@ -113,7 +115,7 @@ const noRecord = pureView || action.startsWith('preview');
 
 let S;
 try {
-  S = data.save ? freshStateFromSave(data.save) : freshState(data.seed);
+  S = data.save ? freshStateFromSave(data.save) : freshState(data.seed, { route: data.route ?? 'body' });
   // 回放失败必须指出是第几个动作（第 7 轮 H：裸错误「当前不在战斗阶段」无从定位脱节动作）
   for (let i = 0; i < data.actions.length; i++) {
     try { exec(S, data.actions[i]); if (TRACE) traceLine(S, data.actions[i]); }

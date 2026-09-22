@@ -47,13 +47,7 @@ import { withLabels } from './panels/shared.js';
 const UPGRADE_SOURCES = {
   // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
   // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
-  camp: {
-    upgrade: true,
-    cards: (s) => s?.camp?.upgradeCards,
-    intent: (uniqueID, targetId = null) => ({ action: 'campChoose', option: 'upgrade', uniqueID, targetId }),
-    title: '选择要升级的卡', confirmLabel: '确认升级',
-    hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
-  },
+  // （camp 源 2026-09-21 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
@@ -478,6 +472,18 @@ export function createStagePickerKit({
       if (showcase?.busy) { showcase.onClick(hit); return true; }
       if (cardPicker?.opened) { cardPicker.onClick(hit); return true; }
       if (relicPicker?.opened) { relicPicker.onClick(hit); return true; }
+      return false;
+    },
+
+    /**
+     * 按下转发（2026-09-21 滚动条拖拽）：点击语义在各舞台是「抬起」判定，而滚动条拖拽
+     * 必须从按下那拍开始——宿主 handlePointerDown 里调这里，把按下（含指针坐标）交给
+     * 开着的全屏界面（当前只有选卡界面的滚动条用；其余界面没有按下语义，返回 false）。
+     */
+    routePointerDown(hit, x, y) {
+      if (grantBusy || upgradeBusy) return true;
+      if (cardPicker?.opened) return cardPicker.onPointerDown?.(hit, x, y) ?? false;
+      if (relicPicker?.opened) return relicPicker.onPointerDown?.(hit, x, y) ?? false;
       return false;
     },
 

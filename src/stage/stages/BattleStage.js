@@ -284,8 +284,9 @@ export class BattleStage {
     this._buttonSigs = {};
     this._btnData = {};   // 每个按钮最近一次的数据（悬停态变化时据此重烘）
     this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
-    // 弃牌模式（2026-09-13 改制，原「换卡」单张换出废除）：点弃牌按钮进入，
-    // 手牌任意点选（本地多选集），主按钮变「确认(n)」一次提交——付一次阶梯费弃任意张
+    // 弃牌模式（2026-09-21 D3 一键全弃：点弃牌按钮进入 = 全选所有手牌，
+    // 主按钮变「弃掉全部N张」作确认步（兼误触防护）；阶梯费照旧付一次。
+    // 2026-09-13 旧制为逐张多选，已随 D3 废除——诅咒/状态卡的卡手设计由此重新长牙）
     this._dumpMode = false;
     this._dumpSel = new Set();
     // ---- 战后奖励面板宿主（用户定 2026-09-12）----
@@ -896,9 +897,9 @@ export class BattleStage {
     let label = '结束回合';
     let enabled = inPlayerTurn && !pending && !this._endTurnRequested;
     if (this._dumpMode) {
-      // 弃牌模式：主按钮 = 提交选择（付一次阶梯费弃任意张，2026-09-13 改制）
+      // 弃牌模式：主按钮 = 确认全弃（付一次阶梯费弃掉全部手牌，2026-09-21 D3 改制）
       const n = this._dumpSel.size;
-      label = n > 0 ? `弃掉${n}张` : '弃牌';
+      label = n > 0 ? `弃掉全部${n}张` : '弃牌';
       enabled = n >= 1;
     } else if (this._pick) {
       const n = this._pick.selection.length;
@@ -947,7 +948,10 @@ export class BattleStage {
   _setDumpMode(on) {
     if (this._dumpMode === on || !this._snapshot) return;
     this._dumpMode = on;
-    if (!on) this._dumpSel.clear();
+    // D3 一键全弃（2026-09-21）：进模式即全选当前手牌——主按钮的「弃掉全部N张」
+    // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）
+    if (on) for (const c of this._snapshot.hand ?? []) this._dumpSel.add(c.uniqueID);
+    else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
   }
@@ -1065,14 +1069,18 @@ export class BattleStage {
     });
   }
 
-  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区） */
+  /** 按 uniqueID 找投影里的卡视图（跨区查找：手牌/牌库/焚毁区；定义池候选回退到
+   *  pendingInput.poolCards——source 'pool' 的发现类选卡，视图由投影层用一次性
+   *  runtime 现烘，候选不在任何区） */
   _findCardProj(uniqueID) {
     const zones = this._snapshot?.zones ?? {};
     for (const list of Object.values(zones)) {
       const hit = (list ?? []).find(c => c.uniqueID === uniqueID);
       if (hit) return hit;
     }
-    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID) ?? null;
+    return (this._snapshot?.hand ?? []).find(c => c.uniqueID === uniqueID)
+      ?? this._snapshot?.pendingInput?.poolCards?.[uniqueID]
+      ?? null;
   }
 
   _layoutAndTrack() {
@@ -1136,7 +1144,7 @@ export class BattleStage {
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
       } else if (this._dumpMode && zone === 'hand') {
-        // 弃牌模式：选中的高亮，其余保持常态（任何手牌都可弃，无"不可选"压灰）
+        // 弃牌模式（D3 一键全弃）：进模式即全选 → 整手高亮；对账摘除的（已离手）回常态
         view.setVisualState(this._dumpSel.has(id) ? 'highlighted' : 'normal');
       } else if (this._endTurnRequested && zone === 'hand') {
         // 回合过渡锁（点了结束回合、下一回合快照未落）：整手压灰——锁定期打牌/换卡全关
@@ -1901,10 +1909,20 @@ export class BattleStage {
     }
   }
 
+  // 滚轮：转发给选卡套件（全屏选卡界面的滚动）。战斗舞台此前漏了这一手（Map/Room 都有）
+  // ——战后删卡界面画在战斗舞台 uiScene 上，App 的 activeStage() 会把滚轮喂到这里，
+  // 缺这个方法时静默落空（用户 2026-09-21 报「删卡界面滚轮无响应」的病灶）。
+  handleWheel(deltaY) {
+    return this._pickerKit.handleWheel(deltaY);
+  }
+
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
-    if (this._pickerKit.cardPicker?.opened) return; // 全屏选卡（战后删卡机会）
+    if (this._pickerKit.cardPicker?.opened) {   // 全屏选卡（战后删卡机会）：滚动条拖拽从按下开始
+      this._pickerKit.routePointerDown?.(this.picker.pick(x, y), x, y);
+      return;
+    }
     if (this._panel) return;         // 面板模态中：只走面板自己的点按（不拖牌/不瞄准）
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
@@ -2022,12 +2040,8 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'card' && this._dumpMode) {
-      // 弃牌模式点手牌：切换选中（本地多选集，主按钮一次提交）。任何手牌都可弃
-      // （激活咏唱也可——弃置 = 离手熄灭，玩家自己的抉择）；回合过渡锁期间模式已退，这里是兜底
-      if (this._endTurnRequested) return;
-      if (this._dumpSel.has(hit.id)) this._dumpSel.delete(hit.id);
-      else this._dumpSel.add(hit.id);
-      this.reconcile(); // 选中态高亮 + 主按钮「弃掉N张」
+      // D3 一键全弃（2026-09-21）：弃牌模式下点手牌无逐张挑选语义（进模式已全选）；
+      // 确认走主按钮，取消走再点弃牌按钮。回合过渡锁期间模式已退，这里是兜底
       return;
     }
     if (hit.kind === 'button' && hit.id === 'btn:main') {
@@ -2035,7 +2049,7 @@ export class BattleStage {
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
       if (this._dumpMode) {
-        // 弃牌提交：付一次阶梯费弃掉全部选中卡（2026-09-13 改制）；失败保持模式便于重试
+        // 弃牌提交：付一次阶梯费弃掉全部手牌（2026-09-21 D3 一键全弃）；失败保持模式便于重试
         if (this.bridge.intents.dumpCards([...this._dumpSel])) this._setDumpMode(false);
       } else if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);

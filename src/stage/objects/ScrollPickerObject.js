@@ -39,6 +39,8 @@ const LAYOUT = PICKER_LAYOUT;
 const Z = PICKER_Z;
 const BACK_ID = 'picker:back';
 const CONFIRM_ID = 'picker:confirm';
+const THUMB_ID = 'picker:scrollbar:thumb';
+const TRACK_ID = 'picker:scrollbar:track';
 
 export class ScrollPickerObject extends THREE.Group {
   /**
@@ -184,8 +186,11 @@ export class ScrollPickerObject extends THREE.Group {
     this._nodes = [];
     this._selected.clear();
     this._hovered = null;
+    this._barDrag = null;
     this._scrollY = 0;
     this._maxScroll = 0;
+    this._picker?.removePickable(THUMB_ID);
+    this._picker?.removePickable(TRACK_ID);
   }
 
   attachPicker(picker) {
@@ -193,6 +198,8 @@ export class ScrollPickerObject extends THREE.Group {
     if (!picker) return;
     for (const e of this._entries) picker.addPickable(e.id, e.obj, { kind: 'button', space: 'ui' });
     for (const [id, btn] of this._buttons) picker.addPickable(id, btn, { kind: 'button', space: 'ui' });
+    if (this._bar?.track) picker.addPickable(TRACK_ID, this._bar.track, { kind: 'button', space: 'ui' });
+    if (this._bar?.thumb) picker.addPickable(THUMB_ID, this._bar.thumb, { kind: 'button', space: 'ui' });
   }
 
   /**
@@ -221,6 +228,10 @@ export class ScrollPickerObject extends THREE.Group {
   /** hover：抬亮 + 弹该候选的 tooltip（内容由 buildItem 给的 tip 决定）。 */
   onHover(hit, x = 0, y = 0) {
     if (!this._opened) return;
+    if (this._barDrag != null) {                 // 滚动条拖拽中：指针驱动滚动
+      this._dragScrollTo(this._uiWorldY(x, y));
+      return;
+    }
     const entry = hit?.kind === 'button' ? this._entries.find(e => e.id === hit.id) : null;
     if (!entry) { this._setHovered(null); return; }
     this._setHovered(entry);
@@ -230,6 +241,7 @@ export class ScrollPickerObject extends THREE.Group {
   /** 点击：候选 = 选取（禁用的忽略）；返回/确认走回调。 */
   onClick(hit) {
     if (!this._opened || hit?.kind !== 'button') return false;
+    if (this._barDrag != null) { this._barDrag = null; return true; }   // 拖拽松手：只结束拖拽，不当点击
     if (hit.id === BACK_ID) { this.close(); this._onCancel?.(); return true; }
     if (hit.id === CONFIRM_ID) {
       if (this._selected.size === 0) return false;
@@ -300,6 +312,45 @@ export class ScrollPickerObject extends THREE.Group {
       new THREE.MeshBasicMaterial({ color: 0x7fa9d4, transparent: true, opacity: 0.5 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
+    // 滚动条可交互（2026-09-21 用户报「无法点击滚动条」）：轨道 + 滑块都注册成拾取件
+    // ——按下滑块 = 抓住拖拽；按轨道 = 跳到该处并接续拖拽（见 onPointerDown/onHover）。
+    this._picker?.addPickable(TRACK_ID, this._bar.track, { kind: 'button', space: 'ui' });
+    this._picker?.addPickable(THUMB_ID, this._bar.thumb, { kind: 'button', space: 'ui' });
+  }
+
+  /** 屏幕坐标 → UI 世界 y（按滚动条内容平面反投影；宿主转发的指针是画布像素）。 */
+  _uiWorldY(x, y) {
+    const sm = this._picker?._sm;
+    if (!sm) return null;
+    return sm.screenToWorld(x, y, Z.CONTENT, sm.uiCamera)?.y ?? null;
+  }
+
+  /** 拖拽中：把指针（+抓取偏移）映射回 scrollY 并应用。 */
+  _dragScrollTo(pointerY) {
+    const bar = this._bar;
+    if (!bar?.thumb || pointerY == null) return;
+    const travel = bar.bandH - bar.thumbH;
+    if (travel <= 0 || this._maxScroll <= 0) return;
+    const half = bar.thumbH / 2;
+    const center = Math.min(bar.bandTop - half,
+      Math.max(bar.bandTop - bar.bandH + half, pointerY + (this._barDrag ?? 0)));
+    this._scrollY = Math.min(this._maxScroll,
+      Math.max(0, ((bar.bandTop - half) - center) / travel * this._maxScroll));
+    this._applyScroll();
+    bar.thumb.material.opacity = 0.8;   // 拖拽中提亮（_applyScroll 每次会重置为 0.45）
+  }
+
+  /** 按下（宿主转发的指针）：按下滑块 = 抓住；按轨道 = 跳到该处接续拖。
+   *  点击语义在各舞台是「抬起」判定（按压/抬起配对），拖拽必须从按下那拍开始——
+   *  这就是宿主 handlePointerDown 里要调 kit.routePointerDown 的原因。 */
+  onPointerDown(hit, x, y) {
+    if (!this._opened || hit?.kind !== 'button') return false;
+    if (hit.id !== THUMB_ID && hit.id !== TRACK_ID) return false;
+    if (this._maxScroll <= 0) return true;            // 无可滚：吞掉按压，不给底下穿透
+    const pointerY = this._uiWorldY(x, y);
+    if (hit.id === TRACK_ID) this._dragScrollTo(pointerY);  // 点轨道：先把滑块跳到指针处
+    this._barDrag = (pointerY ?? 0) - this._bar.thumb.position.y;  // 抓取偏移（滑块中心 − 指针）
+    return true;
   }
 
   _syncScrollbar() {

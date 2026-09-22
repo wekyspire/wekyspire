@@ -198,11 +198,11 @@ export function enterRoom(run, roomId) {
  * 直接开一次战后奖励（测奖励/开包/三选一链路）：钱 + 卡包按常规分布掷出。
  * @returns {string} 人话
  */
-export function startReward(run, { packId = null, minTier = null } = {}) {
+export function startReward(run, { packId = null, channel = 'normal' } = {}) {
   run.gameStage = 'reward';
   run.currentRoom = null;
   run.roomData = null;
-  spawnRewards(run, { minTier });
+  spawnRewards(run, { channel });
   if (packId) chooseRewardPack(run, packId);
   const packs = run.rewards?.packs ?? [];
   return `战后奖励已就位${packId ? `（已开包 ${packId}）` : `（可选卡包：${packs.join('/') || '无'}）`}`;

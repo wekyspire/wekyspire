@@ -112,7 +112,7 @@ function renderBattle(S, L) {
   if (pi) {
     L.push(`  → 应答：in <候选#> [卡名] …（多选就重复写，如 in 1 拳 3 盾）`);
   }
-  L.push(`→ play <手牌#> <卡名> [敌#] / dump <手牌#> <卡名> [更多# 卡名…]（付费${swapCostOf(bs)}AP弃任意张） / end`
+  L.push(`→ play <手牌#> <卡名> [敌#] / dump（付费${swapCostOf(bs)}AP弃全部手牌） / end`
     + ` / why <手牌#> / lib 看牌库`);
   const log = battleLogText(S);
   if (log.length) {
@@ -212,9 +212,9 @@ function renderRoomCampTraining(S, L, room) {
       L.push('营地：锁定（先把训练收尾——act train 开局 / act up 清尾款）');
       return;
     }
-    const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)', upgrade: '升级(upgrade)' };
+    const optCn = { recoverRemi: '找回瑞米(remi)', rest: '休整(rest)' };
     L.push(`营地。可用: ${campOptions(run).map(o => optCn[o] ?? o).join(' / ')}`
-      + `（act rest | act remi | act upgrade <构筑#> <卡名>——先 preview up <#> 看升阶对比）`);
+      + `（act rest | act remi——2026-09-21 D4：营地不再能升级卡）`);
   };
   const renderTraining = () => {
     const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
@@ -233,8 +233,20 @@ function renderRoomCampTraining(S, L, room) {
       });
       L.push('→ act take <#> <卡名> / act skipdraw 放弃本次抓牌');
     } else if (run.roomData?.pendingUpgrade) {
-      L.push(`尾款升级——可升级卡: ${upgradableCards(run).map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
-      L.push('→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）');
+      const p = run.roomData.pendingUpgrade;
+      if (typeof p !== 'object' || !p.mode) {
+        // 尾款第一拍：选模式（升 2 张 C→B / 升 1 张 B→A）
+        const cs = upgradableCards(run).filter(rt => defOf(rt).tier === 'C');
+        const bs = upgradableCards(run).filter(rt => defOf(rt).tier === 'B');
+        L.push('尾款升级——先选模式:');
+        if (cs.length >= 2) L.push(`  act upmode c → 升 2 张 C→B（可升: ${cs.map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}）`);
+        if (bs.length >= 1) L.push(`  act upmode b → 升 1 张 B→A（可升: ${bs.map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}）`);
+      } else {
+        const tier = p.mode === 'twoC' ? 'C' : 'B';
+        const pool = upgradableCards(run).filter(rt => defOf(rt).tier === tier);
+        L.push(`尾款升级（${p.mode === 'twoC' ? '2 张 C→B' : '1 张 B→A'}，还需 ${p.remaining} 张）——可升级卡: ${pool.map(rt => `${deckIdx(rt)}${defOf(rt).name}`).join(' ')}`);
+        L.push('→ act up <构筑#> <卡名>（先 preview up <#> 看升阶对比；编号即 deck 视图行号）');
+      }
     } else if (!run.roomData?.optionalDone) {
       L.push('→ act draw（看四选一候选）/ 不抓就直接处理营地或 next 离开');
     } else {
@@ -248,7 +260,7 @@ function renderRoomCampTraining(S, L, room) {
   if (room !== 'camp') renderTraining();
   if (room === 'campTraining') {
     L.push(run.roomData?.pendingUpgrade
-      ? '（抓卡尾款未清：必须 act up <构筑#> <卡名>）'
+      ? '（抓卡尾款未清：先 act upmode c|b 选模式，再 act up <构筑#> <卡名>）'
       : !run.roomData?.trained
         ? '（训练必做：act train 开局后才能用营地/离开）'
         : '（营地与训练各自可做一次，收尾后 next 离开）');

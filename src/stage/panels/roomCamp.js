@@ -6,7 +6,8 @@ import { withLabels, upgradeButton, pushCampGroup, roomHeader } from './shared.j
 
 /**
  * 训练部分（营地·训练场合并房的训练半场）：
- * 开始训练（必做）→ 四选一抓牌（可选，抓了欠一次升级）→ 尾款升级。
+ * 开始训练（必做）→ 四选一抓牌（可选，抓了欠升级尾款）→ 尾款新制（2026-09-21 D4）：
+ * 先选模式（升 2 张 C→B / 升 1 张 B→A，按牌组实况亮灯），再逐张选卡晋升。
  * 占位房间与**场景式房间**（RoomStage 点训练桩开的那份）共用同一份。
  */
 export function trainingWidgets(w, snap) {
@@ -14,9 +15,19 @@ export function trainingWidgets(w, snap) {
   if (!t.started) {
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练（必做）：开始这次修行——修行次数达标会当场引动进阶突破。' });
     w.push({ kind: 'button', id: 'train:begin', width: 260, size: 'main', label: '开始训练', action: { action: 'trainingBegin' } });
+  } else if (t.pendingUpgrade && !t.upgradeMode) {
+    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '抓到的卡要配一次修行——选一种修行方式：' });
+    const modes = t.upgradeModes ?? { twoC: 0, oneB: 0 };
+    if (modes.twoC >= 2) {
+      w.push({ kind: 'button', id: 'train:modeC', width: 300, size: 'main', label: '夯实基础：升 2 张 C 阶卡', action: { action: 'trainingUpgradeMode', mode: 'twoC' } });
+    }
+    if (modes.oneB >= 1) {
+      w.push({ kind: 'button', id: 'train:modeB', width: 300, size: 'main', label: '精益求精：升 1 张 B 阶卡', action: { action: 'trainingUpgradeMode', mode: 'oneB' } });
+    }
   } else if (t.pendingUpgrade) {
-    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '抓到的卡要配一次修行——升级一张卡：' });
-    w.push(upgradeButton('training'));
+    const tierLabel = t.upgradeMode === 'twoC' ? 'C' : 'B';
+    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: `升级 ${tierLabel} 阶卡（还需 ${t.upgradeRemaining} 张）：` });
+    w.push(upgradeButton('training', `升级一张 ${tierLabel} 阶卡`));
   } else if (t.choices?.length) {
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '择一张加入牌组（抓了就欠一次升级）：' });
     w.push({

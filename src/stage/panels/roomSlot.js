@@ -102,7 +102,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
       label: '粉碎物品…', action: { action: 'requestDevour' },
     });
   }
-  // 离房安慰奖（拉了 ≥2 次杆一次没中）**完全不进 UI**（用户定 2026-09-13）：它既不是进度
+  // 离房安慰奖（同一层拉了 ≥4 次杆一次没中，2026-09-21 D5 收紧）**完全不进 UI**（用户定 2026-09-13）：它既不是进度
   // 也不是可领取项——玩家点「继续前进」离房时，机器自己凑上来吐可乐/鸡腿让你二选一
   // （场景演出见 RoomStage._playGift），领完自动续上离房切幕。面板里既不提示也不给按钮，
   // 免得把"离房"这件事拆成"先在面板里领东西、再点一次继续"两步。
@@ -158,11 +158,21 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
     demonRollWidgets(w, bk.pendingRoll, sceneChoice);
   } else {
     if (bk.money > 0) {
-      w.push({
-        kind: 'button', id: 'bank:deposit', width: 300, size: 'sub',
-        label: `存入全部（${bk.money} 金）`,
-        action: { action: 'bankDeposit' },
-      });
+      // 存款三档（2026-09-21 用户定：33% / 66% / 全部）——按持有金币取整；钱太少时
+      // 低档位取整为 0 的按钮直接隐藏（core.bankDeposit 本就收任意金额，缺省=全部）。
+      for (const { key, frac, label } of [
+        { key: 33, frac: 0.33, label: '存入 33%' },
+        { key: 66, frac: 0.66, label: '存入 66%' },
+        { key: 'all', frac: 1, label: '存入全部' },
+      ]) {
+        const n = Math.floor(bk.money * frac);
+        if (n <= 0) continue;
+        w.push({
+          kind: 'button', id: `bank:deposit:${key}`, width: 300, size: 'sub',
+          label: `${label}（${n} 金）`,
+          action: { action: 'bankDeposit', amount: n },
+        });
+      }
     }
     if (bk.deposit > 0) {
       w.push({
