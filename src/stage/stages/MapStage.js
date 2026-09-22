@@ -17,6 +17,8 @@ import { renderRichTextBlock } from '../richtext/texture.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { sharedTowerArtCache } from '../art/towerArt.js';
 import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, TOWER_X, TOWER_Z, TOWER_BASE_Y } from '../scenes/towerWilderness.js';
+import { Cast } from '../fx/cast.js';
+import { runScript } from '../fx/script.js';
 
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
@@ -138,6 +140,10 @@ export class MapStage {
     this.uiScene.add(this._bubbles);
     this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
     this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
+    // fx 门面地基（2026-09-22 Phase 4）：塔楼目前无可寻址道具，cast 留空表——
+    // cutscene 'fx' step 在塔楼层只应做运镜/等待类演出（camera 可用）
+    this._cast = new Cast();
+    this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -485,6 +491,25 @@ export class MapStage {
     this._mgr = null;
   }
 
+  // fx 服务门面（cutscene 'fx' step 的统一入口）：塔楼无可寻址道具（cast 为空表），
+  // 剧本可做运镜/等待；runScript 无 animator（注册对象补间不可用，tweenRaw 正常）
+  fxServices() {
+    return {
+      cast: this._cast,
+      particles: null,
+      shake: null,
+      vignette: null,
+      camera: this._sm?.cameraDirector ?? null,
+      notify: () => {},
+      runScript: (body) => {
+        const h = runScript(body, { animator: null });
+        this._fxScripts.add(h);
+        h.promise.then(() => this._fxScripts.delete(h));
+        return h;
+      },
+    };
+  }
+
   dispose() {
     this.onExit();
     this._unsubArt?.(); // 共享缓存订阅摘除（防幽灵舞台补挂头像）
@@ -492,6 +517,9 @@ export class MapStage {
     this._unsubCardArt = null;
     this._unsubTowerArt?.(); // 塔楼模块晚到订阅摘除
     this._unsubTowerArt = null;
+    for (const h of this._fxScripts) h.kill(); // 在途剧本协程统一取消
+    this._fxScripts.clear();
+    this._cast.clear();
     this._removePanel();
     this._bubbles.dispose();
     this._bubbleAnchors.clear();

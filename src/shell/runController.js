@@ -230,7 +230,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 由 App.vue 的 SceneWipeOverlay 渲染——黑幕的**目的地**可以是 3D 舞台，也可以是一段
   // cutscene 内容（事件房：切幕开始 → 对话/CG 就位 → 切幕结束）。
   const sceneWipe = createSceneWipe();
-  const cutscene = createCutscenePlayer({ sequencer: runSequencer, wipe: sceneWipe });
+  // getFxServices：'fx' step 的舞台服务来源——三舞台不共存（战斗/奖励期 battleStage 存活，
+  // 房间/房内进阶期 roomStage 存活，其余 mapStage），取活舞台的门面；皆空 → null（fx step 告警即收）
+  const cutscene = createCutscenePlayer({
+    sequencer: runSequencer,
+    wipe: sceneWipe,
+    getFxServices: () => (battleStage ?? roomStage ?? mapStage)?.fxServices?.() ?? null,
+  });
   // 按当前 run 状态查触发规则并逐条播放（幂等；阻塞靠流程侧 await）。返回实际播放条数——
   // 调用方据此决定要不要补一道"退出切幕"（没播剧本就别多等一次黑幕）。
   const playPendingCutscenes = async () => {

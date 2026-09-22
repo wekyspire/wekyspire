@@ -149,6 +149,7 @@ export function composeRoom(recipeId, seed = 'dev') {
   const liveRoot = new THREE.Group();
   liveRoot.name = 'room:live';
   const interactives = new Map();   // name -> { object, def, placement, kind }
+  const notifiables = [];           // 被动响应件（behaviors 声明）：{ name, object, interactions }
   const floorRoot = new THREE.Group();
   floorRoot.name = 'room:floor';
   const decalRoot = new THREE.Group();
@@ -586,9 +587,14 @@ export function composeRoom(recipeId, seed = 'dev') {
     const obj = def.build({ rng: createRng(`${seed}:${recipeId}:g:${g.id}`) });
     const gsc = g.scale ?? 1;
     const live = !!g.live;
+    // 带交互行为的道具（def.behaviors——受击震颤等 notify 响应件）不进静态合批，
+    // 登记进 notifiables（舞台 cast 'prop:' 前缀 + fx/notify 单向分发；与 live 机器
+    // 是两条路：notifiables 不可点、只管被动响应）。随机撒布件的 behaviors 不生效
+    // （合批优先），想让行为生效必须走 guaranteed 定点。
+    const notifiable = (def.behaviors?.length ?? 0) > 0;
     track(def, obj, {
       x: g.x, y: FLOOR_Y, z: g.z, ry: g.ry ?? 0, composition: true, scale: gsc,
-      root: live ? liveRoot : staticRoot,
+      root: (live || notifiable) ? liveRoot : staticRoot,
     });
     claim(g.x, g.z, ((def.footprint?.x ?? 2) / 2) * gsc, ((def.footprint?.z ?? 2) / 2) * gsc);
     if (live) {
@@ -600,6 +606,12 @@ export function composeRoom(recipeId, seed = 'dev') {
         object: obj, def, kind: obj.userData.interactive ?? g.kind ?? g.id,
         x: g.x, z: g.z, ry: g.ry ?? 0, scale: gsc, parts: obj.userData.parts ?? null,
       });
+    }
+    if (notifiable) {
+      // behaviors[] → interactions 表组装（同名事件后者覆盖前者）
+      const interactions = {};
+      for (const b of def.behaviors) Object.assign(interactions, b?.interactions ?? {});
+      notifiables.push({ name: g.name ?? g.id, object: obj, interactions });
     }
     const anchor = fireAnchorOf(placements[placements.length - 1]);
     if (anchor) fireAnchors.push(anchor);
@@ -948,6 +960,7 @@ export function composeRoom(recipeId, seed = 'dev') {
     torches: lighting.torches,
     placements,
     interactives,   // 可动组件登记（休息房的机器等）：{ object, parts, kind, x/z/ry }
+    notifiables,    // 被动响应件（fx/notify 分发目标）：{ name, object, interactions }
     openings: { windows: left.windowRects, door },
     recipe,
     // 特殊色调（用户定 2026-09）：配方 grading 随契约下发——exposure=渲染曝光倍率；

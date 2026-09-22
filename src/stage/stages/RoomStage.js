@@ -38,6 +38,9 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { bakeAutoLine } from '../objects/textBakers.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
+import { Cast } from '../fx/cast.js';
+import { createNotifyHub } from '../fx/notify.js';
+import { runScript } from '../fx/script.js';
 
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 
@@ -90,6 +93,13 @@ export class RoomStage {
     this._camTween = null;   // { from, to, t, dur, then }：推近/拉远的机位补间
     this._unsubTick = null;
 
+    // fx 门面地基（2026-09-22 Phase 4）：命名寻址 + notify 分发——房间 cutscene 剧本
+    // 经 cast('prop:<名字>') 拿机器/陈设句柄；带 behaviors 的道具经 notify 被动响应
+    this._cast = new Cast();
+    this._notifyHub = createNotifyHub({ cast: this._cast });
+    this.notify = this._notifyHub.notify;
+    this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
+
     // ---- 3D 房间（PCG 配方；与战斗房同一 composeRoom 契约）----
     this._sceneDef = getScene(`pcg:${recipe}`, seed);
     this._room = this._sceneDef?.build3D?.() ?? null;
@@ -99,6 +109,9 @@ export class RoomStage {
       this.scene.fog = fogDef
         ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
         : new THREE.Fog(0x060a14, 165, 310);
+      for (const n of this._room.notifiables ?? []) {
+        this._cast.register(`prop:${n.name}`, n);
+      }
     }
     const renderer = stageManager?._renderer;
     if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
@@ -437,9 +450,31 @@ export class RoomStage {
     this._topBar.dispose();
     this._markers = [];
     this._rigs.clear();
+    for (const h of this._fxScripts) h.kill(); // 在途剧本协程统一取消
+    this._fxScripts.clear();
+    this._cast.clear();
   }
 
   // ================= 内部：场景与机器 =================
+
+  // fx 服务门面（cutscene 'fx' step 的统一入口）：房间剧本可拿 cast/camera/notify
+  // 与剧本运行器；房间无粒子池与震屏（战斗专属），剧本写法需相应退让
+  fxServices() {
+    return {
+      cast: this._cast,
+      particles: null,
+      shake: null,
+      vignette: null,
+      camera: this._sm?.cameraDirector ?? null,
+      notify: this.notify,
+      runScript: (body) => {
+        const h = runScript(body, { animator: null });
+        this._fxScripts.add(h);
+        h.promise.then(() => this._fxScripts.delete(h));
+        return h;
+      },
+    };
+  }
 
   _buildInteractives() {
     const interactives = this._room?.interactives;
@@ -450,6 +485,8 @@ export class RoomStage {
   /** 登记一件交互物：机器类（由机器模块的 createRig 决定）才建 rig；普通陈设只要浮标 + 拾取 + 推近。 */
   _addInteractive(name, entry) {
     {
+      // 交互物同时登记进 fx cast（cutscene 剧本可经 prop:<名字> 寻址机器/陈设）
+      this._cast.register(`prop:${name}`, { name, object: entry.object, interactions: null });
       // rig 的创建归口到机器模块（没有 createRig 的陈设 = 无 rig，只有浮标 + 聚焦）
       const rig = this._moduleOfKind[entry.kind]?.createRig?.(entry) ?? null;
       if (rig) this._rigs.set(name, rig);

@@ -59,6 +59,7 @@ import { resolveDamageRecipe, resolveUnitAuras } from '../fx/recipes.js';
 import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
+import { createNotifyHub } from '../fx/notify.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
@@ -236,6 +237,13 @@ export class BattleStage {
     // 命名寻址注册表（fx/cast.js）：剧本/相机经名字拿句柄。战斗内登记
     // unit:<uniqueID> 与 role:player；anchor/light 由场景层登记（Phase 3+）
     this._cast = new Cast();
+    // PCG 道具被动响应（fx/notify.js）：带 behaviors 的场景件登记为 prop:<name>，
+    // 重击等事件经 notify 单向分发（fire-and-forget，不进节拍、不读回值）
+    this._notifyHub = createNotifyHub({ cast: this._cast });
+    this.notify = this._notifyHub.notify;
+    for (const n of this._scene3D?.notifiables ?? []) {
+      this._cast.register(`prop:${n.name}`, n);
+    }
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
     this._bubbles = new BubbleLayer();
@@ -1488,6 +1496,26 @@ export class BattleStage {
     });
   }
 
+  // fx 服务门面（cutscene 'fx' step / 房间机器 / 未来事件 SDK 的统一入口）：
+  // 暴露当前舞台可供剧本使用的全部能力。stage 不共存，runController 按活舞台取。
+  fxServices() {
+    return {
+      cast: this._cast,
+      particles: this.particles,
+      shake: this.shake,
+      vignette: this._vignette,
+      camera: this._sm.cameraDirector,
+      notify: this.notify,
+      runScript: (body) => {
+        const h = runScript(body, { animator: this.animator });
+        this._fxScripts.add(h);
+        h.promise.then(() => this._fxScripts.delete(h));
+        return h;
+      },
+      unitById: (id) => this._units.get(id) ?? null,
+    };
+  }
+
 
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
   //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放）；
@@ -1510,6 +1538,14 @@ export class BattleStage {
     if (severity > 0) {
       this.shake.impulse(severity);
       if (unit.side !== 'enemy') this._vignette.pulse(severity);
+      // 重击落地 → PCG 场景件被动响应（火盆震颤等；阈值 4 ≈ 中伤以上，附级 tick 不触发）。
+      // 单向 fire-and-forget：不进节拍、不读回值
+      if (severity >= 4) {
+        this.notify('impact', {
+          at: { x: unit.position.x, z: unit.position.z },
+          severity,
+        });
+      }
     }
 
     if (absorbed > 0) {

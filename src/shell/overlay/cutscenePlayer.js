@@ -4,6 +4,7 @@ import { isBossFloor } from '../../core/run/runFlow.js';
 import { CUTSCENE_SCRIPTS } from './scripts.js';
 import { AnimationSequencer } from '../../core/anim/sequencer.js';
 import { createSceneWipe, SCENE_TRANSITION_MS } from './sceneWipe.js';
+import { getScript } from '../../stage/fx/scripts/index.js';
 
 // CutscenePlayer（Shell 层）：cutscene 分步时间轴播放器。
 // S3 收敛：剧本 step 编译为 sequencer 指令（默认严格串行），与战斗/房间/塔楼
@@ -32,6 +33,11 @@ import { createSceneWipe, SCENE_TRANSITION_MS } from './sceneWipe.js';
 //                                      page 可带 `choices: [{ id, label, hint?, disabled? }]`
 //                                      ——该页不靠点击推进，必须 `choose(id)`（见下）
 //   { type:'call', fn }                瞬时回调（换舞台/改流程状态等副作用）——自完结指令
+//   { type:'fx', script, args?,
+//     fireAndForget? }                 fx 剧本（fx/scripts 注册表 id）：在当前活动舞台的
+//                                      fxServices 上跑协程（3D 走位/运镜/道具交互）——
+//                                      默认阻塞（剧本收尾才推进）；fireAndForget 起播即推进。
+//                                      未知 id / 无活动舞台 → 告警并即收（前向兼容铁律）
 //
 // **带选项的对话**（用户定 2026-09-11：粉碎物品入口首次用上 dialogue 层）：
 //   step = { type:'dialogue', pages:[{ speaker, text, choices }], onChoice?(id) }
@@ -64,8 +70,10 @@ export const CUTSCENE_TRIGGERS = Object.freeze([
  *   sequencer: run 级共享指令队列（缺省自建独立实例——单测/独立使用）
  *   wipe: 幕间切幕器（`createSceneWipe()`；缺省自建——独立使用时也自洽）。
  *         宿主（runController）传共享实例，overlay 才能渲染到同一份状态。
+ *   getFxServices: () => fxServices|null（'fx' step 的舞台服务来源——宿主传
+ *         「当前活动舞台的 fxServices()」；null = 无活动舞台，fx step 告警即收）
  */
-export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = null } = {}) {
+export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = null, getFxServices = null } = {}) {
   const wait = sleep || ((ms) => new Promise(r => setTimeout(r, ms)));
   const seq = sequencer || new AnimationSequencer({ bus: mitt(), finishedEvent: FINISH_EVENT });
   const wipeCtl = wipe ?? createSceneWipe();
@@ -193,6 +201,26 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
           start({ id, emit }) {
             step.fn?.();
             emit(FINISH_EVENT, { id }); // 瞬时副作用即回执（同步泵起下一步）
+          },
+        };
+      case 'fx':
+        return {
+          // 保险丝：与 ANIM_SCRIPT 同量级（15000）+ 余量；fireAndForget 不需要长保险丝
+          durationMs: step.fireAndForget ? 2000 : (step.timeoutMs ?? 15000) + 2000,
+          async start({ id, emit }) {
+            const fn = getScript(step.script);
+            const services = getFxServices?.() ?? null;
+            if (!fn || !services) {
+              console.warn(`[cutscene/fx] 剧本不执行（静默收拍）：${step.script}（${!fn ? '未知 id' : '无活动舞台'}）`);
+              emit(FINISH_EVENT, { id });
+              return;
+            }
+            // 剧本签名与 ANIM_SCRIPT 节拍同构：{ ctx, args, ...fxServices }——
+            // cast/camera/notify/particles 等服务由活动舞台门面供给
+            const h = services.runScript((ctx) => fn({ ctx, args: step.args ?? {}, ...services }));
+            if (step.fireAndForget) { emit(FINISH_EVENT, { id }); return; }
+            await h.promise; // runScript 承诺必达（正常完/被杀/异常吞进 error）
+            emit(FINISH_EVENT, { id });
           },
         };
       default:

@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './scenes/volumetricMoon.js';
+import { CameraDirector } from './fx/camera.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
@@ -86,6 +87,9 @@ export class StageManager {
     this._viewHeight = 0;
     this._clock = null;         // start 时创建（node 无 performance 场景注入）
     this._tickHandlers = new Set(); // 每帧回调（粒子系统等）：fn(dtSeconds)
+    // 相机导演（fx 架构）：命名机位 + flyTo + override 栈，世界相机全局共享一台——
+    // 换场时 dispose（清栈 + 还原基准机位），上一舞台的运镜覆写不漏给下一舞台
+    this.cameraDirector = new CameraDirector(this);
   }
 
   /** 注册每帧回调，返回注销函数。 */
@@ -205,6 +209,7 @@ export class StageManager {
   setStage(stage) {
     if (this._stage === stage) return;
     this._stage?.onExit?.(this);
+    this.cameraDirector.dispose(); // 上一舞台的机位覆写到此为止（栈清空 + 回基准机位）
     this._stage = stage;
     this._stage?.onEnter?.(this);
   }
@@ -216,6 +221,7 @@ export class StageManager {
     const tick = () => {
       if (!this._running) return;
       const dt = Math.min(this._clock.getDelta(), 0.1); // 掉帧保护：单帧最多推进 100ms
+      this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
       if (this._stage) {
         // 世界 pass：stage 可带 composeScene 钩子接管渲染（如体积光 composer 的

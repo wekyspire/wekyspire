@@ -5,7 +5,7 @@
 // 变体走 build(opts)：炭块数/火苗数/燃灭。
 
 import * as THREE from 'three';
-import { P, K, shade } from '../kit/index.js';
+import { P, K, shade, B } from '../kit/index.js';
 
 // 炭盆轮廓（lathe profile：束腰→鼓腹→外撇盆沿），盆体高约 1.05
 const BOWL = [
@@ -18,7 +18,10 @@ export default {
   mount: 'floor',
   tags: ['metal', 'lightSource', 'fire'],
   footprint: { x: 4, z: 4 },
-  behaviors: [],
+  // 受击震颤（fx/notify 示范件，2026-09-22）：战场重击落地 → 火盆原地衰减微摆
+  // （radius 取模板默认 95 = 房间尺度全覆盖，幅度按距离衰减——近处猛晃、远处涟漪）。
+  // 注意：behaviors 只在 guaranteed 定点摆放时生效（composeRoom 不合批才登记 notifiables）。
+  behaviors: [B.flutterOnImpact({ tilt: 0.06 })],
   build({ coals = 5, flames = 2, lit = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('brazierFire');
