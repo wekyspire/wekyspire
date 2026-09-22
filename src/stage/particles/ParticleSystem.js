@@ -1,5 +1,6 @@
 // ParticleSystem（§4.8）：两类粒子池，由 StageManager.onTick 驱动（BattleStage 接线）。
-//   ① Points 池：单 THREE.Points + 对象池的轻量点粒子（火花/碎屑爆发）。
+//   ① Points 池：单 THREE.Points + 对象池的轻量点粒子（火花/碎屑爆发）；
+//      spawnEmitter 提供持续发射（燃烧光环/咏唱逸散等常驻特效），stop 即停。
 //      加色混合下黑色=不可见，死粒子颜色归零并归还池位。真 3D——z 必须传场景内
 //      实际深度（缺省 z=70 是旧 2D 特效层约定，斜相机下会投影错位）。
 //   ② Sprite 池：textured / text 粒子（伤害数字、图标、符咒碎片等）。
@@ -22,6 +23,12 @@ const DEFAULTS = Object.freeze({
   gravity: -30,
   size: 1.2,        // PointsMaterial 点大小（世界单位）
   z: 70,            // 粒子层高度（特效层）
+});
+
+// 持续发射器缺省：在 spawn 的 DEFAULTS 口径上追加（其余参数语义与 spawn 一致）
+const EMITTER_DEFAULTS = Object.freeze({
+  rate: 12,   // 每秒发射粒子数
+  radius: 0,  // 发射位 xy 随机抖动半径（世界单位）
 });
 
 const SPRITE_DEFAULTS = Object.freeze({
@@ -80,6 +87,7 @@ export class ParticleSystem {
 
     this._pool = [];               // 活点粒子 { i, x, y, vx, vy, life, ttl, gravity, r, g, b }
     this._free = Array.from({ length: max }, (_, i) => max - 1 - i);
+    this._emitters = [];           // 持续发射器 { x, y, acc, rate, radius, stopped, o, color }
 
     // ---- ② Sprite 池（world / ui 两套，空间分流）----
     this.sprites = this._buildSpriteGroup(maxSprites);      // 世界池：3D 场景内
@@ -111,26 +119,55 @@ export class ParticleSystem {
   spawn(x, y, options = {}) {
     const o = { ...DEFAULTS, size: this._pointSize, ...options };
     const color = new THREE.Color(o.color);
-    for (let n = 0; n < o.count; n++) {
-      const i = this._free.pop();
-      if (i == null) return; // 池满静默丢弃
-      const angle = Math.random() * Math.PI * 2;
-      const speed = o.speed * (0.5 + Math.random() * 0.8);
-      // 逐粒子亮度抖动（0.75~1.3）：单色加色爆发太均质，抖出明暗层次更醒目
-      const jitter = 0.75 + Math.random() * 0.55;
-      this._sizes[i] = o.size * (0.8 + Math.random() * 0.5); // 点径同步抖动
-      this._pool.push({
-        i, x, y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 0,
-        ttl: o.ttl * (0.7 + Math.random() * 0.6),
-        gravity: o.gravity,
-        r: Math.min(1, color.r * jitter), g: Math.min(1, color.g * jitter), b: Math.min(1, color.b * jitter),
-        z: o.z,
-      });
-    }
+    for (let n = 0; n < o.count; n++) this._spawnOne(x, y, o, color);
     this.points.geometry.attributes.aSize.needsUpdate = true;
+  }
+
+  /** spawn 的逐粒子逻辑（emit 单位）：池满静默丢，不置 needsUpdate（由调用方批量置一次）。 */
+  _spawnOne(x, y, o, color) {
+    const i = this._free.pop();
+    if (i == null) return; // 池满静默丢弃
+    const angle = Math.random() * Math.PI * 2;
+    const speed = o.speed * (0.5 + Math.random() * 0.8);
+    // 逐粒子亮度抖动（0.75~1.3）：单色加色爆发太均质，抖出明暗层次更醒目
+    const jitter = 0.75 + Math.random() * 0.55;
+    this._sizes[i] = o.size * (0.8 + Math.random() * 0.5); // 点径同步抖动
+    this._pool.push({
+      i, x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0,
+      ttl: o.ttl * (0.7 + Math.random() * 0.6),
+      gravity: o.gravity,
+      r: Math.min(1, color.r * jitter), g: Math.min(1, color.g * jitter), b: Math.min(1, color.b * jitter),
+      z: o.z,
+    });
+  }
+
+  /**
+   * 持续点粒子发射器：每帧按 rate 累积发射，stop() 即停（已发出的粒子自然存活到 ttl）。
+   * 常驻特效（燃烧光环、咏唱逸散等）用；宿主移动时可每帧 setPosition 跟随。
+   * options 在 spawn 的 DEFAULTS 口径上追加 rate/radius（见 EMITTER_DEFAULTS），
+   * 其余（color/speed/ttl/gravity/size/z）语义与 spawn 一致。
+   * handle 上的 `rate` 是公开可变数值字段且逐帧生效（update 每帧读 e.rate）——
+   * 舞台侧可用 gsap 直接补间 handle.rate 做进入渐升（0→满）。
+   * @returns {{ rate: number, stopped: boolean, stop(): void, setPosition(x,y): void }}
+   */
+  spawnEmitter(x, y, options = {}) {
+    const o = { ...DEFAULTS, size: this._pointSize, ...EMITTER_DEFAULTS, ...options };
+    // handle 即发射器记录本体：rate/x/y/acc 直接挂在上面，外部改 rate 下帧即生效
+    const handle = {
+      x, y,
+      rate: o.rate,              // 每秒发射数（公开可变，逐帧读）
+      acc: 0,                    // 发射累积器：满 1 发 1 粒
+      radius: o.radius,
+      stopped: false,
+      _p: { o, color: new THREE.Color(o.color) }, // 逐粒子参数（私有槽，count 不参与——每次恒发 1）
+      stop() { handle.stopped = true; }, // 幂等：update 泵到即从 _emitters splice 移除
+      setPosition(nx, ny) { handle.x = nx; handle.y = ny; },
+    };
+    this._emitters.push(handle);
+    return handle;
   }
 
   /**
@@ -182,8 +219,29 @@ export class ParticleSystem {
   }
 
   update(dt) {
+    this._updateEmitters(dt);
     this._updatePoints(dt);
     this._updateSprites(dt);
+  }
+
+  /** 泵持续发射器：acc += handle.rate*dt（rate 每帧读，外部补间即逐帧生效），每满 1 发 1 粒；stopped 的移除（防泄漏）。 */
+  _updateEmitters(dt) {
+    if (this._emitters.length === 0) return;
+    let dirty = false;
+    for (let k = this._emitters.length - 1; k >= 0; k--) {
+      const e = this._emitters[k];
+      if (e.stopped) { this._emitters.splice(k, 1); continue; }
+      e.acc += e.rate * dt;
+      while (e.acc >= 1) {
+        e.acc -= 1;
+        // 发射位 = emitter 当前位置 + radius 内随机抖动（均匀圆盘近似：r*sqrt(u)）
+        const a = Math.random() * Math.PI * 2;
+        const r = e.radius * Math.sqrt(Math.random());
+        this._spawnOne(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, e._p.o, e._p.color);
+        dirty = true;
+      }
+    }
+    if (dirty) this.points.geometry.attributes.aSize.needsUpdate = true;
   }
 
   _updatePoints(dt) {

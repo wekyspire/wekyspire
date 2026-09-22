@@ -55,7 +55,8 @@ import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../ar
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
-import { resolveDamageRecipe } from '../fx/recipes.js';
+import { resolveDamageRecipe, resolveUnitAuras } from '../fx/recipes.js';
+import { AuraHost } from '../fx/aura.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
@@ -227,6 +228,9 @@ export class BattleStage {
     // 在途 fx 协程剧本（伤害命中等节拍本体）：dispose 时统一 kill（结构化取消，
     // 防舞台拆除后残段继续改对象）；promise 必达，节拍 finish 链不会断
     this._fxScripts = new Set();
+    // 单位常驻 aura（fx/aura.js）：uniqueID → AuraHost。由显示状态 diff 驱动
+    // （_syncUnits 里对账），观战端经同一份 state sync 自动一致
+    this._unitAuras = new Map();
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
     this._bubbles = new BubbleLayer();
@@ -460,6 +464,13 @@ export class BattleStage {
       if (!unitProj.isDead) obj.scale.set(tr.scale, tr.scale, 1);
       // 失明（银行机恶魔词条）：敌人意图不可见 → 清空意图条（玩家只能靠猜）
       obj.setUnit(proj.blind && side === 'enemy' ? { ...unitProj, intention: null } : unitProj);
+      // 常驻 aura 对账（显示状态 diff 驱动）：燃烧等状态光环随投影挂上/摘除
+      let auras = this._unitAuras.get(unitProj.uniqueID);
+      if (!auras) {
+        auras = new AuraHost({ object3D: obj });
+        this._unitAuras.set(unitProj.uniqueID, auras);
+      }
+      auras.set(resolveUnitAuras(unitProj.effects, { particles: this.particles, unit: obj }));
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
@@ -468,6 +479,8 @@ export class BattleStage {
       if (!seen.has(id)) {
         this.picker.removePickable(id);
         this.animator.unregister(id);
+        this._unitAuras.get(id)?.dispose(); // 单位视图消亡：aura 瞬收（不播 exit）
+        this._unitAuras.delete(id);
         this.scene.remove(obj);
         obj.dispose();
         this._units.delete(id);
@@ -2221,6 +2234,8 @@ export class BattleStage {
     this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
     for (const h of this._fxScripts) h.kill(); // 在途演出协程统一取消（结构化取消，promise 必达）
     this._fxScripts.clear();
+    for (const auras of this._unitAuras.values()) auras.dispose(); // 常驻 aura 全瞬收
+    this._unitAuras.clear();
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);
       window.removeEventListener('keyup', this._onShiftKeyUp);

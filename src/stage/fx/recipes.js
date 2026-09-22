@@ -8,6 +8,7 @@
 //   → KILL 加重覆写（payload.killed：震荡加成、数字放大）
 // 调视觉参数只改本文件；新增体系/标签主题 = 表里加一行。
 import { getSkillDefinition } from '../../core/skills/registry.js';
+import gsap from 'gsap';
 
 // 主级默认模板（与 2026-09 _damageHit 现行参数逐项对齐——默认路径零回归）
 const BASE = {
@@ -117,4 +118,67 @@ export function resolveDamageRecipe(payload = {}) {
     r.numberScale = KILL.numberScale;
   }
   return r;
+}
+
+// ============ 常驻 aura 配方（fx 架构「附件」筐，2026-09-22 Phase 2）============
+// 单位的常驻状态 FX（buff 光环等）同样查表：效果投影 → aura 定义。
+// aura 定义挂进 AuraHost（fx/aura.js）——状态机/过渡纪律见该文件；这里只产数据。
+// 铁律：aura 由**显示状态 diff** 驱动（sync 节拍对账），不订阅 core 事件——
+// 观战端经同一份 state sync 自动一致。enter/exit 是 fire-and-forget 短过渡，不进节拍。
+
+// 单位 aura 主题表：effectId → 发射参数（点粒子 emitter，粒子进全局 Points 池——
+// 故 aura.group 对这类 aura 是空壳，视觉全在 emitter；sprite 类 aura 才用 group）。
+// gravity 为正 = 上飘（y 向上）；yOff = 发射位相对单位脚底的抬升；radius = 发射位抖动。
+const UNIT_AURA_THEMES = {
+  burn: { rate: 14, color: 0xff7a30, speed: 7, ttl: 0.9, gravity: 9, size: 1.3, radius: 1.4, yOff: 1.5 },
+};
+
+function makeUnitAuraDef(theme, { particles, unit }) {
+  const spawnAt = () => particles.spawnEmitter(
+    unit.position.x, unit.position.y + theme.yOff,
+    { ...theme, rate: 0, z: unit.position.z }, // rate 从 0 起，enter 渐升
+  );
+  const ramp = (aura) => {
+    // 进入渐升：直接补间 emitter.rate（句柄契约：rate 可变、逐帧生效）。
+    // 裸 gsap 不经 ctx——aura 宿主被杀时 emitter 已随 dispose 关停，rate 残留无害。
+    return new Promise((resolve) => {
+      gsap.to(aura.data.emitter, { rate: theme.rate, duration: 0.4, ease: 'power1.out', onComplete: resolve });
+    });
+  };
+  return {
+    enter(aura) {
+      aura.data.emitter = spawnAt();
+      return ramp(aura);
+    },
+    // exit 打断重挂（aura 纪律②）：重建 emitter 并渐升
+    reenter(aura) {
+      aura.data.emitter = spawnAt();
+      return ramp(aura);
+    },
+    // 软退出：停止发射，余烬按 ttl 自然衰减（~0.9s 内飘尽）——不额外播演出
+    exit(aura) {
+      aura.data.emitter?.stop();
+      aura.data.emitter = null;
+    },
+    dispose(aura) {
+      aura.data.emitter?.stop();
+      aura.data.emitter = null;
+    },
+  };
+}
+
+/**
+ * 由单位效果投影 diff 出应有 aura 集合。
+ * @param {Array} effects 投影效果列表 [{ effectId, stacks, ... }]
+ * @param {object} deps { particles, unit }（unit = UnitObject，读 position/z）
+ * @returns Map<auraKey, auraDef>
+ */
+export function resolveUnitAuras(effects, deps) {
+  const out = new Map();
+  for (const e of effects ?? []) {
+    const theme = UNIT_AURA_THEMES[e?.effectId];
+    if (!theme || (e.stacks ?? 0) <= 0) continue;
+    out.set(e.effectId, makeUnitAuraDef(theme, deps));
+  }
+  return out;
 }
