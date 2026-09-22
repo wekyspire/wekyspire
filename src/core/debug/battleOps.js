@@ -44,11 +44,10 @@ export function killAllEnemies(battle) {
   return `秒杀 ${targets.length} 个敌人`;
 }
 
-/** 秒杀单个敌人（按 uniqueID 或索引）。 */
+/** 秒杀单个敌人（与 resolveUnit 同口径：uniqueID / 裸索引 / 'enemy:N' / 'enemy'）。 */
 export function killEnemy(battle, key) {
-  const list = aliveEnemies(battle.ctx.battleState);
-  const target = list.find(e => e.uniqueID === key) ?? list[Number(key)];
-  if (!target) throw new Error(`找不到这个敌人：${key}`);
+  const target = resolveUnit(battle, key);
+  if (target.side !== 'enemy') throw new Error(`killEnemy 只认敌人（收到：${key}）`);
   submit(battle, [new DealDamageInstruction({
     source: null, target, amount: DEBUG_DAMAGE, fixed: true, pierce: true, type: 'minor',
   })]);
