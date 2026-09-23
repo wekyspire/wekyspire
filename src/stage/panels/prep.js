@@ -1,6 +1,7 @@
-// 战前准备面板（塔楼层）：层数 / 敌人预告 / 遗物装卸 / 进入战斗。
+// 战前准备面板（塔楼层）：层数 / 敌人预告 / 遗物装卸（图标 + 拖拽 + 容量条）/ 进入战斗。
+import { RelicLoadoutObject, relicLoadoutSpec } from '../objects/RelicLoadoutObject.js';
 
-/** 战前准备（塔楼层）：层数 / 敌人预告 / 遗物装卸 / 进入战斗。 */
+/** 战前准备（塔楼层）：层数 / 敌人预告 / 遗物装卸（2026-09-24 交互升级）/ 进入战斗。 */
 export function buildPrepPanel(snap) {
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战前准备' });
@@ -26,48 +27,20 @@ export function buildPrepPanel(snap) {
     w.push({ kind: 'text', text: e.name, tint: '#f08080' });
   }
 
+  // —— 遗物装卸区（custom widget）：图标 + hover 详情 + 拖拽装卸 + 槽容量 point bar ——
+  // 意图仍走 equip/unequip/useRelic（与旧按钮同一条链）；「槽位 N/M」并入容量条读数。
   w.push({ kind: 'gap' });
+  w.push({ kind: 'sub', text: '遗物', tint: '#8a93b2' });
   w.push({
-    kind: 'sub',
-    // 槽位是权重和口径（Σcost ≤ 上限）：显示占用量而非件数
-    text: `遗物（槽位 ${snap.relicSlots.used}/${snap.relicSlots.total}）`,
-    tint: '#8a93b2',
+    kind: 'custom',
+    height: relicLoadoutSpec(snap.relics, snap.relicSlots).height,
+    build: (panel) => new RelicLoadoutObject({
+      relics: snap.relics ?? [],
+      slots: snap.relicSlots ?? { used: 0, total: 0 },
+      fireIntent: (a) => panel.fireIntent(a),
+      bakeText: panel._bakeText ?? null,
+    }),
   });
-  if (!snap.relics?.length) w.push({ kind: 'text', text: '（无）', tint: '#77809a' });
-  const slotRelics = (snap.relics ?? []).filter(r => !r.nonSlot);
-  const nonSlotRelics = (snap.relics ?? []).filter(r => r.nonSlot);
-  for (const r of slotRelics) {
-    const tag = r.rarity ? `${r.rarity}·${r.cost}槽` : `${r.cost}槽`;
-    const suffix = r.equipped ? '（已装备）' : '';
-    w.push({
-      kind: 'text', text: `[${tag}] ${r.name}${suffix}`, tint: r.equipped ? '#cfe0f5' : undefined,
-      token: { type: 'relic', payload: { relicId: r.id } }, // hover 出效果预览
-    });
-    if (r.equipped) {
-      w.push({ kind: 'button', id: `relic:unequip:${r.id}`, label: '卸下', action: { action: 'unequip', relicId: r.id } });
-      if (r.canUse) {
-        const uses = r.usesLeft != null ? `（余 ${r.usesLeft}）` : '';
-        w.push({ kind: 'button', id: `relic:use:${r.id}`, label: `使用${uses}`, action: { action: 'useRelic', relicId: r.id } });
-      }
-    } else {
-      w.push({
-        kind: 'button', id: `relic:equip:${r.id}`,
-        label: r.canEquip ? '装备' : '装备（槽位不足）',
-        enabled: r.canEquip, // 可用性由 core 判定，Stage 只画
-        action: { action: 'equip', relicId: r.id },
-      });
-    }
-  }
-  if (nonSlotRelics.length) {
-    w.push({ kind: 'gap' });
-    w.push({ kind: 'sub', text: '非槽位式（恒生效，不占槽）', tint: '#8a93b2' });
-    for (const r of nonSlotRelics) {
-      w.push({
-        kind: 'text', text: `[${r.rarity ?? 'C'}] ${r.name}`, tint: '#a8c6a0',
-        token: { type: 'relic', payload: { relicId: r.id } },
-      });
-    }
-  }
 
   w.push({ kind: 'gap' });
   w.push({

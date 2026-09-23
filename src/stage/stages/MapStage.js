@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { isBossFloor } from '../../core/run/runFlow.js';
+
+const _v3 = new THREE.Vector3();   // 装卸区坐标换算的复用向量（免逐帧分配）
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
@@ -121,6 +123,7 @@ export class MapStage {
     this._unsubCardArt = null; // 卡图到图 → 面板卡面重烘
     this._picker = null;   // 输入通道（attachInput 注入：stageManager + 总线）
     this._panel = null;    // 当前休息阶段面板对象（setPanel 装配；null = 无面板）
+    this._loadout = null;  // 面板里的遗物装卸区（prep custom widget；每次重绘后重接）
     this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
     this._snap = null;     // 当前面板快照（本地重绘用）
     this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
@@ -245,7 +248,28 @@ export class MapStage {
     if (!entry) return;
     this._panel.attachPicker(this._picker);
     this._panel.setWidgets(kind, entry.build(snap, { selected: this._panelUi?.selected }));
+    this._bindLoadout();
     this._syncSlotRoll();
+  }
+
+  /**
+   * 遗物装卸区接线（prep 面板的 custom widget，2026-09-24）：拾取器 + 屏幕→局部坐标
+   * 换算。面板每次重绘都会重建该对象，故每次 _renderPanel 后都要重接。
+   */
+  _bindLoadout() {
+    this._loadout = this._panel?.getObjectByName?.('relicLoadout') ?? null;
+    if (!this._loadout) return;
+    const sm = this._sm;
+    this._loadout.bindStage({
+      picker: this._picker,
+      screenToLocal: (sx, sy, zLocal) => {
+        const lo = this._loadout;
+        if (!lo || !sm?.screenToWorld) return { x: 0, y: 0 };
+        const gz = lo.getWorldPosition(_v3).z + zLocal;
+        const w = sm.screenToWorld(sx, sy, gz, sm.uiCamera);   // 返回普通 {x,y}
+        return lo.worldToLocal(new THREE.Vector3(w.x, w.y, gz));
+      },
+    });
   }
 
   // ---- 获得物特写（通用组件，用户定 2026-09-11）----
@@ -369,6 +393,7 @@ export class MapStage {
     this.uiScene.remove(this._panel);
     this._panel.dispose();
     this._panel = null;
+    this._loadout = null;
     this._syncCardArtSub();
   }
 
@@ -381,6 +406,7 @@ export class MapStage {
     this._sm = stageManager ?? null;
     this._bus = bus ?? null; // 选卡界面的 tooltip 出口（card 整卡预览走同一条浮层）
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
+    this._bindLoadout?.();                     // 装卸区拾取同批重接
     this._pickerKit.attachPicker(this._picker); // 选卡/选遗物/特写一并重连
   }
 
@@ -412,11 +438,14 @@ export class MapStage {
       this._mouseTarget.x = (x / el.clientWidth) * 2 - 1;
       this._mouseTarget.y = 1 - (y / el.clientHeight) * 2;
     }
+    // 遗物装卸区拖拽中/按下候选：吞掉常规 hover（tooltip 不抢、面板 hover 停更）
+    if (this._loadout?.wantsPointer()) { this._loadout.onMove(x, y); return; }
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
     if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     this._panel?.onHover?.(hit);
+    this._loadout?.onHoverHit?.(hit);                    // 装卸区图标抬升反馈
   }
 
   /** 按压：只记录命中，交互一律在抬起时判定（与 BattleStage 的查看器同律）。 */
@@ -424,11 +453,18 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     this._downHit = this._picker.pick(x, y);
+    if (this._loadout?.onDown?.(this._downHit, x, y)) return;  // 遗物图标按下（候选拖拽/点击）
     this._pickerKit.routePointerDown?.(this._downHit, x, y);   // 滚动条拖拽从按下开始
   }
 
   /** 抬起：按压与抬起命中一致才算一次点击（防拖出/误触）。 */
   handlePointerUp(x, y) {
+    // 装卸区在拖拽/按下候选状态：自己收尾（拖放/点击使用/弹回），不走按钮的 down/up 同位判定
+    if (this._loadout?.wantsPointer()) {
+      this._loadout.onUp(x, y);
+      this._downHit = null;
+      return;
+    }
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.pick(x, y);
@@ -468,6 +504,7 @@ export class MapStage {
     this._unsubTick?.();
     this._unsubTick = manager.onTick((dt) => {
       this._statusBar.update(dt);
+      this._loadout?.update(dt);         // 遗物装卸区（容量条缓动/图标抬升/弹回）
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._pickerKit.update(dt);        // 获得物特写（自带 in/hold/out 时序）
       this._wilderness?.update(dt);      // 荒原环境（雪花 GPU 推进）

@@ -103,6 +103,8 @@ export class PanelObject extends THREE.Group {
 
   get buttons() { return [...this._buttons.values()]; }
   get rowCount() { return this._rows.length; }
+  /** 自定义 widget 的意图上行口（与按钮同一条链，2026-09-24 加）。 */
+  fireIntent(action) { this._onIntent?.(action ?? null); }
   /** 行几何（面板局部坐标系，wu）：供契约测试断言"不重叠且不越界"。 */
   get rows() {
     return this._rows.map(r => ({
@@ -169,6 +171,20 @@ export class PanelObject extends THREE.Group {
         y -= groupH;
         this._contentBottom = y;
         continue; // 组高已在此推进
+      } else if (w.kind === 'custom') {
+        // 通用自定义宿主（2026-09-24）：builder 产出任意 Object3D，面板只负责占位与生命周期
+        // （清场时调 dispose）。交互（拾取/拖拽/动画）由对象自理——宿主经 w.build(panel)
+        // 拿到面板引用，可用 panel.fireIntent 上行意图。高度由 builder 侧算好（w.height，px）。
+        const hWu = (w.height ?? 60) / PX_PER_WU;
+        const obj = w.build?.(this);
+        if (obj) {
+          obj.position.set(centerX, y - hWu / 2, Z.CONTENT);
+          this.add(obj);
+          this._rows.push({ widget: w, object: obj, top: y, h: hWu, contentH: hWu });
+        }
+        y -= hWu;
+        this._contentBottom = y;
+        continue;
       } else {
         // dock（场景式操纵条）：文字**统一白色**（读在 3D 场景上，彩色/灰字对比不够）；
         // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText。

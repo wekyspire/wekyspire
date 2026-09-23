@@ -14,9 +14,13 @@
 import { PropArtCache } from './propArt.js';
 import { indexArtUrls } from './imageCache.js';
 
-const RELIC_ART_URLS = indexArtUrls(
-  import.meta.glob('../../assets/relics/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' }),
-);
+// node（单测/冒烟）没有 import.meta.glob：document 守卫短路成空表，浏览器行为不变
+//（vite 构建期仍会把 glob 调用变换为静态导入表——守卫只挡 node 的裸跑）。
+const RELIC_ART_URLS = typeof document !== 'undefined'
+  ? indexArtUrls(
+      import.meta.glob('../../assets/relics/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' }),
+    )
+  : {};
 
 /** 应用级共享单例（跨舞台/跨面板复用已解码图与纹理）。 */
 export const sharedRelicArtCache = new PropArtCache(RELIC_ART_URLS);

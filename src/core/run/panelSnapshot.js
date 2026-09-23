@@ -78,6 +78,7 @@ export function prepSnapshot(run) {
       return {
         id,
         name: def?.name ?? id,
+        icon: def?.icon ?? null,   // 无立绘时的特征字回落（遗物装卸区图标烘焙用）
         rarity: def?.rarity ?? null,
         cost,
         nonSlot,

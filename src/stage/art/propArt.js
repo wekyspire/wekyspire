@@ -13,14 +13,14 @@
 import * as THREE from 'three';
 import { ArtImageCache, indexArtUrls } from './imageCache.js';
 
-const PROP_ART_URLS = indexArtUrls(
+const PROP_ART_URLS = typeof document !== 'undefined' ? indexArtUrls(
   import.meta.glob('../../assets/props/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
-);
+) : {};   // node 无 glob：空表（同 relicArt 的守卫口径）
 // 获得物素材（`assets/items/*`）：遗物/药水/奖励的特写图放这里；**同名时 items 优先**，
 // 于是"道具图"与"物品图"共用一个查表 key，调用方不必分两套。
-const ITEM_ART_URLS = indexArtUrls(
+const ITEM_ART_URLS = typeof document !== 'undefined' ? indexArtUrls(
   import.meta.glob('../../assets/items/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' })
-);
+) : {};
 
 export class PropArtCache extends ArtImageCache {
   /**
