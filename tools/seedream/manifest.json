@@ -34,6 +34,71 @@
     {
       "name": "unit_warlock",
       "prompt": "粗糙笔触的涂鸦水彩，儿童绘本感，Q版二头身角色，粗犷勾线，水彩晕染填色。火焰小术士'燃焰术士'：穿暗红色长袍，尖顶兜帽，双手举着一根顶端燃烧火焰的木法杖，表情凶萌。全身立绘，正面站姿，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_hedgehog",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要细腻毛发质感、不要二次元萌系高光。一只背刺完全竖起的刺鼠（小怪物），刺尖带微光，主色灰褐 + 白色尖刺。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_slimelet",
+      "refImages": ["ref/slime.png", "ref/mossBall.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要光滑玻璃质感、不要二次元萌系高光。史莱姆的幼体：一只更小更圆的半透明粘液球小怪物，两只白色圆眼，体表挂几滴拉丝的小粘液。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_thornWeed",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一丛蔓生荆棘成精的小怪物：茎秆布满尖刺，刺尖带紫黑毒光、挂着毒滴，底部根须扎地。主色暗绿 + 毒紫。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_carrionBeetle",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只油亮甲壳的腐食甲虫怪物（蜣螂形），大张的口器，甲壳带霉斑。主色暗棕黑 + 油绿光泽。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_staticPuff",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只蓬松的毛球小怪物，毛发直立、缠着细细的电弧，皮下透出蓝白电光。主色灰白 + 电蓝。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_diggerMole",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只矮壮的鼹鼠怪物，一对金属光泽的异常发达的大前爪，鼻尖和爪尖挂着泥土。主色灰褐 + 金属银爪。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_pufferToad",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只大腹蟾蜍怪物，腹部松弛鼓胀、浑身疣刺。主色疣绿 + 腹部淡黄。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_blastPod",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一颗鼓胀的孢子囊果小怪物（豆荚/脓疮形），囊体半透明、可见内部发酵液体，头顶一根引线状花蕊。主色病黄绿 + 红尖。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_stoneCocoon",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一枚蛹状石茧怪物，外壳是带裂纹的石头，裂缝里透出橙红内光。主色石灰 + 橙光。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_rockSnail",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只巨壳蜗牛怪物，背着岩质螺旋大壳，壳上有苔斑，半缩壳姿态。主色岩石灰 + 苔斑。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_wraith",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只半透明浮游怨灵：没有腿的雾状身体、飘散的下摆、一只手做出诅咒手势。主色幽蓝紫、低饱和。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_snowwolf",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只雪原巨狼精英怪物，霜蓝色眼睛、毛上挂着雪粒，作扑击姿态。主色冷白灰蓝。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
+    },
+    {
+      "name": "unit_rockPangolin",
+      "refImages": ["ref/mossBall.png", "ref/slime.png", "ref/buzzbug.png", "ref/swampAmbusher.png"],
+      "prompt": "严格按照参考图的画风来画：笨拙粗糙的手绘涂鸦线条，像小孩子画的简笔画，粗犷勾线、水彩晕染填色，绝对不要精致渲染、不要二次元萌系高光。一只穿山甲精英怪物，背部层层叠叠如花岗岩的厚重甲片，小眼睛大爪子，甲片缝隙露出浅色软腹，低头冲锋姿态。主色花岗灰棕 + 腹部暖色。全身立绘，正面，纯白色背景，无阴影，无底座，无文字。"
     }
   ]
 }

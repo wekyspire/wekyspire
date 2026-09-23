@@ -3,6 +3,10 @@
 > 2026-09-14 整理：注册表现有 61 只敌人，立绘仅 4 份文件（玩家、瑞米、史莱姆[兼大史莱姆]、燃焰术士），
 > 其余 58 只全部走程序化占位色块。本清单 = 待绘列表 + 每只的立绘要点（形态原型 / 机制可视化锚点 / 主色）。
 > 画完丢 `src/assets/stage/`，跑一次 `python tools/compress_art.py` 原位转 WebP，然后告诉 K3 登记。
+>
+> **2026-09-22 进展**：P0 章1 全部 16 只就位——mossBall/buzzbug/swampAmbusher 为手绘直用，
+> 其余 13 只（含 slimelet/hedgehog）由 seedream i2i 以 4 张手绘图为风格参考批量生成
+> （提示词模板见 `tools/seedream/manifest.json`：风格锚定句 + 一句话形态 + 白底无影无文字）。
 
 ## 0. 通用规格（对齐 STAGE_DESIGN §立牌）
 
