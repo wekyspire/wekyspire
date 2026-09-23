@@ -40,13 +40,14 @@
           </div>
         </Transition>
       </div>
-      <div class="story-toggle">
+      <!-- 故事/调试两个开关仅线下开发可见（IS_DEV 构建期常量，部署版恒 false 不渲染、恒默认关闭） -->
+      <div v-if="IS_DEV" class="story-toggle">
         <input id="story-checkbox" type="checkbox" v-model="isStory" />
         <label for="story-checkbox">故事模式</label>
       </div>
       <!-- 调试模式（仅调试用）：新开局进调试会话——F9 调试面板 / 存档写 debug 槽 / 开局发一拳。
            取代了旧的「无敌模式」复选框：无敌只是这个模式里的一项（面板里随时开关，或直接发一拳） -->
-      <div class="story-toggle">
+      <div v-if="IS_DEV" class="story-toggle">
         <input id="debug-checkbox" type="checkbox" :checked="settings.debugMode" @change="toggleDebug" />
         <label for="debug-checkbox">调试模式<span style="color: #ff0000;">（仅调试用）</span></label>
       </div>
@@ -74,13 +75,16 @@ const props = defineProps({
 });
 const emit = defineEmits(['start']);
 const showMenuPopup = inject('showMenuPopup'); // App.vue 挂载的全局共享 popup
+const IS_DEV = import.meta.env.DEV; // 构建期常量：故事/调试两开关只在 dev server 渲染
 
 // 模式选择持久化：回主菜单后复选框保持上次选择；默认肉鸽（故事模式未开放）
 const isStory = ref(settings.menuStoryMode === true);
-// 开局路线（D2）：持久化到 settings，默认体修
-const route = ref(ROUTE_IDS.includes(settings.menuRoute) ? settings.menuRoute : 'body');
+// 开局路线（D2）：持久化到 settings，默认体修。
+// 木/空灵脉尚未开发完成，部署版屏蔽（IS_DEV 构建期常量）；持久化里残留的旧选择落回体修
+const VISIBLE_ROUTE_IDS = IS_DEV ? ROUTE_IDS : ROUTE_IDS.filter(id => id !== 'wood' && id !== 'air');
+const route = ref(VISIBLE_ROUTE_IDS.includes(settings.menuRoute) ? settings.menuRoute : 'body');
 const ROUTE_COLORS = { body: '#b8894a', fire: '#e85a5a', wood: '#4aa56e', air: '#5aa2e8' };
-const routeList = ROUTE_IDS.map(id => ({ id, name: ROUTES[id].name, color: ROUTE_COLORS[id] }));
+const routeList = VISIBLE_ROUTE_IDS.map(id => ({ id, name: ROUTES[id].name, color: ROUTE_COLORS[id] }));
 const routeBlurb = computed(() => ROUTES[route.value]?.blurb ?? '');
 watch(route, (v) => { settings.menuRoute = v; persistSettings(); });
 // 「继续」的优先来源：调试模式开着就先看 debug 槽（各槽互不覆盖，见 saves.modeOf）
