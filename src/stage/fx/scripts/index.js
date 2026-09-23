@@ -17,6 +17,8 @@
 // }
 // 节拍语义：ANIM_SCRIPT 是阻塞节拍——剧本跑完才 finish；未知 id 静默回落收拍（不炸队列）。
 import { registerPyroScripts } from './bosses/pyro.js';
+import { registerKardasScripts } from './bosses/kardas.js';
+import { registerMefm1Scripts } from './bosses/mefm1.js';
 
 const REG = new Map();
 
@@ -31,3 +33,5 @@ export function hasScript(id) { return REG.has(id); }
 
 // ---- 显式装配 ----
 registerPyroScripts(registerScript);
+registerKardasScripts(registerScript);
+registerMefm1Scripts(registerScript);

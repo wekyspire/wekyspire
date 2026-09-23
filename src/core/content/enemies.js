@@ -251,8 +251,10 @@ registerEnemy({
     };
     const rageUp = (stacks) => actx.kernel.submitInstruction(new AddEffectInstruction({
       target: unit, effectId: 'rage', stacks }));
-    if (!unit._phase2 && unit.hp < 50) { // 转段拍：回血25+暴怒2，不攻
+    if (!unit._phase2 && unit.hp < 50) { // 转段拍：嘶吼（占拍演出）+ 回血25 + 暴怒2，不攻
       unit._phase2 = true; unit._phaseBeat = 0;
+      // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT，同 pyro）：core 只报 id+标量参数
+      actx.presenter?.playScript?.({ script: 'bosses/kardasP2', unit: unit.uniqueID });
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 25 }));
       rageUp(2);
       return;
@@ -313,9 +315,14 @@ registerEnemy({
           source: unit, target: actx.player, amount: amount + atk }));
       }
     };
-    if (!unit._phase2 && unit.hp < 80) { // 转段拍：失去铁壳，故障空转
+    if (!unit._phase2 && unit.hp < 80) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
       unit._phase2 = true; unit._phaseBeat = 0;
-      unit.defense = Math.max(0, unit.defense - 4);
+      // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT，同 pyro）
+      actx.presenter?.playScript?.({ script: 'bosses/mefm1P2', unit: unit.uniqueID });
+      // 失去防御4：防御已效果化（onBattleStart 走 AddEffectInstruction），剥壳 = 扣 4 层
+      // （旧写法直改 unit.defense 字段——该字段已不存在，等于 NaN 赋值，2026-09-22 修）
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'defense', stacks: -4 }));
       return;
     }
     if (!unit._phase2) {
