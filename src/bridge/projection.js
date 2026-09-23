@@ -158,7 +158,7 @@ export function projectBattle(battle) {
     // 共用 pickOverflowVictims（helpers.js），两处不得各自实现
     overflowVictims: pickOverflowVictims(battleState.zones.hand, ctx),
     // 手牌容量分解（批次 13 灯珠指示器与 headless 文本同源）：蓝珠=咏唱容量占用、
-    // 绿珠=普通占用、黄珠=溢出激活咏唱占用、灰=空；超载无指示器（用户定 2026-09-13）。
+    // 绿珠=普通占用、黄珠=溢出激活咏唱占用、灰=空；超载（合计>max）末尾追加红珠=尾弃张数。
     handCapacity: (() => {
       const { normal, chantW } = handBreakdown(battleState);
       const cap = chantCapacityOf(ctx);

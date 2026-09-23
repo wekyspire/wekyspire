@@ -3,7 +3,7 @@
 // 投影 handCapacity 同口径：
 //   最左 chantCap 颗 = 咏唱容量珠（蓝系）：激活咏唱的权重（共鸣石折扣后）先占它——点亮=占用，暗=空。
 //   其余 max 颗 = 手牌珠：绿 = 普通卡占用，黄 = 溢出容量的激活咏唱占用，灰 = 空。
-// 超载状态无指示器（铁律）。
+//   超载时（占用合计 > max）末尾追加红珠 = 溢出张数（尾弃预告，2026-09-22 用户定）。
 // 纯展示件：只读投影 setValue，不挂拾取、不进动画注册表；珠数签名不变不重建网格。
 // 摆放/层级由宿主（BattleStage）决定——必须放在手牌扇覆盖区之外的可见带，
 // z 压过静息手牌（≤15）但低于悬浮/瞄准牌（30.5+），见 BattleStage 装配处注释。
@@ -23,6 +23,7 @@ const COLORS = {
   handLit: 0x4ad06e,    // 普通卡占用
   chantOverflow: 0xe8c85a, // 溢出容量的激活咏唱占用
   empty: 0x363d4d,      // 手牌位·空
+  overflow: 0xe85a5a,   // 超载溢出（尾弃预告）
 };
 
 // 圆角方形 Shape（中心在原点）
@@ -59,12 +60,14 @@ export class CapacityBeadsObject extends THREE.Group {
     const normalUsed = Math.max(0, hc.normalUsed ?? 0);
     const chantCapUsed = Math.max(0, hc.chantCapUsed ?? 0);
     const chantOverflowUsed = Math.max(0, hc.chantOverflowUsed ?? 0);
+    // 超载：占用合计超出手牌容量的部分以红珠追加在末尾（此刻结束回合会被尾弃的张数）
+    const overflow = Math.max(0, normalUsed + chantOverflowUsed - max);
     const sig = `${chantCap}|${max}|${normalUsed}|${chantCapUsed}|${chantOverflowUsed}`;
     if (sig === this._sig) return;
     this._sig = sig;
 
-    const layoutKey = `${chantCap}|${max}`;
-    if (layoutKey !== this._layoutKey) this._rebuild(chantCap, max);
+    const layoutKey = `${chantCap}|${max}|${overflow}`;
+    if (layoutKey !== this._layoutKey) this._rebuild(chantCap, max, overflow);
 
     let ci = 0, hi = 0;
     for (const bead of this._beads) {
@@ -72,6 +75,8 @@ export class CapacityBeadsObject extends THREE.Group {
       if (bead.slot === 'chant') {
         color = ci < chantCapUsed ? COLORS.chantLit : COLORS.chantIdle;
         ci++;
+      } else if (bead.slot === 'overflow') {
+        color = COLORS.overflow;
       } else {
         // 手牌珠从左向右填充：先普通占用（绿），再溢出咏唱占用（黄），余者空（灰）
         color = hi < normalUsed ? COLORS.handLit
@@ -83,22 +88,23 @@ export class CapacityBeadsObject extends THREE.Group {
     }
   }
 
-  _rebuild(chantCap, max) {
+  _rebuild(chantCap, max, overflow = 0) {
     for (const bead of this._beads) {
       this.remove(bead.mesh);
       bead.mesh.geometry.dispose();
       bead.mesh.material.dispose();
     }
     this._beads = [];
-    this._layoutKey = `${chantCap}|${max}`;
+    this._layoutKey = `${chantCap}|${max}|${overflow}`;
 
-    const total = chantCap + max;
+    const total = chantCap + max + overflow;
     if (total <= 0) return;
     // 行宽 = 组内珠距 + 组间额外间隔；原点 = 行中心
     const width = (total - 1) * BEAD_STEP + (chantCap > 0 && max > 0 ? GROUP_GAP : 0);
     let x = -width / 2;
     for (let i = 0; i < total; i++) {
       const isChant = i < chantCap;
+      const isOverflow = i >= chantCap + max;
       if (i === chantCap && chantCap > 0 && max > 0) x += GROUP_GAP;
       const mesh = new THREE.Mesh(
         BEAD_GEO,
@@ -107,7 +113,7 @@ export class CapacityBeadsObject extends THREE.Group {
       mesh.position.set(x, 0, 0);
       x += BEAD_STEP;
       this.add(mesh);
-      this._beads.push({ mesh, slot: isChant ? 'chant' : 'hand' });
+      this._beads.push({ mesh, slot: isChant ? 'chant' : (isOverflow ? 'overflow' : 'hand') });
     }
   }
 
