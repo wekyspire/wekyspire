@@ -77,6 +77,11 @@ export class UnitObject extends THREE.Group {
     this._hasArt = false;
     this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
 
+    // 命名部件表（多部件敌人，fx Phase 5）：key → Object3D（环绕火球/浮游炮等挂接件）。
+    // 剧本经 partOrRoot(key) 寻址——部件不存在回落根节点（内容演进不炸旧剧本）
+    this.parts = new Map();
+    this._tickFns = new Set(); // 附件的逐帧钩子（环绕轨道等），update 统一驱动
+
     // billboard 子组：standee/hpBar/fxAnchor 全部挂进来，faceCamera 逐帧水平转向相机
     // （立牌形/圆柱 billboard，只 yaw——斜视下立牌不转正会被透视压斜；
     // 立面保持垂直地面，球面 pitch 后仰已弃；金环贴地不参与）
@@ -227,6 +232,12 @@ export class UnitObject extends THREE.Group {
 
   /** 死亡演出访问口：billboard（倾倒轴）/ body（焚毁载体）。 */
   get billboard() { return this._billboard; }
+
+  /** 命名部件寻址：命中部件 Object3D，未命中/未给 key 回落根节点（本对象）。 */
+  partOrRoot(key = null) { return (key && this.parts.get(key)) || this; }
+
+  /** 附件逐帧钩子（环绕轨道等）：update(dt) 统一驱动；返回注销函数。 */
+  addTick(fn) { this._tickFns.add(fn); return () => this._tickFns.delete(fn); }
   get body() { return this._body; }
 
   /** 死亡演出前置：隐藏血条/护盾/效果行等状态绘制——尸体不再读数，焚毁只剩立牌。 */
@@ -417,8 +428,9 @@ export class UnitObject extends THREE.Group {
     this._billboard.rotation.y = Math.atan2(camDir.x, camDir.z);
   }
 
-  /** 帧驱动：idle 呼吸（仅 scaleY 微振，死亡即停）+ 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
+  /** 帧驱动：附件钩子（环绕轨道等）+ idle 呼吸 + 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
   update(dt) {
+    for (const fn of this._tickFns) fn(dt);
     if (this._flashT > 0) this._flashT -= dt;
     if (this._shieldPopT > 0) {
       this._shieldPopT -= dt;

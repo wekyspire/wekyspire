@@ -120,6 +120,9 @@ registerEnemy({
   id: 'pyro', name: '燃焰术士',
   // 2026-09-21 用户定：一章 Boss 集体加强——基础 +7，经 11 层 ×3.4 缩放 ≈ 实战 +24（153→177）
   createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 52 }),
+  // 多部件（fx Phase 5 首件试点，2026-09-23）：本体 + 3 团环绕火球
+  // （billboard 占位纹理，无美术素材；P2 剧本会把它催成狂暴态）
+  orbs: { count: 3, color: 0xff8a3a, radius: 2.6, height: 3.4, size: 1.25, speed: 1.6, bob: 0.4 },
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {

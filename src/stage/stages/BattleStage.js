@@ -60,6 +60,8 @@ import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
+import { attachOrbs } from '../fx/orbs.js';
+import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
@@ -231,6 +233,9 @@ export class BattleStage {
     // 在途 fx 协程剧本（伤害命中等节拍本体）：dispose 时统一 kill（结构化取消，
     // 防舞台拆除后残段继续改对象）；promise 必达，节拍 finish 链不会断
     this._fxScripts = new Set();
+    // 舞台寿命钩子（fx Phase 5）：剧本的**常驻**效果（场景覆写/余烬/烧痕）挂这里——
+    // runScript 的 onKill 在正常收尾也会触发，挂它会误收常驻演出；dispose 统一回调
+    this._fxDisposeHooks = new Set();
     // 单位常驻 aura（fx/aura.js）：uniqueID → AuraHost。由显示状态 diff 驱动
     // （_syncUnits 里对账），观战端经同一份 state sync 自动一致
     this._unitAuras = new Map();
@@ -243,6 +248,20 @@ export class BattleStage {
     this.notify = this._notifyHub.notify;
     for (const n of this._scene3D?.notifiables ?? []) {
       this._cast.register(`prop:${n.name}`, n);
+    }
+    // 场景布光登记（Boss 剧本光照覆写寻址用）：light:hemi / light:dir<i> / light:point<i>
+    // + light:root（lighting 门面本体）。灯位语义由 lighting.js 预设决定，这里只按类型枚举
+    {
+      const lg = this._scene3D?.lighting;
+      if (lg?.group) {
+        this._cast.register('light:root', lg);
+        let di = 0, pi = 0;
+        for (const l of lg.group.children) {
+          if (l.isHemisphereLight) this._cast.register('light:hemi', l);
+          else if (l.isDirectionalLight) this._cast.register(`light:dir${di++}`, l);
+          else if (l.isPointLight) this._cast.register(`light:point${pi++}`, l);
+        }
+      }
     }
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
@@ -468,6 +487,11 @@ export class BattleStage {
         this.animator.register(unitProj.uniqueID, obj);
         this.picker.addPickable(unitProj.uniqueID, obj, { kind: 'unit' });
         this._applyUnitArtTo(obj);
+        // 多部件挂接（fx Phase 5）：敌人 def 声明 orbs → 环绕火球部件（'orbs'，剧本可寻址）
+        if (side === 'enemy') {
+          const orbsDef = getEnemyDefinition(unitProj.defId)?.orbs;
+          if (orbsDef) attachOrbs(obj, orbsDef); // headless 无画布返回 null，跳过即安
+        }
       }
       // cast 命名寻址登记（幂等；同句柄重登不告警）
       this._cast.register(`unit:${unitProj.uniqueID}`, obj);
@@ -1488,6 +1512,7 @@ export class BattleStage {
         vignette: this._vignette,
         camera: this._sm.cameraDirector, // 与 fxServices() 同袋：运镜剧本在节拍里也能飞相机
         notify: this.notify,
+        onStageDispose: (fn) => this.onFxDispose(fn), // 常驻效果锚舞台寿命（onKill 会误收）
         unitById: (id) => this._units.get(id) ?? null,
       });
     }, { animator: this.animator });
@@ -1508,6 +1533,7 @@ export class BattleStage {
       vignette: this._vignette,
       camera: this._sm.cameraDirector,
       notify: this.notify,
+      onStageDispose: (fn) => this.onFxDispose(fn),
       runScript: (body) => {
         const h = runScript(body, { animator: this.animator });
         this._fxScripts.add(h);
@@ -1517,6 +1543,9 @@ export class BattleStage {
       unitById: (id) => this._units.get(id) ?? null,
     };
   }
+
+  /** 登记舞台寿命钩子（剧本常驻效果的收尾）；返回注销函数。dispose 统一回调。 */
+  onFxDispose(fn) { this._fxDisposeHooks.add(fn); return () => this._fxDisposeHooks.delete(fn); }
 
 
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
@@ -2312,6 +2341,8 @@ export class BattleStage {
     this._fxScripts.clear();
     for (const auras of this._unitAuras.values()) auras.dispose(); // 常驻 aura 全瞬收
     this._unitAuras.clear();
+    for (const fn of this._fxDisposeHooks) { try { fn(); } catch (_) {} } // 剧本常驻效果收尾
+    this._fxDisposeHooks.clear();
     this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
     this._cast.clear(); // 命名寻址随舞台销毁（下一场 beginBattle 重建）
     if (typeof window !== 'undefined') {

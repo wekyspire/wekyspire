@@ -144,6 +144,7 @@ export class MapStage {
     // cutscene 'fx' step 在塔楼层只应做运镜/等待类演出（camera 可用）
     this._cast = new Cast();
     this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
+    this._fxDisposeHooks = new Set(); // 舞台寿命钩子（剧本常驻效果收尾，dispose 统一回调）
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -501,6 +502,7 @@ export class MapStage {
       vignette: null,
       camera: this._sm?.cameraDirector ?? null,
       notify: () => {},
+      onStageDispose: (fn) => { this._fxDisposeHooks.add(fn); return () => this._fxDisposeHooks.delete(fn); },
       runScript: (body) => {
         const h = runScript(body, { animator: null });
         this._fxScripts.add(h);
@@ -519,6 +521,8 @@ export class MapStage {
     this._unsubTowerArt = null;
     for (const h of this._fxScripts) h.kill(); // 在途剧本协程统一取消
     this._fxScripts.clear();
+    for (const fn of this._fxDisposeHooks) { try { fn(); } catch (_) {} } // 剧本常驻效果收尾
+    this._fxDisposeHooks.clear();
     this._cast.clear();
     this._removePanel();
     this._bubbles.dispose();

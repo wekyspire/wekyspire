@@ -99,6 +99,7 @@ export class RoomStage {
     this._notifyHub = createNotifyHub({ cast: this._cast });
     this.notify = this._notifyHub.notify;
     this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
+    this._fxDisposeHooks = new Set(); // 舞台寿命钩子（剧本常驻效果收尾，dispose 统一回调）
 
     // ---- 3D 房间（PCG 配方；与战斗房同一 composeRoom 契约）----
     this._sceneDef = getScene(`pcg:${recipe}`, seed);
@@ -452,6 +453,8 @@ export class RoomStage {
     this._rigs.clear();
     for (const h of this._fxScripts) h.kill(); // 在途剧本协程统一取消
     this._fxScripts.clear();
+    for (const fn of this._fxDisposeHooks) { try { fn(); } catch (_) {} } // 剧本常驻效果收尾
+    this._fxDisposeHooks.clear();
     this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
     this._cast.clear();
   }
@@ -468,6 +471,7 @@ export class RoomStage {
       vignette: null,
       camera: this._sm?.cameraDirector ?? null,
       notify: this.notify,
+      onStageDispose: (fn) => { this._fxDisposeHooks.add(fn); return () => this._fxDisposeHooks.delete(fn); },
       runScript: (body) => {
         const h = runScript(body, { animator: null });
         this._fxScripts.add(h);
