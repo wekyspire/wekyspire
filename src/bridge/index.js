@@ -109,6 +109,10 @@ export function createBridge({
     sequencer,
     intents,
     interaction,
+    // 标脏/补同步（2026-09-22 暴露：调试面板在战斗内改 run 级字段后，投影需要
+    // 一次显式补同步——run 级 notify 触不到战斗侧的脏标记链）
+    markDirty,
+    syncIfIdle,
 
     start() {
       startBattle(battle);

@@ -166,14 +166,28 @@ export function rollTiered(run, pool, count, table = REWARD_TIER_TABLE.normal, a
   }
   const picks = [];
   while (picks.length < count && byTier.size) {
-    const entries = [...byTier.entries()]
+    let entries = [...byTier.entries()]
       .filter(([tier, defs]) => defs.length > 0 && (table[tier] ?? 0) > 0);
-    if (!entries.length) break; // 剩余等阶在表中均无权重（防御性兜底）
-    let total = 0;
-    for (const [tier] of entries) total += table[tier];
-    let r = run.rng.next() * total;
+    // 降档兜底（2026-09-22 修，qa 实测触发）：表有权重的等阶在池里一张都没有时
+    //（典型态：体修路线 + elite 通道——体修 0 级把基础包钳到 C，elite 表只有 B/A），
+    // 把份额摊给**池内实际存在**的等阶（权重 = 剩余张数）。不兜底的后果：
+    //   · 精英战零卡奖励（只剩金币）；
+    //   · 老虎机「超越级卡包」掷出空 choices 的死奖（takeSlotPrize 抛错、pending 卡死）。
+    const fallback = entries.length === 0;
+    if (fallback) entries = [...byTier.entries()].filter(([, defs]) => defs.length > 0);
     let tier = entries[entries.length - 1][0];
-    for (const [t] of entries) { r -= table[t]; if (r <= 0) { tier = t; break; } }
+    let r;
+    if (fallback) {
+      let total = 0;
+      for (const [, defs] of entries) total += defs.length;
+      r = run.rng.next() * total;
+      for (const [t, defs] of entries) { r -= defs.length; if (r <= 0) { tier = t; break; } }
+    } else {
+      let total = 0;
+      for (const [t] of entries) total += table[t];
+      r = run.rng.next() * total;
+      for (const [t] of entries) { r -= table[t]; if (r <= 0) { tier = t; break; } }
+    }
     const group = byTier.get(tier);
     let i;
     if (affinityOf) { // 档内亲和加权取一张

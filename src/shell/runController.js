@@ -627,6 +627,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
     if (run.roomData?.pendingUpgrade) return;
+    if (run.slotPending) return; // 产出没处理完不许离房（2026-09-22 qa 修：防静默丢弃成幽灵奖项）
     void exitRestRoomScene(() => { completeRoom(run); notify(); });   // 同 leaveRoom：迁移压进黑幕
   }
 

@@ -107,12 +107,19 @@ export function gurpasView(run) {
   };
 }
 
-/** 收购价（文档 A 90~120 / S 150~200；当次掷定，进快照供 UI 显示）。 */
+/**
+ * 收购价（文档 A 90~120 / S 150~200）。**当次进店掷定**：缓存在本次货架上
+ * （首次需要时掷，同一件遗物此后不变）——2026-09-22 qa 修：旧实现每次快照重掷，
+ * 面板重绘一次价格变一次，且与实际卖出价漂移、白白消耗 rng 流。
+ */
 export function sellPrice(run, def) {
   if (!def) return 0;
   const range = GURPAS.sell[def.rarity];
   if (!range) throw new Error('她只收 A 级与 S 级遗物');
-  return intIn(range, run.rng);
+  const g = ensureGurpasStock(run);
+  g.sellPrices ??= {};
+  if (g.sellPrices[def.id] == null) g.sellPrices[def.id] = intIn(range, run.rng);
+  return g.sellPrices[def.id];
 }
 
 /** 货架价（只读，不掷）。 */

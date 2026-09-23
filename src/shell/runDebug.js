@@ -53,6 +53,11 @@ export function createRunDebug(ctx) {
       after?.();
       syncMapStatus?.();
       notify?.();
+      // 战斗内改动（上限类字段等）补一次战斗投影同步：run 级 notify 触不到 bridge 的
+      // 标脏链，投影只在战斗指令事件时重拉——否则珠子/将弃预告停更到下一条指令
+      //（2026-09-22 qa 实测修复）。
+      const bridge = ctx.getBattleBridge?.();
+      if (bridge) { bridge.markDirty?.(); bridge.syncIfIdle?.(); }
       say(msg ?? label);
       return true;
     } catch (err) {

@@ -25,8 +25,8 @@ export function buildRoomPanel(snap) {
   }
 
   if (snap.room === 'slot') {
-    roomHeader(w, snap);
     slotWidgets(w, snap);
+    w.push({ kind: 'sub', align: 'center', tint: '#9ccfff', text: '银行机' });
     bankWidgets(w, snap);
     w.push({ kind: 'button', id: 'slot:leave', label: '离开', width: 220, size: 'sub', action: { action: 'leaveSlot' } });
     return w;

@@ -57,6 +57,7 @@ export const KEYWORD_LABELS = Object.freeze({
   slowStart: '慢热',
   anchored: '锁定',
   blood: '卖血',
+  blade: '刀法', // 系列标签（2026-09-22 修：此前裸透传英文 blade 到卡面页脚）
 });
 
 export function projectCardFull(battle, rt) {

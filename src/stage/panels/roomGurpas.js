@@ -22,7 +22,6 @@ export function gurpasWidgets(w, snap) {
     });
     return w;
   }
-  w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '货架：' });
   g.items.forEach((it, i) => {
     const sold = it.sold ? '（已售出）' : '';
     const used = it.kind === 'remove' ? `（已用 ${it.used ?? 0}/${2}）` : '';
