@@ -26,7 +26,7 @@ export const CAMERA_ZOOM = 0.79;
 // 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs
 // 手牌 z=20+ 位置错乱、卡牌飞行 z 变化时忽大忽小）；正交下布局坐标↔屏幕线性映射，
 // 拾取/拖拽反投影也线性，一类问题全消。
-export const UI_CAMERA_LOOK_AT_Y = -15; // 取景中心 y（底部留手牌构图，与旧透视 UI 相机同框架）
+export const UI_CAMERA_LOOK_AT_Y = -10; // 取景中心 y（底部留手牌构图，与旧透视 UI 相机同框架）
 export const UI_CAMERA_Z = 500;         // 正交相机位置只决定可见 z 区间，不改投影
 
 // 世界内 z 分层（renderOrder 约定，数值即约定本身，勿散写魔法数）

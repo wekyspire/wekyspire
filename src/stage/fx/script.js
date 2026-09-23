@@ -112,6 +112,44 @@ export class ScriptContext {
     return child;
   }
 
+  /**
+   * 公共编排「纵向翻面」（明日方舟式 2D 卡翻面）：翻转 → 侧立那一帧换内容 → 展开回正。
+   * 侧立（|rotation.y|=90°）时平面投影宽度为 0，是**天然不可见**的换图窗口——换贴图、
+   * 换材质、换整张卡都塞在这里，观众只看到「一张卡翻过去、另一张翻回来」，
+   * 而不是贴图凭空替换。回展带一点撑开再收回，读成「哗地打开」。
+   * 通用：只要求 node 是带 rotation.y / scale.x 的 Object3D（UnitObject.standee、
+   * 卡面对象、道具画牌皆可）。从 +90° 跳到 -90° 再转回 0 ⇒ 图全程不镜像、终态正对镜头。
+   * @param {object} node 被翻的节点
+   * @param {() => void} [swap] 侧立那一帧执行（换图/换材质/补一记闪光）
+   * @param {{durationMs?:number, foldRatio?:number, pop?:number}} [opts]
+   * @returns {Promise} 翻面完成（await = 占住这一拍；不 await = 并行演出）
+   */
+  flip(node, swap = null, { durationMs = 620, foldRatio = 0.45, pop = 0.09 } = {}) {
+    const HALF = Math.PI / 2;
+    const foldMs = Math.max(40, durationMs * foldRatio);
+    const spreadMs = Math.max(40, durationMs - foldMs);
+    const rot = (v) => { node.rotation.y = v; };
+    const wide = (v) => { node.scale.x = v; };
+    // 被杀（收拍/拆台）时不许留半张侧立的卡：归正姿态，换没换图都按新图正面示人
+    this.onKill(() => { node.rotation.y = 0; node.scale.x = 1; });
+    return this.spawn(async (c) => {
+      // 走「通用键 + onUpdate」那条路（gsapTween 的语义键 rotation 只管 z，翻面要的是 y）
+      await c.tweenRaw({ k: node.rotation.y }, { k: HALF },
+        { durationMs: foldMs, ease: 'power2.in', onUpdate: rot });
+      swap?.();
+      node.rotation.y = -HALF; // 侧立两侧不可分辨：从另一侧转回，图不镜像、终态正对镜头
+      await Promise.all([
+        c.tweenRaw({ k: -HALF }, { k: 0 }, { durationMs: spreadMs, ease: 'power2.out', onUpdate: rot }),
+        (async () => { // 展开：转回来的途中比纯透视多撑开一点，再收回——「哗地打开」
+          await c.tweenRaw({ k: 1 }, { k: 1 + pop },
+            { durationMs: spreadMs * 0.55, ease: 'power1.out', onUpdate: wide });
+          await c.tweenRaw({ k: 1 + pop }, { k: 1 },
+            { durationMs: spreadMs * 0.45, ease: 'power2.inOut', onUpdate: wide });
+        })(),
+      ]);
+    }).promise;
+  }
+
   // body(done, setCancel) 同步执行；done 幂等（kill 后或重复调用变 no-op）。
   _track(body) {
     if (this._killed) return Promise.reject(new ScriptKilled());

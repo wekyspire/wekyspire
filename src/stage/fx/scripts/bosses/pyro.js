@@ -127,14 +127,16 @@ const sstep = (x) => x * x * (3 - 2 * x); // 压扁曲线：起步与到位都�
 //   燃躯（1.5s，三拍）：火自体内窜出 → 环火二次浪 → 吐一口火灰定相
 //   场景覆写（爆发瞬间点火，常驻到战斗结束——三级覆写阶梯的 L1/L2 运行时形态）：
 //     ① 相机已在蓄力段落到 P2 常驻「对抗机位」（duelPose：与基准战斗镜头同内容，长焦 + 平视）
-//     ② 光照转「火主冷辅」：以 Boss 为圆心由近及远逐灯错峰转
+//     ② 光照转「火主冷辅」：结构光走 mood 乘子压暗（边缘沉底）+ 火光乘子反抬，
+//        灯色以 Boss 为圆心由近及远错峰染暖；火主近旁挂点光（亮橙黄 → 血红两段过渡）
 //     ③ 布件先焚、木件后裂：charBurn modifier 挂 M.cloth / M.wood，两族各走自己的烧黑→侵蚀
-//     ④ 场景余烬：火盆口 + 机位可见空域的前景飘灰（锚舞台寿命停发，逐缕错开起步）
+//     ④ 场景余烬：火盆口 + 机位可见空域飘灰 + 以 Boss 为心的三圈热浪环（向外荡开、
+//        向上蒸腾；锚舞台寿命停发，逐缕/逐圈错开起步）
 //     ⑤ 环绕火球升温：orbit.heat 0→1（半径/转速同推）
 // 常驻效果一律挂 onStageDispose（不是 ctx.onKill——onKill 在剧本正常收尾也会触发，
 // 会把刚点着的常驻演出当场收掉）。自燃披风（全场燃烧7）下一拍由 act 结算——
 // aura 系统经状态同步自动点燃，本剧本不管。
-async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onStageDispose, runScript, unitById }) {
+async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onStageDispose, runScript, unitById, setArtVariant }) {
   const unit = unitById(args.unit);
   if (!unit) return; // 快照缺失兜底：静默收拍
   const id = unit.uniqueID;
@@ -234,6 +236,10 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
 
   // —— 爆发：炽闪 + 双道冲击环 + 火星炸开 ——
   unit.flash?.(0xff7a30);
+  // 换形态（空兜帽 → 双眼发光 + 火翼张开）走公共编排 ctx.flip：翻转 → 侧立那一帧换图 →
+  // 展开回正。侧立时立牌投影宽度为 0，贴图替换天然看不见，比「拿白光遮一下」更有形。
+  // 不 await：640ms 全跑在弹起 + 燃躯三拍里，转段总时长不受影响。
+  ctx.flip(unit.standee, () => setArtVariant?.(unit, 'p2'), { durationMs: 640 });
   // 炽闪：一团主题色大光晕原地亮起速灭（scalePop 出生弹跳 + 短 ttl；按立牌体量，
   // 光晕盖过半身但不能盖满屏——旧版 13u 在特写距离上直接洗白整帧，09-23 教训）。
   // 现在**没有特写垫着了**，体量按常驻景别给（H 的六成长这样，广角里才读得出「炸」）
@@ -275,13 +281,19 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   const orbit = unit.parts?.get('orbs')?.userData?.orbit;
   (runScript ?? ((body) => { ctx.spawn(body); }))(async (c) => {
     const jobs = [];
-    // ② 光照转「火主冷辅」：以 Boss 为圆心由近及远逐灯错峰（lag 120→1020ms）；
-    //    暖光先抬强度、隔 420ms 再换色（火先窜起来、光色才染上），冷压更晚一档。
-    //    判据用灯色本身（r>b 即火系光池），不认灯名——换房间预设不用改剧本。
+    // ② 光照转「火主冷辅」：强度一律走 mood 乘子（lighting.update 每帧按 base×periph
+    //    重写各灯强度——直推 light.intensity 会被当场覆盖，09-23 复审发现）；灯色仍可直推。
+    //    结构光整体压暗（房间边缘沉下去）+ 火光乘子反抬（火盆/烛火更跳），
+    //    再逐灯以 Boss 为圆心由近及远错峰染色。
+    const mood = cast.get('light:mood');
+    if (mood) {
+      jobs.push(c.tweenRaw(mood, { dim: mood.dim * 0.62 }, { durationMs: 1700, delayMs: 150 }));
+      jobs.push(c.tweenRaw(mood, { fireGain: mood.fireGain * 1.9 }, { durationMs: 1500, delayMs: 300 }));
+    }
     const emberCol = desatColor(0xff7a2e, { k: 0.35, cap: 0.45 });
     const lights = [];
     for (const { handle } of cast.query('light:')) {
-      if (!handle?.isLight) continue; // light:root 门面跳过
+      if (!handle?.isLight) continue; // light:root 门面 / light:mood 句柄跳过
       const p = handle.position;
       lights.push({ handle, d: p ? Math.hypot(p.x - ux, p.z - uz) : 0 });
     }
@@ -289,19 +301,26 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
     for (const { handle, d } of lights) {
       const lag = 120 + (d / dMax) * 900; // 离火主近的灯先变
       const col = handle.color;
-      const warm = !!col && col.r > col.b;
+      if (!col) continue;
+      const warm = col.r > col.b;
       if (warm) {
-        if (handle.intensity > 0) {
-          jobs.push(c.tweenRaw(handle, { intensity: handle.intensity * 2.3 }, { durationMs: 1300, delayMs: lag }));
-        }
-        if (col) jobs.push(c.tweenRaw(col, { r: emberCol.r, g: emberCol.g, b: emberCol.b }, { durationMs: 1500, delayMs: lag + 420 }));
+        jobs.push(c.tweenRaw(col, { r: emberCol.r, g: emberCol.g, b: emberCol.b }, { durationMs: 1500, delayMs: lag + 420 }));
       } else {
-        jobs.push(c.tweenRaw(handle, { intensity: handle.intensity * 0.6 }, { durationMs: 1900, delayMs: lag + 500 }));
-        if (col) jobs.push(c.tweenRaw(col, {
+        jobs.push(c.tweenRaw(col, {
           r: Math.min(1, col.r * 1.1 + 0.06), g: col.g * 0.94, b: col.b * 0.8,
         }, { durationMs: 2200, delayMs: lag + 500 }));
       }
     }
+    // ②b 火主近旁光（挂单位 = 跟随，不进 lighting.group ⇒ update 不管它，强度自由补间）：
+    //    爆发即亮的亮橙黄，随后颜色沉向血红、强度再抬一档——「亮橙黄 → 红」两段过渡，
+    //    把 Boss 立牌与近旁地面从暗场里托出来
+    const bossLight = new THREE.PointLight(0xffc266, 0, H * 6.5, 1.8);
+    bossLight.position.set(0, H * 0.55, H * 0.3);
+    unit.add(bossLight);
+    onStageDispose?.(() => { unit.remove(bossLight); bossLight.dispose?.(); });
+    jobs.push(c.tweenRaw(bossLight, { intensity: 3400 }, { durationMs: 700, delayMs: 100, ease: 'power2.out' }));
+    jobs.push(c.tweenRaw(bossLight.color, { r: 1.0, g: 0.2, b: 0.06 }, { durationMs: 2600, delayMs: 1400 }));
+    jobs.push(c.tweenRaw(bossLight, { intensity: 4600 }, { durationMs: 2600, delayMs: 1400 }));
     // ③ 焚化分轨（族单例挂 modifier）：布易燃——先黑、蚀得深；木后裂——只啃表皮。
     //    每族两拍（uChar 烧黑 → uBurn 侵蚀）各带自己的 delay，错峰推进而非串行到底。
     //    burnTo 口径：前沿 = uBurn×1.35 − 0.35·hash ⇒ 0.4 ≈ 啃掉四成、留六成骨架；
@@ -349,6 +368,23 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
       if (!em) continue;
       onStageDispose?.(() => em.stop());
       jobs.push(c.tweenRaw(em, { rate }, { durationMs: 2400, delayMs: lag }));
+    }
+    // ④b 热浪环：以 Boss 为心的三圈 outward 发射 + 上升偏置（emitter 方向窗/径向散布，
+    //    09-23 新增能力）——内圈亮金而急、中圈主橙、外圈暗红大而缓（余烬碎皮感）；
+    //    速率/尺寸/颜色/起步全不同，读作热气从火主身上一圈圈荡开、向上蒸腾
+    const heatRings = [
+      { r: H * 0.5, rate: 36, speed: 15, vby: 9, size: 1.1, color: 0xffd9a0, ttl: 1.4, lag: 300 },
+      { r: H * 1.05, rate: 28, speed: 10, vby: 9, size: 1.9, color: 0xff7a30, ttl: 2.1, lag: 900 },
+      { r: H * 1.7, rate: 18, speed: 7, vby: 11, size: 2.7, color: 0xd93a14, ttl: 2.7, lag: 1600 },
+    ];
+    for (const hr of heatRings) {
+      const em = particles.spawnEmitter(ux, uy + H * 0.2, {
+        rate: 0, radius: hr.r, outward: true, vby: hr.vby, color: hr.color,
+        speed: hr.speed, ttl: hr.ttl, size: hr.size, gravity: 6, zJitter: H * 0.55, z: uz,
+      });
+      if (!em) continue;
+      onStageDispose?.(() => em.stop());
+      jobs.push(c.tweenRaw(em, { rate: hr.rate }, { durationMs: 2200, delayMs: hr.lag }));
     }
     // ⑤ 环绕火球升温（orbs.js heat 口径：亮度/抖幅/尾迹/灯光整体涨，轨道参数同推）
     //    爆发即起，但拉长到 2.2s——与燃躯三拍同轨收尾，狂暴是「长出来的」不是「切过去的」

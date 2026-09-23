@@ -125,6 +125,18 @@ registerEnemy({
   // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
   // 小数值会全部埋没在袍子躯干里（实拍教训 09-23）
   orbs: { count: 3, color: 0xff8a3a, radius: 8, height: 11, size: 3.2, speed: 1.5, bob: 1.2 },
+  // Boss 房间覆写（2026-09-23，composeRoom 深合并进 boss 配方）：
+  // 一阶段全场压暗 + 火光微抬——转段「亮起来」才有明暗落差；木质装饰品大增 = 满房燃料，
+  // P2 的 charBurn 烧黑/侵蚀才有东西可烧。guaranteed 两件摆在战场走廊外的敌侧翼
+  roomOverride: {
+    dim: 0.58, fireGain: 1.25,
+    scatter: { tags: { wood: 3.0, barrack: 2.0 } },
+    guaranteed: [
+      { id: 'barricadeWood', x: -46, z: -46, ry: 0.6 }, { id: 'crateLong', x: -40, z: -58, ry: 1.2 },
+      { id: 'logPile', x: -58, z: -30, ry: 0.4 }, // 左翼
+      { id: 'barrelStack', x: 64, z: -14, ry: 1.9 }, { id: 'weaponRack', x: 70, z: 6, ry: -0.9 }, // 右翼
+    ],
+  },
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {

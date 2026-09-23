@@ -166,7 +166,10 @@ export const LIGHTING_PRESETS = {
 /**
  * 按预设组装灯光。fireAnchors=[{x,y,z}]（composeRoom 从 lightSource 道具收集的火位）；
  * lampAnchors=[{x,y,z,gain}]（`lamp` 标签的自发光体：机器/彩灯串，只出光池不出火）。
- * @returns {group, torches, moonlight, tint, update(dt, particles, camPos), setFocus(target|null), focusLight}
+ * @returns {group, torches, moonlight, tint, mood, update(dt, particles, camPos), setFocus(target|null), focusLight}
+ *   mood = 运行期氛围句柄（公开可写、update 逐帧读——与 emitter.rate / orbit.heat 同惯例）：
+ *   { dim, fireGain }。update 每帧按 base×periph 重写各灯强度，**直推 light.intensity
+ *   会被当场覆盖**——运行期压暗/抬火必须落在 mood 乘子上（Boss 剧本、房间覆写同走此路）。
  */
 export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   const preset = LIGHTING_PRESETS[key];
@@ -289,6 +292,10 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     { light: centerFill, base: cfBase },
   ];
 
+  // 氛围句柄（Boss 剧本/房间覆写的运行期乘子）：dim 压结构光（含灯池），fireGain 抬/压火光。
+  // 强度唯一落笔点是 update——乘子在这里进公式，剧本直推 mood 字段即生效（gsap 可补间）
+  const mood = { dim: 1, fireGain: 1 };
+
   // 灯池染色（用户定 2026-09-11）：恶魔 roll 期间整机光照要偏暗红——灯池是静态建的，
   // 运行期改色走这个句柄（k=0 恢复本色，k=1 全量替换）。**只染灯池**（机器/彩灯串），
   // 不动中央光/月光（房间基调仍归预设）。
@@ -323,9 +330,9 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     focusK += (focusWant - focusK) * Math.min(1, dt * (focusCfg.rise ?? 3.2));
     if (Math.abs(focusWant - focusK) < 0.003) focusK = focusWant;
     const periph = 1 - focusK * (focusCfg.dim ?? 0.72);
-    for (const p of peripheral) p.light.intensity = p.base * periph;
+    for (const p of peripheral) p.light.intensity = p.base * periph * mood.dim;
     for (const l of lampLights) {
-      l.light.intensity = l.base * periph;
+      l.light.intensity = l.base * periph * mood.dim;
       if (lampTintK > 0.001) l.light.color.copy(l.baseColor).lerp(lampTintTarget, lampTintK);
       else if (!l.light.color.equals(l.baseColor)) l.light.color.copy(l.baseColor);
     }
@@ -350,7 +357,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
       t.intensity = 1
         + 0.16 * Math.sin(time * 11 + t.phase)
         + 0.08 * Math.sin(time * 23 + t.phase * 1.7);
-      t.light.intensity = preset.fire.base * t.intensity * periph;
+      t.light.intensity = preset.fire.base * t.intensity * periph * mood.fireGain;
       if (particles) {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
@@ -371,7 +378,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     radius: preset.tint.radius,
   };
   return {
-    group, torches, moonlight, tint, update, setFocus, focusLight,
+    group, torches, moonlight, tint, mood, update, setFocus, focusLight,
     setLampTint,   // (color, k) 灯池染色：恶魔 roll 等运行期换风格
   };
 }

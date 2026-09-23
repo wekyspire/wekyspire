@@ -9,13 +9,14 @@ import { RECIPES } from './presets.js';
 /**
  * @param recipeId 配方 id（presets.js：ch1 / ch3 / boss）
  * @param seed 房间种子（run 种子 + 层号派生；同种子恒定同布局）
+ * @param roomOverride Boss 房间覆写（敌人 def roomOverride，深合并进配方；见 presets.js）
  * @returns 场景定义 { id, build3D, battleLine, slots }
  */
-export function getRoomScene(recipeId, seed = 'dev') {
+export function getRoomScene(recipeId, seed = 'dev', roomOverride = null) {
   const recipe = RECIPES[recipeId];
   return {
     id: `pcg:${recipeId}`,
-    build3D: () => composeRoom(recipeId, seed),
+    build3D: () => composeRoom(recipeId, seed, roomOverride),
     battleLine: DUNGEON.battleLine,
     slots: DUNGEON.slots,
     // 休息房等配方可声明交互锚点（设施位置/朝向 + UI 安全区）：随场景定义下发，

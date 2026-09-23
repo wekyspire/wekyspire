@@ -21,7 +21,7 @@ import {
 import { buildFloor } from './floor.js';
 import { generateTerrain, buildTerrain } from './terrain.js';
 import { createLighting } from './lighting.js';
-import { getRecipe } from './presets.js';
+import { getRecipe, mergeRecipeOverride } from './presets.js';
 
 // ---- L0 功能分区（地块红线法的带状分区；密度/格宽由配方 bandDensities 供给）----
 const BANDS = {
@@ -128,9 +128,10 @@ function measure(obj) {
  * 组装一个房间。
  * @param recipeId 配方 id（presets.js）
  * @param seed 房间种子（同种子恒定同布局）
+ * @param override Boss 房间覆写（敌人 def roomOverride，深合并进配方；见 presets.js）
  */
-export function composeRoom(recipeId, seed = 'dev') {
-  const recipe = getRecipe(recipeId);
+export function composeRoom(recipeId, seed = 'dev', override = null) {
+  const recipe = override ? mergeRecipeOverride(getRecipe(recipeId), override) : getRecipe(recipeId);
   setTheme(recipe.theme);
   const keepout = buildKeepout();
   // 房间有效边界（阶段配方 room.scale 缩小空间：右缘/近缘收入，左/背墙与战斗几何不动）；
@@ -911,6 +912,10 @@ export function composeRoom(recipeId, seed = 'dev') {
   // 灯锚按 gain 降序：颜色轮转表的前几位留给 gain=1 的机器，彩灯串（gain<1）拿后面的彩灯色
   lampAnchors.sort((a, b) => (b.gain ?? 1) - (a.gain ?? 1));
   const lighting = createLighting(recipe.lighting, [...fireAnchors, ...fireExtra], lampAnchors);
+  // 房间覆写的布光字段（Boss 主题房：一阶段压暗全场 / 火光独立增益）——
+  // 落 mood 乘子而非逐灯改强度（update 每帧按 base 重写，直改会被覆盖）
+  if (recipe.dim !== undefined) lighting.mood.dim = recipe.dim;
+  if (recipe.fireGain !== undefined) lighting.mood.fireGain = recipe.fireGain;
   group.add(lighting.group);
   const skydome = buildSkydome({ moonDir: new THREE.Vector3(-0.55, 0.5, -0.45), flat: true });
   group.add(skydome);

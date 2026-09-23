@@ -104,13 +104,14 @@ export class BattleStage {
    *   bakeFace(cardProjection) / bakeLabel(text)：烘焙函数，缺省浏览器 canvas 实现（可注入 fake）
    *   tween: StageAnimator 的 tween 工厂（缺省 gsap，测试注入手动版）
    */
-  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', sceneSeed = 'dev', displayModel = null }) {
+  constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', sceneSeed = 'dev', displayModel = null, roomOverride = null }) {
     this.bridge = bridge;
     this.name = 'battle';
     this.scene = new THREE.Scene();   // 3D 世界 pass：场景/单位/粒子（与地板正确深度交互）
     this.uiScene = new THREE.Scene(); // UI pass：卡牌/按钮/图标/资源点（清深度后渲染，不被地板 z-test 裁掉）
     this._bus = bus || bridge.frontendBus;
-    this._sceneDef = getScene(scene, sceneSeed);
+    // roomOverride：Boss 把房间改成自己的主题房（敌人 def roomOverride，经 runController 收集传入）
+    this._sceneDef = getScene(scene, sceneSeed, roomOverride);
     // 素材缓存 = 应用级共享单例（跨场/跨舞台复用已解码图，预取也进同一份）：
     // node 单测注入 fake bakeFace 时不走卡图链路，缓存保持 null
     this._artCache = (!bakeFace && typeof document !== 'undefined')
@@ -257,11 +258,14 @@ export class BattleStage {
       this._cast.register(`prop:${n.name}`, n);
     }
     // 场景布光登记（Boss 剧本光照覆写寻址用）：light:hemi / light:dir<i> / light:point<i>
-    // + light:root（lighting 门面本体）。灯位语义由 lighting.js 预设决定，这里只按类型枚举
+    // + light:root（lighting 门面本体）+ light:mood（氛围乘子句柄——强度唯一落笔点是
+    // lighting.update，剧本调光强必须推 mood，直推 light.intensity 会被每帧覆盖）。
+    // 灯位语义由 lighting.js 预设决定，这里只按类型枚举
     {
       const lg = this._scene3D?.lighting;
       if (lg?.group) {
         this._cast.register('light:root', lg);
+        if (lg.mood) this._cast.register('light:mood', lg.mood);
         let di = 0, pi = 0;
         for (const l of lg.group.children) {
           if (l.isHemisphereLight) this._cast.register('light:hemi', l);
@@ -1025,8 +1029,15 @@ export class BattleStage {
 
   // 立牌纹理补挂：缓存命中才设置，未命中等共享缓存订阅回调统一补
   _applyUnitArtTo(obj) {
-    const img = this._unitArt?.get(obj._defId, obj.side);
+    const img = this._unitArt?.get(obj._defId, obj.side, obj.artVariant);
     if (img && !obj.hasArt) obj.setArt(img);
+  }
+
+  /** 换形态立绘（fx 剧本用：Boss 转阶段等）。变体没登记对应素材时静默保留本图。 */
+  setUnitArtVariant(obj, variant) {
+    if (!obj?.setArtVariant(variant)) return false;
+    this._applyUnitArtTo(obj);
+    return obj.hasArt;
   }
 
   _applyUnitArt() {
@@ -1522,6 +1533,7 @@ export class BattleStage {
         onStageDispose: (fn) => this.onFxDispose(fn), // 常驻效果锚舞台寿命（onKill 会误收）
         runScript: (body) => this._fxRunScript(body), // 常驻渐升的独立剧本锚（节拍收尾不杀）
         unitById: (id) => this._units.get(id) ?? null,
+        setArtVariant: (unit, v) => this.setUnitArtVariant(unit, v),
       });
     }, { animator: this.animator });
     this._fxScripts.add(h);
@@ -1544,6 +1556,7 @@ export class BattleStage {
       onStageDispose: (fn) => this.onFxDispose(fn),
       runScript: (body) => this._fxRunScript(body),
       unitById: (id) => this._units.get(id) ?? null,
+      setArtVariant: (unit, v) => this.setUnitArtVariant(unit, v),
     };
   }
 

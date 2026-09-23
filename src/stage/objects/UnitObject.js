@@ -75,6 +75,7 @@ export class UnitObject extends THREE.Group {
     this._standeeHeight = standeeHeight;
     this._groundRadius = standeeHeight * 0.32; // 金环横向半径（setArt 后随牌面加宽）
     this._hasArt = false;
+    this._artVariant = null; // 形态变体（Boss 转阶段换立绘；取图与重挂由舞台做）
     this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
 
     // 命名部件表（多部件敌人，fx Phase 5）：key → Object3D（环绕火球/浮游炮等挂接件）。
@@ -230,6 +231,17 @@ export class UnitObject extends THREE.Group {
 
   get hasArt() { return this._hasArt; }
 
+  /** 换形态（Boss 转阶段等）：记下变体并把立牌标成待重挂——取图与贴图由舞台做，
+   *  美术没解码完就走缓存订阅回调补挂（与首挂同一条路）。返回是否真的换了。 */
+  setArtVariant(variant) {
+    if (this._artVariant === variant) return false;
+    this._artVariant = variant;
+    this._hasArt = false;
+    return true;
+  }
+
+  get artVariant() { return this._artVariant; }
+
   /** 死亡演出访问口：billboard（倾倒轴）/ body（焚毁载体）。 */
   get billboard() { return this._billboard; }
 
@@ -239,6 +251,8 @@ export class UnitObject extends THREE.Group {
   /** 附件逐帧钩子（环绕轨道等）：update(dt) 统一驱动；返回注销函数。 */
   addTick(fn) { this._tickFns.add(fn); return () => this._tickFns.delete(fn); }
   get body() { return this._body; }
+  /** 立牌子组（呼吸/受击仿射与「纵向翻面」都作用在这里，不含血条与意图图标）。 */
+  get standee() { return this._standee; }
 
   /** 死亡演出前置：隐藏血条/护盾/效果行等状态绘制——尸体不再读数，焚毁只剩立牌。 */
   hideStatus() { this._hpBar.visible = false; }

@@ -17,7 +17,7 @@ import { getAllyDefinition } from '../core/allies/registry.js';
 import { createBridge, EventNames } from '../bridge/index.js';
 import { BattleStage } from '../stage/stages/BattleStage.js';
 import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
-import { restRecipeFor } from '../stage/scenes/rooms/presets.js';
+import { restRecipeFor, mergeRecipeOverride } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { upgradableCards, beginTraining, trainUpgradeStart, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
@@ -319,9 +319,14 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       if (stageManager) {
         battleStage?.dispose(); // 上一场舞台即刻释放（场景图 + composer 渲染目标）
         const sceneId = USE_PCG_ROOMS ? sceneIdForFloor(run.floor) : 'dungeon';
+        // Boss 房间覆写（敌人 def roomOverride，2026-09-23）：Boss 把房间改成自己的
+        // 主题房——pyro 全场压暗 + 木质装饰品大增（转段「烧起来」的燃料与明暗落差）
+        const roomOverride = enemies.reduce(
+          (ovr, u) => mergeRecipeOverride(ovr, getEnemyDefinition(u.defId)?.roomOverride), null);
         // 房间种子 = 战斗种子 + 层号派生：同层同种子恒定同布局，重打同层房间不变
         battleStage = new BattleStage({
           bridge, stageManager, displayModel, scene: sceneId, sceneSeed: `${seed}:room:${run.floor}`,
+          roomOverride,
         });
         // 战后奖励面板落在战斗舞台上（用户定 2026-09-12）：意图出口与塔楼层同一套
         battleStage.setPanelIntentHandler?.(dispatchPanelIntent);

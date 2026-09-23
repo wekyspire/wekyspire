@@ -23,12 +23,16 @@ const DEFAULTS = Object.freeze({
   gravity: -30,
   size: 1.2,        // PointsMaterial 点大小（世界单位）
   z: 70,            // 粒子层高度（特效层）
+  angle0: 0, angle1: Math.PI * 2, // 发射方向窗（弧度；缺省全向）
+  vbx: 0, vby: 0,   // 速度偏置（叠在方向采样之后：整体漂移/升腾走它）
 });
 
 // 持续发射器缺省：在 spawn 的 DEFAULTS 口径上追加（其余参数语义与 spawn 一致）
 const EMITTER_DEFAULTS = Object.freeze({
   rate: 12,   // 每秒发射粒子数
   radius: 0,  // 发射位 xy 随机抖动半径（世界单位）
+  outward: false, // true = 发射方向取「偏离圆心」的径向（配 radius 读作一圈圈荡开的热浪）
+  zJitter: 0,     // z 逐粒子 ±抖动（纵深散布；0 = 全在同一深度切片）
 });
 
 const SPRITE_DEFAULTS = Object.freeze({
@@ -129,15 +133,15 @@ export class ParticleSystem {
   _spawnOne(x, y, o, color) {
     const i = this._free.pop();
     if (i == null) return; // 池满静默丢弃
-    const angle = Math.random() * Math.PI * 2;
+    const angle = o.angle0 + Math.random() * (o.angle1 - o.angle0);
     const speed = o.speed * (0.5 + Math.random() * 0.8);
     // 逐粒子亮度抖动（0.75~1.3）：单色加色爆发太均质，抖出明暗层次更醒目
     const jitter = 0.75 + Math.random() * 0.55;
     this._sizes[i] = o.size * (0.8 + Math.random() * 0.5); // 点径同步抖动
     this._pool.push({
       i, x, y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
+      vx: Math.cos(angle) * speed + o.vbx,
+      vy: Math.sin(angle) * speed + o.vby,
       life: 0,
       ttl: o.ttl * (0.7 + Math.random() * 0.6),
       gravity: o.gravity,
@@ -163,6 +167,8 @@ export class ParticleSystem {
       rate: o.rate,              // 每秒发射数（公开可变，逐帧读）
       acc: 0,                    // 发射累积器：满 1 发 1 粒
       radius: o.radius,
+      outward: o.outward,
+      zJitter: o.zJitter,
       stopped: false,
       _p: { o, color: new THREE.Color(o.color) }, // 逐粒子参数（私有槽，count 不参与——每次恒发 1）
       stop() { handle.stopped = true; }, // 幂等：update 泵到即从 _emitters splice 移除
@@ -239,7 +245,14 @@ export class ParticleSystem {
         // 发射位 = emitter 当前位置 + radius 内随机抖动（均匀圆盘近似：r*sqrt(u)）
         const a = Math.random() * Math.PI * 2;
         const r = e.radius * Math.sqrt(Math.random());
-        this._spawnOne(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, e._p.o, e._p.color);
+        // outward：发射方向改取「圆心→发射点」的径向（方向窗被压成这一条线），
+        // 配 vby 上升偏置读作一圈圈向外荡开、向上蒸腾的热浪；zJitter 撒纵深
+        const o = (e.outward || e.zJitter)
+          ? { ...e._p.o,
+              ...(e.outward ? { angle0: a, angle1: a } : null),
+              z: e._p.o.z + (e.zJitter ? (Math.random() * 2 - 1) * e.zJitter : 0) }
+          : e._p.o;
+        this._spawnOne(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r, o, e._p.color);
         dirty = true;
       }
     }

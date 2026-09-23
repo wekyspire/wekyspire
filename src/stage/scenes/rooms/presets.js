@@ -710,3 +710,25 @@ export function getRecipe(id) {
   if (!r) throw new Error(`rooms: 未知配方 "${id}"（可选：${Object.keys(RECIPES).join('/')}）`);
   return r;
 }
+
+/**
+ * Boss 房间覆写合并（敌人 def 的 roomOverride，2026-09-23）：深合并进配方——
+ * 平面对象递归、数组拼接、标量覆盖。用途：Boss 把房间改成自己的主题房
+ * （pyro：木质装饰品大增 = 满房燃料 + dim 一阶段压暗，转段「亮起来」才有落差）。
+ * 额外消费字段（composeRoom 建灯后落地，不属配方结构）：dim（结构光乘子）/ fireGain（火光乘子）。
+ */
+export function mergeRecipeOverride(recipe, override) {
+  if (!override) return recipe;
+  const merge = (base, ovr) => {
+    if (Array.isArray(base) || Array.isArray(ovr)) {
+      return (Array.isArray(base) && Array.isArray(ovr)) ? [...base, ...ovr] : ovr;
+    }
+    if (base && ovr && typeof base === 'object' && typeof ovr === 'object') {
+      const out = { ...base };
+      for (const k of Object.keys(ovr)) out[k] = (k in base) ? merge(base[k], ovr[k]) : ovr[k];
+      return out;
+    }
+    return ovr;
+  };
+  return merge(recipe, override);
+}

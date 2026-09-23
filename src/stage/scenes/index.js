@@ -12,9 +12,10 @@ const SCENES = Object.freeze({
 /**
  * @param id 场景 id：'dungeon' | 'pcg:fortress' | 'pcg:palace' | 'pcg:manor' | 'pcg:library' | 'pcg:boss' | 'pcg:mezzanine'
  * @param seed PCG 房间种子（run 种子 + 层号派生；同种子恒定同布局）——仅 pcg:* 使用
+ * @param roomOverride Boss 房间覆写（敌人 def roomOverride，深合并进配方）——仅 pcg:* 使用
  */
-export function getScene(id = 'dungeon', seed = 'dev') {
-  if (id.startsWith('pcg:')) return getRoomScene(id.slice(4), seed);
+export function getScene(id = 'dungeon', seed = 'dev', roomOverride = null) {
+  if (id.startsWith('pcg:')) return getRoomScene(id.slice(4), seed, roomOverride);
   return SCENES[id] ?? DUNGEON;
 }
 
