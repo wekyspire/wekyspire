@@ -120,9 +120,11 @@ registerEnemy({
   id: 'pyro', name: '燃焰术士',
   // 2026-09-21 用户定：一章 Boss 集体加强——基础 +7，经 11 层 ×3.4 缩放 ≈ 实战 +24（153→177）
   createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 52 }),
-  // 多部件（fx Phase 5 首件试点，2026-09-23）：本体 + 3 团环绕火球
-  // （billboard 占位纹理，无美术素材；P2 剧本会把它催成狂暴态）
-  orbs: { count: 3, color: 0xff8a3a, radius: 2.6, height: 3.4, size: 1.25, speed: 1.6, bob: 0.4 },
+  // 多部件（fx Phase 5 首件试点，2026-09-23；同日视觉大改）：本体 + 3 团环绕火球
+  // （程序化焰身/光晕/彗尾 sprite + 点光，无美术素材；P2 剧本推 heat 催成狂暴态）
+  // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
+  // 小数值会全部埋没在袍子躯干里（实拍教训 09-23）
+  orbs: { count: 3, color: 0xff8a3a, radius: 8, height: 11, size: 3.2, speed: 1.5, bob: 1.2 },
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (!unit._phase2 && (bs.turn.count > 10 || unit.hp < 80)) {

@@ -307,6 +307,8 @@ function reloadCurrent() {
               </template>
             </select>
             <button class="pri" @click="addPickedBattleCard()">加到手里</button>
+            <button @click="dbg.addCardToHand('gmPunch50')">塞调试重拳</button>
+            <button @click="dbg.addCardToHand('onePunch')">塞一拳</button>
           </div>
           <div class="row">
             <span class="k">效果</span>

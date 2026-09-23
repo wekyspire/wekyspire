@@ -67,10 +67,12 @@ export class StageManager {
     this._camera.lookAt(CAMERA_LOOK_AT.x, CAMERA_LOOK_AT.y, CAMERA_LOOK_AT.z);
     // 基准机位快照：世界相机只在这里落位一次，之后由舞台各自动它（战斗受击震荡、
     // 休息房聚焦机器）。任何改过机位的舞台**结束时必须 restoreBaseCamera()**，
-    // 否则塔楼/战斗层会带着变形的取景。
+    // 否则塔楼/战斗层会带着变形的取景。fov 也在快照里——fx 剧本可以临时压视场角
+    // （长焦对抗镜头），收尾必须连同视场角一起还原，不然下一场带着 19° 看世界。
     this._cameraBase = {
       position: this._camera.position.clone(),
       quaternion: this._camera.quaternion.clone(),
+      fov: this._camera.fov,
     };
     // UI 专用相机（uiScene pass）：正交正视——卡牌/按钮/图标/资源点的布局坐标
     // 与屏幕线性映射，不吃任何透视畸变（z 只决定前后层，不改投影大小/位置）。
@@ -159,11 +161,15 @@ export class StageManager {
   /** 世界相机的基准机位（只读快照；相机不在场景图内，直接拷 position/quaternion）。 */
   get cameraBase() { return this._cameraBase; }
 
-  /** 还原世界相机到基准机位（借用过机位的舞台退出时调）。 */
+  /** 还原世界相机到基准机位（借用过机位的舞台退出时调；含视场角）。 */
   restoreBaseCamera() {
     if (!this._cameraBase) return;
     this._camera.position.copy(this._cameraBase.position);
     this._camera.quaternion.copy(this._cameraBase.quaternion);
+    if (this._cameraBase.fov != null && this._camera.fov !== this._cameraBase.fov) {
+      this._camera.fov = this._cameraBase.fov;
+      this._camera.updateProjectionMatrix();
+    }
   }
 
   /** 屏幕像素 → 指定 z 平面上的世界坐标（射线与 z=planeZ 平面求交，任意相机通用）。
@@ -223,6 +229,9 @@ export class StageManager {
       const dt = Math.min(this._clock.getDelta(), 0.1); // 掉帧保护：单帧最多推进 100ms
       this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
+      // 相机位姿唯一的落笔点：运镜写 pose、震荡等写偏移通道，这里渲染前一次性合成
+      // （各路写入者不再各自直写相机，因此互不覆盖、可自然叠加）
+      this.cameraDirector.commit();
       if (this._stage) {
         // 世界 pass：stage 可带 composeScene 钩子接管渲染（如体积光 composer 的
         // RT+后处理链），缺省直接渲染

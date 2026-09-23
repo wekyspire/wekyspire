@@ -74,6 +74,8 @@ export class ParticleSystem {
       blending: THREE.AdditiveBlending,
       transparent: true,
       depthWrite: false,
+      map: softPointTexture(), // 圆斑：无 map 时 gl_PointCoord 是实心方块，
+      //   小尺寸看不出来，但 Boss 体量/近机位下火星会糊成一地彩色方块（09-23 pyro 实拍）
     });
     material.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
@@ -307,9 +309,30 @@ export class ParticleSystem {
   }
 }
 
+// 点粒子形状：白热中心 → 边缘归零的柔斑（additive 下黑=不发光）。
+// node（无 document）返回 null → 材质退回实心方点，纯逻辑测试不受影响。
+let _softPoint = null;
+function softPointTexture() {
+  if (_softPoint) return _softPoint;
+  if (typeof document === 'undefined') return null;
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.82)');
+  grad.addColorStop(0.72, 'rgba(255,255,255,0.22)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, S, S);
+  _softPoint = new THREE.CanvasTexture(c);
+  _softPoint.colorSpace = THREE.SRGBColorSpace;
+  return _softPoint;
+}
+
 // 浏览器默认文本烘焙：RichTextEngine；非浏览器（无 canvas）退化为 1x1 占位
-function defaultBakeText(text, { fontSize, color, fontWeight }) {
-  if (typeof document === 'undefined') {
+function defaultBakeText(text, { fontSize, color, fontWeight }) {  if (typeof document === 'undefined') {
     const texture = new THREE.Texture({ width: 1, height: 1 });
     texture.needsUpdate = true;
     return { texture, width: 1, height: 1 };

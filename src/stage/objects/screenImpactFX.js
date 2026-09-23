@@ -1,9 +1,10 @@
 // screenImpactFX：受伤全屏演出件（震荡 + 渐晕），由 BattleStage 在伤害节拍驱动。
 // 组成：
-//   ├─ ScreenShake：全屏震荡——对注册相机（世界透视 + UI 正交）施加逐帧位移偏移，
-//   │   双 pass 同步偏移 = 真·全屏震（场景与 UI 一起晃）。幅度/时长随受击烈度增长，
-//   │   线性包络衰减，正弦双轴抖动（每次 impulse 随机相位，重复受击不重样）。
-//   │   震荡是 non-blocking FX（不进动画队列、不占节拍），与粒子/读数同律。
+//   ├─ ScreenShake：全屏震荡——向相机导演登记一路叠加偏移通道，导演 commit 时把
+//   │   世界相机与 UI 正交相机同步位移（双 pass 同步偏移 = 真·全屏震，场景与 UI 一起晃）。
+//   │   幅度/时长随受击烈度增长，线性包络衰减，正弦双轴抖动（每次 impulse 随机相位，
+//   │   重复受击不重样）。震荡是 non-blocking FX（不进动画队列、不占节拍），与粒子/读数同律。
+//   │   与运镜天然可叠加：震荡震它的，flyTo 飞它的，两路各写各的数据、互不覆盖。
 //   └─ DamageVignette：视角边缘压暗压红渐晕——友军受击时播放（uiScene 顶层覆盖面，
 //       径向渐变贴图：中心全透明，边角暗红）。峰值随烈度、指数释放。
 //
@@ -38,14 +39,19 @@ export function damageSeverity(dealt, shieldAbsorbed) {
 }
 
 export class ScreenShake {
-  /** @param {{ cameras: THREE.Camera[] }} options 每帧施加偏移的相机集（基位在震荡启动时采样） */
-  constructor({ cameras = [] } = {}) {
-    // 基位不能在构造时锁：BattleStage 的构造点早于上一舞台还相机（塔楼专属机位在
-    // setStage → onExit 才 restoreBaseCamera），构造时 clone 会把借用的塔楼机位
-    // 焊成基位——首次受击震荡结束把相机"复位"到塔楼取景（错位放大、战斗单位出画，
-    // 2026-09-15 塔楼 3D 化后暴露）。改为震荡启动那一刻采样当前位：战斗期间世界
-    // 相机只被本类移动，启动位即基位，对构造时机免疫。
-    this._cams = [...cameras].map(cam => ({ cam, base: null }));
+  /**
+   * @param {{ director: import('../fx/camera.js').CameraDirector, offsetId?: string }} options
+   * 所有权口径（09-23 改）：**震荡不拥有相机**。它是相机导演的一路「叠加偏移通道」，
+   * 每帧只把偏移登记给导演，由导演在渲染前与运镜/其它通道合成后落笔（世界相机 +
+   * UI 正交相机按增量同步位移 = 真·全屏震）。
+   * 旧写法是「启动时锁一份基位 + 每帧硬写 base+offset + 结束时 copy(base)」，那句
+   * 「战斗期间世界相机只被本类移动」的前提早就没了（导演 flyTo 运镜、Boss 常驻微运动
+   * 都是写入者）：推镜途中来一记震荡，画面被钉在起跳位、震荡结束再把相机硬拷回那份
+   * 过期基位 = pyro 转段起点那一下肉眼可感的跳跃（pyro-cam-who.mjs 量得）。
+   */
+  constructor({ director, offsetId = 'shake' } = {}) {
+    this._dir = director;
+    this._id = offsetId;
     this._amp = 0;   // 当前幅度（世界单位）
     this._dur = 0;   // 本次震荡总时长（秒）
     this._t = 0;     // 包络时间
@@ -63,9 +69,6 @@ export class ScreenShake {
     // 不叠加（防连续小额伤害叠出超限抖动），但也不让前一击把后一击吃掉
     const remain = this._active ? this._amp * (1 - this._t / this._dur) : 0;
     const remainTime = this._active ? this._dur - this._t : 0;
-    if (!this._active) {
-      for (const c of this._cams) c.base = c.cam.position.clone();
-    }
     this._amp = Math.max(remain, amp);
     this._dur = Math.max(remainTime, dur);
     this._t = 0;
@@ -79,28 +82,28 @@ export class ScreenShake {
     return this._active ? this._amp * (1 - this._t / this._dur) : 0;
   }
 
-  /** 帧推进：把偏移写入相机（tick 尾调用——本帧逻辑用基位，渲染带偏移）。 */
+  /** 帧推进：算偏移并登记到导演的本路通道（tick 里调用；落笔由导演 commit 统一做）。 */
   update(dt) {
     if (!this._active) return;
     this._t += dt;
     if (this._t >= this._dur) {
       this._active = false;
-      for (const { cam, base } of this._cams) cam.position.copy(base); // 精确复位
+      this._dir.clearOffset(this._id); // 包络走完必须撤通道：残留会把相机永久推歪
       return;
     }
     const k = this._amp * (1 - this._t / this._dur); // 线性包络
-    const ox = k * Math.sin(this._t * SHAKE_FREQ_X + this._phX);
-    const oy = k * SHAKE_AXIS_RATIO * Math.sin(this._t * SHAKE_FREQ_Y + this._phY);
-    for (const { cam, base } of this._cams) cam.position.set(base.x + ox, base.y + oy, base.z);
+    this._dir.setOffset(
+      this._id,
+      k * Math.sin(this._t * SHAKE_FREQ_X + this._phX),
+      k * SHAKE_AXIS_RATIO * Math.sin(this._t * SHAKE_FREQ_Y + this._phY),
+      0, // z 不震：沿视向推拉会被透视放大成缩放感
+    );
   }
 
-  /** 退场复位：相机回基位（舞台 dispose 时必须调，防把偏移泄漏给下一舞台）。
-   *  从未震荡过的实例没有基位——不碰相机（否则会把构造时位姿强写回共享相机）。 */
+  /** 退场复位：撤掉自己那路通道（相机已归下一舞台所有，别的什么都不碰）。 */
   dispose() {
     this._active = false;
-    for (const { cam, base } of this._cams) {
-      if (base) cam.position.copy(base);
-    }
+    this._dir.clearOffset(this._id);
   }
 }
 

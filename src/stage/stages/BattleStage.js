@@ -61,6 +61,7 @@ import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { attachOrbs } from '../fx/orbs.js';
+import { warmCharBurn } from '../fx/charBurn.js';
 import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
@@ -162,6 +163,11 @@ export class BattleStage {
       this.composeResize = (w, h) => this._composer.resize(w, h);
       this.composeResize(stageManager.viewSize.width || 2, stageManager.viewSize.height || 2);
     }
+    // 烧毁覆写的着色器在**入场黑幕期**编好（Boss 房才有转段焚化）：延到用的那一拍
+    // 现场重编译，实测在转段爆发那一帧冻住主线程 715ms（演出中段「跃变」的元凶）。
+    if (this._sceneDef?.id === 'pcg:boss') {
+      warmCharBurn({ renderer, scene: this.scene, camera: stageManager.camera });
+    }
     this._tintScratch = new THREE.Color();
 
     this.layout = new LayoutEngine();
@@ -224,9 +230,10 @@ export class BattleStage {
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
 
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
-    // 震荡对双相机施加位移 = 世界 pass 与 UI pass 一起晃（真·全屏）；
+    // 震荡是相机导演的一路**叠加偏移通道**（与运镜可合成：转段推镜途中受击照样震，
+    // 不会把在途镜头钉住，也不会用过期基位把相机拷回——旧模型的转段跃变病灶）；
     // 渐晕是友军受击专属的视角边缘压暗压红覆盖面（uiScene 顶层）
-    this.shake = new ScreenShake({ cameras: [stageManager.camera, stageManager.uiCamera] });
+    this.shake = new ScreenShake({ director: stageManager.cameraDirector });
     this._vignette = new DamageVignette();
     this.uiScene.add(this._vignette.object);
 
@@ -287,7 +294,7 @@ export class BattleStage {
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
       this._vignette.update(dt);  // 友军受击渐晕释放
-      this.shake.update(dt);      // 相机位移最后落位：本帧逻辑读基位，渲染带偏移
+      this.shake.update(dt);      // 震荡只登记偏移通道，落笔在导演的 commit()（渲染前）
     });
 
     // 区域图标（牌库）：点击开查看器，计数经 reconcile 同步
@@ -2369,7 +2376,7 @@ export class BattleStage {
     this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
     this._capacityBeads.dispose();
     this._topBar.dispose();
-    this.shake.dispose();      // 相机精确回基位（防偏移泄漏给下一舞台）
+    this.shake.dispose();      // 撤掉震荡那路偏移通道（残留会把下一舞台的相机推歪）
     this._vignette.dispose();
     // 视图全销毁；模型跨场存活（下一场 beginBattle 重置），不在此清理
     for (const view of this._views.values()) {
