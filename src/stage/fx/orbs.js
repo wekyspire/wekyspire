@@ -66,8 +66,12 @@ export function attachOrbs(unit, def = {}) {
       sprites[i].scale.set(sc, sc, 1);
     }
   });
-  return {
-    group,
-    dispose: () => { untick(); unit.remove(group); unit.parts.delete('orbs'); },
+  const dispose = () => {
+    untick();
+    unit.remove(group);
+    unit.parts.delete('orbs');
+    for (const s of sprites) s.material.dispose(); // 每单位独立材质要销；纹理是 _texCache 共享，不销
   };
+  group.userData.dispose = dispose; // UnitObject.dispose 经此收尾（部件自检约定）
+  return { group, dispose };
 }

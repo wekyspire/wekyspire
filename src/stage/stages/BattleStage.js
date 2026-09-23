@@ -1513,6 +1513,7 @@ export class BattleStage {
         camera: this._sm.cameraDirector, // 与 fxServices() 同袋：运镜剧本在节拍里也能飞相机
         notify: this.notify,
         onStageDispose: (fn) => this.onFxDispose(fn), // 常驻效果锚舞台寿命（onKill 会误收）
+        runScript: (body) => this._fxRunScript(body), // 常驻渐升的独立剧本锚（节拍收尾不杀）
         unitById: (id) => this._units.get(id) ?? null,
       });
     }, { animator: this.animator });
@@ -1534,18 +1535,22 @@ export class BattleStage {
       camera: this._sm.cameraDirector,
       notify: this.notify,
       onStageDispose: (fn) => this.onFxDispose(fn),
-      runScript: (body) => {
-        const h = runScript(body, { animator: this.animator });
-        this._fxScripts.add(h);
-        h.promise.then(() => this._fxScripts.delete(h));
-        return h;
-      },
+      runScript: (body) => this._fxRunScript(body),
       unitById: (id) => this._units.get(id) ?? null,
     };
   }
 
   /** 登记舞台寿命钩子（剧本常驻效果的收尾）；返回注销函数。dispose 统一回调。 */
   onFxDispose(fn) { this._fxDisposeHooks.add(fn); return () => this._fxDisposeHooks.delete(fn); }
+
+  // 舞台寿命剧本：常驻渐升/常驻演出的锚——与节拍同池追踪（dispose 统一 kill），
+  // 但寿命独立：节拍剧本收尾不会连带杀它（ctx.spawn 会，pyroP2 曾因此冻结渐升）。
+  _fxRunScript(body) {
+    const h = runScript(body, { animator: this.animator });
+    this._fxScripts.add(h);
+    h.promise.then(() => this._fxScripts.delete(h));
+    return h;
+  }
 
 
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——

@@ -12,11 +12,13 @@ const PATCH_KEY = '_charBurn';
 
 /**
  * 给材质打烧毁补丁（幂等：已打过直接取原记录）。
- * @returns {{ uChar: {value:number}, uBurn: {value:number}, material }}
+ * 记录里**不反引 material**：挂在 userData 上的循环引用会让 Material.clone() 的
+ * JSON 深拷贝直接抛错（族单例自首次补丁起终身携带，clone 即炸——验收 P2-3）。
+ * @returns {{ uChar: {value:number}, uBurn: {value:number} }}
  */
 export function attachCharBurn(material) {
   if (material.userData[PATCH_KEY]) return material.userData[PATCH_KEY];
-  const rec = { uChar: { value: 0 }, uBurn: { value: 0 }, material };
+  const rec = { uChar: { value: 0 }, uBurn: { value: 0 } };
   material.userData[PATCH_KEY] = rec;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uChar = rec.uChar;

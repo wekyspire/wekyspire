@@ -492,6 +492,11 @@ export class UnitObject extends THREE.Group {
   get highlighted() { return !!this._ring; }
 
   dispose() {
+    // 部件自检（fx Phase 5）：部件把收尾挂在 userData.dispose（orbs 等）——
+    // 单位视图消亡（死亡移除/舞台销毁）时统一摘部件、停 tick、释放部件材质
+    for (const part of this.parts.values()) { try { part.userData?.dispose?.(); } catch (_) {} }
+    this.parts.clear();
+    this._tickFns.clear();
     this.setHighlight(false);
     this._clearEffectRows();
     this._body.geometry.dispose();
