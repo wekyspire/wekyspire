@@ -143,6 +143,7 @@ export function slotView(run) {
   return {
     cost,
     rolls: st.rolls,
+    pulls: st.pulls ?? st.rolls, // 全口径拉杆数（含免费；吞噬进度/安慰奖门槛都看它）
     freeRolls: run.slotFreeRolls ?? 0,
     // 恶魔 roll 挂着时机器切到恶魔形态、不能拉杆（spinSlot 同款守卫）
     canSpin: !run.bank?.pendingRoll && ((run.slotFreeRolls ?? 0) > 0 || run.player.money >= cost),
@@ -393,10 +394,14 @@ export function takeSlotPrize(run, choice = null) {
     out.relicId = choice;
   }
   if (p.choices) {
-    if (!choice) throw new Error('这份产出需要选一张卡');
-    if (!p.choices.some(c => c.id === choice)) throw new Error(`卡不在候选里：${choice}`);
-    run.player.deck.push(createSkillRuntime(choice));
-    out.defId = choice;
+    // 空候选（历史脏档/旧版 rollTiered 空手）按「无候选奖」处理——收下落空但不抛错，
+    // 免得 pending 卡死（2026-09-22 硬化；根因已在 rollTiered 修掉）
+    if (p.choices.length > 0) {
+      if (!choice) throw new Error('这份产出需要选一张卡');
+      if (!p.choices.some(c => c.id === choice)) throw new Error(`卡不在候选里：${choice}`);
+      run.player.deck.push(createSkillRuntime(choice));
+      out.defId = choice;
+    }
   }
   if (p.upgrade) {
     if (p.upgrade.kind === 'random') {

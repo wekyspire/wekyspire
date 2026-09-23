@@ -364,12 +364,27 @@ export function createSlotMachine(ctx) {
       return false;
     },
 
-    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）。 */
-    pendingDuty: () => (ctx.snap()?.bank?.pendingRoll ? 'demon' : null),
+    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'，
+     *  2026-09-22 qa 修：此前 pending 挂着照样能离房，产出静默丢弃成幽灵奖项）。 */
+    pendingDuty: () => (ctx.snap()?.bank?.pendingRoll ? 'demon'
+      : (ctx.snap()?.slot?.pending ? 'prize' : null)),
 
-    /** 点「继续前进」时接管：恶魔词条未选 → 拉回镜头提示；安慰奖未领 → 演完再离房。 */
+    /** 点「继续前进」时接管：恶魔词条未选 → 拉回镜头提示；产出未处理 → 同样拉回提示；
+     *  安慰奖未领 → 演完再离房。 */
     onContinue() {
       if (ctx.snap()?.bank?.pendingRoll) { _nudgeDemonRoll(); return true; }
+      if (ctx.snap()?.slot?.pending) {
+        if (ctx.focused() !== 'slot') ctx.focusMachine('slot');
+        const entry = ctx.entryOf('slot');
+        if (entry) ctx.bubbles().say('room:slot', {
+          ...ctx.midAnchorOf(entry, 1.5),
+          text: '机器还吐着一份奖励呢——收下或者放弃它。',
+          kind: 'thought',
+          duration: 2.6,
+          tint: 0xffd75e,
+        });
+        return true;
+      }
       if (_playGift()) return true;
       return false;
     },

@@ -340,7 +340,7 @@ export function createStagePickerKit({
       cancelFn = () => { onIntent?.({ action: 'takeShopCard', defId: null }); };
       picker.attachPicker(pickerNow());
       picker.open({
-        title: `${pend.packId} · 卡包`,
+        title: `${pend.packName ?? pend.packId} · 卡包`,
         hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
         cards: pend.cards.map(c => ({
           uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
@@ -386,6 +386,62 @@ export function createStagePickerKit({
         confirmLabel: '拿下这件',
       });
       return true;
+    },
+
+    /**
+     * 老虎机中奖产出的**多选一**（2026-09-22 统一：获得演出 dismiss 后接全屏 overlay，
+     * 不再走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
+     * 演出 → `slotTake(choice)`；「返回」= 放弃这份产出（`slotDecline`，与卡包同口径——
+     * 演出里的「跳过」也是放弃，两条出口殊途同归）。遗物类奖项走 RelicScrollPicker。
+     * @returns 是否真的打开了（非多选奖项 / 无候选 → false）
+     */
+    openSlotPrizePicker(snap = null) {
+      const pd = snap?.slot?.pending;
+      if (!pd) return false;
+      if (pd.relicChoices?.length) {
+        const picker = ensureRelicPicker();
+        confirmFn = (ids) => { onIntent?.({ action: 'slotTake', choice: ids[0] }); };
+        cancelFn = () => { onIntent?.({ action: 'slotDecline' }); };
+        picker.attachPicker(pickerNow());
+        picker.open({
+          title: pd.tier === 'major' ? '★ 大奖 · 挑一件遗物' : '小奖 · 挑一件遗物',
+          hint: '悬停查看效果 ｜ 「返回」= 放弃这份产出',
+          relics: pd.relicChoices,
+          confirmLabel: '收下这件',
+        });
+        return true;
+      }
+      if (pd.choices?.length) {
+        const picker = ensureCardPicker();
+        confirmFn = (ids) => { onIntent?.({ action: 'slotTake', choice: ids[0] }); };
+        cancelFn = () => { onIntent?.({ action: 'slotDecline' }); };
+        picker.attachPicker(pickerNow());
+        picker.open({
+          title: pd.tier === 'major' ? '★ 大奖 · 择一张带走' : '小奖 · 择一张带走',
+          hint: '不想要就点「返回」放弃 ｜ 滚轮翻页',
+          cards: pd.choices.map(c => ({
+            uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+          })),
+          confirmLabel: '加入牌组',
+        });
+        // 得卡演出钩子（与卡包同款：open 之后设，接管关闭与上行时机）
+        picker.confirmHook = (keys) => {
+          const entry = picker.takeEntry(keys[0]);
+          picker.close();
+          grantBusy = true;
+          const done = () => { grantBusy = false; confirmFn?.(keys); };
+          if (!entry) { done(); return; }
+          scene()?.add(entry.obj);
+          playCardGrantFlight({
+            card: entry.obj,
+            target: typeof getAnchor === 'function' ? getAnchor() : null,
+            sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
+            onDone: done,
+          });
+        };
+        return true;
+      }
+      return false;
     },
 
     /**

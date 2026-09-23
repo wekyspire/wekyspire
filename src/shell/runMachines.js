@@ -59,7 +59,12 @@ export function createRunMachines(ctx) {
   function gurpasDo(kind, arg, arg2) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'gurpas') return;
     try {
-      if (kind === 'buy') buyGurpas(run, arg);
+      if (kind === 'buy') {
+        const res = buyGurpas(run, arg);
+        // 删卡服务（2026-09-22 修 qa 断链）：付完款**当场**开全屏选卡——购买动作此前
+        // 只扣钱计次，选卡界面没人打开（来源表/意图都在，唯独缺这一跳）
+        if (res?.kind === 'remove') ctx.panelStage()?.openUpgradePicker?.('gurpasRemove');
+      }
       else if (kind === 'take') takeGurpasCard(run, arg);
       else if (kind === 'sell') sellGurpasRelic(run, arg);
       else if (kind === 'remove') removeCardAtGurpas(run, arg2 ?? arg);
@@ -95,17 +100,26 @@ export function createRunMachines(ctx) {
     });
     ctx.notify();
   }
-  // 产出结算（可放弃——文档：这些产出总是可以放弃不要的）
+  // 产出结算（可放弃——文档：这些产出总是可以放弃不要的）。try/catch 硬化：
+  // core 校验失败（脏档/竞态）不得炸穿点击链——回执进调试面板，pending 留给「放弃」兜底
   function slotTake(choice = null) {
     if (run.gameStage !== 'room' || !run.slotPending) return;
-    takeSlotPrize(run, choice);
-    slot.lastSpin = null; // 结算完收起揭示横幅
+    try {
+      takeSlotPrize(run, choice);
+      slot.lastSpin = null; // 结算完收起揭示横幅
+    } catch (err) {
+      console.warn('[slotTake]', err.message);
+    }
     ctx.notify();
   }
   function slotDecline() {
     if (run.gameStage !== 'room' || !run.slotPending) return;
-    declineSlotPrize(run);
-    slot.lastSpin = null;
+    try {
+      declineSlotPrize(run);
+      slot.lastSpin = null;
+    } catch (err) {
+      console.warn('[slotDecline]', err.message);
+    }
     ctx.notify();
   }
   // 大奖「免费指定升级」：选卡界面确认后落地（分叉卡由升级子面板带 targetId）

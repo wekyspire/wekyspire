@@ -210,6 +210,7 @@ export function roomSnapshot(run, extra = {}) {
       } : {
         kind: 'pack',
         packId: run.shopPending.packId,
+        packName: PACKS[run.shopPending.packId]?.name ?? run.shopPending.packId, // 显示名（2026-09-22：裸 id 上屏修复）
         cards: (run.shopPending.choices ?? []).map(id => ({
           defId: id,
           view: cardViewFromDef(getSkillDefinition(id), { player: p }),
@@ -294,6 +295,7 @@ export function roomSnapshot(run, extra = {}) {
       cost: view.cost,
       money: p.money,
       rolls: view.rolls,
+      pulls: view.pulls,
       freeRolls: view.freeRolls,
       canSpin: view.canSpin && !pending,
       majorChance: view.majorChance,
@@ -318,6 +320,7 @@ export function roomSnapshot(run, extra = {}) {
       pending: pending ? {
         tier: pending.tier, kind: pending.kind,
         money: pending.money ?? null,
+        healPct: pending.healPct ?? null,   // 2026-09-22 修：漏投影会让文案回落到裸 kind「heal」
         special: pending.special ?? null,
         relicId: pending.relicId ?? null,
         upgradeCopyId: pending.upgradeCopyId ?? null,
@@ -327,7 +330,16 @@ export function roomSnapshot(run, extra = {}) {
           defId: c.id,
           view: cardViewFromDef(getSkillDefinition(c.id), { player: p }),
         })),
-        relicChoices: pending.relicChoices ?? null,
+        // 遗物三选一（relicA 大奖）：补全 rarity/desc——全屏选遗物界面（RelicScrollPicker）
+        // 与吞噬/遗物包的条目同构，2026-09-22 领奖统一 overlay 后不再走面板按钮墙
+        relicChoices: (pending.relicChoices ?? null)?.map(r => {
+          const def = getRelicDefinition(r.id);
+          return {
+            id: r.id, name: r.name,
+            rarity: def?.rarity ?? 'C',
+            desc: def?.description ?? '',
+          };
+        }),
       } : null,
       // 大奖「免费指定升级」挂起时：复用全屏选卡界面（与营地/训练场同一套）
       needsCardPick: !!run.slotUpgradePending,

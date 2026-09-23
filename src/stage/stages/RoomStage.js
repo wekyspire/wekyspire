@@ -303,6 +303,9 @@ export class RoomStage {
   /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
   openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
 
+  /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里；2026-09-22 统一全屏 overlay）。 */
+  openSlotPrizePicker() { return this._pickerKit.openSlotPrizePicker(this._snap); }
+
   /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
   openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
 
@@ -780,6 +783,7 @@ export class RoomStage {
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
+      if (action.action === 'openSlotPrize') { this.openSlotPrizePicker(); return; }
       if (action.action === 'toggleSeed') {
         // 种子包勾选（阶段级模态面板的本地交互态）：确认前是纯 UI 态，就地重绘
         const sel = this._stagePanelUi?.selected;

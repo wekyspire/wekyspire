@@ -150,7 +150,10 @@ export function createRunShowcase(ctx) {
       onSkip: () => actions.slotDecline(),
       onDismiss: () => {
         if (freeUpgrade) { actions.slotTake(null); ctx.panelStage()?.openUpgradePicker?.('slot'); }
-        else if (!needsPick) actions.slotTake(null);
+        // 多选一奖项（2026-09-22 统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
+        // 「返回」= 放弃——不再落回 dock 面板的内嵌卡行/按钮墙（旧逻辑已删）
+        else if (needsPick) ctx.panelStage()?.openSlotPrizePicker?.();
+        else actions.slotTake(null);
       },
     });
     return true;

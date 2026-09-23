@@ -1,6 +1,6 @@
 // 老虎机 / 银行机面板：转轮本体、恶魔 roll 词条、银行存取与超额取款。
 
-import { withLabels, roomHeader, slotPrizeText, getRelicRarity } from './shared.js';
+import { roomHeader, slotPrizeText } from './shared.js';
 
 /** 老虎机本体的 widget（无表头、无离开——场景式房间点机器单开，占位房间由 buildRoomPanel 组装）。 */
 export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
@@ -8,15 +8,16 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   if (snap.bank?.pendingRoll) { demonRollWidgets(w, snap.bank.pendingRoll, sceneChoice); return; }
   const s = snap.slot ?? {};
   const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
+  // 价格只在按钮上带一次（2026-09-22 精简）；「已拉」为全口径（含免费抽，与吞噬进度同口径）
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
-    text: `单抽 ${s.cost} 金 ｜ 持有 ${s.money}`
+    text: `持有 ${s.money} 金`
       + (s.freeRolls ? ` ｜ 免费 ${s.freeRolls} 次` : '')
-      + ` ｜ 已抽 ${s.rolls ?? 0}`,
+      + ` ｜ 已拉 ${s.pulls ?? s.rolls ?? 0} 次`,
   });
   w.push({
     kind: 'sub', align: 'center', tint: '#77809a',
-    text: `小奖 ${pct(s.minorChance)}（未中累加）｜ 大奖 ${pct(s.majorChance)}（未中累加）`,
+    text: `小奖 ${pct(s.minorChance)} / 大奖 ${pct(s.majorChance)}（未中累加）`,
   });
 
   // 产出：不能连抽，先处理这一件（文档：产出总是可以放弃不要的）
@@ -25,24 +26,14 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     w.push({ kind: 'gap' });
     w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#e8eefb' : '#c3cee0',
       text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
-    if (pd.relicChoices?.length) {
-      for (const r of pd.relicChoices) {
-        w.push({
-          kind: 'button', id: `slot:relic:${r.id}`, width: 320, size: 'sub',
-          label: `${r.name}（${getRelicRarity(r.id)}）`,
-          action: { action: 'slotTake', choice: r.id },
-        });
-      }
-    } else if (pd.choices?.length) {
-      // 卡多选一（3 或 6 张）：一整行卡面，点哪张领哪张
+    // 多选一奖项（2026-09-22 统一）：候选只出现在**全屏 overlay**（选卡/选遗物界面）——
+    // 中奖即自动「获得演出 → dismiss 接候选界面」，这里不再内嵌卡行/遗物按钮墙（旧逻辑已删，
+    // 用户报"没统一为获取动画 + 全屏多选"）。只留一个重开入口兜底（界面被异常关闭时）。
+    if ((pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0) {
       w.push({
-        kind: 'cards', idPrefix: 'slotPrize', cols: Math.min(6, pd.choices.length),
-        scale: pd.choices.length > 3 ? 0.52 : 0.72,
-        items: pd.choices.map(c => ({
-          defId: c.defId, view: withLabels(c.view),
-          // grantCard：得卡标记——舞台据此先播「择卡得卡」演出再上行意图
-          action: { action: 'slotTake', choice: c.defId, grantCard: true },
-        })),
+        kind: 'button', id: 'slot:pickPrize', width: 300, size: 'sub',
+        label: '挑选这份产出…',
+        action: { action: 'openSlotPrize', local: true },
       });
     } else if (pd.upgrade?.kind === 'free') {
       w.push({
@@ -51,12 +42,11 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
         action: { action: 'openUpgradePicker', source: 'slot', local: true },
       });
     }
-    // 需要"选一个"的产出不给领取键（点候选即领取）；**其余产出也不给"领取"键**——
-    // 中奖即自动唤起获得演出（用户定 2026-09-12：领取必须是获得演出，不是操纵条里一个
-    // 干巴巴的按钮）。这里只留「放弃」兜底（演出被跳过/已关闭时仍能处理掉这份产出）。
+    // 「放弃」兜底：演出/界面的「跳过」「返回」都是放弃，这里给面板侧的第三个出口
+    // （headless 之外的降级路径 / 玩家改主意）。
     w.push({
       kind: 'button', id: 'slot:decline', width: 220, size: 'sub',
-      label: (pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0 ? '全部放弃' : '放弃',
+      label: '放弃',
       action: { action: 'slotDecline' },
     });
     return w;
@@ -135,12 +125,11 @@ export function demonRollWidgets(w, pr, sceneChoice) {
   return true;
 }
 
-/** 银行机的 widget（同上）。 */
+/** 银行机的 widget（同上）。标题由 roomHeader 出（聚焦面板/合并面板各自带「银行机」小节头）。 */
 export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   const bk = snap.bank;
   if (!bk) return;
   w.push({ kind: 'gap' });
-  w.push({ kind: 'sub', align: 'center', tint: '#9ccfff', text: '🏦 银行机' });
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
     text: `存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`,
