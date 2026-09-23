@@ -15,31 +15,30 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 // 不会再触发首进阶赠送）。
 
 const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard']);
-// 火路线填充加厚（2026-09-21 用户定：拳 4 盾 5）——基石三张已覆盖过牌/叠炎/回蓝，
-// 填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线
+// 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线
 const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard', 'guard']);
 
 export const ROUTES = Object.freeze({
   body: Object.freeze({
     id: 'body', name: '体修', leino: null, ability: null, apBonus: 1,
     deck: Object.freeze([...BODY_STARTER_DECK]),
-    blurb: '肉身成圣——没有灵脉天赐，全靠一拳一盾打出来（AP 上限 +1）',
+    blurb: '肉身成圣',
   }),
   fire: Object.freeze({
     id: 'fire', name: '火灵脉', leino: 'fire', ability: 'fireVein', apBonus: 0,
     // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃 C（回蓝——C 位 2026-09-21 为此补回）
     deck: Object.freeze(['inflame', 'fireBolt', 'flashBurn', ...FILLER_FIRE]),
-    blurb: '爆发与燃烧之脉——高蓝耗、高副作用，换爆炸输出',
+    blurb: '爆发与燃烧',
   }),
   wood: Object.freeze({
     id: 'wood', name: '木灵脉', leino: 'wood', ability: 'woodVein', apBonus: 0,
     deck: Object.freeze(['poisonSting', 'breathOfLife', ...FILLER]),
-    blurb: '再生与凋零之脉——以血养藤，以毒磨骨',
+    blurb: '尚未完善，请勿游玩',
   }),
   air: Object.freeze({
     id: 'air', name: '空灵脉', leino: 'air', ability: 'airVein', apBonus: 0,
     deck: Object.freeze(['windBlade', 'atEase', ...FILLER]),
-    blurb: '风行与闪避之脉——来无影，去无踪',
+    blurb: '尚未完善，请勿游玩',
   }),
 });
 
