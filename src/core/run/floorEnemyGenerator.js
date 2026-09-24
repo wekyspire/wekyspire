@@ -24,8 +24,8 @@ import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from 
 //   1-10（章1）：2 → 4 → 5 → 6 … 7（教学 → 双敌陡升，章末收平等着打 Boss）；
 //   12-21（章2）：9 → 13；23-32（章3）：13 → 17；34-43（章4）：17 → 21（每 2 层 +1）。
 // Boss 层难度按章取值（单只吃满预算，体型由难度缩放承载）。
-// 章1 第 6 层压到 6（而非 7）：精英日挪到第 6 层后按 D 缩放会把雪狼吹到 126 血，
-// 降一档让首精英保持 98 血的调定强度（试玩反馈：首个 Boss 前压力过高）。
+// 章1 第 6 层压到 6（而非 7）：精英日挪到第 6 层后按 D 缩放会把雪狼吹到 99 血，
+// 降一档让首精英保持 77 血的调定强度（试玩反馈：首个 Boss 前压力过高）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
 const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 6, 7, 7, 7, 7]; // 章1 表驱动（陡升段，章末收平）
@@ -44,7 +44,7 @@ export function floorDifficulty(floor) {
 // ---- 实例难度 → 属性加成（全局唯一缩放口）----
 // 难度单位 ≈ 「一步」：每 +1 难度 ≈ HP +40%、攻击约每 2 难 +1；d = anchor 即白板。
 // 锚点两套（ENEMY_GENERATION.md）：普通敌人的基准数值按 d=2 授权（anchor 2）；
-// 精英的基准数值按自身 base 难度授权（anchor = base，如雪狼 70 血 = 难5 白板），
+// 精英的基准数值按自身 base 难度授权（anchor = base，如雪狼 55 血 = 难5 白板），
 // 否则全局公式会把高基准精英吹成团本 Boss。攻击加成慢于 HP：玩家 HP 也在长。
 export function difficultyScaling(d, anchor = 2) {
   return {

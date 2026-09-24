@@ -32,8 +32,10 @@
 
 ### 敌人
 
-`core/content/enemies.js` 按等阶定义；强度按楼层/进度挑选。行为走 `core/instructions/aiAct.js`
-的意图序列（意图 kinds 含 attack / defend / summon / stun 等），不写在敌人定义里。
+`core/content/enemies/` 按三分类组织（`chapter1`~`chapter4` 小怪 / `elites` 精英 / `bosses`），
+每敌带难度元数据；遭遇生成与强度缩放见 `core/run/floorEnemyGenerator.js`（难度制）。行为走
+`core/instructions/aiAct.js` 的意图序列（意图 kinds 含 attack / defend / summon / stun 等），
+不写在敌人定义里。
 
 ### 技能（卡牌）
 
