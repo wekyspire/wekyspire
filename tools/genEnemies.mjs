@@ -18,8 +18,8 @@ const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[
 // 纪律（沿袭遗物 PROMPT_TEMPLATE 实测结论）：完成度的第一驱动是描述里的高频名词，
 // 不是风格措辞——逐怪描述只写「是什么 + 大致轮廓 + 主色/主材质 + 一个点缀」，
 // 禁写纹理/裂纹/斑点/笔触这类诱发逐一刻画的名词。
-const STYLE = 'rough gouache sketch, soft thick paint, low completion, muted desaturated dark colors, large flat polygonal facet color planes, matte flat lighting, coarse visible brush strokes, simplified geometric shapes, minimal detail, dark moody palette, plain pure white background, no shadow, single subject filling the frame, stylized game creature art, unfinished sketchy edges, nothing else in frame';
-const NEGATIVE = 'detailed, intricate, fine texture, individual hairs, individual spines, realistic fur, photorealistic, photographic, 3d render, smooth airbrush gradients, bright saturated colors, vivid, neon, clean vector, glossy, ornate, complex pattern, many small elements, high frequency detail, black background, gradient background, colored background, environment, ground shadow, drop shadow, atmospheric fog, scenery, anime, cartoon';
+const STYLE = 'rough gouache sketch, soft thick paint, low completion, muted desaturated dark colors, large flat polygonal facet color planes, matte flat lighting, coarse visible brush strokes, simplified geometric shapes, minimal detail, dark moody palette, full body visible from head to tail, strict side view, facing left, plain pure white background, no shadow, single subject filling the frame, stylized game creature art, unfinished sketchy edges, nothing else in frame';
+const NEGATIVE = 'detailed, intricate, fine texture, individual hairs, individual spines, realistic fur, photorealistic, photographic, 3d render, smooth airbrush gradients, bright saturated colors, vivid, neon, clean vector, glossy, ornate, complex pattern, many small elements, high frequency detail, black background, gradient background, colored background, environment, ground shadow, drop shadow, atmospheric fog, scenery, anime, cartoon, front view, three-quarter view, back view, portrait, head only, bust, cropped body, facing right';
 
 // 敌人 prompt 表：id → 是什么 + 大轮廓 + 主色/主材质 + 一个点缀（别写全，留白）
 const ENEMIES = [
@@ -29,7 +29,7 @@ const ENEMIES = [
   { id: 'slimelet', prompt: 'a tiny dark slime blob, blue-black, two white dot eyes' },
   { id: 'buzzbug', prompt: 'a small dark fly, two big pale translucent wings, big iridescent purple eyes, fuzzy dark body' },
   { id: 'mossBall', prompt: 'a dark ball of tangled roots and moss, brown-gray, one small glowing green eye' },
-  { id: 'pufferToad', prompt: 'a round inflated toad, mottled olive-green, wide mouth, two yellow eyes' },
+  { id: 'pufferToad', prompt: 'a round inflated toad standing, full body, mottled olive-green, wide mouth, one yellow eye' },
   { id: 'blastPod', prompt: 'a round brown seed pod with a warm orange glowing core, two white dot eyes' },
   { id: 'stoneCocoon', prompt: 'a gray stone cocoon oval, two pale eyes in a small opening' },
   { id: 'rockSnail', prompt: 'a snail with a heavy gray spiral shell, mossy patches, pale body, two white dot eyes' },
@@ -38,7 +38,7 @@ const ENEMIES = [
   { id: 'diggerMole', prompt: 'a dark brown mole with big gray front claws, pointed snout, small black eyes' },
   { id: 'staticPuff', prompt: 'a pale yellow fluffy ball, blue sparks, small black eyes' },
   // 精英
-  { id: 'snowwolf', prompt: 'a large white-gray wolf with blue shadows, pale blue eyes, snarling' },
+  { id: 'snowwolf', prompt: 'a large white-gray wolf standing, full body, blue shadows, pale blue eyes, snarling open mouth' },
   { id: 'swampAmbusher', prompt: 'a low-slung lurking crocodile, mottled olive and dark teal, long snout, small red eyes' },
   { id: 'rockPangolin', prompt: 'a curled pangolin with gray stone scale armor, brown edges, small black eyes' },
 ];
