@@ -1,9 +1,11 @@
 // 卡面图案缓存（§4 卡图链路）：技能卡插画 → 已加载 Image 的同步查询。
 // 缓存/订阅/就绪信号语义继承 ArtImageCache（与 UnitArtCache 共用实现）。
-// 解析规则（沿用旧仓库约定）：
+// 解析规则（沿用旧仓库约定，2026-09-24 扩 series 键）：
 //   1. def.image（技能定义显式指定，不含扩展名，如 image:'奇迹' → assets/cards/奇迹.png）
-//   2. 兜底 `${type}-${tierIndex}.png`（type=fire/wood…，tierIndex D=0..S=4，素材如 fire-1.png）
-//   3. 都没有 → 无卡图（牌面按无图布局）
+//   2. card.series（系列符号图：assets/cards/<series>.png——一拳一刀一盾一焰，
+//      符号优先，系列内全部卡共用）
+//   3. 兜底 `${type}-${tierIndex}.png`（type=fire/wood…，tierIndex D=0..S=4，素材如 fire-1.png）
+//   4. 都没有 → 无卡图（牌面按无图布局）
 // 加载是异步的：get() 未命中即发起加载并先返回 null（按无图烘焙），
 // 加载完成经 addOnLoad 订阅通知 Stage 重烘牌面（纹理与 hit map 成对替换的铁律不变）。
 // 实例为应用级共享单例（sharedCardArtCache）：跨舞台/跨战斗复用已解码图，
@@ -24,10 +26,17 @@ const DECOR_URLS = indexArtUrls(
 const TIER_ART_INDEX = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 export class CardArtCache extends ArtImageCache {
-  /** 该卡是否有可用素材（同步，不发起加载）。 */
+  /** 该卡是否有可用素材（同步，不发起加载）：def.image → series 符号图 → type-等阶。 */
   resolveUrl(card) {
-    const key = card.image ?? `${card.type ?? 'normal'}-${TIER_ART_INDEX[card.tier] ?? 0}`;
-    return ART_URLS[key] ?? null;
+    const keys = [
+      card.image,
+      card.series,
+      `${card.type ?? 'normal'}-${TIER_ART_INDEX[card.tier] ?? 0}`,
+    ];
+    for (const key of keys) {
+      if (key && ART_URLS[key]) return ART_URLS[key];
+    }
+    return null;
   }
 
   /**

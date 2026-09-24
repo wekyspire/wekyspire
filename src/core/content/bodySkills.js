@@ -776,7 +776,7 @@ adrenalineCard({ id: 'adrenalineA', tier: 'A', draw: 3 });
 // 保险卡掐灭），只弃非激活的手牌。固有保证起手必然上手（详见 namedTerms「固有」）；
 // 不入奖励池：系统级保险卡，定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
 registerSkill({
-  id: 'badOmen', name: '情况不对', type: 'normal', tier: 'C',
+  id: 'badOmen', image: 'badOmen', name: '情况不对', type: 'normal', tier: 'C',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
