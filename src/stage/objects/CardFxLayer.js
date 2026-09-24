@@ -11,7 +11,8 @@
 //   lock  锁定  z=0.44（四角瞄准括号）—— 无人战体「解除威胁」：琥珀色慢呼吸，回合末
 //         仍在手则焚毁（与 doom 的红框急促截止感区分：锁定是持续「被瞄准」态）
 //   pulse 闪光 z=0.45 —— 一次性加色脉冲（冷却推进/威力提升/衰败反向）
-//   edge  流光 z=0.6  —— 咏唱激活的绕边小光点
+//   edge  流光 z=0.6  —— 咏唱激活：呼吸 rimlight + 沿边绕行的脉动光点，单面片
+//         自定义 shader 一次画完（光点融入 rimlight；HDR 输出 >1 radiance 喂 bloom）
 // 三张平面各自惰性创建；焚毁接管牌面前调 clearTransient() 熄灭全部叠加。
 
 import * as THREE from 'three';
@@ -33,6 +34,84 @@ const DOOM_PERIOD = 1.2;
 // 锁定括号：警戒琥珀 + 慢呼吸（2.4s——「已被瞄准」的持续状态感，与将弃的急促截止区分）
 const LOCK_COLOR = 0xe8a23c;
 const LOCK_PERIOD = 2.4;
+// 咏唱流光面片：牌面外扩边距（给 rim 外溢与光晕留空间）、点亮淡入速率
+const EDGE_MARGIN = 5;
+const EDGE_FADE_IN = 3.5;
+
+// 咏唱边缘流光 shader：呼吸 rimlight（圆角矩形 SDF 内收外溢双边带）+
+// 3 颗沿边巡游的彗星光点（头部高斯光晕 + 沿 rim 的渐熄拖尾，亮度并入 rimlight）。
+// 加色混合、alpha 恒 1，rgb 直接输出 HDR（峰值 >1 radiance）交给 bloom。
+const EDGE_GLOW_VERT = /* glsl */`
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+const EDGE_GLOW_FRAG = /* glsl */`
+varying vec2 vUv;
+uniform float uTime;
+uniform float uFade;
+uniform vec2 uCard;
+uniform vec2 uPlane;
+uniform vec3 uColor;
+
+float sdRoundBox(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + r;
+  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// 矩形周长参数路径（t∈[0,1)，顶边左→右起顺时针）
+vec2 edgePath(float t, vec2 hf) {
+  float w = hf.x * 2.0, h = hf.y * 2.0;
+  float d = fract(t) * 2.0 * (w + h);
+  if (d < w) return vec2(d - hf.x, hf.y);
+  d -= w;
+  if (d < h) return vec2(hf.x, hf.y - d);
+  d -= h;
+  if (d < w) return vec2(hf.x - d, -hf.y);
+  d -= w;
+  return vec2(-hf.x, d - hf.y);
+}
+
+// 片元的最近边周长参数（拖尾亮带用；角部按主导轴近似，视觉连续即可）
+float edgeParam(vec2 p, vec2 hf) {
+  float w = hf.x * 2.0, h = hf.y * 2.0;
+  float dx = hf.x - abs(p.x), dy = hf.y - abs(p.y);
+  float s;
+  if (dx < dy) s = p.x > 0.0 ? w + (hf.y - p.y) : 2.0 * w + h + (p.y + hf.y);
+  else         s = p.y > 0.0 ? p.x + hf.x : w + h + (hf.x - p.x);
+  return s / (2.0 * (w + h));
+}
+
+void main() {
+  vec2 p = (vUv - 0.5) * uPlane;
+  vec2 hf = uCard * 0.5;
+  float d = sdRoundBox(p, hf, 1.5);
+
+  // 呼吸 rimlight：内收外溢不对称边带，3.2s 慢呼吸（明灭约 3:1）
+  float breath = 0.55 + 0.45 * sin(uTime * 1.9635);
+  float rim = d < 0.0 ? exp(d * 1.6) : exp(-d * 0.85);
+
+  // 绕行光点：3 颗彗星 ~4.5s 一圈，各自快速脉动；拖尾只亮在 rim 附近 → 融入 rimlight
+  float s = edgeParam(p, hf);
+  float rimProx = exp(-abs(d) * 0.9);
+  float head = 0.0, trail = 0.0;
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    float ti = fract(uTime * 0.22 + fi * 0.333333);
+    float pulse = 0.62 + 0.38 * sin(uTime * 11.0 + fi * 2.4);
+    vec2 dv = p - edgePath(ti, hf);
+    head += exp(-dot(dv, dv) * 1.1) * pulse;
+    trail += exp(-fract(s - ti + 1.0) * 11.0) * pulse * 0.7;
+  }
+
+  // 能量配比：rim 呼吸 ~0.16..0.54（压 bloom 阈下，保持牌面可读、暖金不发白），
+  // 拖尾峰值 ~0.85，光点头峰值 ~1.9（唯一稳过 bloom 阈的主光源）
+  float energy = rim * (0.16 + 0.38 * breath) + trail * rimProx * 0.85 + head * 1.9;
+  gl_FragColor = vec4(uColor * energy * uFade, 1.0);
+}
+`;
 
 export class CardFxLayer extends THREE.Group {
   constructor({ width = 20, height = 27 } = {}) {
@@ -51,8 +130,8 @@ export class CardFxLayer extends THREE.Group {
     this._lock = null;       // 锁定特效组（四角瞄准括号，惰性创建）
     this._pulse = null;      // 脉冲平面
     this._pulseTl = null;    // { elapsed, duration, scale } | null
-    this._edgeDot = null;    // 咏唱流光点
-    this._edgeT = 0;
+    this._edgeGlow = null;   // 咏唱流光面片（自定义 shader，惰性创建）
+    this._edgeUniforms = null; // 面片 uniforms 句柄（update 推进 uTime/uFade）
   }
 
   /** 一次性加色闪光（冷却推进/衰败反向/威力提升）。重触发即重置时间线（新脉冲顶掉旧脉冲）。 */
@@ -131,28 +210,40 @@ export class CardFxLayer extends THREE.Group {
 
   get coolingMode() { return this._veilMode; }
 
-  /** 咏唱激活边缘流光开关（幂等）。轨道推进在 update(dt)。 */
+  /** 咏唱激活边缘流光开关（幂等）：呼吸 rimlight + 绕行脉动光点，单面片自定义
+   *  shader（HDR 输出喂 bloom）。点亮有短淡入；时间推进在 update(dt)。 */
   setEdgeGlow(on) {
-    if (on === !!this._edgeDot) return;
+    if (on === !!this._edgeGlow) return;
     if (on) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0xffe9a0, transparent: true, opacity: 0.9,
-        blending: THREE.AdditiveBlending, depthWrite: false,
+      const pw = this._w + EDGE_MARGIN * 2, ph = this._h + EDGE_MARGIN * 2;
+      this._edgeUniforms = {
+        uTime: { value: this._t },
+        uFade: { value: 0 },
+        uCard: { value: new THREE.Vector2(this._w, this._h) },
+        uPlane: { value: new THREE.Vector2(pw, ph) },
+        uColor: { value: new THREE.Color(1.0, 0.9, 0.62) }, // 咏唱暖金
+      };
+      const mat = new THREE.ShaderMaterial({
+        uniforms: this._edgeUniforms,
+        vertexShader: EDGE_GLOW_VERT,
+        fragmentShader: EDGE_GLOW_FRAG,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
       });
-      this._edgeDot = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), mat);
-      this._edgeDot.position.z = 0.6;
-      this._edgeT = 0;
-      this.add(this._edgeDot);
+      this._edgeGlow = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
+      this._edgeGlow.position.z = 0.6;
+      this.add(this._edgeGlow);
     } else {
-      this.remove(this._edgeDot);
-      this._edgeDot.geometry.dispose();
-      this._edgeDot.material.dispose();
-      this._edgeDot = null;
+      this.remove(this._edgeGlow);
+      this._edgeGlow.geometry.dispose();
+      this._edgeGlow.material.dispose();
+      this._edgeGlow = null;
+      this._edgeUniforms = null;
     }
   }
 
-  get hasEdgeGlow() { return !!this._edgeDot; }
-  get edgeDot() { return this._edgeDot; } // 测试/调试窥视
+  get hasEdgeGlow() { return !!this._edgeGlow; }
 
   /** 「将弃」标记（P9 尾弃预告）：红色呼吸描边框 + 暗化盖纱。幂等。呼吸推进在 update(dt)。 */
   setDoomed(on) {
@@ -245,7 +336,7 @@ export class CardFxLayer extends THREE.Group {
     this._pulseTl = null;
   }
 
-  /** 帧驱动：脉冲进度回程 / 盖纱呼吸 / 流光轨道。 */
+  /** 帧驱动：脉冲进度回程 / 盖纱呼吸 / 流光 shader 时钟与淡入。 */
   update(dt) {
     this._t += dt;
     if (this._pulse?.visible && this._pulseTl) {
@@ -288,13 +379,10 @@ export class CardFxLayer extends THREE.Group {
         o.material.opacity = 0.45 + 0.5 * k;
       }
     }
-    if (this._edgeDot) {
-      this._edgeT = (this._edgeT + dt * 0.35) % 1; // ≈2.9s 一圈
-      const p = perimeterPoint(this._edgeT, this._w + 1.6, this._h + 1.6);
-      this._edgeDot.position.x = p.x;
-      this._edgeDot.position.y = p.y;
-      const pulse = 0.75 + 0.25 * Math.sin(this._edgeT * Math.PI * 8);
-      this._edgeDot.scale.set(pulse, pulse, 1);
+    if (this._edgeGlow) {
+      this._edgeUniforms.uTime.value = this._t;
+      const f = this._edgeUniforms.uFade;
+      f.value = Math.min(1, f.value + dt * EDGE_FADE_IN); // 点亮淡入
     }
   }
 
@@ -344,17 +432,4 @@ function bakeChipTexture(n) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
-}
-
-// 矩形周长参数路径（t∈[0,1)，顶边左→右起顺时针），w/h 为路径全宽/全高
-function perimeterPoint(t, w, h) {
-  const per = 2 * (w + h);
-  let d = t * per;
-  if (d < w) return { x: -w / 2 + d, y: h / 2 };   // 顶边 左→右
-  d -= w;
-  if (d < h) return { x: w / 2, y: h / 2 - d };    // 右边 上→下
-  d -= h;
-  if (d < w) return { x: w / 2 - d, y: -h / 2 };   // 底边 右→左
-  d -= w;
-  return { x: -w / 2, y: -h / 2 + d };             // 左边 下→上
 }
