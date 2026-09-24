@@ -84,10 +84,11 @@ python tmp/deploy_scenes.py                                   # ③ 按 tmp/scen
   - **键内变体 `--varchain`**：每键以**已部署的 webp** 为锚，逐级 img2img
     （`VAR_DENOISE=0.8`），后缀按等阶递强——同一动作、越来越强。取代旧 txt2img `--variants`
     （独立生成必然构图漂移，正是用户否决的「同链路认不出」）。
-- **等阶后缀三表**（生成器内，按键查 `ESCALATION_VOID[key][tier] → ESCALATION_QUIET → ESCALATION`）：
-  通用 `ESCALATION`（1=C 微强 … 4=S 终极爆发）；安静/生活场景配「更丰盈/更深沉」的
-  `ESCALATION_QUIET`（防止 blazing bright 把冷色鬼火读成橙焰）；体修高阶走
-  `ESCALATION_VOID`（褪彩→黑白→虚空，红围巾唯一残色，优先级最高）。
+- **等阶后缀三表**（生成器内，按键查 `ESCALATION_VOID[key][tier] → ESCALATION_CUSTOM → ESCALATION`）：
+  通用 `ESCALATION`（1=C 微强 … 4=S 终极爆发）；**按键定制 `ESCALATION_CUSTOM`**——铁律：
+  后缀必须**点名新增可视元素**（裂纹/尘土/光膜/残影/血珠），不许只写「更强更亮」
+  （通用措辞在微距场景上被 0.8 保真压过、进阶不可读——首轮评审 38/60 键因此返工）；
+  体修高阶走 `ESCALATION_VOID`（褪彩→黑白→虚空，红围巾唯一残色，优先级最高）。
 - ComfyUI `127.0.0.1:8188`，qwen_image_2.1，25 步 euler，**800×400**（2026-09-22 用户定：
   800 宽够用、省时 3 倍），单张约 30–40s；已存在的跳过（resume），`--count` 控制目标张数；
   多个 node 进程共享同一 FIFO 队列，可并行跑不同键段。

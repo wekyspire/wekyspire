@@ -216,6 +216,7 @@ const SCENES = [
   { id: 'heatWave', prompt: `a rolling wall of visible heat distortion blasting toward the left, shimmering air ripples large in frame, the ground below scorched black, only the knight's pushing palm at the right edge` },
   { id: 'burnSnap', prompt: `extreme close-up of two steel-gray gauntlet fingers pinching a flame and crushing it into a violent detonation, the fire collapsing inward then bursting through the fingers, dark background` },
   { id: 'fireControlDisturb', prompt: `many scattered flames across the frame streaming like iron filings toward a single steel-gray gauntlet at the center, the fires converging and swirling into the palm, gathering motion lines` },
+  { id: 'fireControlBurn', prompt: `${KNIGHT}, half-body portrait, an upturned steel-gray gauntlet palm holding a single bright flame at his side, the flame the only light source, dark background, calm controlled fire` },
   { id: 'fireControlRefine', prompt: `a bright orange flame and a black smog mass colliding mid-frame and annihilating each other in white sparks, paired cancellation, a steel-gray gauntlet directing the clash from the bottom edge` },
   { id: 'fireControlScorch', prompt: `extreme close-up of a steel-gray gauntlet fist being dipped and coated in thick clinging flame, fire wrapping the knuckles like fuel, loaded for the next strike, dark background` },
   { id: 'fireControlSupreme', prompt: `an open steel-gray gauntlet palm-up with a whole court of tiny shaped flames hovering above it — a ring, a serpent, a blade, a bird — every flame bending to one will, supreme mastery, dark background` },
@@ -298,12 +299,12 @@ const ESCALATION = {
 // 不再「更亮更爆」，而是色彩流失、笔触虚幻、趋近黑白（红围巾作唯一残色）。优先级最高。
 const ESCALATION_VOID = {
   fastPunch: { // 快拳(B)→炮拳(A)→真拳(S)：真拳归于至简
-    3: ', the same straight punch, the colors draining toward gray, the edges blurring, emptier and calmer',
-    4: ', the same straight punch in stark black and white, the form simplified to a few blurred strokes, pure void-calm, the red scarf the only color',
+    3: ', the same straight punch, noticeably desaturated: armor and background drained to muted grays, the edges softened, only the red scarf keeps full color',
+    4: ', the same straight punch rendered in pure black and white with harsh contrast, the form reduced to a few blurred essential strokes, pure void-calm, the red scarf the sole spot of color',
   },
   fullCharge: { // 蓄满一击(C/B)→全神一击(A)：全神 = 敛神入空
-    2: ', the same charging stance, quieter and denser, the colors muting toward gray',
-    3: ', the same charging stance in near monochrome, the aura gone pale, total spirit condensed into emptiness',
+    2: ', the same charging stance, the light dimming, the colors muting toward gray, the charge turning inward and silent',
+    3: ', the same charging stance in near monochrome, desaturated grays, soft dissolving edges, all spirit condensed into emptiness',
   },
   wildFlurry: { // 乱拳(C)→雨拳(B)→千手(A)→万手(S)：万手归一、一片空茫
     2: ', the same flurry, more afterimages, a faster rhythm',
@@ -315,13 +316,229 @@ const ESCALATION_VOID = {
     3: ', the same stance in stark black and white, heaven and man as one, the form simplified to essential blurred strokes, the red scarf the only color',
   },
 };
-// 安静/生活场景的能量后缀会读岔，单独给「更丰盈/更深沉」的分级
-const ESCALATION_QUIET = {
-  woodHerb: {
+// 按键定制后缀：通用 ESCALATION「more intense energy」在安静的体修微距/生活场景上读不动
+// （0.8 保真压过模糊措辞——试点实测近半键进阶不可读），凡此皆进本表。
+// 铁律：后缀必须**点名新增可视元素**（裂纹/尘土/光膜/残影/血珠……），不许只写「更强更亮」。
+const ESCALATION_CUSTOM = {
+  // —— 体修微距（2026-09-22 变体评审首轮失败键返工：构图轴已锁，进阶靠具体新元素） ——
+  agileCombo: { // 敏捷连击(C)→疾速连击(B)→暴风连击(A)：残影逐级增多
+    2: ', the same coiled double-fist lean, now with a pale blurred afterimage of his fists echoing behind, faint speed lines',
+    3: ', the same lean, two pale afterimage echoes trailing his fists, sharp speed lines, stormy motion blur',
+  },
+  barrier: { // 壁垒(C)→堡垒(B)→铜城(A)：铜城 = 铜辉能量壳
+    2: ', the same armored ball, a faint pale-blue energy shimmer glazing the plates',
+    3: ', the same armored ball enclosed in a bright bronze-glowing energy shell, glowing seams between the plates',
+  },
+  berserkStance: { // 狂战姿态(B)→狂战掌控(A)：怒吼显形
+    3: ', the same roaring helmet, a pale wild aura flaring off the shoulders, the roar visible as a shockwave ring around the head',
+  },
+  bloodFist: { // 血拳(B)→血拳(A)：血更盛
+    3: ', the same bloody fist, blood now dripping and beading off the knuckles, a faint dark-red blood mist around the hand',
+  },
+  defensePrep: { // 防御准备(C)→守护姿态(B)→玄龟姿态(A)：玄龟 = 六边龟甲光膜；头盔必须在（首轮出过裸脸）
+    2: ', the same overhead open-palm catch, a faint pale energy film above the palm, helmet on, no visible face',
+    3: ', the same pose, the energy film hardened into a translucent turtle-shell pattern of glowing hexes above the palm, helmet on, visor in shadow, no visible face',
+  },
+  endure: { // 忍耐(C)→强撑(B)：甲损尘落
+    2: ', the same hunched covering pose, the armor now scratched and dented, dust and small debris raining on him',
+  },
+  fistPress: { // 拳压(C)→拳压(B)→拳压(A)：地面裂纹逐级炸开
+    2: ', the same downward grinding fist, cracks beginning to spread under the knuckles, dust rising',
+    3: ', the same fist, a spiderweb of bright cracks bursting outward under it, debris and dust blasting up',
+  },
+  guard: { // 盾(C)→坚固盾(B)→强化盾(A)：臂甲逐级硬化发光
+    2: ', the same crossed-vambrace guard, a faint steel-blue sheen hardening on the armor plates',
+    3: ', the same guard, the vambraces glowing with a reinforced bright rim, a small impact spark bursting off them',
+  },
+  hunYuanPlus: { // 变招(B)→混元(A)→混元(S)：混元归虚
+    3: ', the same circling palms, a faint swirl of pale and dark mist spiraling between the hands',
+    4: ', the same circling palms in stark monochrome, the mist swirl dissolved into pure black-and-white emptiness, the forms simplified to blurred strokes',
+  },
+  mimicFist: { // 仿形拳(C)→豹形拳(B)→虎形拳(A)：手形生爪（只画手，不许出兽脸）
+    2: ', the same phantom gauntlet hand-shapes, the fingers sharpening into claws like a leopard paw, hands only, no animal, no creature face',
+    3: ', the same cluster, the claws longer and heavier like a tiger claw, more phantom hands, fiercer, hands only, no animal, no creature face',
+  },
+  novice: { // 入门(C)→精通(B)→无双(A)：拳掌间光逐级迸发
+    2: ', the same fist-in-palm salute, the grip firmer, a faint resolve glow seeping from the seam between fist and palm',
+    3: ', the same salute, radiant light bursting from the seam between fist and palm, peerless conviction',
+  },
+  powerStance: { // 架势(B)→架势(A)：拳压出冲击环
+    3: ', the same pressed knuckles, a shockwave ring and dust burst radiating from the fists, the armor straining',
+  },
+  prepareMove: { // 准备出招(C)→B→A：蓄力显形（首轮「tremor lines/wisps」太虚读不出——换尘土与气旋）
+    2: ', the same pulled-back fist, small debris and dust lifting off the ground around it, the gathering force visible',
+    3: ', the same fist, dust and pale energy streams spiraling around the forearm, the air shimmering with stored force',
+  },
+  rally: { // 活动筋骨(C)→B→A：掸尘松甲
+    2: ', the same shoulder stretch, small motion lines and dust shaking off the armor',
+    3: ', the same stretch, the armor glowing warm at the seams, dust bursting off the plates, full limbered readiness',
+  },
+  shatterHit: { // 碎击(C)→碎骨(B)→碎头(A)：裂纹星逐级爆碎
+    2: ', the same crack-starred fist, the cracks spreading wider, fragments beginning to flake off the impact point',
+    3: ', the same fist, the impact surface exploding into flying shards, the crack-star bursting across the whole frame',
+  },
+  wildPunch: { // 狂拳(C)→B→A：自伤溅血、挥势更狂
+    2: ', the same wild punch, blood trickling from the knuckles, the swing wilder, heavy motion blur',
+    3: ', the same punch, blood spraying from the knuckles, the whole body thrown into the berserk swing, violent motion blur',
+  },
+  // —— 刀系/肘系/杂项（同批返工） ——
+  annihilatingEdge: { // 斩灭(A)→斩灭(S)：刃口噬光（首轮「drinking the light」语义太玄，构图漂了——改死锚 pose）
+    4: ', the exact same pose and framing, the same dark blade held the same way, its edge turning void-black with a thin annihilating pale rim, the background darker',
+  },
+  breath: { // 呼吸(C)→武者呼吸(B)→完美呼吸(A)：气息更绵长
+    2: ', the same visor close-up, the breath mist thicker and slower, faint cool vapor curling',
+    3: ', the same visor, a perfect slow breath: one long elegant ribbon of pale mist drifting out, total calm',
+  },
+  cleave: { // 横劈(C)→强力劈(B)→裂空劈(A)：裂空 = 劈开空气
+    2: ', the same horizontal swing, the blade trailing a bright speed arc, the air splitting behind the edge',
+    3: ', the same swing, a huge splitting arc tearing across the frame, the air itself cracked open along the trajectory, debris flung',
+  },
+  cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
+    2: ', the same spinning ring slash, the ring erupting into a bursting spiral, sparks flying off the arc',
+    3: ', the same ring, a perfect seamless blazing circle with a second inner ring of light, sparks storming outward',
+  },
+  edgeBreath: { // 含刃术(C→B→A)：刃更寒
+    2: ', the same blade held at the visor, the steel brighter, a faint cold gleam along the edge',
+    3: ', the same pose, the blade gleaming razor-bright, cold light running along the edge, breath mist curling off the steel',
+  },
+  elbowMaster: { // 牢大(B)→牢大(A)：喜剧系——肘尖高光星
+    3: ', the same heroic elbow display, the elbow point gleaming with a heroic four-point shine star, confident polish',
+  },
+  elbowReturn: { // 牢大归来(B)→A：更高更傲
+    3: ', the same elbow thrust skyward, a triumphant four-point shine star on the elbow point, the pose higher and prouder',
+  },
+  elbowStrike: { // 肘击(C)→猛烈(B)→强大(A)→纯粹(S)：S「纯粹」归简（喜剧系的简不是虚无，是干净）
+    2: ', the same elbow swing, heavier motion blur, a small shock ring bursting at the impact point',
+    3: ', the same swing, a bigger shock ring at the elbow point, dust blasting off',
+    4: ', the same elbow purified to essence: stark monochrome, the swing reduced to one clean blurred arc, pure and simple',
+  },
+  fastRain: { // 快如雨(C)→疾如风(B)→疾如风(A)：雨成风暴
+    2: ', the same rain-soaked knight, the rain denser and faster, sharper diagonal streaks, the wind picking up his scarf',
+    3: ', the same figure, a storm of wind-driven rain lashing diagonally across the frame, the scarf whipping hard, blurring speed',
+  },
+  feint: { // 假动作(C→B→A)：影分身逐级凝实
+    2: ', the same knight and his shadow double, the double more solid and convincing, harder to tell apart',
+    3: ', the same pair, the shadow double fully materialized with its own red scarf, two indistinguishable knights',
+  },
+  flyingDagger: { // 飞刀(C)→强力飞刀(B)→绝灭飞刀(A)：刀尾光轨
+    2: ', the same dagger thrust, the dagger trailing a sharp speed line, faster and heavier',
+    3: ', the same thrust, the dagger screaming forward with a long bright trail, the tip glowing, annihilating momentum',
+  },
+  handCleave: { // 花刀(C→B)→蔽目花刀(A)：蔽目 = 耀目刀幕
+    2: ', the same flourished curved blade, a brighter arc trail following the flourish',
+    3: ', the same flourish, a dazzling blinding fan of arc light veiling the frame',
+  },
+  haveWithout: { // 以有胜无(B)→A：牌更盛
+    3: ', the same card fan, the cards glowing with a confident bright rim, more cards fanned, abundance',
+  },
+  honeBlade: { // 养刀术(C→B→A)：刃口觉醒
+    2: ', the same blade care, the edge catching a brighter gleam as it is wiped',
+    3: ', the same pose, the blade fully awakened: a keen bright edge, light running along the steel',
+  },
+  melt: { // 熔流：更沸更溅
+    3: ', the same molten pour, the stream thicker and brighter, sparks and molten drops splashing, heat haze shimmering',
+  },
+  quickCleave: { // 快速花刀(C→B→A)：刀弧残影成倍
+    2: ', the same quick flourish, faster: the blade trailing two blurred arc echoes',
+    3: ', the same flourish, the blade a fan of three blurred arc echoes, lightning-quick',
+  },
+  silverDance: { // 刀舞(B)→风暴刀舞(A)：银弧成暴
+    3: ', the same blade dance, the arcs multiplying into a storm of silver trails, blades everywhere',
+  },
+  storeEdge: { // 收刃(C)→潜锋(B)→藏锋(A)：越藏越深、杀气越敛
+    2: ', the same sheathing motion, the blade sliding deeper, a colder subdued gleam, hidden menace',
+    3: ', the same sheath, the blade almost fully hidden, only a sliver of cold steel visible, the quietest deadliest moment',
+  },
+  whetstone: { // 砺刀(C)→磨锋(B)→展锐(A)：展锐 = 锋芒毕露
+    2: ', the same whetting, brighter sparks skipping off the stone, the edge beginning to gleam',
+    3: ', the same stone, the honed edge flashing razor-bright, a keen line of light on the steel, sparks flying',
+  },
+  winWithout: { // 以无胜有(B)→A：唯一牌更亮
+    3: ', the same single held card, the card glowing bright against the emptiness around it, decisive minimalism',
+  },
+  // —— 预防性定制（主批后半段的安静/青绿键——通用「blazing」会把木绿/风青拉成橙，且微距无钩可读） ——
+  miasma: { // 瘴气：毒雾逐浓
+    1: ', the same conjuring, the miasma cloud a little thicker, more droplets beading',
+    2: ', the same palm, thick sickly green vapor billowing, poison droplets dripping',
+    3: ', the same arm, a huge roiling swamp miasma engulfing it, dense green fumes, dripping poison',
+  },
+  woodBark: { // 树皮甲：甲皮逐厚
+    1: ', the same forearm, more bark plates spreading further up the arm',
+    2: ', the same forearm, thick bark armor covering it whole, mossy glints in the seams',
+    3: ', the same forearm, a full ancient-tree bark shell: massive ridged plates, green vitality glowing in the seams',
+  },
+  woodSting: { // 飞刺：刺雨逐密
+    1: ', the same throw, a second smaller stinger trailing the first',
+    2: ', the same throw, a volley of thorny stingers fanning out, poison drops scattering',
+    3: ', the same throw, a storm of thorny stingers with green trails filling the frame',
+  },
+  breathOfLife: { // 育苗：苗逐壮
+    1: ', the same cupped soil, the seedling taller with one more bright leaf, the light ring a touch brighter',
+    2: ', the same cupped soil, the seedling grown into a small lush sapling, vivid green glow, the light ring radiant',
+  },
+  airFloat: { // 浮空：浮更高
+    1: ', the same levitation, floating higher, the pale air ring beneath brighter, more debris motes orbiting',
+    2: ', the same levitation at a steeper tilt, a bright double air ring beneath, the scarf streaming straight up, weightless',
+  },
+  atEase: { // 云坐：云逐软
+    1: ', the same cloud float, the cloud a little fluffier, deeper relaxation',
+    2: ', the same pose, a bigger softer cloud, a few drifting motes of dream-light',
+    3: ', the same pose on a grand fluffy cloud throne, total serenity, soft glow all around',
+  },
+  bathWind: { // 放羽：羽环逐多
+    1: ', the same feather release, two feathers floating, more air rings drifting',
+    2: ', the same release, a small swirl of feathers wrapped in bright cyan air rings',
+  },
+  lightness: { // 化风：人逐散
+    1: ', the same gust dodge, more blurred, an extra cyan air ring',
+    2: ', the same dodge, half-dissolved into the gust, a stronger cyan spiral',
+    3: ', the same gust, the knight almost fully dissolved into a swirling cyan wind storm, only the red scarf and one gauntlet still hinting his shape',
+  },
+  windBlade: { // 风刃：刃逐大
+    1: ', the same wind slash, the cyan crescent larger and brighter',
+    2: ', the same slash, a huge bright cyan crescent with gust rings trailing',
+    3: ', the same slash, a massive tearing cyan blade-storm, double crescents, the air ripped open',
+  },
+  holdOut: { // 坚守：墙逐高
+    1: ', the same braced wall, the wall one course higher, more dust in the air',
+    2: ', the same brace, the wall much taller, dust and pebbles cascading down',
+    3: ', the same brace behind a towering brick bulwark, a dust storm around, unbreakable hold',
+  },
+  psiShield: { // 灵能屏障：两层屏障显形（两轮「更大更亮」都读不出——屏障已大，加新层）
+    2: ', the same pose, a second smaller hexagonal barrier materializing in front of the first one, double-layered defense, bright glowing rims',
+  },
+  relief: { // 泄压：蒸汽逐猛
+    1: ', the same valve, more steam blasting out sideways',
+    2: ', the same valve fully wrenched open, a huge white steam blast',
+    3: ', the same pose, an enormous roaring steam eruption flooding the frame',
+  },
+  silence: { // 灭烛：烟缕逐多、暗逐深
+    1: ', the same snuffing, the smoke wisp curling higher, the dark deeper',
+    2: ', the same gauntlets, two just-snuffed candles, twin smoke wisps rising',
+    3: ', the same gauntlets, three just-snuffed candle stumps in a row, smoke ribbons braiding upward, near-total dark',
+  },
+  warmUp: { // 烛环：烛环逐盛
+    1: ', the same candle ring, more small flames joining, more bright points',
+    2: ', the same ring, a denser circle of warm flames, brighter glow on his back',
+    3: ', the same knight, a grand blazing circle of candle flames all around, his silhouette washed in warm light',
+  },
+  // —— 安静/生活场景（「更丰盈/更深沉」分级） ——
+  fireControlBurn: { // 控火术：燃(C)→散(B)→爆(A)：散=火星飞散、爆=喷爆发作
+    2: ', the same pose, the palm flame scattering into a spray of bright embers and small flames streaming off his hand',
+    3: ', the same pose, the palm flame erupting into a violent bright blast, fire bursting upward, embers storming',
+  },
+  flameHeal: { // 焰愈(C)→炽愈(B)→浴火(A)：A = 火焰如水流淌全身
+    2: ', the same kneeling pose, the warm light column widening, small flames kindling along his shoulders and arms',
+    3: ', the same kneeling figure bathed in fire: flames washing over his whole body like water, a roaring warm blaze, unburned and serene',
+  },
+  kindling: { // 可燃血液(C→B→A)：血焰沿臂蔓延
+    2: ', the same wrist, the blood-drop flame catching properly: a small bright flame standing on the arm, more blood welling',
+    3: ', the same arm, the kindled blood flame roaring up along the vambrace, bright fire wrapping the forearm',
+  },
+  herbPaste: { // 草药（旧 woodHerb 键改名）
     1: ', the same gentle grip, the herb larger with more bright leaves, the soft green glow a little stronger',
     2: ', the same gentle grip, the herb grown lush: a small bundle of bright sprouting leaves, vivid green glow, drifting motes of light',
     3: ', the same gentle grip, the herb bursting with life: a large lush spray of glowing leaves and tendrils, strong green radiance',
-    4: ', the same gentle grip, the herb at overflowing vitality: a huge radiant bouquet of glowing leaves and vines, brilliant green light flooding the frame',
   },
   manaJar: {
     1: ', the same jar, the blue glow escaping a little brighter, a wisp of light rising',
@@ -521,7 +738,7 @@ async function runVarChains(onlyKeys) {
     if (!fs.existsSync(refPath)) { console.error(`  ✗ ${key} 无部署图，跳过`); continue; }
     for (const idx of t.slice(1)) {
       const vid = `${key}-${idx}`;
-      const esc = ESCALATION_VOID[key]?.[idx] ?? ESCALATION_QUIET[key]?.[idx] ?? ESCALATION[idx];
+      const esc = ESCALATION_VOID[key]?.[idx] ?? ESCALATION_CUSTOM[key]?.[idx] ?? ESCALATION[idx];
       const vscene = { id: vid, prompt: scene.prompt + esc };
       const dir = path.join(OUT_DIR, vid);
       fs.mkdirSync(dir, { recursive: true });
@@ -543,6 +760,11 @@ async function runVarChains(onlyKeys) {
         }
       }
       if (firstNew) refPath = firstNew; // 逐级传递：下一阶锚定本阶首张新图
+      else if (have >= COUNT) {
+        // 本档已满（前轮/他跑产物，本次未生成）：锚仍推进到最新既有候选，保持逐阶累积
+        const cands = fs.readdirSync(dir).filter(f => f.endsWith('.png')).sort();
+        refPath = path.join(dir, cands[cands.length - 1]);
+      }
     }
   }
   console.log('变体级联完成。');
