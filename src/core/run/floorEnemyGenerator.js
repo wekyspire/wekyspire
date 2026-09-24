@@ -175,10 +175,13 @@ export const isEliteFloor = (floor) =>
 // 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配；
 // difficulty 缺失视为不可生成（防御）。
 function eligiblePool(floor, elite = false) {
+  // **按 id 排序**（2026-09-24 定）：取材池的顺序决定 rng.pick 的落点，而注册顺序
+  // 随内容文件的组织方式漂移（enemies.js 按章拆分当天就撞上：同 seed 同层换了怪）。
+  // 排序后生成流与文件布局彻底解耦——内容怎么拆分/挪动，遭遇分布一分不变。
   return allEnemies().filter(def =>
     !BOSS_IDS.has(def.id)
     && Boolean(def.difficulty?.elite) === elite
-    && eligibleAtFloor(def, floor));
+    && eligibleAtFloor(def, floor)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 function eligibleAtFloor(def, floor) {

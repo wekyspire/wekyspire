@@ -14,7 +14,7 @@ import './woodSkills.js';
 import './airSkills.js';
 import './commonSkills.js';
 import './gmSkills.js';
-import './enemies.js';
+import './enemies/index.js';
 import './allies.js';
 import './abilities.js';
 import './relicCards.js';
