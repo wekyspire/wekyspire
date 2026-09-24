@@ -20,3 +20,6 @@ import './abilities.js';
 import './relicCards.js';
 import './relics.js';
 import './events.js';
+// 卡图键覆盖：晋升链拆分（同链/同名同键、异链异键），见 core/skills/artKeys.js 头注
+import { applyArtKeyOverrides } from '../skills/artKeys.js';
+applyArtKeyOverrides();
