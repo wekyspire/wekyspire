@@ -23,7 +23,7 @@ function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
   return noSlime && hasSlot && notSummonedLastTurn;
 }
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 8, floorMin: 12, floorMax: 30 },
+  difficulty: { base: 5, floorMin: 12, floorMax: 30 },
   id: 'bigSlime', name: '大史莱姆',
   createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 34 }), // 2026-09-21 用户定：44→34（二章坦克削血提攻）
   act(actx) {
@@ -51,7 +51,7 @@ registerEnemy({
 // ④ 暗影刺客：蓄势滚雪球——攻 → 蓄势+2（每层攻击+1）→ 突袭（高基数），
 // 拖久了威胁线性上升，逼玩家集火或速杀
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 32 },
+  difficulty: { base: 4, floorMin: 12, floorMax: 32 },
   id: 'shadowblade', name: '暗影刺客',
   createUnit: () => new Enemy({ defId: 'shadowblade', name: '暗影刺客', maxHp: 26 }),
   act(actx) {
@@ -77,7 +77,7 @@ registerEnemy({
 // ⑦ 夜蝠：汲血（攻击并自愈）×2 → 尖啸（滞气1：玩家下回合无法抽牌）
 // 滞气尖啸是节奏型威胁——被叫到的回合要么硬打要么吃伤害
 registerEnemy({
-  difficulty: { base: 3, min: 2, max: 5, floorMin: 12, floorMax: 34 },
+  difficulty: { base: 3, floorMin: 12, floorMax: 34 },
   id: 'nightbat', name: '夜蝠',
   createUnit: () => new Enemy({ defId: 'nightbat', name: '夜蝠', maxHp: 24 }),
   act(actx) {
@@ -107,7 +107,7 @@ registerEnemy({
 // 目标优先级考题。与腐苔球（奶轴支援）错开：它是盾轴支援，护盾会被回合清零（T2），
 // 所以必须每两拍重新举盾——它的存活本身就是对面防线的续航。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 7, floorMin: 12, floorMax: 24 },
+  difficulty: { base: 5, floorMin: 12, floorMax: 24 },
   id: 'palaceGuard', name: '宫廷守卫',
   createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22 }),
   act(actx) {
@@ -132,7 +132,7 @@ registerEnemy({
 // ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军蓄势2（它自己脆，给玩家一拍反应窗），
 // 此后攻5。杀得快等于白赚，杀不掉全队滚雪球——与雪狼开局虚弱镜像：一个压玩家，一个抬敌人。
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 22 },
+  difficulty: { base: 4, floorMin: 12, floorMax: 22 },
   id: 'herald', name: '传令官',
   createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16 }),
   act(actx) {
@@ -162,7 +162,7 @@ registerEnemy({
 // hp 差值是唯一无需新引擎/新订阅的可读状态；燃烧·中毒 tick 也计入受创（语义通：
 // 被折磨痛了同样会缩）。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 8, floorMin: 14, floorMax: 26 },
+  difficulty: { base: 5, floorMin: 14, floorMax: 26 },
   id: 'marbleSentinel', name: '大理石哨兵',
   createUnit: () => new Enemy({ defId: 'marbleSentinel', name: '大理石哨兵', maxHp: 26, defense: 2 }),
   act(actx) {
@@ -201,7 +201,7 @@ registerEnemy({
 // 有多可怕」先在玩家身上演一遍。本身零防脆菇，速杀即无毒；与宫廷守卫同场时「先杀谁」
 // 是真问题（盾轴保毒轴）。对标：沼泽伏击者（精英）一口毒5，它常规杂兵 2 起步渐浓。
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 6, floorMin: 12, floorMax: 26 },
+  difficulty: { base: 4, floorMin: 12, floorMax: 26 },
   id: 'miasmaShroom', name: '瘴气菇',
   createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24 }),
   act(actx) {

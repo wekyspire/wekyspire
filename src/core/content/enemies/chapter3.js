@@ -7,7 +7,7 @@ import { AddEffectInstruction } from '../../instructions/effects.js';
 
 // ⑥ 石像卫士：高防厚血 + 再生续航——再生3 → 攻 → 盾 循环，考验破防与斩杀线
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-44→23-32，章4 血牛由禁书守卫/档案巨像承担
+  difficulty: { base: 5, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-44→23-32，章4 血牛由禁书守卫/档案巨像承担
   id: 'gargoyle', name: '石像卫士',
   createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2 }),
   act(actx) {
@@ -43,7 +43,7 @@ registerEnemy({
 // ⑧ 岩甲龟：龟缩（盾7 + 荆棘1）→ 重击 循环——盾棘一体的防御压迫，
 // 打盾要吃反伤，绕盾要挨重击
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 7, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-40→23-32
+  difficulty: { base: 4, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-40→23-32
   id: 'rockshell', name: '岩甲龟',
   createUnit: () => new Enemy({ defId: 'rockshell', name: '岩甲龟', maxHp: 30, defense: 1 }),
   act(actx) {
@@ -73,7 +73,7 @@ registerEnemy({
 // 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是蓄势，
 // 贪杯鬼是自愈+力量双轴）。
 registerEnemy({
-  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）
+  difficulty: { base: 6, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）
   id: 'tippler', name: '贪杯鬼',
   createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30 }),
   act(actx) {
@@ -105,7 +105,7 @@ registerEnemy({
 // 意图预告读 unit._tally（上一回合的实际出牌数，act 时落账）：预告与实际严格同值；
 // 首拍尚无台账时回落「本回合已打出数」，随出牌实时爬升，把记账规则当场演示给玩家。
 registerEnemy({
-  difficulty: { base: 7, min: 6, max: 8, floorMin: 23, floorMax: 27 },
+  difficulty: { base: 7, floorMin: 23, floorMax: 27 },
   id: 'tallySpirit', name: '筹算灵',
   createUnit: () => new Enemy({ defId: 'tallySpirit', name: '筹算灵', maxHp: 30 }),
   act(actx) {
@@ -135,7 +135,7 @@ registerEnemy({
 // 爆发牌要跟它的起风拍错开；单发重击被闪避白吃（垫一发小的再出大的），中毒/燃烧
 // 绕过闪避（dot 是天然克制）。嗡嗡虫的章3 上位：那边教「先垫一发」，这边教「算风停」。
 registerEnemy({
-  difficulty: { base: 6, min: 5, max: 9, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-38→23-32
+  difficulty: { base: 6, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-38→23-32
   id: 'windRaccoon', name: '风狸',
   createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24 }),
   act(actx) {

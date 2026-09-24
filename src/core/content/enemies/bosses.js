@@ -42,7 +42,7 @@ function attachPressureCounter(kernel, unit, owner) {
 // 机智点：它给自己也点燃烧、再靠「消耗燃烧回血」闭环——玩家的叠炎既是在烧它、
 // 也是在给它备血包（引爆窗口 = 燃烧7 刚挂上、回血拍未到的一拍）。
 registerEnemy({
-  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
+  difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
   // 2026-09-21 用户定：一章 Boss 集体加强——基础 +7，经 11 层 ×3.4 缩放 ≈ 实战 +24（153→177）
   createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 52 }),
@@ -157,7 +157,7 @@ registerEnemy({
 // 2026-09-19 用户裁决（0918 马拉松 9 败数据）：全系攻击基础伤害 -3/段（多段每段同砍）
 // 整体变弱，暴怒不动——保住「多段喂力量」的极化检定属性。
 registerEnemy({
-  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
+  difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'kardas', name: '卡达斯',
   createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 34 }), // 2026-09-21：+7 基础 ≈ 实战 +24（92→116）
   onBattleStart(ctx, unit) {
@@ -222,7 +222,7 @@ registerEnemy({
 // 转段：血量跌至 80 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
 // 二阶段：首拍获得炎魔2，随后 攻2×3 → 攻2×4 交替（积焰已久的点燃海）。
 registerEnemy({
-  difficulty: { base: 8, min: 8, max: 8, floorMin: 11, floorMax: 11 },
+  difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
   createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 54 }), // 2026-09-21：+7 基础 ≈ 实战 +24（160→184）
   onBattleStart(ctx, unit) {
@@ -298,7 +298,7 @@ registerEnemy({
 //   盾 + 格挡 + 蓄势滚雪球。**清场才能获胜**（用户定 2026-09-13：Boss 死≠即胜，
 //   侍从必须清完）。
 registerEnemy({
-  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  difficulty: { base: 11, floorMin: 22, floorMax: 22 },
   id: 'knightCommander', name: '宫殿骑士长',
   createUnit: () => new Enemy({ defId: 'knightCommander', name: '宫殿骑士长', maxHp: 54 }),
   act(actx) {
@@ -394,7 +394,7 @@ registerEnemy({
 //   与骑士长（阵型）、主教（debuff 对冲）三题错开。实现零新基础设施：
 //   鸣钟 = act 内行动后计数判定 + zones.hand.length 现成读取。
 registerEnemy({
-  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  difficulty: { base: 11, floorMin: 22, floorMax: 22 },
   id: 'candleWarden', name: '烛厅守钟人·卡珊',
   createUnit: () => new Enemy({ defId: 'candleWarden', name: '烛厅守钟人·卡珊', maxHp: 44 }),
   act(actx) {
@@ -453,7 +453,7 @@ registerEnemy({
 // 二阶段（HP≤40%）狂信：虚弱补到 6、攻 19、祈祷回 18。
 // 考试点：出牌结构对冲虚弱 + 爆发必须卡在两拍祈祷之间。
 registerEnemy({
-  difficulty: { base: 11, min: 11, max: 11, floorMin: 22, floorMax: 22 },
+  difficulty: { base: 11, floorMin: 22, floorMax: 22 },
   id: 'bishopMarchand', name: '宴厅主教·马尔尚',
   createUnit: () => new Enemy({ defId: 'bishopMarchand', name: '宴厅主教·马尔尚', maxHp: 46 }),
   act(actx) {
@@ -506,7 +506,7 @@ registerEnemy({
 // 玩家对策 = 在吞噬拍之前杀仆从（仆从是他的血包兼成长资粮）：杀光他就只剩平拍，
 // 但仆从会不断再召；不杀 = 养虎。考试点：多目标输出分配 +「杀还是不杀」的节奏账。
 registerEnemy({
-  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33 },
+  difficulty: { base: 14, floorMin: 33, floorMax: 33 },
   id: 'gluttonLord', name: '饕餮领主',
   createUnit: () => new Enemy({ defId: 'gluttonLord', name: '饕餮领主', maxHp: 36 }),
   act(actx) {
@@ -622,7 +622,7 @@ const purgeEffectInstructions = (unit) => [...unit.effects].map((e) => new AddEf
 registerEnemy({
   // elite:true 仅借「锚点=base」的缩放语义（章4 Boss 难度18 → hpMult=1），让 300 血
   // 精确落地；floorMin/Max=44 + BOSS_IDS 排除保证它不进任何精英/通配取材池。
-  difficulty: { base: 18, min: 18, max: 18, floorMin: 44, floorMax: 44, elite: true },
+  difficulty: { base: 18, floorMin: 44, floorMax: 44, elite: true },
   id: 'divineShell', name: '神兵躯壳',
   createUnit: () => new Enemy({ defId: 'divineShell', name: '神兵躯壳', maxHp: 300 }),
   onBattleStart(ctx, unit) {
@@ -877,7 +877,7 @@ const DRONE_OVERHEAT = 50;
 registerEnemy({
   // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），让 100 血
   // 精确落地；floorMin/Max=33 + BOSS_IDS 排除保证它不进任何精英/通配取材池。
-  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  difficulty: { base: 14, floorMin: 33, floorMax: 33, elite: true },
   id: 'intactDrone', name: '完好的无人战体',
   createUnit: () => new Enemy({ defId: 'intactDrone', name: '完好的无人战体', maxHp: 100 }),
   onBattleStart(ctx, unit) {
@@ -1079,7 +1079,7 @@ registerEnemy({
 registerEnemy({
   // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），让 150 血
   // 精确落地；floorMin/Max=33 + BOSS_IDS 排除保证不进任何精英/通配取材池。
-  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  difficulty: { base: 14, floorMin: 33, floorMax: 33, elite: true },
   id: 'greenhouseQueen', name: '温室之后',
   createUnit: () => new Enemy({ defId: 'greenhouseQueen', name: '温室之后', maxHp: 150 }),
   onBattleStart(ctx, unit) {
@@ -1194,7 +1194,7 @@ registerEnemy({
 //     渊素反噬（fixed 5，自愈5——吸玩家的命）。
 registerEnemy({
   // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），180 血精确落地。
-  difficulty: { base: 14, min: 14, max: 14, floorMin: 33, floorMax: 33, elite: true },
+  difficulty: { base: 14, floorMin: 33, floorMax: 33, elite: true },
   id: 'essenceEater', name: '渊素食客',
   createUnit: () => new Enemy({ defId: 'essenceEater', name: '渊素食客', maxHp: 180 }),
   onBattleStart(ctx, unit) {

@@ -32,7 +32,7 @@ registerSkill({
 // 攻8防8 → 攻8×2 → 向玩家手牌随机位置塞 2 张「震慑」（塞牌是节奏型骚扰：
 // 挤占手牌上限与位置敏感卡；满手时震慑改落牌库，AddCard 的 §7.3 兜底语义）。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
+  difficulty: { base: 5, floorMin: 4, floorMax: 10, elite: true },
   id: 'snowwolf', name: '雪狼',
   createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 55 }),
   act(actx) {
@@ -83,7 +83,7 @@ registerEnemy({
 // 攻15，随后三拍循环——盾15+中毒5 → 盾15+攻10 → 晕眩发呆（不行动，破盾窗口）。
 // 中毒 5 是长线压力（回合末固定伤害递减），逼玩家带节奏强攻。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 7, floorMin: 4, floorMax: 10, elite: true },
+  difficulty: { base: 5, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
   createUnit: () => {
     const u = new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 32 });
@@ -130,7 +130,7 @@ registerEnemy({
 // + 蓄势 1，重甲恢复）→ 冲锋（14+atk 大单发，**冲锋拍失衡：防御归零**，下一拍恢复）
 // ——重甲的破绽窗口写在意图里，读节奏打。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 6, floorMin: 4, floorMax: 10, elite: true },
+  difficulty: { base: 5, floorMin: 4, floorMax: 10, elite: true },
   id: 'rockPangolin', name: '碎岩穿山甲',
   createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 45 }),
   onBattleStart(ctx, unit) {
@@ -165,7 +165,7 @@ registerEnemy({
 // 攻9 → 召唤仆人（场上无仆人且有空位）→ 攻13 → 自身盾8。
 // 仆人护主（给它盾5）——先杀仆人还是抢主人，是每回合的账。
 registerEnemy({
-  difficulty: { base: 7, min: 6, max: 9, floorMin: 23, floorMax: 32, elite: true },
+  difficulty: { base: 7, floorMin: 23, floorMax: 32, elite: true },
   id: 'manorLord', name: '庄园主',
   createUnit: () => new Enemy({ defId: 'manorLord', name: '庄园主', maxHp: 60 }),
   act(actx) {

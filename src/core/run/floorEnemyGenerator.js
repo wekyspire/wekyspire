@@ -1,18 +1,15 @@
-// floorEnemyGenerator：按楼层难度预算生成遭遇编成（run 层，确定性）。
-// 体系（2026-09 难度制，权威设计见 battle_gameplay/ENEMY_GENERATION.md）：
-//   1. 楼层难度 D(floor)：开局几层陡升（教学单挑 → 双敌），此后每 2 层 +1 稳定爬升；
-//      Boss 层（11/22/33/44）走独立的 Boss 难度表；
-//   2. 每个敌人带难度元数据 { base, min, max, floorMin, floorMax }（content/enemies.js）：
-//      实例难度 d ∈ [min,max]、楼层 ∈ [floorMin,floorMax] 才可生成——机制老旧或数值
-//      漂移超出设计包络的敌人自然退役，不会出现「44 层超级史莱姆」；
-//      另有 unique 标志（每场至多一只，如怨灵——成对出现会叠死输出轴）；
-//   3. 属性加成**只由实例难度计算**（HP 倍率 + 攻击面板加成），楼层不再直接缩放：
-//      高层变难靠「更难的敌人 + 更大的编成」表达，而不是线性吹大杂鱼面板；
-//   4. 战斗模板（主题编成）：固定结构（如「史莱姆战 = 1 史莱姆 + 1 其他」）+ 楼层区间。
-//      模板按「难度区间能覆盖 D」筛选后随机取用——编成强度稳定可控；
-//   5. 预算分配：编成内实例难度之和 ≈ D（贪心：全员 min 起步，余量逐点随机抬到 max，
-//      抬满仍不足则按最大可达收场——「接近层总和」的容差语义）。
-// 确定性：编成与缩放全部由 deriveBattleSeed(run.seed, floor) 派生 rng 驱动，
+// floorEnemyGenerator：按楼层难度挑选遭遇编成（run 层，确定性）。
+// 难度制 v2（2026-09-24 用户定稿：**取消单敌人难度缩放**）：
+//   1. 每只敌人只有一组**固定数值**（设计卡写多少，玩家就看到多少——数值语义不再发散）；
+//      敌人元数据只剩 `{ base, floorMin, floorMax }` + 可选 `unique / elite`：
+//      base = 固定难度（该敌的战力档位）、楼层区间 = 允许出没层、unique 每场至多一只、
+//      elite 挡在普通通配池外只经精英房出场；
+//   2. 楼层难度 D(floor) 仍是一层的战斗总预算（曲线见下）；Boss 层走独立难度表；
+//   3. 模板（主题编成）= 固定结构 + 楼层区间 + **编成难度**（各槽 base 之和）；
+//   4. 生成 = 在「本层允许、且编成难度落在 [D−2, D+2] 漂移窗内」的模板里，
+//      按「编成难度距 D 越近越常出」加权随机取一，槽位再按敌人 base 就近取材；
+//   5. 后处理不变：同种错拍 / 石茧群延迟苏醒 / 音叉群错拍（见文件尾）。
+// 确定性：编成选取全部由 deriveBattleSeed(run.seed, floor) 派生 rng 驱动，
 // 同 seed 同 floor 恒定（回放/测试可复现）。
 
 import { createRng } from '../state/rng.js';
@@ -20,15 +17,11 @@ import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
-// 「开始几层较陡，后面稳定爬升」：
-//   1-10（章1）：2 → 4 → 5 → 6 … 7（教学 → 双敌陡升，章末收平等着打 Boss）；
-//   12-21（章2）：9 → 13；23-32（章3）：13 → 17；34-43（章4）：17 → 21（每 2 层 +1）。
-// Boss 层难度按章取值（单只吃满预算，体型由难度缩放承载）。
-// 章1 第 6 层压到 6（而非 7）：精英日挪到第 6 层后按 D 缩放会把雪狼吹到 99 血，
-// 降一档让首精英保持 77 血的调定强度（试玩反馈：首个 Boss 前压力过高）。
+// 章1 表驱动（用户 2026-09-24 上调后重新配平），章 2–4 每 2 层 +1；
+// Boss 层难度按章取值。D 是一层战斗的总预算，与编成难度对齐（漂移 ±2）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
-const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 6, 7, 7, 7, 7]; // 章1 表驱动（陡升段，章末收平）
+const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 6, 7, 7, 7, 7]; // 章1 表驱动（v2 离散难度：与怪物 base 1–3 匹配）
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
@@ -41,143 +34,82 @@ export function floorDifficulty(floor) {
   return CHAPTER_BASE[ch] + Math.floor((f - CHAPTER_START[ch]) / 2);
 }
 
-// ---- 实例难度 → 属性加成（全局唯一缩放口）----
-// 难度单位 ≈ 「一步」：每 +1 难度 ≈ HP +40%、攻击约每 2 难 +1；d = anchor 即白板。
-// 锚点两套（ENEMY_GENERATION.md）：普通敌人的基准数值按 d=2 授权（anchor 2）；
-// 精英的基准数值按自身 base 难度授权（anchor = base，如雪狼 55 血 = 难5 白板），
-// 否则全局公式会把高基准精英吹成团本 Boss。攻击加成慢于 HP：玩家 HP 也在长。
-export function difficultyScaling(d, anchor = 2) {
-  return {
-    hpMult: Math.max(1, 1 + 0.4 * (d - anchor)),
-    attackBonus: Math.max(0, Math.floor((d - anchor) / 2)),
-  };
-}
-
-/** 就地按实例难度缩放一只已创建的敌人（锚点按敌种取：精英用 base，普通用 2）。 */
-function scaleUnit(unit, d, anchor = 2) {
-  const { hpMult, attackBonus } = difficultyScaling(d, anchor);
-  unit.maxHp = Math.max(1, Math.round(unit.maxHp * hpMult));
-  unit.hp = unit.maxHp;
-  if (attackBonus > 0) unit.attack += attackBonus;
-  return unit;
-}
-
 // ---- 战斗模板（主题编成）----
-// slots：{ fixed?: defId }——fixed 为钉死位，其余为通配位（从当层可用池随机取）。
-// 模板适用条件：楼层 ∈ [minFloor,maxFloor]，且「min 难度和 ≤ D」（买得起）；
-// 优先取「max 难度和 ≥ D」（够得着）的模板，没有则取 max 和最大者（贴线收场）。
+// slots：{ fixed?: defId }——fixed 为钉死位，其余为通配位（从当层可用池就近取材）。
+// 模板适用条件：楼层 ∈ [minFloor,maxFloor]，且编成难度落在 [D−2, D+2] 漂移窗内。
+// 编成难度 = 各槽位难度之和：钉死位取该敌 base；通配位取当层池的「代表难度」
+// （池面 base 的众数低值——通配位是变量，模板难度只作锚，实际编成由取材时的
+// 就近原则贴线）。
 const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
   { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
-  // —— 第一章主题编成（2026-09，设计卡 battle_gameplay/ENEMIES_1.md §4）——
-  // 节奏型：用搭配逼出排序/防御时机的决策（快攻在这些场次收益偏高，故只留两套）
-  // 2026-09-11 用户试玩后削：原「爆囊×2 + 石茧×2」四敌同时施压（两只石茧苏醒后每回合 20+ 伤
-  // 叠爆囊死亡反伤）堪比精英，删掉一只石茧 → 三敌；难度份额改由前三槽分摊。
+  // —— 第一章主题编成（设计卡 battle_gameplay/ENEMIES_1.md §4）——
   { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }] },
   { id: 'twinClock', name: '钟摆双塔', minFloor: 5, maxFloor: 10, slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
-  // 苦战型：给「慢慢磨」的牌组留位置——攻击弱、不成长、血巨厚，考的是稳挡 + 稳定输出节奏
   { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
   { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
-  // —— 章1「塔基爆发」编队（2026-09-14 用户设计；wiki 魔物爆发：F/E 级杂鱼起步，
-  // 机制随烈度爬升：塞卡 → DoT → 滚雪球 → 时机 → 集群 → 组合；预算按楼层难度 2-7 配平）——
-  // 虫群风暴（E）：嗡嗡虫集群塞粉尘——「卡手」主题的入门场（min 1+1+1+1=4 / max 8）
+  // —— 章1「塔基爆发」编队（2026-09-14 用户设计；wiki 魔物爆发：F/E 级杂鱼起步）——
   { id: 'infestation', name: '虫群风暴', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'buzzbug' }, { fixed: 'buzzbug' }, { fixed: 'buzzbug' }, {}] },
-  // 草丛（F-E）：刺刺草 DoT 教学 + 杂鱼（min 2+2+1=5 / max 8）
   { id: 'thornPatch', name: '草丛', minFloor: 3, maxFloor: 10, slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, {}] },
-  // 静电原野（E）：双毛球充能滚雪球——「不打它越充越强」的镜像抉择场（min 2 / max 6）
   { id: 'staticField', name: '静电原野', minFloor: 4, maxFloor: 12, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
-  // 掘地场（E）：双鼹鼠错相位遁地——转火时机教学（min 4+1=5 / max 10）
   { id: 'digSite', name: '掘地场', minFloor: 5, maxFloor: 12, slots: [{ fixed: 'diggerMole' }, { fixed: 'diggerMole' }, {}] },
-  // 甲虫潮（E）：集群啃牌 + 亡语病菌——AOE 甜蜜点带代价（min 3+1=4 / max 8）
   { id: 'beetleTide', name: '甲虫潮', minFloor: 6, maxFloor: 14, slots: [{ fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, {}] },
-  // 共振带（E+）：毛球×2+鼹鼠——双机制组合的章1 收官难度（min 5 / max 10）
   { id: 'resonance', name: '共振带', minFloor: 8, maxFloor: 14, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'diggerMole' }] },
-  // 腐蔓园（E）：紧勒+DoT+塞牌三重卡手主题战——「腾手」能力的第一次大考（min 5 / max 8）
   { id: 'rotGarden', name: '腐蔓园', minFloor: 6, maxFloor: 12, slots: [{ fixed: 'mossBall' }, { fixed: 'thornWeed' }, { fixed: 'buzzbug' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
-  // —— 第二~四章主题编队（2026-09-13 总策划批次，与新敌补池同波，设计卡 tmp/design-monsters-wave1.mjs）——
-  // 章2 宫殿：阵型互动（群体盾支援 + 开场蓄势 + 受创龟缩）
+  // —— 第二~四章主题编队（2026-09-13 总策划批次）——
   { id: 'palaceGuard', name: '宫廷卫队', minFloor: 12, maxFloor: 21, slots: [{ fixed: 'palaceGuard' }, {}] },
   { id: 'honorGuard', name: '仪仗队', minFloor: 14, maxFloor: 21, slots: [{ fixed: 'herald' }, { fixed: 'palaceGuard' }, {}] },
-  // 章3 庄园：滚雪球主题（喝酒双鬼， budget 核对 min 10 ≤ 13 / max 18 ≥ 16）
   { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
-  // 章4 图书馆：防线锚 + 群狼连击（min 15 ≤ 17 / max 25 ≥ 21）
   { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
-  // 血牛互斥（2026-09-14 马拉松修复）：钉死位已有一只龟/像时，通配位排除其余血牛
-  // （岩甲龟/石像卫士/禁书守卫）——防线怪的单体马拉松已由蓄势/再生递减治理，
-  // 编成层面再防「双龟」「龟+像」这类叠加组合。
+  // 血牛互斥：钉死位已有一只龟/像时，通配位排除其余血牛（双龟/龟+像是马拉松病灶）
   { id: 'shellLine', name: '龟甲阵', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'rockshell' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
-  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] }, // 血牛模板随 gargoyle/rockshell 收窄至章3（2026-09-16）
-  // —— 第四章特色战斗（2026-09-14 用户设计定稿，古尔帕斯商店 35 层之后的中后期）：
-  // 三族（玻璃连炮/巨兽渐强/机制反制）+ 机制四件套组合。每场是一个有破解方程的谜题，
-  // 设计红线：开局 2 拍 ≤25（A 系齐射除外）、单回合峰值 30-40、滚雪球 6-8 回合进
-  // 不可挡区、多源爆发错拍、大伤害意图预告可见——「高压但有解」，考大成牌组。 ——
-  // 族A 玻璃连炮：开局重压+异常轮转，杀一只少一份（守像阵型共鸣）
+  { id: 'colossus', name: '巨像', minFloor: 23, maxFloor: 32, slots: [{ fixed: 'gargoyle' }, { exclude: ['rockshell', 'gargoyle', 'tomeWarden'] }] },
+  // —— 第四章特色战斗（族A 玻璃连炮 / 族B 巨兽渐强 / 族C 机制反制 + 机制四件套）——
   { id: 'guardQuad', name: '典礼方阵', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }] },
   { id: 'guardPhalanx', name: '受戒典礼', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'wardStatue' }, { fixed: 'shieldBearer' }] },
   { id: 'forkDuet', name: '音叉双鸣', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'tuningFork' }, { fixed: 'tuningFork' }] },
   { id: 'candleSwarm', name: '烛火群', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }, { fixed: 'candleSpirit' }] },
-  // 族B 巨兽渐强：血牛（终值 200+）+ 塞牌干扰 + 回合账单，启动窗口温和
   { id: 'archiveTitan', name: '档案巨像', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'archiveColossus' }] },
   { id: 'devourLair', name: '噬书巢穴', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'bookDevourer' }, {}] },
   { id: 'inkTide', name: '墨海涨潮', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'inkTideCore' }, { fixed: 'bookWorm' }] },
-  // 族C 机制反制：读构筑/行为的镜子
   { id: 'mirrorHall', name: '镜厅', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'oracleOrb' }, { fixed: 'galeGolem' }] },
   { id: 'scriptorium', name: '禁阅室', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'censorScribe' }] },
   { id: 'ledgerOffice', name: '账房', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'ledgerImp' }] },
   { id: 'monitorPost', name: '监察岗', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'acadMonitor' }, {}] },
-  // 机制四件套组合：增益核心+闪避多段打手 / 抗爆发阵型 / 开局塞重物
   { id: 'consecration', name: '受戒仪仗', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'riteAltar' }, { fixed: 'galeGolem' }, { fixed: 'shieldBearer' }] },
   { id: 'phalanxWall', name: '方阵阻击', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'repeaterBallista' }, { fixed: 'shieldBearer' }, {}] },
   { id: 'binderVault', name: '装订库', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'binderPython' }, { fixed: 'tomeWarden' }] },
-  // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）：1-2 敌，
-  // 恒含一只高难精英（elite 槽从当层精英池按份额取材），余量可带一名杂鱼随从
+  // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
   { id: 'elitePair', name: '精英押队', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
 ];
+
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
-// 第二波（2026-09-13）：22 层骑士长（阵型结业考）、33 层饕餮领主（滚雪球结业考）上岗；
-// 第三波（2026-09-13）：44 层换占位（pyro → 塔心，现已下线）。
-// 第四波（2026-09-13，用户设计）：11 层改为**火主题 Boss 三候选池**——燃焰术士（重做）/
-// 卡达斯/MEFM-1，每场 Boss 战由战斗种子确定性抽一只（同一层重打 = 同一只）。
-// 第五波（2026-09-14，用户设计）：33 层改为候选池——饕餮领主 / 完好的无人战体
-// （三灯状态机 + 锁牌 + 盾碎转段 + 自爆收场的机体考）/ 温室之后（南孚妖蝶集群意识体：
-// 同律集群 + 舞步滚雪球 + 清场窗口反转）/ 渊素食客（堕落考核官：三段单向堕落 +
-// 增益掠夺 + 渊素共鸣对赌）——清杂考、手牌考、指向与节奏考、增益对赌考一届配齐。
-// 第六波（2026-09-20，用户设计）：44 层终塔换成**神兵躯壳**（300 血 + 200 盾 +
-// 如山/纯净开场、盾碎与致死两次转阶段、阶段三自焚败亡曲线；与无人战体同技术谱系的最
-// 上位机）——数值碾压式终局，取代旧占位「塔心」（44 血的孤身巨石，强度不足已下线）。
 // 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
-// 自 22 层起每个 Boss 必带燃烧交互纹理
-//（铁律：Boss 血量线性成长、火系燃烧乘算成长，不给反制火系 Boss 战必然失控；
-//  神兵躯壳的反制 = 盾碎转段净化全部燃烧（阶段一内必须闭环「堆层→引爆」）；
-//  无人战体的反制 = 红灯转段净化全部燃烧，同理）。
+// 11 层火主题三候选 / 22 层三题 / 33 层四考 / 44 层终塔神兵躯壳——
+// 设计与缩放口径见 ENEMY_GENERATION.md §4.3。
 const BOSS_OF_FLOOR = Object.freeze({
   11: ['pyro', 'kardas', 'mefm1'],
-  // 批次 16（2026-09-13）：章二池三题错开——阵型（骑士长）/ 外挂时钟·手牌节奏（守钟人）/ debuff 对冲（主教）
   22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
   33: ['gluttonLord', 'intactDrone', 'greenhouseQueen', 'essenceEater'],
-  // 44 层（终塔）候选池：神兵躯壳（2026-09-20 用户设计稿，取代旧占位「塔心」）。
-  // 单元素也写成数组——顶塔是「一池多题」的位置，后续 Boss 直接往这里加 id。
   44: ['divineShell'],
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 
 // 精英层排期（确定性，好记好测）：每章第 6、9 层（6/9、17/20、28/31、39/42）。
-// 2026-09 试玩后从 5/8 后挪：开局多一层普通战铺垫，再碰精英。
-// 该章尚无精英内容时（精英池为空）自动回落普通编成——后续章节加精英零生成器改动。
+// 该章尚无精英内容时（精英池为空）自动回落普通编成。
 export const isEliteFloor = (floor) =>
   floor % FLOORS_PER_CHAPTER === 6 || floor % FLOORS_PER_CHAPTER === 9;
 
-// 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配；
+// 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配。
+// **按 id 排序**（2026-09-24 定）：取材池的顺序决定 rng.pick 的落点，排序后
+// 生成流与内容文件组织方式彻底解耦（拆分/挪动不改遭遇分布）。
 // difficulty 缺失视为不可生成（防御）。
 function eligiblePool(floor, elite = false) {
-  // **按 id 排序**（2026-09-24 定）：取材池的顺序决定 rng.pick 的落点，而注册顺序
-  // 随内容文件的组织方式漂移（enemies.js 按章拆分当天就撞上：同 seed 同层换了怪）。
-  // 排序后生成流与文件布局彻底解耦——内容怎么拆分/挪动，遭遇分布一分不变。
   return allEnemies().filter(def =>
     !BOSS_IDS.has(def.id)
     && Boolean(def.difficulty?.elite) === elite
@@ -190,125 +122,115 @@ function eligibleAtFloor(def, floor) {
 }
 
 // 槽位取材池：钉死位 = 该敌人自身；精英槽 = 当层精英池；通配位 = 当层普通池。
-// slot.exclude（2026-09-14 马拉松修复）：通配位排除指定敌 id——「龟甲阵/巨像」这类
-// 血牛钉死位的搭档不许再抽到其他血牛（双龟/龟+像组合是 15~20+ 回合无风险马拉松的
-// 直接来源，两份试玩死于 32 层双岩甲龟）。exclude 只过滤选材池（templateRange 与
-// 份额分配同用此池），不影响预算逻辑本身。
+// slot.exclude：通配位排除指定敌 id（血牛互斥——双龟/龟+像是马拉松病灶）。
 function slotPool(slot, floor) {
   if (slot.fixed) return [getEnemyDefinition(slot.fixed)];
   const pool = eligiblePool(floor, slot.elite === true);
   return slot.exclude?.length ? pool.filter(def => !slot.exclude.includes(def.id)) : pool;
 }
 
-// 模板在指定层的难度可达区间 [minSum, maxSum]：各槽取材池的 min 最小值 /
-// max 最大值（钉死位不满足楼层区间、任一池为空 → 模板不可用，返回 null）。
-function templateRange(tpl, floor) {
-  let min = 0, max = 0;
-  for (const slot of tpl.slots) {
-    const pool = slotPool(slot, floor);
-    if (pool.length === 0 || (slot.fixed && !eligibleAtFloor(pool[0], floor))) return null;
-    min += Math.min(...pool.map(x => x.difficulty.min));
-    max += Math.max(...pool.map(x => x.difficulty.max));
-  }
-  return { min, max };
+// 槽位代表难度：钉死位取自身 base；通配位取当层池 base 的「众数低值」
+// （池面常见档——通配位是变量，模板难度只作锚，实际由取材时的就近原则贴线）。
+function slotBase(slot, floor) {
+  const pool = slotPool(slot, floor);
+  if (pool.length === 0) return null;
+  if (slot.fixed) return pool[0].difficulty.base;
+  // 池面 base 的最小值作代表（通配位倾向取低，与「先凑基础再抬升」的取材直觉一致）
+  return Math.min(...pool.map(x => x.difficulty.base));
 }
+
+// 模板编成难度 = 各槽代表难度之和。任一槽无可用取材 → 模板不可用（返回 null）。
+function templateCost(tpl, floor) {
+  let sum = 0;
+  for (const slot of tpl.slots) {
+    const b = slotBase(slot, floor);
+    if (b == null) return null;
+    sum += b;
+  }
+  return sum;
+}
+
+// 漂移窗：编成难度允许偏离楼层预算 ±2。
+const DRIFT = 2;
 
 /**
  * 生成一层遭遇：返回**可序列化描述符**数组（run.encounter 落此，存档/回放安全）：
- *   { defId, maxHp, attack, difficulty }——maxHp/attack 为按实例难度缩放后的终值。
- * Boss 层恒单 Boss（难度按章）；普通层走模板 + 预算分配。
+ *   { defId, maxHp, attack, difficulty }——maxHp/attack 为该敌固定数值（不再缩放），
+ *   difficulty 仅为展示/调试（该敌 base）。Boss 层恒单 Boss；普通层走模板 + 漂移加权。
  */
 export function generateEncounter(run) {
   const floor = Math.min(Math.max(1, run.floor), TOTAL_FLOORS);
-  const rng = createRng(deriveBattleSeed(run.seed, floor) ^ 0x5EED); // 与旧 encounter 派生错开
+  const rng = createRng(deriveBattleSeed(run.seed, floor) ^ 0x5EED);
   if (isBossFloor(floor)) {
     const chapter = floor / FLOORS_PER_CHAPTER - 1;
     const entry = BOSS_OF_FLOOR[floor] ?? 'pyro';
-    const bossId = Array.isArray(entry) ? rng.pick(entry) : entry; // 候选池：战斗种子定抽
+    const bossId = Array.isArray(entry) ? rng.pick(entry) : entry;
     const bossDef = getEnemyDefinition(bossId);
-    const d = Math.min(BOSS_DIFFICULTY[chapter], bossDef.difficulty.max);
+    // v2：Boss 不再缩放——难度仅作展示/调试（取当章 Boss 难度，封顶 def.base 以兼容
+    // 候选池里 base 不齐的旧定义；数值恒用授权面板）。
+    const d = Math.min(BOSS_DIFFICULTY[chapter], bossDef.difficulty.base);
     return [descriptorOf(bossId, d)];
   }
 
   const D = floorDifficulty(floor);
-  // 精英层排期：该层是精英层且本章有精英内容时，只从精英房模板取材
   const eliteDay = isEliteFloor(floor) && eligiblePool(floor, true).length > 0;
-  const candidates = TEMPLATES
-    .map(tpl => ({ tpl, range: templateRange(tpl, floor) }))
-    .filter(x => x.range
-      && Boolean(x.tpl.elite) === eliteDay
-      && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor && x.range.min <= D);
-  if (candidates.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
-  const bracket = candidates.filter(x => x.range.max >= D);
-  const picked = rng.pick(bracket.length > 0 ? bracket : candidates).tpl;
 
-  // 份额分配（先定份额、再按份额选敌）：各槽难度份额从槽下界起步，余量逐点随机
-  // 抬升（槽界 = 钉死位自身区间 / 通配位取当层池面区间）。先分后选保证贴模板时
-  // Σ 恒等于 D——先选后分的话，随机抽到弱敌（如双史莱姆）会把可达上限压到 D 以下。
-  const bounds = picked.slots.map(slot => (slot.fixed
-    ? { ...getEnemyDefinition(slot.fixed).difficulty, fixed: slot.fixed }
-    : (() => {
-      const poolOfSlot = slotPool(slot, floor);
-      return {
-        min: Math.min(...poolOfSlot.map(x => x.difficulty.min)),
-        max: Math.max(...poolOfSlot.map(x => x.difficulty.max)),
-        fixed: null,
-      };
-    })()));
-  const shares = bounds.map(b => b.min);
-  let leftover = D - shares.reduce((n, s) => n + s, 0);
-  while (leftover > 0) {
-    const raisable = bounds
-      .map((b, i) => (shares[i] < b.max ? i : -1))
-      .filter(i => i >= 0);
-    if (raisable.length === 0) break;   // 贴线收场：抬满仍不足（模板上限 < D）
-    shares[rng.pick(raisable)] += 1;
-    leftover -= 1;
+  // 候选模板：楼层命中 + 精英标志匹配 + 编成难度落在漂移窗内。
+  const candidates = TEMPLATES
+    .map(tpl => ({ tpl, cost: templateCost(tpl, floor) }))
+    .filter(x => x.cost != null
+      && Boolean(x.tpl.elite) === eliteDay
+      && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor
+      && Math.abs(x.cost - D) <= DRIFT);
+  if (candidates.length === 0) {
+    // 兜底：漂移窗内无货时取编成难度最近者（贴线收场，不报错——用户上调曲线后
+    // 允许某些楼层只有一两套模板可选）。
+    const fallback = TEMPLATES
+      .map(tpl => ({ tpl, cost: templateCost(tpl, floor) }))
+      .filter(x => x.cost != null
+        && Boolean(x.tpl.elite) === eliteDay
+        && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor)
+      .sort((a, b) => Math.abs(a.cost - D) - Math.abs(b.cost - D));
+    if (fallback.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
+    candidates.push(fallback[0]);
   }
 
-  // 选敌落位：份额落在哪个敌人的难度区间就选谁（区间内均匀随机；池区间有
-  // 空隙时兜底取钳位距离最近者，份额钳回其区间）。
-  // unique 敌人（如怨灵：虚弱不衰减，成对出现会焊死输出轴）每场至多一只：
-  // 已被前面槽位占用的 unique 不再进池。过滤只影响选材不影响份额分配，
-  // 极端情况下份额被迫钳回较窄区间、Σd 偏离 D 一两点——落在「接近层总和」容差内。
+  // 加权随机：编成难度距 D 越近权重越高（差 0 → 4，差 1 → 2，差 2 → 1）。
+  const weighted = [];
+  for (const c of candidates) {
+    const weight = 4 - 2 * Math.abs(c.cost - D);
+    for (let i = 0; i < weight; i++) weighted.push(c);
+  }
+  const picked = rng.pick(weighted).tpl;
+
+  // 槽位取材：钉死位直接用；通配位从池里按 base 就近取材（优先贴槽位代表难度），
+  // unique 敌人已被前面槽位占用则不再进池。
   const used = new Set();
-  const slots = bounds.map((b, i) => {
-    if (b.fixed) { used.add(b.fixed); return { defId: b.fixed, d: shares[i] }; }
-    const full = slotPool(picked.slots[i], floor);
+  const slots = picked.slots.map((slot) => {
+    if (slot.fixed) { used.add(slot.fixed); return { defId: slot.fixed, d: getEnemyDefinition(slot.fixed).difficulty.base }; }
+    const full = slotPool(slot, floor);
     const avail = full.filter(x => !(x.unique && used.has(x.id)));
-    const poolOfSlot = avail.length > 0 ? avail : full; // 防御：过滤后为空则放宽
-    const t = shares[i];
-    let cands = poolOfSlot.filter(x => x.difficulty.min <= t && t <= x.difficulty.max);
-    if (cands.length === 0) {
-      cands = [poolOfSlot.reduce((best, x) => {
-        const dist = Math.abs(Math.min(Math.max(t, x.difficulty.min), x.difficulty.max) - t);
-        const bestDist = Math.abs(Math.min(Math.max(t, best.difficulty.min), best.difficulty.max) - t);
-        return dist < bestDist ? x : best;
-      })];
-    }
+    const poolOfSlot = avail.length > 0 ? avail : full;
+    // 就近取材：池里谁的 base 离槽位代表难度最近取谁（并列随机）
+    const target = slotBase(slot, floor);
+    const nearest = Math.min(...poolOfSlot.map(x => Math.abs(x.difficulty.base - target)));
+    const cands = poolOfSlot.filter(x => Math.abs(x.difficulty.base - target) === nearest);
     const def = rng.pick(cands);
     used.add(def.id);
-    const d = Math.min(Math.max(t, def.difficulty.min), def.difficulty.max);
-    return { defId: def.id, d };
+    return { defId: def.id, d: def.difficulty.base };
   });
+
   const out = slots.map(s => descriptorOf(s.defId, s.d));
-  // 石茧群（用户 2026-09-11）：同层第二只起**延迟一回合苏醒**且难度更低（苏醒越晚越弱）。
-  // 否则多只同拍苏醒＝每回合 20+ 伤，是第 1 章最容易低估的死局。
+
+  // ---- 编成后处理（与 v1 相同）----
+  // 石茧群：同层第二只起延迟一回合苏醒且难度更低（苏醒越晚越弱）
   const cocoons = out.map((s, i) => (s.defId === 'stoneCocoon' ? i : -1)).filter(i => i >= 0);
   if (cocoons.length > 1) {
-    const def = getEnemyDefinition('stoneCocoon');
     for (const i of cocoons.slice(1)) {
-      // 难度降一档但不低于该敌人的难度下界（契约：实例难度必须落在 def 的 [min,max] 内）；
-      // 下界已到 min 时，削弱体现在「延迟苏醒 + 苏醒时少叠一层力量」上。
-      const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
-      out[i] = descriptorOf('stoneCocoon', d, { wakeDelay: 2, wakeStrength: 1 });
+      out[i] = descriptorOf('stoneCocoon', out[i].difficulty, { wakeDelay: 2, wakeStrength: 1 });
     }
   }
-  // 同种错拍（用户 2026-09-16 定）：同 defId 的多只个体按 0/1 交错起始节拍——
-  // 「四只风狸＝两只先攻两只先闪避」，而不是四只同拍齐动齐停（齐拍要么瞬间爆炸、
-  // 要么整拍零压力，是节奏锯齿）。特意安排齐拍的（典礼方阵开局齐射）与自带错拍
-  // 特殊处理的（石茧/音叉 wakeDelay）不在此列。跨种组合的主题节奏（阵型先架盾、
-  // 血牛先回春、醉鬼先喝酒）由各敌 act 自身表达，不受影响。
+  // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉/石茧自带错拍）
   const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork', 'stoneCocoon']);
   const nthOf = new Map();
   for (let i = 0; i < out.length; i++) {
@@ -316,26 +238,22 @@ export function generateEncounter(run) {
     if (SYNC_EXEMPT.has(s.defId) || s.wakeDelay != null) continue;
     const n = (nthOf.get(s.defId) ?? 0) + 1;
     nthOf.set(s.defId, n);
-    if (n % 2 === 0) out[i] = { ...s, actionIndex: 1 }; // 第 2、4…只错一拍
+    if (n % 2 === 0) out[i] = { ...s, actionIndex: 1 };
   }
-  // 音叉群（2026-09-14 第四章特色战斗）：第二只起 wakeDelay=1 且难度 -1——两台大振
-  // 恒错拍，任意回合最多一次大振（同拍双大振 = 单回合 50+ 直伤，踩红线）。
+  // 音叉群：第二只起 wakeDelay=1（两台大振恒错拍）
   const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);
   if (forks.length > 1) {
-    const def = getEnemyDefinition('tuningFork');
     for (const i of forks.slice(1)) {
-      const d = Math.max(def.difficulty.min, out[i].difficulty - 1);
-      out[i] = descriptorOf('tuningFork', d, { wakeDelay: 1 });
+      out[i] = descriptorOf('tuningFork', out[i].difficulty, { wakeDelay: 1 });
     }
   }
   return out;
 }
 
-/** 描述符 = defId + 实例难度 + 缩放终值（锚点：精英按 base，普通按 2）。extra 供变体参数。 */
+/** 描述符 = defId + 固定数值（v2：不再缩放，unit 即用授权面板）。extra 供变体参数。 */
 function descriptorOf(defId, difficulty, extra = {}) {
   const def = getEnemyDefinition(defId);
   const unit = def.createUnit();
-  scaleUnit(unit, difficulty, def.difficulty.elite ? def.difficulty.base : 2);
   return { defId, maxHp: unit.maxHp, attack: unit.attack, difficulty, ...extra };
 }
 
@@ -346,8 +264,8 @@ export function spawnEnemy(entry) {
   unit.maxHp = entry.maxHp ?? unit.maxHp;
   unit.hp = unit.maxHp;
   if (entry.attack != null) unit.attack = entry.attack;
-  if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;       // 石茧等：苏醒回合参数
+  if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;
   if (entry.wakeStrength != null) unit.wakeStrength = entry.wakeStrength;
-  if (entry.actionIndex != null) unit.actionIndex = entry.actionIndex; // 同种错拍（2026-09-16）
+  if (entry.actionIndex != null) unit.actionIndex = entry.actionIndex;
   return unit;
 }

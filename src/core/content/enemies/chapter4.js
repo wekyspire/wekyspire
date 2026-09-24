@@ -12,7 +12,7 @@ import { aliveEnemies } from '../../state/battleState.js';
 // ㉓ 禁书守卫（章4·终章防线锚）——攻10 → 全体友军盾12 → 攻14 三拍循环。
 // 宫廷守卫的终章上位：数值跨档 + 自身 3 防御面板，群体盾更厚。
 registerEnemy({
-  difficulty: { base: 8, min: 7, max: 11, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 8, floorMin: 34, floorMax: 43 },
   id: 'tomeWarden', name: '禁书守卫',
   createUnit: () => new Enemy({ defId: 'tomeWarden', name: '禁书守卫', maxHp: 40, defense: 3 }),
   act(actx) {
@@ -43,7 +43,7 @@ registerEnemy({
 // ㉔ 蛀书虫（章4·群狼小件：连击）——攻2×3 → 攻6 两拍循环。
 // 连击逼「单发大盾」以外的对策（多段吃盾次数多），嗡嗡虫的终章上位。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 7, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 5, floorMin: 34, floorMax: 43 },
   id: 'bookWorm', name: '蛀书虫',
   createUnit: () => new Enemy({ defId: 'bookWorm', name: '蛀书虫', maxHp: 14 }),
   act(actx) {
@@ -74,7 +74,7 @@ registerEnemy({
 // 个弱攻击手（拂尘拍空转），考题只点名 DoT 构筑。主教（Boss）的燃烧净化是它的原型，
 // 这只连中毒一起拂。
 registerEnemy({
-  difficulty: { base: 7, min: 6, max: 9, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 7, floorMin: 34, floorMax: 43 },
   id: 'dustkeeper', name: '掸尘者',
   createUnit: () => new Enemy({ defId: 'dustkeeper', name: '掸尘者', maxHp: 20 }),
   act(actx) {
@@ -126,7 +126,7 @@ registerEnemy({
 // 私有异常循环（0号灼伤牌/1号虚弱/2号重锤/3号中毒）。阵型共鸣：每死一只，其余攻击 -2
 // （读「初始只数 - 现存活数」动态结算，无需订阅）——杀一只压力断崖。
 registerEnemy({
-  difficulty: { base: 4, min: 3, max: 5, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 4, floorMin: 34, floorMax: 43 },
   id: 'wardStatue', name: '守像',
   createUnit: () => new Enemy({ defId: 'wardStatue', name: '守像', maxHp: 30 }),
   act(actx) {
@@ -176,7 +176,7 @@ registerEnemy({
 // 第二只由生成器塞 wakeDelay=1 + 难度 -1（石茧惯例）——两台大振恒错 2 拍，任意回合
 // 最多一次大振。失谐窗口 = 白给的输出回合，破解=记拍子。
 registerEnemy({
-  difficulty: { base: 6, min: 5, max: 7, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 6, floorMin: 34, floorMax: 43 },
   id: 'tuningFork', name: '音叉灵',
   createUnit: () => new Enemy({ defId: 'tuningFork', name: '音叉灵', maxHp: 20 }),
   act(actx) {
@@ -207,7 +207,7 @@ registerEnemy({
 // ③ 烛灵（A3 烛火群）：恒攻 + 自燃线性滚雪球（攻击 = 8 + 2×行动次数），无自愈无防御——
 // 纯 DPS 时限检查：拖到第 6-7 回合合计输出进不可挡区，必须速扫。基准血量全场最低档。
 registerEnemy({
-  difficulty: { base: 4, min: 4, max: 7, floorMin: 34, floorMax: 43 },
+  difficulty: { base: 4, floorMin: 34, floorMax: 43 },
   id: 'candleSpirit', name: '烛灵',
   createUnit: () => new Enemy({ defId: 'candleSpirit', name: '烛灵', maxHp: 22 }),
   act(actx) {
@@ -228,7 +228,7 @@ registerEnemy({
 // （攻6 + 塞 2 墨渍）↔ 重压拍（14+t×2 + 自盾10），t=行动次数——第 8 拍起锤击 24+，
 // 超期账单。前 2 拍合计 ≤ 22 = 免费启动窗口（咏唱/引擎铺场来得及）。
 registerEnemy({
-  difficulty: { base: 12, min: 10, max: 13, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 12, floorMin: 36, floorMax: 43 },
   id: 'archiveColossus', name: '档案馆巨像',
   createUnit: () => new Enemy({ defId: 'archiveColossus', name: '档案馆巨像', maxHp: 40 }),
   act(actx) {
@@ -262,7 +262,7 @@ registerEnemy({
 // 返还：战斗 zones 本就不回写 run 牌组，被吞的卡本场消失）↔ 蜕变（自愈8+蓄势1）↔
 // 喷洒（(8+蓄势)×3）。反「精致留手」：留牌价值排序 + 速杀。
 registerEnemy({
-  difficulty: { base: 10, min: 8, max: 12, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 10, floorMin: 36, floorMax: 43 },
   id: 'bookDevourer', name: '噬书巨虫',
   createUnit: () => new Enemy({ defId: 'bookDevourer', name: '噬书巨虫', maxHp: 44 }),
   act(actx) {
@@ -301,7 +301,7 @@ registerEnemy({
 // 战斗内叠层、保底 4 + 塞 1 墨渍）」。单回合峰值温和，全部压力来自操作空间收缩——
 // 「可打但越来越挤」。手牌上限走 battleState.modifiers（战斗级，战后自动复位）。
 registerEnemy({
-  difficulty: { base: 11, min: 9, max: 12, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 11, floorMin: 36, floorMax: 43 },
   id: 'inkTideCore', name: '墨海母核',
   createUnit: () => new Enemy({ defId: 'inkTideCore', name: '墨海母核', maxHp: 42 }),
   act(actx) {
@@ -328,7 +328,7 @@ registerEnemy({
 // 单位身上的负面状态（燃烧/中毒/虚弱等 debuff 类效果）原样复制给玩家。DoT 流打它 =
 // 第 4 拍原样退货——先读镜子再选武器（直伤/净化/4 拍内控量）。
 registerEnemy({
-  difficulty: { base: 8, min: 7, max: 9, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 8, floorMin: 36, floorMax: 43 },
   id: 'oracleOrb', name: '占卜水晶球',
   createUnit: () => new Enemy({ defId: 'oracleOrb', name: '占卜水晶球', maxHp: 16 }),
   act(actx) {
@@ -364,7 +364,7 @@ registerEnemy({
 // ⑧ 禁阅抄录员（C2）：攻击随玩家累计抽牌数成长（每 3 张 +2，行动时按 floor(drawn/3)
 // 拉齐蓄势层）——抽牌引擎流被点名。焚页拍清空自身蓄势换自愈 6：逼它洗牌再集火的交互窗。
 registerEnemy({
-  difficulty: { base: 7, min: 6, max: 8, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 7, floorMin: 36, floorMax: 43 },
   id: 'censorScribe', name: '禁阅抄录员',
   createUnit: () => new Enemy({ defId: 'censorScribe', name: '禁阅抄录员', maxHp: 14 }),
   act(actx) {
@@ -403,7 +403,7 @@ registerEnemy({
 // ⑨ 账房墨灵（C3）：收账时若你手牌近乎满（≥ 上限-1），攻击 +6 且蓄势 +2——囤牌课税的
 // 敌人化（读当下手牌数，快打流白嫖记账拍）。超载流/留手流被点名。
 registerEnemy({
-  difficulty: { base: 7, min: 6, max: 8, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 7, floorMin: 36, floorMax: 43 },
   id: 'ledgerImp', name: '账房墨灵',
   createUnit: () => new Enemy({ defId: 'ledgerImp', name: '账房墨灵', maxHp: 15 }),
   act(actx) {
@@ -438,7 +438,7 @@ registerEnemy({
 // 出牌数（history.turn.played 在敌方行动时读到的即玩家上回合总量）——多动流出牌 ≥4
 // 时攻击 +5。「多动罚」：复读机/高频引擎被点名，序列多样化无感。
 registerEnemy({
-  difficulty: { base: 8, min: 7, max: 9, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 8, floorMin: 36, floorMax: 43 },
   id: 'acadMonitor', name: '学术监察',
   createUnit: () => new Enemy({ defId: 'acadMonitor', name: '学术监察', maxHp: 17 }),
   act(actx) {
@@ -479,7 +479,7 @@ registerEnemy({
 // 玩家先手前生效=真·抗首回合爆发）；三拍循环续盾。杀掉它群体盾断供——但它血厚且常被
 // 增益/仇恨掩护。破解：单点速杀盾源，或先用持续输出磨穿盾窗。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 6, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 5, floorMin: 36, floorMax: 43 },
   id: 'shieldBearer', name: '持盾像',
   createUnit: () => new Enemy({ defId: 'shieldBearer', name: '持盾像', maxHp: 34 }),
   onSpawn(unit, enemies) {
@@ -512,7 +512,7 @@ registerEnemy({
 // ⑫ 仪典祭坛（群体增益核心）：两拍循环「祝圣（全体友军力量+2、盾+8）↔ 蓄能（自盾14）」。
 // 输出为零但每两拍让全队攻击 +2——3 个循环后多段怪每段 +6。必须优先处理，但它自盾最厚。
 registerEnemy({
-  difficulty: { base: 5, min: 4, max: 6, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 5, floorMin: 36, floorMax: 43 },
   id: 'riteAltar', name: '仪典祭坛',
   createUnit: () => new Enemy({ defId: 'riteAltar', name: '仪典祭坛', maxHp: 26 }),
   act(actx) {
@@ -536,7 +536,7 @@ registerEnemy({
 // 敌方回合开始 -1）↔ 刃舞（(6+atk)×4 四连击）」。多段流的坟墓（每段单独判闪避）、
 // DoT 流的猎物（毒/燃烧穿透闪避）。被祭坛喂力量后 8×4=32/轮。
 registerEnemy({
-  difficulty: { base: 8, min: 6, max: 9, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 8, floorMin: 36, floorMax: 43 },
   id: 'galeGolem', name: '风刃魔像',
   createUnit: () => new Enemy({ defId: 'galeGolem', name: '风刃魔像', maxHp: 20 }),
   act(actx) {
@@ -561,7 +561,7 @@ registerEnemy({
 // ⑭ 连环弩台（重装→爆发节律）：三拍循环「装填（盾10+蓄势2）→ 点射（10+蓄势×2）→
 // 齐射（(7+蓄势)×3）」。装填拍是明确预告的「下轮会痛」——读意图后的盾量分配教科书。
 registerEnemy({
-  difficulty: { base: 9, min: 7, max: 10, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 9, floorMin: 36, floorMax: 43 },
   id: 'repeaterBallista', name: '连环弩台',
   createUnit: () => new Enemy({ defId: 'repeaterBallista', name: '连环弩台', maxHp: 22 }),
   act(actx) {
@@ -594,7 +594,7 @@ registerEnemy({
 // ⑮ 装订巨蟒（开局塞大卡）：首拍向玩家牌库**顶**塞 4 张「活页」（第 2 回合起手必被
 // 污染——活页可打出：自伤4抽2，付代价清障）；自身两拍循环「缠绕 11+atk ↔ 蜕皮自愈6」。
 registerEnemy({
-  difficulty: { base: 8, min: 7, max: 10, floorMin: 36, floorMax: 43 },
+  difficulty: { base: 8, floorMin: 36, floorMax: 43 },
   id: 'binderPython', name: '装订巨蟒',
   createUnit: () => new Enemy({ defId: 'binderPython', name: '装订巨蟒', maxHp: 36 }),
   act(actx) {

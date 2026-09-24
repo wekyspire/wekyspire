@@ -12,7 +12,7 @@ import { aliveEnemies } from '../../state/battleState.js';
 // ① 固定行动序列杂鱼：攻 6 → 盾 4 循环
 registerEnemy({
   id: 'slime', name: '史莱姆',
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 1, floorMax: 14 },
+  difficulty: { base: 2, floorMin: 1, floorMax: 14 },
   createUnit: () => new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 20 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
@@ -32,7 +32,7 @@ registerEnemy({
 // 2026-09 用户改稿：旧版每两拍叠一次荆棘（越拖越痛），实质是在奖励速杀；改后荆棘只在开场
 // 上一次，长线战斗不再变本加厉——速攻的唯一优势只剩「第一拍就秒掉它」从而完全避开荆棘。
 registerEnemy({
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 1, floorMax: 16 },
+  difficulty: { base: 2, floorMin: 1, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
   createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18 }),
   act(actx) {
@@ -65,7 +65,7 @@ registerEnemy({
 // unique：每场至多一只——虚弱不衰减，双怨灵会把永久 -4 攻击叠到前期无法翻盘；
 // 血量 22→18 同步削弱（试玩反馈：前期压力过高）。
 registerEnemy({
-  difficulty: { base: 3, min: 2, max: 4, floorMin: 2, floorMax: 18 },
+  difficulty: { base: 3, floorMin: 2, floorMax: 18 },
   unique: true,
   id: 'wraith', name: '怨灵',
   createUnit: () => new Enemy({ defId: 'wraith', name: '怨灵', maxHp: 18 }),
@@ -106,7 +106,7 @@ registerSkill({
   describe: () => '抽1',
 });
 registerEnemy({
-  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
   id: 'slimelet', name: '小史莱姆',
   createUnit: () => new Enemy({ defId: 'slimelet', name: '小史莱姆', maxHp: 3 }),
   act(actx) {
@@ -140,7 +140,7 @@ registerEnemy({
 // （灼伤的轻量版，硬卡手教学）进牌库随机位，随后两拍撞击。本体脆（7 血），是
 // 章 1「塞卡/卡手」主题的入门件；与粘液（软卡手税）构成两档语言。
 registerEnemy({
-  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
   id: 'buzzbug', name: '嗡嗡虫',
   createUnit: () => new Enemy({ defId: 'buzzbug', name: '嗡嗡虫', maxHp: 7 }),
   act(actx) {
@@ -181,7 +181,7 @@ registerEnemy({
 // 绑怪生命周期的教学化口径：杀了就松手。上限实际扣减直改 player.maxHandSize
 // （战斗内有效；战后 refreshRunModifiers 从 baseStats 重算自动恢复），下限 2 不锁死。
 registerEnemy({
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'mossBall', name: '腐苔球',
   createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 14 }),
   act(actx) {
@@ -218,7 +218,7 @@ registerEnemy({
 // 「别贪刀连打」的轻教学，与静电毛球互为镜像（毛球不打它亏、蟾蜍打太狠亏）。
 // 意图实时反映膨胀伤害与自爆预告（玩家出牌后刷新意图），膨胀可见可控。
 registerEnemy({
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 2, floorMax: 16 },
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'pufferToad', name: '鼓腹蟾',
   createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 20 }),
   onBattleStart(ctx, unit) {
@@ -260,7 +260,7 @@ registerEnemy({
 // 低血高代价的「什么时候杀它」考题：早杀便宜、拖延变贵，但代价完全由玩家掌控。
 // 亡语经 combat.js 的 onDeath 钩子提交（作为致死伤害的子节点立即结算）。
 registerEnemy({
-  difficulty: { base: 1, min: 1, max: 2, floorMin: 2, floorMax: 16 },
+  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
   id: 'blastPod', name: '爆囊',
   createUnit: () => new Enemy({ defId: 'blastPod', name: '爆囊', maxHp: 9 }),
   act(actx) {
@@ -298,7 +298,7 @@ registerEnemy({
 // 检查：一拍内打不掉 26 血，就要开始面对 8/拍的持续压力（且它无减伤，随时可回头集火）。
 // 攻击 +2 落在沉眠拍末尾——苏醒拍的意图预告直接含 +2，所见即所算。
 registerEnemy({
-  difficulty: { base: 3, min: 2, max: 4, floorMin: 4, floorMax: 16 },
+  difficulty: { base: 3, floorMin: 4, floorMax: 16 },
   id: 'stoneCocoon', name: '石茧',
   createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 26 }),
   // 苏醒回合参数（用户 2026-09-11 定）：wakeDelay = 沉眠几拍才苏醒（缺省 1 = 只沉眠一拍），
@@ -336,7 +336,7 @@ registerEnemy({
 // 它不叠 buff、不爆发、不召唤，纯粹考「能不能一边稳挡一边保持输出节奏」——缩壳的回血
 // 让「纯磨血」不够，但也不需要任何爆发。它是第一章唯一适合打持久战的敌人。
 registerEnemy({
-  difficulty: { base: 3, min: 2, max: 4, floorMin: 4, floorMax: 16 },
+  difficulty: { base: 3, floorMin: 4, floorMax: 16 },
   id: 'rockSnail', name: '岩螺',
   createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 40 }),
   act(actx) {
@@ -364,7 +364,7 @@ registerEnemy({
 // 教学件——藤鞭 4+中毒1 ↔ 扎根自盾4 两拍循环；血薄（12），是「带不带解毒素」的
 // 第一道分岔题。
 registerEnemy({
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 3, floorMax: 14 },
+  difficulty: { base: 2, floorMin: 3, floorMax: 14 },
   id: 'thornWeed', name: '刺刺草',
   createUnit: () => new Enemy({ defId: 'thornWeed', name: '刺刺草', maxHp: 12 }),
   act(actx) {
@@ -388,7 +388,7 @@ registerEnemy({
 // 本场消化：战斗 zones 是 run 牌组的克隆，焚毁天然不回写）；**亡语病菌**（死亡时
 // 玩家中毒 2）——AOE 流的甜蜜点带小代价。
 registerEnemy({
-  difficulty: { base: 1, min: 1, max: 2, floorMin: 3, floorMax: 14 },
+  difficulty: { base: 1, floorMin: 3, floorMax: 14 },
   id: 'carrionBeetle', name: '腐食甲虫',
   createUnit: () => new Enemy({ defId: 'carrionBeetle', name: '腐食甲虫', maxHp: 8 }),
   act(actx) {
@@ -413,7 +413,7 @@ registerEnemy({
 // （蒸发口径：遁地给的闪避跨玩家回合仍在），现身拍是集火窗口——「转火时机」的
 // 低配教学（与第四章音叉错拍同族但更直白）。
 registerEnemy({
-  difficulty: { base: 3, min: 2, max: 4, floorMin: 5, floorMax: 16 },
+  difficulty: { base: 3, floorMin: 5, floorMax: 16 },
   id: 'diggerMole', name: '掘地鼹鼠',
   createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 14 }),
   act(actx) {
@@ -444,7 +444,7 @@ const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse']);
 // 滚雪球），玩家攻击它=提前放电（受击层数-2）。不打它越电越强、打它有泄压收益——
 // 攻防节奏抉择，与鼓腹蟾互为镜像（蟾蜍打太狠亏、毛球不打亏）。
 registerEnemy({
-  difficulty: { base: 2, min: 1, max: 3, floorMin: 4, floorMax: 12 },
+  difficulty: { base: 2, floorMin: 4, floorMax: 12 },
   id: 'staticPuff', name: '静电毛球',
   createUnit: () => new Enemy({ defId: 'staticPuff', name: '静电毛球', maxHp: 10 }),
   act(actx) {
