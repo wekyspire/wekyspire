@@ -1,9 +1,9 @@
 // 卡面图案缓存（§4 卡图链路）：技能卡插画 → 已加载 Image 的同步查询。
 // 缓存/订阅/就绪信号语义继承 ArtImageCache（与 UnitArtCache 共用实现）。
-// 解析规则（沿用旧仓库约定，2026-09-24 扩 series 键）：
-//   1. def.image（技能定义显式指定，不含扩展名，如 image:'奇迹' → assets/cards/奇迹.png）
-//   2. card.series（系列符号图：assets/cards/<series>.png——一拳一刀一盾一焰，
-//      符号优先，系列内全部卡共用）
+// 解析规则（沿用旧仓库约定，2026-09-24 扩 series 键，2026-09-22 扩等阶梯度变体）：
+//   1. def.image 的等阶变体 `${image}-${tierIndex}` → def.image（技能定义显式指定，不含扩展名）
+//   2. card.series 的等阶变体 `${series}-${tierIndex}` → card.series（系列键，系列内共用）
+//      ——等阶变体 = 同一动作、越来越强（升级较大的系列按等阶出异图）；素材缺位自动回落基础键
 //   3. 兜底 `${type}-${tierIndex}.png`（type=fire/wood…，tierIndex D=0..S=4，素材如 fire-1.png）
 //   4. 都没有 → 无卡图（牌面按无图布局）
 // 加载是异步的：get() 未命中即发起加载并先返回 null（按无图烘焙），
@@ -26,12 +26,15 @@ const DECOR_URLS = indexArtUrls(
 const TIER_ART_INDEX = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 
 export class CardArtCache extends ArtImageCache {
-  /** 该卡是否有可用素材（同步，不发起加载）：def.image → series 符号图 → type-等阶。 */
+  /** 该卡是否有可用素材（同步，不发起加载）：image变体 → image → series变体 → series → type-等阶。 */
   resolveUrl(card) {
+    const tier = TIER_ART_INDEX[card.tier] ?? 0;
     const keys = [
+      card.image ? `${card.image}-${tier}` : null,
       card.image,
+      card.series ? `${card.series}-${tier}` : null,
       card.series,
-      `${card.type ?? 'normal'}-${TIER_ART_INDEX[card.tier] ?? 0}`,
+      `${card.type ?? 'normal'}-${tier}`,
     ];
     for (const key of keys) {
       if (key && ART_URLS[key]) return ART_URLS[key];

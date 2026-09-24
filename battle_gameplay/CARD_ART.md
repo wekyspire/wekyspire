@@ -22,17 +22,26 @@
 ## 二、解析链（`src/stage/art/cardArtCache.js`）
 
 ```
-def.image  →  card.series  →  `${type}-${等阶序号}`（D=0..S=4，兜底，现无素材）
+def.image 的等阶变体 `${image}-${tier}`  →  def.image
+card.series 的等阶变体 `${series}-${tier}` →  card.series
+`${type}-${等阶序号}`（D=0..S=4，兜底，现无素材）
 ```
+
+**等阶梯度变体（2026-09-22 用户定）**：不同系列必须异图；同系列升级较大时也要异图——
+**同一动作、越来越强**。变体键 = `<基础键>-<等阶序号>`；系列内**最低在册等阶沿用基础图**，
+其余每个等阶一张变体（如 blade 系 C–S：blade-2/3/4，blade 基础图服务 C 阶）。
+素材缺位自动回落基础键，core 内容零改动。
 
 素材位 = `src/assets/cards/<key>.webp`（704×352，2:1 全幅场景；卡面 ART_RECT 176×88 cover 贴合，
 上下渐隐进卡底色 + 主题色描边）。键集合 = 注册表全卡解析键并集（2026-09-22 审计 71 活键 +
 GM 调试卡 `normal-1` 无图属预期；死键 inflame 曾误入表已清除——点火卡 series=ignite）。
+等阶普查脚本 `tmp/dump-series-tiers.mjs` → `tmp/series_tiers.json`（58 多等阶键、123 变体位）。
 
 ## 三、生产管线（本地 ComfyUI，免费可重跑）
 
 ```bash
 node tools/genCardScenes.mjs [--only key1,key2] [--count N]   # ① 逐键抽卡 → art_src/cards_scenes/<key>/cand_<i>_<seed>.png
+node tools/genCardScenes.mjs --variants [--count N]           # ①b 等阶变体批跑（读 tmp/series_tiers.json）
 python tmp/review_scenes.py [keys…]                           # ② 拼版检阅（2:1 中裁缩略图行）
 python tmp/deploy_scenes.py                                   # ③ 按 tmp/scene_picks.md 胜者 → 中裁 704×352 → webp
 ```
@@ -43,18 +52,30 @@ python tmp/deploy_scenes.py                                   # ③ 按 tmp/scen
   写 prompt 前必须读该键全部卡的中文名 + describe + 所属体系设计文档
   （`battle_gameplay/skills/*.md`）理解家族内涵，画面语义以中文卡面为准。
   审计脚本 `tmp/dump-image-keys.mjs` → `tmp/image_key_audit.txt`（键→卡全表）。
+- **防同图纪律（2026-09-22 用户试玩发现「不同系列图完全一样」后定）**：同一演员 + 紧特写口径下，
+  「骑士胸前一点小火光」式 prompt 必然收敛成同一张图（文件层面零共用也会**视觉**撞车）。
+  写 prompt 必须**先定构图轴**（机位：正面/背影/侧脸/俯视/手部微距/铠甲微距；
+  姿态：站/跪/坐/浮/掷/倒；景别：半身/全身/微距），再填内容物；
+  近义键（掌火系、咏唱系、格挡系）两两构图轴不得相同。
 - 抽卡纪律（用户定）：每键先抽 3 张，全不满意再补到 5+；评审 = 我的视觉判断，
   四要素：**风格相符 / 与 concept 相似（钢灰盔非纯黑、面甲缝、红围巾、五指）/
-  表达力（卡面尺寸下的可读性）/ 美观**；记录在 `tmp/scene_picks.md`。
+  表达力（卡面尺寸下的可读性）/ 美观**；**外加跨键异图复查**——评审后重建卡面实尺联排
+  （71 键缩到 176×88 拼版 + 感知哈希近重复对，最差对须明显可分），记录在 `tmp/scene_picks.md`。
+- 变体增强后缀：按**绝对等阶**分级（1=C 微强 … 4=S 终极爆发），跨系列同阶同强度口径；
+  安静/暗调场景（草药/面包/午睡/低语/血焰/鬼火/血藤等）单独配「更丰盈/更深沉」后缀，
+  防止「blazing bright」把冷色鬼火读成橙焰。
 - ComfyUI `127.0.0.1:8188`，qwen_image_2.1，25 步 euler，1344×768，单张约 60–90s；
   已存在的跳过（resume），`--count` 控制目标张数。
 
 ## 四、踩坑记录（场景时代实测）
 
+- **文件零共用 ≠ 视觉不撞车（最大坑）**：解析审计确认 71 键无一跨系列共用，但玩家仍看到
+  「很多不同系列图完全一样」——根因是**构图收敛**：同一演员 + 紧特写 + 小区分物，
+  「胸前微光半身像」集群（ember/flameHeal/fireChant/focusChant/airFloat…）在卡面尺寸下不可分。
+  排查姿势 = 卡面实尺联排（176×88 拼版）+ 感知哈希近重复对；修复姿势 = 构图轴先行改写，
+  不是换内容物。修复后哈希最差对从 18/256 提到 40/256。
 - **模型会漂移，prompt 对了不等于图对了**：kindling prompt 写「臂上血滴着火」，首批画成
   普通拢焰（血滴退化成红点）——评审时要按卡面语义挑候选，不是按构图美观挑。
 - **超时偶发**：单张 ~5% 超时（blade#0），resume 重跑补齐即可。
-- **近义键要互查区分度**：common/fireControl/ignite/patience 都是「掌焰」——
-  评审时须确保四键构图/姿态互不重复（正面托掌 / 侧首引焰 / 掌侧腾焰 / 俯首守血焰）。
 - 符号时代的灰卡 prompt 坍缩教训仍适用：抽象词 → 毛笔符文；写**具体物体名词**。
 - 旧符号管线（`tools/genCardArt.mjs` + `tools/cutCardArt.py`）已退役，仅存档备查。
