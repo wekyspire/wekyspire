@@ -5,7 +5,7 @@ import Player, { PLAYER_BASE_HP, PLAYER_BASE_AP } from '../core/state/player.js'
 import { createSkillRuntime } from '../core/state/skillRuntime.js';
 import {
   createRun, enterBattle, finishBattle, completeRewards, completeRoom,
-  assembleBattle, isBossFloor, advanceFloor,
+  assembleBattle, isBossFloor, advanceFloor, TOTAL_FLOORS, FLOORS_PER_CHAPTER,
 } from '../core/run/runFlow.js';
 import { chooseSkillReward, chooseRewardPack as chooseRewardPackCore } from '../core/run/rewards.js';
 import { restoreRunFromSave } from '../core/run/saveRestore.js';
@@ -98,6 +98,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     seed: save?.seed ?? seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
     route: save ? null : route,   // 读档恢复现场，不重复结算路线授予
+    // 生产版封顶第一章（2026-09-24 用户定）：11 层 Boss 打完即终局（胜利/失败）——
+    // 二章及以后的内容与数值还没到能见人的时候。dev 保持全程 44 层。
+    // totalFloors 走 core 的覆盖位：advanceFloor 的终局判定/塔楼高度/层数文案全部随之。
+    totalFloors: import.meta.env.PROD ? FLOORS_PER_CHAPTER : TOTAL_FLOORS,
   }));
   if (save) restoreRunFromSave(run, save); // 恢复原语在 core（headless 工具共用同一份）
   else {

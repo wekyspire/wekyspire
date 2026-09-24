@@ -3,11 +3,15 @@
 const props = defineProps({ ctrl: { type: Object, required: true } });
 const emit = defineEmits(['restart']);
 const run = props.ctrl.run;
+// 生产版封顶第一章（2026-09-24）：11 层 Boss 后的胜利不是登顶，文案随口径切换
+const IS_PROD = import.meta.env.PROD;
 </script>
 
 <template>
   <div class="panel">
-    <h2 :class="run.result">{{ run.result === 'victory' ? '登顶成功' : '倒在了塔中' }}</h2>
+    <h2 :class="run.result">{{
+      run.result === 'victory' ? (IS_PROD ? '第一章·完' : '登顶成功') : '倒在了塔中'
+    }}</h2>
     <p>抵达 {{ run.floor }} / {{ run.totalFloors }} 层 ｜ 金币 {{ run.player.money }} ｜ 卡组 {{ run.player.deck.length }}</p>
     <button @click="emit('restart')">再来一局</button>
   </div>
