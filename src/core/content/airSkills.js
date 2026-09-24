@@ -138,7 +138,7 @@ const easeCard = (id, name, tier, expand, { dodge = 0, draw = 0, exhaust = false
     if (draw > 0) drawCards(sctx, draw);
     return true;
   },
-  describe: () => `本场战斗咏唱容量+${expand}${dodge > 0 ? `，/effect{闪避}${dodge}` : ''}${draw > 0 ? `，抽${draw}` : ''}`,
+  describe: () => `咏唱容量+${expand}${dodge > 0 ? `，/effect{闪避}${dodge}` : ''}${draw > 0 ? `，抽${draw}` : ''}`,
   battleDescribe: () => `咏唱容量+${expand}${dodge > 0 ? `，闪避${dodge}` : ''}${draw > 0 ? `，抽${draw}` : ''}`,
 });
 easeCard('atEase', '自在', 'C', 1, { promotesTo: 'cloudWalk' });

@@ -256,8 +256,8 @@ function explosiveArtCard({ id, tier, promotesTo }) {
       if (twin) addCard(sctx, twin, { toZone: 'hand' });
       return true;
     },
-    describe: () => `/named{发现}0咏唱权重的/card{${twin}}`,
-    battleDescribe: () => `/named{发现}0咏唱权重的/card{${twin}}`,
+    describe: () => `/named{发现}/card{${twin}}，其咏唱开销置0`,
+    battleDescribe: () => `/named{发现}/card{${twin}}，其咏唱开销置0`,
   });
 }
 explosiveArtCard({ id: 'explosiveArt', tier: 'C', promotesTo: 'explosiveArtPlus' });

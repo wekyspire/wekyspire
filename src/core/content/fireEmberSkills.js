@@ -214,7 +214,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy',
     });
     return true;
   },
-  describe: () => '下次造成伤害时，每3点伤害赋予目标/effect{燃烧}1',
+  describe: () => '下次攻击每造成3伤害，赋予/effect{燃烧}1',
 }, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。

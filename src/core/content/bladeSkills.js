@@ -379,9 +379,9 @@ const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null)
     for (let i = 0; i < shards * landed; i++) addCard(sctx, 'ironShard', { index: 'random' });
     return true;
   },
-  describe: () => `群伤${damage}${shards > 0 ? `，/named{命中}：每命中1敌/named{洗入1}/card{ironShard}` : ''}`,
+  describe: () => `群伤${damage}${shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''}`,
   battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}`
-    + (shards > 0 ? `，/named{命中}：每命中1敌/named{洗入1}/card{ironShard}` : ''),
+    + (shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''),
 });
 horizontalCleave('cleave', '横劈', 'C', 7, 1, 'powerCleave');
 horizontalCleave('powerCleave', '强力劈', 'B', 10, 1, 'riftCleave');
