@@ -1,38 +1,46 @@
-// 批量生图（ComfyUI API · Qwen Image 2.1）：第一章敌人立绘，风格 = 剪影/粗轮廓/扁平/单色。
-// 用法：node tools/genEnemies.mjs [--dry] [--only id1,id2] [--out 目录]
-// 产物：art_src/enemies_qwen/<id>.png（未压缩 PNG，压缩进 src/assets 走 tools/compress_art.py）
+// 批量生图（ComfyUI API · Qwen Image 2.1）：第一章敌人立绘，风格 = 大平面色块厚涂。
+// 用法：node tools/genEnemies.mjs [--dry] [--only id1,id2] [--out 目录] [--force]
+// 产物：<out>/<id>.png（未压缩 PNG，压缩进 src/assets 走 tools/compress_art.py）
 import fs from 'node:fs';
 import path from 'node:path';
 
 const COMFY = 'http://127.0.0.1:8188';
-const OUT_DIR = path.resolve('art_src/enemies_qwen');
+const OUT_DIR = path.resolve(
+  (process.argv.find(a => a.startsWith('--out=')) || '').split('=')[1] || 'art_src/enemies_qwen');
 const DRY = process.argv.includes('--dry');
+const FORCE = process.argv.includes('--force');
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[1]?.split(',') || null;
 
-// 风格前缀：厚涂油彩/粗笔触/色彩层次/黑色背景/光影体积——与用户手画控制点
-// （腐苔球/嗡嗡虫/沼泽伏击者/骑士）同族。不是剪影，不是扁平，是「有体积的色块」。
-const STYLE = 'thick oil painting style, visible brush strokes, rich color layers, volumetric lighting, painterly texture, black background, character portrait, gouache illustration, chunky color blocks, expressive brushwork, dramatic chiaroscuro, hand-painted game art style, not flat, not silhouette, full color rendering with depth and form';
+// 风格锚点 = 用户手画控制点（art_src/角色/：沼泽伏击者/腐苔球/嗡嗡虫/骑士_头像）。
+// 真锚点口径：柔和厚涂但**完成度低**——粗笔触、边缘草莽未收；色彩**灰暗低饱和**
+// （橄榄/棕灰/墨青），主体拆成大块多边形色面（低多边形感），平光无戏剧光影，
+// 唯一高亮是眼睛/舌头这类小点缀；黑背景，主体在画框中占比偏小。
+// 纪律（沿袭遗物 PROMPT_TEMPLATE 实测结论）：完成度的第一驱动是描述里的高频名词，
+// 不是风格措辞——逐怪描述只写「是什么 + 大致轮廓 + 主色/主材质 + 一个点缀」，
+// 禁写纹理/裂纹/斑点/笔触这类诱发逐一刻画的名词。
+const STYLE = 'rough gouache sketch, soft thick paint, low completion, muted desaturated dark colors, large flat polygonal facet color planes, matte flat lighting, coarse visible brush strokes, simplified geometric shapes, minimal detail, dark moody palette, plain pure white background, no shadow, single subject filling the frame, stylized game creature art, unfinished sketchy edges, nothing else in frame';
+const NEGATIVE = 'detailed, intricate, fine texture, individual hairs, individual spines, realistic fur, photorealistic, photographic, 3d render, smooth airbrush gradients, bright saturated colors, vivid, neon, clean vector, glossy, ornate, complex pattern, many small elements, high frequency detail, black background, gradient background, colored background, environment, ground shadow, drop shadow, atmospheric fog, scenery, anime, cartoon';
 
-// 敌人 prompt 表：id → 形态 + 色彩描述（厚涂该是什么样）
+// 敌人 prompt 表：id → 是什么 + 大轮廓 + 主色/主材质 + 一个点缀（别写全，留白）
 const ENEMIES = [
-  { id: 'slime', prompt: 'a round blob slime creature, glossy dark blue-black body with subtle purple highlights, two glowing white oval eyes, amorphous teardrop shape, wet sheen' },
-  { id: 'hedgehog', prompt: 'a small round hedgehog, brown spiky back with cream belly, four short legs, two black bead eyes, textured fur spikes' },
-  { id: 'wraith', prompt: 'a floating ghost wraith, tattered dark gray cloak with ethereal blue-green wisps, no legs, two glowing pale eyes in shadow, translucent edges' },
-  { id: 'slimelet', prompt: 'a tiny blob slime, very small round shape, glossy dark body with blue highlights, two small white dot eyes' },
-  { id: 'buzzbug', prompt: 'a round insect bug, gray-blue translucent wings with visible veins, dark body, two large purple iridescent compound eyes, small antennae' },
-  { id: 'mossBall', prompt: 'a spherical moss ball creature, tangled brown vines with patches of green moss, one glowing green eye peeking through, earthy texture' },
-  { id: 'pufferToad', prompt: 'a round toad frog, inflated belly with mottled green-brown skin, wide mouth, two yellow eyes on top, warty texture' },
-  { id: 'blastPod', prompt: 'a round seed pod creature, cracked brown shell showing orange glow inside, small stem on top, two white dot eyes, plant texture' },
-  { id: 'stoneCocoon', prompt: 'an oval cocoon shape, wrapped in gray stone texture with cracks, small opening showing two pale eyes, rock surface' },
-  { id: 'rockSnail', prompt: 'a snail with large spiral shell, heavy gray-brown stone shell with green moss patches, pale body, two white dot eyes on stalks' },
-  { id: 'thornWeed', prompt: 'a plant weed creature, spiky dark green leaves with purple thorns, root-like base, two small red eyes in center, organic texture' },
-  { id: 'carrionBeetle', prompt: 'a round beetle insect, hard dark brown shell with oily sheen, six legs, two small black eyes, segmented body' },
-  { id: 'diggerMole', prompt: 'a mole creature, large metallic-gray front claws, dark brown fur, pointed snout, two small black eyes, earthy texture' },
-  { id: 'staticPuff', prompt: 'a round fluffy ball creature, pale yellow-white fur with electric blue spark shapes crackling around it, two small black eyes' },
+  { id: 'slime', prompt: 'a small round dark slime blob, blue-black, two white oval eyes' },
+  { id: 'hedgehog', prompt: 'a small round hedgehog, dark brown jagged back, cream belly, black bead eyes' },
+  { id: 'wraith', prompt: 'a floating ghost in a dark gray tattered cloak, two pale glowing eyes, a few teal wisps' },
+  { id: 'slimelet', prompt: 'a tiny dark slime blob, blue-black, two white dot eyes' },
+  { id: 'buzzbug', prompt: 'a small dark fly, two big pale translucent wings, big iridescent purple eyes, fuzzy dark body' },
+  { id: 'mossBall', prompt: 'a dark ball of tangled roots and moss, brown-gray, one small glowing green eye' },
+  { id: 'pufferToad', prompt: 'a round inflated toad, mottled olive-green, wide mouth, two yellow eyes' },
+  { id: 'blastPod', prompt: 'a round brown seed pod with a warm orange glowing core, two white dot eyes' },
+  { id: 'stoneCocoon', prompt: 'a gray stone cocoon oval, two pale eyes in a small opening' },
+  { id: 'rockSnail', prompt: 'a snail with a heavy gray spiral shell, mossy patches, pale body, two white dot eyes' },
+  { id: 'thornWeed', prompt: 'a dark green spiky weed plant, purple thorns, two small red eyes' },
+  { id: 'carrionBeetle', prompt: 'a round dark brown beetle, oily sheen, small black eyes' },
+  { id: 'diggerMole', prompt: 'a dark brown mole with big gray front claws, pointed snout, small black eyes' },
+  { id: 'staticPuff', prompt: 'a pale yellow fluffy ball, blue sparks, small black eyes' },
   // 精英
-  { id: 'snowwolf', prompt: 'a large wolf, thick white-gray fur with blue shadows, pointed ears, snarling mouth showing teeth, four legs, two pale blue eyes, majestic and menacing' },
-  { id: 'swampAmbusher', prompt: 'a crocodile ambush predator, mottled green-brown scaly skin with moss patches, long snout, half-submerged in murky water, two red eyes, textured scales' },
-  { id: 'rockPangolin', prompt: 'a pangolin armadillo, overlapping gray stone-like scale armor with brown edges, curled tail, two small black eyes, rocky texture' },
+  { id: 'snowwolf', prompt: 'a large white-gray wolf with blue shadows, pale blue eyes, snarling' },
+  { id: 'swampAmbusher', prompt: 'a low-slung lurking crocodile, mottled olive and dark teal, long snout, small red eyes' },
+  { id: 'rockPangolin', prompt: 'a curled pangolin with gray stone scale armor, brown edges, small black eyes' },
 ];
 
 async function queuePrompt(promptText, seed) {
@@ -48,7 +56,7 @@ async function queuePrompt(promptText, seed) {
       inputs: {
         clip: ['453', 0],
         prompt: `${promptText}, ${STYLE}`,
-        negative_prompt: 'flat, silhouette, solid black fill, white background, minimal detail, abstract shape, no shading, no texture, graphic novel style, photographic, 3d render, anime, cartoon',
+        negative_prompt: NEGATIVE,
         resolution: 1024,
       },
     },
@@ -120,7 +128,7 @@ async function main() {
   console.log(`目标 ${targets.length} 只敌人，输出到 ${OUT_DIR}`);
   for (const e of targets) {
     const outPath = path.join(OUT_DIR, `${e.id}.png`);
-    if (fs.existsSync(outPath)) { console.log(`跳过 ${e.id}（已存在）`); continue; }
+    if (!FORCE && fs.existsSync(outPath)) { console.log(`跳过 ${e.id}（已存在，--force 覆盖）`); continue; }
     const seed = Math.floor(Math.random() * 1e15);
     console.log(`生成 ${e.id}（seed ${seed}）…`);
     if (DRY) { console.log(`  prompt: ${e.prompt}, ${STYLE}`); continue; }

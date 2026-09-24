@@ -7,6 +7,14 @@
 > **2026-09-22 进展**：P0 章1 全部 16 只就位——mossBall/buzzbug/swampAmbusher 为手绘直用，
 > 其余 13 只（含 slimelet/hedgehog）由 seedream i2i 以 4 张手绘图为风格参考批量生成
 > （提示词模板见 `tools/seedream/manifest.json`：风格锚定句 + 一句话形态 + 白底无影无文字）。
+>
+> **2026-09-24 重做（seedream 版废弃）**：seedream 批精细度过高、与手绘风格不符，全部重生成。
+> 新管线 = 本地 ComfyUI（Qwen Image 2.1，`tools/genEnemies.mjs`）→ 抠图裁边（`tools/cutUnitArt.py`，
+> 边界洪水填充去白底 + 裁 alpha 包围盒）→ `compress_art.py --only stage`。
+> 风格口径（对齐 4 张手绘锚点，沿袭遗物 `PROMPT_TEMPLATE.md` 方法论）：描述只写
+> 「是什么 + 大致轮廓 + 主色 + 一个点缀」（完成度由描述留白驱动，不由风格措辞）；
+> 灰暗低饱和、大色面低完成度厚涂、白底无影。slime 同步换上手绘版（`art_src/角色/史莱姆.png`），
+> mossBall/buzzbug/swampAmbusher 沿用原手绘立牌不变。
 
 ## 0. 通用规格（对齐 STAGE_DESIGN §立牌）
 
