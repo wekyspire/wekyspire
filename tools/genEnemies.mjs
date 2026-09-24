@@ -9,29 +9,30 @@ const OUT_DIR = path.resolve('art_src/enemies_qwen');
 const DRY = process.argv.includes('--dry');
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[1]?.split(',') || null;
 
-// 风格前缀：剪影/粗轮廓/扁平/单色/粗糙笔刷——与 slime.webp 同族
-const STYLE = 'silhouette character design, thick rough brush stroke outline, flat solid black fill, single color, minimal detail, abstract shape, white background, no shading, no texture, graphic novel style, bold simple form, only eyes visible as white dots';
+// 风格前缀：厚涂油彩/粗笔触/色彩层次/黑色背景/光影体积——与用户手画控制点
+// （腐苔球/嗡嗡虫/沼泽伏击者/骑士）同族。不是剪影，不是扁平，是「有体积的色块」。
+const STYLE = 'thick oil painting style, visible brush strokes, rich color layers, volumetric lighting, painterly texture, black background, character portrait, gouache illustration, chunky color blocks, expressive brushwork, dramatic chiaroscuro, hand-painted game art style, not flat, not silhouette, full color rendering with depth and form';
 
-// 敌人 prompt 表：id → 形态描述（剪影该是什么样）
+// 敌人 prompt 表：id → 形态 + 色彩描述（厚涂该是什么样）
 const ENEMIES = [
-  { id: 'slime', prompt: 'a round blob slime creature, amorphous teardrop shape, two white oval eyes' },
-  { id: 'hedgehog', prompt: 'a small round hedgehog, spiky back silhouette, four short legs, two white dot eyes' },
-  { id: 'wraith', prompt: 'a floating ghost wraith, tattered cloak shape, no legs, two white dot eyes in shadow' },
-  { id: 'slimelet', prompt: 'a tiny blob slime, very small round shape, two white dot eyes' },
-  { id: 'buzzbug', prompt: 'a round insect bug, two wing shapes on back, small antennae, two white dot eyes' },
-  { id: 'mossBall', prompt: 'a spherical moss ball creature, fuzzy texture silhouette, two white dot eyes' },
-  { id: 'pufferToad', prompt: 'a round toad frog, inflated belly shape, wide mouth silhouette, two white dot eyes on top' },
-  { id: 'blastPod', prompt: 'a round seed pod creature, cracked shell showing glow inside, small stem on top, two white dot eyes' },
-  { id: 'stoneCocoon', prompt: 'an oval cocoon shape, wrapped in stone texture silhouette, small opening showing eyes' },
-  { id: 'rockSnail', prompt: 'a snail with large spiral shell, heavy stone shell silhouette, two white dot eyes on stalks' },
-  { id: 'thornWeed', prompt: 'a plant weed creature, spiky leaf silhouette, root-like base, two white dot eyes in center' },
-  { id: 'carrionBeetle', prompt: 'a round beetle insect, hard shell back silhouette, six legs, two white dot eyes' },
-  { id: 'diggerMole', prompt: 'a mole creature, large front claws silhouette, pointed snout, two white dot eyes' },
-  { id: 'staticPuff', prompt: 'a round fluffy ball creature, electric spark shapes around it, two white dot eyes' },
+  { id: 'slime', prompt: 'a round blob slime creature, glossy dark blue-black body with subtle purple highlights, two glowing white oval eyes, amorphous teardrop shape, wet sheen' },
+  { id: 'hedgehog', prompt: 'a small round hedgehog, brown spiky back with cream belly, four short legs, two black bead eyes, textured fur spikes' },
+  { id: 'wraith', prompt: 'a floating ghost wraith, tattered dark gray cloak with ethereal blue-green wisps, no legs, two glowing pale eyes in shadow, translucent edges' },
+  { id: 'slimelet', prompt: 'a tiny blob slime, very small round shape, glossy dark body with blue highlights, two small white dot eyes' },
+  { id: 'buzzbug', prompt: 'a round insect bug, gray-blue translucent wings with visible veins, dark body, two large purple iridescent compound eyes, small antennae' },
+  { id: 'mossBall', prompt: 'a spherical moss ball creature, tangled brown vines with patches of green moss, one glowing green eye peeking through, earthy texture' },
+  { id: 'pufferToad', prompt: 'a round toad frog, inflated belly with mottled green-brown skin, wide mouth, two yellow eyes on top, warty texture' },
+  { id: 'blastPod', prompt: 'a round seed pod creature, cracked brown shell showing orange glow inside, small stem on top, two white dot eyes, plant texture' },
+  { id: 'stoneCocoon', prompt: 'an oval cocoon shape, wrapped in gray stone texture with cracks, small opening showing two pale eyes, rock surface' },
+  { id: 'rockSnail', prompt: 'a snail with large spiral shell, heavy gray-brown stone shell with green moss patches, pale body, two white dot eyes on stalks' },
+  { id: 'thornWeed', prompt: 'a plant weed creature, spiky dark green leaves with purple thorns, root-like base, two small red eyes in center, organic texture' },
+  { id: 'carrionBeetle', prompt: 'a round beetle insect, hard dark brown shell with oily sheen, six legs, two small black eyes, segmented body' },
+  { id: 'diggerMole', prompt: 'a mole creature, large metallic-gray front claws, dark brown fur, pointed snout, two small black eyes, earthy texture' },
+  { id: 'staticPuff', prompt: 'a round fluffy ball creature, pale yellow-white fur with electric blue spark shapes crackling around it, two small black eyes' },
   // 精英
-  { id: 'snowwolf', prompt: 'a wolf silhouette, pointed ears, snarling mouth, four legs, two white dot eyes, larger size' },
-  { id: 'swampAmbusher', prompt: 'a crocodile ambush predator, long snout silhouette, half-submerged shape, two white dot eyes' },
-  { id: 'rockPangolin', prompt: 'a pangolin armadillo, overlapping scale armor silhouette, curled tail, two white dot eyes' },
+  { id: 'snowwolf', prompt: 'a large wolf, thick white-gray fur with blue shadows, pointed ears, snarling mouth showing teeth, four legs, two pale blue eyes, majestic and menacing' },
+  { id: 'swampAmbusher', prompt: 'a crocodile ambush predator, mottled green-brown scaly skin with moss patches, long snout, half-submerged in murky water, two red eyes, textured scales' },
+  { id: 'rockPangolin', prompt: 'a pangolin armadillo, overlapping gray stone-like scale armor with brown edges, curled tail, two small black eyes, rocky texture' },
 ];
 
 async function queuePrompt(promptText, seed) {
@@ -47,7 +48,7 @@ async function queuePrompt(promptText, seed) {
       inputs: {
         clip: ['453', 0],
         prompt: `${promptText}, ${STYLE}`,
-        negative_prompt: 'detailed, realistic, textured, shaded, gradient, colorful, complex, intricate, photographic, 3d render',
+        negative_prompt: 'flat, silhouette, solid black fill, white background, minimal detail, abstract shape, no shading, no texture, graphic novel style, photographic, 3d render, anime, cartoon',
         resolution: 1024,
       },
     },
