@@ -313,14 +313,20 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
     }
     // ②b 火主近旁光（挂单位 = 跟随，不进 lighting.group ⇒ update 不管它，强度自由补间）：
     //    爆发即亮的亮橙黄，随后颜色沉向血红、强度再抬一档——「亮橙黄 → 红」两段过渡，
-    //    把 Boss 立牌与近旁地面从暗场里托出来
-    const bossLight = new THREE.PointLight(0xffc266, 0, H * 6.5, 1.8);
-    bossLight.position.set(0, H * 0.55, H * 0.3);
-    unit.add(bossLight);
-    onStageDispose?.(() => { unit.remove(bossLight); bossLight.dispose?.(); });
-    jobs.push(c.tweenRaw(bossLight, { intensity: 3400 }, { durationMs: 700, delayMs: 100, ease: 'power2.out' }));
-    jobs.push(c.tweenRaw(bossLight.color, { r: 1.0, g: 0.2, b: 0.06 }, { durationMs: 2600, delayMs: 1400 }));
-    jobs.push(c.tweenRaw(bossLight, { intensity: 4600 }, { durationMs: 2600, delayMs: 1400 }));
+    //    把 Boss 立牌与近旁地面从暗场里托出来。
+    //    灯从舞台光池借（light:fx0，2026-09-24 改）：演出中途 new + add 灯会触发全场景
+    //    着色器重编译（实测 1.2s 冻帧）；池灯入场即在场景里，重挂到单位不触发重编译
+    const bossLight = cast.get('light:fx0');
+    if (bossLight) {
+      bossLight.color.set(0xffc266);
+      bossLight.distance = H * 6.5;
+      bossLight.position.set(0, H * 0.55, H * 0.3);
+      unit.add(bossLight);
+      onStageDispose?.(() => { bossLight.intensity = 0; unit.remove(bossLight); });
+      jobs.push(c.tweenRaw(bossLight, { intensity: 3400 }, { durationMs: 700, delayMs: 100, ease: 'power2.out' }));
+      jobs.push(c.tweenRaw(bossLight.color, { r: 1.0, g: 0.2, b: 0.06 }, { durationMs: 2600, delayMs: 1400 }));
+      jobs.push(c.tweenRaw(bossLight, { intensity: 4600 }, { durationMs: 2600, delayMs: 1400 }));
+    }
     // ③ 焚化分轨（族单例挂 modifier）：布易燃——先黑、蚀得深；木后裂——只啃表皮。
     //    每族两拍（uChar 烧黑 → uBurn 侵蚀）各带自己的 delay，错峰推进而非串行到底。
     //    burnTo 口径：前沿 = uBurn×1.35 − 0.35·hash ⇒ 0.4 ≈ 啃掉四成、留六成骨架；

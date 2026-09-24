@@ -199,19 +199,26 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
   }
 
   // —— 常驻（挂舞台寿命）：怒气红光 + 环身余烬 + 低频电弧 + 结构光压暗 ——
-  const rageLight = new THREE.PointLight(0xff4a34, 0, H * 5, 1.8);
-  rageLight.position.set(0, H * 0.55, H * 0.25);
-  unit.add(rageLight);
-  onStageDispose?.(() => { unit.remove(rageLight); rageLight.dispose?.(); });
+  // 红光从舞台光池借（light:fx0）：演出中途 add 灯会触发全场景着色器重编译
+  // （实测 1.2s 冻帧，09-24）；池灯入场即在场景里，这里只挪位/换色/推强度
+  const rageLight = cast.get('light:fx0');
+  if (rageLight) {
+    rageLight.color.set(0xff4a34);
+    rageLight.distance = H * 5;
+    rageLight.position.set(0, H * 0.55, H * 0.25);
+    unit.add(rageLight);   // 重挂不改变场景灯数 → 不重编译
+    onStageDispose?.(() => { rageLight.intensity = 0; unit.remove(rageLight); });
+  }
   const aura = particles.spawnEmitter(ux, uy + H * 0.08, {
     rate: 0, radius: H * 0.42, color: 0xd93a2a, speed: 4.5, ttl: 2.2, size: 1.4,
     gravity: 3.5, zJitter: H * 0.3, z: uz,
   });
   if (aura) onStageDispose?.(() => aura.stop());
   (runScript ?? ((body) => ctx.spawn(body)))(async (c) => {
-    const jobs = [
-      c.tweenRaw(rageLight, { intensity: 1500 }, { durationMs: 900, ease: 'power2.out' }),
-    ];
+    const jobs = [];
+    if (rageLight) {
+      jobs.push(c.tweenRaw(rageLight, { intensity: 1500 }, { durationMs: 900, ease: 'power2.out' }));
+    }
     if (aura) jobs.push(c.tweenRaw(aura, { rate: 9 }, { durationMs: 1400 }));
     const mood = cast.get('light:mood');
     if (mood) jobs.push(c.tweenRaw(mood, { dim: mood.dim * 0.78 }, { durationMs: 1800, delayMs: 200 }));
@@ -225,7 +232,9 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
     }
   });
 
-  // 演出机位退场：还给默认战斗镜头（常驻只有光与怒气，不霸占机位）
+  // 演出机位退场：先补间飞回基准机位（flyHome 连 fov 一起飞），再弹栈——
+  // 直接 pop 会瞬时硬切 63u + 4.8°（用户报「动画结束后相机弹回原位」的病灶，09-24 修）
+  await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('kardasP2');
   unit.restoreColor?.();
 }

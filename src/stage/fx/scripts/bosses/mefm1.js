@@ -103,10 +103,16 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
   });
 
   // —— 告警红灯（跟随点光，故障段正弦扫射；停机段熄灭；点火段换橙色熔炉光起燃）——
-  const alarm = new THREE.PointLight(0xff3a3a, 0, H * 5, 1.8);
-  alarm.position.set(0, H * 0.6, H * 0.3);
-  unit.add(alarm);
-  onStageDispose?.(() => { unit.remove(alarm); alarm.dispose?.(); });
+  // 从舞台光池借（light:fx1）：演出中途 add 灯 = 全场景着色器重编译（实测 1.2s 冻帧，
+  // 09-24）；池灯入场即在场景里，这里只挪位/换色/推强度（重挂到单位不触发重编译）
+  const alarm = cast.get('light:fx1');
+  if (alarm) {
+    alarm.color.set(0xff3a3a);
+    alarm.distance = H * 5;
+    alarm.position.set(0, H * 0.6, H * 0.3);
+    unit.add(alarm);
+    onStageDispose?.(() => { alarm.intensity = 0; unit.remove(alarm); });
+  }
 
   // —— ① 故障：阶梯抽搐 + 红蓝告警闪 + 电火花 + 微震荡连击 ——
   let step = -1;
@@ -124,7 +130,7 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
         );
         unit.flash?.(Math.random() < 0.5 ? 0x9ecbff : 0xff5a5a);
       }
-      alarm.intensity = 520 + 420 * Math.sin(sec * Math.PI * 2 * 2.2);
+      if (alarm) alarm.intensity = 520 + 420 * Math.sin(sec * Math.PI * 2 * 2.2);
       if (Math.random() < 0.09) shake.impulse(0.5);
       if (Math.random() < 0.06) burstSparks(particles, ux, uy, uz, H, 6);
     },
@@ -136,7 +142,7 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
       durationMs: T.STALL, ease: 'power2.in',
       onUpdate: (t) => unit.scale.set(s * (0.97 - 0.05 * t), s * (0.97 - 0.05 * t), 1),
     }),
-    ctx.tweenRaw(alarm, { intensity: 0 }, { durationMs: T.STALL, ease: 'power2.in' }),
+    alarm ? ctx.tweenRaw(alarm, { intensity: 0 }, { durationMs: T.STALL, ease: 'power2.in' }) : null,
   ]);
   // 一粒白火花慢慢落下去（「灯灭了」的那口气）
   particles.spawnSprite(ux + H * 0.2, uy + H * 0.55, {
@@ -172,11 +178,11 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
       // 弹性回胀：过冲 1.18 → 收回 1.03（故障缩掉的都撑回来，常驻涨一档）
       const k = 1 + 0.24 * Math.sin(t * Math.PI * 0.78) * (1 - t * 0.35);
       unit.scale.set(s * (0.92 + 0.11 * t) * k, s * (0.92 + 0.11 * t) * k, 1);
-      alarm.intensity = 2400 * Math.min(1, t * 2.2);   // 告警灯变熔炉光
+      if (alarm) alarm.intensity = 2400 * Math.min(1, t * 2.2);   // 告警灯变熔炉光
     },
   });
   unit.scale.set(s * 1.03, s * 1.03, 1);
-  alarm.color.set(0xff8a4a);
+  if (alarm) alarm.color.set(0xff8a4a);
 
   // —— 常驻（挂舞台寿命）：三路排焰错峰开喷 + 火光乘子 + 低频电火花 ——
   const VENTS = [
@@ -209,7 +215,8 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
     }
   });
 
-  // 演出机位退场
+  // 演出机位退场：先补间飞回基准（flyHome 连 fov），再弹栈——瞬时硬切是病灶（09-24 修）
+  await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('mefm1P2');
   unit.restoreColor?.();
 }

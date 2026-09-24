@@ -119,7 +119,9 @@ export class CameraDirector {
     });
   }
 
-  /** 回基准机位（补间版 restoreBaseCamera——舞台退场的收尾运镜）。 */
+  /** 回基准机位（补间版 restoreBaseCamera——舞台退场的收尾运镜）。fov 一并飞回：
+   *  长焦对抗机位（duelPose 压过 fov）若只飞位不飞焦，弹栈的 restoreBaseCamera 仍会
+   *  瞬切视场角（2026-09-24 随 kardas 收尾硬切一并修）。 */
   flyHome(opts = {}) {
     const base = this._sm.cameraBase;
     if (!base) return Promise.resolve(false);
@@ -127,7 +129,7 @@ export class CameraDirector {
     const pos = base.position;
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(base.quaternion);
     const look = pos.clone().add(dir.multiplyScalar(pos.length()));
-    return this.flyTo({ position: pos, lookAt: look }, opts);
+    return this.flyTo({ position: pos, lookAt: look, fov: base.fov ?? this._sm.camera.fov }, opts);
   }
 
   // ---- 叠加偏移通道 ----

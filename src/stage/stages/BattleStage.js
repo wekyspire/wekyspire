@@ -275,6 +275,20 @@ export class BattleStage {
       }
     }
 
+    // Boss 演出光池（light:fx0 / light:fx1，2026-09-24）：**入场即挂在场景里、强度 0**。
+    // 为什么必须是池：演出中途 new PointLight + add = 前向渲染器重编译全部受光材质
+    // （PCG 房实测 1.2s 主线程长任务，画面冻住、收尾弹栈的机位硬切全部被吞进冻结里
+    // ——09-24「卡达斯转段相机跃变」的根因）。剧本一律 `cast.get('light:fxN')` 借灯，
+    // 只推强度/换色/挪位（重挂到单位不改变场景灯数，不触发重编译）。
+    this._fxLightPool = [];
+    for (let i = 0; i < 2; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 40, 1.8);
+      l.name = `fxPool${i}`;
+      this.scene.add(l);
+      this._fxLightPool.push(l);
+      this._cast.register(`light:fx${i}`, l);
+    }
+
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
     this._bubbles = new BubbleLayer();
     this.uiScene.add(this._bubbles);
