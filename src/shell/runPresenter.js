@@ -19,14 +19,19 @@ const VISUALS = {
 
 export function createRunPresenter() {
   let queue = [];
+  let unitQueue = [];
   return {
     /** core 声明一次获得物特写意图（排队；不立即播）。 */
     showcase(intent) { if (intent) queue.push(intent); },
+    /** core 声明单位演出指令（2026-09-25：事件驱动房间单位移动/形态；排队同 showcase）。 */
+    unitCommand(cmd) { if (cmd) unitQueue.push(cmd); },
     /** 取走全部待播意图（Shell 在揭幕之后调）。 */
     drain() { return queue.splice(0); },
+    /** 取走全部单位指令（与 drain 同时机）。 */
+    drainUnitCommands() { return unitQueue.splice(0); },
     /** 丢弃待播意图（换局/异常路径）。 */
-    clear() { queue.length = 0; },
-    get pending() { return queue.length; },
+    clear() { queue.length = 0; unitQueue.length = 0; },
+    get pending() { return queue.length + unitQueue.length; },
   };
 }
 

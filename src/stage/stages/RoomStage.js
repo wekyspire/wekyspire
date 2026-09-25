@@ -37,6 +37,7 @@ import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { bakeAutoLine } from '../objects/textBakers.js';
 import { sharedUnitArtCache } from '../art/unitArt.js';
+import { createRoomUnits } from './roomUnits.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { Cast } from '../fx/cast.js';
 import { createNotifyHub } from '../fx/notify.js';
@@ -67,7 +68,7 @@ export class RoomStage {
    * 与 BattleStage 同律：**自己建 Picker**（App.vue 只给 mapStage 注入输入通道，
    * 战斗/房间舞台各自持有自己的拾取器）；attachInput 保留给测试/外部覆盖。
    */
-  constructor({ recipe = 'casino', seed = 'room', stageManager = null, snap = null, bakeLabel = null, unitArt = null, bus = null } = {}) {
+  constructor({ recipe = 'casino', seed = 'room', stageManager = null, snap = null, bakeLabel = null, unitArt = null, units = null, bus = null } = {}) {
     this.name = 'room';
     this.recipe = recipe;
     this.scene = new THREE.Scene();
@@ -125,6 +126,15 @@ export class RoomStage {
     // ---- 机器 rig + 头顶浮标（可点：浮标比机器大得多，远景也点得中）----
     this._rigs = new Map();      // name -> rig
     this._markers = [];          // { name, entry, marker(箭头浮标), hover }
+
+    // ---- 房间活物（用户 2026-09-25 定）：骑士常驻立牌（无血条）+ 瑞米在场游荡 ----
+    // 单位指令通道（后端驱动）：core 事件 → presenter → runController → roomUnitCommand，
+    // 与 cutscene 的 unit 步骤共用（见 stages/roomUnits.js 头注）。
+    this._roomUnits = createRoomUnits({
+      scene: this.scene,
+      unitArt: unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null),
+      remi: !!units?.remi,
+    });
     // ---- 机器模块（machines/：每台机器的 rig/取景/面板/拾取/演出/义务门都归它的模块）----
     // RoomStage 只做通用舞台机制；加新机器 = machines/index.js 登记一行。
     // ctx 全部箭头晚绑定（与 runController 拆域同律）：模块构造时舞台可能还没就位（无 picker/无相机）。
@@ -188,6 +198,8 @@ export class RoomStage {
     // 头像都是空圆」（用户 2026-09-13 报赌博层头像失踪）。素材通常已预载就绪，先挂一次；
     // 未就绪则由 addOnLoad 回调补挂（水晶/金币的晚到补挂走 PlayerStatusObject 自己的订阅）。
     this._unsubArt = this._unitArt?.addOnLoad(() => this._applyAvatar());
+    // 房间单位立牌的素材晚到补挂（骑士/瑞米/未来姿势图）
+    this._unsubUnitArt = this._unitArt?.addOnLoad(() => this._roomUnits?.refreshArt());
     this._applyAvatar();
     // 卡图晚到重烘（与战场/塔楼层同语言）：房间面板（训练四选一/种子包）与全屏选卡的
     // 候选卡都不在卡组里、没有战斗预热，首拍常是无图占位——不订阅就永远空白
@@ -222,6 +234,13 @@ export class RoomStage {
   // ================= 对外 API（与 MapStage 同名同义，宿主代码可共用）=================
 
   setPanelIntentHandler(fn) { this._onIntent = fn; }
+
+  /**
+   * 通用单位指令（后端驱动/cutscene 共用）：{unit, op:'moveTo'|'pose'|'face'|'wander', ...}。
+   * 描述符可序列化（直播回放可直接重放）；返回 Promise（moveTo 等到达）。
+   */
+  roomUnitCommand(cmd) { return this._roomUnits?.command(cmd) ?? Promise.resolve(); }
+  get roomUnitBusy() { return this._roomUnits?.busy ?? false; }
 
   /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
   setRunSequencer(seq) { this._runSequencer = seq ?? null; }
@@ -455,6 +474,10 @@ export class RoomStage {
     this.onExit();
     this._unsubArt?.();
     this._unsubArt = null;
+    this._unsubUnitArt?.();
+    this._unsubUnitArt = null;
+    this._roomUnits?.dispose();
+    this._roomUnits = null;
     this._unsubCardArt?.();
     this._unsubCardArt = null;
     this._composer?.dispose();
@@ -487,6 +510,9 @@ export class RoomStage {
   fxServices() {
     return {
       cast: this._cast,
+      // 单位指令（cutscene 'unit' 步骤走这里；与 runController.roomUnitCommand 同一条通道）
+      unitCommand: (cmd) => this.roomUnitCommand(cmd),
+      unitBusy: () => this.roomUnitBusy,
       particles: null,
       shake: null,
       vignette: null,
@@ -862,6 +888,7 @@ export class RoomStage {
     }
     // 各机器的帧驱动（恶魔相位机 / 安慰奖 billboard 面向相机 + 浮动）
     for (const m of this._machines) m.tick?.(dt);
+    this._roomUnits?.tick(dt, this._sm?.camera ?? null);
     // 「继续前进」的明度：获得演出/全屏选择界面是**模态覆盖层**，期间这枚常驻按钮必须明显不可用。
     // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点
     // （用户 2026-09-13 报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /

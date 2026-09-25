@@ -223,6 +223,26 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             emit(FINISH_EVENT, { id });
           },
         };
+      case 'unit':
+        return {
+          durationMs: 20000, // 单位跳跳移动的多跳串联上限（保险丝）
+          async start({ id, emit }) {
+            const services = getFxServices?.() ?? null;
+            const cmds = Array.isArray(step.cmds) ? step.cmds : (step.cmd ? [step.cmd] : []);
+            if (!services?.unitCommand || !cmds.length) {
+              if (cmds.length) console.warn(`[cutscene/unit] 无活动房间舞台或无指令，静默收拍（${JSON.stringify(cmds[0]).slice(0, 60)}）`);
+              emit(FINISH_EVENT, { id });
+              return;
+            }
+            try {
+              for (const cmd of cmds) {
+                const p = services.unitCommand(cmd);
+                if (!step.fireAndForget) await p;   // moveTo 等到达（描述符承诺必达，打断也 resolve）
+              }
+            } catch { /* 演出异常不拦剧本流 */ }
+            emit(FINISH_EVENT, { id });
+          },
+        };
       default:
         return null; // 未知 step 类型静默跳过（前向兼容：先写剧本、后补执行器也不崩）
     }

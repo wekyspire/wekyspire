@@ -124,3 +124,15 @@ export function setFlag(ctx, key, value = true) {
 }
 
 export const hasFlag = (run, key) => !!(run.eventFlags ?? {})[key];
+
+/**
+ * 单位演出指令（2026-09-25）：事件驱动房间单位（骑士/瑞米/未来 NPC）的移动与形态。
+ * 指令描述符原样上行（{unit, op:'moveTo'|'pose'|'face'|'wander', ...}，可序列化，
+ * 直播回放直接重放）；headless 无表现层时是 noop（null presenter）。
+ * @param {object} ctx run 上下文（ctx.presenter.unitCommand）
+ * @param {...object} cmds 单位指令描述符（逐条排队，Shell 按序执行）
+ */
+export function unitAction(ctx, ...cmds) {
+  for (const cmd of cmds) ctx.presenter.unitCommand?.(cmd);
+  return cmds;
+}

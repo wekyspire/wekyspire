@@ -249,6 +249,11 @@ export function createRunShowcase(ctx) {
 
   /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
   function flushRunPresentations() {
+    // 单位演出指令（2026-09-25）：事件驱动房间单位移动/形态——同排水时机送活动舞台。
+    // 只有房间舞台实现 roomUnitCommand（battle/map 无房间活物，静默丢弃）。
+    for (const cmd of runPresenter.drainUnitCommands()) {
+      ctx.panelStage()?.roomUnitCommand?.(cmd);
+    }
     for (const intent of runPresenter.drain()) {
       // 卡牌升级：播「变身收编」演出（原卡金闪变新卡后飞入牌库），不是三行文本特写。
       // 换面要**投影后的卡面视图**（裸 defId 会被 bakeFace 烘成空卡）——这里按面板同

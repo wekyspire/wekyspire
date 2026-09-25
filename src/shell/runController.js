@@ -429,6 +429,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         stageManager,
         bus: animBus,
         snap: panelSnapshot(run, panelExtras()),
+        // 房间活物（2026-09-25）：瑞米在场 = 未被击退（骑士常驻，无血条）
+        units: { remi: !run.remi?.drivenOff },
       }));
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
       roomStage.setRunSequencer(runSequencer);   // 得卡演出的指令化挂点（与离房切幕串行）
