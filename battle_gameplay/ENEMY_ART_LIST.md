@@ -16,6 +16,8 @@
 > 灰暗低饱和、大色面低完成度厚涂、白底无影。slime 同步换上手绘版（`art_src/角色/史莱姆.png`），
 > mossBall/buzzbug/swampAmbusher 沿用原手绘立牌不变。
 > **体态返修（2026-09-22）**：rockSnail 朝右 → 源图水平翻转；snowwolf 只有半身、pufferToad 正面照 → 按全身正侧面重生成；`genEnemies.mjs` 的 STYLE/NEGATIVE 已固化「full body + strict side view facing left」（球/墩形怪豁免）。
+>
+> **2026-09-23 重制（本节取代上文 genEnemies 批）**：视角改定 **正面站姿、身体与脸微微朝画面左侧**（取代正侧面规格）；画风不符批全部重做。新管线 = 本地 ComfyUI Qwen-Image-2.1，`tools/genUnitArt.mjs` 的 i2i 手绘底图模式（`ref_white/` 白底参考 denoise 0.8；画风文本由 glm-flash 直读参考图提炼），切边 `tools/seedream/key.py`（洪填 + `--erode` 边缘腐蚀 + `--holes` 封闭白腔 + 孤岛去斑；缝隙白斑终修 = 邻色 inpaint）。全部经 glm-flash 对照参考图四维验收（画风/朝向/白边/成色）。章1 怪 12/13 已入库；**怨灵未过**（臂身空隙生成必成躯干封闭腔，六轮未解，保留旧图）。
 
 ## 0. 通用规格（对齐 STAGE_DESIGN §立牌）
 
