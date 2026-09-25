@@ -659,8 +659,8 @@ function instantStrikesThisTurn(sctx) {
 }
 
 // 拆招 C→B→A（手牌补充，2026-09-21 大调收阶）：0费 冷却1——抽 1；
-// /named{自由牌}（未激活咏唱的手牌）不超过 2/3/4 张时再抽 1（清手流的续航资源件）。
-// 发动卡结算时已离手（pending），自由牌读其余手牌（激活咏唱豁免判定）。
+// 自由手牌（未激活咏唱的手牌）不超过 2/3/4 张时再抽 1（清手流的续航资源件）。
+// 发动卡结算时已离手（pending），自由手牌读其余手牌（激活咏唱豁免判定）。
 function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
   registerSkill({
     id, name: '拆招', type: 'normal', tier, series: 'fist',
@@ -674,10 +674,10 @@ function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
       if (free <= threshold) drawCards(sctx, extra);
       return true;
     },
-    describe: () => `抽1牌；/named{自由牌}不超过${threshold}张时，再抽${extra}`,
+    describe: () => `抽1；/named{自由}手牌不超过${threshold}张时，再抽${extra}`,
     battleDescribe: (sctx) => {
       const free = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `抽1牌（当前自由牌${free}张${free <= threshold ? `，再抽${extra}` : ''}）`;
+      return `抽1（当前自由手牌${free}张${free <= threshold ? `，再抽${extra}` : ''}）`;
     },
   });
 }

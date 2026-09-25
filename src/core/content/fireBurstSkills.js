@@ -779,7 +779,7 @@ function echoingFlamesCard({ id, tier, draw }) {
 echoingFlamesCard({ id: 'echoingFlames', tier: 'B', draw: 3 });
 echoingFlamesCard({ id: 'echoingFlamesMaster', tier: 'A', draw: 5 });
 
-// 背水一战 B/A（消耗）：焚毁所有未激活咏唱的手牌（/named{自由牌}），每张回复 1 魏启，
+// 背水一战 B/A（消耗）：焚毁所有未激活咏唱的手牌（/named{自由}手牌），每张回 1 魏启，
 // 抽 3/4（2026-09-21 大调：每张 2魏→1魏，A 档抽 5→4）。已激活的咏唱卡豁免——点亮的
 // 咏唱是构筑引擎本身，烧引擎换蓝等于自拆台。
 function lastStandCard({ id, tier, draw }) {
@@ -798,10 +798,10 @@ function lastStandCard({ id, tier, draw }) {
       drawCards(sctx, draw);
       return true;
     },
-    describe: () => `焚毁所有/named{自由牌}手牌，每张回复1魏启，抽${draw}`,
+    describe: () => `焚毁所有/named{自由}手牌，每张回1魏启，抽${draw}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `焚毁${n}手牌：回复${n * 1}魏启，抽${draw}`;
+      return `焚毁${n}张自由手牌：回${n * 1}魏启，抽${draw}`;
     },
   });
 }
