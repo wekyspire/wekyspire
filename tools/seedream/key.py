@@ -4,16 +4,20 @@
 边缘洪水填充法：从图像四边所有与"边缘主色"色差小于 tolerance 的像素开始 BFS，
 只把与背景连通的部分置透明——角色内部的白色（如瑞米身体）不会被误抠。
 
+切边后按 --erode 对 alpha 做形态学腐蚀（默认 2px）：生成图的边缘常残留
+1-2px 半透明白边，深色场景里会显出发亮白圈——多切这几像素根治
+（2026-09-22 用户定）。
+
 用法：
     python key.py out/unit_remi.png                 # → out/unit_remi_cut.png
-    python key.py out/unit_remi.png --tol 40 --feather 1.6
+    python key.py out/unit_remi.png --tol 40 --feather 1.6 --erode 2
 """
 import argparse
 import sys
 from collections import deque
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 def border_color(px, w, h):
@@ -39,6 +43,8 @@ def main() -> int:
     ap.add_argument("--tol", type=float, default=32, help="色差阈值（RGB 欧氏距离）")
     ap.add_argument("--feather", type=float, default=1.8,
                     help="羽化带宽度倍数：tol*feather 内的边缘像素按色差比例半透明")
+    ap.add_argument("--erode", type=int, default=2,
+                    help="切边后 alpha 腐蚀像素数（多吃掉边缘白残留；0 关闭）")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -82,6 +88,14 @@ def main() -> int:
                     and dist2(px[nx, ny][:3], bg) <= feather2:
                 visited[ny * w + nx] = 1
                 q.append((nx, ny))
+
+    # 边缘腐蚀：alpha 通道 N 次 3x3 min 滤波 = 向内收缩 N 像素，
+    # 洪填羽化带里残留的半透明白边随最外圈一起消失
+    if args.erode > 0:
+        a = img.getchannel("A")
+        for _ in range(args.erode):
+            a = a.filter(ImageFilter.MinFilter(3))
+        img.putalpha(a)
 
     # 自动裁掉全透明边距（留 2% 边距），立牌纹理更紧凑
     bbox = img.getbbox()
