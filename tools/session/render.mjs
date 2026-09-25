@@ -272,8 +272,9 @@ function renderRoomSlot(S, L) {
   const run = S.run;
   const p = run.player;
   const v = slotView(run);
-  L.push(`老虎机：本次单价 ${v.cost} 金币（每抽 +${SLOT.costStep}）｜持有 ${p.money}`
-    + (v.freeRolls ? `｜免费 ${v.freeRolls} 次` : '')
+  // 「单价」与「免费」并列展示被三路试玩先后误读成"免费也在扣钱"——免费次数在手时
+  // 直接说"本次免费"，付费才报单价（免费抽不涨价）。
+  L.push(`老虎机：${v.freeRolls ? `本次拉杆**免费**（剩 ${v.freeRolls} 次）` : `本次单价 ${v.cost} 金币`}（付费每抽 +${SLOT.costStep}）｜持有 ${p.money}`
     + `｜小奖 ${Math.round(v.minorChance * 100)}% 大奖 ${Math.round(v.majorChance * 100)}%（未中累加）`);
   L.push(`吞噬进度 ${v.devourProgress}/${v.devourEvery}${v.devourReady ? '（可吞噬）：act devour relic <遗物id> / act devour card <构筑#>' : ''}`);
   // 银行机（与老虎机成对出现）
