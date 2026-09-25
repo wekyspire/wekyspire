@@ -19,7 +19,9 @@ import * as THREE from 'three';
 import { FLOOR_Y } from '../scenes/dungeon3D.js';
 import { RoomUnitObject } from '../objects/RoomUnitObject.js';
 
-// 瑞米姿势表：idle/back 用既有立牌，其余用生成的多状态图（缺图自动回落 idle）
+// 瑞米姿势表：idle/back 用既有立牌，其余等用户手绘图集（2026-09-25 定：qwen 一致性
+// 不达标，用户自绘）。手绘落盘命名 = src/assets/stage/remi_pose_<姿势>.webp（透明底），
+// 缺图自动回落 idle——画几张生效几张，不用改代码。
 const REMI_POSES = {
   idle: 'unit_remi_front.webp',
   back: 'unit_remi.webp',

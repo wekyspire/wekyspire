@@ -11,19 +11,23 @@ const OUT_DIR = path.resolve('art_src/remi_poses');
 const REF = path.resolve('art_src/角色/瑞米正面.png');
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[1]?.split(',') || null;
 const COUNT = Number((process.argv.find(a => a.startsWith('--count=')) || '').split('=')[1]) || 3;
-const DENOISE = 0.78; // 角色身份/画风靠参考图；0.78 让姿势改动真实发生（低了对姿势词几乎不动）
+const DENOISE = 0.74; // 身份/画风全靠参考图；降到 0.74 加强参考约束（0.78 物种对了但画风漂）
 
 // 姿势表：id → 姿势后缀（前缀统一锁「同一只奶白绒毛圆家伙」+ 黑底全身）
-const PREFIX = 'the same small round cream-white fluffy creature from the reference image, identical colors proportions and art style, full body, single character, ';
-const SUFFIX = ', solid pure black background, nothing else in frame, no shadow on the ground, stylized game character art';
+// 身份与画风**全部交给参考图**（用户 2026-09-25 定：prompt 不指定风格——文字风格词
+// 会与参考图打架，一致性烂掉的根因之一；微观解剖清单同样会引来缝合怪）。文字只管：
+// 「就是参考图这只 + 新姿势 + 黑底」。
+const PREFIX = 'the exact same small creature from the reference image, identical appearance, identical colors, identical proportions, identical art style as the reference, full body, single character, ';
+const SUFFIX = ', solid pure black background, nothing else in frame';
+
 const POSES = [
-  { id: 'sit', prompt: 'sitting down on its round bottom, paws resting on its belly, relaxed' },
-  { id: 'curious', prompt: 'leaning forward with big curious eyes, one small paw raised, head tilted' },
-  { id: 'sleepy', prompt: 'drooping drowsy, eyes half closed, swaying sleepy, ears down' },
-  { id: 'alert', prompt: 'standing tall on its toes, ears perked up, alarmed big eyes' },
-  { id: 'hop', prompt: 'mid-jump stretched vertically off the ground, limbs tucked, bouncy energy' },
-  { id: 'lookback', prompt: 'looking back over its shoulder, body facing away slightly, head turned to camera' },
-  { id: 'happy', prompt: 'cheerful with happy closed eyes, bouncing gleefully, tiny smile' },
+  { id: 'sit', prompt: 'sitting upright on its haunches like a fox, front paws together, tail curled around its feet, relaxed' },
+  { id: 'curious', prompt: 'leaning forward with big curious eyes, head tilted, one front paw lifted mid-step, ears swiveled forward' },
+  { id: 'sleepy', prompt: 'drooping drowsy, eyes half closed, ears drooping down, tail resting flat, sleepy sway' },
+  { id: 'alert', prompt: 'standing tense on all fours, both ears perked straight up, tail raised, alarmed wide eyes' },
+  { id: 'hop', prompt: 'mid-leap stretched horizontally off the ground, legs tucked, tail streaming, bouncy energy' },
+  { id: 'lookback', prompt: 'looking back over its shoulder, body facing away, head turned to camera, tail up' },
+  { id: 'happy', prompt: 'cheerful bounding bounce, eyes closed happy, mouth open in a grin, tail wagging up' },
 ];
 
 async function uploadImage(file) {
