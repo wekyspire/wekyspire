@@ -233,7 +233,7 @@ function mossBallDef(id, delayedGrip) {
           source: unit, target: player, amount: 8 + unit.getStat('attack') }));
       } else {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
-        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 8 }));
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 })); // 回血 8→5（2026-09-22 用户定）
       }
     },
     getIntention: (unit) => {
