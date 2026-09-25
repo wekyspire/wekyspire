@@ -20,6 +20,11 @@ export function cardViewFromDef(def, ctx = {}) {
     tier: def.tier ?? null,
     type: def.type ?? 'normal',
     series: def.series ?? null,
+    // 美术键（2026-09-25 补）：链级换代后 def.image 是卡图解析的主键（cardArtCache
+    // resolveUrl 首选），缺了它面板/选卡器只能回落 series——家族桶键已随换代退役，
+    // 全线解析归 null = "选卡界面空白卡"事故的根因。战斗手牌走 bridge 投影自带
+    // image 所以有图，掩盖了这条链路的缺口。
+    image: def.image ?? null,
     cost: def.cost ?? { mana: 0, actionPoint: 0 },
     keywords: def.keywords ?? [],
     cardMode: def.cardMode ?? 'normal',
