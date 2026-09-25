@@ -55,19 +55,19 @@ const TEMPLATES = [
   { id: 'slimeBurst', name: '史莱姆爆发', cost: 5, minFloor: 2, maxFloor: 5, once: true, excl: ['slimeletBurst'],
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }, { fixed: 'slime' }] },
   { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 2, maxFloor: 9, once: true, excl: ['rotEye'],
-    slots: [{ fixed: 'mossBall' }, { fixed: 'mossBall' }, { fixed: 'slime' }] },
+    slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'slime' }] },
   { id: 'pester', name: '难缠麻烦', cost: 6, minFloor: 2, maxFloor: 5, once: true,
-    slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBall' }, { fixed: 'pufferToad' }] },
+    slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBallA' }, { fixed: 'pufferToad' }] },
   { id: 'toadPool', name: '蛤蟆漩涡', cost: 7, minFloor: 2, maxFloor: 7, once: true, excl: ['greatToadPool'],
     slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
   { id: 'greatToadPool', name: '大蛤蟆漩涡', cost: 8, minFloor: 2, maxFloor: 10, once: true, excl: ['toadPool'],
-    slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'mossBall' }] },
+    slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'mossBallA' }] },
   { id: 'rotEye', name: '腐败之眼', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['rotHeart', 'mudFlat'],
-    slots: [{ fixed: 'mossBall' }, { fixed: 'mossBall' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }] },
+    slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }] },
   { id: 'rotHeart', name: '腐败之心', cost: 10, minFloor: 2, maxFloor: 10, once: true, excl: ['rotEye'],
     slots: [{ fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenTreeHeart' }] },
   { id: 'creviceA', name: '石缝生物A', cost: 5, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceB', 'creviceC'],
-    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBall' }] },
+    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBallA' }] },
   { id: 'creviceB', name: '石缝生物B', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceA', 'creviceC'],
     slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToad' }] },
   { id: 'creviceC', name: '石缝生物C', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceA', 'creviceB'],
@@ -203,21 +203,19 @@ function templateUsable(tpl, floor, eliteDay, usedOnce) {
 }
 
 // 选模板（纯函数：同 floor/rng/usedOnce 恒定同结果——历史重放依赖这一点）。
+// 难度窗是硬门槛（2026-09-22 用户定）：编成难度与当层预算差超过 ±DRIFT 的战斗
+// **永不生成**——含兜底路径（通用模板常驻各层难度窗内，窗空即数据配错，直接抛错
+// 比静默破窗好）。权重随难度差衰减：diff 0/1/2 → 4/2/1。
 function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
   const D = floorDifficulty(floor);
   const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
-  const usable = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce) && costs.get(t) != null);
-  let candidates = usable.filter(t => Math.abs(costs.get(t) - D) <= DRIFT);
+  const candidates = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce)
+    && costs.get(t) != null && Math.abs(costs.get(t) - D) <= DRIFT);
   if (candidates.length === 0) {
-    // 兜底：漂移窗内无货时取编成难度最近者（贴线收场；通用模板常驻，不会空）。
-    const fallback = [...usable].sort((a, b) => Math.abs(costs.get(a) - D) - Math.abs(costs.get(b) - D));
-    if (fallback.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
-    candidates = [fallback[0]];
+    throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，±${DRIFT} 窗内候选为空）`);
   }
   const weighted = [];
   for (const t of candidates) {
-    // 兜底候选可能距 D 超过漂移窗——权重下限 1，保证加权池非空（否则 pick 出
-    // undefined 击穿调用方；旧版在「全部候选都贴窗边」时同样会静默空池，一并修掉）
     const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
     for (let i = 0; i < weight; i++) weighted.push(t);
   }

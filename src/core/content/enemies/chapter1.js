@@ -212,46 +212,61 @@ registerEnemy({
 
 // 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，效果轨可见），奇数拍攻 8、
 // 偶数拍自愈盾回；亡语归还自己施加的全部紧勒层数（杀了就松手）。
-registerEnemy({
-  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
-  id: 'mossBall', name: '腐苔球',
-  createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 30 }),
-  act(actx) {
-    const { unit, player } = actx;
-    unit._grip = (unit._grip ?? 0) + 1;
-    actx.kernel.submitInstruction(new AddEffectInstruction({
-      target: player, effectId: 'constrict', stacks: 1 }));
-    player.maxHandSize = Math.max(2, (player.maxHandSize ?? 5) - 1);
-    if (unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 8 + unit.getStat('attack') }));
-    } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 8 }));
-    }
-  },
-  getIntention: (unit) => ({
-    kinds: unit.actionIndex % 2 === 0 ? ['attack', 'debuff'] : ['defend', 'buff', 'debuff'],
-    hits: unit.actionIndex % 2 === 0 ? 1 : undefined,
-    damage: unit.actionIndex % 2 === 0 ? 8 + unit.getStat('attack') : undefined,
-    note: '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）',
-  }),
-  onDeath(actx) {
-    const grip = actx.unit._grip ?? 0;
-    if (grip > 0) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'constrict', stacks: -grip }));
-      actx.player.maxHandSize += grip;
-    }
-  },
-});
+// A/B 类（2026-09-22 用户定，头轮试玩反馈紧勒叠太快）：B 类紧勒晚一拍起步——第 2 拍
+// 才开始蔓延，给玩家一个手牌完整的首回合抢输出；同场 2 只苔球的编成一律 A/B 配合
+// （见 floorEnemyGenerator），单只编成用 A。
+function mossBallDef(id, delayedGrip) {
+  registerEnemy({
+    difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+    id, name: '腐苔球',
+    createUnit: () => new Enemy({ defId: id, name: '腐苔球', maxHp: 27 }),
+    act(actx) {
+      const { unit, player } = actx;
+      if (!(delayedGrip && unit.actionIndex === 0)) {
+        unit._grip = (unit._grip ?? 0) + 1;
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: player, effectId: 'constrict', stacks: 1 }));
+        player.maxHandSize = Math.max(2, (player.maxHandSize ?? 5) - 1);
+      }
+      if (unit.actionIndex % 2 === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 8 + unit.getStat('attack') }));
+      } else {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 8 }));
+      }
+    },
+    getIntention: (unit) => {
+      const gripsNow = !(delayedGrip && unit.actionIndex === 0);
+      const attacking = unit.actionIndex % 2 === 0;
+      return {
+        kinds: attacking
+          ? (gripsNow ? ['attack', 'debuff'] : ['attack'])
+          : (gripsNow ? ['defend', 'buff', 'debuff'] : ['defend', 'buff']),
+        hits: attacking ? 1 : undefined,
+        damage: attacking ? 8 + unit.getStat('attack') : undefined,
+        note: gripsNow ? '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）' : '迟滞蔓延（下回合起）',
+      };
+    },
+    onDeath(actx) {
+      const grip = actx.unit._grip ?? 0;
+      if (grip > 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'constrict', stacks: -grip }));
+        actx.player.maxHandSize += grip;
+      }
+    },
+  });
+}
+mossBallDef('mossBallA', false); // A 类：每拍紧勒（含首拍）
+mossBallDef('mossBallB', true);  // B 类：首拍只打不缠，第 2 拍起每拍紧勒
 
 // 鼓腹蟾：渐强威胁——拍1 鼓气（未知）、拍2 攻10、拍3 起永远重击 18。放着不管会出事，
 // 但打它没有任何反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'pufferToad', name: '鼓腹蟾',
-  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 40 }),
+  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 34 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex === 0) return; // 鼓气：白给一拍
@@ -525,13 +540,14 @@ function buzzbugDef(id, firstIsAttack) {
 buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍3 撞×5
 buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×5
 
-// 腐败根须：会复苏的一直攻击——死亡后隔 1 回合满血复活（无限次；作为场上最后一只
-// 被击杀时战斗即刻胜利，复苏不触发）。两拍循环：攻8 → 攻4×3。
+// 腐败根须：会复苏的一直攻击——死亡后隔 1 回合复活（无限次；作为场上最后一只
+// 被击杀时战斗即刻胜利，复苏不触发）。首现 18 血，复苏固定 13 血（2026-09-22 用户定：
+// 复活体更脆——花在「再杀一次」上的输出能换到更多喘息）。两拍循环：攻8 → 攻4×3。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'rottenRoot', name: '腐败根须',
-  createUnit: () => new Enemy({ defId: 'rottenRoot', name: '腐败根须', maxHp: 15 }),
-  ...reviveKit({ times: Infinity }),
+  createUnit: () => new Enemy({ defId: 'rottenRoot', name: '腐败根须', maxHp: 18 }),
+  ...reviveKit({ times: Infinity, hp: 13 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
