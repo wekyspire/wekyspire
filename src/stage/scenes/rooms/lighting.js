@@ -143,8 +143,10 @@ export const LIGHTING_PRESETS = {
     // 全景与怼脸都是恒定的机器主光。
     front: {
       color: 0xe6eefc,        // 略微偏冷的中性白（不是蓝）
-      base: 2050, dist: 60,   // 实测定档：3400 会把玻璃门照成一团白、柜内货架读不出来
-      angle: 0.62, penumbra: 0.92, decay: 1.7,
+      base: 1300, dist: 64,   // 实测两轮定档：3400 玻璃门一团白；2050 仍反光压货
+      // （2026-09-25 用户报"玻璃反光太明显、柜内货物看不清"）→ 1300 + 更宽衰减距离，
+      // 宁可机器整体暗半档，货架上 unlit 自发光的货品自己会亮
+      angle: 0.66, penumbra: 0.95, decay: 1.7,
       position: [0.8, FLOOR_Y + 7.2, -32.5],
       target: [0, FLOOR_Y + 3.4, -44.5],
     },
