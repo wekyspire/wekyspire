@@ -2365,6 +2365,10 @@ export class BattleStage {
       if (view.cardData) view.setCard(view.cardData);
     }
     this._viewer.rebake(); // 查看器内的卡同享到图重烘（关闭态为空操作）
+    // 面板（奖励三选一 overlay）与全屏选卡界面的候选卡不在卡组、未经预热，
+    // 首拍常为无图占位——一并重烘（用户 2026-09-25 报"选卡空白卡，手牌却有图"）
+    this._panel?.rebakeCards?.();
+    this._pickerKit?.rebakeCards?.();
   }
 
   // 渲染端支持的最大各向异性（假 renderer/无 WebGL 环境回退 1）

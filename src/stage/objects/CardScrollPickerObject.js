@@ -36,6 +36,20 @@ export class CardScrollPickerObject extends ScrollPickerObject {
   get cardCount() { return this.itemCount; }
 
   /**
+   * 卡图异步到图后重烘（宿主舞台经 stagePickerKit 在 cardArt.addOnLoad 里调）：
+   * 候选卡不在卡组里、没被 preloadBattleArt 预热，首拍常是占位卡面——
+   * 不补这一手，选卡界面会永远停在无图占位（用户 2026-09-25 报"选卡界面空白卡"）。
+   */
+  rebakeCards() {
+    if (!this._opened) return;
+    for (const e of this._entries) {
+      if (e.meta?.view && e.obj) {
+        e.obj.setCard(withLabels({ ...e.meta.view, uniqueID: e.id, defId: e.meta.defId }));
+      }
+    }
+  }
+
+  /**
    * 打开选卡界面（幂等：先清场）。
    * @param {object} data
    *   title / hint: 文案

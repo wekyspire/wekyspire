@@ -234,6 +234,12 @@ export function createStagePickerKit({
     get showcasing() { return !!showcase?.busy; },
     /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
     get upgrading() { return upgradeBusy; },
+    /**
+     * 卡图异步到图后重烘选卡界面（宿主在 cardArt.addOnLoad 里调；合批由宿主负责）。
+     * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
+     * （用户 2026-09-25 报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
+     */
+    rebakeCards() { cardPicker?.rebakeCards?.(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
     get uiBusy() { return grantBusy || upgradeBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
 

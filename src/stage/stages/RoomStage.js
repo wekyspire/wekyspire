@@ -189,6 +189,22 @@ export class RoomStage {
     // 未就绪则由 addOnLoad 回调补挂（水晶/金币的晚到补挂走 PlayerStatusObject 自己的订阅）。
     this._unsubArt = this._unitArt?.addOnLoad(() => this._applyAvatar());
     this._applyAvatar();
+    // 卡图晚到重烘（与战场/塔楼层同语言）：房间面板（训练四选一/种子包）与全屏选卡的
+    // 候选卡都不在卡组里、没有战斗预热，首拍常是无图占位——不订阅就永远空白
+    // （用户 2026-09-25 报）。每图一通知，用脏标记合批成一拍。
+    {
+      let dirty = false;
+      this._unsubCardArt = sharedCardArtCache.addOnLoad(() => {
+        if (dirty) return;
+        dirty = true;
+        setTimeout(() => {
+          dirty = false;
+          this._panel?.rebakeCards?.();
+          this._stagePanel?.rebakeCards?.();
+          this._pickerKit?.rebakeCards?.();
+        }, 50);
+      });
+    }
     this._topBar = new TopResourceBarObject({ bakeLabel: mkBake });
     this.uiScene.add(this._topBar);
     this._bubbles = new BubbleLayer();   // 角色/物件的说话·思索泡泡（提示用，如"还没挑卡"）
@@ -439,6 +455,8 @@ export class RoomStage {
     this.onExit();
     this._unsubArt?.();
     this._unsubArt = null;
+    this._unsubCardArt?.();
+    this._unsubCardArt = null;
     this._composer?.dispose();
     this._composer = null;
     this.composeScene = null;

@@ -329,10 +329,18 @@ export class MapStage {
    * 公开入口（宿主编排器用：银行升级/焚毁、中奖后的免费指定升级由 Shell 主动唤起）。
    * 面板本地动作走同一条路（`_onPanelAction` 的 openUpgradePicker 分支）。
    */
-  openUpgradePicker(source) { return this._pickerKit.openUpgradePicker(source, this._snap); }
+  openUpgradePicker(source) {
+    const ok = this._pickerKit.openUpgradePicker(source, this._snap);
+    if (ok) this._syncCardArtSub();   // 选卡界面开着期间也要订阅卡图晚到重烘
+    return ok;
+  }
 
   /** 卡包三选一（买到即开）：全屏 overlay，**可放弃**（返回 = 放弃卡包）。 */
-  openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
+  openShopPackPicker() {
+    const ok = this._pickerKit.openShopPackPicker(this._snap);
+    if (ok) this._syncCardArtSub();
+    return ok;
+  }
 
   /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
   openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
@@ -372,11 +380,21 @@ export class MapStage {
     });
   }
 
-  // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅
+  // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅。
+  // 重烘范围含全屏选卡界面（候选卡无战斗预热，首拍常为占位——2026-09-25 空白卡事故同源）
   _syncCardArtSub() {
-    const need = !!this._panel?.ownsCardArtWait;
+    const need = !!this._panel?.ownsCardArtWait || !!this._pickerKit?.cardPicker?.opened;
     if (need && !this._unsubCardArt) {
-      this._unsubCardArt = sharedCardArtCache.addOnLoad(() => this._panel?.rebakeCards?.());
+      let dirty = false;
+      this._unsubCardArt = sharedCardArtCache.addOnLoad(() => {
+        if (dirty) return;
+        dirty = true;
+        setTimeout(() => {
+          dirty = false;
+          this._panel?.rebakeCards?.();
+          this._pickerKit?.rebakeCards?.();
+        }, 50);
+      });
     } else if (!need && this._unsubCardArt) {
       this._unsubCardArt();
       this._unsubCardArt = null;
