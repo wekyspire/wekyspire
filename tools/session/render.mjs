@@ -14,6 +14,7 @@ import { upgradableCards } from '../../src/core/run/rooms/training.js';
 import { slotView, SLOT } from '../../src/core/run/rooms/slotMachine.js';
 import { bankView, pendingDebuffViews } from '../../src/core/run/rooms/bank.js';
 import { gurpasView } from '../../src/core/run/rooms/gurpas.js';
+import { eventView } from '../../src/core/run/rooms/event.js';
 import { listNamedTerms } from '../../src/core/skills/namedTerms.js';
 import { allEffects } from '../../src/core/effects/registry.js';
 
@@ -166,7 +167,7 @@ function renderRoom(S, L) {
   if (room === 'camp' || room === 'training' || room === 'campTraining') renderRoomCampTraining(S, L, room);
   else if (room === 'slot') renderRoomSlot(S, L);
   else if (room === 'gurpas') renderRoomGurpas(S, L);
-  else if (room === 'event') renderRoomEvent(L);
+  else if (room === 'event') renderRoomEvent(S, L);
 }
 
 function renderRoomShop(S, L) {
@@ -349,8 +350,10 @@ function renderRoomGurpas(S, L) {
   }
 }
 
-function renderRoomEvent(L) {
-  L.push(`事件房 → act play 触发事件`);
+function renderRoomEvent(S, L) {
+  const v = eventView(S.run);
+  L.push(`事件房「${v.name}」→ act choose <#> 选定选项 ｜ act play = 直接选 [1] ｜ act skip 不触发离开`);
+  v.choices.forEach((c, i) => L.push(`  [${i + 1}] ${c.label}${c.hint ? '——' + c.hint : ''} (id:${c.id})`));
 }
 
 function renderAscension(S, L) {

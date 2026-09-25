@@ -38,7 +38,7 @@ import {
 } from '../../src/core/run/ascension.js';
 import { trainUpgrade, trainUpgradeStart, trainDrawChoices, trainDraw, beginTraining } from '../../src/core/run/rooms/training.js';
 import { campRest, campRecoverRemi, CAMP_PLACEHOLDER, campLocked } from '../../src/core/run/rooms/camp.js';
-import { playEvent } from '../../src/core/run/rooms/event.js';
+import { playEvent, eventView } from '../../src/core/run/rooms/event.js';
 import {
   spinSlot, takeSlotPrize, declineSlotPrize, slotUpgrade, devourSlot,
   slotGiftDue, takeSlotGift,
@@ -838,9 +838,23 @@ function execRoomSlot(S, t) {
 // 事件房
 function execRoomEvent(S, t) {
   const run = S.run;
-  const [, a] = t;
-  if (a === 'play') {
-    const r = playEvent(run);
+  const [, a, b] = t;
+  if (a === 'play' || a === 'choose') {
+    // choose <#|选项id>：指定选项触发。play 不带参数 = 第一个选项（兼容旧会话重放）。
+    // （二轮试玩实报：血祭祭坛三选项在 headless 无从选择、act play 永远献血——工具缺口）
+    let choice = null;
+    if (a === 'choose') {
+      const view = eventView(run);
+      const n = Number.parseInt(b ?? '', 10);
+      const idx = Number.isInteger(n) ? n - 1 : view.choices.findIndex(c => c.id === (b ?? ''));
+      const picked = view.choices[idx] ?? null;
+      if (!picked) {
+        throw new Error(`没有这个选项：${b ?? '(空)'}（可选 ${
+          view.choices.map((c, i) => `${i + 1}:${c.label}`).join(' / ') || '无'}）`);
+      }
+      choice = picked.id;
+    }
+    const r = playEvent(run, { choice });
     S.roomDone = true;
     S.lastOutcome = `事件：${eventResultText(r)}`;
     return;
@@ -850,7 +864,7 @@ function execRoomEvent(S, t) {
     S.lastOutcome = '跳过事件（未触发）离开房间';
     return;
   }
-  throw new Error('事件动作：act play 触发事件｜不想触发就用 act skip（或 next）离开');
+  throw new Error('事件动作：act choose <#> 选定选项触发 ｜ act play = 直接选 [1] ｜ act skip 不触发离开');
 }
 
 // ---- 进阶 ----
