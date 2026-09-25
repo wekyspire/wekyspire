@@ -151,7 +151,7 @@ function slimeletDef(id, firstIsAttack) {
       const jab = unit.actionIndex % 2 === (firstIsAttack ? 1 : 0);
       if (jab) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: player, amount: 6 + unit.getStat('attack'),
+          source: unit, target: player, amount: 4 + unit.getStat('attack'),
         }));
       } else {
         actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -166,13 +166,13 @@ function slimeletDef(id, firstIsAttack) {
       const atk = unit.getStat('attack');
       const jab = unit.actionIndex % 2 === (firstIsAttack ? 1 : 0);
       return jab
-        ? { kinds: ['attack'], hits: 1, damage: 6 + atk }
+        ? { kinds: ['attack'], hits: 1, damage: 4 + atk }
         : { kinds: ['attack', 'debuff'], hits: 1, damage: 3 + atk, note: '向牌库末塞入1张「粘液」' };
     },
   });
 }
-slimeletDef('slimeletA', false); // A 类：拍1 塞粘液攻3 → 拍2 攻6
-slimeletDef('slimeletB', true);  // B 类：拍2 攻6 → 拍1 塞粘液攻3
+slimeletDef('slimeletA', false); // A 类：拍1 塞粘液攻3 → 拍2 攻4
+slimeletDef('slimeletB', true);  // B 类：拍2 攻4 → 拍1 塞粘液攻3
 
 // 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻6+盾8 → 攻10 → 攻6+荆棘3。
 registerEnemy({

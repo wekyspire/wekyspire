@@ -90,6 +90,8 @@ const TEMPLATES = [
     slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'diggerMole' }] },
   { id: 'bugSwarm', name: '全是虫虫', cost: 8, minFloor: 2, maxFloor: 10, once: true, excl: ['skyLandFeast'],
     slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }] },
+  { id: 'trinity', name: '三位一体', cost: 12, minFloor: 2, maxFloor: 10, once: true,
+    slots: [{ fixed: 'diggerMole' }, { fixed: 'rottenTreeHeart' }, { fixed: 'rockSnail' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
   // —— 第二~四章主题编队（2026-09-13 总策划批次）——
