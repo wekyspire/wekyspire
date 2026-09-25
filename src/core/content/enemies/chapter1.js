@@ -261,27 +261,41 @@ function mossBallDef(id, delayedGrip) {
 mossBallDef('mossBallA', false); // A 类：每拍紧勒（含首拍）
 mossBallDef('mossBallB', true);  // B 类：首拍只打不缠，第 2 拍起每拍紧勒
 
-// 鼓腹蟾：渐强威胁——拍1 鼓气（未知）、拍2 攻10、拍3 起永远重击 18。放着不管会出事，
-// 但打它没有任何反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。
-registerEnemy({
-  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
-  id: 'pufferToad', name: '鼓腹蟾',
-  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 34 }),
-  act(actx) {
-    const { unit, player } = actx;
-    if (unit.actionIndex === 0) return; // 鼓气：白给一拍
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: player,
-      amount: (unit.actionIndex === 1 ? 10 : 18) + unit.getStat('attack'),
-    }));
-  },
-  getIntention: (unit) => {
-    const atk = unit.getStat('attack');
-    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '鼓腹（蓄力中）' };
-    if (unit.actionIndex === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
-    return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
-  },
-});
+// 鼓腹蟾：渐强威胁——鼓气 → 启动段 → 永远重击 18。放着不管会出事，但打它没有任何
+// 反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。
+// A/B/C 类（2026-09-22 用户定，蟾群团灭复盘：三蟾同步齐射 30→54 无解）：B/C 启动段
+// 各多插一/两拍「攻 7」过渡拍——重击到达时间 A=T3 / B=T4 / C=T5，三蟾编成 ABC 配合
+// 后齐射变轮射（T3 峰值 54→35），玩家每回合有可防御窗口；单蟾 18 不动，仍考验 DPS
+// 与启动速度（拖到 T5 三蟾照样齐 54）。
+function pufferToadDef(id, ramped) {
+  registerEnemy({
+    difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+    id, name: '鼓腹蟾',
+    createUnit: () => new Enemy({ defId: id, name: '鼓腹蟾', maxHp: 32 }),
+    act(actx) {
+      const { unit, player } = actx;
+      const i = unit.actionIndex;
+      if (i === 0) return; // 鼓气：白给一拍
+      const rampEnd = 2 + ramped;               // 重击起点（含）
+      const amount = i >= rampEnd ? 18 : (i === rampEnd - 1 ? 10 : 7);
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: amount + unit.getStat('attack'),
+      }));
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const i = unit.actionIndex;
+      if (i === 0) return { kinds: ['unknown'], note: '鼓腹（蓄力中）' };
+      const rampEnd = 2 + ramped;
+      if (i >= rampEnd) return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
+      if (i === rampEnd - 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
+      return { kinds: ['attack'], hits: 1, damage: 7 + atk };
+    },
+  });
+}
+pufferToadDef('pufferToadA', 0); // A 类：鼓气 → 攻10 → 重击18∞
+pufferToadDef('pufferToadB', 1); // B 类：鼓气 → 攻7 → 攻10 → 重击18∞
+pufferToadDef('pufferToadC', 2); // C 类：鼓气 → 攻7 → 攻7 → 攻10 → 重击18∞
 
 // 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 20 并
 // 自爆）。三拍节奏：攻5 → 攻8 → 原地待爆。杀它 = 拆弹（被击杀则引线什么都不做）。
