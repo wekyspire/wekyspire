@@ -107,6 +107,7 @@ export class UnitObject extends THREE.Group {
     // 立牌投影（用户定）：alphaTest 剪影在月光下拉出单位形地面影；
     // three 深度材质支持 map+alphaTest，透明区不会投出矩形假影
     this._body.castShadow = true;
+    this._bodyColorBase = this._body.material.color.clone(); // 焚毁改色后的恢复基准（restoreBody）
     this._standee.add(this._body);
 
     // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（脚底=地板，旧稿"站台下方"
@@ -244,6 +245,17 @@ export class UnitObject extends THREE.Group {
 
   /** 死亡演出访问口：billboard（倾倒轴）/ body（焚毁载体）。 */
   get billboard() { return this._billboard; }
+  /** 复苏节拍的兜底恢复：焚毁演出把材质烧成透明/焦黑（opacity、color 被改）——
+   *  复活起立前恢复原貌。底色在构造时记一次（贴图替换不动 color）。 */
+  restoreBody() {
+    const mat = this._body.material;
+    mat.transparent = false;
+    mat.opacity = 1;
+    if (this._bodyColorBase) mat.color.copy(this._bodyColorBase);
+    mat.needsUpdate = true;
+    this._body.castShadow = true;
+    this.visible = true;
+  }
 
   /** 命名部件寻址：命中部件 Object3D，未命中/未给 key 回落根节点（本对象）。 */
   partOrRoot(key = null) { return (key && this.parts.get(key)) || this; }
@@ -256,6 +268,7 @@ export class UnitObject extends THREE.Group {
 
   /** 死亡演出前置：隐藏血条/护盾/效果行等状态绘制——尸体不再读数，焚毁只剩立牌。 */
   hideStatus() { this._hpBar.visible = false; }
+  showStatus() { this._hpBar.visible = true; } // 复苏节拍恢复读数（与 hideStatus 对称）
 
   /** 单位投影更新：签名变化才重烘文本/重排血条。 */
   setUnit(projection) {

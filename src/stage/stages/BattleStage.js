@@ -75,8 +75,8 @@ const ARROW_Z = 45; // 瞄准箭头所在平面：高于手牌扇（静息 z≤1
 const BUTTON_SIZE = { w: 15, h: 6 };
 // 按钮纵列：主按钮（结束回合/确认）在上，换卡按钮在下（右下自由区，避让人群与手牌扇）
 export const BUTTON_POSITIONS = {
-  main: { x: 74, y: -4 },
-  swap: { x: 74, y: -12 },
+  main: { x: 74, y: -20 },
+  swap: { x: 74, y: -28 },
 };
 const PILE_POSITIONS = {
   deck: { x: 80, y: -55 },      // 牌库图标（手牌右侧下；扇形手牌卡中心右界 64，避让开）
@@ -573,6 +573,11 @@ export class BattleStage {
       if (!view || view.visible === false) continue;
       view.hideIntention?.();
       view.hideStatus?.();
+      if (u.reviving) {
+        // 假死稳态：落到 82° 倒地留尸（跳段/中途接入端与实时端同一稳态语言）
+        view.billboard.rotation.x = -THREE.MathUtils.degToRad(82);
+        continue;
+      }
       view.visible = false; // 稳态 = 焚毁演出终态（整体退场；reconcile 不重置 visible）
       n++;
     }
@@ -1351,7 +1356,7 @@ export class BattleStage {
     // 通用剧本闸口（fx 架构）：剧本自寻址（cast/unitById），不走 target 投影
     if (type === EventNames.ANIM_SCRIPT) return this._scriptBeat(payload, finish);
     if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
-    if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, finish);
+    if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, payload, finish);
     if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
     // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
     // 治疗追加 +N 绿色文本粒子（无重力上飘）
@@ -1685,14 +1690,21 @@ export class BattleStage {
     const px = unit.position.x;
     const py = unit.position.y;
     const pz = unit.position.z;
-    const TIP = THREE.MathUtils.degToRad(78); // 起始倾角：近平躺（与死亡的 82° 呼应）
+    // 复活接入（假死尸体起立，2026-09-22）：恢复可见/影子/读数/材质（兜底：若走了
+    // 焚毁链，restoreBody 把透明焦黑材质复原），从**当前倾角**起立——假死尸停在 82°，
+    // 正好以「从地上挣起来」的同一语言复苏；普通召唤 rotation.x≈0 时维持原 78° 平躺起立。
+    unit.restoreBody?.();
+    unit.showStatus?.();
+    const startRad = Math.abs(billboard.rotation.x) > 0.1
+      ? Math.abs(billboard.rotation.x)
+      : THREE.MathUtils.degToRad(78);
 
     // ① 立起（~0.38s，power3.out：起得急、临直立减速——「挣起来」的发力感）
     this.animator.animateCustom(unit.uniqueID, {
       durationMs: 380,
       ease: 'power3.out',
       onUpdate: (t) => {
-        billboard.rotation.x = -TIP * (1 - t);
+        billboard.rotation.x = -startRad * (1 - t);
         // 果冻展开：前 40% 纵向压扁（贴地铺开），后 60% 弹回全高
         const squash = t < 0.4 ? 0.55 + t : 1 - 0.28 * Math.sin(Math.PI * (t - 0.4) / 0.6);
         billboard.scale.y = squash;
@@ -1726,8 +1738,14 @@ export class BattleStage {
   // 倾倒作用于 billboard 的 X 轴（YXZ 序下与 faceCamera 的 yaw 正交组合，逐帧
   // yaw 不吃掉倾倒角），旋转轴过脚底——立牌物理感的根源；牌面立面底部锚定，
   // 绕原点转即天然「栽倒」而非「缩没」。
-  _unitDeathBeat(unit, finish) {
+  _unitDeathBeat(unit, payload, finish) {
     const id = unit.uniqueID;
+    // 假死分支（将复苏：春风/复苏系，2026-09-22 用户定补前端假死/复活语义）——
+    // 倒地留尸不焚毁：复苏时 ANIM_UNIT_SPAWN 从倒地姿态重新立起。判据读 **payload
+    // 里 core unit 的复活倒计时**（结算内同步挂上，实时）；不能用本舞台快照——
+    // unitDied 是「先 anim 后 sync」，死亡节拍播放时快照还是旧投影（reviving 未至），
+    // 误判走真死焚毁链（病灶：复苏后立起的是焚毁透明立牌）。
+    if ((payload?.unit?._reviveCountdown ?? 0) > 0) return this._unitFakeDeathBeat(unit, finish);
     const billboard = unit.billboard;
     unit.hideIntention(); // 意图即隐：尸体不再预告下一手
     const px = unit.position.x;
@@ -1754,6 +1772,27 @@ export class BattleStage {
           },
           onComplete: () => this._unitBurnAway(unit, finish),
         });
+      },
+    });
+  }
+
+  // 假死演出：与死亡同语言的倾倒+落尘，但**就地停住**——不焚毁不隐藏（尸体可见、
+  // 影子保留），状态条与意图隐藏（尸体不读数）。复苏节拍（ANIM_UNIT_SPAWN）从这
+  // 个 82° 倒地姿态直接起立；若它在到达前战斗结束，尸体随舞台销毁一起退场。
+  _unitFakeDeathBeat(unit, finish) {
+    const billboard = unit.billboard;
+    unit.hideIntention();
+    unit.hideStatus();
+    const TIP = THREE.MathUtils.degToRad(82);
+    const { x: px, y: py, z: pz } = unit.position;
+    this.animator.animateCustom(unit.uniqueID, {
+      durationMs: 470,
+      ease: 'power2.in',
+      onUpdate: (t) => { billboard.rotation.x = -TIP * t; },
+      onComplete: () => {
+        this.particles.spawn(px, py + 0.8, { count: 14, color: 0x8fa06a, speed: 7, ttl: 0.7, gravity: -6, size: 2.0, z: pz });
+        this.particles.spawn(px, py + 0.5, { count: 8, color: 0x6d7a4f, speed: 12, ttl: 0.45, gravity: -12, size: 1.3, z: pz });
+        finish(); // 停在倒地态：等复苏（或战斗结束）
       },
     });
   }

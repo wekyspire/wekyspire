@@ -30,6 +30,9 @@ export function projectUnit(u) {
     maxHp: u.maxHp,
     shield: u.shield,
     isDead: u.isDead(),
+    // 假死中（将复苏：reviveKit 挂了复活倒计时）——前端死亡演出走「倒地留尸」分支，
+    // 复活时由 ANIM_UNIT_SPAWN（复苏节拍）从倒地姿态重新立起
+    reviving: (u._reviveCountdown ?? 0) > 0,
     effects: u.effects.map(e => {
       // 定义元数据压平进视图（Stage 渲染效果行用，不 import Core 注册表）；
       // 未注册的效果（防御路径）按 id 兜底显示
