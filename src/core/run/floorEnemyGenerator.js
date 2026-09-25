@@ -21,7 +21,7 @@ import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from 
 // Boss 层难度按章取值。D 是一层战斗的总预算，与编成难度对齐（漂移 ±2）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
-const CHAPTER1_CURVE = [2, 3, 5, 8, 9, 10, 11, 12, 12, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss）。2026-09-22 前段放缓：L2/L3 是玩家 build 零成长窗口（首个跳跃点在 L2 后的训练房）
+const CHAPTER1_CURVE = [2, 3, 5, 6, 7, 10, 10, 10, 10, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss；L6/9 位是精英占位值，普通层不消费）。2026-09-22 用户两调：前段放缓（L2/L3 build 零成长窗口）+ 中段再压（L4 8→6、L5 9→7、L7/8 11/12→10——实测 L5 cost9 组合断崖）
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
