@@ -142,7 +142,7 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player,
-        amount: 12 + unit.getStat('attack') + unit.getEffectStacks('momentum'),
+        amount: 12 + unit.getStat('attack'), // 蓄势走 PRE 订阅（双计 bug 2026-09-22 修：意图曾少一份）
       }));
     }
   },

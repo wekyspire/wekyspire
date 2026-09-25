@@ -374,7 +374,7 @@ registerEnemy({
         target: unit, effectId: 'momentum', stacks: 3,
       }));
     } else {
-      const per = 1 + unit.getStat('attack') + unit.getEffectStacks('momentum');
+      const per = 1 + unit.getStat('attack'); // 蓄势由 momentum 的 PRE 订阅统一加（双计 bug 2026-09-22 修）
       for (let i = 0; i < 4; i++) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: player, amount: per,
@@ -485,7 +485,7 @@ registerEnemy({
     const { unit, player, battleState: bs } = actx;
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: unit, target: player,
-      amount: 4 + unit.getStat('attack', bs) + unit.getEffectStacks('momentum'),
+      amount: 4 + unit.getStat('attack', bs), // 蓄势走 PRE 订阅（防双计）
     }));
     for (const e of aliveEnemies(bs)) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
