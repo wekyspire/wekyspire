@@ -1,97 +1,55 @@
-// 章1 小怪（要塞外围，1~11 层普通池；按 2026-09 难度制出没区间标注在各自 difficulty）。
-// 拆分自原 content/enemies.js（2026-09-24，按「章小怪/精英/Boss」三分类；内容零改动）。
+// 章1 小怪（首个 Boss 前 · 第 1–10 层普通池）。
+// 2026-09-22 用户全量重写 ENEMIES_1.md：v2 固定数值（面板即所见），主题战编成见
+// floorEnemyGenerator.js；效果定义一律以 battle_gameplay/skills/EFFECTS.md 为准。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy } from '../../enemies/registry.js';
 import { registerSkill } from '../../skills/registry.js';
 import { AddCardInstruction, DrawCardsInstruction, BurnCardInstruction } from '../../instructions/cards.js';
-import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
+import { EnemyTurnStartInstruction } from '../../instructions/turn.js';
 import { aliveEnemies } from '../../state/battleState.js';
 
-// ① 固定行动序列杂鱼：攻 6 → 盾 4 循环
-registerEnemy({
-  id: 'slime', name: '史莱姆',
-  difficulty: { base: 2, floorMin: 1, floorMax: 14 },
-  createUnit: () => new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 20 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 6 + actx.unit.getStat('attack'),
-      }));
-    } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 4 }));
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }
-    : { kinds: ['defend'], note: '自身护盾+4' }),
-});
+// ---- 复苏组件（腐败根须/树心/刺刺草「春风」共用）----
+// onDeath 记账（剩余次数 + 倒计时 2），敌方回合开始时 tick——倒计时归零即复活。
+// 时序：玩家回合 N 击杀 → 敌回合 N（2→1）→ 玩家回合 N+1（喘息）→ 敌回合 N+1 复活动作
+// ——「死亡后 1 回合复活，玩家只有 1 回合喘息」。
+// 复活前提 = 战斗仍在进行：若它是场上最后一只敌人，击杀瞬间胜利结算先行、tick 永不
+// 执行——「把它留到最后杀」就是根须/树心的既定收束打法，无需改核心胜利判定。
+function reviveKit({ times = Infinity, hp = null } = {}) {
+  return {
+    onBattleStart(ctx, unit) {
+      unit._revives = times;
+      ctx.kernel.addSubscription({
+        when: EnemyTurnStartInstruction,
+        phase: 'post',
+        owner: `enemy:${unit.uniqueID}:revive`,
+        filter: () => unit.isDead() && (unit._reviveCountdown ?? 0) > 0,
+        react: (instr, kctx) => {
+          unit._reviveCountdown -= 1;
+          if (unit._reviveCountdown > 0) return;
+          unit._reviveCountdown = 0;
+          unit.hp = hp ?? unit.maxHp;
+          unit.shield = 0;
+          kctx.presenter?.unitSpawned?.({ source: null, unit });
+        },
+      });
+    },
+    onDeath(actx) {
+      const unit = actx.unit;
+      if ((unit._revives ?? 0) > 0) {
+        unit._revives -= 1;
+        unit._reviveCountdown = 2; // 隔一个完整玩家回合后复活
+      }
+    },
+  };
+}
 
-// ③ 针鼠：**首拍竖刺（荆棘3，一次性）**，此后「攻3+护盾8 ↔ 攻6」两拍往复。
-// 2026-09 用户改稿：旧版每两拍叠一次荆棘（越拖越痛），实质是在奖励速杀；改后荆棘只在开场
-// 上一次，长线战斗不再变本加厉——速攻的唯一优势只剩「第一拍就秒掉它」从而完全避开荆棘。
-registerEnemy({
-  difficulty: { base: 2, floorMin: 1, floorMax: 16 },
-  id: 'hedgehog', name: '针鼠',
-  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 18 }),
-  act(actx) {
-    if (actx.unit.actionIndex === 0) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'thorns', stacks: 3,
-      }));
-      return;
-    }
-    const phase = (actx.unit.actionIndex - 1) % 2;
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: actx.unit, target: actx.player,
-      amount: (phase === 0 ? 3 : 6) + actx.unit.getStat('attack'),
-    }));
-    if (phase === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
-    }
-  },
-  getIntention: (unit) => {
-    if (unit.actionIndex === 0) return { kinds: ['buff'], note: '自身荆棘3' };
-    const phase = (unit.actionIndex - 1) % 2;
-    return phase === 0
-      ? { kinds: ['attack', 'defend'], hits: 1, damage: 3 + unit.getStat('attack'), note: '自身护盾+8' }
-      : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') };
-  },
-});
+// ---- 淤积牌 ----
 
-// ⑤ 怨灵：攻6 → 咒（虚弱2：玩家攻击-2）→ 攻8 三拍循环——削弱玩家的输出轴，
-// 长线磨损。2026-09 稿改三拍（旧两拍版每两回合一虚，玩家直接萎了——超模）。
-// unique：每场至多一只——虚弱不衰减，双怨灵会把永久 -4 攻击叠到前期无法翻盘；
-// 血量 22→18 同步削弱（试玩反馈：前期压力过高）。
-registerEnemy({
-  difficulty: { base: 3, floorMin: 2, floorMax: 18 },
-  unique: true,
-  id: 'wraith', name: '怨灵',
-  createUnit: () => new Enemy({ defId: 'wraith', name: '怨灵', maxHp: 18 }),
-  act(actx) {
-    const phase = actx.unit.actionIndex % 3;
-    if (phase === 1) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'weaken', stacks: 2,
-      }));
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player,
-        amount: (phase === 0 ? 6 : 8) + actx.unit.getStat('attack'),
-      }));
-    }
-  },
-  getIntention: (unit) => {
-    const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['debuff'], note: '赋予玩家虚弱2（攻击-2）' };
-    return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 8) + unit.getStat('attack') };
-  },
-});
-
-// ⑩ 小史莱姆（前期微威胁杂兵，2026-09 难度制）：塞粘液 ↔ 攻3 两拍循环。
-// 粘液 = 1AP 抽1 消耗的淤积牌（比震慑温和：能打出换手，但吃 AP、占牌库）。
-// 只经 AddCard 入场，不入奖励池。
+// 粘液（小史莱姆衍生塞牌）：1AP 抽1 消耗——吃 AP、占牌库的软卡手税。只经 AddCard
+// 入场，不入奖励池。
 registerSkill({
   id: 'gooCard', name: '粘液', type: 'normal', tier: 'C', series: 'enemyJunk',
   cost: { mana: 0, actionPoint: 1 },
@@ -105,85 +63,159 @@ registerSkill({
   },
   describe: () => '抽1',
 });
+
+// ---- 普通怪 ----
+
+// 史莱姆：教学基准怪——攻 12 → 盾 8 两拍循环。第 1 层固定单挑；2–4 层史莱姆战固定位。
 registerEnemy({
-  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
-  id: 'slimelet', name: '小史莱姆',
-  createUnit: () => new Enemy({ defId: 'slimelet', name: '小史莱姆', maxHp: 3 }),
+  id: 'slime', name: '史莱姆',
+  difficulty: { base: 2, floorMin: 1, floorMax: 4 },
+  createUnit: () => new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 27 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
-      // 粘液塞牌库末（数组尾 = 最晚抽到）：污染在长线兑现，不卡当下
-      actx.kernel.submitInstruction(new AddCardInstruction({
-        defId: 'gooCard', toZone: 'deck', index: null,
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 12 + actx.unit.getStat('attack'),
       }));
     } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 3 + actx.unit.getStat('attack'),
-      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['debuff'], note: '向牌库末塞入1张「粘液」' }
-    : { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') }),
-  // 融合（wiki：「魔化时多只融合成一只大史莱姆，实际仍是多个体」）：尸液融入存活的
-  // 史莱姆族（+4血+1攻面板）——打小的喂大的，AOE/斩杀顺序的低压力教学（2026-09-14）。
-  onDeath(actx) {
-    for (const e of aliveEnemies(actx.battleState)) {
-      if (e.defId !== 'slime' && e.defId !== 'slimelet' && e.defId !== 'bigSlime') continue;
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 4 }));
-      e.attack += 1;
+    ? { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack') }
+    : { kinds: ['defend'], note: '自身护盾+8' }),
+});
+
+// 怨灵 A/B（成群出现的强 Debuff 位；A 类开局洗 4 张虚无，B 类开局虚弱 2）：
+// 之后两拍循环——攻 10 → 洗 1 张虚无。虚无牌永久滞留牌库，长线磨损玩家的抽牌质量。
+function wraithDef(id, opener) {
+  const open = opener.opener;
+  registerEnemy({
+    id, name: '怨灵',
+    difficulty: { base: 3, floorMin: 2, floorMax: 6 },
+    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 28 }),
+    act(actx) {
+      const { unit, player } = actx;
+      if (unit.actionIndex === 0) return open(actx);
+      const phase = (unit.actionIndex - 1) % 2;
+      if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 10 + unit.getStat('attack'),
+        }));
+      } else {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'voidCard', toZone: 'deck', index: 'random',
+        }));
+      }
+    },
+    getIntention: (unit) => {
+      if (unit.actionIndex === 0) return opener.intention;
+      return (unit.actionIndex - 1) % 2 === 0
+        ? { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }
+        : { kinds: ['debuff'], note: '向你的牌库洗入1张「虚无」' };
+    },
+  });
+}
+wraithDef('wraithA', {
+  intention: { kinds: ['debuff'], note: '向你的牌库洗入4张「虚无」' },
+  opener: (actx) => {
+    for (let i = 0; i < 4; i++) {
+      actx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'voidCard', toZone: 'deck', index: 'random',
+      }));
     }
   },
 });
+wraithDef('wraithB', {
+  intention: { kinds: ['debuff'], note: '赋予玩家虚弱2（攻击-2）' },
+  opener: (actx) => {
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: actx.player, effectId: 'weaken', stacks: 2,
+    }));
+  },
+});
 
-// ⑪ 嗡嗡虫（前期小敌人，2026-09；2026-09-14 章1「塔基爆发」改版）：wiki 习性
-// 「成群结队的冲击足以让人头晕目眩、难以视物」——振翅拍改为**塞 1 张迷眼粉尘**
-// （灼伤的轻量版，硬卡手教学）进牌库随机位，随后两拍撞击。本体脆（7 血），是
-// 章 1「塞卡/卡手」主题的入门件；与粘液（软卡手税）构成两档语言。
-registerEnemy({
-  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
-  id: 'buzzbug', name: '嗡嗡虫',
-  createUnit: () => new Enemy({ defId: 'buzzbug', name: '嗡嗡虫', maxHp: 7 }),
-  act(actx) {
-    const atk = actx.unit.getStat('attack');
-    const phase = actx.unit.actionIndex % 3;
-    if (phase === 0) {
-      // 振翅：迷眼粉尘塞入牌库随机位（抽到手上才开始计时）
-      actx.kernel.submitInstruction(new AddCardInstruction({
-        defId: 'dustCloud', toZone: 'deck', index: 'random',
+// 小史莱姆 A/B：微威胁铺场位。登场获得「融合」（EFFECTS.md：死亡时友军史莱姆族
+// 各恢复 6 生命 +2 力量）——打小的喂大的。A 类先塞后打，B 类先打后塞（错拍出题）。
+function slimeletDef(id, firstIsAttack) {
+  registerEnemy({
+    id, name: '小史莱姆',
+    difficulty: { base: 1, floorMin: 2, floorMax: 16 },
+    createUnit: () => new Enemy({ defId: id, name: '小史莱姆', maxHp: 9 }),
+    onBattleStart(ctx, unit) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'fusion', stacks: 1,
       }));
-    } else if (phase === 1) {
-      for (let i = 0; i < 4; i++) {
+    },
+    act(actx) {
+      const { unit, player } = actx;
+      const jab = unit.actionIndex % 2 === (firstIsAttack ? 1 : 0);
+      if (jab) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: actx.unit, target: actx.player, amount: 1 + atk,
+          source: unit, target: player, amount: 6 + unit.getStat('attack'),
+        }));
+      } else {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 3 + unit.getStat('attack'),
+        }));
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'gooCard', toZone: 'deck', index: null,
         }));
       }
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 3 + atk,
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const jab = unit.actionIndex % 2 === (firstIsAttack ? 1 : 0);
+      return jab
+        ? { kinds: ['attack'], hits: 1, damage: 6 + atk }
+        : { kinds: ['attack', 'debuff'], hits: 1, damage: 3 + atk, note: '向牌库末塞入1张「粘液」' };
+    },
+  });
+}
+slimeletDef('slimeletA', false); // A 类：拍1 塞粘液攻3 → 拍2 攻6
+slimeletDef('slimeletB', true);  // B 类：拍2 攻6 → 拍1 塞粘液攻3
+
+// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻6+盾8 → 攻10 → 攻6+荆棘3。
+registerEnemy({
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'hedgehog', name: '针鼠',
+  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 28 }),
+  act(actx) {
+    const { unit } = actx;
+    if (unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'thorns', stacks: 3,
+      }));
+      return;
+    }
+    const phase = (unit.actionIndex - 1) % 3;
+    const amount = (phase === 1 ? 10 : 6) + unit.getStat('attack');
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: actx.player, amount,
+    }));
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+    } else if (phase === 2) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'thorns', stacks: 3,
       }));
     }
   },
   getIntention: (unit) => {
+    if (unit.actionIndex === 0) return { kinds: ['buff'], note: '自身荆棘3' };
+    const phase = (unit.actionIndex - 1) % 3;
     const atk = unit.getStat('attack');
-    const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['debuff'], note: '振翅：1张迷眼粉尘塞入你的牌库' };
-    if (phase === 1) return { kinds: ['attack'], hits: 4, damage: 1 + atk };
-    return { kinds: ['attack'], hits: 1, damage: 3 + atk };
+    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+8' };
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
+    return { kinds: ['attack', 'buff'], hits: 1, damage: 6 + atk, note: '自身荆棘+3' };
   },
 });
 
-// ============ 第一章补充敌人（2026-09，设计卡见 battle_gameplay/ENEMIES_1.md §5）============
-// 四只各填一个机制空位（支援 / 预告重击 / 亡语 / 蛰伏），互不重叠，都不引入新资源轴。
-
-// ⑬ 腐苔球（2026-09-14 章1「塔基爆发」改版）：**腐烂蔓延**——活着就在收拢你的手牌
-// 空间（紧勒，EFFECTS.md 目录定义的实装首用）：每拍玩家紧勒+1（手牌上限 -1，效果
-// 轨可见），奇数拍小攻、偶数拍自愈；**枯萎（死亡）时归还自己施加的全部层数**——
-// 绑怪生命周期的教学化口径：杀了就松手。上限实际扣减直改 player.maxHandSize
-// （战斗内有效；战后 refreshRunModifiers 从 baseStats 重算自动恢复），下限 2 不锁死。
+// 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，效果轨可见），奇数拍攻 8、
+// 偶数拍自愈盾回；亡语归还自己施加的全部紧勒层数（杀了就松手）。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'mossBall', name: '腐苔球',
-  createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 14 }),
+  createUnit: () => new Enemy({ defId: 'mossBall', name: '腐苔球', maxHp: 30 }),
   act(actx) {
     const { unit, player } = actx;
     unit._grip = (unit._grip ?? 0) + 1;
@@ -192,15 +224,16 @@ registerEnemy({
     player.maxHandSize = Math.max(2, (player.maxHandSize ?? 5) - 1);
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 3 + unit.getStat('attack') }));
+        source: unit, target: player, amount: 8 + unit.getStat('attack') }));
     } else {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 3 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 8 }));
     }
   },
   getIntention: (unit) => ({
-    kinds: unit.actionIndex % 2 === 0 ? ['attack', 'debuff'] : ['buff', 'debuff'],
+    kinds: unit.actionIndex % 2 === 0 ? ['attack', 'debuff'] : ['defend', 'buff', 'debuff'],
     hits: unit.actionIndex % 2 === 0 ? 1 : undefined,
-    damage: unit.actionIndex % 2 === 0 ? 3 + unit.getStat('attack') : undefined,
+    damage: unit.actionIndex % 2 === 0 ? 8 + unit.getStat('attack') : undefined,
     note: '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）',
   }),
   onDeath(actx) {
@@ -213,248 +246,337 @@ registerEnemy({
   },
 });
 
-// ⑭ 鼓腹蟾（2026-09-14 章1「塔基爆发」改版）：**鼓腹**——每次被攻击膨胀（攻击+1，
-// _inflated 计数），膨胀满 4 次后下一拍**自爆**（对玩家 8+atk 伤并炸死自己）——
-// 「别贪刀连打」的轻教学，与静电毛球互为镜像（毛球不打它亏、蟾蜍打太狠亏）。
-// 意图实时反映膨胀伤害与自爆预告（玩家出牌后刷新意图），膨胀可见可控。
+// 鼓腹蟾：渐强威胁——拍1 鼓气（未知）、拍2 攻10、拍3 起永远重击 18。放着不管会出事，
+// 但打它没有任何反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'pufferToad', name: '鼓腹蟾',
-  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 20 }),
+  createUnit: () => new Enemy({ defId: 'pufferToad', name: '鼓腹蟾', maxHp: 40 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex === 0) return; // 鼓气：白给一拍
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player,
+      amount: (unit.actionIndex === 1 ? 10 : 18) + unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '鼓腹（蓄力中）' };
+    if (unit.actionIndex === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
+    return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
+  },
+});
+
+// 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 20 并
+// 自爆）。三拍节奏：攻5 → 攻8 → 原地待爆。杀它 = 拆弹（被击杀则引线什么都不做）。
+registerEnemy({
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'blastPod', name: '爆囊',
+  createUnit: () => new Enemy({ defId: 'blastPod', name: '爆囊', maxHp: 28 }),
   onBattleStart(ctx, unit) {
-    // 受击响应挂应用原语 POST + 只认主级（2026-09-15 拆分）：「被攻击膨胀」——
-    // 附级伤害（玩家荆棘反伤/毒 tick）不喂膨胀（此前 filter 只查 source 非空，
-    // 荆棘反伤 source=敌方 unit，会白喂膨胀=同族病灶，本次顺手修正）。
-    ctx.kernel.addSubscription({
-      when: ApplyDamageInstruction, phase: 'post',
-      owner: `enemy:${unit.uniqueID}:inflate`,
-      filter: (instr) => instr.target === unit && instr.source
-        && instr.type === 'major' && !unit.isDead(),
-      react: () => {
-        unit._inflated = (unit._inflated ?? 0) + 1;
-        unit.attack += 1; // 膨胀：攻击面板直接涨（difficultyScaling 同款直改口径）
-      },
-    });
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'blastFuse', stacks: 3,
+    }));
   },
   act(actx) {
     const { unit, player } = actx;
-    if ((unit._inflated ?? 0) >= 4) {
-      // 自爆：对玩家爆发并炸死自己（走正规死亡结算）
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 8 + unit.getStat('attack') }));
+        source: unit, target: player, amount: 5 + unit.getStat('attack'),
+      }));
+    } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: unit, amount: 999, pierce: true, tags: ['burst'] }));
+        source: unit, target: player, amount: 8 + unit.getStat('attack'),
+      }));
+    }
+    // phase 2：原地待爆（引线在回合结束自然走）
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const fuse = unit.getEffectStacks('blastFuse');
+    const boom = `爆炸引线${fuse}：归零时对玩家阵营全体炸 20（击杀它=拆弹）`;
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 5 + atk, note: boom };
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 8 + atk, note: boom };
+    return { kinds: ['unknown'], note: `准备引爆！${boom}` };
+  },
+});
+
+// 石茧：首拍重击 15，此后每拍攻6+盾9——没有沉眠期了（2026-09-22 稿），开局就是压力。
+registerEnemy({
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'stoneCocoon', name: '石茧',
+  createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 36 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 15 + unit.getStat('attack'),
+      }));
       return;
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: player, amount: 5 + unit.getStat('attack') }));
-  },
-  getIntention: (unit) => {
-    const n = unit._inflated ?? 0;
-    if (n >= 3) return { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack'), note: '即将自爆！（停止攻击它）' };
-    return { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack'), note: n > 0 ? `鼓腹×${n}：每被攻击一次膨胀+1攻` : undefined };
-  },
-});
-
-// ⑮ 爆囊：攻 3 ↔ 引线+1 两拍循环；**亡语**——死亡时对玩家造成 6 + 3×引线 伤害（可被盾挡）。
-// 低血高代价的「什么时候杀它」考题：早杀便宜、拖延变贵，但代价完全由玩家掌控。
-// 亡语经 combat.js 的 onDeath 钩子提交（作为致死伤害的子节点立即结算）。
-registerEnemy({
-  difficulty: { base: 1, floorMin: 2, floorMax: 16 },
-  id: 'blastPod', name: '爆囊',
-  createUnit: () => new Enemy({ defId: 'blastPod', name: '爆囊', maxHp: 9 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 3 + actx.unit.getStat('attack'),
-      }));
-    } else {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'blastFuse', stacks: 1,
-      }));
-    }
-  },
-  onDeath(actx) {
-    const fuse = actx.unit.getEffectStacks('blastFuse');
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: actx.unit, target: actx.player, amount: 6 + 3 * fuse,
+      source: unit, target: player, amount: 6 + unit.getStat('attack'),
     }));
+    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 9 }));
   },
   getIntention: (unit) => {
-    // 亡语数值恒挂 note（含攻击拍）——「这回合杀不杀它」的决策窗口在每一拍，
-    // 只在引线拍亮数值等于要求玩家背公式（R8-B/C 双杀点的信息负担）。
-    // 预览口径 = 此刻击杀的爆炸（6+3×当前引线）——引线是爆囊自己行动时才 +1，
-    // 玩家在己方回合看到意图的决策窗口里，多算一层会高估 3 点代价
-    const fuse = unit.getEffectStacks('blastFuse');
-    const boom = `引线：死亡时对玩家造成 ${6 + 3 * fuse} 伤害`;
-    if (unit.actionIndex % 2 === 0) {
-      return { kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack'), note: boom };
-    }
-    return { kinds: ['debuff'], note: boom };
+    const atk = unit.getStat('attack');
+    return unit.actionIndex === 0
+      ? { kinds: ['attack'], hits: 1, damage: 15 + atk, note: '破茧重击' }
+      : { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+9' };
   },
 });
 
-// ⑯ 石茧：沉眠 1 拍（白给）+ 苏醒时攻击 +2，此后每拍 8+攻击。一道「打得掉吗」的 DPS
-// 检查：一拍内打不掉 26 血，就要开始面对 8/拍的持续压力（且它无减伤，随时可回头集火）。
-// 攻击 +2 落在沉眠拍末尾——苏醒拍的意图预告直接含 +2，所见即所算。
+// 岩螺：蓄势引擎——拍1 缩壳（盾10+回10+蓄势3），拍2 攻1×4（蓄势让每段都吃加成）。
+// 拖得越久打越疼，但本体血厚难秒：打还是磨的节奏题。
 registerEnemy({
-  difficulty: { base: 3, floorMin: 4, floorMax: 16 },
-  id: 'stoneCocoon', name: '石茧',
-  createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 26 }),
-  // 苏醒回合参数（用户 2026-09-11 定）：wakeDelay = 沉眠几拍才苏醒（缺省 1 = 只沉眠一拍），
-  // **苏醒越晚 = 难度越低**（少叠一层力量 wakeStrength，且由遭遇生成侧按更低难度配额生成）。
-  // 同层多只石茧时，第二只起延迟一回合苏醒——否则「两只同拍醒＝每回合 20+ 伤」是
-  // 第 1 章最容易低估的死局（第 3 轮试玩两个正常局皆死于此）。
-  act(actx) {
-    const wakeDelay = actx.unit.wakeDelay ?? 1;
-    if (actx.unit.actionIndex < wakeDelay) {
-      // 力量只在**最后一拍沉眠**叠一次：否则沉眠越久叠得越多，「苏醒越晚难度越低」会被抵消
-      if (actx.unit.actionIndex === wakeDelay - 1) {
-        actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: actx.unit, effectId: 'strength', stacks: actx.unit.wakeStrength ?? 2,
-        }));
-      }
-      return; // 沉眠：本拍不攻击
-    }
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: actx.unit, target: actx.player, amount: 8 + actx.unit.getStat('attack'),
-    }));
-  },
-  getIntention: (unit) => {
-    const wakeDelay = unit.wakeDelay ?? 1;
-    // 沉睡期把「还有几拍醒、醒了打多少」说清（纯展示，不影响 AI 行为）
-    if (unit.actionIndex < wakeDelay) {
-      const left = wakeDelay - unit.actionIndex;
-      return { kinds: ['unknown'], note: `沉眠：${left} 回合后苏醒并获得力量${unit.wakeStrength ?? 2}，此后每回合都攻击` };
-    }
-    return { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack') };
-  },
-});
-
-// ⑰ 岩螺（第一章「苦战」底盘，2026-09 用户定：给慢慢磨的牌组留位置）：攻 4+攻击 ↔
-// 缩壳（自身护盾6 + 回复4），两拍循环。特征 = **攻击弱、不会越来越强、血巨厚**：
-// 它不叠 buff、不爆发、不召唤，纯粹考「能不能一边稳挡一边保持输出节奏」——缩壳的回血
-// 让「纯磨血」不够，但也不需要任何爆发。它是第一章唯一适合打持久战的敌人。
-registerEnemy({
-  difficulty: { base: 3, floorMin: 4, floorMax: 16 },
+  difficulty: { base: 4, floorMin: 2, floorMax: 16 },
   id: 'rockSnail', name: '岩螺',
-  createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 40 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 4 + actx.unit.getStat('attack'),
-      }));
-    } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 6 }));
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 4 }));
-      // 缩壳蓄势（2026-09-14 马拉松修复）：礁石滩曾是「无风险磨 12+ 回合」——攻击软、
-      // 缩壳无限回复，输出不足的卡组全程零压力干耗。每次缩壳 +1 蓄势（每层攻击+1，
-      // 走 getStat 自动进攻击与意图预告）＝温水煮青蛙的时间账单：磨可以，但越磨越疼。
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 1,
-      }));
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
-    : { kinds: ['defend', 'buff'], note: '缩壳：自身护盾6，回复4，蓄势+1' }),
-});
-
-// ⑰ 刺刺草（wiki：F·木「茎秆布满尖刺」「刺尖含麻痹毒素」「缓慢蠕动」）：低层 DoT
-// 教学件——藤鞭 4+中毒1 ↔ 扎根自盾4 两拍循环；血薄（12），是「带不带解毒素」的
-// 第一道分岔题。
-registerEnemy({
-  difficulty: { base: 2, floorMin: 3, floorMax: 14 },
-  id: 'thornWeed', name: '刺刺草',
-  createUnit: () => new Enemy({ defId: 'thornWeed', name: '刺刺草', maxHp: 12 }),
+  createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 55 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 4 + unit.getStat('attack') }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: player, effectId: 'poison', stacks: 1 }));
+        target: unit, effectId: 'momentum', stacks: 3,
+      }));
     } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 4 }));
+      const per = 1 + unit.getStat('attack') + unit.getEffectStacks('momentum');
+      for (let i = 0; i < 4; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: per,
+        }));
+      }
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack', 'debuff'], hits: 1, damage: 4 + unit.getStat('attack'), note: '藤鞭：中毒1' }
-    : { kinds: ['defend'], note: '扎根：自身护盾+4' }),
+    ? { kinds: ['defend', 'buff'], note: '缩壳：自身护盾+10、回复10、蓄势+3' }
+    : { kinds: ['attack'], hits: 4,
+        damage: 1 + unit.getStat('attack') + unit.getEffectStacks('momentum'),
+        note: `蓄势${unit.getEffectStacks('momentum')}：每段伤害+${unit.getEffectStacks('momentum')}` }),
 });
 
-// ⑱ 腐食甲虫（wiki：E「集群 10-30」「啃食皮革制品、帆布背包或裸露在外的食物」
-// 「传播病菌」）：集群白板+双重资源压力——攻击附带**啃食**（吃掉玩家牌库顶 1 张，
-// 本场消化：战斗 zones 是 run 牌组的克隆，焚毁天然不回写）；**亡语病菌**（死亡时
-// 玩家中毒 2）——AOE 流的甜蜜点带小代价。
+// 刺刺草：春风——第一次死亡后隔 1 回合以 14 血复苏；每拍藤鞭（攻5+中毒2）。
 registerEnemy({
-  difficulty: { base: 1, floorMin: 3, floorMax: 14 },
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'thornWeed', name: '刺刺草',
+  createUnit: () => new Enemy({ defId: 'thornWeed', name: '刺刺草', maxHp: 19 }),
+  ...reviveKit({ times: 1, hp: 14 }),
+  act(actx) {
+    const { unit, player } = actx;
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player, amount: 5 + unit.getStat('attack'),
+    }));
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: player, effectId: 'poison', stacks: 2,
+    }));
+  },
+  getIntention: (unit) => ({ kinds: ['attack', 'debuff'], hits: 1,
+    damage: 5 + unit.getStat('attack'), note: '藤鞭：中毒2（春风：第一次死亡后复苏）' }),
+});
+
+// 腐食甲虫：出场自带甲壳2（主级伤害减半/层）；每拍啃咬（攻5 + 吃掉玩家牌库顶1张）。
+registerEnemy({
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'carrionBeetle', name: '腐食甲虫',
-  createUnit: () => new Enemy({ defId: 'carrionBeetle', name: '腐食甲虫', maxHp: 8 }),
+  createUnit: () => new Enemy({ defId: 'carrionBeetle', name: '腐食甲虫', maxHp: 22 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'shell', stacks: 2,
+    }));
+  },
   act(actx) {
     const { unit, player, battleState: bs } = actx;
     actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: player, amount: 3 + unit.getStat('attack') }));
+      source: unit, target: player, amount: 5 + unit.getStat('attack'),
+    }));
     const top = bs.zones.deck[0];
     if (top) {
       actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: top.uniqueID }));
     }
   },
   getIntention: (unit) => ({ kinds: ['attack', 'debuff'], hits: 1,
-    damage: 3 + unit.getStat('attack'), note: '啃食：吃掉你的牌库顶1张（本场消化）' }),
-  onDeath(actx) {
-    actx.kernel.submitInstruction(new AddEffectInstruction({
-      target: actx.player, effectId: 'poison', stacks: 2 }));
+    damage: 5 + unit.getStat('attack'), note: '啃食：吃掉你的牌库顶1张（本场消化）' }),
+});
+
+// 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 攻10+盾30 → 恢复24 → 攻22。
+// 自愈+厚盾+大单发，是一只完整的「马拉松检查」。
+registerEnemy({
+  difficulty: { base: 3, floorMin: 2, floorMax: 16 },
+  id: 'diggerMole', name: '掘地鼹鼠',
+  createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 38 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 7 + unit.getStat('attack'),
+      }));
+      return;
+    }
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 10 + unit.getStat('attack'),
+      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 30 }));
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 24 }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 22 + unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) return { kinds: ['attack'], hits: 1, damage: 7 + atk, note: '突袭' };
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 10 + atk, note: '自身护盾+30' };
+    if (phase === 1) return { kinds: ['buff'], note: '掘洞恢复：回复24' };
+    return { kinds: ['attack'], hits: 1, damage: 22 + atk, note: '重击' };
   },
 });
 
-// ⑲ 掘地鼹鼠（wiki：F·地「异常发达、金属光泽的前爪」「挖洞逃离危险」「致病菌」）：
-// **遁地节拍**——突袭 7 ↔ 遁地（闪避拉到 2+自愈 2）两拍循环。遁地拍玩家打不着它
-// （蒸发口径：遁地给的闪避跨玩家回合仍在），现身拍是集火窗口——「转火时机」的
-// 低配教学（与第四章音叉错拍同族但更直白）。
+// 静电毛球：电动（每有一个友军攻击+3，友军增减即时反映面板）——集群越厚它越凶。
+// 每拍电击（攻4）并为友军全员蓄势+1：群战里的成长引擎。血量 16–24 随机（生成器定档）。
 registerEnemy({
-  difficulty: { base: 3, floorMin: 5, floorMax: 16 },
-  id: 'diggerMole', name: '掘地鼹鼠',
-  createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 14 }),
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'staticPuff', name: '静电毛球',
+  createUnit: () => new Enemy({ defId: 'staticPuff', name: '静电毛球', maxHp: 20 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'dynamo', stacks: 1,
+    }));
+  },
+  act(actx) {
+    const { unit, player, battleState: bs } = actx;
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player,
+      amount: 4 + unit.getStat('attack', bs) + unit.getEffectStacks('momentum'),
+    }));
+    for (const e of aliveEnemies(bs)) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: e, effectId: 'momentum', stacks: 1,
+      }));
+    }
+  },
+  getIntention: (unit, battleState) => {
+    const atk = unit.getStat('attack', battleState);
+    const friends = battleState
+      ? aliveEnemies(battleState).filter(u => u !== unit && !u.isDead()).length : 1;
+    return { kinds: ['attack', 'buff'], hits: 1,
+      damage: 4 + atk + unit.getEffectStacks('momentum'),
+      note: `电动（友军${friends}名：攻击+${3 * friends}），友军全员蓄势+1` };
+  },
+});
+
+// 嗡嗡虫 A/B（塞卡干扰位，成群出现）：登场闪避1；三拍循环——A 类先塞后打，B 类先打后塞。
+// 迷眼粉尘塞牌库随机位（抽到手上才开始计时），尾拍是 2×5 的多段撞击。
+function buzzbugDef(id, firstIsAttack) {
+  registerEnemy({
+    id, name: '嗡嗡虫',
+    difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+    createUnit: () => new Enemy({ defId: id, name: '嗡嗡虫', maxHp: 19 }),
+    onBattleStart(ctx, unit) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'dodge', stacks: 1,
+      }));
+    },
+    act(actx) {
+      const { unit, player } = actx;
+      const phase = unit.actionIndex % 3;
+      const swarm = phase === 2;
+      const jab = phase === (firstIsAttack ? 1 : 0);
+      if (swarm) {
+        for (let i = 0; i < 5; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 2 + unit.getStat('attack'),
+          }));
+        }
+      } else if (jab) {
+        for (let i = 0; i < 4; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 1 + unit.getStat('attack'),
+          }));
+        }
+      } else {
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new AddCardInstruction({
+            defId: 'dustCloud', toZone: 'deck', index: 'random',
+          }));
+        }
+      }
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const phase = unit.actionIndex % 3;
+      if (phase === 2) return { kinds: ['attack'], hits: 5, damage: 2 + atk };
+      const jab = phase === (firstIsAttack ? 1 : 0);
+      return jab
+        ? { kinds: ['attack'], hits: 4, damage: 1 + atk }
+        : { kinds: ['debuff'], note: '振翅：2张迷眼粉尘塞入你的牌库' };
+    },
+  });
+}
+buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍3 撞×5
+buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×5
+
+// 腐败根须：会复苏的一直攻击——死亡后隔 1 回合满血复活（无限次；作为场上最后一只
+// 被击杀时战斗即刻胜利，复苏不触发）。两拍循环：攻8 → 攻4×3。
+registerEnemy({
+  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+  id: 'rottenRoot', name: '腐败根须',
+  createUnit: () => new Enemy({ defId: 'rottenRoot', name: '腐败根须', maxHp: 15 }),
+  ...reviveKit({ times: Infinity }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 7 + unit.getStat('attack') }));
+        source: unit, target: player, amount: 8 + unit.getStat('attack'),
+      }));
     } else {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'dodge', stacks: 2 }));
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 2 }));
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 4 + unit.getStat('attack'),
+        }));
+      }
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack'), note: '突袭' }
-    : { kinds: ['buff'], note: '遁地：自身闪避2、自愈2（打不着它）' }),
+    ? { kinds: ['attack'], hits: 1, damage: 8 + unit.getStat('attack'), note: '复苏：死后1回合复活' }
+    : { kinds: ['attack'], hits: 3, damage: 4 + unit.getStat('attack'), note: '复苏：死后1回合复活' }),
 });
 
-// 灵脉虹吸的黑名单：纯玩家侧触发逻辑（偷过去语义反转）与内部计数轨不可偷
-const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse']);
-
-// ============ 章1「塔基爆发」新敌（2026-09-14 用户设计；wiki 魔物爆发页低阶魔物，
-// 习性即机制书）。主题：塔基要塞正处一场 D 级魔物爆发中——F/E 级杂鱼起步，机制随
-// 烈度爬升（DoT → 滚雪球 → 时机 → 集群 → 组合），6/9 层精英收烈度，11 层源头 Boss。============
-
-// ⑯ 静电毛球（wiki：E·雷「滚动摩擦积蓄静电」「多个附着累积电击致肢体僵硬」「怕水」）：
-// **充能**（2026-09-14 用户新效果）——每拍自动充能+1（每层攻击+1，意图栏实时可见
-// 滚雪球），玩家攻击它=提前放电（受击层数-2）。不打它越电越强、打它有泄压收益——
-// 攻防节奏抉择，与鼓腹蟾互为镜像（蟾蜍打太狠亏、毛球不打亏）。
+// 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。两拍：攻6 → 攻4×3。
 registerEnemy({
-  difficulty: { base: 2, floorMin: 4, floorMax: 12 },
-  id: 'staticPuff', name: '静电毛球',
-  createUnit: () => new Enemy({ defId: 'staticPuff', name: '静电毛球', maxHp: 10 }),
+  difficulty: { base: 3, floorMin: 2, floorMax: 16 },
+  id: 'rottenTreeHeart', name: '腐败树心',
+  createUnit: () => new Enemy({ defId: 'rottenTreeHeart', name: '腐败树心', maxHp: 45 }),
+  ...reviveKit({ times: Infinity }),
   act(actx) {
     const { unit, player } = actx;
-    // 先放电后积蓄：行动面板在提交一刻快照——同拍「先充再放」吃不到新充能；
-    // 倒序后每拍攻击自然吃到上一拍的充能，与意图 damage 同口径。
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: player, amount: 3 + unit.getStat('attack') }));
-    actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'charge', stacks: 1 }));
+    if (unit.actionIndex % 2 === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: player, amount: 6 + unit.getStat('attack'),
+      }));
+    } else {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 4 + unit.getStat('attack'),
+        }));
+      }
+    }
   },
-  getIntention: (unit) => ({ kinds: ['attack'], hits: 1, damage: 3 + unit.getStat('attack') + 1,
-    note: `静电放电（充能${unit.getEffectStacks('charge')}+1：每层+1，攻击它泄放2层）` }),
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack'), note: '复苏：死后1回合复活' }
+    : { kinds: ['attack'], hits: 3, damage: 4 + unit.getStat('attack'), note: '复苏：死后1回合复活' }),
 });
+
+// 灵脉虹吸的黑名单：纯玩家侧触发逻辑（偷过去语义反转）与内部计数轨不可偷。
+// blastFuse（2026-09-22 重定义）仍是敌方式倒计时——玩家挂着只会炸自己，不可偷。
+// bosses.js 的吞噬者（灵脉虹吸）同表共用——此前它引用了未导出的本表（潜在 ReferenceError）。
+export const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse', 'fusion']);

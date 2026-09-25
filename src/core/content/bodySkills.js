@@ -749,8 +749,9 @@ discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 0 });
 
 // 肾上腺素 B/A（通用灰卡，2026-09-21 大调：C→B 并补 A 档，COMMON_CARDS 定稿）：
 // 0 开销消耗卡——获得 1AP 并抽 2/3 牌。应急节奏阀，消耗属性保证不沉淀循环。
-// 2026-09-21 D1：体修基础能力由「白送肾上腺素」改为「AP 上限 +1」，起始卡组
-// 不再绑定此卡；之后可经通用注入抽到（pack: 'common'）。
+// 2026-09-22 用户定稿：体修基础能力 = 「多获得一张肾上腺素」（起始组共两张，
+// 见 routes.js 的 body 路线）；旧「AP 上限 +1」（D1）已废弃。本卡仍可经通用注入抽到
+//（pack: 'common'）。
 function adrenalineCard({ id, tier, draw, promotesTo = null }) {
   registerSkill({
     id, name: '肾上腺素', type: 'normal', pack: 'common', tier, series: 'fist',
@@ -797,6 +798,7 @@ registerSkill({
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
 // 拳（C）×5 + 盾（C）×4 + 抱头（C）×1 + 肾上腺素 ×1 + 情况不对 ×1
+//（肾上腺素 ×2 ——第二张由体修基础能力追加，见 routes.js）
 // （2026-09-21 用户定：12 张加厚；抱头经「全系 +4 护盾」强化后换回一张盾归位——
 // 格挡链首重新成为体修开局种子）。
 // 肾上腺素做节奏阀、情况不对做鬼抽保险。

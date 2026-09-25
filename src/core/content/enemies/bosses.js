@@ -12,6 +12,7 @@ import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../../instructions/turn.js';
 import { GainManaInstruction } from '../../instructions/resources.js';
 import { aliveEnemies, aliveAllies, allAliveUnits, zoneOf } from '../../state/battleState.js';
+import { ESSENCE_STEAL_BLACKLIST } from './chapter1.js';
 
 // 【过热自保】受压计数挂载（无人战体 / 神兵躯壳共用；2026-09-21 用户设计）：
 //   玩家回合开始清零 → 累计本回合该单位受到的**生命值伤害**（`result.dealt`）。

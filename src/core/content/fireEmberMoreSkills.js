@@ -136,6 +136,7 @@ const willOWispCard = ({ id, tier, chantWeight, promotesTo = null }) => register
       when: ApplyDamageInstruction, phase: 'post',
       filter: (instr) => instr.target.side === 'enemy'
         && instr.result?.targetDead === true
+        && !(instr.result?.skipped ?? false) // 过期目标守卫的占位结果不算（多段击杀余段会重复带 targetDead）
         && instr.target.getEffectStacks('burn') > 0,
       react: (instr, ctx) => {
         const stacks = instr.target.getEffectStacks('burn');

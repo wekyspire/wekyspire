@@ -17,11 +17,11 @@ import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
-// 章1 表驱动（用户 2026-09-24 上调后重新配平），章 2–4 每 2 层 +1；
+// 章1 表驱动（用户 2026-09-22 ENEMIES_1 重写：陡升后收平等 Boss），章 2–4 每 2 层 +1；
 // Boss 层难度按章取值。D 是一层战斗的总预算，与编成难度对齐（漂移 ±2）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
-const CHAPTER1_CURVE = [2, 4, 5, 6, 6, 6, 7, 7, 7, 7]; // 章1 表驱动（v2 离散难度：与怪物 base 1–3 匹配）
+const CHAPTER1_CURVE = [2, 4, 6, 8, 9, 10, 11, 12, 12, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss）
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
@@ -37,26 +37,59 @@ export function floorDifficulty(floor) {
 // ---- 战斗模板（主题编成）----
 // slots：{ fixed?: defId }——fixed 为钉死位，其余为通配位（从当层可用池就近取材）。
 // 模板适用条件：楼层 ∈ [minFloor,maxFloor]，且编成难度落在 [D−2, D+2] 漂移窗内。
-// 编成难度 = 各槽位难度之和：钉死位取该敌 base；通配位取当层池的「代表难度」
-// （池面 base 的众数低值——通配位是变量，模板难度只作锚，实际编成由取材时的
-// 就近原则贴线）。
+// 编成难度：显式 `cost` 优先（章1 主题战 = 设计卡标定的遭遇难度，不等于槽位 base 之和），
+// 否则 = 各槽位难度之和（钉死位取该敌 base；通配位取当层池的代表难度——池面 base
+// 的众数低值，通配位是变量，模板难度只作锚）。
+// 章规则元数据（ENEMIES_1.md 2026-09-22）：`once: true` 一局至多出现一次；
+// `excl: [...]` 与列出的模板互斥（对方出现过则本模板不再出）。历史由「确定性重放
+// 1..floor-1 的普通层模板选择」推得（同 seed 同分布，无新增存档字段）。
 const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
-  { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'slime' }, {}] },
+  { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 4, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
-  // —— 第一章主题编成（设计卡 battle_gameplay/ENEMIES_1.md §4）——
-  { id: 'chainBlast', name: '连环爆', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }] },
-  { id: 'twinClock', name: '钟摆双塔', minFloor: 5, maxFloor: 10, slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
-  { id: 'reef', name: '礁石滩', minFloor: 6, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'rockSnail' }] },
-  { id: 'mudFlat', name: '淤泥滩', minFloor: 4, maxFloor: 10, slots: [{ fixed: 'rockSnail' }, { fixed: 'slime' }, { fixed: 'slime' }] },
-  // —— 章1「塔基爆发」编队（2026-09-14 用户设计；wiki 魔物爆发：F/E 级杂鱼起步）——
-  { id: 'infestation', name: '虫群风暴', minFloor: 2, maxFloor: 10, slots: [{ fixed: 'buzzbug' }, { fixed: 'buzzbug' }, { fixed: 'buzzbug' }, {}] },
-  { id: 'thornPatch', name: '草丛', minFloor: 3, maxFloor: 10, slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, {}] },
-  { id: 'staticField', name: '静电原野', minFloor: 4, maxFloor: 12, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
-  { id: 'digSite', name: '掘地场', minFloor: 5, maxFloor: 12, slots: [{ fixed: 'diggerMole' }, { fixed: 'diggerMole' }, {}] },
-  { id: 'beetleTide', name: '甲虫潮', minFloor: 6, maxFloor: 14, slots: [{ fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }, {}] },
-  { id: 'resonance', name: '共振带', minFloor: 8, maxFloor: 14, slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'diggerMole' }] },
-  { id: 'rotGarden', name: '腐蔓园', minFloor: 6, maxFloor: 12, slots: [{ fixed: 'mossBall' }, { fixed: 'thornWeed' }, { fixed: 'buzzbug' }] },
+  // —— 第一章主题战（ENEMIES_1.md 2026-09-22 全量重写；cost=设计卡标定遭遇难度）——
+  { id: 'wraithBurst', name: '怨灵爆发', cost: 6, minFloor: 2, maxFloor: 6, once: true,
+    slots: [{ fixed: 'wraithA' }, { fixed: 'wraithB' }] },
+  { id: 'slimeletBurst', name: '小史莱姆爆发', cost: 4, minFloor: 2, maxFloor: 5, once: true,
+    slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }] },
+  { id: 'slimeBurst', name: '史莱姆爆发', cost: 5, minFloor: 2, maxFloor: 5, once: true, excl: ['slimeletBurst'],
+    slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }, { fixed: 'slime' }] },
+  { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 2, maxFloor: 9, once: true, excl: ['rotEye'],
+    slots: [{ fixed: 'mossBall' }, { fixed: 'mossBall' }, { fixed: 'slime' }] },
+  { id: 'pester', name: '难缠麻烦', cost: 6, minFloor: 2, maxFloor: 5, once: true,
+    slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBall' }, { fixed: 'pufferToad' }] },
+  { id: 'toadPool', name: '蛤蟆漩涡', cost: 7, minFloor: 2, maxFloor: 7, once: true, excl: ['greatToadPool'],
+    slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'pufferToad' }] },
+  { id: 'greatToadPool', name: '大蛤蟆漩涡', cost: 8, minFloor: 2, maxFloor: 10, once: true, excl: ['toadPool'],
+    slots: [{ fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'pufferToad' }, { fixed: 'mossBall' }] },
+  { id: 'rotEye', name: '腐败之眼', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['rotHeart', 'mudFlat'],
+    slots: [{ fixed: 'mossBall' }, { fixed: 'mossBall' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }] },
+  { id: 'rotHeart', name: '腐败之心', cost: 10, minFloor: 2, maxFloor: 10, once: true, excl: ['rotEye'],
+    slots: [{ fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenTreeHeart' }] },
+  { id: 'creviceA', name: '石缝生物A', cost: 5, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceB', 'creviceC'],
+    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBall' }] },
+  { id: 'creviceB', name: '石缝生物B', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceA', 'creviceC'],
+    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToad' }] },
+  { id: 'creviceC', name: '石缝生物C', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['creviceA', 'creviceB'],
+    slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToad' }] },
+  { id: 'rockfall', name: '石头崩落', cost: 10, minFloor: 2, maxFloor: 10, once: true,
+    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'rockSnail' }] },
+  { id: 'grassA', name: '草地麻烦A', cost: 6, minFloor: 2, maxFloor: 10, once: true, excl: ['grassB'],
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }] },
+  { id: 'grassB', name: '草地麻烦B', cost: 6, minFloor: 2, maxFloor: 10, once: true, excl: ['grassA'],
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }] },
+  { id: 'grassBigA', name: '草地大麻烦A', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['grassBigB'],
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'diggerMole' }] },
+  { id: 'grassBigB', name: '草地大麻烦B', cost: 11, minFloor: 2, maxFloor: 10, once: true, excl: ['grassBigA'],
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'diggerMole' }] },
+  { id: 'staticFieldA', name: '静电草地A', cost: 6, minFloor: 2, maxFloor: 10, once: true, excl: ['staticFieldB'],
+    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
+  { id: 'staticFieldB', name: '静电草地B', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['staticFieldA'],
+    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'carrionBeetle' }] },
+  { id: 'skyLandFeast', name: '空陆大餐', cost: 9, minFloor: 2, maxFloor: 10, once: true, excl: ['bugSwarm'],
+    slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'diggerMole' }] },
+  { id: 'bugSwarm', name: '全是虫虫', cost: 8, minFloor: 2, maxFloor: 10, once: true, excl: ['skyLandFeast'],
+    slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
   // —— 第二~四章主题编队（2026-09-13 总策划批次）——
@@ -83,9 +116,10 @@ const TEMPLATES = [
   { id: 'consecration', name: '受戒仪仗', minFloor: 37, maxFloor: 43, slots: [{ fixed: 'riteAltar' }, { fixed: 'galeGolem' }, { fixed: 'shieldBearer' }] },
   { id: 'phalanxWall', name: '方阵阻击', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'repeaterBallista' }, { fixed: 'shieldBearer' }, {}] },
   { id: 'binderVault', name: '装订库', minFloor: 36, maxFloor: 43, slots: [{ fixed: 'binderPython' }, { fixed: 'tomeWarden' }] },
-  // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）
+  // 精英怪房（elite: true——只在精英层启用，见 isEliteFloor）。章1 精英难度 base=10
+  //（ENEMIES_1.md 精英主题战=难10），与 D(6)=10 / D(9)=12 对齐；押队模板限章2+。
   { id: 'eliteSolo', name: '精英独战', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }] },
-  { id: 'elitePair', name: '精英押队', minFloor: 4, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
+  { id: 'elitePair', name: '精英押队', minFloor: 12, maxFloor: 43, elite: true, slots: [{ elite: true }, {}] },
 ];
 
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
@@ -139,8 +173,12 @@ function slotBase(slot, floor) {
   return Math.min(...pool.map(x => x.difficulty.base));
 }
 
-// 模板编成难度 = 各槽代表难度之和。任一槽无可用取材 → 模板不可用（返回 null）。
+// 模板编成难度：显式 cost 优先（章1 主题战 = 设计卡标定的遭遇难度），否则各槽代表
+// 难度之和。任一槽无可用取材 → 模板不可用（返回 null）。
 function templateCost(tpl, floor) {
+  if (tpl.cost != null) {
+    return tpl.slots.some(s => slotPool(s, floor).length === 0) ? null : tpl.cost;
+  }
   let sum = 0;
   for (const slot of tpl.slots) {
     const b = slotBase(slot, floor);
@@ -152,6 +190,37 @@ function templateCost(tpl, floor) {
 
 // 漂移窗：编成难度允许偏离楼层预算 ±2。
 const DRIFT = 2;
+
+// 模板可用性（不含难度窗）：楼层命中 + 精英标志 + once 未用过 + 互斥组无人用过。
+function templateUsable(tpl, floor, eliteDay, usedOnce) {
+  if (Boolean(tpl.elite) !== eliteDay) return false;
+  if (floor < tpl.minFloor || floor > tpl.maxFloor) return false;
+  if (tpl.once && usedOnce.has(tpl.id)) return false;
+  if (tpl.excl?.some(id => usedOnce.has(id))) return false;
+  return true;
+}
+
+// 选模板（纯函数：同 floor/rng/usedOnce 恒定同结果——历史重放依赖这一点）。
+function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
+  const D = floorDifficulty(floor);
+  const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
+  const usable = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce) && costs.get(t) != null);
+  let candidates = usable.filter(t => Math.abs(costs.get(t) - D) <= DRIFT);
+  if (candidates.length === 0) {
+    // 兜底：漂移窗内无货时取编成难度最近者（贴线收场；通用模板常驻，不会空）。
+    const fallback = [...usable].sort((a, b) => Math.abs(costs.get(a) - D) - Math.abs(costs.get(b) - D));
+    if (fallback.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
+    candidates = [fallback[0]];
+  }
+  const weighted = [];
+  for (const t of candidates) {
+    // 兜底候选可能距 D 超过漂移窗——权重下限 1，保证加权池非空（否则 pick 出
+    // undefined 击穿调用方；旧版在「全部候选都贴窗边」时同样会静默空池，一并修掉）
+    const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
+    for (let i = 0; i < weight; i++) weighted.push(t);
+  }
+  return rng.pick(weighted);
+}
 
 /**
  * 生成一层遭遇：返回**可序列化描述符**数组（run.encounter 落此，存档/回放安全）：
@@ -172,36 +241,19 @@ export function generateEncounter(run) {
     return [descriptorOf(bossId, d)];
   }
 
-  const D = floorDifficulty(floor);
   const eliteDay = isEliteFloor(floor) && eligiblePool(floor, true).length > 0;
 
-  // 候选模板：楼层命中 + 精英标志匹配 + 编成难度落在漂移窗内。
-  const candidates = TEMPLATES
-    .map(tpl => ({ tpl, cost: templateCost(tpl, floor) }))
-    .filter(x => x.cost != null
-      && Boolean(x.tpl.elite) === eliteDay
-      && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor
-      && Math.abs(x.cost - D) <= DRIFT);
-  if (candidates.length === 0) {
-    // 兜底：漂移窗内无货时取编成难度最近者（贴线收场，不报错——用户上调曲线后
-    // 允许某些楼层只有一两套模板可选）。
-    const fallback = TEMPLATES
-      .map(tpl => ({ tpl, cost: templateCost(tpl, floor) }))
-      .filter(x => x.cost != null
-        && Boolean(x.tpl.elite) === eliteDay
-        && floor >= x.tpl.minFloor && floor <= x.tpl.maxFloor)
-      .sort((a, b) => Math.abs(a.cost - D) - Math.abs(b.cost - D));
-    if (fallback.length === 0) throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}）`);
-    candidates.push(fallback[0]);
+  // once/互斥历史：确定性重放 1..floor-1 的普通层模板选择（每层独立派生 rng，
+  // 与真实生成同分布——重放只做模板选择这一步 rng 消耗，与真实生成的后续槽位
+  // 取材互不干扰）。
+  const usedOnce = new Set();
+  for (let f = 1; f < floor; f++) {
+    if (isBossFloor(f) || isEliteFloor(f)) continue;
+    const fRng = createRng(deriveBattleSeed(run.seed, f) ^ 0x5EED);
+    const tpl = pickTemplateInner(f, false, fRng, usedOnce);
+    if (tpl.once) usedOnce.add(tpl.id);
   }
-
-  // 加权随机：编成难度距 D 越近权重越高（差 0 → 4，差 1 → 2，差 2 → 1）。
-  const weighted = [];
-  for (const c of candidates) {
-    const weight = 4 - 2 * Math.abs(c.cost - D);
-    for (let i = 0; i < weight; i++) weighted.push(c);
-  }
-  const picked = rng.pick(weighted).tpl;
+  const picked = pickTemplateInner(floor, eliteDay, rng, usedOnce);
 
   // 槽位取材：钉死位直接用；通配位从池里按 base 就近取材（优先贴槽位代表难度），
   // unique 敌人已被前面槽位占用则不再进池。
@@ -222,16 +274,13 @@ export function generateEncounter(run) {
 
   const out = slots.map(s => descriptorOf(s.defId, s.d));
 
-  // ---- 编成后处理（与 v1 相同）----
-  // 石茧群：同层第二只起延迟一回合苏醒且难度更低（苏醒越晚越弱）
-  const cocoons = out.map((s, i) => (s.defId === 'stoneCocoon' ? i : -1)).filter(i => i >= 0);
-  if (cocoons.length > 1) {
-    for (const i of cocoons.slice(1)) {
-      out[i] = descriptorOf('stoneCocoon', out[i].difficulty, { wakeDelay: 2, wakeStrength: 1 });
-    }
+  // ---- 编成后处理 ----
+  // 静电毛球：16–24 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([16, 18, 20, 22, 24]) };
   }
-  // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉/石茧自带错拍）
-  const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork', 'stoneCocoon']);
+  // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉自带错拍）
+  const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork']);
   const nthOf = new Map();
   for (let i = 0; i < out.length; i++) {
     const s = out[i];

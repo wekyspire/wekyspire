@@ -6,6 +6,7 @@ import { UseSkillInstruction } from '../instructions/skill.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import AIActInstruction from '../instructions/aiAct.js';
+import { aliveEnemies, aliveAllies } from '../state/battleState.js';
 
 // 燃烧：自己阵营回合开始时受到等于层数的**固定伤害**（EFFECTS.md 2026-09 定调：
 // 固定＝跳过修正与防御、护盾可挡，不穿透），然后层数 -1。
@@ -190,7 +191,8 @@ registerEffect({
   }],
 });
 
-// 蓄势：每层攻击 +1（纯读轨标记，滚雪球压力源——暗影刺客等蓄力型敌人用）。
+// 聚力（旧「蓄势」，2026-09-22 更名让位）：每层攻击 +1（纯读轨标记，滚雪球压力源
+// ——暗影刺客/筹算灵等蓄力型敌人用）。新语义的「蓄势」见文件尾 momentum（伤害加成口径）。
 registerEffect({
   id: 'focus',
   type: 'buff',
@@ -198,7 +200,7 @@ registerEffect({
   statModifiers: {
     attack: (stacks) => stacks,
   },
-  name: '蓄势',
+  name: '聚力',
   description: '每层使攻击提高 1 点。',
   icon: '⚡',
   color: 'yellow',
@@ -554,16 +556,42 @@ registerEffect({
   }],
 });
 
-// 引线：纯标记层数——爆囊的亡语伤害 = 6 + 3×层数（无自身订阅，只被 def.onDeath 读）。
-// 用效果而不是私有字段，是为了走统一的层数显示/结算与「层数变更」订阅语言。
+// 引线（EFFECTS.md 2026-09-22 重定义·爆炸引线）：自己回合结束时层数 -1，**层数归 0
+// 时引爆**——对玩家阵营全体造成 20 群伤并自爆死亡。持有者被提前击杀则什么都不发生
+//（新生版爆囊的定时炸弹口径：杀它=拆弹，拖满倒计时=挨炸）。旧「亡语按层数加伤」
+// 语义随旧爆囊一起退役。
 registerEffect({
   id: 'blastFuse',
   type: 'buff',
   stacking: 'count',
-  name: '引线',
-  description: '死亡时爆炸伤害 +3/层（爆囊亡语）。',
+  name: '爆炸引线',
+  description: '自己回合结束时层数减少 1；层数归零时爆炸——对玩家阵营全体造成 20 伤害，自身死亡。',
   icon: '🧨',
   color: 'red',
+  subscriptions: (unit) => [{
+    when: TurnEndInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === unit.side && !unit.isDead(),
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('blastFuse');
+      if (stacks <= 0) return;
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'blastFuse', stacks: -1,
+      }), instr);
+      if (stacks <= 1) {
+        // 归零引爆：玩家阵营全体 20 群伤 + 自爆（走正规死亡结算）
+        for (const t of [ctx.player, ...aliveAllies(ctx.battleState)]) {
+          if (t.isDead()) continue;
+          ctx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: t, amount: 20, type: 'major', tags: ['blast'],
+          }), instr);
+        }
+        ctx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: unit, amount: 999, pierce: true, tags: ['blast'],
+        }), instr);
+      }
+    },
+  }],
 });
 
 // 奇迹（2026-09 用户定，塞西莉亚体系通用机制）：生命拒绝降到 0 或以下——minHp 地板 = 1
@@ -829,4 +857,119 @@ registerEffect({
   description: '手牌上限减少层数张（施加者死亡时解除其施加的部分）。',
   icon: '🪢',
   color: 'purple',
+});
+
+// ---- 章 1 新敌效果四件（EFFECTS.md 2026-09-22 用户补定义）----
+
+// 甲壳：受到主级伤害时伤害减半，然后层数 -1。挂应用原语 PRE（受击侧最后修正，
+// 与格挡同管线），只认主级、非固定、非穿透（穿透不吃减伤是 EFFECTS.md 伤害分类铁律）。
+registerEffect({
+  id: 'shell',
+  type: 'buff',
+  stacking: 'count',
+  name: '甲壳',
+  description: '受到攻击时伤害减半，然后层数减少 1。',
+  icon: '🐚',
+  color: 'gray',
+  subscriptions: (unit) => [{
+    when: ApplyDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.target === unit && !instr.fixed && !instr.basePierce
+      && instr.type === 'major' && unit.getEffectStacks('shell') > 0,
+    react: (instr, ctx) => {
+      instr.setPayload('damage', Math.ceil(instr.payload.damage / 2));
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'shell', stacks: -1 }), instr);
+    },
+  }],
+});
+
+// 电动：每有一个**其他**友军存活，攻击提高 3（层数是强度系数：1 层 = 每友军 +3）。
+// 走 statModifiers 的 view 通道（getStat 第三参 = battleState，跨实体衍生的既定口径，
+// 同火焰主宰读敌燃烧）——友军增减即时反映到面板与意图。view 缺席（无战斗上下文）时
+// 按 1 个友军兜底，保证 tooltip/意图不归零。
+registerEffect({
+  id: 'dynamo',
+  type: 'buff',
+  stacking: 'count',
+  name: '电动',
+  description: '每有一个友军，攻击提高 3。',
+  icon: '🔌',
+  color: 'yellow',
+  statModifiers: {
+    attack: (stacks, unit, view) => {
+      if (!view) return stacks * 3;
+      const side = unit.side === 'enemy' ? aliveEnemies(view) : aliveAllies(view);
+      const friends = side.filter(u => u !== unit && !u.isDead()).length;
+      return stacks * 3 * friends;
+    },
+  },
+});
+
+// 蓄势（EFFECTS.md 2026-09-22 新定义）：所有伤害增加层数层（发动侧 PRE，逐次伤害
+// 各自加成——多段攻击每段都吃到）；受到任何**生命值**伤害（dealt>0，被盾全额吸收
+// 不算）时层数 -1。与聚力的差异：聚力走攻击面板（进意图公式），蓄势直接加在每次
+// 伤害上且会被打掉——「趁热打铁，别让它养起来」的攻防拉扯。
+registerEffect({
+  id: 'momentum',
+  type: 'buff',
+  stacking: 'count',
+  name: '蓄势',
+  description: '所有伤害增加层数层；受到生命伤害时层数减少 1。',
+  icon: '📈',
+  color: 'yellow',
+  subscriptions: (unit) => [
+    {
+      when: DealDamageInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.source === unit && !instr.fixed
+        && unit.getEffectStacks('momentum') > 0,
+      react: (instr) => {
+        instr.setPayload('damage', instr.payload.damage + unit.getEffectStacks('momentum'));
+      },
+    },
+    {
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit
+        && (instr.result?.dealt ?? 0) > 0
+        && unit.getEffectStacks('momentum') > 0,
+      react: (instr, ctx) => {
+        ctx.kernel.submitInstruction(
+          new AddEffectInstruction({ target: unit, effectId: 'momentum', stacks: -1 }), instr);
+      },
+    },
+  ],
+});
+
+// 融合（EFFECTS.md 既有定义，2026-09-22 随新小史莱姆实装为自持亡语）：死亡时，友军
+// 所有史莱姆族恢复 6 生命并获得 2 力量——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
+// 亡语挂在效果自身的死亡响应上（任何持有「融合」的单位都生效，不依赖敌人 def.onDeath）；
+// 史莱姆族口径与旧版一致：slime / slimeletA / slimeletB / bigSlime。
+const SLIME_FAMILY = new Set(['slime', 'slimeletA', 'slimeletB', 'slimelet', 'bigSlime']);
+registerEffect({
+  id: 'fusion',
+  type: 'buff',
+  stacking: 'count',
+  name: '融合',
+  description: '死亡时，友军所有史莱姆恢复 6 生命并获得 2 力量。',
+  icon: '🫠',
+  color: 'green',
+  subscriptions: (unit) => [{
+    when: ApplyDamageInstruction,
+    phase: 'post',
+    // 只认「真实致死」的结算（targetDead 且非 skipped）——多段攻击中途击杀后，余段
+    // 打在尸体上会带 { targetDead:true, skipped:true } 的占位结果（execute 的过期目标
+    // 守卫），不滤掉会把亡语按剩余段数重复触发（攻2×5 首段击杀 = 白送 4 次融合）。
+    filter: (instr) => instr.target === unit
+      && (instr.result?.targetDead ?? false) && !(instr.result?.skipped ?? false),
+    react: (instr, ctx) => {
+      for (const e of aliveEnemies(ctx.battleState)) {
+        if (e === unit || !SLIME_FAMILY.has(e.defId)) continue;
+        ctx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 6 }), instr);
+        ctx.kernel.submitInstruction(
+          new AddEffectInstruction({ target: e, effectId: 'strength', stacks: 2 }), instr);
+      }
+    },
+  }],
 });
