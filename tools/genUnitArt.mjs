@@ -21,6 +21,18 @@ const SEED = (process.argv.find(a => a.startsWith('--seed=')) || '').split('=')[
 const REF_OVERRIDE = (process.argv.find(a => a.startsWith('--ref=')) || '').split('=')[1] || null;
 const I2I = (process.argv.find(a => a.startsWith('--i2i=')) || '').split('=')[1] || null; // img2img 底图（手绘参考白底版）
 const DENOISE = Number((process.argv.find(a => a.startsWith('--denoise=')) || '').split('=')[1]) || 0.8;
+// 模型档（fp8 量化版 = 免换页提速；缺省 fp8，文件不存在回落 bf16）
+const MODELS_DIR_UNET = 'E:/aiimage/ComfyUI/models/diffusion_models';
+const MODELS_DIR_TE = 'E:/aiimage/ComfyUI/models/text_encoders';
+import { existsSync as fsExists, statSync as fsStat } from 'node:fs';
+// 存在性检查必须带字节数门槛：下载半成品文件也会"存在"，直接切过去 = 张量越界全灭
+const ready = (p, minBytes) => { try { return fsExists(p) && fsStat(p).size >= minBytes; } catch { return false; } };
+// unsloth FP8 = 压缩检查点格式（_weight_qdata/_weight_scale 键），原生 UNETLoader 不认
+// → UNet 用 bf16 文件 + 运行时量化（weight_dtype fp8_e4m3fn，免下载显存减半）；
+//   TE 的 fp8 是普通 dtype 存储、CLIPLoader 可读（下载完成后自动启用）
+const UNET_NAME = 'qwen_image_2.1_bf16.safetensors';
+const UNET_DTYPE = 'fp8_e4m3fn';
+const CLIP_NAME = ready(`${MODELS_DIR_TE}/qwen3vl_8b_fp8.safetensors`, 9.3e9) ? 'qwen3vl_8b_fp8.safetensors' : 'qwen3vl_8b_bf16.safetensors';
 // 参考图必须白底版（ref_white/，python 预合成）：RGBA 抠图直传会被 LoadImage 丢 alpha、
 // 透明区 RGB=黑，模型跟着画黑底（2026-09-22 试生成实测）。白底进 → 白底出 → key.py 切边。
 const REF_FILES = (REF_OVERRIDE ? [REF_OVERRIDE] : [
@@ -29,10 +41,9 @@ const REF_FILES = (REF_OVERRIDE ? [REF_OVERRIDE] : [
   'tools/seedream/ref_white/buzzbug.png',
 ]).slice(0, Number.isFinite(REFS_N) ? REFS_N : (REF_OVERRIDE ? 1 : 3));
 
-// 涂鸦风（2026-09-22 四组审查定稿：seedream 批全是精致商业插画 = 全废，画风必须钉死；
-// 首轮 q21 参考图模式实测：多参考被当内容锚（缝合巨兽）且 seed 失效——参考图只允许
-// 单张风格拼贴（--ref=），默认纯 t2i 靠文字钉画风）
-const STYLE = 'clumsy childish crayon scribble doodle style, like a drawing by a young child, uneven rough wobbly hand-drawn outlines, flat watercolor wash fill, blotchy uneven muted low-saturation colors, adorably crude, simple flat shapes, no detail polish, no volumetric shading';
+// 画风（2026-09-22 定稿：由 glm-flash 直读参考图提炼，勿再人工转述——曾写成
+// 「儿童蜡笔涂鸦」误导生成与验收两头）。i2i 模式下底图继承为主，本段是文字补锚
+const STYLE = 'hand-painted digital game creature art, thick slightly wobbly dark brown-black outline around a compact chibi-proportioned silhouette, fill of flat muted desaturated color patches (olive, teal, grey-brown, sand tones) applied with visible chunky dry-brush strokes, some shapes with no clean outline and their edge formed by the paint mass itself, no volumetric shading, form read from adjacent color patches, small bright glowing accents only on eyes, loose painterly moderately rough finish';
 const BG = 'single small monster only, no extra creatures, centered with comfortable margins, plain pure white background, no ground, no shadow';
 const NEGATIVE = 'photorealistic, photograph, 3d render, airbrush, smooth gradients, glossy, shiny, specular highlights, cel shading, anime, manga, kawaii mascot, big sparkling anime eyes, realistic fur, intricate details, fine texture, polished commercial illustration, clean perfect linework, vector, sticker border, black background, dark background, scenery, ground, drop shadow, text, watermark, signature, frame, border, multiple monsters, symmetric frontal pose, facing right, side view, back view, do not copy the reference subjects';
 // 朝向措辞（首轮实测：写成 side view 了）——「双眼可见」是正面视角的最强信号，
@@ -46,23 +57,27 @@ const BASE_DIR = 'tools/seedream/ref_white';
 const UNITS = [
   { id: 'hedgehog', base: 'mossBall.png', content: 'a small hedgehog monster with all of its back spines fully erect, the spine tips faintly glowing, gray-brown face and belly with white spines on its back only' },
   { id: 'slimelet', base: 'slime.png', content: 'a tiny baby slime, a small round dark translucent goo ball with two simple white oval eyes, a few stretchy mucus drips hanging off its body', orient: 'fronted, slightly angled toward the viewer\'s left, not perfectly symmetric' },
-  { id: 'thornWeed', base: 'mossBall.png', content: 'a small monster of animate bramble weeds, thorny stems with poison-purple glowing tips and hanging venom drops, small roots planted in a clump of dirt, dark green and poison purple', orient: 'fronted, slightly angled toward the viewer\'s left, not perfectly symmetric' },
-  { id: 'carrionBeetle', base: 'buzzbug.png', content: 'a carrion beetle monster with a gaping maw, glossy dark shell with mold spots, dark brown-black with a dull oily green sheen' },
+  // 荆棘 r4（2026-09-22 三轮全败后换设计）：编织藤笼结构必然出镂空露白，改画
+  // 「实体球茎身 + 背上短刺枝」——与 mossBall 底图同构，结构上无洞
+  { id: 'thornWeed', base: 'mossBall.png', content: 'a plump solid bulb-like plant monster with a round dark-green plant body, several short thorny stems growing out of its back like spikes, each stem tip glowing poison purple with a glossy venom droplet hanging from it, small roots gripping a soil mound at the bottom, two simple eyes on the front of the bulb, dark green and poison purple', orient: 'fronted, slightly angled toward the viewer\'s left, not perfectly symmetric' },
+  { id: 'carrionBeetle', base: 'buzzbug.png', content: 'a huge carrion beetle monster with a gaping maw, glossy dark shell with mold spots, dark brown-black with a dull oily green sheen, its body filling the entire frame from edge to edge with only tiny margins' },
   { id: 'staticPuff', base: 'mossBall.png', content: 'a fluffy ball of fur monster, its fur standing on end with thin blue electric arcs tangled in it, pale blue-white light glowing under the fur, gray-white and electric blue' },
-  { id: 'diggerMole', base: 'swampAmbusher.png', content: 'a stout mole monster with a pair of oversized metallic silver digging claws, dirt smudges on its nose and claw tips, gray-brown fur with silver claws' },
-  { id: 'pufferToad', base: 'mossBall.png', content: 'a big-bellied toad monster with a slack bloated belly covered in warts, warty green back with a pale yellow belly' },
+  { id: 'diggerMole', base: 'swampAmbusher.png', content: 'a stout mole monster with a pair of oversized metallic silver digging claws, dirt smudges on its nose and claw tips, gray-brown fur with silver claws, its dark brown-black outline directly bounding the plain white background with no pale glow or halo around the outline' },
+  { id: 'pufferToad', base: 'mossBall.png', content: 'a big-bellied toad monster with a hugely saggy bloated pale-yellow belly covered in dark warts, olive-green warty back with a few scattered spikes, simple clearly separated stumpy limbs resting on the ground, no tangled leg masses, no raised rear limb' },
   { id: 'blastPod', base: 'mossBall.png', content: 'a bloated spore-pod monster shaped like a pea pod, its sac showing fermenting liquid inside, a single fuse-like flower stigma sticking up from its top, sickly yellow-green with a red tip', orient: 'fronted, slightly tilted toward the viewer\'s left, not perfectly symmetric' },
   { id: 'stoneCocoon', base: 'mossBall.png', content: 'a pupa-shaped stone cocoon monster, its cracked stone shell glowing with warm orange-red light through the cracks, limestone gray with orange glow', orient: 'standing upright, slightly tilted toward the viewer\'s left, not perfectly symmetric' },
   { id: 'rockSnail', base: 'mossBall.png', content: 'a snail monster with a huge rocky spiral shell covered in moss patches, half retracted into its shell with its head poking out, rock gray with moss green' },
-  { id: 'wraith', base: 'swampAmbusher.png', content: 'a semi-transparent floating wraith, a legless misty body with a ragged drifting hem, one hand raised in a curse gesture, ghostly blue-purple, low saturation', orient: 'floating upright, body and face turned slightly toward the viewer\'s left by about 20 degrees, not perfectly symmetric' },
+  // 怨灵 r6（2026-09-23）：以 r5 cand_3（结构最对：兜帽+双眼+雾摆）为底迭代——
+  // 修三处：朝左（r5 朝右了）/禁橄榄卡其（r5 全批中招）/臂身空隙必须连通背景（r5 躯干被凿穿）
+  { id: 'wraith', base: 'mossBall.png', content: 'a semi-transparent floating ghost spirit with a hooded head and two evenly drawn dark eyes, no legs and no feet — its lower edge trailing into soft wisps of pale mist, exactly one single arm raised in a hexing claw gesture, the gap between the arm and the torso fully open to the background with no closed holes in the body, the main body color strictly pale ghost-blue and muted violet, absolutely no olive green, no khaki, no tan, low saturation', orient: 'hood and face clearly turned toward the viewer\'s left by about 20 degrees, not facing right' },
   { id: 'snowwolf', base: 'swampAmbusher.png', content: 'a big snowfield wolf monster, frost-blue eyes, snowflakes caught in its fur, crouched ready to pounce, cold white gray-blue' },
   { id: 'rockPangolin', base: 'swampAmbusher.png', content: 'a pangolin monster with heavy granite-like layered armor plates on its back, small eyes and big claws, pale soft belly showing between the plates, head lowered in a charging stance, granite gray-brown with a warm pale belly' },
 ];
 
 function buildWorkflow(unit, seed, refNames, i2iName = null) {
   const wf = {
-    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'default' } },
-    '453': { class_type: 'CLIPLoader', inputs: { clip_name: 'qwen3vl_8b_bf16.safetensors', type: 'qwen_image', device: 'default' } },
+    '451': { class_type: 'UNETLoader', inputs: { unet_name: UNET_NAME, weight_dtype: UNET_DTYPE } },
+    '453': { class_type: 'CLIPLoader', inputs: { clip_name: CLIP_NAME, type: 'qwen_image', device: 'default' } },
     '454': { class_type: 'VAELoader', inputs: { vae_name: 'qwen_image_2.1_vae_bf16.safetensors' } },
     '452': {
       class_type: 'TextEncodeQwenImage21',
@@ -164,7 +179,8 @@ for (const r of REF_FILES) {
 for (const unit of targets) {
   const dir = path.join(OUT_DIR, unit.id);
   fs.mkdirSync(dir, { recursive: true });
-  const have = fs.readdirSync(dir).filter(f => f.startsWith('cand_') && f.endsWith('.png')).length;
+  // 只数原始候选（cand_*_cut.png 是切边产物，混进计数会让目标被静默跳过——实测坑）
+  const have = fs.readdirSync(dir).filter(f => /^cand_\d+_\d+\.png$/.test(f)).length;
   for (let i = have; i < COUNT; i++) {
     const seed = SEED != null ? Number(SEED) + i : Math.floor(Math.random() * 1e15);
     const outPath = path.join(dir, `cand_${i}_${seed}.png`);
