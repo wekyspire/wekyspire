@@ -313,13 +313,17 @@ const T2I_TIERS = {
   'spark-3': 'an overwhelming storm of hundreds of blazing white-orange sparks flooding the entire frame edge to edge, blinding shower of glowing points, a small figure with a wide-brim hat and goggles barely visible at the bottom edge, no readable book, no props',
   'lightness-3': 'a swirling cyan wind storm of horizontal streaks and air rings sweeping across the dark frame, only one small bright red scarf streak remaining in the wind, no body left',
   'windBlade-3': 'a hurricane of many separate cyan crescent wind blades tearing across the entire frame, overlapping translucent air blades everywhere at different angles, a storm of steel-sharp wind, no person',
+  // 真拳 S（2026-09-22）：「拳化纯白炽影」是本质级变身，i2i 0.8 保真四轮全灭 → 免参考直出。
+  'fastPunch-4': 'a steel-gray armored forearm driving a fist that has become pure light: the gauntlet fist itself a blinding pure-white silhouette radiating hard white rim light, the armor plates and background sunk to near-black with harsh contrast, a thin red scarf edge at the frame corner as the sole spot of color, pure void-calm, a few essential blurred strokes, side-view straight punch pose',
 };
 // 体修虚无后缀（2026-09-22 用户定）：体修越高深越「虚无、简单、幻灭」——这些链的高阶变体
 // 不再「更亮更爆」，而是色彩流失、笔触虚幻、趋近黑白（红围巾作唯一残色）。优先级最高。
 const ESCALATION_VOID = {
-  fastPunch: { // 快拳(B)→炮拳(A)→真拳(S)：真拳归于至简
-    3: ', the same straight punch, noticeably desaturated: armor and background drained to muted grays, the edges softened, only the red scarf keeps full color',
-    4: ', the same straight punch rendered in pure black and white with harsh contrast, the form reduced to a few blurred essential strokes, pure void-calm, the red scarf the sole spot of color',
+  fastPunch: { // 快拳(B)→炮拳(A)→真拳(S)：灰甲底无彩可褪，褪彩轴读不出进阶（2026-09-22 用户：
+    // 三阶看不出升级感）——改走「炮击实感 → 至简白炽」轴：A 点名冲击波环/火花（构图不动），
+    // S 把拳本身烧成纯白炽影、甲与背景沉黑（虚无仍在，但一眼终极）。
+    3: ', the same straight punch now landing with cannon impact: a bright shockwave ring bursting right at the knuckles, sharp sparks and streaks blasting off the fist, wider stronger speed lines, heightened drama',
+    4: ', the same straight punch ascended to pure void: the fist itself become a blinding pure-white silhouette of light, armor and background sunk to near-black with harsh contrast, the form reduced to a few essential strokes, pure void-calm, the red scarf the sole spot of color',
   },
   fullCharge: { // 蓄满一击(C/B)→全神一击(A)：全神 = 敛神入空
     2: ', the same wound fist, the colors draining toward gray, a faint white core of stored force now glowing at the knuckles, the charge turning inward and silent',
