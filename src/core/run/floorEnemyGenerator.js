@@ -15,7 +15,6 @@
 import { createRng } from '../state/rng.js';
 import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
-import { isShopFloor } from './rooms/shop.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
 // 章1 表驱动（用户 2026-09-22 ENEMIES_1 重写：陡升后收平等 Boss），章 2–4 每 2 层 +1；
@@ -216,22 +215,22 @@ function templateUsable(tpl, floor, eliteDay, usedOnce) {
 function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
   const D = floorDifficulty(floor);
   const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
-  // 商店层（4/8、15/19…）难度上漂封顶（2026-09-26 用户定）：漂移窗改为 [D−DRIFT, D]——
-  // 只往小随不往大随。「补给站不打硬仗」：三层试玩实测 F4/F8 是商店层却吞掉 28%/15% 的
-  // 死亡（F4 还叠加 19 个重模板 minFloor=4 的解锁悬崖），买药的钱在战后才到手，进攻性
-  // 编成把血量预算打穿后再补给已经晚了
-  const driftUp = isShopFloor(floor) ? 0 : DRIFT;
-  const candidates = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce)
-    && costs.get(t) != null && costs.get(t) - D <= driftUp && D - costs.get(t) <= DRIFT);
-  if (candidates.length === 0) {
-    throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，窗 [${D - DRIFT}, ${D + driftUp}] 候选为空）`);
+  const usable = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce) && costs.get(t) != null);
+  // 优先往低随机（2026-09-26 用户定，全局规则——取代当日早先的商店层特例）：常规池 =
+  // [D−DRIFT, D]，只往小随不往大随；池子空了（本局 once 模板耗尽等）才逐级上浮
+  // D+1、D+2 **补位**——上浮是兜底不是平级选项。三层试玩实测死亡集中在编成难度
+  // 越过本层预算的「上漂尖刺」（F4 28%/F6 21%），压制上尾即可，D 本身不动。
+  for (const driftUp of [0, 1, 2]) {
+    const candidates = usable.filter(t => costs.get(t) - D <= driftUp && D - costs.get(t) <= DRIFT);
+    if (candidates.length === 0) continue;
+    const weighted = [];
+    for (const t of candidates) {
+      const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
+      for (let i = 0; i < weight; i++) weighted.push(t);
+    }
+    return rng.pick(weighted);
   }
-  const weighted = [];
-  for (const t of candidates) {
-    const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
-    for (let i = 0; i < weight; i++) weighted.push(t);
-  }
-  return rng.pick(weighted);
+  throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，窗 [${D - DRIFT}, D+2] 全空——数据配错）`);
 }
 
 /**
