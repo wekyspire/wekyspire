@@ -317,6 +317,7 @@ function reloadCurrent() {
             </select>
             <button @click="dbg.addBattleEffect('player', pick.effect, 3)">给自己 ×3</button>
             <button @click="dbg.addBattleEffect('enemy', pick.effect, 3)">给敌人 ×3</button>
+            <button @click="dbg.cleanseBattle()">净化全场（清零所有效果）</button>
           </div>
           <div class="row">
             <span class="k">敌人</span>

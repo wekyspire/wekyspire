@@ -96,6 +96,28 @@ export function addEffect(battle, targetKey, effectId, stacks = 1) {
   return `${target.name ?? targetKey} 获得效果 ${effectId} ×${stacks}`;
 }
 
+/** 净化全场：所有存活单位的全部效果清零（走 AddEffectInstruction 负层数正式链——
+ *  订阅注销/投影/演出同正式路径）。凝滞最先摘：它在场时会 veto 其它效果变更
+ *  （stasis 定义只放行自己的负层数，见 effects.js）。 */
+export function cleanseAll(battle) {
+  const bs = battle.ctx.battleState;
+  const units = [battle.ctx.player, ...(bs.allies ?? []), ...aliveEnemies(bs)]
+    .filter(u => u && !u.isDead?.());
+  const instrs = [];
+  for (const u of units) {
+    const effects = [...(u.effects ?? [])];
+    effects.sort((a, b) => (a.effectId === 'stasis' ? -1 : b.effectId === 'stasis' ? 1 : 0));
+    for (const e of effects) {
+      if ((e.stacks ?? 0) > 0) {
+        instrs.push(new AddEffectInstruction({ target: u, effectId: e.effectId, stacks: -e.stacks }));
+      }
+    }
+  }
+  if (!instrs.length) throw new Error('场上没有可净化的效果');
+  submit(battle, instrs);
+  return `净化全场（清零 ${instrs.length} 项效果）`;
+}
+
 /** 解析单位：'player' / 'enemy:0' / 'enemy'（第一个存活敌人）/ uniqueID。 */
 export function resolveUnit(battle, key) {
   const bs = battle.ctx.battleState;

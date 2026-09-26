@@ -1,26 +1,59 @@
-// 贴体叠火（L1 贴体层首件，VFX 结构大更新 Phase 1，2026-09-26；Phase 2 改挂层宿主）：
-// orbs.js 同款多层 sprite 火的**贴体版**——不绕轨，3 团锚在立绘下半身
-// （体宽错开、体高下半分布），让燃烧单位「身上着火」而不是「身边飘火星」。
-// 挂进 UnitFxLayer 的 L1 分组（billboard 子组，与立绘同 yaw 面向相机——贴体铁律：
-// 挂 unit 根的件不会跟随 billboard 转身，身体侧对相机时火会飘离剪影）。
-// HDR 纪律：sprite 材质 color 乘算推过世界 bloom 阈 1.45（火是发光体——焰身 ×2.6 /
-// 内芯 ×2.2 / 光晕 ×1.3）；本体（L0）压阈下，发光的活全在这层，分工防糊白。
-// 混合：世界场景内 additive 即可（世界链终段不透明，无 uiScene RT 的 alpha 占地问题）。
-// 总控一个标量：setLevel(0..1)（enter 渐升 / stacks 强弱 / exit 渐熄全推它）；
-// 逐帧抖焰走 unit.addTick（orbs 同惯例），dispose 摘钩收尸（由宿主层统一调）。
+// 贴体火幕（L1 贴体层，burn 主题件，VFX 结构大更新 Phase 2 重做，2026-09-26）：
+// 一块贴体 quad 上跑片元噪声火焰——域扭曲 fbm 向上卷出火舌，底部亮芯、顶部撕裂消散。
+// 为什么不用 sprite 焰苗：orbs.js 那套 flameTexture 是为燃焰术士的环绕火球专门调的形，
+// 贴体放大后读成「两盏红灯笼」（用户验收原话「很丑，别用燃焰术士的特效」）——
+// 贴体火要有连续的火幕感，只能靠 shader 噪声火，多张焰苗贴片拼不出来。
+// HDR 纪律：芯部白黄峰值 ~2.7 过世界 bloom 阈 1.45（火是发光体），顶部暗红压回阈下；
+// 本体（L0）压阈下，发光的活全在这层，分工防糊白。
+// 总控一个标量 setLevel(0..1)（enter 渐升 / stacks 强弱 / exit 渐熄全推它）；
+// uTime 共用 L0 的钟（同源同帧）；dispose 由宿主层统一调。
 import * as THREE from 'three';
-import { glowTexture, flameTexture } from './orbs.js';
 
-// 三团锚位（× 立牌高 H）：左右腿侧两团大 + 腹前一团小——火苗集中在下半身，
-// 上半身留给表情/意图条可读
-const ANCHORS = [
-  { x: -0.30, y: 0.10, s: 0.34 },
-  { x: 0.26, y: 0.05, s: 0.30 },
-  { x: -0.02, y: 0.30, s: 0.25 },
-];
+const VERT = /* glsl */`
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const FRAG = /* glsl */`
+precision highp float;
+varying vec2 vUv;
+uniform float uLevel;
+uniform float uTime;
+uniform vec3 uTheme;
+float vhash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(vhash(i), vhash(i + vec2(1.0, 0.0)), u.x),
+             mix(vhash(i + vec2(0.0, 1.0)), vhash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  return vnoise(p) * 0.55 + vnoise(p * 2.31 + vec2(7.7, 3.1)) * 0.30
+       + vnoise(p * 4.70 + vec2(13.1, 9.2)) * 0.15;
+}
+void main() {
+  // 火域：x 体宽、y 底→顶；噪声向上卷（火向上窜），域扭曲让火舌左右摇摆
+  vec2 p = vUv * vec2(3.0, 2.0) + vec2(0.0, -uTime * 2.2);
+  float warp = fbm(p * 1.6 + vec2(0.0, -uTime * 1.1));
+  float n = fbm(p + vec2(warp * 0.9 - 0.45, 0.0));
+  // 火形：底旺顶撕裂、两侧收拢（椭圆掩膜）
+  float body = 1.0 - vUv.y;
+  float side = 1.0 - abs(vUv.x - 0.5) * 2.0;
+  float flame = body * body * (0.45 + 1.15 * n) * smoothstep(0.05, 0.5, side);
+  flame = smoothstep(0.16, 0.75, flame) * uLevel;
+  if (flame < 0.004) discard;
+  // 色 ramp：顶暗红 → 中橙 → 底芯白黄（HDR 过阈真发光）；主题色掺三成保持体系色
+  vec3 c = mix(vec3(1.7, 0.35, 0.06), vec3(2.7, 1.8, 0.8),
+               smoothstep(0.35, 0.95, flame * (1.0 - vUv.y * 0.55)));
+  c = mix(vec3(0.85, 0.14, 0.02), c, smoothstep(0.02, 0.45, flame));
+  c = mix(c, uTheme * 2.2, 0.3);
+  gl_FragColor = vec4(c, flame);
+}`;
 
 /**
- * 在宿主层的 L1 分组里建贴体叠火。
+ * 在宿主层的 L1 分组里建贴体火幕。
  * @param {UnitFxLayer} layer 单位特效宿主（unitFxLayer.js）
  * @returns {{ group, setLevel(0..1), dispose } | null}（headless 无画布 → null）
  */
@@ -28,64 +61,46 @@ export function makeBodyFlames(layer, { color = 0xff8a3a } = {}) {
   if (typeof document === 'undefined') return null;
   const unit = layer.unit;
   const H = unit._standeeHeight ?? 22;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uLevel: { value: 0 },
+      uTime: { value: 0 },
+      uTheme: { value: new THREE.Color(color) },
+    },
+    vertexShader: VERT,
+    fragmentShader: FRAG,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true,
+    fog: false,
+  });
+  // 火幕几何与本体共享（随 setArt 自愈重绑）——缩放定形：宽 1.3 倍**溢出剪影两侧**
+  // （火舌要在背景上可见，躲在立绘后面等于没火——腐苔球那种近圆体型本体比 H 还宽，
+  // 按 H 定宽必被挡死），高 0.78 罩下半身，底边贴脚底
+  const mesh = new THREE.Mesh(unit._body.geometry, mat);
+  mesh.name = 'bodyFlames';
+  mesh.scale.set(1.3, 0.78, 1);
+  mesh.position.set(0, H * 0.39, 0.55); // L1 z 槽位（见 unitFxLayer 约定）
   const group = new THREE.Group();
-  group.name = 'bodyFlames';
-  const glowTex = glowTexture(color);
-  const flameTex = flameTexture(color);
-  // HDR 乘算：焰身/内芯过 bloom 阈，光晕贴阈下（焰身必须比光晕亮——orbs 红色气球教训）
-  const colFlame = new THREE.Color(color).multiplyScalar(2.6);
-  const colCore = new THREE.Color(0xffd9a0).multiplyScalar(2.2);
-  const colGlow = new THREE.Color(color).multiplyScalar(1.3);
-  const mk = (tex, col, opacity) => new THREE.Sprite(new THREE.SpriteMaterial({
-    map: tex, color: col, blending: THREE.AdditiveBlending,
-    depthWrite: false, transparent: true, opacity, fog: false,
-  }));
-  const flames = [];
-  for (let i = 0; i < ANCHORS.length; i++) {
-    const a = ANCHORS[i];
-    const glow = mk(glowTex, colGlow, 0);
-    const flame = mk(flameTex, colFlame, 0);
-    const core = mk(glowTex, colCore, 0);
-    for (const s of [glow, flame, core]) group.add(s);
-    flames.push({
-      glow, flame, core,
-      ax: a.x * H, ay: a.y * H, as: a.s * H,
-      ph: i * 1.93, // 各团去同步初相
-    });
-  }
-  layer.groups[1].add(group); // L1 贴体层（z 段 0.50~0.60，见 unitFxLayer 文件头约定）
+  group.name = 'bodyFlamesGroup';
+  group.add(mesh);
+  layer.groups[1].add(group);
   let level = 0;
-  let t = Math.random() * Math.PI * 2;
-  const untick = unit.addTick((dt) => {
-    t += dt;
+  const untick = unit.addTick(() => {
     group.visible = level > 0.02 && !unit._dead; // 尸体上不放火（orbs 同律）
-    for (const f of flames) {
-      // 双正弦 ≈ 伪噪声抖焰 + 慢速体量呼吸
-      const fl = 1 + 0.13 * Math.sin(t * 15.7 + f.ph * 9.1) + 0.08 * Math.sin(t * 27.3 + f.ph * 5.3);
-      const sc = f.as * fl * (0.72 + 0.4 * level) * (1 + 0.1 * Math.sin(t * 3.1 + f.ph * 2.2));
-      const bob = 0.06 * f.as * Math.sin(t * 2.3 + f.ph * 3.7);
-      f.glow.position.set(f.ax, f.ay + sc * 0.12 + bob, 0.5);
-      f.glow.scale.set(sc * 2.1, sc * 2.1, 1);
-      f.glow.material.opacity = 0.3 * level;
-      f.flame.position.set(f.ax, f.ay + sc * 0.34 + bob, 0.55);
-      f.flame.scale.set(sc * 0.95, sc * 1.85, 1);
-      f.flame.material.opacity = level;
-      f.flame.material.rotation = 0.12 * Math.sin(t * 11 + f.ph * 7); // 摆尾
-      f.core.position.set(f.ax, f.ay + sc * 0.14 + bob, 0.6);
-      f.core.scale.set(sc * 0.44, sc * 0.44, 1);
-      f.core.material.opacity = 0.55 * level;
-    }
+    // setArt 自愈：本体几何被原位替换（旧几何销掉）——逐帧核对重绑共享引用
+    if (mesh.geometry !== unit._body.geometry) mesh.geometry = unit._body.geometry;
+    mat.uniforms.uLevel.value = level;
+    mat.uniforms.uTime.value = layer.body.uTime.value; // 共用 L0 的钟（同源同帧）
   });
   const dispose = () => {
     untick();
     group.parent?.remove(group);
-    for (const f of flames) { // 每单位独立材质要销；纹理是 orbs 共享缓存，不销
-      for (const s of [f.glow, f.flame, f.core]) s.material.dispose();
-    }
+    mat.dispose(); // 几何是本体共享引用，不销
   };
   return {
     group,
-    /** 总控标量 0..1：不透明度与体量全由它推（enter 渐升 / stacks 强弱 / exit 渐熄）。 */
+    /** 总控标量 0..1：火幕强度（enter 渐升 / stacks 强弱 / exit 渐熄全推它）。 */
     setLevel(l) { level = Math.max(0, Math.min(1, l)); },
     dispose,
   };

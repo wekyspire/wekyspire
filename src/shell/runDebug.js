@@ -157,6 +157,7 @@ export function createRunDebug(ctx) {
   const drawCards = (n) => battleAct('抽牌', () => bops.drawCards(battle(), n));
   const addBattleEffect = (targetKey, effectId, stacks) =>
     battleAct('加效果', () => bops.addEffect(battle(), targetKey, effectId, stacks));
+  const cleanseBattle = () => battleAct('净化全场', () => bops.cleanseAll(battle()));
   const enemyViews = () => {
     try { return bops.enemyViews(battle()); } catch { return []; }
   };
@@ -195,6 +196,6 @@ export function createRunDebug(ctx) {
     triggerAscension, skipCutscene,
     // 战斗页
     killAllEnemies, killEnemy, healFull, gainManaInBattle, gainApInBattle, gainShieldInBattle,
-    addCardToHand, drawCards, addBattleEffect, enemyViews, hardResetBattle,
+    addCardToHand, drawCards, addBattleEffect, cleanseBattle, enemyViews, hardResetBattle,
   };
 }
