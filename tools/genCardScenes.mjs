@@ -28,11 +28,13 @@ const END = Number((process.argv.find(a => a.startsWith('--end=')) || '').split(
 const VARCHAIN = process.argv.includes('--varchain');
 const CHAIN = (process.argv.find(a => a.startsWith('--chain=')) || '').split('=')[1]?.split(',') || null;
 const ANCHOR = (process.argv.find(a => a.startsWith('--anchor=')) || '').split('=')[1] || null; // 显式参考图（给定时链内所有键都生成，无「链首跳过」）
+const FIXANCHOR = process.argv.includes('--fixanchor'); // 锚不逐级传递：每键都从显式锚出发（2026-09-22 斩链低级卡重做：锁死骑士身形与剑位，只换特效层）
+const DENoiseArg = Number((process.argv.find(a => a.startsWith('--denoise=')) || '').split('=')[1]);
 const CHAIN_DENOISE = 0.85; // 级联 img2img 强度：0.6 克隆参考图；0.75 只加碎屑、全链零变化（用户否掉）；
 // 0.85 让刀刃/状态/背景/笔触的逐级变身真正发生，构图由参考图+共享句式双锚定
 const VAR_DENOISE = 0.8; // 变体级联强度：同一张卡的逐级增强——构图必须锁死（用户：同链路构图要类似），
 // 变化交给能量/光效/褪彩——0.72 太保守（褪彩压不过保真，试点几乎零变化），0.8 让后缀显形而构图不漂
-let DENOISE = CHAIN_DENOISE; // buildWorkflow 实际使用值：--chain=0.85，--varchain=0.72
+let DENOISE = Number.isFinite(DENoiseArg) && DENoiseArg > 0 ? DENoiseArg : CHAIN_DENOISE; // buildWorkflow 实际使用值：--chain=0.85（可 --denoise= 覆盖），--varchain=0.72
 // 跨键进阶链（battlePromotesTo 阶梯，斩链）不走独立 txt2img——构图各自漂移、玩家认不出同链；
 // 统一由 --chain 级联产出。普通模式跳过这些键（--only 可强制）。
 const LADDER_KEYS = new Set(['rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave']);
@@ -100,10 +102,10 @@ const SCENES = [
   // prompt 只写可直接入画的具体景物（不为难 AI 具象化「斩金断石」）；明度/能量严格渐强——
   // 暗钢 → 金火花 → 沙暴 → 碧涛 → 白光 → 泛白，让玩家一眼读出「一重更比一重强」。
   // 链内全部键共享同一取景句式（级联锁构图），每级四轴变身：刀刃形态色泽/背景景物/明度能量/骑士存在感。
-  { id: 'rockCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its steel blade chipped and dusty gray, a big boulder split into two halves behind the blade with rock chunks and brown-gray dust settling, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dark background, dim dusty mood` },
-  { id: 'goldCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its edge glowing golden-hot, a sheared metal column stump beside the blade with a shower of golden sparks and metal shards flying, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dark background, warm spark-lit mood` },
-  { id: 'mountainCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its blade broadened and humming, visible shockwave rings rippling the air around the blade, a mountain peak behind with massive clouds of dust and sand blasting off its slopes, gravel and sand storming outward in every direction, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, violent storm-force mood` },
-  { id: 'seaCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its blade wrapped in streaming water ribbons, two towering walls of seawater parting to the left and right of the blade with white foam and spray between them, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dramatic cool blue mood` },
+  { id: 'rockCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, gray-brown stone chips and rock dust bursting along the blade's swing path, small split rock fragments flying, gritty dusty mood, dark background` }, // 2026-09-22 四改：锁死用户开天斩原画构图（同手臂同剑位），低级四斩只换特效层
+  { id: 'goldCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel and must NOT turn golden, a shower of golden-orange sparks and small golden metal shards bursting along the blade's swing path, the gold only in the sparks and shards, warm spark-lit mood, dark background` }, // 削金 = 金在火花屑里，剑身永钢（旧版把刃画金被用户判死）
+  { id: 'mountainCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, a massive blast of sand dust and gravel storming outward along the blade's swing path, rock debris flying, violent dusty mood, dark background` },
+  { id: 'seaCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, streaming seawater ribbons and white foam spray bursting along the blade's swing path, water parting around the blade edge, cool wet mood, dark background` },
   { id: 'skyCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: both gauntlets swinging a huge greatsword diagonally across the frame, the blade still plain steel, its swing path tearing the dark sky open in a huge diagonal rift of blinding white light trailing right behind the blade, the light rift as dominant as the blade, red scarf whipping at the frame edge, tight dark close-up, no landscape, dark background` }, // 2026-09-22 二改：「举剑站姿」被用户判构图错——必须是挥斩中途+剑路天裂，链语法=横挥动势
   { id: 'godCleave', prompt: `a colossal arc of void-white fire huge and filling the entire frame, its edge dissolving into drifting sparks of light, a vast radiant figure of pale light collapsing and scattering into ash-like fragments behind the blade, the knight a near-invisible silhouette at the frame edge with only the red scarf vivid, the frame flooding toward white, overwhelming god-slaying mood` },
   { id: 'ironShard', prompt: `a burst of jagged iron shards flying toward the left, sharp crisp metal fragments dominant, the right half of the frame plain dark emptiness, nothing else in frame` },
@@ -845,7 +847,7 @@ async function runChain(keys) {
         console.error(`  ✗ ${key}#${i}: ${e.message}`);
       }
     }
-    if (firstNew) refPath = firstNew; // 下一级锚定本级的首张新图，逐代传递
+    if (firstNew && !FIXANCHOR) refPath = firstNew; // 下一级锚定本级的首张新图，逐代传递（--fixanchor 时锚死显式锚图）
   }
   console.log('链级联完成。');
 }
@@ -902,7 +904,7 @@ const t2i = T2I_TIERS[vid] ?? null; // 构图级升维档：免参考直出（�
 if (CHAIN) {
   await runChain(CHAIN);
 } else if (VARCHAIN) {
-  DENOISE = VAR_DENOISE;
+  DENOISE = Number.isFinite(DENoiseArg) && DENoiseArg > 0 ? DENoiseArg : VAR_DENOISE;
   await runVarChains(ONLY);
 } else {
 const POOL = SCENES;
