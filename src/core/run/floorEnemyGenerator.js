@@ -15,6 +15,7 @@
 import { createRng } from '../state/rng.js';
 import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
+import { isShopFloor } from './rooms/shop.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
 // 章1 表驱动（用户 2026-09-22 ENEMIES_1 重写：陡升后收平等 Boss），章 2–4 每 2 层 +1；
@@ -60,7 +61,7 @@ const TEMPLATES = [
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }] },
   { id: 'slimeBurst', name: '史莱姆爆发', cost: 5, minFloor: 3, maxFloor: 5, once: true, excl: ['slimeletBurst'],
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }, { fixed: 'slime' }] },
-  { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 4, maxFloor: 9, once: true, excl: ['rotEye'],
+  { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 5, maxFloor: 9, once: true, excl: ['rotEye'],
     slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'slime' }] },
   { id: 'pester', name: '难缠麻烦', cost: 6, minFloor: 4, maxFloor: 5, once: true,
     slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBallA' }, { fixed: 'pufferToadA' }] },
@@ -215,10 +216,15 @@ function templateUsable(tpl, floor, eliteDay, usedOnce) {
 function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
   const D = floorDifficulty(floor);
   const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
+  // 商店层（4/8、15/19…）难度上漂封顶（2026-09-26 用户定）：漂移窗改为 [D−DRIFT, D]——
+  // 只往小随不往大随。「补给站不打硬仗」：三层试玩实测 F4/F8 是商店层却吞掉 28%/15% 的
+  // 死亡（F4 还叠加 19 个重模板 minFloor=4 的解锁悬崖），买药的钱在战后才到手，进攻性
+  // 编成把血量预算打穿后再补给已经晚了
+  const driftUp = isShopFloor(floor) ? 0 : DRIFT;
   const candidates = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce)
-    && costs.get(t) != null && Math.abs(costs.get(t) - D) <= DRIFT);
+    && costs.get(t) != null && costs.get(t) - D <= driftUp && D - costs.get(t) <= DRIFT);
   if (candidates.length === 0) {
-    throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，±${DRIFT} 窗内候选为空）`);
+    throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，窗 [${D - DRIFT}, ${D + driftUp}] 候选为空）`);
   }
   const weighted = [];
   for (const t of candidates) {
