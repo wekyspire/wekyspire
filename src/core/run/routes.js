@@ -2,18 +2,18 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 
 // 开局路线（2026-09-21 D2，杀戮尖塔式选角）：各体系有专属起始牌组 + 体系基础能力
-// 开局即授予 + 灵脉直接 1 级（不占 6 次进阶额度）。这取代了旧「首进阶送基石卡 +
+// 开局即授予（2026-09-22 用户定：**灵脉等级不从 1 起步**——初始终为 0，首进阶 0→1
+// 才点亮，种子包九选三仪式随之回到首进阶）。这取代了旧「首进阶送基石卡 +
 // 体系能力 + 种子包救火」的补丁结构——路线选择直接消除「全员体修开局 → 转型慢」。
 //
 // 对价（用户定 2026-09-22）：
-//   · 灵脉路线 = leino 1 + 体系基石卡 + 体系能力，牌组由通用填充卡（拳/盾）补足；
+//   · 灵脉路线 = 起始牌组（含基石卡）+ 体系能力，灵脉等级 0，牌组由通用填充卡（拳/盾）补足；
+//     首次进阶该灵脉（0→1）走 ascension.js 的获赠流程：基石卡已在起始组则不重复直发，
+//     种子包九选三照常。
 //   · 体修路线啥都不拿（无灵脉可点）——补偿是体修基础能力「多获得一张肾上腺素」
 //     （BODY_CULTIVATION_CARDS §0：肾上腺素 = 0 费消耗、+1AP 抽 2/3 的节奏阀，
 //     起始组共两张），以及拳/盾填充卡的晋升通道（见 promotion.js 的 FILLER_STARTERS
 //     门禁）。旧「AP 上限 +1」（2026-09-21 D1）已废弃——体修与法师同为 3 AP。
-// 种子包新定位（D2-c）：首体系不再发种子包——它只在局中**第二体系 0→1** 时作为
-// 骨架包出现（ascension.js 的 0→1 获赠逻辑天然满足：路线体系开局已是 1 级，
-// 不会再触发首进阶赠送）。
 
 const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard']);
 // 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线
@@ -58,7 +58,8 @@ export function applyRoute(run, routeId) {
   const p = run.player;
   if (!p.deck.length) p.deck = route.deck.map(id => createSkillRuntime(id));
   if (route.leino) {
-    p.leino[route.leino] = Math.max(p.leino[route.leino] ?? 0, 1);
+    // 灵脉等级不从 1 起步（2026-09-22 用户定）：初始终 0，首进阶 0→1 点亮——
+    // 获赠流程见 ascension.js（基石卡去重 + 种子包九选三）。
     if (route.ability && !p.abilities.includes(route.ability)) p.abilities.push(route.ability);
   }
   if (route.apBonus) {
