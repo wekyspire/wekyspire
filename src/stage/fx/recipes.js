@@ -8,7 +8,10 @@
 //   → KILL 加重覆写（payload.killed：震荡加成、数字放大）
 // 调视觉参数只改本文件；新增体系/标签主题 = 表里加一行。
 import { getSkillDefinition } from '../../core/skills/registry.js';
-import { attachBodyFlames } from './bodyFlames.js';
+import { makeBodyFlames } from './bodyFlames.js';
+import { makeVaporPlumes } from './vaporPlumes.js';
+import { makeStasisShell } from './stasisShell.js';
+import { makeStunStars } from './stunStars.js';
 import gsap from 'gsap';
 
 // 主级默认模板（与 2026-09 _damageHit 现行参数逐项对齐——默认路径零回归）
@@ -127,73 +130,59 @@ export function resolveDamageRecipe(payload = {}) {
 // 铁律：aura 由**显示状态 diff** 驱动（sync 节拍对账），不订阅 core 事件——
 // 观战端经同一份 state sync 自动一致。enter/exit 是 fire-and-forget 短过渡，不进节拍。
 
-// 单位 aura 主题表：effectId → 发射参数（点粒子 emitter，粒子进全局 Points 池——
-// 故 aura.group 对这类 aura 是空壳，视觉全在 emitter；sprite 类 aura 才用 group）。
-// gravity 为正 = 上飘（y 向上）；yOff = 发射位相对单位脚底的抬升；radius = 发射位抖动。
-// burn 另有本体（L0 unitBodyFx）与贴体叠火（L1 bodyFlames）两件——见 makeBurnAuraDef。
+// 单位 aura 主题表（VFX 结构大更新 Phase 2，2026-09-26 升级为层级/槽位声明）：
+// effectId → { layer, build, levelOf, body?, emitter? }。aura def 退化成纯「槽位导演」——
+// 建件收件全在 UnitFxLayer（一效果一槽位，key = effectId），def 的 enter/update/exit
+// 只推 level 标量。字段口径：
+//   layer   目标层级 1|2|3（L0 本体层无几何件，经 body 键推 uniform）
+//   build   建件器 (layer) => 句柄|null（headless 返 null，幂等挂层）
+//   levelOf 层数 → 强度标量（stacks 缺席按 1 计；enter/update 共用此口径）
+//   body    可选：level 同时推 L0 本体补丁的同名 uniform（burn→uBurn / poison→uPoison）
+//   emitter 可选：附带点粒子发射参数（粒子进全局 Points 池；gravity 为正 = 上飘，
+//           yOff = 发射位相对单位脚底的抬升，radius = 发射位抖动）
 const UNIT_AURA_THEMES = {
-  burn: { rate: 14, color: 0xff7a30, speed: 7, ttl: 0.9, gravity: 9, size: 1.3, radius: 1.4, yOff: 1.5 },
+  burn: {
+    layer: 1,
+    build: (layer) => makeBodyFlames(layer, { color: 0xff8a3a }),
+    levelOf: (s) => Math.min(0.3 + (s ?? 1) * 0.07, 0.85),
+    body: 'uBurn',
+    emitter: { rate: 14, color: 0xff7a30, speed: 7, ttl: 0.9, gravity: 9, size: 1.3, radius: 1.4, yOff: 1.5 },
+  },
+  poison: {
+    layer: 1,
+    build: (layer) => makeVaporPlumes(layer, { color: 0x7fe06a }),
+    levelOf: (s) => Math.min(0.3 + (s ?? 1) * 0.05, 0.8),
+    body: 'uPoison',
+    emitter: { rate: 5, color: 0x7fe06a, speed: 3.5, ttl: 1.2, gravity: 4, size: 1.5, radius: 1.2, yOff: 2.0 },
+  },
+  stasis: {
+    layer: 2,
+    build: (layer) => makeStasisShell(layer),
+    levelOf: () => 0.9,
+  },
+  stun: {
+    layer: 3,
+    build: (layer) => makeStunStars(layer),
+    levelOf: () => 1,
+  },
 };
 
-function makeUnitAuraDef(theme, { particles, unit }) {
-  const spawnAt = () => particles.spawnEmitter(
-    unit.position.x, unit.position.y + theme.yOff,
-    { ...theme, rate: 0, z: unit.position.z }, // rate 从 0 起，enter 渐升
-  );
-  const ramp = (aura) => {
-    // 进入渐升：直接补间 emitter.rate（句柄契约：rate 可变、逐帧生效）。
-    // 裸 gsap 不经 ctx——aura 宿主被杀时 emitter 已随 dispose 关停，rate 残留无害。
-    return new Promise((resolve) => {
-      gsap.to(aura.data.emitter, { rate: theme.rate, duration: 0.4, ease: 'power1.out', onComplete: resolve });
-    });
-  };
-  return {
-    enter(aura) {
-      aura.data.emitter = spawnAt();
-      return ramp(aura);
-    },
-    // exit 打断重挂（aura 纪律②）：重建 emitter 并渐升
-    reenter(aura) {
-      aura.data.emitter = spawnAt();
-      return ramp(aura);
-    },
-    // 软退出：停止发射，余烬按 ttl 自然衰减（~0.9s 内飘尽）——不额外播演出
-    exit(aura) {
-      aura.data.emitter?.stop();
-      aura.data.emitter = null;
-    },
-    dispose(aura) {
-      aura.data.emitter?.stop();
-      aura.data.emitter = null;
-    },
-  };
-}
-
-// 燃烧 aura（Phase 1 重做，2026-09-26）：三通道合一——
-//   L0 本体余烬（unitBodyFx 补丁的 uBurn：立绘自下而上泛橙红脉动）
-//   L1 贴体叠火（bodyFlames：3 团 HDR sprite 火锚在下半身，过 bloom 阈真发光）
-//   余烬粒子（旧 rate-14 emitter 保留：火屑上飘的纵深）
-// 总控 level（0..1，stacks 映射）：enter 渐升 / **update 追层数**（AuraHost 的 set()
-// 只管增删，存续 aura 的强度由同步侧逐个调 def.update——stacks 3→7 火焰随旺）/
+// 通用 aura 工厂（Phase 2）：主题声明 → 槽位导演 def。enter 渐升 / update 追层数
+// （AuraHost 的 set() 只管增删，存续 aura 的强度由同步侧逐个调 def.update）/
 // exit 渐熄（teardown 时 dispose 归零收尸）。
-const BURN_LEVEL = (stacks) => Math.min(0.3 + (stacks ?? 1) * 0.07, 0.85);
-
-function makeBurnAuraDef(theme, { particles, unit }) {
-  const spawnAt = () => particles.spawnEmitter(
-    unit.position.x, unit.position.y + theme.yOff,
-    { ...theme, rate: 0, z: unit.position.z },
-  );
-  const rampRate = (aura) => new Promise((resolve) => {
-    gsap.to(aura.data.emitter, {
-      rate: theme.rate, duration: 0.4, ease: 'power1.out', overwrite: 'auto',
-      onComplete: resolve, onInterrupt: resolve, // 被顶掉也要落地：enter 的 Promise.all 靠它转态
-    });
-  });
-  // level → 三通道落地（补间 onUpdate 与 update 钩共用这一个落笔点）
+function makeAuraDef(effectId, theme, { particles, unit }) {
+  const fxLayer = unit._fxLayer; // UnitFxLayer（UnitObject 构造时自建）
+  const spawnAt = theme.emitter
+    ? () => particles.spawnEmitter(
+        unit.position.x, unit.position.y + theme.emitter.yOff,
+        { ...theme.emitter, rate: 0, z: unit.position.z }, // rate 从 0 起，enter 渐升
+      )
+    : null;
+  // level → 槽位 + L0 uniform 落地（补间 onUpdate 与 update 钩共用这一个落笔点）
   const applyLevel = (aura) => {
     const l = aura.data.level ?? 0;
-    if (aura.data.bodyFx) aura.data.bodyFx.uBurn.value = l;
-    aura.data.flames?.setLevel(l);
+    fxLayer.setLevel(effectId, l);
+    if (theme.body) fxLayer.body[theme.body].value = l;
   };
   const rampLevel = (aura, target, dur) => new Promise((resolve) => {
     gsap.to(aura.data, {
@@ -204,32 +193,37 @@ function makeBurnAuraDef(theme, { particles, unit }) {
       onUpdate: () => applyLevel(aura), onComplete: resolve, onInterrupt: resolve,
     });
   });
+  const rampRate = spawnAt ? (aura) => new Promise((resolve) => {
+    gsap.to(aura.data.emitter, {
+      rate: theme.emitter.rate, duration: 0.4, ease: 'power1.out', overwrite: 'auto',
+      onComplete: resolve, onInterrupt: resolve, // 被顶掉也要落地：enter 的 Promise.all 靠它转态
+    });
+  }) : null;
   return {
     enter(aura) {
-      aura.data.bodyFx = unit._bodyFx ?? null; // BattleStage 建视图时挂的 L0 补丁
-      aura.data.flames = attachBodyFlames(unit, { color: theme.color }); // headless → null
-      aura.data.emitter = spawnAt();
-      // 本体 uTime 只在 burn 存活期推进（熄灭即冻结，零空转）
-      aura.data.untickBody = aura.data.bodyFx
-        ? unit.addTick((dt) => { aura.data.bodyFx.uTime.value += dt; })
-        : null;
+      fxLayer.overlay(effectId, theme.layer, theme.build); // 幂等建件（headless → null 句柄）
+      if (spawnAt) aura.data.emitter = spawnAt();
       aura.data.level = 0;
-      return Promise.all([rampLevel(aura, aura.data.target ?? 0.5, 0.45), rampRate(aura)]);
+      return Promise.all([
+        rampLevel(aura, aura.data.target ?? theme.levelOf(1), 0.45),
+        rampRate ? rampRate(aura) : Promise.resolve(),
+      ]);
     },
     // 强度追层数（同步侧钩；gsap 同属性补间顶掉在途——entering 中也平滑改道）
     update(aura, e) {
-      aura.data.target = BURN_LEVEL(e?.stacks ?? 1);
+      aura.data.target = theme.levelOf(e?.stacks ?? 1);
       rampLevel(aura, aura.data.target, 0.35);
     },
-    // exit 打断重挂：emitter 已 stop 需重建；level 直接回 target
+    // exit 打断重挂（aura 纪律②）：emitter 已 stop 需重建；level 直接回 target
     reenter(aura) {
-      if (!aura.data.emitter) {
+      fxLayer.overlay(effectId, theme.layer, theme.build);
+      if (spawnAt && !aura.data.emitter) {
         aura.data.emitter = spawnAt();
         rampRate(aura);
       }
-      return rampLevel(aura, aura.data.target ?? 0.5, 0.3);
+      return rampLevel(aura, aura.data.target ?? theme.levelOf(1), 0.3);
     },
-    // 软退出：停发射 + 火焰渐熄（teardown 由 AuraHost 收尾，dispose 钩清场）
+    // 软退出：停发射 + level 渐熄（teardown 由 AuraHost 收尾，dispose 钩清场）
     exit(aura) {
       aura.data.emitter?.stop();
       aura.data.emitter = null;
@@ -238,12 +232,9 @@ function makeBurnAuraDef(theme, { particles, unit }) {
     dispose(aura) {
       gsap.killTweensOf(aura.data);
       aura.data.emitter?.stop();
-      aura.data.untickBody?.();
-      aura.data.flames?.dispose();
-      if (aura.data.bodyFx) aura.data.bodyFx.uBurn.value = 0; // 防御性归零（材质随单位消亡）
-      aura.data.flames = null;
-      aura.data.bodyFx = null;
       aura.data.emitter = null;
+      fxLayer.clear(effectId);
+      if (theme.body) fxLayer.body[theme.body].value = 0; // 防御性归零（材质随单位消亡）
     },
   };
 }
@@ -251,7 +242,7 @@ function makeBurnAuraDef(theme, { particles, unit }) {
 /**
  * 由单位效果投影 diff 出应有 aura 集合。
  * @param {Array} effects 投影效果列表 [{ effectId, stacks, ... }]
- * @param {object} deps { particles, unit }（unit = UnitObject，读 position/z/_bodyFx）
+ * @param {object} deps { particles, unit }（unit = UnitObject，读 position/z/_fxLayer）
  * @returns Map<auraKey, auraDef>
  */
 export function resolveUnitAuras(effects, deps) {
@@ -259,9 +250,7 @@ export function resolveUnitAuras(effects, deps) {
   for (const e of effects ?? []) {
     const theme = UNIT_AURA_THEMES[e?.effectId];
     if (!theme || (e.stacks ?? 0) <= 0) continue;
-    out.set(e.effectId, e.effectId === 'burn'
-      ? makeBurnAuraDef(theme, deps)
-      : makeUnitAuraDef(theme, deps));
+    out.set(e.effectId, makeAuraDef(e.effectId, theme, deps));
   }
   return out;
 }

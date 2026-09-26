@@ -61,7 +61,6 @@ import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { attachOrbs } from '../fx/orbs.js';
-import { attachUnitBodyFx } from '../fx/unitBodyFx.js';
 import { warmCharBurn } from '../fx/charBurn.js';
 import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
@@ -521,8 +520,7 @@ export class BattleStage {
           textureAnisotropy: Math.min(8, this._smMaxAnisotropy()),
         });
         obj._defId = unitProj.defId;
-        // L0 本体特效补丁（燃烧等；每单位独立材质，无族复位负担——unitBodyFx.js）
-        obj._bodyFx = attachUnitBodyFx(obj._body.material);
+        // L0 本体补丁由 UnitFxLayer 在 UnitObject 构造时挂好（VFX Phase 2 收口）
         this._units.set(unitProj.uniqueID, obj);
         this.scene.add(obj);
         this.animator.register(unitProj.uniqueID, obj);

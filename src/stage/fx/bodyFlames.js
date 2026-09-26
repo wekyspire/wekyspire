@@ -1,13 +1,13 @@
-// 贴体叠火（L1 贴体层首件，VFX 结构大更新 Phase 1，2026-09-26）：
+// 贴体叠火（L1 贴体层首件，VFX 结构大更新 Phase 1，2026-09-26；Phase 2 改挂层宿主）：
 // orbs.js 同款多层 sprite 火的**贴体版**——不绕轨，3 团锚在立绘下半身
 // （体宽错开、体高下半分布），让燃烧单位「身上着火」而不是「身边飘火星」。
-// 挂 billboard 子组（与立绘同 yaw 面向相机——贴体铁律：挂 unit 根的件不会跟随
-// billboard 转身，身体侧对相机时火会飘离剪影）。
+// 挂进 UnitFxLayer 的 L1 分组（billboard 子组，与立绘同 yaw 面向相机——贴体铁律：
+// 挂 unit 根的件不会跟随 billboard 转身，身体侧对相机时火会飘离剪影）。
 // HDR 纪律：sprite 材质 color 乘算推过世界 bloom 阈 1.45（火是发光体——焰身 ×2.6 /
 // 内芯 ×2.2 / 光晕 ×1.3）；本体（L0）压阈下，发光的活全在这层，分工防糊白。
 // 混合：世界场景内 additive 即可（世界链终段不透明，无 uiScene RT 的 alpha 占地问题）。
 // 总控一个标量：setLevel(0..1)（enter 渐升 / stacks 强弱 / exit 渐熄全推它）；
-// 逐帧抖焰走 unit.addTick（orbs 同惯例），dispose 摘钩收尸。
+// 逐帧抖焰走 unit.addTick（orbs 同惯例），dispose 摘钩收尸（由宿主层统一调）。
 import * as THREE from 'three';
 import { glowTexture, flameTexture } from './orbs.js';
 
@@ -20,11 +20,13 @@ const ANCHORS = [
 ];
 
 /**
- * 给单位视图挂贴体叠火。
+ * 在宿主层的 L1 分组里建贴体叠火。
+ * @param {UnitFxLayer} layer 单位特效宿主（unitFxLayer.js）
  * @returns {{ group, setLevel(0..1), dispose } | null}（headless 无画布 → null）
  */
-export function attachBodyFlames(unit, { color = 0xff8a3a } = {}) {
+export function makeBodyFlames(layer, { color = 0xff8a3a } = {}) {
   if (typeof document === 'undefined') return null;
+  const unit = layer.unit;
   const H = unit._standeeHeight ?? 22;
   const group = new THREE.Group();
   group.name = 'bodyFlames';
@@ -51,7 +53,7 @@ export function attachBodyFlames(unit, { color = 0xff8a3a } = {}) {
       ph: i * 1.93, // 各团去同步初相
     });
   }
-  unit._billboard.add(group); // 贴体铁律：与立绘同 billboard（见文件头）
+  layer.groups[1].add(group); // L1 贴体层（z 段 0.50~0.60，见 unitFxLayer 文件头约定）
   let level = 0;
   let t = Math.random() * Math.PI * 2;
   const untick = unit.addTick((dt) => {
@@ -76,7 +78,7 @@ export function attachBodyFlames(unit, { color = 0xff8a3a } = {}) {
   });
   const dispose = () => {
     untick();
-    unit._billboard.remove(group);
+    group.parent?.remove(group);
     for (const f of flames) { // 每单位独立材质要销；纹理是 orbs 共享缓存，不销
       for (const s of [f.glow, f.flame, f.core]) s.material.dispose();
     }

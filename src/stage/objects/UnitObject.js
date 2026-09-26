@@ -20,6 +20,7 @@
 // 场景可遮蔽立牌（合理）但不可遮蔽状态（用户定）；卡牌 UI 是独立 pass 天然在其上。
 
 import * as THREE from 'three';
+import { UnitFxLayer } from '../fx/unitFxLayer.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -216,6 +217,9 @@ export class UnitObject extends THREE.Group {
     // 战斗节拍经 setPose 逐帧写入，update 与呼吸合成后落到 standee（血条/意图条不动）；
     // standee 底部锚定 → 蜷缩压向地面、前倾绕脚转，物理感与死亡倾倒同源
     this._pose = { lean: 0, squash: 1, widen: 1 };
+    // VFX 固定四层宿主（L0 本体补丁 + L1–L3 overlay 槽位池；fx/unitFxLayer.js）——
+    // 挂 billboard 的分组在这里建好，aura 配方只经它推 level
+    this._fxLayer = new UnitFxLayer(this);
   }
 
   /** 立牌纹理挂载（异步到图后调用）：替换占位色块，按图片纵横比重排平面。 */
@@ -462,7 +466,15 @@ export class UnitObject extends THREE.Group {
 
   /** 帧驱动：附件钩子（环绕轨道等）+ idle 呼吸 + 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
   update(dt) {
-    for (const fn of this._tickFns) fn(dt);
+    // 逐件 try/catch：tick 件全是视觉装饰，一件抛错不许拖死主循环——且必须就地
+    // 摘除病灶（毒雾 s 字段撞名教训：异常逃出 update 把 rAF 主循环整链打断，
+    // 画面冻结但 gsap 继续推 uniform，数据断言全绿、视觉已死，极难察觉）
+    for (const fn of this._tickFns) {
+      try { fn(dt); } catch (e) {
+        this._tickFns.delete(fn);
+        console.error('[UnitObject] tick 件抛错，已摘除:', e);
+      }
+    }
     if (this._flashT > 0) this._flashT -= dt;
     if (this._shieldPopT > 0) {
       this._shieldPopT -= dt;
@@ -532,6 +544,7 @@ export class UnitObject extends THREE.Group {
   get highlighted() { return !!this._ring; }
 
   dispose() {
+    this._fxLayer.dispose(); // fx 宿主先收：overlay 件摘钩销材质，L0 随本体材质消亡
     // 部件自检（fx Phase 5）：部件把收尾挂在 userData.dispose（orbs 等）——
     // 单位视图消亡（死亡移除/舞台销毁）时统一摘部件、停 tick、释放部件材质
     for (const part of this.parts.values()) { try { part.userData?.dispose?.(); } catch (_) {} }
