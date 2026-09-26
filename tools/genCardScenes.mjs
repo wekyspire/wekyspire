@@ -85,7 +85,7 @@ const SCENES = [
   { id: 'endlessCombo', prompt: `a sweeping row of overlapping punch afterimages trailing across the frame, five sequential steel-gray fists blurring one after another in a single flowing barrage, the knight's body a smear of motion behind them, endless combo, dark background` },
   { id: 'instantThousand', prompt: `a frozen instant: hundreds of desaturated gray fist afterimages scattered across the whole frame like a starfield of blows, near-monochrome, blurred illusory phantom fists everywhere` },
   { id: 'instantStrike', prompt: `extreme close-up of a steel-gray armored fist landing a flash-fast jab toward the left, sharp motion lines, dark background` },
-  { id: 'adrenaline', prompt: `extreme close-up of a steel-gray fist slamming into an open armored palm, the psych-up gesture, a sharp impact burst and motion lines, raw adrenaline, dark background` },
+  { id: 'adrenaline', prompt: `extreme close-up of two steel-gray armored gauntlets: one armored fist slamming into the open armored palm, the psych-up gesture, a sharp white impact burst and motion lines around the clap, red scarf edge at the corner, raw adrenaline, dark background` }, // 2026-09-26 二改：旧部署件是裸拳（盔甲裁定违规），锚死双甲手
   { id: 'crashLanding', prompt: `ground-level view looking up: exactly one small stretched black silhouette dropping out of the dark sky elbow-first, a shockwave ring already cracking the earth beneath it, single figure only, scale contrast` },
   { id: 'elbowMaster', prompt: `extreme heroic close-up of one bent steel-gray armored elbow joint presented to the camera like a legendary trophy weapon, the elbow point filling the frame, polished gleam on the plating, comedic reverence for the boss elbow, no helmet, no face, no body, dark background` },
   { id: 'elbowReturn', prompt: `extreme close-up of a steel-gray elbow thrust skyward in triumph, raised high like a returning champion, dramatic backlight on the point, dark background` },
@@ -113,7 +113,7 @@ const SCENES = [
   { id: 'perfectCleave', prompt: `a flat rosette of interlaced blade-arc trails blooming like a steel flower facing the camera, ornate defensive flourish pattern, no person visible, dark background` },
   { id: 'silverDance', prompt: `flowing silver blade ribbons tracing an elegant dance pattern across the dark frame, the ribbons the only subject, graceful and deadly` },
   { id: 'graceDance', prompt: `a steel-gray knight in an elegant flowing blade dance, his sword tracing one smooth continuous ribbon of light in a tall graceful arc, poised and unhurried, dark background` },
-  { id: 'cycloneSlash', prompt: `one complete ring of blade-light filling the frame edge to edge, a perfect circle of steel arc, sparks riding the rim` },
+  { id: 'cycloneSlash', prompt: `a steel-gray armored knight spinning in a full-body rotation slash: both gauntlets swinging a greatsword extended outward, the blade's path drawn as one complete ring of pale blade-light encircling the spinning knight edge to edge, the red scarf whipping around the armored neck, dark background` }, // 2026-09-26 二改：旧 prompt 只写光环不给主体，AI 每回合往里塞裸男——骑士必须明写
   { id: 'cleave', prompt: `one huge flat horizontal blade-arc sweeping across the entire frame, the arc as wide as the frame itself, everything in its path split` },
   { id: 'flyingDagger', prompt: `a throwing knife huge in frame streaking toward the left with a long speed trail, a steel-gray gauntlet blurred at the rear edge` },
   { id: 'returningDagger', prompt: `extreme close-up of a curved throwing dagger spinning back into an open steel-gray gauntlet, the returning catch, a circular motion trail closing the loop, dark background` },
@@ -257,8 +257,8 @@ const SCENES = [
   { id: 'atEase', prompt: `${KNIGHT}, floating cross-legged on a soft cloud puff, relaxed weightless pose, scarf drifting slowly` },
   { id: 'airFloat', prompt: `${KNIGHT}, levitating high off the ground at a tilted diagonal, boots dangling, red scarf drifting straight upward, a ring of pale cyan air beneath him, weightless floating pose` },
   // —— 通用灰卡家族（骑士的日常动作） ——
-  { id: 'purify', prompt: `a clear stream of water pouring over a steel-gray armored gauntlet in close-up, the hand clearly plated metal armor with chunky plate segments and steel sheen, dark grime dissolving off the metal plates in the flowing water, droplets sparkling, no skin, no flesh, no bare hand, brilliant purity` },
-  { id: 'extract', prompt: `a steel-gray armored hand pulling a long iridescent ribbon of light out of a small gray rock, the ribbon shimmering green, yellow and blue like an oil sheen, stretched taut across the frame` },
+  { id: 'purify', prompt: `a steel-gray armored gauntlet held up in close-up, a soft cascade of pale glowing light pouring over it like a luminous waterfall, black grime and dark smoke dissolving off the metal plates where the light touches, the steel gleaming clean and bright, light made visible, not liquid, no water, brilliant purity, dark background` }, // 2026-09-26 二改：旧版真倒水=洗手梗；纯化改「光之涤荡」
+  { id: 'extract', prompt: `a steel-gray armored gauntlet pulling a long taut stream of glowing essence out of a cracked dull gray rock, the stream made of luminous pale vapor, breath made visible, faint green gold and blue shimmer within the light, smoke-like, not liquid, not metal, stretched across the frame, dark background` }, // 2026-09-26 二改：旧版虹彩管=热成像图；萃取改「光雾精华流」
   { id: 'drawQi', prompt: `thin streams of pale blue breath-light converging from every edge of the frame toward the small dark armored silhouette's chest at the center, a strong inhaling vortex motion, no book, no objects in hands, dark background` },
   { id: 'manaJar', prompt: `extreme close-up of a small round glass potion jar held in a steel-gray gauntlet, bright sapphire-blue glow escaping from the opened mouth, cool blue light on the metal, no helmet in frame` },
   { id: 'stimulant', prompt: `a vivid yellow-green bolt of energy crackling around a steel-gray armored forearm held across the frame, sharp bright jolt lines, sudden vigor, no helmet in frame` },
@@ -423,8 +423,8 @@ const ESCALATION_CUSTOM = {
     3: ', the same arc, a huge splitting arc tearing the whole frame open along its path, debris flung',
   },
   cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
-    2: ', the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
-    3: ', the same ring, a blazing double circle of blade-light, sparks storming outward',
+    2: ', the same spinning armored knight inside the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
+    3: ', the same spinning knight, a blazing double circle of blade-light, sparks storming outward',
   },
   edgeBreath: { // 含刃术(C→B→A)：刃更寒
     2: ', the same blade held at the visor, the steel brighter, a faint cold gleam along the edge',
@@ -661,16 +661,19 @@ const ESCALATION_CUSTOM = {
     2: ', the same hand and vine, more thorns coiling further up the wrist, more glowing dark-red sap dripping',
   },
   extract: {
-    2: ', the same pull, the iridescent ribbon wider and brighter, stronger green-yellow-blue shimmer',
-    3: ', the same pull, a torrent of iridescent green-yellow-blue light erupting from the cracking rock, the ribbon flooding the frame',
+    2: ', the same pull, the luminous vapor stream thicker and brighter, more pale light billowing out of the cracking rock',
+    3: ', the same pull, a torrent of pale glowing essence erupting from the rock, the light flooding the frame',
+  },
+  adrenaline: { // 肾上腺素(B)→(A)：爆发更烈
+    3: ', the same double-gauntlet clap, the white impact burst bigger, sharper spikes of light radiating outward',
   },
   drawQi: {
     2: ', the same inhale, the pale blue streams thicker and brighter, clearly more streams rushing in from farther away',
     3: ', the same inhale, a vortex storm of pale blue light converging from every direction, the silhouette chest glowing as it fills',
   },
   purify: {
-    2: ', the same gauntlet, a small waterfall of clear water pouring over it, the stain dissolving',
-    3: ', the same gauntlet, a huge sparkling torrent of water flooding over it, brilliant purity',
+    2: ', the same gauntlet, a wider cascade of pale light pouring over it, more grime and smoke dissolving off the plates',
+    3: ', the same gauntlet, a brilliant torrent of white light flooding over it, every plate gleaming, total purity',
   },
   stimulant: {
     2: ', the same jolt, the yellow-green energy crackling louder across the whole arm',
