@@ -55,11 +55,11 @@ registerEffect({
 });
 
 // 格挡（体修·拆体系核心资源，BODY_CULTIVATION_CARDS §0）：buff 层数，≠ 护盾池。
-// 受主级攻击时伤害减免 25%（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
+// 受主级攻击时伤害减免 33%（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
 // 原型验证：test/posture.test.js（此处为正式落地，语义不变）。
-// 2026-09-20 用户裁决：减半 → 免 25%——格挡的基础免伤过强（体修拆体系靠层数堆免伤
-// 几乎等于无敌），基础层只留「轻掩」；真正的免伤深度交给**武者（40%）/ 武帝（55%）**
-// 两级能力抬高（见 abilities.js），即"想靠格挡活命必须投入能力位"。
+// 2026-09-20 用户裁决：减半 → 免 25%；2026-09-26 稿：25% → 33%。基础免伤深度仍交给
+// **武者（44%）/ 武帝（55%）**两级能力抬高（见 abilities.js），
+// 即"想靠格挡活命必须投入能力位"。
 // 两原语拆分（2026-09-15）：挂**应用原语 PRE**（受击侧最后修正）+ 只认主级——
 // 附级伤害（荆棘反伤/精通抽卡伤/tick）是格挡「响应」不该拦的东西，吃盾但不动格挡层。
 registerEffect({
@@ -67,7 +67,7 @@ registerEffect({
   type: 'buff',
   stacking: 'count',
   name: '格挡',
-  description: '受到攻击时伤害减少 25%，然后层数减少 1。',
+  description: '受到攻击时伤害减少 33%，然后层数减少 1。',
   icon: '🛡️',
   color: 'blue',
   subscriptions: (unit) => [{
@@ -76,12 +76,12 @@ registerEffect({
     // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错。
     // 穿透伤害整条格挡响应链都不参与（2026-09-21 用户裁决修复）：EFFECTS.md 的伤害分类
     // 写死「穿透伤害：防御、护盾、格挡都不减免」——此前 filter 漏了 pierce，穿透被照常
-    // 减 25%/40%/55%，还白吃一层格挡。读 basePierce（应用原语的穿透在受击侧不可改，
+    // 减 33%/44%/55%，还白吃一层格挡。读 basePierce（应用原语的穿透在受击侧不可改，
     // 见 instructions/combat.js 的 modifiablePayload 注释）。
     filter: (instr) => instr.target === unit && !instr.fixed && !instr.basePierce
       && instr.type === 'major',
     react: (instr, ctx) => {
-      instr.setPayload('damage', Math.floor(instr.payload.damage * 0.75));
+      instr.setPayload('damage', Math.floor(instr.payload.damage * 0.67));
       ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: unit, effectId: 'block', stacks: -1 }), instr);
     },

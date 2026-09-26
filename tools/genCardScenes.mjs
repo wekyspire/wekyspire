@@ -424,7 +424,7 @@ const ESCALATION_CUSTOM = {
   },
   cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
     2: ', the same spinning armored knight inside the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
-    3: ', the same spinning knight, a blazing double circle of blade-light, sparks storming outward',
+    3: ', the same spinning knight, feet planted wide in a low balanced stance, torso upright and controlled, a blazing double circle of blade-light sweeping around the knight at arms length outside the body, nothing passing through the knight, the greatsword gripped firmly in one gauntlet, clear depth between the light ring and the armor, sparks storming outward',
   },
   edgeBreath: { // 含刃术(C→B→A)：刃更寒
     2: ', the same blade held at the visor, the steel brighter, a faint cold gleam along the edge',

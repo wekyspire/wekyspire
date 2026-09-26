@@ -70,7 +70,7 @@ registerAbility({
 //   · 伤害修饰全走 PRE 流水线（payload.damage），多重能力按 priority 降序叠加；
 //   · 「同线精英/大师同时持有」取强者（吞日者覆盖吹火者、武帝覆盖武者），filter 里排他；
 //   · 武者/武帝的 priority 必须低于格挡 block 的 PRE（默认 0）——它们在 block 的基础
-//     免伤（×0.75）之后**再折算**（净减免 = 1 − 0.75 × 0.8 = 40%、1 − 0.75 × 0.6 = 55%），
+//     免伤（×0.67）之后**再折算**（净减免 = 44%、55%，乘子 0.56/0.67、0.45/0.67），
 //     顺序反了数值会错。2026-09-20：block 由减半降到免 25% 后，这两级能力成为格挡免伤
 //     的主要来源（基础层只留轻掩），乘子（0.8 / 0.6）不变即可落在 40% / 55%。
 // ============================================================================
@@ -318,27 +318,29 @@ registerAbility({
 // ---- 体修·拆（§3.4）----
 
 
-// 精英 **武者**：格挡 ≥3 层时，受攻击总减免 40%（block ×0.75 之后 ×0.8；持有武帝时被覆盖）。
+// 精英 **武者**：格挡 ≥3 层时，受攻击总减免 44%（block ×0.67 之后 ×(0.56/0.67)；持有武帝时被覆盖）。
 // priority -10 = 必须在 block 的 PRE（默认 0）之后跑。2026-09-16 用户定：75%→60%。
 // 2026-09-20 用户定：block 基础免伤 50%→25% 后，本能力净额随之落到 40%（乘子不变）。
+// 2026-09-26 稿：block 33% 后落到 44%（乘子 = 0.56/0.67，链条取整用 round 贴合稿面百分比）。
 // 2026-09-15 拆分：随 block 同迁**应用原语 PRE**（同为格挡响应链，只认主级）。
 // 2026-09-21 用户裁决修复：本能力是**格挡免伤链**的一段，穿透伤害整链不参与
 // （EFFECTS.md：穿透不吃防御/护盾/格挡）——filter 排除 basePierce。
 registerAbility({
   id: 'warrior', name: '武者', grade: 'elite',
-  description: '格挡不少于 3 层时，受攻击减免 40% 伤害。',
+  description: '格挡不少于 3 层时，受攻击减免 44% 伤害。',
   subscriptions: () => [{
     when: ApplyDamageInstruction, phase: 'pre', priority: -10,
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed && !instr.basePierce
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 3
       && !ctx.player.abilities.includes('warEmperor'),
-    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 0.8)),
+    react: (instr) => instr.setPayload('damage', Math.round(instr.payload.damage * (0.56 / 0.67))),
   }],
 });
 
-// 大师 **武帝**：格挡 ≥5 层时，受攻击总减免 55%（block ×0.75 之后 ×0.6；武者的上位）。
+// 大师 **武帝**：格挡 ≥5 层时，受攻击总减免 55%（block ×0.67 之后 ×(0.45/0.67)；武者的上位）。
 // 2026-09-16 用户定：90%→70%。2026-09-20 用户定：block 基础免伤 50%→25% 后落到 55%。
+// 2026-09-26 稿：block 33% 后维持 55%（乘子 = 0.45/0.67——「减免 55%」= 实付 45%）。
 registerAbility({
   id: 'warEmperor', requires: 'warrior', name: '武帝', grade: 'master',
   description: '格挡不少于 5 层时，受攻击减免 55% 伤害。',
@@ -347,7 +349,7 @@ registerAbility({
     filter: (instr, ctx) => instr.target === ctx.player && !instr.fixed && !instr.basePierce
       && instr.type === 'major'
       && ctx.player.getEffectStacks('block') >= 5,
-    react: (instr) => instr.setPayload('damage', Math.floor(instr.payload.damage * 0.6)),
+    react: (instr) => instr.setPayload('damage', Math.round(instr.payload.damage * (0.45 / 0.67))),
   }],
 });
 
