@@ -95,6 +95,19 @@ const BUBBLE_HEAD_DY = 30;
 // 手牌满被挡下时骑士的自语（用户定 2026-09-11；思索泡泡而非飘字）
 const HAND_FULL_LINE = '我无法掌控更多手牌了！';
 
+// 单位行动姿态表（2026-09-22 用户定：非主角角色行动要有身体反馈——
+// 增强/攻击/防御三种姿态分流，削弱随效果节拍白捡一路）。squash/widen 绕脚底
+// 压扁撑宽、lean 绕脚前倾（符号在节拍内按朝向算），flash 为立牌染色（restoreColor 复原）。
+// 攻击姿态不在此表：它是「突进位移 + 前倾」，编排在 _damageHit 里（接触瞬间 = 命中演出）。
+const UNIT_POSES = Object.freeze({
+  // 防御：蜷缩支撑（压扁 + 撑宽 = 沉住马步），蓝闪
+  defend: { squash: 0.78, widen: 1.16, lean: 0, flash: 0x8fc3ff, inMs: 110, holdMs: 110, outMs: 190 },
+  // 增强：拔地而起（拔高 + 收窄 = 气势上行），金闪
+  buff: { squash: 1.18, widen: 0.94, lean: 0, flash: 0xffd34c, inMs: 130, holdMs: 90, outMs: 200 },
+  // 削弱：佝偻前倾（压扁 + 微倾 = 气势受挫），紫闪；lean 朝向对方阵营（节拍内按 side 赋号）
+  debuff: { squash: 0.84, widen: 1.06, lean: 0.1, flash: 0xb26ee8, inMs: 130, holdMs: 80, outMs: 190 },
+});
+
 export class BattleStage {
   /**
    * @param {object} options
@@ -1359,7 +1372,10 @@ export class BattleStage {
     if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, payload, finish);
     if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
     // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
-    // 治疗追加 +N 绿色文本粒子（无重力上飘）
+    // 治疗追加 +N 绿色文本粒子（无重力上飘）。
+    // 护盾/效果另接**行动姿态**（2026-09-22 用户定：非主角行动要有身体语言）——
+    // 护盾 = 防御蜷缩、效果按 type 分增强拔起/削弱佝偻，替换旧通用脉冲（时长同量级）；
+    // 治疗保持通用脉冲（治疗者姿态未定义，不硬造）。
     if (target && (type === EventNames.ANIM_HEAL || type === EventNames.ANIM_SHIELD || type === EventNames.ANIM_EFFECT)) {
       const fx = {
         [EventNames.ANIM_HEAL]: { color: 0x66ff9e, accent: 0xd0ffe0, gravity: 18 },
@@ -1380,6 +1396,12 @@ export class BattleStage {
             space: 'ui',
           },
         );
+      }
+      if (type === EventNames.ANIM_SHIELD) return this._poseBeat(target, UNIT_POSES.defend, finish);
+      // 效果姿态只摆「获得/叠层」：层数衰减/扣尽（燃烧跳完 -1 等）读作消退，
+      // 不配「被施加」的强姿态——回落下方通用脉冲（旧行为）
+      if (type === EventNames.ANIM_EFFECT && (payload?.delta ?? 1) > 0) {
+        return this._poseBeat(target, payload?.type === 'debuff' ? UNIT_POSES.debuff : UNIT_POSES.buff, finish);
       }
     }
     if (!target) { finish(); return; }
@@ -1593,7 +1615,12 @@ export class BattleStage {
 
 
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
-  //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放）；
+  //   攻击方姿态（2026-09-22 用户定：非主角行动要有身体反馈）：主级伤害的来源单位
+  //     （敌人/盟友；主角除外——其反馈由卡牌演出承担）向目标「蓄势后拉 → 发力突进」，
+  //     锋尖抵近那一帧 = 受击演出（火花/数字/震荡）起点；收势回位与受击方击退并行。
+  //     附级 tick（燃烧/中毒）与环境伤害不摆（无身体语言，减法即丰富）。
+  //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放；
+  //     盟友受击是生动版——击退 + 向后小跳几步再跳回槽位，2026-09-22 用户定）；
   //   附级伤害（type='minor'，燃烧/中毒/荆棘 tick 等）：配方降规格——小数字、无翻红、
   //     无击退、无震荡、短节拍（减法即丰富：tick 不再每次满屏红闪）；
   //   致命击（killed）：配方加重——震荡加成 + 数字放大；
@@ -1607,38 +1634,87 @@ export class BattleStage {
     const absorbed = payload?.shieldAbsorbed ?? 0;
     const r = resolveDamageRecipe(payload);
 
-    // 全屏受击演出（non-blocking 旁路，不占队列节拍）：烈度 = 基础烈度 × 配方震荡
-    // 系数（附级 = 0）+ 致命加成；收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕
-    const severity = damageSeverity(dealt, absorbed) * r.shakeScale + (dealt > 0 ? r.shakeBonus : 0);
-    if (severity > 0) {
-      this.shake.impulse(severity);
-      if (unit.side !== 'enemy') this._vignette.pulse(severity);
-      // 重击落地 → PCG 场景件被动响应（火盆震颤等；阈值 4 ≈ 中伤以上，附级 tick 不触发）。
-      // 单向 fire-and-forget：不进节拍、不读回值
-      if (severity >= 4) {
-        this.notify('impact', {
-          at: { x: unit.position.x, z: unit.position.z },
-          severity,
-        });
-      }
-    }
-
-    if (absorbed > 0) {
-      // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
-      this.particles.spawn(unit.position.x, unit.position.y + 2, {
-        count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
-      });
-      const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
-      this.particles.spawnText(p.x, p.y, `-${absorbed}`, {
-        fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
-        vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
-        gravity: -50, ttl: 0.85, scalePop: 0.3,
-        space: 'ui',
-      });
-      if (this._displayShieldOf(unit.uniqueID) - absorbed <= 0) this._shieldBreakFx(unit);
-    }
+    // 攻击方突进解算：来源 → 目标的方向 / 步长 / 前倾角（standee 绕脚转，符号 = 目标方向）
+    const srcId = payload?.source?.uniqueID ?? null;
+    const src = srcId != null ? (this._units.get(srcId) ?? null) : null;
+    const lunging = !!src && srcId !== this._snapshot?.player?.uniqueID
+      && !src._dead && (payload?.type ?? 'major') === 'major';
+    const sx = src?.position.x ?? 0;
+    const sz = src?.position.z ?? 0;
+    const ddx = unit.position.x - sx;
+    const ddz = unit.position.z - sz;
+    const dist = Math.hypot(ddx, ddz) || 1;
+    const ux = ddx / dist;
+    const uz = ddz / dist;
+    const reach = Math.min(Math.max(dist * 0.42, 2.5), 8); // 步长随间距，留身位不贴脸
+    const strikeLean = -Math.sign(ddx || 1) * 0.18;
 
     const h = runScript(async (ctx) => {
+      if (lunging) {
+        // 突进被打断（收拍/拆台）不许把攻击方晾在半路上：归位 + 姿态清零（正常结束也过这，幂等）
+        ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose?.(); });
+        // ① 蓄势后拉（反向微仰）
+        await ctx.custom(srcId, {
+          durationMs: 70, ease: 'power1.out',
+          onUpdate: (t) => {
+            src.position.x = sx - ux * 1.2 * t;
+            src.position.z = sz - uz * 1.2 * t;
+            src.setPose({ lean: -strikeLean * 0.5 * t });
+          },
+        });
+        // ② 发力突进（前倾压进）——锋尖抵近即接触，受击演出自此起
+        await ctx.custom(srcId, {
+          durationMs: 95, ease: 'power2.in',
+          onUpdate: (t) => {
+            src.position.x = sx - ux * 1.2 + ux * (reach + 1.2) * t;
+            src.position.z = sz - uz * 1.2 + uz * (reach + 1.2) * t;
+            src.setPose({ lean: -strikeLean * 0.5 + strikeLean * 1.5 * t });
+          },
+        });
+      }
+      // ③ 收势回位：不起新 await 链——与受击方演出并行，末尾统一等齐
+      const recover = lunging
+        ? ctx.custom(srcId, {
+          durationMs: 220, ease: 'power2.out',
+          onUpdate: (t) => {
+            src.position.x = sx + ux * reach * (1 - t);
+            src.position.z = sz + uz * reach * (1 - t);
+            src.setPose({ lean: strikeLean * (1 - t) });
+          },
+        })
+        : null;
+
+      // 全屏受击演出（命中瞬间；non-blocking 旁路，不占队列节拍）：烈度 = 基础烈度 ×
+      // 配方震荡系数（附级 = 0）+ 致命加成；收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕
+      const severity = damageSeverity(dealt, absorbed) * r.shakeScale + (dealt > 0 ? r.shakeBonus : 0);
+      if (severity > 0) {
+        this.shake.impulse(severity);
+        if (unit.side !== 'enemy') this._vignette.pulse(severity);
+        // 重击落地 → PCG 场景件被动响应（火盆震颤等；阈值 4 ≈ 中伤以上，附级 tick 不触发）。
+        // 单向 fire-and-forget：不进节拍、不读回值
+        if (severity >= 4) {
+          this.notify('impact', {
+            at: { x: unit.position.x, z: unit.position.z },
+            severity,
+          });
+        }
+      }
+
+      if (absorbed > 0) {
+        // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
+        this.particles.spawn(unit.position.x, unit.position.y + 2, {
+          count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
+        });
+        const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
+        this.particles.spawnText(p.x, p.y, `-${absorbed}`, {
+          fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
+          vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
+          gravity: -50, ttl: 0.85, scalePop: 0.3,
+          space: 'ui',
+        });
+        if (this._displayShieldOf(unit.uniqueID) - absorbed <= 0) this._shieldBreakFx(unit);
+      }
+
       if (dealt > 0) {
         const flashed = r.flash != null;
         if (flashed) unit.flash?.(r.flash);
@@ -1658,19 +1734,106 @@ export class BattleStage {
         });
         if (r.knockback) {
           const x0 = unit.position.x;
-          // 击退幅度随伤害缩放（与震荡同语言）：轻伤轻晃、重伤踉跄
+          const srcX = payload?.source?.uniqueID != null
+            ? (this._units.get(payload.source.uniqueID)?.position.x ?? null) : null;
+          // 击退方向 = 远离伤害源（旧版恒 +x：敌方恰好正确，我方被打成"迎着攻击踉跄"）；
+          // 无来源（环境/附级）按阵营默认：我方朝左、敌方朝右
+          const dir = srcX != null
+            ? (Math.sign(x0 - srcX) || (unit.side === 'enemy' ? 1 : -1))
+            : (unit.side === 'enemy' ? 1 : -1);
+          if (unit.side === 'ally') {
+            // 盟友（瑞米）受击要生动（2026-09-22 用户定）：冲击击退 → 向后小跳两步
+            // （y 弧线 + 后撤步进，后仰逐跳回正）→ 一步跳回槽位。
+            // 被打断（收拍/拆台）经 onKill 归位归零，不晾在半路上（正常结束也过这，幂等）。
+            const y0 = unit.position.y;
+            const back = 2.0 + Math.min(dealt, 20) * 0.09; // 冲击击退（随伤害缩放）
+            const leanBack = -dir * 0.14;                  // 后仰角：立牌顶倒向远离伤害源
+            ctx.onKill(() => { unit.position.x = x0; unit.position.y = y0; unit.resetPose?.(); });
+            // ① 冲击：快速击退 + 后仰
+            await ctx.custom(unit.uniqueID, { durationMs: 80, ease: 'power2.out', onUpdate: (t) => {
+              unit.position.x = x0 + dir * back * t;
+              unit.setPose({ lean: leanBack * t });
+            } });
+            // ② 后撤小跳 ×2（sin 弧线腾空，步进递减——踉跄稳住）
+            let fromX = x0 + dir * back;
+            let leanFrom = leanBack;
+            for (const seg of [{ step: 1.5, h: 1.5, ms: 150, leanTo: leanBack * 0.55 },
+              { step: 1.0, h: 1.2, ms: 140, leanTo: leanBack * 0.25 }]) {
+              const fx = fromX;
+              const lf = leanFrom;
+              await ctx.custom(unit.uniqueID, { durationMs: seg.ms, ease: 'none', onUpdate: (t) => {
+                unit.position.x = fx + dir * seg.step * t;
+                unit.position.y = y0 + seg.h * Math.sin(Math.PI * t);
+                unit.setPose({ lean: lf + (seg.leanTo - lf) * t });
+              } });
+              fromX = fx + dir * seg.step;
+              leanFrom = seg.leanTo;
+            }
+            // ③ 跳回槽位（与攻击方收势并行）
+            const fx = fromX;
+            const lf = leanFrom;
+            const home = ctx.custom(unit.uniqueID, { durationMs: 180, ease: 'none', onUpdate: (t) => {
+              unit.position.x = fx + (x0 - fx) * t;
+              unit.position.y = y0 + 1.3 * Math.sin(Math.PI * t);
+              unit.setPose({ lean: lf * (1 - t) });
+            } });
+            await Promise.all([home, recover ?? Promise.resolve()]);
+            if (flashed) unit.restoreColor?.();
+            return;
+          }
+          // 通用击退（敌方/主角）：幅度随伤害缩放（与震荡同语言）——轻伤轻晃、重伤踉跄
           const knock = 1.1 + Math.min(dealt, 20) * 0.055;
-          await ctx.tween(unit.uniqueID, { x: x0 + knock }, { durationMs: 80, ease: 'power1.in' });
-          await ctx.tween(unit.uniqueID, { x: x0 }, { durationMs: 120 });
+          await ctx.tween(unit.uniqueID, { x: x0 + dir * knock }, { durationMs: 80, ease: 'power1.in' });
+          await Promise.all([
+            ctx.tween(unit.uniqueID, { x: x0 }, { durationMs: 120 }),
+            recover ?? Promise.resolve(),
+          ]);
           if (flashed) unit.restoreColor?.();
           return;
         }
         if (flashed) unit.restoreColor?.();
-        await ctx.wait(r.beatMs); // 附级：短节拍即收
+        await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]); // 附级：短节拍即收
         return;
       }
       // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
-      await ctx.wait(80);
+      await Promise.all([ctx.wait(80), recover ?? Promise.resolve()]);
+    }, { animator: this.animator });
+    this._fxScripts.add(h);
+    h.promise.then(() => {
+      this._fxScripts.delete(h);
+      finish();
+    });
+  }
+
+  // 行动姿态节拍（防御/增强/削弱，2026-09-22 用户定）：立牌绕脚「蓄势 → 定势 → 弹回」，
+  // 配姿态色立牌染色（flash → 收尾 restoreColor）。取代旧通用缩放脉冲——同等时长量级，
+  // 但三种行动各有身体语言。姿态起点恒为中立（节拍串行，上一拍已归位）；
+  // 被打断（收拍/拆台）经 onKill 归零姿态 + 复原染色，不留半蹲（正常结束也过这，幂等）。
+  _poseBeat(unit, pose, finish) {
+    if (unit._dead) { finish(); return; } // 尸体不摆姿态
+    // 削弱前倾朝向对方阵营：敌方（右侧）前倾 = 朝左 = +lean；我方 = 朝右 = -lean
+    const lean = pose.lean * (unit.side === 'enemy' ? 1 : -1);
+    const h = runScript(async (ctx) => {
+      ctx.onKill(() => { unit.resetPose?.(); unit.restoreColor?.(); });
+      unit.flash?.(pose.flash);
+      await ctx.custom(unit.uniqueID, {
+        durationMs: pose.inMs, ease: 'power2.out',
+        onUpdate: (t) => unit.setPose({
+          lean: lean * t,
+          squash: 1 + (pose.squash - 1) * t,
+          widen: 1 + (pose.widen - 1) * t,
+        }),
+      });
+      await ctx.wait(pose.holdMs);
+      // 弹回带一点过冲（back.out）：定势不是硬切回中立，而是松开后微微晃稳
+      await ctx.custom(unit.uniqueID, {
+        durationMs: pose.outMs, ease: 'back.out(1.7)',
+        onUpdate: (t) => unit.setPose({
+          lean: lean * (1 - t),
+          squash: 1 + (pose.squash - 1) * (1 - t),
+          widen: 1 + (pose.widen - 1) * (1 - t),
+        }),
+      });
     }, { animator: this.animator });
     this._fxScripts.add(h);
     h.promise.then(() => {

@@ -46,6 +46,9 @@ export class AddEffectInstruction extends BattleInstruction {
       target: this.target,
       effectId: this.effectId,
       stacks: this.result.stacks,
+      delta: this.payload.stacks, // 本次增减（标量过线）：行动姿态只在「获得/叠层」时摆——衰减/扣尽走通用脉冲
+      // 效果类型（buff/debuff，标量过线）：舞台行动姿态分流——增强拔起 / 削弱佝偻
+      type: getEffectDefinition(this.effectId)?.type ?? 'buff',
     });
     return true;
   }

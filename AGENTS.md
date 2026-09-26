@@ -92,6 +92,10 @@ node tools/saveForge.mjs --from-session r20-a1-2 --out 现场1
   `h.clickPickerConfirm()` 全屏选卡 ｜ `h.shot('名字')` 截图 ｜ `h.fps()` 自查帧率与 WebGL 后端（确诊是否又跑回软渲染）。
 - **面板层次坑**：场景房的 dock 操纵条（`rs._panel`）与阶段模态面板（`rs._stagePanel`）会**同时存在**
   （进阶期间 dock 仍挂着过时内容）——harness 的点击助手一律**优先阶段模态**；自己写页面内表达式时也要注意。
+- **演出期输入/读数坑（2026-09-22 踩过）**：战斗开场等长演出链按真实时间播，期间点击会被输入仲裁
+  **静默吞掉**（按钮显示 enabled 也照吞），且快照只在 sync 节拍推进——积压期读 `_snapshot.turn`
+  永远是旧值。操作前先等演出落定（固定 `waitForTimeout` 数秒，或 `waitFor` 一个快照条件，如
+  `turn.side === 'enemy'`），别拿 `waitIdleFrames` 当"演出播完"用——它只数 rAF 帧不管队列。
 - **自检**：`node tools/browserHarness.mjs --check [--save 名] [--headed]` —— 起一次、报帧率/WebGL/现场状态，
   落一张截图到 `tmp/play/harness-check.png`。
 - 参考脚本：`tmp/play/check-train-real.mjs`（从存档起跑，真时间走完「训练桩 → 房内进阶 → 种子包 → 抓牌 → 尾款升级」全流程，约 16 秒）。
@@ -211,6 +215,7 @@ src/
 - **任何文本都可能带 markup**：遗物/效果/卡牌描述里的 `/card{}` `/named{}` `/effect{}` 在**所有**渲染面（卡面、面板行、获得特写、状态栏、tooltip 正文）都要渲染成图标 + 特征色名称。做法是用 `textBakers.bakeAutoLine`（3D）/`RichTextInline`（DOM），**别自己写烘焙、别在文案里裸写卡名**；如果某个面印出了 `/xxx{`，就是那处没接 `richtext/appearance.js` 的解析器（详见 Stage 节「富文本」）。**引用的热区只保留在卡面上**，tooltip 正文里不做 hover（用户 2026-09-19 定）。
 - **卡牌威力提升（power）一律走 `cardKit.gainPower(sctx, card, n)`**，不要裸改 `card.power += n`：它还发 `presenter.cardPowerUp` → `ANIM_CARD_POWER_UP` 公共节拍——「这张牌状态变了」玩家要看得见。
 - **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场/弃/焚/迁移/视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次重算兜底——空窗期里 idle 的卡会被弹簧从展示位拉回手牌锚点（「打出 → 飞回手牌 → 再飞牌库」病灶已多次回归）。
+- **单位行动姿态走 `_pose` 通道（2026-09-22）**：攻击突进（`_damageHit` 内编排：蓄势后拉→发力突进，锋尖抵近帧=受击演出起点；主角不摆——其反馈由卡牌演出承担）/ 防御蜷缩 / 增强拔起 / 削弱佝偻（`_poseBeat`，配 `UNIT_POSES` 表）。姿态字段（lean/squash/widen）在 `UnitObject.update` 与呼吸每帧合成，**别直接改 standee.scale**（会被呼吸覆盖）；节拍收尾经 onKill 归零硬化（同步假 tween 路径无 onUpdate）。效果姿态只在**获得/叠层**（`payload.delta > 0`）时摆——燃烧 tick 衰减等走旧通用脉冲。受击击退方向 = **远离伤害源**（旧版恒 +x 只对了敌方）；**盟友受击是生动版**：冲击击退 → 后撤小跳×2（y 弧线+步进递减+后仰渐回）→ 跳回槽位（同 `_damageHit` 击退分支）。
 - **刀法牌 = `series: 'blade'`**（`cardKit.isBladeCard`：series 命中**或** keywords 含 blade）——碎铁/出鞘这类"斩的衍生与处理牌"也算刀法牌，吃养刀术/锻刀术/练刀/砺刀系效果；它们 keywords 不带 `blade`。
 - `.trae/rules/project_rules.md` 关于 `backendGameState/displayGameState`、`animationSequencer.js` 的描述是**旧架构**残留——以本文件与 README 为准。
 
