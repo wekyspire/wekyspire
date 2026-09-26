@@ -61,6 +61,7 @@ import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { attachOrbs } from '../fx/orbs.js';
+import { attachUnitBodyFx } from '../fx/unitBodyFx.js';
 import { warmCharBurn } from '../fx/charBurn.js';
 import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
@@ -520,6 +521,8 @@ export class BattleStage {
           textureAnisotropy: Math.min(8, this._smMaxAnisotropy()),
         });
         obj._defId = unitProj.defId;
+        // L0 本体特效补丁（燃烧等；每单位独立材质，无族复位负担——unitBodyFx.js）
+        obj._bodyFx = attachUnitBodyFx(obj._body.material);
         this._units.set(unitProj.uniqueID, obj);
         this.scene.add(obj);
         this.animator.register(unitProj.uniqueID, obj);
@@ -548,11 +551,29 @@ export class BattleStage {
         auras = new AuraHost({ object3D: obj });
         this._unitAuras.set(unitProj.uniqueID, auras);
       }
-      auras.set(resolveUnitAuras(unitProj.effects, { particles: this.particles, unit: obj }));
+      const resolved = resolveUnitAuras(unitProj.effects, { particles: this.particles, unit: obj });
+      auras.set(resolved);
+      // 存续 aura 的强度追层数：set() 只管增删，burn level 等随 stacks 的更新走
+      // def.update（stacks 3→7 火焰随旺；无 update 钩的 def 不受影响）
+      for (const [key, def] of resolved) {
+        const aura = auras.get(key);
+        if (aura && typeof def.update === 'function') {
+          def.update(aura, unitProj.effects.find((e) => e.effectId === key));
+        }
+      }
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
     proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
+    // L0 本体补丁程序入场预热：首个同步批就把变体编好（compileAsync 走
+    // KHR_parallel_shader_compile 不冻主线程——charBurn 的 715ms 教训；单位本体是
+    // MeshBasicMaterial 小 shader，但一次性成本照样不留进演出）
+    if (!this._bodyFxWarmed && this._units.size > 0) {
+      this._bodyFxWarmed = true;
+      const r = this._sm?._renderer;
+      const warm = r?.compileAsync?.(this.scene, this._sm.camera);
+      if (!warm) r?.compile?.(this.scene, this._sm.camera);
+    }
     for (const [id, obj] of this._units) {
       if (!seen.has(id)) {
         this.picker.removePickable(id);
