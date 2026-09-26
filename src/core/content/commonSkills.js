@@ -517,7 +517,7 @@ swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
 swiftManaJar('swiftManaJarPlus', '豪华魏启罐', 'A', 3);
 
 // ---- HeLiCoPtEr（A，消耗，2026-09-12 设计稿新增；2026-09-21 大调：设计稿未写费用 → 0费）----
-// 「将手中/named{自由牌}变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
+// 「将手中自由牌变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
 // keepPower 延续；与斩链的局内转化同一指令）→ 目标卡 = 肘击系列的免费形态
 // `fierceElbowFree`（0 费咏唱1、P5 随机伤害、伤害带 `elbow` 标记**吃牢大翻倍**，
 // 只在 bodySkills.js 里定义、不进奖励池）。整套牌因此被肘击稀释——放弃体系协同换
@@ -541,7 +541,7 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '将手中/named{自由牌}变换为0开销/named{猛烈肘击}',
-  battleDescribe: (sctx) => '将手中/named{自由牌}变换为0开销/named{猛烈肘击}'
+  describe: () => '将手中/named{自由}牌变换为0开销/card{fierceElbowFree}',
+  battleDescribe: (sctx) => '将手中/named{自由}牌变换为0开销/card{fierceElbowFree}'
     + `（当前可变换${sctx.battleState.zones.hand.filter(c => !c.isActivated).length}张）`,
 });

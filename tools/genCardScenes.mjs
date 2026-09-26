@@ -28,11 +28,13 @@ const END = Number((process.argv.find(a => a.startsWith('--end=')) || '').split(
 const VARCHAIN = process.argv.includes('--varchain');
 const CHAIN = (process.argv.find(a => a.startsWith('--chain=')) || '').split('=')[1]?.split(',') || null;
 const ANCHOR = (process.argv.find(a => a.startsWith('--anchor=')) || '').split('=')[1] || null; // 显式参考图（给定时链内所有键都生成，无「链首跳过」）
+const FIXANCHOR = process.argv.includes('--fixanchor'); // 锚不逐级传递：每键都从显式锚出发（2026-09-22 斩链低级卡重做：锁死骑士身形与剑位，只换特效层）
+const DENoiseArg = Number((process.argv.find(a => a.startsWith('--denoise=')) || '').split('=')[1]);
 const CHAIN_DENOISE = 0.85; // 级联 img2img 强度：0.6 克隆参考图；0.75 只加碎屑、全链零变化（用户否掉）；
 // 0.85 让刀刃/状态/背景/笔触的逐级变身真正发生，构图由参考图+共享句式双锚定
 const VAR_DENOISE = 0.8; // 变体级联强度：同一张卡的逐级增强——构图必须锁死（用户：同链路构图要类似），
 // 变化交给能量/光效/褪彩——0.72 太保守（褪彩压不过保真，试点几乎零变化），0.8 让后缀显形而构图不漂
-let DENOISE = CHAIN_DENOISE; // buildWorkflow 实际使用值：--chain=0.85，--varchain=0.72
+let DENOISE = Number.isFinite(DENoiseArg) && DENoiseArg > 0 ? DENoiseArg : CHAIN_DENOISE; // buildWorkflow 实际使用值：--chain=0.85（可 --denoise= 覆盖），--varchain=0.72
 // 跨键进阶链（battlePromotesTo 阶梯，斩链）不走独立 txt2img——构图各自漂移、玩家认不出同链；
 // 统一由 --chain 级联产出。普通模式跳过这些键（--only 可强制）。
 const LADDER_KEYS = new Set(['rockCleave', 'goldCleave', 'mountainCleave', 'seaCleave', 'skyCleave', 'godCleave']);
@@ -65,10 +67,10 @@ const SCENES = [
   { id: 'fierceFist', prompt: `extreme foreshortening macro: a huge five-fingered steel-gray gauntlet fist filling the entire frame aimed left, knuckles front and center, the arm racing away to a tiny blurred distant body, a thin red scarf line on the distant figure, scale contrast` },
   { id: 'slash', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its plain honest steel blade catching a diagonal edge of light, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dark background, quiet grounded mood` },
   { id: 'duckHead', prompt: `crossed steel-gray vambraces filling the frame raised in guard, sparks bursting on the plates, a helmet barely visible behind the wall of armor` },
-  { id: 'punch', prompt: `extreme close-up of a steel-gray gauntlet fist frozen at the moment of impact filling the frame, radiating impact lines, nothing else in frame` },
+  { id: 'punch', prompt: `extreme close-up of a steel-gray armored fist held low and coiled: massive faceted knuckle plates like boulders filling the frame, hard cool light from the upper left grazing the plate edges, most of the frame sinking into pure black shadow, a small vivid red scarf fleck at the frame edge, quiet coiled weight, no motion lines, dark background` }, // 2026-09-22 三改：弃软气刷圆拳+卡通放射线，巨石切面语法（对齐 fierceFist 标杆）
   { id: 'focusChant', prompt: `extreme close-up of two steel-gray armored gauntlets pressed together in prayer, a single bright drop of light floating between the palms, the hands filling the entire frame, no helmet in frame, dark background` },
   // —— 体修·拳组合（过牌；骑士本体 + 大面积黑灰） ——
-  { id: 'fastPunch', prompt: `side-view close-up of a straight punch: only the fist, the forearm and one sharp speed line crossing the whole frame, everything else cropped to darkness` },
+  { id: 'fastPunch', prompt: `dramatic low-angle side view of a steel-gray armored straight punch: the huge gauntlet fist fills the left third of the frame aimed left, massive faceted knuckle plates like boulders catching a hard cool light from the upper left, the armored forearm receding smaller into pure black at the right, one sharp white speed line streaking above the fist, a small vivid red scarf fleck in the dark, extreme scale and weight, dark background` }, // 2026-09-22 二改：弃三节圆筒臂横摆（无体量无光影），巨石切面+前缩+硬光
   { id: 'fullCharge', prompt: `extreme close-up of a steel-gray fist wound far back behind the shoulder, coiled to its limit, every plate trembling with stored force, side view, maximal wind-up, dark background` },
   { id: 'wildPunch', prompt: `a small stretched black silhouette of a knight leaping through the air mid haymaker strike, violent red and black speed lines storming around him, the silhouette small in frame, berserk momentum, dark background` },
   { id: 'wildFlurry', prompt: `a rain of fist afterimages: dozens of blurred fists filling the whole frame in rhythmic diagonal rows like falling rain, no readable body, storm of blows` },
@@ -83,7 +85,7 @@ const SCENES = [
   { id: 'endlessCombo', prompt: `a sweeping row of overlapping punch afterimages trailing across the frame, five sequential steel-gray fists blurring one after another in a single flowing barrage, the knight's body a smear of motion behind them, endless combo, dark background` },
   { id: 'instantThousand', prompt: `a frozen instant: hundreds of desaturated gray fist afterimages scattered across the whole frame like a starfield of blows, near-monochrome, blurred illusory phantom fists everywhere` },
   { id: 'instantStrike', prompt: `extreme close-up of a steel-gray armored fist landing a flash-fast jab toward the left, sharp motion lines, dark background` },
-  { id: 'adrenaline', prompt: `extreme close-up of a steel-gray fist slamming into an open armored palm, the psych-up gesture, a sharp impact burst and motion lines, raw adrenaline, dark background` },
+  { id: 'adrenaline', prompt: `extreme close-up of two steel-gray armored gauntlets: one armored fist slamming into the open armored palm, the psych-up gesture, a sharp white impact burst and motion lines around the clap, red scarf edge at the corner, raw adrenaline, dark background` }, // 2026-09-26 二改：旧部署件是裸拳（盔甲裁定违规），锚死双甲手
   { id: 'crashLanding', prompt: `ground-level view looking up: exactly one small stretched black silhouette dropping out of the dark sky elbow-first, a shockwave ring already cracking the earth beneath it, single figure only, scale contrast` },
   { id: 'elbowMaster', prompt: `extreme heroic close-up of one bent steel-gray armored elbow joint presented to the camera like a legendary trophy weapon, the elbow point filling the frame, polished gleam on the plating, comedic reverence for the boss elbow, no helmet, no face, no body, dark background` },
   { id: 'elbowReturn', prompt: `extreme close-up of a steel-gray elbow thrust skyward in triumph, raised high like a returning champion, dramatic backlight on the point, dark background` },
@@ -100,18 +102,18 @@ const SCENES = [
   // prompt 只写可直接入画的具体景物（不为难 AI 具象化「斩金断石」）；明度/能量严格渐强——
   // 暗钢 → 金火花 → 沙暴 → 碧涛 → 白光 → 泛白，让玩家一眼读出「一重更比一重强」。
   // 链内全部键共享同一取景句式（级联锁构图），每级四轴变身：刀刃形态色泽/背景景物/明度能量/骑士存在感。
-  { id: 'rockCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its steel blade chipped and dusty gray, a big boulder split into two halves behind the blade with rock chunks and brown-gray dust settling, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dark background, dim dusty mood` },
-  { id: 'goldCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its edge glowing golden-hot, a sheared metal column stump beside the blade with a shower of golden sparks and metal shards flying, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dark background, warm spark-lit mood` },
-  { id: 'mountainCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its blade broadened and humming, visible shockwave rings rippling the air around the blade, a mountain peak behind with massive clouds of dust and sand blasting off its slopes, gravel and sand storming outward in every direction, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, violent storm-force mood` },
-  { id: 'seaCleave', prompt: `a heavy two-handed greatsword huge and dominant across the frame, its blade wrapped in streaming water ribbons, two towering walls of seawater parting to the left and right of the blade with white foam and spray between them, the knight only half-visible at the frame edge gripping it with both gauntlets, red scarf at the corner, dramatic cool blue mood` },
-  { id: 'skyCleave', prompt: `the dark storm sky split open in a huge vertical rift with a waterfall of blinding pale light pouring through and flooding the frame, a colossal blade of condensed white light huge across the lower frame beneath the rift, the knight a small silhouette at the frame edge with both gauntlets raised, red scarf vivid, the light rift the dominant feature, blazing bright mood` },
+  { id: 'rockCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, the knight's bright red scarf wrapped at the neck clearly visible and vivid, gray-brown stone chips and rock dust bursting along the blade's swing path, small split rock fragments flying, gritty dusty mood, dark background` }, // 2026-09-22 五改：0.55 低噪 + 围巾强制句——用户判 0.7 版骑士漂移/围巾丢失/形态变化过大
+  { id: 'goldCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel and must NOT turn golden, the knight's bright red scarf wrapped at the neck clearly visible and vivid, a shower of golden-orange sparks and small golden metal shards bursting along the blade's swing path, the gold only in the sparks and shards, warm spark-lit mood, dark background` }, // 削金 = 金在火花屑里，剑身永钢（旧版把刃画金被用户判死）
+  { id: 'mountainCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, the knight's bright red scarf wrapped at the neck clearly visible and vivid, a massive blast of sand dust and gravel storming outward along the blade's swing path, rock debris flying, violent dusty mood, dark background` },
+  { id: 'seaCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: the armored arm at the right edge gripping a bright plain steel greatsword extending to the lower-left, the blade stays plain bright steel, the knight's bright red scarf wrapped at the neck clearly visible and vivid, streaming ribbons of pale cool blue seawater with white foam bursting along the blade's swing path, the water clearly blue-toned against the dark, glowing faint cold blue, water parting around the blade edge, cool wet mood, dark background` }, // 六改：加「clearly blue-toned」——v5 白灰水花与摧山尘暴撞色，水系身份=冷蓝
+  { id: 'skyCleave', prompt: `extreme close-up of a steel-gray armored knight mid downward cleave: both gauntlets swinging a huge greatsword diagonally across the frame, the blade still plain steel, its swing path tearing the dark sky open in a huge diagonal rift of blinding white light trailing right behind the blade, the light rift as dominant as the blade, red scarf whipping at the frame edge, tight dark close-up, no landscape, dark background` }, // 2026-09-22 二改：「举剑站姿」被用户判构图错——必须是挥斩中途+剑路天裂，链语法=横挥动势
   { id: 'godCleave', prompt: `a colossal arc of void-white fire huge and filling the entire frame, its edge dissolving into drifting sparks of light, a vast radiant figure of pale light collapsing and scattering into ash-like fragments behind the blade, the knight a near-invisible silhouette at the frame edge with only the red scarf vivid, the frame flooding toward white, overwhelming god-slaying mood` },
   { id: 'ironShard', prompt: `a burst of jagged iron shards flying toward the left, sharp crisp metal fragments dominant, the right half of the frame plain dark emptiness, nothing else in frame` },
   { id: 'handCleave', prompt: `a decorative circle of steel blade-light filling the frame edge to edge, the spinning greatsword reduced to a bright streak riding the circle, no readable body, showy flourish` },
   { id: 'perfectCleave', prompt: `a flat rosette of interlaced blade-arc trails blooming like a steel flower facing the camera, ornate defensive flourish pattern, no person visible, dark background` },
   { id: 'silverDance', prompt: `flowing silver blade ribbons tracing an elegant dance pattern across the dark frame, the ribbons the only subject, graceful and deadly` },
   { id: 'graceDance', prompt: `a steel-gray knight in an elegant flowing blade dance, his sword tracing one smooth continuous ribbon of light in a tall graceful arc, poised and unhurried, dark background` },
-  { id: 'cycloneSlash', prompt: `one complete ring of blade-light filling the frame edge to edge, a perfect circle of steel arc, sparks riding the rim` },
+  { id: 'cycloneSlash', prompt: `a steel-gray armored knight spinning in a full-body rotation slash: both gauntlets swinging a greatsword extended outward, the blade's path drawn as one complete ring of pale blade-light encircling the spinning knight edge to edge, the red scarf whipping around the armored neck, dark background` }, // 2026-09-26 二改：旧 prompt 只写光环不给主体，AI 每回合往里塞裸男——骑士必须明写
   { id: 'cleave', prompt: `one huge flat horizontal blade-arc sweeping across the entire frame, the arc as wide as the frame itself, everything in its path split` },
   { id: 'flyingDagger', prompt: `a throwing knife huge in frame streaking toward the left with a long speed trail, a steel-gray gauntlet blurred at the rear edge` },
   { id: 'returningDagger', prompt: `extreme close-up of a curved throwing dagger spinning back into an open steel-gray gauntlet, the returning catch, a circular motion trail closing the loop, dark background` },
@@ -255,8 +257,8 @@ const SCENES = [
   { id: 'atEase', prompt: `${KNIGHT}, floating cross-legged on a soft cloud puff, relaxed weightless pose, scarf drifting slowly` },
   { id: 'airFloat', prompt: `${KNIGHT}, levitating high off the ground at a tilted diagonal, boots dangling, red scarf drifting straight upward, a ring of pale cyan air beneath him, weightless floating pose` },
   // —— 通用灰卡家族（骑士的日常动作） ——
-  { id: 'purify', prompt: `a clear stream of water pouring over a steel-gray armored gauntlet in close-up, the hand clearly plated metal armor with chunky plate segments and steel sheen, dark grime dissolving off the metal plates in the flowing water, droplets sparkling, no skin, no flesh, no bare hand, brilliant purity` },
-  { id: 'extract', prompt: `a steel-gray armored hand pulling a long iridescent ribbon of light out of a small gray rock, the ribbon shimmering green, yellow and blue like an oil sheen, stretched taut across the frame` },
+  { id: 'purify', prompt: `a steel-gray armored gauntlet held up in close-up, a soft cascade of pale glowing light pouring over it like a luminous waterfall, black grime and dark smoke dissolving off the metal plates where the light touches, the steel gleaming clean and bright, light made visible, not liquid, no water, brilliant purity, dark background` }, // 2026-09-26 二改：旧版真倒水=洗手梗；纯化改「光之涤荡」
+  { id: 'extract', prompt: `a steel-gray armored gauntlet pulling a long taut stream of glowing essence out of a cracked dull gray rock, the stream made of luminous pale vapor, breath made visible, faint green gold and blue shimmer within the light, smoke-like, not liquid, not metal, stretched across the frame, dark background` }, // 2026-09-26 二改：旧版虹彩管=热成像图；萃取改「光雾精华流」
   { id: 'drawQi', prompt: `thin streams of pale blue breath-light converging from every edge of the frame toward the small dark armored silhouette's chest at the center, a strong inhaling vortex motion, no book, no objects in hands, dark background` },
   { id: 'manaJar', prompt: `extreme close-up of a small round glass potion jar held in a steel-gray gauntlet, bright sapphire-blue glow escaping from the opened mouth, cool blue light on the metal, no helmet in frame` },
   { id: 'stimulant', prompt: `a vivid yellow-green bolt of energy crackling around a steel-gray armored forearm held across the frame, sharp bright jolt lines, sudden vigor, no helmet in frame` },
@@ -306,20 +308,24 @@ const ESCALATION = {
 // prompt 铁律：**绝对数量词做主语**（six fists / hundreds of sparks），不写「两只拳+更多」
 // 这类锚定基图数量的措辞（四轮全败的根因之一）。
 const T2I_TIERS = {
-  'agileCombo-2': 'a diagonal row of six separate solid pale fists marching across the dark frame, each fist crisp and readable with knuckles, short motion blur trails behind, quick rhythmic combo energy',
-  'agileCombo-3': 'a long row of nine separate glowing pale fists sweeping across the entire frame from corner to corner, sharp speed lines between them, storm of rapid strikes',
+  'agileCombo-2': 'a diagonal row of six separate solid steel-gray armored gauntlet fists marching across the dark frame, each gauntlet crisp and readable with knuckles, short motion blur trails behind, quick rhythmic combo energy',
+  'agileCombo-3': 'a long row of nine separate glowing steel-gray armored gauntlet fists sweeping across the entire frame from corner to corner, sharp speed lines between them, storm of rapid strikes',
   'relief-3': 'a colossal wall of white steam erupting sideways and filling the entire frame edge to edge, dense billowing vapor textures, a tiny round pressure valve barely visible at the bottom corner, no creature, no face, no figure, pure steam only',
   'spark-2': 'a figure wearing a wide-brim hat and goggles, hundreds of bright sparks bursting and flying everywhere around the raised hands, the whole frame full of glowing points',
   'spark-3': 'an overwhelming storm of hundreds of blazing white-orange sparks flooding the entire frame edge to edge, blinding shower of glowing points, a small figure with a wide-brim hat and goggles barely visible at the bottom edge, no readable book, no props',
   'lightness-3': 'a swirling cyan wind storm of horizontal streaks and air rings sweeping across the dark frame, only one small bright red scarf streak remaining in the wind, no body left',
   'windBlade-3': 'a hurricane of many separate cyan crescent wind blades tearing across the entire frame, overlapping translucent air blades everywhere at different angles, a storm of steel-sharp wind, no person',
+  // 真拳 S（2026-09-22）：「拳化纯白炽影」是本质级变身，i2i 0.8 保真四轮全灭 → 免参考直出。
+  'fastPunch-4': 'dramatic side-view straight punch: a huge gauntlet fist filling the left third has become pure light — the fist a blinding pure-white silhouette with hard white rim light, massive faceted knuckle boulders dissolving into the glare, the steel-gray armored forearm receding into near-black at the right with harsh contrast, a thin red scarf edge at the frame corner as the sole spot of color, pure void-calm, a few essential blurred strokes',
 };
 // 体修虚无后缀（2026-09-22 用户定）：体修越高深越「虚无、简单、幻灭」——这些链的高阶变体
 // 不再「更亮更爆」，而是色彩流失、笔触虚幻、趋近黑白（红围巾作唯一残色）。优先级最高。
 const ESCALATION_VOID = {
-  fastPunch: { // 快拳(B)→炮拳(A)→真拳(S)：真拳归于至简
-    3: ', the same straight punch, noticeably desaturated: armor and background drained to muted grays, the edges softened, only the red scarf keeps full color',
-    4: ', the same straight punch rendered in pure black and white with harsh contrast, the form reduced to a few blurred essential strokes, pure void-calm, the red scarf the sole spot of color',
+  fastPunch: { // 快拳(B)→炮拳(A)→真拳(S)：灰甲底无彩可褪，褪彩轴读不出进阶（2026-09-22 用户：
+    // 三阶看不出升级感）——改走「炮击实感 → 至简白炽」轴：A 点名冲击波环/火花（构图不动），
+    // S 把拳本身烧成纯白炽影、甲与背景沉黑（虚无仍在，但一眼终极）。
+    3: ', the same straight punch now landing with cannon impact: a bright shockwave ring bursting right at the knuckles, sharp sparks and streaks blasting off the fist, wider stronger speed lines, heightened drama',
+    4: ', the same straight punch ascended to pure void: the fist itself become a blinding pure-white silhouette of light, armor and background sunk to near-black with harsh contrast, the form reduced to a few essential strokes, pure void-calm, the red scarf the sole spot of color',
   },
   fullCharge: { // 蓄满一击(C/B)→全神一击(A)：全神 = 敛神入空
     2: ', the same wound fist, the colors draining toward gray, a faint white core of stored force now glowing at the knuckles, the charge turning inward and silent',
@@ -417,8 +423,8 @@ const ESCALATION_CUSTOM = {
     3: ', the same arc, a huge splitting arc tearing the whole frame open along its path, debris flung',
   },
   cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
-    2: ', the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
-    3: ', the same ring, a blazing double circle of blade-light, sparks storming outward',
+    2: ', the same spinning armored knight inside the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
+    3: ', the same spinning knight, feet planted wide in a low balanced stance, torso upright and controlled, a blazing double circle of blade-light sweeping around the knight at arms length outside the body, nothing passing through the knight, the greatsword gripped firmly in one gauntlet, clear depth between the light ring and the armor, sparks storming outward',
   },
   edgeBreath: { // 含刃术(C→B→A)：刃更寒
     2: ', the same blade held at the visor, the steel brighter, a faint cold gleam along the edge',
@@ -655,16 +661,19 @@ const ESCALATION_CUSTOM = {
     2: ', the same hand and vine, more thorns coiling further up the wrist, more glowing dark-red sap dripping',
   },
   extract: {
-    2: ', the same pull, the iridescent ribbon wider and brighter, stronger green-yellow-blue shimmer',
-    3: ', the same pull, a torrent of iridescent green-yellow-blue light erupting from the cracking rock, the ribbon flooding the frame',
+    2: ', the same pull, the luminous vapor stream thicker and brighter, more pale light billowing out of the cracking rock',
+    3: ', the same pull, a torrent of pale glowing essence erupting from the rock, the light flooding the frame',
+  },
+  adrenaline: { // 肾上腺素(B)→(A)：爆发更烈
+    3: ', the same double-gauntlet clap, the white impact burst bigger, sharper spikes of light radiating outward',
   },
   drawQi: {
     2: ', the same inhale, the pale blue streams thicker and brighter, clearly more streams rushing in from farther away',
     3: ', the same inhale, a vortex storm of pale blue light converging from every direction, the silhouette chest glowing as it fills',
   },
   purify: {
-    2: ', the same gauntlet, a small waterfall of clear water pouring over it, the stain dissolving',
-    3: ', the same gauntlet, a huge sparkling torrent of water flooding over it, brilliant purity',
+    2: ', the same gauntlet, a wider cascade of pale light pouring over it, more grime and smoke dissolving off the plates',
+    3: ', the same gauntlet, a brilliant torrent of white light flooding over it, every plate gleaming, total purity',
   },
   stimulant: {
     2: ', the same jolt, the yellow-green energy crackling louder across the whole arm',
@@ -722,10 +731,15 @@ const ESCALATION_CUSTOM = {
 
 // 变体场景表：多等阶键（tmp/series_tiers.json）为最低阶之外的每个等阶出一行 <key>-<tierIdx>
 
+// fp8 运行时量化（与 genUnitArt 同方：bf16 文件 + weight_dtype fp8_e4m3fn，显存减半、出图更快）；
+// TE fp8 需文件就位（字节门槛防半成品下载件炸 loader），缺了回 bf16。
+const TE_FP8_READY = (() => { try { return fs.statSync('E:/aiimage/ComfyUI/models/text_encoders/qwen3vl_8b_fp8.safetensors').size >= 9.3e9; } catch { return false; } })();
+const CLIP_NAME = TE_FP8_READY ? 'qwen3vl_8b_fp8.safetensors' : 'qwen3vl_8b_bf16.safetensors';
+
 function buildWorkflow(scene, seed, refName = null) {
   const wf = {
-    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'default' } },
-    '453': { class_type: 'CLIPLoader', inputs: { clip_name: 'qwen3vl_8b_bf16.safetensors', type: 'qwen_image', device: 'default' } },
+    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'fp8_e4m3fn' } },
+    '453': { class_type: 'CLIPLoader', inputs: { clip_name: CLIP_NAME, type: 'qwen_image', device: 'default' } },
     '454': { class_type: 'VAELoader', inputs: { vae_name: 'qwen_image_2.1_vae_bf16.safetensors' } },
     '452': {
       class_type: 'TextEncodeQwenImage21',
@@ -836,7 +850,7 @@ async function runChain(keys) {
         console.error(`  ✗ ${key}#${i}: ${e.message}`);
       }
     }
-    if (firstNew) refPath = firstNew; // 下一级锚定本级的首张新图，逐代传递
+    if (firstNew && !FIXANCHOR) refPath = firstNew; // 下一级锚定本级的首张新图，逐代传递（--fixanchor 时锚死显式锚图）
   }
   console.log('链级联完成。');
 }
@@ -893,7 +907,7 @@ const t2i = T2I_TIERS[vid] ?? null; // 构图级升维档：免参考直出（�
 if (CHAIN) {
   await runChain(CHAIN);
 } else if (VARCHAIN) {
-  DENOISE = VAR_DENOISE;
+  DENOISE = Number.isFinite(DENoiseArg) && DENoiseArg > 0 ? DENoiseArg : VAR_DENOISE;
   await runVarChains(ONLY);
 } else {
 const POOL = SCENES;

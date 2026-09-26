@@ -120,3 +120,4 @@ art_src/遗物/out_seedream/
 
 # 会话/计划草稿（ZCode 工作目录产物）
 .zcode/
+__pycache__/

@@ -20,7 +20,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import { TIER_RANK, packOf } from '../run/rewards.js';
 import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
-  dealDamage, drawCards, drawToHandLimit, addCard, randomAliveEnemy,
+  dealDamage, drawCards, addCard, randomAliveEnemy,
   isLastHandCardAtPlay, isFirstPlayThisTurn, aoeAttack, gainShield,
 } from './cardKit.js';
 
@@ -131,7 +131,7 @@ registerAgileCombo({ id: 'stormCombo', name: '暴风连击', tier: 'A', damage: 
 // ==== 4. 虚形拳系列（后手：清手奖励——最后一张打出时质变）====
 // 两条分叉线：伤害线（仿形→豹形→虎形→空形）与抽牌线（蛇形→龙形→虚形）。
 
-// 常规档：基础 7 伤；后手 +bonus 且抽 draw 张（结算读 isLastHandCardAtPlay 出牌时点口径）
+// 常规档：基础 9 伤（2026-09-26 稿 7→9）；后手 +bonus 且抽 draw 张（结算读 isLastHandCardAtPlay 出牌时点口径）
 function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
@@ -141,14 +141,14 @@ function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null
     promotesTo,
     use(sctx) {
       const last = isLastHandCardAtPlay(sctx);
-      attackDamage(sctx, last ? 7 + bonus : 7);
+      attackDamage(sctx, last ? 9 + bonus : 9);
       if (last && draw > 0) drawCards(sctx, draw);
       return true;
     },
-    describe: () => `7伤害；/named{后手}：+${bonus}${draw > 0 ? `，抽${draw}` : ''}`,
+    describe: () => `9伤害；/named{后手}：+${bonus}${draw > 0 ? `，抽${draw}` : ''}`,
     battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx)
-      ? `${resolvedDamageText(sctx, 7 + bonus)}${draw > 0 ? `，抽${draw}牌` : ''}`
-      : resolvedDamageText(sctx, 7)),
+      ? `${resolvedDamageText(sctx, 9 + bonus)}${draw > 0 ? `，抽${draw}牌` : ''}`
+      : resolvedDamageText(sctx, 9)),
   });
 }
 
@@ -164,7 +164,7 @@ registerShadowFist({ id: 'tigerFist', name: '虎形拳', tier: 'A', bonus: 18 })
 // 龙形拳（A）：抽牌线——大调：抽 4→2
 registerShadowFist({ id: 'dragonFist', name: '龙形拳', tier: 'A', bonus: 7, draw: 2 });
 
-// 虚形拳（S，抽牌线顶点）：无基础伤害——后手：抽满手牌（drawToHandLimit 按加权口径补差）。
+// 虚形拳（S，抽牌线顶点）：无基础伤害——后手：抽7（2026-09-26 稿：抽满手牌 → 抽7）。
 // S 为阶梯外等阶，不设 promotesTo。
 registerSkill({
   id: 'voidFist', name: '虚形拳', type: 'normal', tier: 'S', series: 'fist',
@@ -172,11 +172,11 @@ registerSkill({
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
   use(sctx) {
-    if (isLastHandCardAtPlay(sctx)) drawToHandLimit(sctx);
+    if (isLastHandCardAtPlay(sctx)) drawCards(sctx, 7);
     return true;
   },
-  describe: () => '/named{后手}：抽满手牌',
-  battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx) ? '抽满手牌' : '无效果'),
+  describe: () => '/named{后手}：抽7',
+  battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx) ? '抽7牌' : '无效果'),
 });
 
 // 空形拳（S，伤害线顶点）：无基础伤害——后手：55 伤。
@@ -255,9 +255,9 @@ registerSkill({
   describe: () => '/named{发现}5/card{instantStrike}',
 });
 
-// 瞬击（蓄力系列衍生牌）：0 费即抛——5 伤 + 抽 1，打出即焚毁。
-// 只经造牌指令入场，不入奖励池。（2026-09-20 用户裁决：7 → 5——单张收益压在
-// 白板拳 6 伤之下，「免费」换来的额度只够磨刀，破防仍要靠正式输出件。）
+// 瞬击（蓄力系列衍生牌）：0 费即抛——6 伤 + 抽 1，打出即焚毁。
+// 只经造牌指令入场，不入奖励池。（2026-09-26 稿：5 → 6；2026-09-20 用户裁决原为
+// 7 → 5——单张收益压在白板拳之下，「免费」换来的额度只够磨刀。）
 // 等阶记 C（2026-09-21 移除 D 阶——衍生牌的等阶只是账务口径，不进任何池）。
 registerSkill({
   id: 'instantStrike', name: '瞬击', type: 'normal', tier: 'C', series: 'fist',
@@ -267,12 +267,12 @@ registerSkill({
   keywords: ['exhaust'],
   canSpawnAsReward: false,
   use(sctx) {
-    attackDamage(sctx, 5);
+    attackDamage(sctx, 6);
     drawCards(sctx, 1);
     return true;
   },
-  describe: () => '5伤害，抽1牌',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 5)}，抽1牌`,
+  describe: () => '6伤害，抽1牌',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6)}，抽1牌`,
 });
 
 // ==== 6. 肘击系列（小体系，2026-09-20 稿：打击位成链 + 牢大乘区 + 坠机爆发）====
@@ -326,17 +326,17 @@ function registerElbow({ id, name, tier, damage, shield = 0, promotesTo = null, 
 }
 
 // 肘击（C）——2026-09-21 大调 D→C
-registerElbow({ id: 'elbowStrike', name: '肘击', tier: 'C', damage: 4, promotesTo: 'fierceElbow' });
+registerElbow({ id: 'elbowStrike', name: '肘击', tier: 'C', damage: 6, promotesTo: 'fierceElbow' });
 // 猛烈肘击（B）——大调 C→B，5→6
-registerElbow({ id: 'fierceElbow', name: '猛烈肘击', tier: 'B', damage: 6, promotesTo: 'strongElbow' });
+registerElbow({ id: 'fierceElbow', name: '猛烈肘击', tier: 'B', damage: 8, promotesTo: 'strongElbow' });
 // 强大肘击（A）——大调 B→A，5→6、护盾 3→2
-registerElbow({ id: 'strongElbow', name: '强大肘击', tier: 'A', damage: 6, shield: 2, promotesTo: 'pureElbow' });
+registerElbow({ id: 'strongElbow', name: '强大肘击', tier: 'A', damage: 8, shield: 2, promotesTo: 'pureElbow' });
 // 纯粹肘击（S，大调 A→S；费用栏留空 → 0 费）
-registerElbow({ id: 'pureElbow', name: '纯粹肘击', tier: 'S', damage: 8, shield: 4, ap: 0 });
+registerElbow({ id: 'pureElbow', name: '纯粹肘击', tier: 'S', damage: 10, shield: 4, ap: 0 });
 // 猛烈肘击·0 费形态（2026-09-12）：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
 // 的变换目标——同名同形态、只是免费（0AP），且**只经局内转化获得**（不进奖励池/不进抽选）。
 // 2026-09-21 大调跟随猛烈肘击本体：C→B、5→6。
-registerElbow({ id: 'fierceElbowFree', name: '猛烈肘击', tier: 'B', damage: 6, ap: 0, spawnable: false });
+registerElbow({ id: 'fierceElbowFree', name: '猛烈肘击', tier: 'B', damage: 8, ap: 0, spawnable: false });
 
 // 牢大（B/A）：咏唱1/0——你的肘击卡伤害翻倍。设计稿费用栏留空 → 0 费（代价押在
 // 咏唱手牌压力与构建上；A 档咏唱 0 = 零容量压力）。实现：PRE 修饰 tags 含 elbow 的伤害。
@@ -607,9 +607,9 @@ function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，失去${lifeLoss}生命${ap > 0 ? `，获得${ap}行动点` : ''}`,
   });
 }
-wildPunchCard({ id: 'wildPunch', tier: 'C', damage: 12, lifeLoss: 3, ap: 1, promotesTo: 'bloodRage' });
-wildPunchCard({ id: 'bloodRage', tier: 'B', damage: 15, lifeLoss: 3, ap: 1, promotesTo: 'lastGasp' });
-wildPunchCard({ id: 'lastGasp', tier: 'A', damage: 15, lifeLoss: 3, ap: 2 });
+wildPunchCard({ id: 'wildPunch', tier: 'C', damage: 12, lifeLoss: 2, ap: 1, promotesTo: 'bloodRage' });
+wildPunchCard({ id: 'bloodRage', tier: 'B', damage: 15, lifeLoss: 2, ap: 1, promotesTo: 'lastGasp' });
+wildPunchCard({ id: 'lastGasp', tier: 'A', damage: 15, lifeLoss: 2, ap: 2 });
 
 // 乱拳 C → 雨拳 B → 千手 A → 万手 S（多段链：每段独立结算、独立吃减伤门与触发面。
 // 2026-09-21 大调：D 移除、C 改 3×3、万手升 S 5×6；总伤 9/12/16/30）
@@ -659,8 +659,8 @@ function instantStrikesThisTurn(sctx) {
 }
 
 // 拆招 C→B→A（手牌补充，2026-09-21 大调收阶）：0费 冷却1——抽 1；
-// /named{自由牌}（未激活咏唱的手牌）不超过 2/3/4 张时再抽 1（清手流的续航资源件）。
-// 发动卡结算时已离手（pending），自由牌读其余手牌（激活咏唱豁免判定）。
+// 自由手牌（未激活咏唱的手牌）不超过 2/3/4 张时再抽 1（清手流的续航资源件）。
+// 发动卡结算时已离手（pending），自由手牌读其余手牌（激活咏唱豁免判定）。
 function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
   registerSkill({
     id, name: '拆招', type: 'normal', tier, series: 'fist',
@@ -674,10 +674,10 @@ function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
       if (free <= threshold) drawCards(sctx, extra);
       return true;
     },
-    describe: () => `抽1牌；/named{自由牌}不超过${threshold}张时，再抽${extra}`,
+    describe: () => `抽1；/named{自由}手牌不超过${threshold}张时，再抽${extra}`,
     battleDescribe: (sctx) => {
       const free = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `抽1牌（当前自由牌${free}张${free <= threshold ? `，再抽${extra}` : ''}）`;
+      return `抽1（当前自由手牌${free}张${free <= threshold ? `，再抽${extra}` : ''}）`;
     },
   });
 }
@@ -778,7 +778,7 @@ adrenalineCard({ id: 'adrenalineA', tier: 'A', draw: 3 });
 // 不入奖励池：系统级保险卡，定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
 registerSkill({
   id: 'badOmen', image: 'badOmen', name: '情况不对', type: 'normal', tier: 'C',
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   keywords: ['exhaust', 'innate'],

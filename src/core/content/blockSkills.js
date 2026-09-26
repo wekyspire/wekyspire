@@ -149,8 +149,9 @@ perfectSeries('pluckStar', '摘星手', 'S', 30, { block: 4 });
 // 独立的转化指令。转化数值取设计稿字面值（不吃攻击面板/power——面板已计入基础
 // 一击，逐层叠加面板会指数化膨胀）。基础伤害仍是标准攻击算式（基数+面板+power）。
 
-// 破势/解体/贯心（破势系列 C/B/A）：基础伤害 7/8/9；破：每层 7/8/9 伤害
-//（2026-09-21 大调：破伤 7/11/16 → 7/8/9，基础随阶微涨——破势的爆发全押在格挡层数上）。
+// 破势/解体/贯心（破势系列 C/B/A）：基础伤害 9/9/9；破：每层 6/7/8 伤害
+//（2026-09-21 大调：破伤 7/11/16 → 7/8/9；2026-09-26 稿：基础统一 9、破伤 6/7/8——
+// 破势的爆发仍全押在格挡层数上，但低层数时不再纯亏）。
 const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -170,9 +171,9 @@ const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSk
     return `${resolvedDamageText(sctx, base)}，/named{破}：${per}伤害${bonus}`;
   },
 });
-breakAttack('breakStance', '破势', 'C', 7, 7, 'disassemble');
-breakAttack('disassemble', '解体', 'B', 8, 8, 'pierceHeart');
-breakAttack('pierceHeart', '贯心', 'A', 9, 9, null);
+breakAttack('breakStance', '破势', 'C', 9, 6, 'disassemble');
+breakAttack('disassemble', '解体', 'B', 9, 7, 'pierceHeart');
+breakAttack('pierceHeart', '贯心', 'A', 9, 8, null);
 
 // 壁垒/堡垒/铜城（破势系列 C/B/A）：基础护盾 + 破：N 护盾（三阶皆消耗，2026-09 稿）。
 // 设计稿未写费用 → 0 费。先给基础护盾，再清空格挡逐层转化。
@@ -323,14 +324,11 @@ registerSkill({
 // ==== 姿态系列（常驻引擎·咏唱）=================================================
 
 // 龟守链（咏唱触发 P5 攒格挡）：ChantTriggerInstruction POST → 获得 N 层格挡。
-// 笨拙是发动瞬间的一次性代价（activated.onEnable 时获得层数；解除不回收——层数按
-// 笨拙自身规则逐次消耗。设计稿未写解除回收，此为落地假设）。
-// weight 缺省 2（2026-09-21 用户定稿：龟守链 C/B/B/A 统一咏唱2）；神龟姿态 S 咏唱 1
-// （2026-09-20 稿：咏唱 2→1，S 卡零负担顶点）。
-// 阶梯为**菱形链**（2026-09-21 用户澄清）：C 防御准备 → 分叉 B 守护（格挡1 无代价）
-// / B 龟守（格挡2+笨拙1）→ 合流 A 玄龟（格挡2 无笨拙——两条支线的升级终点各自有意义：
-// 守护线加量、龟守线去代价）→ S 神龟直出顶点（无晋升来源）。
-const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesTo, weight = 2) => registerSkill({
+// clumsy 参数保留在工厂里（describe 兼容），现网全链为 0——2026-09-26 稿删除笨拙代价、
+// 全链咏唱 C/B/B/A=1、S=0（原统一咏唱2、S 咏唱1），龟守姿态改 2AP。
+// 阶梯为**菱形链**：C 防御准备 → 分叉 B 守护（格挡1 无代价）/ B 龟守（格挡2，2AP）
+// → 合流 A 玄龟（格挡2）→ S 神龟直出顶点（无晋升来源，咏唱0=零手牌压力）。
+const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesTo, weight = 1) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -354,14 +352,17 @@ const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesT
     return effect;
   },
 });
-turtleStanceCard('defensePrep', '防御准备', 'C', 2, 1, 0, ['guardStance', 'turtleStance']);
-turtleStanceCard('guardStance', '守护姿态', 'B', 1, 1, 0, 'mysticTurtle');
-// 龟守姿态（B 支线）：格挡2 + 笨拙1（与守护并列的分叉位，不是守护的晋升目标）
-turtleStanceCard('turtleStance', '龟守姿态', 'B', 1, 2, 1, 'mysticTurtle');
-// 玄龟姿态（A 合流顶点）：格挡2、无笨拙（2026-09-21 裁定去掉笨拙——守护线升格挡、
-// 龟守线去笨拙，两条支线在终点合流）
-turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 0, null);
-turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null, 1);
+// 2026-09-26 稿重排：全链咏唱 C/B/B/A=1、S=0（原统一咏唱2、S 咏唱1）；龟守姿态改
+// 2AP 并去掉笨拙1（笨拙一次性代价整条删除）；AP 与格挡量不变。
+// 阶梯仍为**菱形链**：C 防御准备 → 分叉 B 守护（格挡1 无代价）/ B 龟守（格挡2，2AP）
+// → 合流 A 玄龟（格挡2）→ S 神龟直出顶点（无晋升来源，咏唱0=零手牌压力）。
+turtleStanceCard('defensePrep', '防御准备', 'C', 2, 1, 0, ['guardStance', 'turtleStance'], 1);
+turtleStanceCard('guardStance', '守护姿态', 'B', 1, 1, 0, 'mysticTurtle', 1);
+// 龟守姿态（B 支线）：格挡2，2AP（与守护并列的分叉位，不是守护的晋升目标）
+turtleStanceCard('turtleStance', '龟守姿态', 'B', 2, 2, 0, 'mysticTurtle', 1);
+// 玄龟姿态（A 合流顶点）：格挡2
+turtleStanceCard('mysticTurtle', '玄龟姿态', 'A', 1, 2, 0, null, 1);
+turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null, 0);
 
 // 武术链（格挡转攻击）：激活期间，玩家为来源的每一条**主级**伤害指令 PRE 加
 // 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。

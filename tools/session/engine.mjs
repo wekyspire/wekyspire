@@ -540,7 +540,7 @@ function execRoom(S, t) {
 // 购买回执的人话化（X1 巡检实报：原样 JSON.stringify(res) 泄漏原始结构）
 function buyOutcomeText(res) {
   switch (res?.kind) {
-    case 'potion': return '生命恢复 25% 上限';
+    case 'potion': return res.healedText ?? '生命恢复 25% 上限';
     case 'apple': return '苹果到手（瑞米的最爱）';
     case 'pack': return '卡包到手——三选一';
     case 'relicPack': return '遗物包到手——三选一';
@@ -557,7 +557,15 @@ function execRoomShop(S, t) {
     // buy 0 基、claim 1 基并存在同一屏，按 0 基输入拿错货）
     const idx = idxOk(num(t[3]), run.shop.items.length, '货位');
     const it = run.shop.items[idx];
+    // 药剂买前/买后血量对照（待办池「药剂假回执」：满血买药 20 金白花却只回一句成功）
+    const hpBefore = run.player.hp;
     const res = buyShopItem(run, idx);
+    if (res.kind === 'potion') {
+      const healed = run.player.hp - hpBefore;
+      res.healedText = healed > 0
+        ? `生命恢复 +${healed}（现 ${run.player.hp}/${run.player.maxHp}）`
+        : `⚠ 已满血（${run.player.hp}/${run.player.maxHp}），回复全部溢出——${it.price} 金花了没有收益`;
+    }
     if (res.kind === 'relicPack') {
       // 遗物包三选一（2026-09-13 用户定：替代旧的随机单件遗物）
       const lines = run.shopPending.choices.map((id, i) => {
@@ -575,7 +583,12 @@ function execRoomShop(S, t) {
     return;
   }
   if (b === 'claim') {
-    if (!run.shopPending) throw new Error('当前没有待选的卡包/遗物包');
+    if (!run.shopPending) {
+      // 反向指路（与 act claim 的互指成对）：最常见的错位 = 老虎机产出误敲 shop claim
+      if (run.slotPending) throw new Error('这不是售货机待选——是**老虎机**的待领取产出。用 act claim <#|id> / act drop 放弃');
+      if (gurpasView(run).pendingPack) throw new Error('这不是售货机待选——是**古尔帕斯之店**的卡包。用 act gurpas claim <#>');
+      throw new Error('当前没有待选的卡包/遗物包');
+    }
     const raw = t[3];
     if (run.shopPending.kind === 'relic') {
       // 遗物包三选一：claim <#> 选 / claim -1 放弃（钱已花，选择权在你）
@@ -745,7 +758,19 @@ function execRoomSlot(S, t) {
     return;
   }
   if (a === 'claim') {
-    if (!run.slotPending) { S.lastOutcome = '本次未中奖，没有待领取的产出（无需处理）'; return; }
+    // 三轮试玩实报「claim 序号与显示不符」的根源：老虎机/售货机/古尔帕斯三套 claim 并存，
+    // 对着售货机待选列表敲 act claim 得到「未中奖无需处理」的**假成功**（还入了档）。
+    // 无老虎机产出时不再静默成功，而是指路到真正的待选出口。
+    if (!run.slotPending) {
+      if (run.shopPending) {
+        throw new Error(`这不是老虎机产出——是**售货机**的待选（${run.shopPending.kind === 'relic' ? '遗物包' : '卡包'}）。用 act shop claim <#>（-1 放弃）`);
+      }
+      if (gurpasView(run).pendingPack) {
+        throw new Error('这不是老虎机产出——是**古尔帕斯之店**的待选卡包。用 act gurpas claim <#>');
+      }
+      S.lastOutcome = '本次未中奖，没有待领取的产出（无需处理）';
+      return;
+    }
     const out = takeSlotPrize(run, resolveSlotClaimArg(run.slotPending ?? {}, b ?? null));
     S.lastOutcome = `领取产出：${slotOutcomeText(out)}`
       + (out.needsCardPick ? '（用 act upgrade <构筑#> <卡名> 指定要升级的卡）' : '');

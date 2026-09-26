@@ -60,7 +60,7 @@ const TEMPLATES = [
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }] },
   { id: 'slimeBurst', name: '史莱姆爆发', cost: 5, minFloor: 3, maxFloor: 5, once: true, excl: ['slimeletBurst'],
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }, { fixed: 'slime' }] },
-  { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 4, maxFloor: 9, once: true, excl: ['rotEye'],
+  { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 5, maxFloor: 9, once: true, excl: ['rotEye'],
     slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'slime' }] },
   { id: 'pester', name: '难缠麻烦', cost: 6, minFloor: 4, maxFloor: 5, once: true,
     slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBallA' }, { fixed: 'pufferToadA' }] },
@@ -215,17 +215,22 @@ function templateUsable(tpl, floor, eliteDay, usedOnce) {
 function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
   const D = floorDifficulty(floor);
   const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
-  const candidates = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce)
-    && costs.get(t) != null && Math.abs(costs.get(t) - D) <= DRIFT);
-  if (candidates.length === 0) {
-    throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，±${DRIFT} 窗内候选为空）`);
+  const usable = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce) && costs.get(t) != null);
+  // 优先往低随机（2026-09-26 用户定，全局规则——取代当日早先的商店层特例）：常规池 =
+  // [D−DRIFT, D]，只往小随不往大随；池子空了（本局 once 模板耗尽等）才逐级上浮
+  // D+1、D+2 **补位**——上浮是兜底不是平级选项。三层试玩实测死亡集中在编成难度
+  // 越过本层预算的「上漂尖刺」（F4 28%/F6 21%），压制上尾即可，D 本身不动。
+  for (const driftUp of [0, 1, 2]) {
+    const candidates = usable.filter(t => costs.get(t) - D <= driftUp && D - costs.get(t) <= DRIFT);
+    if (candidates.length === 0) continue;
+    const weighted = [];
+    for (const t of candidates) {
+      const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
+      for (let i = 0; i < weight; i++) weighted.push(t);
+    }
+    return rng.pick(weighted);
   }
-  const weighted = [];
-  for (const t of candidates) {
-    const weight = Math.max(1, 4 - 2 * Math.abs(costs.get(t) - D));
-    for (let i = 0; i < weight; i++) weighted.push(t);
-  }
-  return rng.pick(weighted);
+  throw new Error(`楼层 ${floor} 无可用战斗模板（难度 D=${D}，窗 [${D - DRIFT}, D+2] 全空——数据配错）`);
 }
 
 /**

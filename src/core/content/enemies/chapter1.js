@@ -432,8 +432,9 @@ registerEnemy({
     damage: 5 + unit.getStat('attack'), note: '啃食：吃掉你的牌库顶1张（本场消化）' }),
 });
 
-// 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 攻10+盾30 → 恢复24 → 攻16（2026-09-22 用户定 22→16）。
-// 自愈+厚盾+大单发，是一只完整的「马拉松检查」。
+// 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 攻10+盾30 → 恢复16 → 攻16。
+// 自愈+厚盾+大单发，是一只完整的「马拉松检查」（重击 22→16 于 09-22；
+// 掘洞回血 24→16 于 09-26——三轮试玩实测回 24 让击杀窗只剩 T1-T2，及格线被顶到 30-40 血）。
 registerEnemy({
   difficulty: { base: 3, floorMin: 2, floorMax: 16 },
   id: 'diggerMole', name: '掘地鼹鼠',
@@ -453,7 +454,7 @@ registerEnemy({
       }));
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 30 }));
     } else if (phase === 1) {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 24 }));
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 16 }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 16 + unit.getStat('attack'),
@@ -465,7 +466,7 @@ registerEnemy({
     if (unit.actionIndex === 0) return { kinds: ['attack'], hits: 1, damage: 7 + atk, note: '突袭' };
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 10 + atk, note: '自身护盾+30' };
-    if (phase === 1) return { kinds: ['buff'], note: '掘洞恢复：回复24' };
+    if (phase === 1) return { kinds: ['buff'], note: '掘洞恢复：回复16' };
     return { kinds: ['attack'], hits: 1, damage: 16 + atk, note: '重击' };
   },
 });
