@@ -80,12 +80,14 @@ const UPGRADE_SOURCES = {
     intent: (uniqueID) => ({ action: 'gurpasRemove', uniqueID }),
     title: '选择要删除的卡', confirmLabel: '确认删除',
     hint: '这张牌将从牌库中彻底消失 ｜ 滚轮翻页',
+    tips: false,   // 删卡界面不弹卡牌 tooltip（2026-09-26 用户定）——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
     cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '选择要删除的卡', confirmLabel: '确认删除',
     hint: '这张牌将从牌库中彻底消失 ｜ 滚轮翻页',
+    tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
   ascensionRemove: {
     // 跳过进阶的删卡反哺（用户定 2026-09-13）：与 Boss 奖励同一计数器/同一结算，
@@ -94,6 +96,7 @@ const UPGRADE_SOURCES = {
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删一张卡', confirmLabel: '确认删除',
     hint: '体修精进的赠礼：这张牌将从牌库中彻底消失（也可以不删）｜ 滚轮翻页',
+    tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
 };
 
@@ -300,6 +303,7 @@ export function createStagePickerKit({
           hint: def.hint,
           cards: cards.map(toCardEntry),
           confirmLabel: def.confirmLabel,
+          tips: def.tips !== false,   // 删卡类源关 hover 预览（2026-09-26 用户定）
         });
         hookMain();
       };
