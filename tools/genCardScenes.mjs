@@ -68,7 +68,7 @@ const SCENES = [
   { id: 'punch', prompt: `extreme close-up of a steel-gray gauntlet fist frozen at the moment of impact filling the frame, radiating impact lines, nothing else in frame` },
   { id: 'focusChant', prompt: `extreme close-up of two steel-gray armored gauntlets pressed together in prayer, a single bright drop of light floating between the palms, the hands filling the entire frame, no helmet in frame, dark background` },
   // —— 体修·拳组合（过牌；骑士本体 + 大面积黑灰） ——
-  { id: 'fastPunch', prompt: `side-view close-up of a straight punch: only the fist, the forearm and one sharp speed line crossing the whole frame, everything else cropped to darkness` },
+  { id: 'fastPunch', prompt: `side-view close-up of a steel-gray armored straight punch: only the steel-gray gauntlet fist, the armor-plated forearm and one sharp speed line crossing the whole frame, a thin red scarf edge at the frame corner, everything else cropped to darkness` },
   { id: 'fullCharge', prompt: `extreme close-up of a steel-gray fist wound far back behind the shoulder, coiled to its limit, every plate trembling with stored force, side view, maximal wind-up, dark background` },
   { id: 'wildPunch', prompt: `a small stretched black silhouette of a knight leaping through the air mid haymaker strike, violent red and black speed lines storming around him, the silhouette small in frame, berserk momentum, dark background` },
   { id: 'wildFlurry', prompt: `a rain of fist afterimages: dozens of blurred fists filling the whole frame in rhythmic diagonal rows like falling rain, no readable body, storm of blows` },
@@ -306,8 +306,8 @@ const ESCALATION = {
 // prompt 铁律：**绝对数量词做主语**（six fists / hundreds of sparks），不写「两只拳+更多」
 // 这类锚定基图数量的措辞（四轮全败的根因之一）。
 const T2I_TIERS = {
-  'agileCombo-2': 'a diagonal row of six separate solid pale fists marching across the dark frame, each fist crisp and readable with knuckles, short motion blur trails behind, quick rhythmic combo energy',
-  'agileCombo-3': 'a long row of nine separate glowing pale fists sweeping across the entire frame from corner to corner, sharp speed lines between them, storm of rapid strikes',
+  'agileCombo-2': 'a diagonal row of six separate solid steel-gray armored gauntlet fists marching across the dark frame, each gauntlet crisp and readable with knuckles, short motion blur trails behind, quick rhythmic combo energy',
+  'agileCombo-3': 'a long row of nine separate glowing steel-gray armored gauntlet fists sweeping across the entire frame from corner to corner, sharp speed lines between them, storm of rapid strikes',
   'relief-3': 'a colossal wall of white steam erupting sideways and filling the entire frame edge to edge, dense billowing vapor textures, a tiny round pressure valve barely visible at the bottom corner, no creature, no face, no figure, pure steam only',
   'spark-2': 'a figure wearing a wide-brim hat and goggles, hundreds of bright sparks bursting and flying everywhere around the raised hands, the whole frame full of glowing points',
   'spark-3': 'an overwhelming storm of hundreds of blazing white-orange sparks flooding the entire frame edge to edge, blinding shower of glowing points, a small figure with a wide-brim hat and goggles barely visible at the bottom edge, no readable book, no props',
@@ -722,10 +722,15 @@ const ESCALATION_CUSTOM = {
 
 // 变体场景表：多等阶键（tmp/series_tiers.json）为最低阶之外的每个等阶出一行 <key>-<tierIdx>
 
+// fp8 运行时量化（与 genUnitArt 同方：bf16 文件 + weight_dtype fp8_e4m3fn，显存减半、出图更快）；
+// TE fp8 需文件就位（字节门槛防半成品下载件炸 loader），缺了回 bf16。
+const TE_FP8_READY = (() => { try { return fs.statSync('E:/aiimage/ComfyUI/models/text_encoders/qwen3vl_8b_fp8.safetensors').size >= 9.3e9; } catch { return false; } })();
+const CLIP_NAME = TE_FP8_READY ? 'qwen3vl_8b_fp8.safetensors' : 'qwen3vl_8b_bf16.safetensors';
+
 function buildWorkflow(scene, seed, refName = null) {
   const wf = {
-    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'default' } },
-    '453': { class_type: 'CLIPLoader', inputs: { clip_name: 'qwen3vl_8b_bf16.safetensors', type: 'qwen_image', device: 'default' } },
+    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'fp8_e4m3fn' } },
+    '453': { class_type: 'CLIPLoader', inputs: { clip_name: CLIP_NAME, type: 'qwen_image', device: 'default' } },
     '454': { class_type: 'VAELoader', inputs: { vae_name: 'qwen_image_2.1_vae_bf16.safetensors' } },
     '452': {
       class_type: 'TextEncodeQwenImage21',
