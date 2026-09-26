@@ -9,7 +9,8 @@
 // 显示假设：游玩分辨率固定 16:9（1920x1080，z=0 世界宽 ≈177.8），不做其它比例适配。
 
 import * as THREE from 'three';
-import { applyToneMapping, DEFAULT_TONE_MODE } from './scenes/volumetricMoon.js';
+import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
+import { createUiComposer } from './post/uiComposer.js';
 import { CameraDirector } from './fx/camera.js';
 
 export const WORLD_HEIGHT = 100;
@@ -89,6 +90,10 @@ export class StageManager {
     this._viewHeight = 0;
     this._clock = null;         // start 时创建（node 无 performance 场景注入）
     this._tickHandlers = new Set(); // 每帧回调（粒子系统等）：fn(dtSeconds)
+    // uiScene 后处理链（卡牌/面板 bloom；post/uiComposer.js）：懒建（首个带 uiScene
+    // 的舞台渲染时），setUiPostProcessing(false) 时退回直渲（低档画质兜底）
+    this._uiComposer = null;
+    this._uiPostEnabled = true;
     // 相机导演（fx 架构）：命名机位 + flyTo + override 栈，世界相机全局共享一台——
     // 换场时 dispose（清栈 + 还原基准机位），上一舞台的运镜覆写不漏给下一舞台
     this.cameraDirector = new CameraDirector(this);
@@ -156,7 +161,16 @@ export class StageManager {
     this._renderer?.setPixelRatio?.(this._devicePixelRatio());
     this._renderer?.setSize?.(width, height);
     this._stage?.composeResize?.(width, height); // 后处理链 RT 跟随（如体积光 composer）
+    this._uiComposer?.resize(width, height, this._devicePixelRatio());
   }
+
+  /**
+   * uiScene 后处理开关（卡牌/UI 辉光链，settings.fxPost 下行）：开 = uiScene 走
+   * composer（RT + bloom），关 = 维持旧直渲（低档设备兜底）。运行时切换即时生效
+   * （composer 实例保留，不重建）；假 renderer（单测）下渲染分支自动退化直渲。
+   */
+  setUiPostProcessing(on) { this._uiPostEnabled = !!on; }
+  get uiPostProcessing() { return this._uiPostEnabled; }
 
   /** 世界相机的基准机位（只读快照；相机不在场景图内，直接拷 position/quaternion）。 */
   get cameraBase() { return this._cameraBase; }
@@ -242,14 +256,24 @@ export class StageManager {
         }
         // UI 独立 pass（stage.uiScene，如卡牌/按钮/图标）：清深度后二次渲染——
         // 牌桌 UI 的世界坐标在地板平面之下（y<-30），同 pass 会被地板 z-test 裁掉；
-        // UI 本质是前景覆盖层，与 3D 世界不做深度交互
+        // UI 本质是前景覆盖层，与 3D 世界不做深度交互。
+        // 后处理开：uiScene → RT + bloom 链，premultiplied 盖回屏幕（post/uiComposer）；
+        // 后处理关 / 假 renderer（单测无 setRenderTarget）：维持直渲旧路径。
         const ui = this._stage.uiScene;
         if (ui) {
           const r = this._renderer;
           const prevAutoClear = r.autoClear;
           r.autoClear = false;
-          r.clearDepth?.(); // 假 renderer（单测）无此方法，跳过即可
-          r.render(ui, this._uiCamera); // UI 用专用正交相机：卡牌/按钮永远正对观者、无透视畸变
+          if (this._uiPostEnabled && typeof r.setRenderTarget === 'function') {
+            if (!this._uiComposer) {
+              this._uiComposer = createUiComposer();
+              this._uiComposer.resize(this._viewWidth || 2, this._viewHeight || 2, this._devicePixelRatio());
+            }
+            this._uiComposer.render(r, ui, this._uiCamera);
+          } else {
+            r.clearDepth?.(); // 假 renderer（单测）无此方法，跳过即可
+            r.render(ui, this._uiCamera); // UI 用专用正交相机：卡牌/按钮永远正对观者、无透视畸变
+          }
           r.autoClear = prevAutoClear;
         }
       }
@@ -266,7 +290,9 @@ export class StageManager {
 
   dispose() {
     this.stop();
-    this._renderer?.dispose?.();
+    this._uiComposer?.dispose();
+    this._uiComposer = null;
+    this._renderer?.dispose();
     this._renderer = null;
   }
 }

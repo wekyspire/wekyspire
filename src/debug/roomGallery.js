@@ -7,7 +7,8 @@ import * as THREE from 'three';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { DUNGEON } from '../stage/scenes/dungeon.js';
-import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '../stage/scenes/volumetricMoon.js';
+import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
+import { applyToneMapping, DEFAULT_TONE_MODE } from '../stage/post/passes.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 
 const params = new URLSearchParams(location.search);

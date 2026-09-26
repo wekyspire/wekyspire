@@ -11,7 +11,8 @@
 import * as THREE from 'three';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
-import { createVolumetricMoonlight, applyToneMapping, DEFAULT_TONE_MODE } from '../stage/scenes/volumetricMoon.js';
+import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
+import { applyToneMapping, DEFAULT_TONE_MODE } from '../stage/post/passes.js';
 import { LIGHTING_PRESETS } from '../stage/scenes/rooms/lighting.js';
 import { createSlotMachineRig } from '../stage/scenes/interactive/slotMachineRig.js';
 import { createBankMachineRig } from '../stage/scenes/interactive/bankMachineRig.js';

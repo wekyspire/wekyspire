@@ -7,6 +7,7 @@
 // node 无 document 时不建任何 mesh（Group 空，update 无操作）——单测可安全构造。
 
 import * as THREE from 'three';
+import { additiveLight } from '../post/passes.js';
 
 const ENV_RATE = 6;      // 包络趋近速率（/s）：约 0.3s 淡入淡出
 const BREATHE_FREQ = 3;  // glow 呼吸频率（rad/s）
@@ -39,10 +40,9 @@ export class HighlightFX {
     const glowTex = bakeRadialTexture();
     this._glow = new THREE.Mesh(
       new THREE.PlaneGeometry(glowSize, glowSize),
-      new THREE.MeshBasicMaterial({
-        map: glowTex, color: glowColor, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }),
+      additiveLight(new THREE.MeshBasicMaterial({
+        map: glowTex, color: glowColor, transparent: true, opacity: 0, depthWrite: false,
+      })),
     );
     this.group.add(this._glow);
 
@@ -51,12 +51,11 @@ export class HighlightFX {
     for (let i = 0; i < count; i++) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(particleSize, particleSize),
-        new THREE.MeshBasicMaterial({
+        additiveLight(new THREE.MeshBasicMaterial({
           map: dotTex, color: new THREE.Color(
             particleColors[i % particleColors.length]),
-          transparent: true, opacity: 0.9,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        }),
+          transparent: true, opacity: 0.9, depthWrite: false,
+        })),
       );
       mesh.visible = false;
       this.group.add(mesh);

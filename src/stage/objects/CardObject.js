@@ -10,6 +10,7 @@
 // 由宿主逐帧驱动，燃尽回调 onBurnt（BattleStage 届时瞬移落位牌库图标处并销毁）。
 
 import * as THREE from 'three';
+import { additiveLight } from '../post/passes.js';
 import { CardFxLayer } from './CardFxLayer.js';
 import { hitTestRegions } from '../richtext/layout.js';
 
@@ -226,10 +227,10 @@ float bNoise(vec2 p) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const material = new THREE.PointsMaterial({
+    const material = additiveLight(new THREE.PointsMaterial({
       size: 1.5, vertexColors: true,
-      blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false,
-    });
+      transparent: true, depthWrite: false, fog: false,
+    }));
     this._embers = new THREE.Points(geometry, material);
     this._embers.frustumCulled = false;
     this._embers.position.z = 1.2;   // 牌面前方

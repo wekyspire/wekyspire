@@ -2,7 +2,7 @@
 // 游戏中弹出菜单（Esc 呼出）：继续/查看存档/设置（音效开关）/回到主菜单。
 // 存档为检查点制（层首/终局自动落盘），此处只读展示。
 import { computed, inject } from 'vue';
-import { settings, toggleSound } from '../settings.js';
+import { settings, toggleSound, toggleFxPost } from '../settings.js';
 import { readSave } from '../saves.js';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
@@ -34,6 +34,10 @@ const resultText = save?.result === 'victory' ? '登顶成功' : save?.result ==
         <label class="row toggle">
           <input type="checkbox" :checked="settings.soundOn" @change="toggleSound()" />
           音效
+        </label>
+        <label class="row toggle">
+          <input type="checkbox" :checked="settings.fxPost" @change="toggleFxPost()" />
+          辉光特效（卡牌/UI 发光；低档设备可关）
         </label>
       </div>
 

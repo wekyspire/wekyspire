@@ -25,6 +25,7 @@
 // 纯 Stage 层：不读 Core/Bridge；数据由调用方以纯对象传入（名称/描述/作用/素材 key/tint）。
 
 import * as THREE from 'three';
+import { additiveLight } from '../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { OVERLAY_Z } from './PanelObject.js';
 import { bakeBoldText, bakeAutoLine } from './textBakers.js';
@@ -197,10 +198,9 @@ export class ItemShowcaseObject extends THREE.Group {
     this._raysTex = bakeGodRays();
     const rays = new THREE.Mesh(
       new THREE.PlaneGeometry(ART.size * 2.6, ART.size * 2.6),
-      new THREE.MeshBasicMaterial({
-        map: this._raysTex, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }),
+      additiveLight(new THREE.MeshBasicMaterial({
+        map: this._raysTex, transparent: true, opacity: 0, depthWrite: false,
+      })),
     );
     rays.position.set(0, ART.y, Z.RAYS);
     rays.visible = !!this._raysTex;   // headless：无光束贴图就不画这一层

@@ -16,6 +16,7 @@
 // 三张平面各自惰性创建；焚毁接管牌面前调 clearTransient() 熄灭全部叠加。
 
 import * as THREE from 'three';
+import { additiveLight } from '../post/passes.js';
 
 const VEIL_STYLE = {
   cooling: { color: 0x0d1420, base: 0.5 },   // 冷却中：暗青灰薄纱（法线混合压暗牌面）
@@ -137,10 +138,10 @@ export class CardFxLayer extends THREE.Group {
   /** 一次性加色闪光（冷却推进/衰败反向/威力提升）。重触发即重置时间线（新脉冲顶掉旧脉冲）。 */
   pulse({ color = 0xffffff, durationMs = 220, scale = 1.2 } = {}) {
     if (!this._pulse) {
-      const mat = new THREE.MeshBasicMaterial({
-        transparent: true, opacity: PULSE_OPACITY,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      });
+      // 加法光不占地（uiScene RT 合成约定，passes.js 铁律②）
+      const mat = additiveLight(new THREE.MeshBasicMaterial({
+        transparent: true, opacity: PULSE_OPACITY, depthWrite: false,
+      }));
       this._pulse = new THREE.Mesh(new THREE.PlaneGeometry(this._w * 1.06, this._h * 1.06), mat);
       this._pulse.position.z = 0.45;
       this._pulse.visible = false;
@@ -223,14 +224,13 @@ export class CardFxLayer extends THREE.Group {
         uPlane: { value: new THREE.Vector2(pw, ph) },
         uColor: { value: new THREE.Color(1.0, 0.9, 0.62) }, // 咏唱暖金
       };
-      const mat = new THREE.ShaderMaterial({
+      const mat = additiveLight(new THREE.ShaderMaterial({
         uniforms: this._edgeUniforms,
         vertexShader: EDGE_GLOW_VERT,
         fragmentShader: EDGE_GLOW_FRAG,
         transparent: true,
-        blending: THREE.AdditiveBlending,
         depthWrite: false,
-      });
+      }));
       this._edgeGlow = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
       this._edgeGlow.position.z = 0.6;
       this.add(this._edgeGlow);
@@ -269,10 +269,9 @@ export class CardFxLayer extends THREE.Group {
     const mkBar = (bw, bh, x, y) => {
       const bar = new THREE.Mesh(
         new THREE.PlaneGeometry(bw, bh),
-        new THREE.MeshBasicMaterial({
-          color: DOOM_COLOR, transparent: true, opacity: 0.8,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        }),
+        additiveLight(new THREE.MeshBasicMaterial({
+          color: DOOM_COLOR, transparent: true, opacity: 0.8, depthWrite: false,
+        })),
       );
       bar.position.set(x, y, 0.5);
       bar.name = 'bar';
@@ -306,10 +305,9 @@ export class CardFxLayer extends THREE.Group {
     const mkArm = (bw, bh, x, y) => {
       const bar = new THREE.Mesh(
         new THREE.PlaneGeometry(bw, bh),
-        new THREE.MeshBasicMaterial({
-          color: LOCK_COLOR, transparent: true, opacity: 0.85,
-          blending: THREE.AdditiveBlending, depthWrite: false,
-        }),
+        additiveLight(new THREE.MeshBasicMaterial({
+          color: LOCK_COLOR, transparent: true, opacity: 0.85, depthWrite: false,
+        })),
       );
       bar.position.set(x, y, 0.44);
       bar.name = 'arm';
