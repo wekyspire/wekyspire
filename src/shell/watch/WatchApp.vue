@@ -180,7 +180,7 @@ const onPointerUp = (e) => battleStage?.handlePointerUp(...framePoint(e));
 
 async function loadSessionList() {
   try {
-    const res = await fetch(`${relayBase}/sessions`);
+    const res = await fetch(`${relayBase}/sessions`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     sessionList.value = await res.json();
     relayError.value = '';
