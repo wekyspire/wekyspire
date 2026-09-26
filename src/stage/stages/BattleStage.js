@@ -56,6 +56,7 @@ import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
 import { resolveDamageRecipe, resolveUnitAuras } from '../fx/recipes.js';
+import { playCardTransform } from '../fx/cardTransform.js';
 import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
@@ -714,14 +715,18 @@ export class BattleStage {
       const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
       if (entry.faceSig !== sig) {
         entry.faceSig = sig;
-        // defId 变化 = 转化/进阶（如斩→裂石斩）：走专属金色演出（手牌内的转化路径，
-        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）
+        // defId 变化 = 转化/进阶（如斩→裂石斩）：走变换演出（手牌内的转化路径，
+        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）——叠层双脸过渡
+        // 接管换脸（落幕一刻才 applyBakedFace，见 fx/cardTransform.js），不经 setCard
         const defChanged = entry.prevDefId != null && entry.prevDefId !== card.defId;
-        view.setCard(card);
-        if (defChanged) this._transformFx(id);
-        // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
-        else if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
-          this._pulseCard(id, 0xffd34c);
+        if (defChanged) {
+          this._transformFx(id, card);
+        } else {
+          view.setCard(card);
+          // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
+          if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
+            this._pulseCard(id, 0xffd34c);
+          }
         }
       }
       entry.prevDefId = card.defId;
@@ -1498,37 +1503,30 @@ export class BattleStage {
     });
   }
 
-  /** 金色迸发 + 卡面闪光（转化演出的特效半，不含缩放时间线与换脸）。
-   *  粒子 z 抬到卡面前方（+2）——与卡面共面时大半能量被牌面深度竞争吞掉；
-   *  fx 层闪光是必达通道（直接叠在牌面上）。 */
-  _transformBurst(id) {
+  /**
+   * 卡牌转化/进阶的变换演出（fx/cardTransform.js，默认 charReveal：焦化→燃烧尾迹→
+   * 白光新脸）。入口 = 手牌内被转化的对账路径（_syncCardContents 发现 defId 变化——
+   * **换脸由演出接管**（落幕一刻 applyBakedFace，勿先 setCard）；展示/持有位的转化
+   * 走 _transformBeat 的完整 staging。mode 参数留给日后多模式（注册表见 cardTransform.js）。
+   */
+  _transformFx(id, card = null, onDone = null, mode = 'charReveal') {
     const view = this._views.get(id);
-    if (!view) return;
-    const p = view.position;
-    this.particles.spawn(p.x, p.y, { count: 26, color: 0xffd76a, speed: 16, ttl: 0.7, size: 1.6, z: (p.z ?? 0) + 2 });
-    this.particles.spawn(p.x, p.y, { count: 12, color: 0xfff3c0, speed: 24, ttl: 0.5, size: 1.1, z: (p.z ?? 0) + 2 });
-    view.fx.pulse({ color: 0xffe9a8, durationMs: 460, scale: 1.5 });
-  }
-
-  /** 卡牌转化/进阶的共用演出（金色迸发 + 尺寸脉冲）。
-   *  入口 = 手牌内被转化的对账路径（_syncCardContents 发现 defId 变化——换脸已在
-   *  差分里完成，这里只补特效）；展示/持有位的转化走 _transformBeat 的完整 staging。 */
-  _transformFx(id, onDone = null) {
-    const view = this._views.get(id);
-    if (!view) { onDone?.(); return; }
-    this._transformBurst(id);
+    if (!view || !card) { onDone?.(); return; }
+    playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
+    // 体量呼吸裹在演出外（变换的重量感）：缓起 1.08 → 随白光收束回程
     const s0 = view.scale.x || 1;
-    this.animator.animate(id, { scale: s0 * 1.3 }, {
-      durationMs: 160,
-      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 160, onComplete: onDone ?? undefined }),
+    this.animator.animate(id, { scale: s0 * 1.08 }, {
+      durationMs: 300, ease: 'power1.out',
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 420 }),
     });
   }
 
-  // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底瞬时换脸 + 金爆
-  // （身份切换藏在闪光下）→ 过冲弹起 → 回稳 → 新脸停留窗。旧版「瞬时换脸 + 一撮
-  // 粒子 + 1.25 脉冲」与威力提升公共节拍语言雷同、读不出跃迁；且斩系打出进阶后
-  // 紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留停留窗的话新脸
-  // 唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经 _syncCardContents
+  // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底起变换演出
+  // （charReveal 双脸过渡接管换脸）→ 过冲弹起（演出并行）→ 回稳 → 新脸停留窗。
+  // 停留窗对齐演出全长（820ms）：旧版 260ms 窗读不完白光收束后的新脸；且斩系
+  // 打出进阶后紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留
+  // 停留窗的话新脸唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经
+  // _syncCardContents（只扫手牌），换脸只能由本节拍承担。
   // （只扫手牌），换脸只能由本节拍承担。
   _transformBeat(payload, finish) {
     const id = payload?.card?.uniqueID ?? null;
@@ -1539,8 +1537,11 @@ export class BattleStage {
       durationMs: 110,
       ease: 'power1.in',
       onComplete: () => {
-        if (payload?.cardView) view.setCard(payload.cardView); // 谷底换脸（藏在闪光下）
-        this._transformBurst(id);
+        // 谷底起变换演出（charReveal 接管换脸——不再瞬时 setCard + 金爆，
+        // 金光粒子的职责由燃烧尾迹/白光承担）
+        if (payload?.cardView) {
+          playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
+        }
         this.animator.animate(id, { scale: s0 * 1.42 }, { // 过冲弹起（跃迁感）
           durationMs: 170,
           ease: 'back.out(2.2)',
@@ -1548,8 +1549,8 @@ export class BattleStage {
             this.animator.animate(id, { scale: s0 }, { // 回稳
               durationMs: 190,
               onComplete: () => {
-                // 新脸停留窗（纯延迟 tween）：给玩家读完新身份再走后续节拍
-                this.animator.animate(id, {}, { delayMs: 260, onComplete: finish });
+                // 新脸停留窗对齐演出全长：谷底起 820ms 的 charReveal 跑完才放后续节拍
+                this.animator.animate(id, {}, { delayMs: 460, onComplete: finish });
               },
             });
           },

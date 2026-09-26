@@ -77,7 +77,11 @@ export class CardObject extends THREE.Group {
     const data = this._altOn && this._cardData?.textAlt != null
       ? { ...this._cardData, text: this._cardData.textAlt, altFace: true }
       : this._cardData;
-    const { texture, hitRegions, width, height } = this._bakeFace(data);
+    this._setBakedFace(this._bakeFace(data));
+  }
+
+  // 纹理与 hit map 成对替换的唯一落点（§4.6 铁律）
+  _setBakedFace({ texture, hitRegions, width, height }) {
     const old = this._material.map;
     this._material.map = texture;
     this._material.needsUpdate = true;
@@ -85,6 +89,16 @@ export class CardObject extends THREE.Group {
     this._hitRegions = hitRegions || [];
     // hit map 用烘焙布局坐标（与牌面世界尺寸无关），uv 反算时按此尺寸还原
     this._layoutSize = { width: width || this.cardWidth, height: height || this.cardHeight };
+  }
+
+  /**
+   * 以预烘焙纹理换脸（变换演出用，fx/cardTransform.js）：新脸在演出开始时就烘好
+   * （叠层双纹理同屏渲染旧→新），落幕一刻经本方法成对替换，所有权移交牌面。
+   */
+  applyBakedFace(cardData, baked) {
+    this._cardData = cardData;
+    if (this._altOn && cardData?.textAlt == null) this._altOn = false; // 与 setCard 同口径
+    this._setBakedFace(baked);
   }
 
   get cardData() { return this._cardData || null; }
@@ -149,6 +163,7 @@ export class CardObject extends THREE.Group {
    */
   startBurn({ durationMs = 700, onBurnt = null } = {}) {
     if (this._burn) return;
+    this._cancelTransform();      // 焚毁接管牌面：在途变换演出掐死（预烘焙纹理就地销）
     this.fx.clearTransient(); // 焚毁接管牌面：熄灭盖纱/闪光/流光
     this._burnUniforms = {
       uBurn: { value: 0 },                 // 0=完好 → 1=燃尽
@@ -274,6 +289,12 @@ float bNoise(vec2 p) {
     col.needsUpdate = true;
   }
 
+  /** 焚毁/销毁前掐死在途变换演出（fx/cardTransform.js 挂的取消钩）。 */
+  _cancelTransform() {
+    this._transformCancel?.();
+    this._transformCancel = null;
+  }
+
   _spawnEmber(frontierY) {
     const i = this._emberFree.pop();
     if (i == null) return; // 池满静默丢弃
@@ -291,6 +312,7 @@ float bNoise(vec2 p) {
   }
 
   dispose() {
+    this._cancelTransform(); // 在途变换演出掐死（叠层/补间/预烘焙纹理一并收）
     this.fx.dispose();
     if (this._embers) {
       this.remove(this._embers);
