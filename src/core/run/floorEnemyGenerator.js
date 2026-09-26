@@ -61,7 +61,7 @@ const TEMPLATES = [
   { id: 'slimeBurst', name: '史莱姆爆发', cost: 5, minFloor: 3, maxFloor: 5, once: true, excl: ['slimeletBurst'],
     slots: [{ fixed: 'slimeletA' }, { fixed: 'slimeletA' }, { fixed: 'slimeletB' }, { fixed: 'slimeletB' }, { fixed: 'slime' }] },
   { id: 'mudFlat', name: '沼泽泥地', cost: 6, minFloor: 5, maxFloor: 9, once: true, excl: ['rotEye'],
-    slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'slime' }] },
+    slots: [{ fixed: 'mossBallC' }, { fixed: 'mossBallB' }, { fixed: 'slime' }] },
   { id: 'pester', name: '难缠麻烦', cost: 6, minFloor: 4, maxFloor: 5, once: true,
     slots: [{ fixed: 'hedgehog' }, { fixed: 'mossBallA' }, { fixed: 'pufferToadA' }] },
   { id: 'toadPool', name: '蛤蟆漩涡', cost: 7, minFloor: 4, maxFloor: 7, once: true, excl: ['greatToadPool'],
