@@ -21,17 +21,17 @@ registerAbility({
   },
 });
 
-// 火灵脉体系能力（FIRE_VEIN_CARDS §0，2026-09 定）：首次点亮火灵脉时自动授予，
-// 战斗开始获得 炎魔1（2026-09-22 用户定：移除烈焰亲和3——基础能力白给的燃烧免税
-// 额度让自焚代价形同虚设；烈焰亲和的获取收归精英/大师能力避火术/避焰决）。
+// 火灵脉体系能力（FIRE_VEIN_CARDS §0）：首次点亮火灵脉时自动授予，
+// 战斗开始获得烈焰亲和3（2026-09-22 用户定：由炎魔1改——基础能力给燃烧免税额度，
+// 让自焚件（急燃/可燃血液）的前期代价变得可承受；攻击附烧收归大师能力炎魔）。
 // 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅），
 // 不能照抄战意的直改写法。
 registerAbility({
   id: 'fireVein', name: '火灵脉',
-  description: '战斗开始时，获得炎魔1。',
+  description: '战斗开始时，获得烈焰亲和3。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameDemon', stacks: 1,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 3,
     }));
   },
 });
@@ -149,7 +149,7 @@ registerAbility({
   }],
 });
 
-// 大师 **炎魔**：战斗开始时炎魔1（与火灵脉基础能力的 1 层叠加）。
+// 大师 **炎魔**：战斗开始时炎魔1（火灵脉基础能力 2026-09-22 起改送烈焰亲和3，不叠）。
 registerAbility({
   id: 'flameDemonLord', requires: 'scorchVein', name: '炎魔', grade: 'master',
   description: '战斗开始时，获得炎魔1。',
@@ -360,7 +360,7 @@ registerAbility({
 // 进阶事件授予池（灵脉 2 级出精英、3 级出大师，大师 requires 前置精英）。
 // ============================================================================
 
-// ---- 获赠：木灵脉（战斗开始 再生2+荆棘1，对标火灵脉 炎魔1；火灵脉 2026-09-22 起不再送烈焰亲和）----
+// ---- 获赠：木灵脉（战斗开始 再生2+荆棘1，对标火灵脉 烈焰亲和3）----
 registerAbility({
   id: 'woodVein', name: '木灵脉',
   description: '战斗开始时，获得再生2与荆棘1。',

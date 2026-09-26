@@ -215,13 +215,20 @@ registerEnemy({
 // A/B 类（2026-09-22 用户定，头轮试玩反馈紧勒叠太快）：B 类紧勒晚一拍起步——第 2 拍
 // 才开始蔓延，给玩家一个手牌完整的首回合抢输出；同场 2 只苔球的编成一律 A/B 配合
 // （见 floorEnemyGenerator），单只编成用 A。
-function mossBallDef(id, delayedGrip) {
+// C 类（2026-09-22 用户定，双苔球+史莱姆开场 28 伤团灭复盘）：首拍纯防御（护盾+8，
+// 不攻击不蔓延），第 2 拍起才进入正常循环——把该编成的一只苔球换成 C 类，
+// T1 齐射 28→20 且首拍零紧勒。
+function mossBallDef(id, delayedGrip, openingGuard = false) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
     id, name: '腐苔球',
     createUnit: () => new Enemy({ defId: id, name: '腐苔球', maxHp: 27 }),
     act(actx) {
       const { unit, player } = actx;
+      if (openingGuard && unit.actionIndex === 0) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
+        return;
+      }
       if (!(delayedGrip && unit.actionIndex === 0)) {
         unit._grip = (unit._grip ?? 0) + 1;
         actx.kernel.submitInstruction(new AddEffectInstruction({
@@ -237,6 +244,9 @@ function mossBallDef(id, delayedGrip) {
       }
     },
     getIntention: (unit) => {
+      if (openingGuard && unit.actionIndex === 0) {
+        return { kinds: ['defend'], note: '蜷缩防御（下回合起正常行动）' };
+      }
       const gripsNow = !(delayedGrip && unit.actionIndex === 0);
       const attacking = unit.actionIndex % 2 === 0;
       return {
@@ -260,6 +270,7 @@ function mossBallDef(id, delayedGrip) {
 }
 mossBallDef('mossBallA', false); // A 类：每拍紧勒（含首拍）
 mossBallDef('mossBallB', true);  // B 类：首拍只打不缠，第 2 拍起每拍紧勒
+mossBallDef('mossBallC', false, true); // C 类：首拍纯防御（盾8），第 2 拍起正常循环
 
 // 鼓腹蟾：渐强威胁——鼓气 → 启动段 → 永远重击 18。放着不管会出事，但打它没有任何
 // 反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。

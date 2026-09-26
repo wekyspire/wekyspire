@@ -13,7 +13,8 @@
 //   │   │      Picker 二级查询返回 token 命中 → tooltip 协议与卡面热区同构）
 //   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
 //   └─ ring:    目标标注金环（平贴地板）
-// 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动。
+// 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动；
+// 行动姿态（攻击/防御/增强/削弱）走 _pose 通道，每帧与呼吸合成（见 setPose/update）。
 // 文本签名不变不重烘。
 // 状态绘制（hpBar 全家 + 护盾层）一律 depthTest:false + 显式 renderOrder(60+)：
 // 场景可遮蔽立牌（合理）但不可遮蔽状态（用户定）；卡牌 UI 是独立 pass 天然在其上。
@@ -211,6 +212,10 @@ export class UnitObject extends THREE.Group {
     this._signature = null;
     this._lightTint = new THREE.Color(0xffffff); // 场景灯光染色（sampleStandeeTint 逐帧供给）
     this._flashT = 0;                            // 受击闪红剩余窗口（染色不覆盖闪红）
+    // 姿态通道（行动演出：攻击前倾 / 防御蜷缩 / 增强拔起 / 削弱佝偻）——
+    // 战斗节拍经 setPose 逐帧写入，update 与呼吸合成后落到 standee（血条/意图条不动）；
+    // standee 底部锚定 → 蜷缩压向地面、前倾绕脚转，物理感与死亡倾倒同源
+    this._pose = { lean: 0, squash: 1, widen: 1 };
   }
 
   /** 立牌纹理挂载（异步到图后调用）：替换占位色块，按图片纵横比重排平面。 */
@@ -472,7 +477,10 @@ export class UnitObject extends THREE.Group {
     }
     if (this._dead) return;
     this._breathT += dt * 2.2;
-    this._standee.scale.y = 1 + 0.02 * Math.sin(this._breathT);
+    // 呼吸 × 姿态合成：squash/widen 是行动演出的压扁撑宽，lean 是绕脚前倾
+    this._standee.scale.y = (1 + 0.02 * Math.sin(this._breathT)) * this._pose.squash;
+    this._standee.scale.x = this._pose.widen;
+    this._standee.rotation.z = this._pose.lean;
   }
 
   /** 场景灯光染色（有立牌图才生效；闪红窗口内只记录不覆盖）。 */
@@ -485,6 +493,11 @@ export class UnitObject extends THREE.Group {
     this._flashT = 0.28;
     this._body.material.color.set(color);
   }
+
+  /** 姿态通道写入（行动演出节拍驱动；缺省字段保持现值）。 */
+  setPose(patch) { Object.assign(this._pose, patch); }
+  /** 姿态归零：节拍收尾/异常兜底——同步假 tween 路径 onUpdate 不放逐帧，靠它硬化终态。 */
+  resetPose() { this._pose.lean = 0; this._pose.squash = 1; this._pose.widen = 1; }
 
   restoreColor() {
     this._flashT = 0;

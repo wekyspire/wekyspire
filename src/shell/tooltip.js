@@ -105,26 +105,23 @@ function intentionModel({ intention, unitName }) {
   return { title: unitName ? `${unitName}的意图` : '意图', body: intentionSentence(intention) };
 }
 
-// 意图释义短句：kinds 最多两两组合 → 「下回合将…，…」；攻击附 N×M（多发带总量），
-// 未知意图单独成句。文案与 UnitObject 意图条图标一一对应（剑/盾/升/降/星光/?）。
+// 意图释义：设计稿（ENEMIES_1.md「意图预告」列）的简略口径——词元碎片逗号相接，
+// 不写散文、不带 note 补充说明（「藤鞭：中毒2（春风……）」这类详情只在 headless
+// 文本界面保留，UI 不给）。与 UnitObject 意图条图标一一对应（剑/盾/升/降/星光/?）。
 const INTENTION_ACTS = Object.freeze({
-  defend: '获得护盾',
-  buff: '强化自身',
-  debuff: '赋予负面效果',
-  summon: '召唤援军',
-  stun: '晕眩（不行动）',
+  defend: '护盾',
+  buff: '强化',
+  debuff: '削弱',
+  summon: '召唤',
+  stun: '晕眩',
 });
 
 function intentionSentence(intention) {
   const kinds = (intention?.kinds?.length ? intention.kinds : ['unknown']).slice(0, 2);
-  const note = intention?.note ? `；${intention.note}` : ''; // 行动逻辑补充说明（固定索敌规则等）
-  if (kinds.includes('unknown')) return `下回合行动未知${note}`;
-  const parts = kinds.map((k) => {
+  if (kinds.includes('unknown')) return '未知';
+  return kinds.map((k) => {
     if (k !== 'attack') return INTENTION_ACTS[k] ?? '行动';
-    if (intention.damage == null) return '进行攻击';
-    return intention.hits > 1
-      ? `造成 ${intention.hits}×${intention.damage}（共 ${intention.hits * intention.damage}）点伤害`
-      : `造成 ${intention.damage} 点伤害`;
-  });
-  return `下回合将${parts.join('，')}${note}`;
+    if (intention.damage == null) return '攻击';
+    return intention.hits > 1 ? `攻击${intention.damage}×${intention.hits}` : `攻击${intention.damage}`;
+  }).join('，');
 }

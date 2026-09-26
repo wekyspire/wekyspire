@@ -159,6 +159,14 @@ export class PreBattleInstruction extends BattleInstruction {
         owner: 'core:manaLedger',
       });
 
+      // 初始意图预览**不能在这里算**——上方 onBattleStart 提交的效果（如静电毛球的
+      // 电动）还是待执行子指令，此刻读面板会漏（T1 意图曾显示「友军0名：攻击+0」）。
+      // 挪到 stage 1：子指令落地后再算，所见即所算。
+      ctx.presenter?.battleStart?.({ battleState, runState });
+      return false;
+    }
+    if (this._stage === 1) {
+      const { battleState } = ctx;
       // 初始意图预览（getIntention 第二参传 battleState：读场面状态的意图要用）；
       // 盟友（瑞米等）同规则——AIUnit 意图不是敌方专利
       for (const e of battleState.enemies) {
@@ -169,11 +177,6 @@ export class PreBattleInstruction extends BattleInstruction {
         const def = getAllyDefinition(a.defId);
         a.intention = def.getIntention ? def.getIntention(a, battleState) : { kinds: ['unknown'] };
       }
-
-      ctx.presenter?.battleStart?.({ battleState, runState });
-      return false;
-    }
-    if (this._stage === 1) {
       ctx.kernel.submitInstruction(
         new DrawCardsInstruction({ count: ctx.battleState.config.initialDraw }), this);
       return false;

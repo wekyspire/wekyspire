@@ -49,7 +49,11 @@ function parseMarkdown(md) {
 async function ensureLoaded() {
   loading ??= (async () => {
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}changelog.md`);
+      // 缓存双保险（2026-09 用户报：版本更新后弹层仍显示旧日志——Apache 对 public/ 静态
+      // 文件无 no-cache 头，浏览器启发式缓存会拿旧副本）：
+      //   · URL 挂构建版本号——每次发版换新地址，旧缓存自然旁路；
+      //   · cache: 'no-store'——同版本内改日志（热修补丁）也不再吃缓存。文件很小，全量下载无负担。
+      const res = await fetch(`${import.meta.env.BASE_URL}changelog.md?v=${APP_VERSION}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       contentHtml.value = parseMarkdown(await res.text());
     } catch (e) {

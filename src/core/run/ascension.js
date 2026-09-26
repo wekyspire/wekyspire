@@ -261,11 +261,15 @@ export function chooseAscension(run, dimension = null) {
 
   run.player.leino[dimension] += 1;
   // 首次 0→1：获赠体系基石卡与体系能力（FIRE_VEIN_CARDS §0）→ 开种子包（九选三），
-  // 选定后再走能力授予/收尾
+  // 选定后再走能力授予/收尾。路线开局 2026-09-22 起灵脉等级也从 0 起步——起始牌组
+  // 已含本维度基石卡，获赠表去重，只补能力（若路线没授）与种子包，不重复直发卡。
   if (run.player.leino[dimension] === 1) {
     const grant = FIRST_ASCENSION_GRANT[dimension];
     if (grant) {
-      for (const defId of grant.cards) run.player.deck.push(createSkillRuntime(defId));
+      const owned = new Set(run.player.deck.map(c => c.defId));
+      for (const defId of grant.cards) {
+        if (!owned.has(defId)) run.player.deck.push(createSkillRuntime(defId));
+      }
       if (grant.ability && !run.player.abilities.includes(grant.ability)) {
         run.player.abilities.push(grant.ability);
       }
