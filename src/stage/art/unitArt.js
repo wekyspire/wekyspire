@@ -6,6 +6,11 @@
 // 跨舞台/跨战斗复用已解码图（各自 new 会导致头像等素材重复加载与解码）。
 
 import { ArtImageCache, IMG_EXT_RE, indexArtUrls } from './imageCache.js';
+import { PLAYER_SWORD_TIERS, playerSwordVariant } from './playerSwordArt.js';
+
+// 大剑体系映射的纯逻辑部分在 playerSwordArt.js（不依赖 import.meta.glob，node 可测）；
+// 此处 re-export 保持消费方（BattleStage/preload）只认 unitArt 一个入口。
+export { PLAYER_SWORD_TIERS, playerSwordVariant };
 //
 // 视角约定（STAGE_DESIGN §0 用户手绘稿）：友军（玩家/队友）背对屏幕，敌军正对屏幕。
 //   unit_xxx.{webp,png}      = 舞台用图（友军=背视图，敌军=正视图）
@@ -58,6 +63,13 @@ const UNIT_ART_FILES = Object.freeze({
 // 所以两张形态图必须**纵向同高**（横向可以差很多，火翼张开属正常）
 const UNIT_ART_VARIANTS = Object.freeze({
   'pyro:p2': 'unit_pyro_p2.png',
+  // 玩家大剑体系（2026-09-22）：佩戴大剑遗物时，骑士立绘随牌堆中斩链最高链位换图
+  // （五档：铁剑 → 微光 → 灼热 → 炽烈 → 白金）；映射见 playerSwordArt.js
+  'player:sword1': 'unit_player_sword1.png',
+  'player:sword3': 'unit_player_sword3.png',
+  'player:sword6': 'unit_player_sword6.png',
+  'player:sword7': 'unit_player_sword7.png',
+  'player:sword8': 'unit_player_sword8.png',
 });
 
 // 立牌相对高度系数（基准身高 26 世界单位 × baseScale）：
@@ -107,8 +119,14 @@ export function unitHeightFactor(defId, side) {
 export class UnitArtCache extends ArtImageCache {
   /** @param {string|null} variant 形态变体（如 'p2'）；未登记的组合回落到本图 */
   resolveUrl(defId, side, variant = null) {
-    const file = variant ? (UNIT_ART_VARIANTS[`${defId}:${variant}`] ?? UNIT_ART_FILES[defId])
-      : (side === 'player' ? 'unit_player.png' : UNIT_ART_FILES[defId]);
+    if (variant) {
+      // 玩家无 defId（null）——变体 key 用 'player:' 前缀（大剑体系立绘档）
+      const key = side === 'player' ? `player:${variant}` : `${defId}:${variant}`;
+      const file = UNIT_ART_VARIANTS[key]
+        ?? (side === 'player' ? 'unit_player.png' : UNIT_ART_FILES[defId]);
+      return file ? (ART_URLS[file.replace(IMG_EXT_RE, '')] ?? null) : null;
+    }
+    const file = side === 'player' ? 'unit_player.png' : UNIT_ART_FILES[defId];
     return file ? (ART_URLS[file.replace(IMG_EXT_RE, '')] ?? null) : null;
   }
 

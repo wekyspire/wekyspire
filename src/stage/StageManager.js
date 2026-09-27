@@ -1,4 +1,8 @@
 // StageManager（§4.1）：单全屏 canvas 的 three.js 舞台总管。
+// 渲染器 = WebGPURenderer（2026-09-27 全量迁移，quest_prompts/WEBGPU_MIGRATION.md）：
+// 默认 WebGPU 后端；`?forceWebGL=1` 强制 WebGL2 后端跑同一套 TSL（迁移期验收对照口，
+// 生产版随 WebGL 兼容逻辑一并撤除）。**不支持 WebGPU 的设备由加载门卡死**（App.vue
+// 预检 probeWebGpuAdapter），本层不做回退。attach 因此是 async（renderer.init 是异步的）。
 // 世界坐标约定：z=0 平面上屏幕高度 ≈ 100 世界单位，y 向上，x 向右。
 // 布局一律用世界坐标计算；resize 只改相机视锥，不动任何场景对象。
 // 相机选小 FOV PerspectiveCamera + 斜方向俯视（用户定）：
@@ -9,9 +13,12 @@
 // 显示假设：游玩分辨率固定 16:9（1920x1080，z=0 世界宽 ≈177.8），不做其它比例适配。
 
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
 import { CameraDirector } from './fx/camera.js';
+import { TSL_READY, forceWebGLBackend } from './fx/tslGate.js';
+import { flushDeferredDisposals } from './deferredDispose.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
@@ -44,12 +51,13 @@ export class StageManager {
   /**
    * @param {object} options
    *   worldHeight: number = 100
-   *   createRenderer: ({canvas}) => renderer-like   缺省 new THREE.WebGLRenderer（浏览器）；
-   *     单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
+   *   createRenderer: ({canvas}) => renderer-like   缺省 WebGPURenderer（后端按
+   *     ?forceWebGL=1 切换）；单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
    */
   constructor(options = {}) {
     this._worldHeight = options.worldHeight || WORLD_HEIGHT;
-    this._createRenderer = options.createRenderer || (({ canvas }) => new THREE.WebGLRenderer({ canvas, antialias: true }));
+    this._createRenderer = options.createRenderer || (({ canvas }) =>
+      new WebGPURenderer({ canvas, antialias: true, forceWebGL: forceWebGLBackend() }));
     this._renderer = null;
     this._camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
     // 相机距离：让 z=0 平面的可视高恰好 = worldHeight（与旧正交约定无缝衔接），
@@ -113,15 +121,21 @@ export class StageManager {
   get worldWidth() { return this._viewHeight > 0 ? this._worldHeight * (this._viewWidth / this._viewHeight) : 0; }
   get viewSize() { return { width: this._viewWidth, height: this._viewHeight }; }
 
-  attach(canvas) {
+  /**
+   * 绑定画布并初始化渲染器（async——WebGPURenderer.init 是异步的：拿 adapter/device、
+   * 建管线缓存）。假 renderer（单测）无 init，直接跳过。
+   */
+  async attach(canvas) {
     this._renderer = this._createRenderer({ canvas });
+    await this._renderer?.init?.();
     this._renderer?.setPixelRatio?.(this._devicePixelRatio());
-    // 色调映射（直渲路径：塔楼层/无 composer 回退）：与体积光 composer 的合成 shader
-    // 用同一条曲线（Khronos PBR Neutral，保色相）——否则彩灯/火光高光会被逐通道裁成白团。
-    // 渲染进 RT 时 three 不套 tone mapping（getParameters 按 renderTarget 判定），
-    // 故 composer 路径不会双重映射，两处各管一条路。
-    applyToneMapping(this._renderer, null, DEFAULT_TONE_MODE, 1);
-    // 阴影贴图（月光穿窗投影用；假 renderer 无 shadowMap，单测跳过）
+    // 色调映射（flavor A：全帧唯一落点 = 渲染器帧末输出 blit）——所有渲染路径
+    // （直渲 / 各 composer 链）终段都只出线性 HDR，tone+sRGB 由 blit 统一施加一次；
+    // 选 Khronos PBR Neutral：保色相，只在接近过曝时压高光（不动既有布光配比）。
+    // 纪律：全项目任何人不得再临时改 renderer.toneMapping（passes.js 头注铁律）。
+    applyToneMapping(this._renderer, DEFAULT_TONE_MODE, 1);
+    // 阴影贴图（月光穿窗投影用）：WebGPURenderer 无 renderer.shadowMap 门面
+    // （节点体系里阴影随灯光声明自动处理），此分支只对旧 WebGLRenderer 假件生效
     if (this._renderer.shadowMap) {
       this._renderer.shadowMap.enabled = true;
       this._renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft 在新版 three 已弃用（自动回退 PCF）
@@ -237,9 +251,10 @@ export class StageManager {
   start() {
     if (this._running || !this._renderer) return;
     this._running = true;
-    this._clock = new THREE.Clock();
+    this._clock = new THREE.Timer(); // Clock 在 webgpu 包已弃用（Console 刷警告）
     const tick = () => {
       if (!this._running) return;
+      this._clock.update();
       const dt = Math.min(this._clock.getDelta(), 0.1); // 掉帧保护：单帧最多推进 100ms
       this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
@@ -258,13 +273,13 @@ export class StageManager {
         // 牌桌 UI 的世界坐标在地板平面之下（y<-30），同 pass 会被地板 z-test 裁掉；
         // UI 本质是前景覆盖层，与 3D 世界不做深度交互。
         // 后处理开：uiScene → RT + bloom 链，premultiplied 盖回屏幕（post/uiComposer）；
-        // 后处理关 / 假 renderer（单测无 setRenderTarget）：维持直渲旧路径。
+        // 后处理关 / 假 renderer（单测无 setRenderTarget）/ uiPost 未迁完（tslGate）：直渲。
         const ui = this._stage.uiScene;
         if (ui) {
           const r = this._renderer;
           const prevAutoClear = r.autoClear;
           r.autoClear = false;
-          if (this._uiPostEnabled && typeof r.setRenderTarget === 'function') {
+          if (this._uiPostEnabled && TSL_READY.uiPost && typeof r.setRenderTarget === 'function') {
             if (!this._uiComposer) {
               this._uiComposer = createUiComposer();
               this._uiComposer.resize(this._viewWidth || 2, this._viewHeight || 2, this._devicePixelRatio());
@@ -277,6 +292,7 @@ export class StageManager {
           r.autoClear = prevAutoClear;
         }
       }
+      flushDeferredDisposals(); // 换图旧纹理的延迟销毁（在飞 submit 已出队，安全落刀）
       this._rafId = requestAnimationFrame(tick);
     };
     this._rafId = requestAnimationFrame(tick);

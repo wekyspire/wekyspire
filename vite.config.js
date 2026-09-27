@@ -73,6 +73,10 @@ export default defineConfig(({mode}) => {
       port: 5177
     },
     build: {
+      // 目标环境 es2022（2026-09-27 WebGPU 迁移随行）：游戏本就只跑支持 WebGPU 的新设备
+      // （加载门预检卡死老旧端），es2022 的顶层 await（Chrome 94+/Safari 16.4+）远低于
+      // WebGPU 门槛——TSL/compute 迁移期的 async 装配模式不再受 esbuild target 限制。
+      target: 'es2022',
       // 入口：正式壳 index.html + 观战页 watch.html（连 headless 直播中继，
       // 见 AGENTS.md「headless 试玩与直播观战」）+ 休息阶段面板陈列页 uiGallery.html
       // （Three 面板的浏览器视觉门，与 propGallery/roomGallery 同范式）。

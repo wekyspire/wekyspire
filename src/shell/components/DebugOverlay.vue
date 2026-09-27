@@ -70,7 +70,7 @@ const TABS = [
 ];
 
 // ---- 内容清单（一次算好；注册表是静态的）----
-const TIER_ORDER = ['D', 'C', 'B', 'A', 'S', 'Z'];
+const TIER_ORDER = ['D', 'C', 'B', 'A', 'S', 'X', 'Z'];
 const cardsByTier = computed(() => {
   const out = {};
   for (const def of allSkills()) {

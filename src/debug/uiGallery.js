@@ -20,7 +20,7 @@ import { prepSnapshot, rewardSnapshot, ascensionSnapshot, roomSnapshot } from '.
 import { grantRelic, equipRelic, unequipRelic, prepUseRelic } from '../core/run/prep.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
 import { chooseRewardPack, chooseSkillReward } from '../core/run/rewards.js';
-import { chooseAscension, chooseSeedCards, rerollSeedOffering } from '../core/run/ascension.js';
+import { chooseAscension } from '../core/run/ascension.js';
 import { trainUpgrade, trainUpgradeStart, trainDrawChoices, trainDraw, beginTraining } from '../core/run/rooms/training.js';
 import { campRest, campRecoverRemi } from '../core/run/rooms/camp.js';
 import {
@@ -71,9 +71,8 @@ function buildRun() {
     roomUi = { slot: { anim: null, lastSpin: null } };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
-    // 进阶事件：进 ascension 阶段；?offering=1 直接走到种子包（火灵脉首次 0→1）
+    // 进阶事件：进 ascension 阶段（2026-09-22 种子包删除后只剩维度抉择面板）
     r.gameStage = 'ascension';
-    if (opt('offering', '0') === '1') chooseAscension(r, 'fire');
   } else if (PANEL === 'reward') {
     // 战后奖励：赢一场即进 reward（初始只解锁体修包 → 核心自动开包，直接进三选一）
     enterBattle(r);
@@ -91,7 +90,7 @@ run = buildRun();
 
 // ---- 舞台 ----
 const stageManager = new StageManager();
-stageManager.attach(canvas);
+await stageManager.attach(canvas); // async：WebGPURenderer.init 异步
 const mapStage = new MapStage({});
 mapStage.setFloor(run.floor, run.totalFloors);
 stageManager.setStage(mapStage);
@@ -158,16 +157,15 @@ mapStage.setPanelIntentHandler((intent) => {
       else if (a === 'leaveEvent') completeRoom(run);
       if (run.gameStage !== 'room') run = buildRun(); // 离房 → 重建样本
     }
-    else if (a === 'chooseAscensionDimension') chooseAscension(run, intent.dimension);
-    else if (a === 'chooseSeedCards') chooseSeedCards(run, intent.defIds);
-    else if (a === 'rerollSeedOffering') rerollSeedOffering(run);
+    else if (a === 'chooseAscensionDimension') {
+      chooseAscension(run, intent.dimension);
+      if (run.gameStage !== 'ascension') run = buildRun(); // 选完即推层 → 重建样本
+    }
     else if (a === 'claimReward') {
       chooseSkillReward(run, intent.defId ?? null);
       completeRewards(run);
       // 领取即离房：重建一份 reward 样本，面板留在屏幕上继续可点
       if (PANEL === 'reward' && run.gameStage !== 'reward') run = buildRun();
-    } else if (PANEL === 'ascension' && a === 'chooseSeedCards') {
-      if (run.gameStage !== 'ascension') run = buildRun(); // 选完即离房 → 重建样本
     }
   } catch (e) {
     intentLine.textContent += `  ✗ ${e.message}`;

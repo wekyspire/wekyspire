@@ -4,6 +4,7 @@
 // 纯 dev 工具，不进构建、不写测试。打开：npm run dev 后访问 /cloudGallery.html。
 
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
 import { buildTowerWilderness } from '../stage/scenes/towerWilderness.js';
 
 const params = new URLSearchParams(location.search);
@@ -12,7 +13,8 @@ const canvas = document.createElement('canvas');
 canvas.id = 'cloud-canvas';
 document.body.appendChild(canvas);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new WebGPURenderer({ canvas, antialias: true });
+await renderer.init(); // WebGPURenderer 异步初始化（TLA，es2022）
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();

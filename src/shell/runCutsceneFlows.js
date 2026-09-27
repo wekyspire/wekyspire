@@ -7,16 +7,16 @@
 // 生命周期动作在构造之后才初始化（swapRoomToMap/exitSceneAfterCutscene 定义在下方），
 // 箭头闭包捕获词法绑定，运行期才取值，初始化顺序安全。
 // lifecycle 是 runController 注入的房间/舞台生命周期动作（黑幕中点的阶段迁移与换台）。
-// 模块内的 core 调用（eventView/resolveEvent/chooseAscension/chooseSeedCards/rerollSeedOffering）
+// 模块内的 core 调用（eventView/resolveEvent/chooseAscension/chooseAscensionAbility）
 // 随函数一起搬进来。
 
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import {
-  chooseAscension, LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
-  chooseSeedCards as chooseSeedCardsCore, rerollSeedOffering as rerollSeedOfferingCore,
+  chooseAscension, LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
   chooseAscensionAbility,
 } from '../core/run/ascension.js';
 import { getAbilityDefinition } from '../core/abilities/registry.js';
+import { getSkillDefinition } from '../core/skills/registry.js';
 import { DIM_META } from '../stage/panels/index.js';
 import { eventArtUrlNamed } from './overlay/eventArt.js';
 
@@ -110,14 +110,26 @@ export function createRunCutsceneFlows(ctx) {
     }),
     { id: 'skip', label: '跳过（体修等阶 +1，生命上限 +3，可删一张卡）', hint: '不选灵脉，精进体修' },
   ];
-  /** 选择之后的结果页（一句话确认，数字读实时 run）。 */
-  const ascensionResultPage = (id) => (id === 'skip'
-    ? { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等阶 ${run.player.bodyLevel ?? 0}，生命上限 +3。此刻起，你还可以从牌库中删去一张卡。）` }
-    : {
-      speaker: '旁白',
-      text: `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
-        + `生命回复 ${ASCENSION_PLACEHOLDER.healAmount} 点，魏启上限 +${ASCENSION_PLACEHOLDER.manaGain}。）`,
-    });
+  /** 选择之后的结果页（一句话确认，数字读实时 run；首次 0→1 顺带宣告获赠内容）。 */
+  const ascensionResultPage = (id) => {
+    if (id === 'skip') {
+      return { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等阶 ${run.player.bodyLevel ?? 0}，生命上限 +3。此刻起，你还可以从牌库中删去一张卡。）` };
+    }
+    let text = `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
+      + `生命回复 ${ASCENSION_PLACEHOLDER.healAmount} 点，魏启上限 +${ASCENSION_PLACEHOLDER.manaGain}。`;
+    // 首次点亮该维度：宣告体系赠礼（基石卡直入牌组 + 体系能力；2026-09-22 种子包删除后
+    // 获赠展示挪到此处——原来是种子包面板的副标题）
+    if (run.player.leino?.[id] === 1) {
+      const g = FIRST_ASCENSION_GRANT[id];
+      if (g) {
+        const names = (g.cards ?? []).map(cid => getSkillDefinition(cid)?.name ?? cid).join('、');
+        const abilityName = g.ability ? (getAbilityDefinition(g.ability)?.name ?? g.ability) : null;
+        text += `初次点亮——${names} 直入牌组`
+          + (abilityName ? `，并获得体系能力「${abilityName}」。` : '。');
+      }
+    }
+    return { speaker: '旁白', text: text + '）' };
+  };
 
   /**
    * 能力授予幕间（精英/大师能力，2026-09-13 实装）：进阶结算挂起 ascensionOffer 时播。
@@ -186,7 +198,7 @@ export function createRunCutsceneFlows(ctx) {
             onChoice: (id) => {
               picked = id;
               chooseAscension(run, id === 'skip' ? null : id);   // 同步结算（恢复/魏启上限/首解锁赠礼）
-              ctx.notify();   // 种子包挂起时把九选三面板推到幕后就位
+              ctx.notify();
             },
           },
         ],
@@ -194,7 +206,6 @@ export function createRunCutsceneFlows(ctx) {
       if (!picked) return false;                      // 未选择（异常路径）：留在 ascension 阶段
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
       if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
-      if (run.cardOffering) return true;              // 九选三面板收尾（chooseSeedCards 里再切幕）
       // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
       await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
       // 跳过进阶的删卡反哺（用户定 2026-09-13）：揭幕后就地开全屏删卡界面（title「删一张卡」）。
@@ -214,12 +225,12 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      if (!run.cardOffering) await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
+      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
     })();
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
   function skipAscension() {
-    if (run.gameStage !== 'ascension' || run.cardOffering) return;
+    if (run.gameStage !== 'ascension') return;
     chooseAscension(run, null);
     ctx.notify();
     void (async () => {
@@ -228,33 +239,14 @@ export function createRunCutsceneFlows(ctx) {
     })();
   }
 
-  // 种子包：九选三 + 一次刷新（首次 0→1 时挂起）；确认后进阶结束 → 切幕回塔楼
-  // （选定后 proceedAfterLevelUp 可能挂起能力授予 → 先播授予幕间再切幕）
-  function chooseSeedCards(defIds) {
-    if (run.gameStage !== 'ascension' || !run.cardOffering) return;
-    chooseSeedCardsCore(run, defIds);
-    ctx.notify();
-    void (async () => {
-      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
-    })();
-  }
-  function rerollSeedOffering() {
-    if (run.gameStage !== 'ascension' || !run.cardOffering) return;
-    rerollSeedOfferingCore(run);
-    ctx.notify();
-  }
-
   return {
     playEventScene, triggerEvent, leaveEvent,
-    playAscensionScene, chooseAscensionDimension, skipAscension, chooseSeedCards, rerollSeedOffering,
+    playAscensionScene, chooseAscensionDimension, skipAscension,
     intents: {
       triggerEvent: () => triggerEvent(),
       leaveEvent: () => leaveEvent(),
       chooseAscensionDimension: (i) => chooseAscensionDimension(i.dimension),
       skipAscension: () => skipAscension(),
-      chooseSeedCards: (i) => chooseSeedCards(i.defIds),
-      rerollSeedOffering: () => rerollSeedOffering(),
     },
   };
 }

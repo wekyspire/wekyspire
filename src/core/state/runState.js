@@ -48,7 +48,6 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     shopPending: null,           // 买到即开的待选 { kind:'pack', packId, choices } | { kind:'relic', rarity, choices }（选完才回房）
     shopAppleBought: false,      // 售货机的苹果全流程仅一件（故事模式）
     ascensionOffer: null,        // 进阶事件待授予能力候选（§5.3；占位恒为空）
-    cardOffering: null,          // 种子包待选（首次点亮灵脉：九选三，§5.3 追加）
     commonPity: 0,               // 通用卡注入保底计数（每 N 次开包必出一次）
     player: p,
     remi: {

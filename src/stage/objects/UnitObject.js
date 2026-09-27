@@ -20,8 +20,10 @@
 // 场景可遮蔽立牌（合理）但不可遮蔽状态（用户定）；卡牌 UI 是独立 pass 天然在其上。
 
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
+import { deferDisposeTexture } from '../deferredDispose.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -103,7 +105,7 @@ export class UnitObject extends THREE.Group {
       new THREE.PlaneGeometry(w0, standeeHeight),
       // 二值 mask（alphaTest discard），不做 semi-transparency：
       // 全透明像素也写深度会污染深度缓冲（体积光 RT 深度被立牌矩形截断、后方物体被误挡）
-      new THREE.MeshBasicMaterial({ color: SIDE_COLORS[side] ?? 0x888888, alphaTest: 0.5, fog: false }),
+      new MeshBasicNodeMaterial({ color: SIDE_COLORS[side] ?? 0x888888, alphaTest: 0.5, fog: false }),
     );
     this._body.name = 'body';
     this._body.position.y = standeeHeight / 2;
@@ -237,7 +239,8 @@ export class UnitObject extends THREE.Group {
     this._body.material.map = texture;
     this._body.material.color.set(0xffffff);
     this._body.material.needsUpdate = true;
-    old?.dispose?.();
+    this._fxLayer?.body?.rebind?.(); // L0 着色链在立绘落地后建（旧 USE_MAP 变体重编的同位时机）
+    deferDisposeTexture(old);
     this._body.geometry.dispose();
     this._body.geometry = new THREE.PlaneGeometry(this._standeeHeight * aspect, this._standeeHeight);
     this._groundRadius = this._standeeHeight * aspect * 0.5;
@@ -302,7 +305,7 @@ export class UnitObject extends THREE.Group {
     const old = this._labelMaterial.map;
     this._labelMaterial.map = texture;
     this._labelMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
     const w = width / this._ppw;
     const h = height / this._ppw;
     this._label.geometry.dispose();
@@ -362,7 +365,7 @@ export class UnitObject extends THREE.Group {
     const old = this._intentionMaterial.map;
     this._intentionMaterial.map = texture;
     this._intentionMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
     const w = width / this._ppw;
     const h = height / this._ppw;
     this._intention.geometry.dispose();
@@ -386,7 +389,7 @@ export class UnitObject extends THREE.Group {
     const old = this._shieldLabelMaterial.map;
     this._shieldLabelMaterial.map = texture;
     this._shieldLabelMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
     const w = width / this._ppw;
     const h = height / this._ppw;
     this._shieldLabel.geometry.dispose();

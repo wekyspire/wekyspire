@@ -10,7 +10,7 @@ import {
   createRun, enterBattle, createRunBattle, finishBattle, completeRewards, completeRoom,
 } from './runFlow.js';
 import { chooseSkillReward, chooseRewardPack, isRewardsClaimed } from './rewards.js';
-import { chooseAscension, chooseAscensionAbility, chooseSeedCards, SEED_OFFERING } from './ascension.js';
+import { chooseAscension, chooseAscensionAbility } from './ascension.js';
 import { upgradableCards, beginTraining, trainDrawChoices, trainDraw, trainUpgrade, trainUpgradeStart, trainUpgradeModes } from './rooms/training.js';
 import { campOptions, campRest, campRecoverRemi } from './rooms/camp.js';
 import { getSkillDefinition } from '../skills/registry.js';
@@ -133,10 +133,6 @@ export class RunDriver {
       case 'ascension':
         this.onAscension?.(this.run);
         chooseAscension(this.run, 'fire'); // 缺省加火灵脉（占位）
-        if (this.run.cardOffering) {
-          // 种子包：缺省取候选前三张（确定性，供整局跑通）
-          chooseSeedCards(this.run, this.run.cardOffering.cards.slice(0, SEED_OFFERING.picks));
-        }
         if (this.run.ascensionOffer) {
           chooseAscensionAbility(this.run, this.run.ascensionOffer[0] ?? null);
         }

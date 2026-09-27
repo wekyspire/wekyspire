@@ -171,13 +171,20 @@ export class EnemyTurnInstruction extends BattleInstruction {
     switch (this._stage) {
       case 0:
         ctx.battleState.turn.side = 'enemy';
+        // 行动者快照在回合开始效果**之前**取（2026-09-27 用户定）：EnemyTurnStart
+        // 的订阅链会复活单位（腐败根须 reviveKit）——刚复活的敌人不得卷入本回合
+        // 行动（与召唤尾插同语义：本回合出现的单位下回合起参战）。
+        this._actors = aliveEnemies(ctx.battleState);
         ctx.kernel.submitInstruction(new EnemyTurnStartInstruction(), this);
         return false;
       case 1:
-        for (const e of aliveEnemies(ctx.battleState)) {
+        // 快照里的单位此刻可能已死（回合开始效果的极端情况）——行动前再验活
+        for (const e of this._actors) {
+          if (e.isDead()) continue;
           ctx.kernel.submitInstruction(
             new AIActInstruction({ unit: e, resolveDef: getEnemyDefinition }), this);
         }
+        this._actors = null;
         return false;
       case 2:
         // 下回合意图预算：敌我 AI 单位同刷（盟友行动在玩家回合 P7，此处一并预告）。

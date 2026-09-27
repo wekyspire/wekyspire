@@ -1,41 +1,21 @@
-// uiScene 后处理 composer（2026-09-26 结构大更新 Phase 0）：
+// uiScene 后处理 composer（TSL 版，W2 2026-09-27）：
 // 卡牌/按钮/面板/特写从「直渲屏幕」升级为「RT + bloom 链」——
-//   uiScene → HalfFloat RT（MSAA×4、透明底）→ bloom 三段（阈值同世界链 1.45）
-//   → 终段 tone map + bloom 加算 + sRGB，premultiplied 合成盖回世界之上。
-// 成立前提 = passes.js 头注释的两条铁律：
-//   ① 终段 premultiplied 合成（three 法线混合在 RT 里留下的 rgb 本就是预乘色、
-//     alpha 是真覆盖率——与直渲逐像素等价）；
-//   ② uiScene 加法发光件一律 additiveLight()（rgb 加算照旧、alpha 不占地），
-//     否则光斑 alpha 会在 RT 里累成覆盖率，合成时把背后的世界挡掉。
-// 既有受益件：CardFxLayer 咏唱流光的 HDR 输出（峰值 ~1.9）自 09-13 起就在等这条链
-// （直渲期被 tone map 压掉，从未真 bloom）；此后新发光 UI 按 HDR 约定写即可。
+//   uiScene → HalfFloat RT（透明底）→ bloom 三段（阈值同世界链 1.45）
+//   → 终段 bloom 加算直出**线性 HDR**，premultiplied 合成进帧缓冲。
+// tone map + sRGB 统一由渲染器帧末输出 blit 施加（flavor A，passes.js 头注
+// 「输出变换铁律」——本 composer 不碰 renderer.toneMapping）；帧末 blit 对
+// 「世界 + UI」的线性叠加结果一次性映射，卡牌叠亮背景处的观感与旧「各自 tone
+// 后混合」略有差别（物理上更正确，2026-09-27 用户定）。
+// 成立前提 = passes.js 头注释的两条铁律（premultiplied 终段 + additiveLight 约定）。
+// 既有受益件：CardFxLayer 咏唱流光的 HDR 输出（峰值 ~1.9）自 09-13 起就在等这条链。
 import * as THREE from 'three';
+import { uniform, texture } from 'three/tsl';
 import {
-  GLSL_TONE_LIB, TONE_MODES,
+  tslFinalUi,
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from './passes.js';
 import { createBloomChain } from './bloomChain.js';
 import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
-
-// UI 终段：与世界链 FRAG_FINAL 同曲线，唯一差别 = alpha 透传（tColor 是真覆盖率，
-// 由调用侧以 premultiplied 混合盖回屏幕）；bloom 纯加算——a=0 处即溢出剪影的光晕。
-const FRAG_UI_FINAL = /* glsl */`
-  precision highp float;
-  varying vec2 vUv;
-  uniform sampler2D tColor;
-  uniform sampler2D tBloom;
-  uniform float uBloom;
-  uniform float uExposure;
-  uniform int uTone;
-  ${GLSL_TONE_LIB}
-
-  void main() {
-    vec4 src = texture2D(tColor, vUv);
-    vec3 c = src.rgb + texture2D(tBloom, vUv).rgb * uBloom;
-    c = applyTone(c, uTone, uExposure);
-    gl_FragColor = vec4(linearToSrgb(c), src.a);
-  }
-`;
 
 /**
  * 建 uiScene composer。
@@ -48,20 +28,21 @@ export function createUiComposer() {
   const bloomParams = { threshold: 1.45, knee: 0.35, strength: 0.5, radius: 1.4 };
   const rt = new THREE.WebGLRenderTarget(2, 2, {
     type: THREE.HalfFloatType,
-    samples: 4, // MSAA：卡边/文字边缘不进 bloom 也要 AA（直渲期吃的是画布 MSAA）
+    // 无 MSAA：WebGPU 后端对「RT samples>0 + 深度附件」的处理有 destroyed-texture 病灶
+    // （probe-w2-post 实测，volumetricMoon 同案）——卡边 AA 暂失，终版如需补 FXAA。
   });
   // bloom 强度偏移通道（fx/bloomOffset.js）：卡牌/特写 FX 主动声明起晕强度，
   // 颜色本体不必拉爆 HDR（世界链同手法；uiScene 无遮挡需求，独立深度清深度即可）
   const rtBloomOff = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
   const bloom = createBloomChain(bloomParams);
-  const finalUniforms = {
-    tColor: { value: null },
-    tBloom: { value: null },
-    uBloom: { value: bloomParams.strength },
-    uExposure: { value: 1 },
-    uTone: { value: TONE_MODES.neutral },
-  };
-  const finalScene = makeFullScreenPass(FRAG_UI_FINAL, finalUniforms);
+
+  // 终段纹理/标量节点（.value 每帧重绑）
+  const blackTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  blackTex.needsUpdate = true;
+  const tColor = texture(blackTex);
+  const tBloom = texture(blackTex);
+  const uBloom = uniform(bloomParams.strength);
+  const finalScene = makeFullScreenPass(tslFinalUi(tColor, tBloom, uBloom));
   {
     // 铁律①：终段 premultiplied 合成（rgb 已是预乘色，不再乘 alpha）
     const mat = finalScene.children[0].material;
@@ -92,7 +73,7 @@ export function createUiComposer() {
     const prevClearAlpha = renderer.getClearAlpha();
     const prevAutoClear = renderer.autoClear;
     renderer.autoClear = false;
-    // pass 1：uiScene → 透明底 RT（渲染进 RT 时 three 不套 tone mapping/sRGB，保持线性）
+    // pass 1：uiScene → 透明底 RT（渲进 RT 无输出变换，保持线性）
     renderer.setRenderTarget(rt);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
@@ -102,9 +83,11 @@ export function createUiComposer() {
     renderBloomOffsetPass(renderer, scene, camera, { clearDepth: true });
     // pass 2-4：bright → 半分辨率 H/V blur
     bloom.render(renderer, rt.texture, rtBloomOff.texture);
-    // pass 5：tone map + bloom 加算 + sRGB，premultiplied 盖回屏幕
-    finalUniforms.tColor.value = rt.texture;
-    finalUniforms.tBloom.value = bloom.texture;
+    // pass 5：bloom 加算，premultiplied 线性叠加进帧缓冲。
+    // 直出线性 HDR——tone+sRGB 由渲染器帧末输出 blit 统一施加（flavor A，
+    // 本链不碰 renderer.toneMapping）
+    tColor.value = rt.texture;
+    tBloom.value = bloom.texture;
     renderer.setRenderTarget(null);
     renderer.setClearColor(_clearColor, prevClearAlpha);
     renderFullScreenPass(renderer, finalScene);
@@ -117,18 +100,20 @@ export function createUiComposer() {
     if (Number.isFinite(knee)) bloomParams.knee = knee;
     if (Number.isFinite(radius)) bloomParams.radius = radius;
     bloom.setBloom({ threshold, knee, radius });
-    if (Number.isFinite(strength)) { bloomParams.strength = strength; finalUniforms.uBloom.value = strength; }
+    if (Number.isFinite(strength)) { bloomParams.strength = strength; uBloom.value = strength; }
   }
 
   function dispose() {
     rt.dispose();
     rtBloomOff.dispose();
     bloom.dispose();
+    blackTex.dispose();
     disposeFullScreenPass(finalScene);
   }
 
   return {
     render, resize, dispose, setBloom, bloomParams,
-    _finalUniforms: finalUniforms, // 调参口（与 volumetricMoon 同惯例）
+    // 调参口（与 volumetricMoon 同惯例）
+    _nodes: { tColor, tBloom, uBloom },
   };
 }

@@ -22,6 +22,7 @@ import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, T
 import { Cast } from '../fx/cast.js';
 import { runScript } from '../fx/script.js';
 
+import { TSL_READY } from '../fx/tslGate.js';
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
 // 战前准备/地图舞台：大雪荒原 + 孤立塔楼（2026-09-15 观感重做，替占位夜空+色块塔）。
@@ -76,9 +77,12 @@ export class MapStage {
     // 塔楼层世界 pass 由雪云管线接管（StageManager composeScene 钩子，BattleStage
     // 体积光同范式）：mesh pass → 云 march（读场景深度）→ transmittance 合成。
     // UI pass（uiScene）仍由 StageManager 在其后兜底渲染，不受影响。
-    this.composeScene = ({ renderer, scene, camera }) => {
-      this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
-    };
+    // tslGate：雪云 march 未迁移前不接管世界 pass（直渲兜底——mesh 全可见，只缺云）
+    if (TSL_READY.towerClouds) {
+      this.composeScene = ({ renderer, scene, camera }) => {
+        this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
+      };
+    }
     // 逻辑机位（视差的基座）：锚点摆位与爬升 tween 只写它，tick 统一把「机位 +
     // 鼠标视差偏移」落到共享相机（onEnter 设/onExit 还协议不变）
     this._basePose = null;
@@ -196,7 +200,7 @@ export class MapStage {
   }
 
   /**
-   * 面板动作分流：`local: true` 的是**面板本地交互态**（如种子包勾选）——舞台自己消化
+   * 面板动作分流：`local: true` 的是**面板本地交互态**（如开选卡界面）——舞台自己消化
    * 并就地重绘，不惊动 core；其余原样上报给 runController。
    * 判据见 THREE_UI_MIGRATION §6.3：被确认前的勾选是纯 UI 态，确认时才作为载荷上行。
    */
@@ -206,13 +210,6 @@ export class MapStage {
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShop') { this._panelUi.shopOpen = true; this._renderPanel(); return; }
       if (action.action === 'closeShop') { this._panelUi.shopOpen = false; this._renderPanel(); return; }
-      if (action.action === 'toggleSeed') {
-        const sel = this._panelUi.selected;
-        const id = action.defId;
-        if (sel.has(id)) sel.delete(id);
-        else if (sel.size < (this._snap?.offering?.picks ?? 0)) sel.add(id);
-        this._renderPanel(); // 就地重绘（勾选高亮 + 确认键可用性）
-      }
       return;
     }
     // 得卡标记（古尔帕斯卡包三选一）：摘下被点的卡 → 解除 overlay → 播「择卡得卡」

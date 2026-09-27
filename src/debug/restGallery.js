@@ -9,6 +9,8 @@
 //   ｜ 布光 knob 同 roomGallery：?hemi=&moon=&fill=&ba=&bb=&glow=&glowd=&cf=&cfd=&fire=&fired=&lamp=&lampd=
 
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
+import { TSL_READY } from '../stage/fx/tslGate.js';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
@@ -50,10 +52,9 @@ const canvas = document.createElement('canvas');
 canvas.id = 'room-canvas';
 document.body.appendChild(canvas);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new WebGPURenderer({ canvas, antialias: true });
+await renderer.init(); // WebGPURenderer 异步初始化（TLA，es2022）
 renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x070a12);
@@ -345,11 +346,11 @@ function rebuild() {
   scene.fog = fogDef
     ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
     : new THREE.Fog(0x070a12, 165, 310);
-  if (room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
+  if (TSL_READY.volumetricMoon && room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
-  applyToneMapping(renderer, composer, tmMode, tmExp);
+  applyToneMapping(renderer, tmMode, tmExp);
   // bloom 旋钮：?bloom=强度 &bthr=阈值 &bknee=软膝 &brad=半径（缺省不动 = 用烘焙值）
   const numKnob = (k) => (params.has(k) ? Number(params.get(k)) : undefined);
   composer?.setBloom({

@@ -33,7 +33,7 @@ import {
 import { restoreRunFromSave } from '../../src/core/run/saveRestore.js';
 import { chooseSkillReward, chooseRewardPack, PACKS } from '../../src/core/run/rewards.js';
 import {
-  chooseAscension, chooseAscensionAbility, chooseSeedCards, rerollSeedOffering,
+  chooseAscension, chooseAscensionAbility,
   ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT,
 } from '../../src/core/run/ascension.js';
 import { trainUpgrade, trainUpgradeStart, trainDrawChoices, trainDraw, beginTraining } from '../../src/core/run/rooms/training.js';
@@ -217,7 +217,7 @@ function resolveSlotClaimArg(pending, raw) {
 const ACTION_WORDS = new Set([
   'fight', 'play', 'swap', 'dump', 'end', 'in', 'auto', 'why',
   'pack', 'take', 'skip', 'act', 'remove',
-  'dim', 'seed', 'reroll', 'ability', 'preview', 'relic', 'next',
+  'dim', 'ability', 'preview', 'relic', 'next',
   'state', 'deck', 'terms', 'help',
 ]);
 
@@ -239,7 +239,7 @@ export function exec(S, raw) {
     case 'pack': case 'take': case 'skip': return execReward(S, cmd, t);
     case 'act': return execRoom(S, t);
     case 'remove': return execRemove(S, t);
-    case 'dim': case 'seed': case 'reroll': case 'ability': return execAscension(S, cmd, t);
+    case 'dim': case 'ability': return execAscension(S, cmd, t);
     case 'preview': return execPreview(S, t);
     case 'dev': return execDev(S, t);
     case 'relic': return execRelic(S, t);
@@ -641,7 +641,7 @@ function execRoomCamp(S, t, campUsed) {
 
 // 训练场（非合并房的 training，或合并房的训练部分）
 // 2026-09-18 改版：训练必做且先于篝火——act train 开局（升阶，达标当场切进阶，
-// 用 dim/seed/ability 解完自动回房）→ 可选段 act draw / act take（四选一抓卡，
+// 用 dim/ability 解完自动回房）→ 可选段 act draw / act take（四选一抓卡，
 // 抓了欠一次升级）→ act up 清尾款。开局后的动作合法性由 core 守卫兜（旧版
 // 「trained=已完成」的总闸已废——trained 现在只表示"已开局"）。
 function execRoomTraining(S, t) {
@@ -651,7 +651,7 @@ function execRoomTraining(S, t) {
     const due = beginTraining(run);
     S.lastOutcome = due
       ? '开始训练（训练次数+1）——修行达标，进阶事件当场引动！'
-        + '（当前已在进阶：dim 火|木|空|跳过 → 首次点亮再 seed 编号 卡名×3 → ability <#>|skip，解完自动回房）'
+        + '（当前已在进阶：dim 火|木|空|跳过 → ability <#>|skip，解完自动回房）'
       : `开始训练（训练次数+1，累计 ${run.player.trainingCount}）——可选段：act draw 看四选一候选，不抓就处理营地/next 离开`;
     return;
   }
@@ -915,28 +915,6 @@ function execAscension(S, cmd, t) {
       S.lastOutcome = `${DIM_LABEL[dim]} +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）${grantText}`;
     }
     else throw new Error('dim 火 | dim 木 | dim 空 | dim 跳过');
-    return;
-  }
-  if (cmd === 'seed') {
-    const off = run.cardOffering;
-    if (!off) throw new Error('当前没有种子卡待选');
-    const groups = t.slice(1).join(' ').split(',').map(s => s.trim()).filter(Boolean);
-    if (groups.some(g => g.split(/\s+/).length !== 2)) {
-      throw new Error('种子卡需「编号 卡名」成对：seed 3 引焰,6 火弹术,4 蓄热火球（共3张）');
-    }
-    const picks = groups.map(g => {
-      const [idxArg, nameArg] = g.split(/\s+/);
-      return resolveChoiceStrict(off.cards, idxArg, nameArg, '种子卡',
-        id => getSkillDefinition(id)?.name ?? id);
-    });
-    if (picks.length !== 3) throw new Error('种子卡必须选 3 张：seed 3 引焰,6 火弹术,4 蓄热火球');
-    chooseSeedCards(run, picks);
-    S.lastOutcome = `种子入组：${picks.map(id => getSkillDefinition(id).name).join('、')}`;
-    return;
-  }
-  if (cmd === 'reroll') {
-    rerollSeedOffering(run);
-    S.lastOutcome = '刷新种子候选';
     return;
   }
   // ability

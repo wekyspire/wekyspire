@@ -12,9 +12,11 @@
 //（BattleStage 届时瞬移落位牌库图标处并销毁）。
 
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：C0 着色链挂 colorNode，牌面材质须为 Node 材质
 import { additiveLight } from '../post/passes.js';
 import { CardFxLayer } from './CardFxLayer.js';
 import { hitTestRegions } from '../richtext/layout.js';
+import { deferDisposeTexture } from '../deferredDispose.js';
 
 // 余烬色板（加色混合，r/g/b 0~1）：火线喷出的火星从深橙到亮黄
 const EMBER_COLORS = [
@@ -39,7 +41,7 @@ export class CardObject extends THREE.Group {
     this.cardHeight = cardHeight;
     this._bakeFace = bakeFace || defaultBakeFace;
 
-    this._material = new THREE.MeshBasicMaterial({ transparent: true });
+    this._material = new MeshBasicNodeMaterial({ transparent: true });
     this._face = new THREE.Mesh(new THREE.PlaneGeometry(cardWidth, cardHeight), this._material);
     this._face.name = 'face';
     this.add(this._face);
@@ -88,7 +90,8 @@ export class CardObject extends THREE.Group {
     const old = this._material.map;
     this._material.map = texture;
     this._material.needsUpdate = true;
-    old?.dispose?.();
+    this.fx?.body?.rebind?.(); // C0 着色链随新脸重建（同构图命中 program 缓存，只换纹理绑定）
+    deferDisposeTexture(old);
     this._hitRegions = hitRegions || [];
     // hit map 用烘焙布局坐标（与牌面世界尺寸无关），uv 反算时按此尺寸还原
     this._layoutSize = { width: width || this.cardWidth, height: height || this.cardHeight };

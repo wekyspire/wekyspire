@@ -287,7 +287,8 @@ const flameCloakCard = ({ id, tier, shield, promotesTo = null }) => registerSkil
     }],
   },
   describe: () => `正在/effect{燃烧}时，获得${shield}护盾`,
-  battleDescribe: (sctx) => `/effect{燃烧}${sctx.player.getEffectStacks('burn')}层：获得${shield}护盾`,
+  // 不写 battleDescribe：判定条件只有「正在燃烧」一条，静态描述已说清——
+  // 实时读数版反而把机制淹没在层数数字里（2026-09-27 用户点删）。
 });
 flameCloakCard({ id: 'flameCloak', tier: 'B', shield: 4, promotesTo: 'flameCloakPlus' });
 flameCloakCard({ id: 'flameCloakPlus', tier: 'A', shield: 6 });

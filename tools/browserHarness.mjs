@@ -333,11 +333,18 @@ export async function launch({ headless = true, viewport = { width: 1280, height
       return { boxes, refs };
     }),
 
-    /** 帧率与 WebGL 后端（确诊"是不是又跑回软渲染了"）。 */
+    /** 帧率与渲染后端（确诊"是不是又跑回软渲染了"）。WebGPU 迁移后：
+     *  backend.isWebGPUBackend / isWebGLBackend 优先；旧 WebGLRenderer 才走 getContext 探测。 */
     fps: (ms = 2000) => page.evaluate((dur) => new Promise((resolve) => {
-      const gl = window.__shell.stageManager?._renderer?.getContext?.();
-      const dbg = gl?.getExtension('WEBGL_debug_renderer_info');
-      const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+      const r = window.__shell.stageManager?._renderer;
+      let renderer = '';
+      if (r?.backend?.isWebGPUBackend) renderer = 'WebGPU';
+      else if (r?.backend?.isWebGLBackend) renderer = 'WebGL2(tsl-fallback)';
+      else {
+        const gl = r?.getContext?.();
+        const dbg = gl?.getExtension?.('WEBGL_debug_renderer_info');
+        renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+      }
       let frames = 0;
       const t0 = performance.now();
       const tick = () => {

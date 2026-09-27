@@ -59,7 +59,7 @@ export function applyRoute(run, routeId) {
   if (!p.deck.length) p.deck = route.deck.map(id => createSkillRuntime(id));
   if (route.leino) {
     // 灵脉等级不从 1 起步（2026-09-22 用户定）：初始终 0，首进阶 0→1 点亮——
-    // 获赠流程见 ascension.js（基石卡去重 + 种子包九选三）。
+    // 获赠流程见 ascension.js（基石卡去重 + 体系能力补授）。
     if (route.ability && !p.abilities.includes(route.ability)) p.abilities.push(route.ability);
   }
   if (route.apBonus) {

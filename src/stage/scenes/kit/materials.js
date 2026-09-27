@@ -5,6 +5,7 @@
 // 材质族即预算口径：单件资产 ≤ 3 族（契约测试按 userData.kitFamily 计数）。
 
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：族单例改 Node 材质（charBurn 等 TSL 特效挂 colorNode/emissiveNode 的前提）
 
 export const FAMILIES = ['stone', 'wood', 'metal', 'glass', 'frost', 'cloth', 'unlit'];
 
@@ -25,8 +26,8 @@ const DEFS = {
 function makeMaterial(name) {
   const d = DEFS[name];
   const m = d.kind === 'std'
-    ? new THREE.MeshStandardMaterial({ roughness: d.roughness, flatShading: true, vertexColors: true })
-    : new THREE.MeshBasicMaterial({ fog: !!d.fog && d.fog, vertexColors: true });
+    ? new MeshStandardNodeMaterial({ roughness: d.roughness, flatShading: true, vertexColors: true })
+    : new MeshBasicNodeMaterial({ fog: !!d.fog && d.fog, vertexColors: true });
   if (d.metalness !== undefined) m.metalness = d.metalness;
   if (d.transparent) { m.transparent = true; m.opacity = d.opacity; }
   if (d.side !== undefined) m.side = d.side;

@@ -52,7 +52,7 @@ import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
-import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache } from '../art/unitArt.js';
+import { unitHeightFactor, STANDEE_BASE_HEIGHT, sharedUnitArtCache, playerSwordVariant, PLAYER_SWORD_TIERS } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
@@ -68,6 +68,7 @@ import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
+import { TSL_READY } from '../fx/tslGate.js';
 export { CARD_WIDTH, CARD_HEIGHT };
 
 export const PLAY_LINE_Y = -20;
@@ -173,7 +174,8 @@ export class BattleStage {
     // 体积月光 composer（ray marching，场景带投影月光且 renderer 支持 RT 时接管世界 pass；
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）
     const renderer = stageManager._renderer;
-    if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
+    if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function'
+        && TSL_READY.volumetricMoon) { // tslGate：raymarch 链 TSL 化前回退直渲
       this._composer = createVolumetricMoonlight({ light: this._scene3D.moonlight });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
@@ -216,6 +218,8 @@ export class BattleStage {
     this.model.beginBattle(); // 战斗边界：卡牌面按场清空（模型本身跨场存活）
     this._views = new Map();  // uniqueID -> CardObject（模型卡条目的 three 视图）
     this._units = new Map();   // uniqueID -> UnitObject
+    this._swordArtRank = -1;   // 大剑立绘 latch（PLAYER_SWORD_TIERS 下标）：场内只升不降——
+                               // 斩转化在 pending 区的瞬间读数暂缺，不闪图；跨战斗随舞台实例重置
     this._snapshot = null;     // 显示状态快照：只在 ANIM_STATE_SYNC 节拍推进（两套状态设计——
                                // 后端状态即时变，显示状态随队列节拍变，时序由 sync 指令位置表达）
     this._snapshotSeq = 0;     // 已应用快照的显示时刻序号（bridge 投影 seq）：显示状态只进不退
@@ -577,6 +581,7 @@ export class BattleStage {
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
     proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
+    this._syncPlayerSwordArt(proj);
     // L0 本体补丁程序入场预热：首个同步批就把变体编好（compileAsync 走
     // KHR_parallel_shader_compile 不冻主线程——charBurn 的 715ms 教训；单位本体是
     // MeshBasicMaterial 小 shader，但一次性成本照样不留进演出）
@@ -1109,6 +1114,28 @@ export class BattleStage {
     return obj.hasArt;
   }
 
+  /**
+   * 大剑体系立绘对账（2026-09-22 用户定）：牌堆（手牌+牌库+焚毁）里斩链最高链位 →
+   * 骑士带剑立绘档。斩只能由大剑遗物洗入/局内转化产生，故「牌堆有斩卡」即体系在场。
+   * 场内只升不降（_swordArtRank latch）：斩转化在 pending 区的瞬间投影只剩 uniqueID
+   * 没有 defId，直读会闪回低档；转化单向升阶，latch 语义与内容一致。
+   */
+  _syncPlayerSwordArt(proj) {
+    const obj = this._units.get(proj.player?.uniqueID);
+    if (!obj) return;
+    const ids = [];
+    for (const c of proj.hand ?? []) ids.push(c.defId);
+    for (const c of proj.zones?.deck ?? []) ids.push(c.defId);
+    for (const c of proj.zones?.burnt ?? []) ids.push(c.defId);
+    const v = playerSwordVariant(ids);
+    if (v !== null) {
+      const rank = PLAYER_SWORD_TIERS.indexOf(v);
+      if (rank > this._swordArtRank) this._swordArtRank = rank;
+    }
+    const use = this._swordArtRank >= 0 ? PLAYER_SWORD_TIERS[this._swordArtRank] : null;
+    if ((obj.artVariant ?? null) !== use) this.setUnitArtVariant(obj, use);
+  }
+
   _applyUnitArt() {
     for (const obj of this._units.values()) this._applyUnitArtTo(obj);
     this._applyAvatar();
@@ -1525,7 +1552,12 @@ export class BattleStage {
   _transformFx(id, card = null, onDone = null, mode = 'charReveal') {
     const view = this._views.get(id);
     if (!view || !card) { onDone?.(); return; }
-    playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
+    if (!TSL_READY.cardTransform) { // tslGate：演出未迁移——直接落地终态（换脸），无演出
+      view.applyBakedFace(card, this._bakeFace(card));
+      onDone?.();
+    } else {
+      playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
+    }
     // 体量呼吸裹在演出外（变换的重量感）：缓起 1.08 → 随白光收束回程
     const s0 = view.scale.x || 1;
     this.animator.animate(id, { scale: s0 * 1.08 }, {
@@ -1553,7 +1585,11 @@ export class BattleStage {
         // 谷底起变换演出（charReveal 接管换脸——不再瞬时 setCard + 金爆，
         // 金光粒子的职责由燃烧尾迹/白光承担）
         if (payload?.cardView) {
-          playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
+          if (!TSL_READY.cardTransform) { // tslGate：直接换脸，无演出
+            view.applyBakedFace(payload.card, this._bakeFace(payload.card));
+          } else {
+            playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
+          }
         }
         this.animator.animate(id, { scale: s0 * 1.42 }, { // 过冲弹起（跃迁感）
           durationMs: 170,
