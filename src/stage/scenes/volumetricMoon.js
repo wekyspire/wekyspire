@@ -21,6 +21,7 @@ import {
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from '../post/passes.js';
 import { createBloomChain } from '../post/bloomChain.js';
+import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 
 const EMA_ALPHA = 1 / 30; // temporal EMA 新帧权重（≈1s 收敛 @30fps）
 
@@ -149,6 +150,13 @@ export function createVolumetricMoonlight({
     samples: 4, // MSAA（r185 支持 depthTexture + 多样本自动 resolve）
     depthTexture: new THREE.DepthTexture(2, 2),
   });
+  // bloom 强度偏移通道（fx/bloomOffset.js）：FX 件在偏移 pass 里重写输出（R = 偏移量），
+  // bright 段阈值判定前加和进亮度——起晕强度由绘制方主动声明，颜色本体不必拉爆 HDR。
+  // **共享场景深度纹理**：被遮挡的发热体不把晕透到遮挡物上（偏移 pass 不清深度）。
+  const rtBloomOff = new THREE.WebGLRenderTarget(2, 2, {
+    type: THREE.HalfFloatType,
+    depthTexture: rt.depthTexture,
+  });
   // temporal 历史（ping-pong，只存线性光量；HalfFloat 保平滑）
   let historyRead = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
   let historyWrite = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
@@ -199,6 +207,7 @@ export function createVolumetricMoonlight({
     const rw = Math.max(1, w);
     const rh = Math.max(1, h);
     rt.setSize(rw, rh);
+    rtBloomOff.setSize(rw, rh);
     historyRead.setSize(rw, rh);
     historyWrite.setSize(rw, rh);
     rtColor.setSize(rw, rh);
@@ -234,8 +243,13 @@ export function createVolumetricMoonlight({
     compositeUniforms.tLight.value = historyWrite.texture;
     renderer.setRenderTarget(rtColor);
     renderFullScreenPass(renderer, compositeScene);
+    // pass 3.5：bloom 偏移通道——BLOOM_LAYER 上的件以 bloomPassFlag=1 重渲一遍
+    // （放在 march 之后：共享深度纹理只许读不许动……本 pass 的深度写无碍 march
+    // 已消费完，且下一帧 pass 1 的 clear 会重置；只清颜色不清深度 = 遮挡正确）
+    renderer.setRenderTarget(rtBloomOff);
+    renderBloomOffsetPass(renderer, scene, camera, { clearDepth: false });
     // pass 4-6：bright → 半分辨率 H/V 分离高斯（共享 bloom 链，结果在 bloom.texture）
-    bloom.render(renderer, rtColor.texture);
+    bloom.render(renderer, rtColor.texture, rtBloomOff.texture);
     // pass 7：tone map(线性色 + bloom) → sRGB → 屏幕
     finalUniforms.tColor.value = rtColor.texture;
     finalUniforms.tBloom.value = bloom.texture;
@@ -251,6 +265,7 @@ export function createVolumetricMoonlight({
   function dispose() {
     rt.depthTexture?.dispose?.();
     rt.dispose();
+    rtBloomOff.dispose();
     rtColor.dispose();
     bloom.dispose();
     historyRead.dispose();

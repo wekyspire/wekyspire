@@ -28,12 +28,14 @@ uniform float uLevel;
 uniform float uTime;
 uniform float uBurn;
 uniform float uPoison;
+uniform float uCalm;
 uniform vec3 uTint;
 ${GLSL_BODY_FX}
 void main() {
   vec4 body = texture2D(tBody, vUv) * uHasBody;
-  // 内影 = 下层状态的同源重算（时间也被冻慢：uTime × 0.15——凝滞 = 时间变慢）
-  vec3 inner = unitBodyFxShade(body.rgb, vUv, uBurn, uPoison, uTime * 0.15);
+  // 内影 = 下层状态的同源重算（时间也被冻慢：uTime × 0.15——凝滞 = 时间变慢）；
+  // shade 返回 vec4（rgb=色，a=bloom 偏移）——壳是哑光件，只取色不转发偏移
+  vec3 inner = unitBodyFxShade(body.rgb, vUv, uBurn, uPoison, uTime * 0.15, uCalm).rgb;
   float lum = dot(inner, vec3(0.299, 0.587, 0.114));
   inner = vec3(lum) * vec3(0.52, 0.62, 0.80) + inner * 0.22; // 去色冷移，留两成本色
   // 壳体：冻晶底色 + 极慢竖向流光（凝滞是时间变慢，不是冰的蓝）
@@ -51,9 +53,19 @@ void main() {
   float rim = clamp((max(max(a0, a1), max(a2, a3)) - min(min(a0, a1), min(a2, a3))) * 1.8, 0.0, 1.0) * uHasBody;
   // 合成：剪影内结霜影（尊重立绘 opacity），边缘霜线最亮；剪影外零壳
   vec3 c = mix(inner, shell, 0.42) + shell * rim * 0.5;
-  float alpha = uLevel * clamp(sa * (0.48 + 0.25 * shimmer) + rim * 0.55, 0.0, 1.0);
+  // 结晶前锋（赋予/消除过渡演出，2026-09-26 用户定）：front 由 level 归一驱动
+  // （0.9 = recipes 的 levelOf 稳态值）——进入时冰霜自下而上扫过全身、前锋挂冰蓝
+  // 亮线（结晶一闪）；退出时同一公式反向，冰霜向下消退（解冻）。
+  float front = clamp(uLevel / 0.9, 0.0, 1.0) * 1.15;
+  float swept = 1.0 - smoothstep(front - 0.18, front + 0.03, vUv.y); // 前锋以下已冻结
+  float frontLine = (1.0 - smoothstep(0.0, 0.06, abs(vUv.y - front)))
+                  * (1.0 - step(1.14, front)); // 扫满（稳态）后亮线收掉
+  float body1 = max(sa, rim); // 亮线只落在剪影/霜线处（无立绘退化期 auto 为零）
+  float alpha = uLevel * clamp((sa * (0.48 + 0.25 * shimmer) + rim * 0.55) * swept, 0.0, 1.0);
+  c += vec3(2.2, 2.9, 3.5) * frontLine * body1; // 前锋亮线（HDR 微过阈，交 bloom 一闪）
+  alpha = max(alpha, frontLine * body1 * 0.9 * uLevel);
   // 无立绘退化：整块薄冻晶板（占位色块期兜底，有图即消失）
-  alpha = mix(alpha, uLevel * 0.18, 1.0 - uHasBody);
+  alpha = mix(alpha, uLevel * 0.18 * swept, 1.0 - uHasBody);
   c = mix(c, shell, (1.0 - uHasBody) * 0.8);
   gl_FragColor = vec4(c, alpha);
 }`;
@@ -77,6 +89,7 @@ export function makeStasisShell(layer, { tint = 0x9fb6d8 } = {}) {
       // 共享 uniform 实例——同源重算：本体燃烧/中毒着色在壳内影里同步呈现
       uBurn: layer.body.uBurn,
       uPoison: layer.body.uPoison,
+      uCalm: layer.body.uCalm,
       uTint: { value: new THREE.Color(tint) },
     },
     vertexShader: VERT,

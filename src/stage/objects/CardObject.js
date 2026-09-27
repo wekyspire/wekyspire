@@ -1,13 +1,15 @@
 // CardObject（§4.2）：场景内的一张牌。
 // 结构：Group
 //   ├─ face: PlaneGeometry(cardWidth, cardHeight)，材质 map = RichTextEngine 烘焙纹理
-//   ├─ fx:   CardFxLayer（卡面特效层：veil 盖纱/ pulse 闪光/ edge 流光，时间驱动 updateFx）
+//   │        （C0 牌面 shader 补丁常驻其上：焚毁吞蚀/禁用压暗/高亮提暖，见 fx/cardBodyFx.js）
+//   ├─ fx:   CardFxLayer（卡牌特效统一宿主：C0 补丁记录 + C1 盖纱 / C2 标记 / C3 发光）
 //   └─ (燃尽时) embers: 局部 Points 余烬粒子（前沿喷发，加色混合）
 // 牌面内容（名称/费用/描述文本）由注入的 bakeFace(cardData) 函数产出
 // { texture, hitRegions, width, height } —— 纹理与 hit map 永远成对替换（§4.6 铁律）。
-// 状态视觉（禁用/高亮…）先以材质颜色占位，shader 版本后续替换 setVisualState 内部实现。
-// 焚毁离场走 startBurn/updateBurn：着色器自底向上吞蚀（噪声火线 + 辉光 + 炭化），
-// 由宿主逐帧驱动，燃尽回调 onBurnt（BattleStage 届时瞬移落位牌库图标处并销毁）。
+// 状态视觉（禁用/高亮）= setVisualState → fx 层 C0 uniform（shader 档，update 收敛过渡）。
+// 焚毁离场走 startBurn/updateBurn：C0 uBurn 自底向上吞蚀（噪声火线 + 辉光 + 炭化，
+// 补丁常驻只推 uniform 不重编译），由宿主逐帧驱动，燃尽回调 onBurnt
+//（BattleStage 届时瞬移落位牌库图标处并销毁）。
 
 import * as THREE from 'three';
 import { additiveLight } from '../post/passes.js';
@@ -42,8 +44,9 @@ export class CardObject extends THREE.Group {
     this._face.name = 'face';
     this.add(this._face);
 
-    // 卡面特效层：盖纱/闪光/流光统一在此（z 分层与扩层约定见 CardFxLayer 头注释）
-    this.fx = new CardFxLayer({ width: cardWidth, height: cardHeight });
+    // 卡面特效层：C0 补丁 + C1~C3 叠加件统一在此（z 分层约定见 CardFxLayer 头注释）；
+    // faceMaterial 传入后构造即挂 C0 补丁（幂等、全卡共享一 program 变体）
+    this.fx = new CardFxLayer({ width: cardWidth, height: cardHeight, faceMaterial: this._material });
     this.add(this.fx);
 
     this._hitRegions = [];   // 烘焙布局坐标（见 setCard）
@@ -121,14 +124,14 @@ export class CardObject extends THREE.Group {
     return hitTestRegions(this._hitRegions, lx, ly); // 与 DOM 预览同一实现（layout.js）
   }
 
-  /** 状态视觉占位：normal | disabled（淡灰白=暂不可发动） | highlighted。shader 版实现时保持此接口。 */
+  /**
+   * 牌面状态档：normal | disabled（暂不可发动：去饱和压暗） | highlighted（提暖呼吸）。
+   * 实现 = C0 牌面 shader 档（fx/cardBodyFx.js 的 uDim/uHighlight，fx.update 收敛过渡）；
+   * 材质 color 恒白不染（颜色占位方案已于 Phase 3 废弃）。
+   */
   setVisualState(state) {
     this._visualState = state;
-    switch (state) {
-      case 'disabled': this._material.color.set(0xb8b8b8); break;
-      case 'highlighted': this._material.color.set(0xffffcc); break;
-      default: this._material.color.set(0xffffff);
-    }
+    this.fx.setVisualState(state);
   }
 
   /** 激活态边缘流光（咏唱已激活）开关；轨道推进走 updateFx（门面：转发特效层）。 */
@@ -152,8 +155,9 @@ export class CardObject extends THREE.Group {
   get visualState() { return this._visualState; }
 
   // ========== 焚毁燃烧（离场演出） ==========
-  // 三层表达：① 着色器自底向上吞蚀（噪声咬边 + 火线辉光 + 上缘炭化预热）
-  // ② 前沿余烬粒子（卡内局部 Points，随前沿上升喷发）③ 火起颤动（rotation.z 微振）。
+  // 三层表达：① C0 牌面补丁自底向上吞蚀（噪声咬边 + 火线辉光 + 上缘炭化预热，
+  // 构造即挂常驻、点燃只推 uniform 不重编译）② 前沿余烬粒子（卡内局部 Points，
+  // 随前沿上升喷发）③ 火起颤动（rotation.z 微振）。
   // startBurn 后由宿主逐帧调 updateBurn(dt)；燃尽（牌面全 discard，卡不可见）时
   // 回调 onBurnt 一次——宿主届时瞬移落位牌库图标处并销毁（玩家已看不见卡，无需飞行动画）。
 
@@ -165,52 +169,9 @@ export class CardObject extends THREE.Group {
     if (this._burn) return;
     this._cancelTransform();      // 焚毁接管牌面：在途变换演出掐死（预烘焙纹理就地销）
     this.fx.clearTransient(); // 焚毁接管牌面：熄灭盖纱/闪光/流光
-    this._burnUniforms = {
-      uBurn: { value: 0 },                 // 0=完好 → 1=燃尽
-      uSeed: { value: Math.random() * 100 }, // 噪声种子（每张卡的咬边形状不同）
-    };
-    // 注：燃烧牌必经 setCard 烘焙（有 map → USE_UV 已定义），uv 属性可用
-    this._material.onBeforeCompile = (shader) => {
-      shader.uniforms.uBurn = this._burnUniforms.uBurn;
-      shader.uniforms.uSeed = this._burnUniforms.uSeed;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vBurnUv;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvBurnUv = uv;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>
-varying vec2 vBurnUv;
-uniform float uBurn;
-uniform float uSeed;
-float bHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-float bNoise(vec2 p) {
-  vec2 i = floor(p); vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(bHash(i), bHash(i + vec2(1.0, 0.0)), u.x),
-    mix(bHash(i + vec2(0.0, 1.0)), bHash(i + vec2(1.0, 1.0)), u.x), u.y);
-}`)
-        .replace('#include <map_fragment>', `#include <map_fragment>
-{
-  // 双频值噪声咬边：燃烧前沿不是直线而是火舌状锯齿
-  float n = bNoise(vBurnUv * vec2(5.0, 8.0) + vec2(uSeed, uSeed * 0.7)) * 0.6
-          + bNoise(vBurnUv * vec2(11.0, 17.0) - uSeed) * 0.4;
-  float line = uBurn * 1.45 - 0.2;               // 前沿自底向上推进（两端留噪声余量）
-  float d = vBurnUv.y - line + (n - 0.5) * 0.45; // 距前沿的有符号距离
-  if (d < -0.05) {
-    discard;                                      // 已燃尽区域
-  } else if (d < 0.02) {
-    float g = 1.0 - (d + 0.05) / 0.07;            // 火线辉光带（深橙→亮黄）
-    vec3 ember = mix(vec3(0.55, 0.12, 0.01), vec3(1.0, 0.88, 0.42), g * g);
-    diffuseColor.rgb = mix(diffuseColor.rgb * 0.3, ember * (1.15 + 0.9 * g), g);
-  } else if (d < 0.16) {
-    float c = 1.0 - (d - 0.02) / 0.14;            // 前沿上方炭化预热（焦黑泛红）
-    diffuseColor.rgb = mix(diffuseColor.rgb,
-      diffuseColor.rgb * vec3(0.4, 0.26, 0.2) + vec3(0.09, 0.015, 0.0), c * 0.85);
-  }
-}`);
-    };
-    this._material.customProgramCacheKey = () => 'weky-card-burn-v1';
-    this._material.needsUpdate = true;
+    // C0 焚毁补丁常驻（fx/cardBodyFx.js）——点燃只推 uniform；uSeed 随机 = 每张卡咬边形状不同
+    this.fx.body.uBurn.value = 0;
+    this.fx.body.uSeed.value = Math.random() * 100;
     this._ensureEmbers();
     this._burn = { t: 0, duration: Math.max(0.001, durationMs / 1000), onBurnt, done: false, emberAcc: 0 };
   }
@@ -223,7 +184,7 @@ float bNoise(vec2 p) {
     const b = this._burn;
     b.t = Math.min(b.t + dt, b.duration);
     const p = b.t / b.duration;
-    this._burnUniforms.uBurn.value = p;
+    this.fx.body.uBurn.value = p; // C0 补丁吞蚀推进（火线/炭化/弃区全在 shader 内）
     this.rotation.z = Math.sin(b.t * 28) * 0.012 * (1 - p); // 火起颤动，随燃尽平息
     this._updateEmbers(dt, p);
     if (p >= 1) {

@@ -48,15 +48,20 @@ export function disposeFullScreenPass(scene) {
 }
 
 // bright pass：软膝阈值提亮部（线性空间）。彩灯/屏幕这些 >1 的自发光体才是主角。
+// tOffset（bloom intensity offset 通道，见 fx/bloomOffset.js）：R 通道按 uOffsetScale
+// 加和进亮度判定——绘制结果可主动声明起晕强度，颜色本体不必拉爆 HDR。
+// 注意它只放大权重 w、不直接给颜色：bloom 光色仍取自 tColor 本像素（黑像素无晕）。
 export const FRAG_BRIGHT = /* glsl */`
   precision highp float;
   varying vec2 vUv;
   uniform sampler2D tColor;
+  uniform sampler2D tOffset;
+  uniform float uOffsetScale;
   uniform float uThreshold;
   uniform float uKnee;
   void main() {
     vec3 c = texture2D(tColor, vUv).rgb;
-    float lum = max(c.r, max(c.g, c.b));
+    float lum = max(c.r, max(c.g, c.b)) + texture2D(tOffset, vUv).r * uOffsetScale;
     // 软膝：threshold 以下全黑，以上平滑过渡（硬阈值会让 bloom 边缘出现台阶）
     float soft = clamp(lum - uThreshold + uKnee, 0.0, 2.0 * uKnee);
     soft = soft * soft / (4.0 * uKnee + 1e-4);

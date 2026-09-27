@@ -43,15 +43,19 @@ export function makeVaporPlumes(layer, { color = 0x7fe06a } = {}) {
   const untick = unit.addTick((dt) => {
     t += dt;
     group.visible = level > 0.02 && !unit._dead;
-    for (const p of plumes) {
+    for (let i = 0; i < plumes.length; i++) {
+      const p = plumes[i];
+      // 逐股浮现（赋予/消除过渡，2026-09-26 用户定）：level 斜坡期雾团按序长大淡入
+      // （附带口径：低层毒雾更稀——1 层稳态约一股半，层数越高越浓）
+      const pk = Math.max(0, Math.min(1, level * 3.0 - i * 0.7));
       const cycle = (t / p.period + p.ph) % 1;             // 0→1 一轮升腾
       const fade = Math.sin(cycle * Math.PI);               // 起末淡入淡出
       const y = (p.y + cycle * p.rise) * H;
       const x = p.x * H + 0.05 * H * Math.sin(t * 1.3 + p.ph * 9.0);
-      const sc = p.size * H * (0.7 + cycle * 0.9);          // 越升越散
+      const sc = p.size * H * (0.7 + cycle * 0.9) * (0.55 + 0.45 * pk); // 越升越散 + 浮现长大
       p.sprite.position.set(x, y, 0.68);
       p.sprite.scale.set(sc, sc * 1.25, 1);
-      p.sprite.material.opacity = 0.5 * level * fade;
+      p.sprite.material.opacity = 0.5 * pk * fade;
       p.sprite.material.rotation = 0.15 * Math.sin(t * 0.9 + p.ph * 7.0);
     }
   });

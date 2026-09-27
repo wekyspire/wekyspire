@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
+import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -106,6 +107,10 @@ export class UnitObject extends THREE.Group {
     );
     this._body.name = 'body';
     this._body.position.y = standeeHeight / 2;
+    // bloom offset 通道（fx/bloomOffset.js）：本体常驻 BLOOM_LAYER——偏移 pass 每帧
+    // 重渲一遍（单位寥寥几个 quad，代价可忽略），偏移量由本体补丁按 uBurn 现算现写
+    // （不烧时写 0，等于不在）；主渲染相机不走该层，零影响
+    this._body.layers.enable(BLOOM_LAYER);
     // 立牌投影（用户定）：alphaTest 剪影在月光下拉出单位形地面影；
     // three 深度材质支持 map+alphaTest，透明区不会投出矩形假影
     this._body.castShadow = true;

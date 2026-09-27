@@ -1,7 +1,7 @@
 // 单位特效统一宿主（L0–L3 固定层级的落点，VFX 结构大更新 Phase 2，2026-09-26）：
 // 每单位一件，UnitObject 构造时自建（对位 CardFxLayer——卡牌侧同款收口）。
 // 职责：
-//   · 持有 L0 本体补丁记录（unitBodyFx：uBurn/uPoison/uTime 单 program 多 uniform）；
+//   · 持有 L0 本体补丁记录（unitBodyFx：uBurn/uPoison/uCalm/uTime 单 program 多 uniform）；
 //   · L1/L2/L3 三个分组挂 billboard（贴体铁律：挂 unit 根的件不随立绘转身）；
 //   · overlay 槽位池：key→句柄，惰性创建、幂等重取，aura 配方只管「推 level」，
 //     建件/收件的活全在这里；
@@ -9,9 +9,13 @@
 //   · 统一 dispose（UnitObject.dispose 首行调它，再吃既有部件自检链）。
 // 层级职责与 z 槽位约定（billboard 局部空间，同层多件按 z 段错开）：
 //   L0 本体层：材质补丁（无几何件，片元内顺序合成 = 上层天然读下层输出）
-//   L1 贴体层：sprite 叠层   z 0.50~0.70（flames 0.50~0.60 / vapor 0.65~0.70）
+//   L1 贴体层：sprite 叠层   z 0.50~0.70（vapor 0.65~0.70）
 //   L2 笼罩层：壳/罩件       z 0.80      （默认同源重算——共享 GLSL 件+同 uniforms 零 RT）
 //   L3 表意层：表意小件      z 0.95      （眩晕星等最上 additive 件）
+// ⚠ 悬挂点铁律（2026-09-26 系统性修正）：**采样本体纹理/剪影的 sheet 件挂 _standee**
+//   （stasisShell、bodyFlames）——姿态通道（squash/widen/lean/呼吸/位移）打在 _standee
+//   上，挂 billboard 分组会在单位播动画时与本体脱锚；世界向粒子/sprite（毒雾、火星）
+//   才挂本层的 L 分组。
 import * as THREE from 'three';
 import { attachUnitBodyFx } from './unitBodyFx.js';
 
@@ -69,6 +73,7 @@ export class UnitFxLayer {
     this._untick = null;
     this.body.uBurn.value = 0;
     this.body.uPoison.value = 0;
+    this.body.uCalm.value = 0;
     for (const g of Object.values(this.groups)) this.unit._billboard?.remove(g);
   }
 }

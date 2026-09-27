@@ -53,12 +53,18 @@ void main() {
   vec3 fire = vec3(2.7, 1.05, 0.22) * fireLine * (0.55 + 0.45 * n);
   // 焦化锋前缘暗红预告线（即将烧到）
   float scorch = exp(-abs(dChar) * 55.0) * (1.0 - isChar);
-  // 新脸区：贴锋一段在白光中浮现（白光强度随距离指数衰减）
-  float whiteK = exp(-max(0.0, (frontShow - y)) * 7.0);
-  vec3 newShown = newC.rgb + vec3(1.5, 1.5, 1.6) * whiteK * whiteK;
+  // 新脸区：贴锋一段在白光中浮现（白光强度随距离指数衰减）——白光推到 HDR 2.6+
+  // （bloom 阈 1.45 以上），white-in 区自然起晕（用户 2026-09-27：前沿要吃到辉光）
+  float whiteK = exp(-max(0.0, (frontShow - y)) * 6.0);
+  vec3 newShown = newC.rgb + vec3(2.6, 2.7, 3.0) * whiteK * whiteK;
   // 合成：旧脸(带焦化预告线) → 焦化区(+火线) → 新脸(+白光)
   vec3 c = mix(oldC.rgb + vec3(0.5, 0.1, 0.02) * scorch, charC + fire, isChar);
   c = mix(c, newShown, isNew);
+  // 白热刃口：骑在显形锋线上的一条高 HDR 白（峰值 ~5.6，远超 bloom 阈）——
+  // 推进前沿的发光特效不做贴图不做粒子，就输出白热色让 bloom 自然晕开；
+  // 噪声调制造犬牙交错的闪烁刃口（与前锋扰动同源）
+  float edgeW = exp(-abs(dShow) * 30.0) * (0.70 + 0.30 * n);
+  c += vec3(5.4, 5.6, 6.2) * edgeW;
   float a = mix(oldC.a, newC.a, isNew); // 圆角/透明随脸走（焦化段沿用旧脸 alpha）
   gl_FragColor = vec4(c, a);
 }`;

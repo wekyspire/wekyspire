@@ -12,10 +12,12 @@ import {
 /**
  * @param {object} options { threshold, knee, radius }
  * @returns {
- *   render(renderer, inputTexture): void,   // 输入 → 三段 → 结果留在 texture
+ *   render(renderer, inputTexture, offsetTexture?): void, // 输入 → 三段 → 结果留在 texture
+ *                                                           // offsetTexture = bloom 强度偏移
+ *                                                           // 通道（fx/bloomOffset.js，可省）
  *   texture: THREE.Texture,                 // 链输出（bloom 光量，供终段加算）
  *   resize(w, h),                           // 全分辨率尺寸入，内部自取半分辨率
- *   setBloom({threshold, knee, radius}),    // 调试页 A/B 实时改（只 uniform）
+ *   setBloom({threshold, knee, radius, offsetScale}), // 调试页 A/B 实时改（只 uniform）
  *   params, dispose()
  * }
  */
@@ -23,8 +25,12 @@ export function createBloomChain({ threshold = 1.45, knee = 0.35, radius = 1.4 }
   const params = { threshold, knee, radius };
   let rtA = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
   let rtB = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
+  const blackTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); // 无偏移通道时的兜底
+  blackTex.needsUpdate = true;
   const brightUniforms = {
     tColor: { value: null },
+    tOffset: { value: blackTex },
+    uOffsetScale: { value: 1 },
     uThreshold: { value: params.threshold },
     uKnee: { value: params.knee },
   };
@@ -41,9 +47,11 @@ export function createBloomChain({ threshold = 1.45, knee = 0.35, radius = 1.4 }
     texel.set(params.radius / bw, params.radius / bh);
   }
 
-  /** 输入纹理 → bright → H/V 两次分离高斯；结果留在 rtA（经 texture getter 取）。 */
-  function render(renderer, inputTexture) {
+  /** 输入纹理 → bright → H/V 两次分离高斯；结果留在 rtA（经 texture getter 取）。
+   *  offsetTexture：可选的 bloom 强度偏移通道（R），阈值判定前加和进亮度。 */
+  function render(renderer, inputTexture, offsetTexture = null) {
     brightUniforms.tColor.value = inputTexture;
+    brightUniforms.tOffset.value = offsetTexture ?? blackTex;
     renderer.setRenderTarget(rtA);
     renderFullScreenPass(renderer, brightScene);
     blurUniforms.tSrc.value = rtA.texture;
@@ -57,9 +65,10 @@ export function createBloomChain({ threshold = 1.45, knee = 0.35, radius = 1.4 }
   }
 
   /** 实时改参（调试页 A/B 用；不动 shader 编译，只改 uniform）。 */
-  function setBloom({ threshold: t, knee: k, radius: r } = {}) {
+  function setBloom({ threshold: t, knee: k, radius: r, offsetScale: o } = {}) {
     if (Number.isFinite(t)) { params.threshold = t; brightUniforms.uThreshold.value = t; }
     if (Number.isFinite(k)) { params.knee = k; brightUniforms.uKnee.value = k; }
+    if (Number.isFinite(o)) { params.offsetScale = o; brightUniforms.uOffsetScale.value = o; }
     if (Number.isFinite(r)) {
       params.radius = r;
       texel.set(r / Math.max(1, rtA.width), r / Math.max(1, rtA.height));
@@ -69,6 +78,7 @@ export function createBloomChain({ threshold = 1.45, knee = 0.35, radius = 1.4 }
   function dispose() {
     rtA.dispose();
     rtB.dispose();
+    blackTex.dispose();
     disposeFullScreenPass(brightScene);
     disposeFullScreenPass(blurScene);
   }

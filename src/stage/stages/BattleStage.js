@@ -38,6 +38,7 @@ import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ScreenShake, DamageVignette, damageSeverity } from '../objects/screenImpactFX.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
+import { createGpuParticles } from '../fx/gpu/gpuParticles.js';
 import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
@@ -244,6 +245,11 @@ export class BattleStage {
     this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
 
+    // GPU 粒子池（2026-09-27，常驻联动发射：燃烧火星从火缘起飞随风飘散是首例）——
+    // 能力不齐（无 WebGL2/float RT、假 renderer）返回 null，aura 自动回退 CPU emitter
+    this.gpuParticles = createGpuParticles(stageManager._renderer);
+    if (this.gpuParticles) this.scene.add(this.gpuParticles.points);
+
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
     // 震荡是相机导演的一路**叠加偏移通道**（与运镜可合成：转段推镜途中受击照样震，
     // 不会把在途镜头钉住，也不会用过期基位把相机拷回——旧模型的转段跃变病灶）；
@@ -311,6 +317,7 @@ export class BattleStage {
       this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
+      this.gpuParticles?.update(dt); // GPU 粒子：emission 图集 → cursor → state 全 GPU
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       for (const unit of this._units.values()) {
@@ -550,7 +557,13 @@ export class BattleStage {
         auras = new AuraHost({ object3D: obj });
         this._unitAuras.set(unitProj.uniqueID, auras);
       }
-      const resolved = resolveUnitAuras(unitProj.effects, { particles: this.particles, unit: obj });
+      const resolved = resolveUnitAuras(
+        // ⚠ 真死单位解空效果表（在挂 aura 走 exit 收殓）——否则尸体隐藏后 aura 仍活，
+        // 燃烧发射器在尸体锚点上永远撒火星（2026-09-27 验收 agent 抓：烧死的怪原地
+        // 喷火星 15s+）。时机天然对齐：死亡节拍「先演后变」，快照带上 isDead 时尸体
+        // 恰好收殓隐藏。假死（reviving）不在此列——复苏后仍在烧，aura 保持。
+        unitProj.isDead && !unitProj.reviving ? [] : unitProj.effects,
+        { particles: this.particles, unit: obj, gpu: this.gpuParticles });
       auras.set(resolved);
       // 存续 aura 的强度追层数：set() 只管增删，burn level 等随 stacks 的更新走
       // def.update（stacks 3→7 火焰随旺；无 update 钩的 def 不受影响）
@@ -2618,6 +2631,8 @@ export class BattleStage {
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;
+    this.gpuParticles?.dispose(); // GPU 粒子池（aura dispose 已先摘除全部活跃单位）
+    this.gpuParticles = null;
     this.composeScene = null;
     this.composeResize = null;
     this._unsubTick?.();

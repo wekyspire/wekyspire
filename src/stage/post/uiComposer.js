@@ -15,6 +15,7 @@ import {
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from './passes.js';
 import { createBloomChain } from './bloomChain.js';
+import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 
 // UI 终段：与世界链 FRAG_FINAL 同曲线，唯一差别 = alpha 透传（tColor 是真覆盖率，
 // 由调用侧以 premultiplied 混合盖回屏幕）；bloom 纯加算——a=0 处即溢出剪影的光晕。
@@ -49,6 +50,9 @@ export function createUiComposer() {
     type: THREE.HalfFloatType,
     samples: 4, // MSAA：卡边/文字边缘不进 bloom 也要 AA（直渲期吃的是画布 MSAA）
   });
+  // bloom 强度偏移通道（fx/bloomOffset.js）：卡牌/特写 FX 主动声明起晕强度，
+  // 颜色本体不必拉爆 HDR（世界链同手法；uiScene 无遮挡需求，独立深度清深度即可）
+  const rtBloomOff = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
   const bloom = createBloomChain(bloomParams);
   const finalUniforms = {
     tColor: { value: null },
@@ -79,6 +83,7 @@ export function createUiComposer() {
     const rw = Math.max(1, Math.round(w * dpr));
     const rh = Math.max(1, Math.round(h * dpr));
     rt.setSize(rw, rh);
+    rtBloomOff.setSize(rw, rh);
     bloom.resize(rw, rh);
   }
 
@@ -92,8 +97,11 @@ export function createUiComposer() {
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
+    // pass 1.5：bloom 偏移通道（BLOOM_LAYER 上的 UI FX 件重写输出；独立深度清深度）
+    renderer.setRenderTarget(rtBloomOff);
+    renderBloomOffsetPass(renderer, scene, camera, { clearDepth: true });
     // pass 2-4：bright → 半分辨率 H/V blur
-    bloom.render(renderer, rt.texture);
+    bloom.render(renderer, rt.texture, rtBloomOff.texture);
     // pass 5：tone map + bloom 加算 + sRGB，premultiplied 盖回屏幕
     finalUniforms.tColor.value = rt.texture;
     finalUniforms.tBloom.value = bloom.texture;
@@ -114,6 +122,7 @@ export function createUiComposer() {
 
   function dispose() {
     rt.dispose();
+    rtBloomOff.dispose();
     bloom.dispose();
     disposeFullScreenPass(finalScene);
   }

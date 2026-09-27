@@ -68,10 +68,14 @@ export function makeStunStars(layer, { color = 0xffd34c } = {}) {
   layer.groups[3].add(group); // L3 表意层（z 0.95，见 unitFxLayer 约定）
   let level = 0;
   let t = Math.random() * Math.PI * 2;
-  const place = (s, a, i, k) => {
-    // k=0 主星，k>0 拖影——滞后相位 + 体量/亮度递减
+  let phase = Math.random() * Math.PI * 2; // 公转相位：转速随 level 渐入（积分制，变速不跳相）
+  // 弹入曲线（back-out，c1=1.7/c3=2.7 经典参数）：星星逐颗以约 10% 过冲缩放就位
+  // ——赋予/消除过渡演出（2026-09-26 用户定）：进入逐颗「叮」地弹入，退出逆序缩没
+  const backOut = (x) => { const u = x - 1; return 1 + 2.7 * u * u * u + 1.7 * u * u; };
+  const place = (s, a, i, k, lk) => {
+    // k=0 主星，k>0 拖影——滞后相位 + 体量/亮度递减；lk = 本颗星的局部 level（弹入进度）
     const depthK = 0.78 + 0.22 * Math.sin(a); // 近端大、远端小（绕后读法）
-    const sc = STAR_S * H * depthK * (1 - k * 0.18) * (1 + 0.2 * Math.sin(t * 9 + i * 2.1));
+    const sc = STAR_S * H * depthK * (1 - k * 0.18) * (1 + 0.2 * Math.sin(t * 9 + i * 2.1)) * backOut(lk);
     s.position.set(
       Math.cos(a) * orbitRx,
       orbitY + 0.02 * H * Math.sin(t * 3.1 + i * 1.7),
@@ -79,16 +83,19 @@ export function makeStunStars(layer, { color = 0xffd34c } = {}) {
     );
     s.scale.set(sc, sc, 1);
     const tw = 0.55 + 0.45 * Math.sin(t * 8.7 + i * 2.3);
-    s.material.opacity = level * tw * (k === 0 ? 1 : 0.38 / k) * (0.55 + 0.45 * depthK);
+    s.material.opacity = lk * tw * (k === 0 ? 1 : 0.38 / k) * (0.55 + 0.45 * depthK);
     s.material.rotation = k === 0 ? 0.25 * Math.sin(t * 3.3 + i * 1.9) : 0; // 主星慢摇
   };
   const untick = unit.addTick((dt) => {
     t += dt;
+    phase += dt * SPIN * (0.25 + 0.75 * level); // 转速渐入：晕透才转满速
     group.visible = level > 0.02 && !unit._dead;
     for (let i = 0; i < stars.length; i++) {
-      const a = t * SPIN + (i * Math.PI * 2) / stars.length;
-      place(stars[i].main, a, i, 0);
-      for (let k = 0; k < TRAILS; k++) place(stars[i].trail[k], a - 0.24 * (k + 1), i, k + 1);
+      // 逐颗弹入/缩没：level 斜坡按序推进到每颗星（稳态 level=1 → 全就位）
+      const lk = Math.max(0, Math.min(1, level * (STAR_COUNT + 0.5) - i * 0.9));
+      const a = phase + (i * Math.PI * 2) / stars.length;
+      place(stars[i].main, a, i, 0, lk);
+      for (let k = 0; k < TRAILS; k++) place(stars[i].trail[k], a - 0.24 * (k + 1), i, k + 1, lk);
     }
   });
   const dispose = () => {
