@@ -1,8 +1,11 @@
 // 卡牌本体特效（C0 牌面着色层）——WebGPU 迁移 TSL 版（2026-09-27，原 onBeforeCompile 字符串补丁重写）。
 // 范式与 unitBodyFx.js 同源（W3 立，细则见该文件头注）：uniform = TSL uniform() 节点
 // （`.value` 推值口径不变，CardFxLayer/CardObject 调用点零改动）；着色链 = TSL Fn 组合；
-// colorNode 全量接管 diffuse（base = materialColor × texture(map)）；牌面纹理经
+// colorNode 全量接管 diffuse（base = materialColor）；牌面纹理经
 // _setBakedFace 异步落地 → 落地后 rec.rebind() 建链。
+// ⚠ TSL 的 materialColor 已含 map（MaterialNode.COLOR = color × map）——
+// 再乘一次 texture(map) = tex²，中调被平方压暗（2026-09-27 战斗画面偏暗根因，
+// 实测板面 0.251²=0.063 与 FB 读数逐位吻合）；GLSL 版补丁作用于 map 之后无此坑。
 // 效果语义与 GLSL 版逐式一致（视觉零回归）：
 //   uBurn      0..1  焚毁吞蚀（离场演出）：自底向上噪声火线 + 炭化预热 + 逐格 discard；
 //                    uBurn=0 时前沿线在牌面下方界外，天然无效果
@@ -16,7 +19,7 @@
 //     状态档（dim/highlight）全部压阈下——状态是读数不是演出；
 //   · 合成顺序固定：状态档 → 焚毁（焚毁最大，盖过一切状态）。
 import {
-  Fn, If, Discard, uniform, texture, uv, materialColor,
+  Fn, If, Discard, uniform, uv, materialColor,
   vec2, vec3, vec4, mix, sin, dot, floor, fract, oneMinus,
 } from 'three/tsl';
 
@@ -68,8 +71,9 @@ export function attachCardBodyFx(material) {
     rebind: () => {
       if (!material.map) { material.colorNode = null; return; }
       // ⚠ TSL 纪律：If/Discard 必须在 Fn 栈内——整条合成包进一个 Fn 再调用
-      material.colorNode = Fn(([tex]) => {
-        const base = materialColor.mul(tex);
+      material.colorNode = Fn(() => {
+        // materialColor 已含 map（见文件头注⚠）——不许再乘 texture(material.map)
+        const base = materialColor;
         const fxUv = uv();
         const c = cbfShade(base.rgb, rec.uDim, rec.uHighlight, rec.uTime).toVar();
         // 焚毁（C0 上段，离场演出）：双频值噪声咬边火线，自底向上吞蚀
@@ -92,7 +96,7 @@ export function attachCardBodyFx(material) {
           });
         });
         return vec4(c, base.a);
-      })(texture(material.map, uv()));
+      })();
       material.needsUpdate = true;
     },
   };

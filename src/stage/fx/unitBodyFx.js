@@ -4,8 +4,10 @@
 //     全体调用点（unitFxLayer/剧本）零改动；
 //   · 着色链 = TSL Fn 组合（替代字符串 include）；材质创建点改用 Node 材质类
 //     （WebGPURenderer 反正把经典材质内部转节点，显式用节点类零额外代价）；
-//   · colorNode 全量接管 diffuse：base = materialColor × texture(map)（顶点色由
-//     NodeMaterial 在 colorNode 之后自动乘入，与旧 color_fragment 注入位序一致）；
+//   · colorNode 全量接管 diffuse：base = materialColor（⚠ TSL 的 materialColor
+//     已含 map——MaterialNode.COLOR = color × map，再乘一次 texture(map) = tex²
+//     平方压暗，2026-09-27 实测单位立绘中调崩掉的根因；顶点色由 NodeMaterial
+//     在 colorNode 之后自动乘入，与旧 color_fragment 注入位序一致）；
 //   · map 后到的材质（立绘异步挂载）：attach 时不建链，setArt 落地后 rec.rebind()
 //     重建 colorNode 并 needsUpdate——与旧 USE_MAP 变体重编的时机/成本一一对应；
 //   · bloom offset 通道：shade 返回 vec4(rgb, bloomOff)，attach 处在 colorNode 尾部
@@ -25,7 +27,7 @@
 //   · 着色链 TSL 件导出共享：W4 的 stasisShell（同源重算）与 W5 的 burnEmission
 //     （compute 化）import 同一份 Fn——单一事实源的地位与 GLSL_BODY_FX 时代相同。
 import {
-  Fn, If, uniform, texture, uv, materialColor, select,
+  Fn, If, uniform, uv, materialColor, select,
   vec2, vec3, vec4, float, mix, clamp, abs, max, min, floor, fract,
   sin, dot, length, step, smoothstep, oneMinus,
 } from 'three/tsl';
@@ -175,7 +177,8 @@ export function attachUnitBodyFx(material) {
     // 与旧 #ifdef USE_MAP 守卫生效范围一致）。重复调用幂等（同构图命中 program 缓存）。
     rebind: () => {
       if (!material.map) { material.colorNode = null; return; }
-      const base = materialColor.mul(texture(material.map, uv()));
+      // materialColor 已含 map（见文件头注⚠）——不许再乘 texture(material.map)
+      const base = materialColor;
       const fx = ubfShade(base.rgb, uv(), rec.uBurn, rec.uPoison, rec.uTime, rec.uCalm);
       material.colorNode = select(
         bloomPassFlag.greaterThan(0.5),
