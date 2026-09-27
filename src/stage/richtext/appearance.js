@@ -32,7 +32,7 @@ const TYPE_COLORS = Object.freeze({
 // 一眼区分系别（用户定）。等阶只保留在等阶标记上（徽章色 + 边框粗细/箔金），
 // 不再左右整卡色相。
 const LEINO_THEME = Object.freeze({
-  body: '#8a8f9d',  // 体修：岩灰
+  body: '#616369',  // 体修：岩灰（调暗降纯度，2026-09-27 用户定）
   fire: '#e85a5a',  // 火
   wood: '#4aa56e',  // 木
   air: '#7ad0e8',   // 风
