@@ -32,6 +32,10 @@ export function forceWebGLBackend() {
   return new URLSearchParams(location.search).get('forceWebGL') === '1';
 }
 
+// 调试口：页面内直拨开关表（harness/控制台二分用；vite 模块实例博弈的绕路）。
+// W6 随本文件整体删除。
+if (typeof window !== 'undefined') window.__TSL_READY = TSL_READY;
+
 /**
  * WebGPU 支持预检（加载门用）：拿不到 adapter 即不支持。
  * 用户定（2026-09-27）：不支持 WebGPU 的设备直接卡死在加载界面，不做任何回退。

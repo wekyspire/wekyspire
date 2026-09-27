@@ -945,8 +945,8 @@ registerEffect({
 // 融合（EFFECTS.md 既有定义，2026-09-22 随新小史莱姆实装为自持亡语）：死亡时，友军
 // 所有史莱姆族恢复 6 生命并获得 2 力量——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
 // 亡语挂在效果自身的死亡响应上（任何持有「融合」的单位都生效，不依赖敌人 def.onDeath）；
-// 史莱姆族口径与旧版一致：slime / slimeletA / slimeletB / bigSlime。
-const SLIME_FAMILY = new Set(['slime', 'slimeletA', 'slimeletB', 'slimelet', 'bigSlime']);
+// 史莱姆族口径：slime / slimeB / slimeletA / slimeletB / slimelet / bigSlime（2026-09-27 加 slimeB）。
+const SLIME_FAMILY = new Set(['slime', 'slimeB', 'slimeletA', 'slimeletB', 'slimelet', 'bigSlime']);
 registerEffect({
   id: 'fusion',
   type: 'buff',

@@ -28,6 +28,8 @@ const UNIT_ART_FILES = Object.freeze({
   remi: 'unit_remi.png',
   slime: 'unit_slime.png',
   bigSlime: 'unit_slime.png',
+  // slimeB 同理复用：防攻变体，同种个体（2026-09-27 史莱姆爆发压场位）
+  slimeB: 'unit_slime.png',
   slimelet: 'unit_slimelet.png',
   // A/B 行为变体（2026-09-22 章1重写）复用基底立绘：同种个体，只是行动顺序不同
   slimeletA: 'unit_slimelet.png',

@@ -115,5 +115,8 @@ export function createUiComposer() {
     render, resize, dispose, setBloom, bloomParams,
     // 调参口（与 volumetricMoon 同惯例）
     _nodes: { tColor, tBloom, uBloom },
+    // 调试探针口：色彩空间链排查用（读回 uiRT 线性像素）
+    _rt: rt,
+    _finalScene: finalScene,
   };
 }

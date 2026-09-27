@@ -133,7 +133,9 @@ export class StageManager {
     // （直渲 / 各 composer 链）终段都只出线性 HDR，tone+sRGB 由 blit 统一施加一次；
     // 选 Khronos PBR Neutral：保色相，只在接近过曝时压高光（不动既有布光配比）。
     // 纪律：全项目任何人不得再临时改 renderer.toneMapping（passes.js 头注铁律）。
-    applyToneMapping(this._renderer, DEFAULT_TONE_MODE, 1);
+    // exposure 1.6（2026-09-27 用户定：房间层太暗——Neutral 曲线 0.76 以下近恒等，
+    // 暗部近似线性乘；高光段由曲线压住；bloom 在上游 RT 链已算完，不受 exposure 影响）
+    applyToneMapping(this._renderer, DEFAULT_TONE_MODE, 1.6);
     // 阴影贴图（月光穿窗投影用）：WebGPURenderer 无 renderer.shadowMap 门面
     // （节点体系里阴影随灯光声明自动处理），此分支只对旧 WebGLRenderer 假件生效
     if (this._renderer.shadowMap) {

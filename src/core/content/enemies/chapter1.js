@@ -67,23 +67,30 @@ registerSkill({
 // ---- 普通怪 ----
 
 // 史莱姆：教学基准怪——攻 12 → 盾 8 两拍循环。第 1 层固定单挑；2–4 层史莱姆战固定位。
-registerEnemy({
-  id: 'slime', name: '史莱姆',
-  difficulty: { base: 2, floorMin: 1, floorMax: 4 },
-  createUnit: () => new Enemy({ defId: 'slime', name: '史莱姆', maxHp: 27 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 12 + actx.unit.getStat('attack'),
-      }));
-    } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack') }
-    : { kinds: ['defend'], note: '自身护盾+8' }),
-});
+// 史莱姆B：防攻变体（盾 8 → 攻 12）——史莱姆爆发主题战的压场位：首拍起盾不下压，
+// 给小史莱姆的塞粘液/融合滚雪球留出铺开时间（2026-09-27 用户定）。
+// 楼层区间即模板出没层；通配位就近取材贴最低 base（小史莱姆 1），B 实际不进编成。
+function slimeDef(id, { name, attackFirst, difficulty }) {
+  registerEnemy({
+    id, name, difficulty,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 27 }),
+    act(actx) {
+      const attackBeat = actx.unit.actionIndex % 2 === (attackFirst ? 0 : 1);
+      if (attackBeat) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: actx.unit, target: actx.player, amount: 12 + actx.unit.getStat('attack'),
+        }));
+      } else {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 8 }));
+      }
+    },
+    getIntention: (unit) => ((unit.actionIndex % 2 === (attackFirst ? 0 : 1))
+      ? { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack') }
+      : { kinds: ['defend'], note: '自身护盾+8' }),
+  });
+}
+slimeDef('slime', { name: '史莱姆', attackFirst: true, difficulty: { base: 2, floorMin: 1, floorMax: 4 } });
+slimeDef('slimeB', { name: '史莱姆B', attackFirst: false, difficulty: { base: 2, floorMin: 3, floorMax: 5 } });
 
 // 怨灵 A/B（成群出现的强 Debuff 位；A 类开局洗 4 张虚无，B 类开局虚弱 2）：
 // 之后两拍循环——攻 10 → 洗 1 张虚无。虚无牌永久滞留牌库，长线磨损玩家的抽牌质量。
