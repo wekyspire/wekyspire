@@ -4,7 +4,7 @@
 // 大世界层（塔楼层）= MapStage（ThreeJS）+ Three 面板（prep 等，见 stage/panels/）；
 // 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud 等叠加；休息阶段面板见 stage/panels/。
 // dialogue / cutscene overlay 由 Vue 渲染，跨后两层（CutsceneOverlay）。
-import { onMounted, onBeforeUnmount, ref, computed, provide } from 'vue';
+import { onMounted, onBeforeUnmount, ref, computed, provide, watch } from 'vue';
 import '../core/content/index.js'; // 注册全部最小内容
 import { StageManager } from '../stage/StageManager.js';
 import { MapStage } from '../stage/stages/MapStage.js';
@@ -204,6 +204,10 @@ let keyHandler = null;
 onMounted(() => {
   stageManager = new StageManager();
   stageManager.attach(canvas.value);
+  // 卡牌/UI 后处理链（辉光）：settings 下行 + 运行时热切换；?uipost=0 强制关（排障/低档机）
+  if (new URLSearchParams(location.search).get('uipost') === '0') settings.fxPost = false;
+  stageManager.setUiPostProcessing(settings.fxPost);
+  watch(() => settings.fxPost, (on) => stageManager?.setUiPostProcessing(on));
   fitFrame();
   window.addEventListener('resize', fitFrame);
   stageManager.start();

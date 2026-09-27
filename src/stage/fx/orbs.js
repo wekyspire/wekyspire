@@ -36,7 +36,8 @@ function cachedTex(key, color, draw) {
 }
 
 // 柔光晕：中心主题色 65% → 透明（additive 下读出"热空气"）
-function glowTexture(color) {
+// （export：bodyFlames 贴体叠火共享同一纹理缓存——缓存不逐件销，见 attachOrbs dispose）
+export function glowTexture(color) {
   return cachedTex('glow', color, (g, rgb) => {
     const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
     grad.addColorStop(0, `rgba(${rgb},0.7)`);
@@ -49,7 +50,8 @@ function glowTexture(color) {
 
 // 焰身：水滴火苗。底 1/3 白热芯 → 中段主题色 → 两缕上挑火舌渐隐成暗红。
 // 画在 128 方布的下半→顶部（贴图原点左上），sprite 中心即焰心偏下。
-function flameTexture(color) {
+// （export：bodyFlames 贴体叠火共享同一纹理缓存）
+export function flameTexture(color) {
   return cachedTex('flame', color, (g, rgb) => {
     // 主体泪滴：贝塞尔轮廓 + 纵向渐变
     const body = g.createLinearGradient(64, 118, 64, 18);

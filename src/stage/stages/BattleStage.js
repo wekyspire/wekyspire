@@ -38,6 +38,7 @@ import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ScreenShake, DamageVignette, damageSeverity } from '../objects/screenImpactFX.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
+import { createGpuParticles } from '../fx/gpu/gpuParticles.js';
 import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
@@ -56,6 +57,7 @@ import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
 import { resolveDamageRecipe, resolveUnitAuras } from '../fx/recipes.js';
+import { playCardTransform } from '../fx/cardTransform.js';
 import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
 import { getScript } from '../fx/scripts/index.js';
@@ -243,6 +245,11 @@ export class BattleStage {
     this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
 
+    // GPU 粒子池（2026-09-27，常驻联动发射：燃烧火星从火缘起飞随风飘散是首例）——
+    // 能力不齐（无 WebGL2/float RT、假 renderer）返回 null，aura 自动回退 CPU emitter
+    this.gpuParticles = createGpuParticles(stageManager._renderer);
+    if (this.gpuParticles) this.scene.add(this.gpuParticles.points);
+
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
     // 震荡是相机导演的一路**叠加偏移通道**（与运镜可合成：转段推镜途中受击照样震，
     // 不会把在途镜头钉住，也不会用过期基位把相机拷回——旧模型的转段跃变病灶）；
@@ -310,6 +317,7 @@ export class BattleStage {
       this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
+      this.gpuParticles?.update(dt); // GPU 粒子：emission 图集 → cursor → state 全 GPU
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       for (const unit of this._units.values()) {
@@ -520,6 +528,7 @@ export class BattleStage {
           textureAnisotropy: Math.min(8, this._smMaxAnisotropy()),
         });
         obj._defId = unitProj.defId;
+        // L0 本体补丁由 UnitFxLayer 在 UnitObject 构造时挂好（VFX Phase 2 收口）
         this._units.set(unitProj.uniqueID, obj);
         this.scene.add(obj);
         this.animator.register(unitProj.uniqueID, obj);
@@ -548,11 +557,35 @@ export class BattleStage {
         auras = new AuraHost({ object3D: obj });
         this._unitAuras.set(unitProj.uniqueID, auras);
       }
-      auras.set(resolveUnitAuras(unitProj.effects, { particles: this.particles, unit: obj }));
+      const resolved = resolveUnitAuras(
+        // ⚠ 真死单位解空效果表（在挂 aura 走 exit 收殓）——否则尸体隐藏后 aura 仍活，
+        // 燃烧发射器在尸体锚点上永远撒火星（2026-09-27 验收 agent 抓：烧死的怪原地
+        // 喷火星 15s+）。时机天然对齐：死亡节拍「先演后变」，快照带上 isDead 时尸体
+        // 恰好收殓隐藏。假死（reviving）不在此列——复苏后仍在烧，aura 保持。
+        unitProj.isDead && !unitProj.reviving ? [] : unitProj.effects,
+        { particles: this.particles, unit: obj, gpu: this.gpuParticles });
+      auras.set(resolved);
+      // 存续 aura 的强度追层数：set() 只管增删，burn level 等随 stacks 的更新走
+      // def.update（stacks 3→7 火焰随旺；无 update 钩的 def 不受影响）
+      for (const [key, def] of resolved) {
+        const aura = auras.get(key);
+        if (aura && typeof def.update === 'function') {
+          def.update(aura, unitProj.effects.find((e) => e.effectId === key));
+        }
+      }
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
     proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
+    // L0 本体补丁程序入场预热：首个同步批就把变体编好（compileAsync 走
+    // KHR_parallel_shader_compile 不冻主线程——charBurn 的 715ms 教训；单位本体是
+    // MeshBasicMaterial 小 shader，但一次性成本照样不留进演出）
+    if (!this._bodyFxWarmed && this._units.size > 0) {
+      this._bodyFxWarmed = true;
+      const r = this._sm?._renderer;
+      const warm = r?.compileAsync?.(this.scene, this._sm.camera);
+      if (!warm) r?.compile?.(this.scene, this._sm.camera);
+    }
     for (const [id, obj] of this._units) {
       if (!seen.has(id)) {
         this.picker.removePickable(id);
@@ -695,14 +728,18 @@ export class BattleStage {
       const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
       if (entry.faceSig !== sig) {
         entry.faceSig = sig;
-        // defId 变化 = 转化/进阶（如斩→裂石斩）：走专属金色演出（手牌内的转化路径，
-        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）
+        // defId 变化 = 转化/进阶（如斩→裂石斩）：走变换演出（手牌内的转化路径，
+        // 展示位/持有位的转化另走 ANIM_CARD_TRANSFORMED 节拍）——叠层双脸过渡
+        // 接管换脸（落幕一刻才 applyBakedFace，见 fx/cardTransform.js），不经 setCard
         const defChanged = entry.prevDefId != null && entry.prevDefId !== card.defId;
-        view.setCard(card);
-        if (defChanged) this._transformFx(id);
-        // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
-        else if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
-          this._pulseCard(id, 0xffd34c);
+        if (defChanged) {
+          this._transformFx(id, card);
+        } else {
+          view.setCard(card);
+          // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
+          if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
+            this._pulseCard(id, 0xffd34c);
+          }
         }
       }
       entry.prevDefId = card.defId;
@@ -1479,37 +1516,30 @@ export class BattleStage {
     });
   }
 
-  /** 金色迸发 + 卡面闪光（转化演出的特效半，不含缩放时间线与换脸）。
-   *  粒子 z 抬到卡面前方（+2）——与卡面共面时大半能量被牌面深度竞争吞掉；
-   *  fx 层闪光是必达通道（直接叠在牌面上）。 */
-  _transformBurst(id) {
+  /**
+   * 卡牌转化/进阶的变换演出（fx/cardTransform.js，默认 charReveal：焦化→燃烧尾迹→
+   * 白光新脸）。入口 = 手牌内被转化的对账路径（_syncCardContents 发现 defId 变化——
+   * **换脸由演出接管**（落幕一刻 applyBakedFace，勿先 setCard）；展示/持有位的转化
+   * 走 _transformBeat 的完整 staging。mode 参数留给日后多模式（注册表见 cardTransform.js）。
+   */
+  _transformFx(id, card = null, onDone = null, mode = 'charReveal') {
     const view = this._views.get(id);
-    if (!view) return;
-    const p = view.position;
-    this.particles.spawn(p.x, p.y, { count: 26, color: 0xffd76a, speed: 16, ttl: 0.7, size: 1.6, z: (p.z ?? 0) + 2 });
-    this.particles.spawn(p.x, p.y, { count: 12, color: 0xfff3c0, speed: 24, ttl: 0.5, size: 1.1, z: (p.z ?? 0) + 2 });
-    view.fx.pulse({ color: 0xffe9a8, durationMs: 460, scale: 1.5 });
-  }
-
-  /** 卡牌转化/进阶的共用演出（金色迸发 + 尺寸脉冲）。
-   *  入口 = 手牌内被转化的对账路径（_syncCardContents 发现 defId 变化——换脸已在
-   *  差分里完成，这里只补特效）；展示/持有位的转化走 _transformBeat 的完整 staging。 */
-  _transformFx(id, onDone = null) {
-    const view = this._views.get(id);
-    if (!view) { onDone?.(); return; }
-    this._transformBurst(id);
+    if (!view || !card) { onDone?.(); return; }
+    playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
+    // 体量呼吸裹在演出外（变换的重量感）：缓起 1.08 → 随白光收束回程
     const s0 = view.scale.x || 1;
-    this.animator.animate(id, { scale: s0 * 1.3 }, {
-      durationMs: 160,
-      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 160, onComplete: onDone ?? undefined }),
+    this.animator.animate(id, { scale: s0 * 1.08 }, {
+      durationMs: 300, ease: 'power1.out',
+      onComplete: () => this.animator.animate(id, { scale: s0 }, { durationMs: 420 }),
     });
   }
 
-  // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底瞬时换脸 + 金爆
-  // （身份切换藏在闪光下）→ 过冲弹起 → 回稳 → 新脸停留窗。旧版「瞬时换脸 + 一撮
-  // 粒子 + 1.25 脉冲」与威力提升公共节拍语言雷同、读不出跃迁；且斩系打出进阶后
-  // 紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留停留窗的话新脸
-  // 唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经 _syncCardContents
+  // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底起变换演出
+  // （charReveal 双脸过渡接管换脸）→ 过冲弹起（演出并行）→ 回稳 → 新脸停留窗。
+  // 停留窗对齐演出全长（820ms）：旧版 260ms 窗读不完白光收束后的新脸；且斩系
+  // 打出进阶后紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留
+  // 停留窗的话新脸唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经
+  // _syncCardContents（只扫手牌），换脸只能由本节拍承担。
   // （只扫手牌），换脸只能由本节拍承担。
   _transformBeat(payload, finish) {
     const id = payload?.card?.uniqueID ?? null;
@@ -1520,8 +1550,11 @@ export class BattleStage {
       durationMs: 110,
       ease: 'power1.in',
       onComplete: () => {
-        if (payload?.cardView) view.setCard(payload.cardView); // 谷底换脸（藏在闪光下）
-        this._transformBurst(id);
+        // 谷底起变换演出（charReveal 接管换脸——不再瞬时 setCard + 金爆，
+        // 金光粒子的职责由燃烧尾迹/白光承担）
+        if (payload?.cardView) {
+          playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
+        }
         this.animator.animate(id, { scale: s0 * 1.42 }, { // 过冲弹起（跃迁感）
           durationMs: 170,
           ease: 'back.out(2.2)',
@@ -1529,8 +1562,8 @@ export class BattleStage {
             this.animator.animate(id, { scale: s0 }, { // 回稳
               durationMs: 190,
               onComplete: () => {
-                // 新脸停留窗（纯延迟 tween）：给玩家读完新身份再走后续节拍
-                this.animator.animate(id, {}, { delayMs: 260, onComplete: finish });
+                // 新脸停留窗对齐演出全长：谷底起 820ms 的 charReveal 跑完才放后续节拍
+                this.animator.animate(id, {}, { delayMs: 460, onComplete: finish });
               },
             });
           },
@@ -2598,6 +2631,8 @@ export class BattleStage {
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;
+    this.gpuParticles?.dispose(); // GPU 粒子池（aura dispose 已先摘除全部活跃单位）
+    this.gpuParticles = null;
     this.composeScene = null;
     this.composeResize = null;
     this._unsubTick?.();

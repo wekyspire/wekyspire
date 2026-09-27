@@ -29,6 +29,41 @@ const importText = ref('');
 const exportText = ref('');
 const pick = ref({ card: '', relic: '', effect: 'burn', battleCard: '', pack: '' });
 
+// ---- 拖拽移位（2026-09-27 用户定）：缺省顶部居中（旧缺省左上角会遮塔楼层按钮）——
+// 抓住标题栏拖动换位置，坐标持久化到 localStorage；钳制防拖出屏外找不回
+const panelEl = ref(null);
+const POS_KEY = 'wekyspire:debugPanelPos';
+const pos = ref(null); // null = 缺省锚位（顶部居中，走 CSS）；{x, y} = 拖过的固定锚点
+try {
+  const saved = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null');
+  if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) pos.value = saved;
+} catch { /* 坏档当没有 */ }
+const posStyle = computed(() => pos.value
+  ? { left: `${pos.value.x}px`, top: `${pos.value.y}px`, transform: 'none' }
+  : {});
+function onDragStart(e) {
+  if (e.button !== 0 || e.target.closest('button')) return; // 头栏按钮（收起）不触发拖
+  const el = panelEl.value;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const base = { x: pos.value?.x ?? rect.left, y: pos.value?.y ?? rect.top };
+  const sx = e.clientX, sy = e.clientY;
+  const move = (ev) => {
+    pos.value = {
+      x: Math.min(Math.max(base.x + ev.clientX - sx, -rect.width * 0.5), window.innerWidth - 80),
+      y: Math.min(Math.max(base.y + ev.clientY - sy, 0), window.innerHeight - 48),
+    };
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    try { localStorage.setItem(POS_KEY, JSON.stringify(pos.value)); } catch { /* 隐私模式 */ }
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  e.preventDefault(); // 拖动不选中文字
+}
+
 const TABS = [
   ['state', '状态'], ['deck', '卡组'], ['relics', '遗物'],
   ['flow', '流程'], ['battle', '战斗'], ['save', '存档'],
@@ -120,8 +155,8 @@ function reloadCurrent() {
 </script>
 
 <template>
-  <div class="dbg">
-    <div class="head">
+  <div class="dbg" ref="panelEl" :style="posStyle">
+    <div class="head" @mousedown="onDragStart">
       <span class="title">调试模式</span>
       <span class="tag" :class="{ live: dbg.session }">{{ dbg.session ? '调试局 · debug 槽' : '普通局（改一下就转调试局）' }}</span>
       <button class="x" @click="emit('close')">收起 (F9)</button>
@@ -317,6 +352,7 @@ function reloadCurrent() {
             </select>
             <button @click="dbg.addBattleEffect('player', pick.effect, 3)">给自己 ×3</button>
             <button @click="dbg.addBattleEffect('enemy', pick.effect, 3)">给敌人 ×3</button>
+            <button @click="dbg.cleanseBattle()">净化全场（清零所有效果）</button>
           </div>
           <div class="row">
             <span class="k">敌人</span>
@@ -365,12 +401,12 @@ function reloadCurrent() {
 <style scoped>
 /* 扁平深底 + 白字 + 淡蓝描边（与全局 UI 风格一致）；z 压过幕间内容层与切幕黑幕 */
 .dbg {
-  position: fixed; top: 10px; left: 10px; z-index: 120;
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 120;
   width: 470px; max-height: calc(100% - 20px); display: flex; flex-direction: column;
   background: rgba(8, 11, 18, .94); border: 1px solid #3f5f8c; border-radius: 4px;
   color: #e8eefb; font-family: sans-serif; font-size: 12px;
 }
-.head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #26324a; }
+.head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #26324a; cursor: move; user-select: none; }
 .title { font-size: 13px; letter-spacing: 1px; }
 .tag { font-size: 11px; color: #c3cee0; }
 .tag.live { color: #ffd479; }
