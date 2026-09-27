@@ -35,7 +35,9 @@ export default class Player extends Unit {
     // 溢出部分才吃手牌容量——见 helpers.effectiveHandCount）。
     this.maxHandSize = opts.maxHandSize ?? 5;
     // 咏唱容量（激活咏唱的免费占用额度，按咏唱开销计数不按卡数；空系未来的改造钩子）。
-    this.chantCapacity = opts.chantCapacity ?? 1;
+    // 2026-09-27 用户定：1→2——容量 1 时咏唱流单引擎就占满免费额度，双引擎运转
+    // 必然挤手牌容量，体系起不来。
+    this.chantCapacity = opts.chantCapacity ?? 2;
 
     // 基础值（run 级修正的基准）：遗物的 run 级加成（行动力上限/魏启上限/防御…）
     // **不写进这些字段**，而是每次由 refreshRunModifiers 从 baseStats + Σ已激活遗物修正重算。

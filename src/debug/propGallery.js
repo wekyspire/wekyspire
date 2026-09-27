@@ -3,6 +3,7 @@
 // 打开：npm run dev 后访问 /propGallery.html。
 
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
 import { propRegistry } from '../stage/scenes/props/index.js';
 import { P, PALETTES, setTheme, getTheme, shade } from '../stage/scenes/kit/palette.js';
 import { box, plate } from '../stage/scenes/kit/primitives.js';
@@ -18,10 +19,9 @@ const canvas = document.createElement('canvas');
 canvas.id = 'gallery-canvas';
 document.body.appendChild(canvas);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new WebGPURenderer({ canvas, antialias: true });
+await renderer.init(); // WebGPURenderer 异步初始化（TLA，es2022）
 renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x07090f);

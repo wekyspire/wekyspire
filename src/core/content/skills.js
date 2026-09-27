@@ -67,7 +67,7 @@ registerSkill({
 
 // ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
 // 点火是火体系的燃烧入口——2026-09 改为首次点亮火灵脉时由进阶获赠直发
-// （ascension.FIRST_ASCENSION_GRANT），不再占用种子包必出位。
+// （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
   id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },

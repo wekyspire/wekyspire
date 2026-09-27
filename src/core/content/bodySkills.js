@@ -115,9 +115,7 @@ function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null })
       return true;
     },
     describe: () => `${damage}伤害；/named{先手}：抽${draw}`,
-    battleDescribe: (sctx) => (isFirstPlayThisTurn(sctx)
-      ? `${resolvedDamageText(sctx, damage)}，抽${draw}牌`
-      : resolvedDamageText(sctx, damage)),
+    // 无 battleDescribe：「先手」条件简单，静态描述即机制（2026-09-27 口径）。
   });
 }
 
@@ -146,9 +144,7 @@ function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null
       return true;
     },
     describe: () => `9伤害；/named{后手}：+${bonus}${draw > 0 ? `，抽${draw}` : ''}`,
-    battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx)
-      ? `${resolvedDamageText(sctx, 9 + bonus)}${draw > 0 ? `，抽${draw}牌` : ''}`
-      : resolvedDamageText(sctx, 9)),
+    // 无 battleDescribe：「后手」条件简单，静态描述即机制（2026-09-27 口径）。
   });
 }
 
@@ -176,7 +172,8 @@ registerSkill({
     return true;
   },
   describe: () => '/named{后手}：抽7',
-  battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx) ? '抽7牌' : '无效果'),
+  // 无 battleDescribe：条件不满足时显示「无效果」会让玩家永远看不到机制
+  // （2026-09-27 口径：判定条件简单的卡保持原 describe）。
 });
 
 // 空形拳（S，伤害线顶点）：无基础伤害——后手：55 伤。
@@ -190,7 +187,7 @@ registerSkill({
     return true;
   },
   describe: () => '/named{后手}：55伤害',
-  battleDescribe: (sctx) => (isLastHandCardAtPlay(sctx) ? resolvedDamageText(sctx, 55) : '无效果'),
+  // 无 battleDescribe：同虚形拳（条件简单，保持机制可见）。
 });
 
 // ==== 5. 蓄力系列（向牌库注入价值：瞬击 = 0 费即抛型过牌弹药）====
@@ -675,10 +672,7 @@ function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
       return true;
     },
     describe: () => `抽1；/named{自由}手牌不超过${threshold}张时，再抽${extra}`,
-    battleDescribe: (sctx) => {
-      const free = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `抽1（当前自由手牌${free}张${free <= threshold ? `，再抽${extra}` : ''}）`;
-    },
+    // 无 battleDescribe：阈值条件比读数更要紧（2026-09-27 口径）。
   });
 }
 counterDrawCard({ id: 'counterDraw', tier: 'C', threshold: 2, extra: 1, promotesTo: 'counterDrawPlus' });
@@ -704,10 +698,7 @@ function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = n
       return true;
     },
     describe: () => `${base}群伤。手牌不少于${threshold}张时，+${bonus}`,
-    battleDescribe: (sctx) => {
-      const full = sctx.battleState.zones.hand.length >= threshold;
-      return `群伤${resolvedDamageText(sctx, base + (full ? bonus : 0)).replace('伤害', '')}`;
-    },
+    // 无 battleDescribe：阈值条件简单，静态描述即机制（2026-09-27 口径）。
   });
 }
 fullChargeCard({ id: 'fullCharge', name: '蓄满一击', tier: 'C', base: 6, bonus: 7, threshold: 4, promotesTo: 'fullChargePlus' });

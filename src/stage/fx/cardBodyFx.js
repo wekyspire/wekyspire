@@ -1,116 +1,105 @@
-// 卡牌本体特效补丁（C0 牌面 shader 层，VFX 结构大更新 Phase 3，2026-09-27）：
-// 对位单位侧 L0（unitBodyFx.js）——同一手法挂进牌面 MeshBasicMaterial：
-// **每卡独立材质实例**（CardObject 构造即 new），补丁随材质 dispose 自然消亡；
-// 单 program 多 uniform 常驻（构造即挂，效果全 0 时零视觉）——焚毁点燃/状态切换
-// 只推 uniform 不再换 onBeforeCompile 重编译（旧 startBurn 点燃时换 cacheKey 重编
-// 的做法废弃：补丁常驻后点燃零编译成本）。
-//  uniforms：
-//   uBurn      0..1  焚毁吞蚀（离场演出）：自底向上噪声火线 + 炭化预热 + 逐格 discard——
-//                    实现与旧 startBurn 内联补丁逐式一致（视觉零回归）；uBurn=0 时
-//                    前沿线在牌面下方界外，天然无效果
+// 卡牌本体特效（C0 牌面着色层）——WebGPU 迁移 TSL 版（2026-09-27，原 onBeforeCompile 字符串补丁重写）。
+// 范式与 unitBodyFx.js 同源（W3 立，细则见该文件头注）：uniform = TSL uniform() 节点
+// （`.value` 推值口径不变，CardFxLayer/CardObject 调用点零改动）；着色链 = TSL Fn 组合；
+// colorNode 全量接管 diffuse（base = materialColor × texture(map)）；牌面纹理经
+// _setBakedFace 异步落地 → 落地后 rec.rebind() 建链。
+// 效果语义与 GLSL 版逐式一致（视觉零回归）：
+//   uBurn      0..1  焚毁吞蚀（离场演出）：自底向上噪声火线 + 炭化预热 + 逐格 discard；
+//                    uBurn=0 时前沿线在牌面下方界外，天然无效果
 //   uSeed            焚毁噪声种子（每张卡咬边形状不同，点燃时写入）
-//   uDim       0..1  禁用态（setVisualState('disabled') 的 shader 版——旧实现是
-//                    material.color 乘 0xb8b8b8 的粗占位）：去饱和 + 压暗 + 微冷
-//   uHighlight 0..1  高亮态（'highlighted'）：提亮 + 微暖 + 极轻呼吸（uTime 驱动）
-//   uTime            秒计时（CardFxLayer 的层内统一钟推进——多 uniform 共用一钟）
+//   uDim       0..1  禁用态：去饱和 + 压暗 + 微冷
+//   uHighlight 0..1  高亮态：提亮 + 微暖 + 极轻呼吸（uTime 驱动）
+//   uTime            秒计时（CardFxLayer 的层内统一钟推进）
 // 纪律：
-//   · 只动 diffuseColor.rgb，不碰 alpha——命中热区/透明度语义零影响；
-//   · 自带 varying（vCardFxUv），不依赖 USE_MAP（无贴图的占位牌也编译得过）；
+//   · 只动 rgb，不碰 alpha——命中热区/透明度语义零影响；
 //   · HDR 约定：焚毁火线峰 ~2.05 过 uiScene bloom 阈 1.45（既有视觉，刻意保留）；
 //     状态档（dim/highlight）全部压阈下——状态是读数不是演出；
 //   · 合成顺序固定：状态档 → 焚毁（焚毁最大，盖过一切状态）。
-import * as THREE from 'three';
+import {
+  Fn, If, Discard, uniform, texture, uv, materialColor,
+  vec2, vec3, vec4, mix, sin, dot, floor, fract, oneMinus,
+} from 'three/tsl';
 
 const PATCH_KEY = '_cardBodyFx';
 
-// C0 着色链（注入牌面材质 color_fragment 后）
-const GLSL_CARD_BODY_FX = /* glsl */`
-  float cardBodyFxHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-  float cardBodyFxNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(cardBodyFxHash(i), cardBodyFxHash(i + vec2(1.0, 0.0)), u.x),
-               mix(cardBodyFxHash(i + vec2(0.0, 1.0)), cardBodyFxHash(i + vec2(1.0, 1.0)), u.x), u.y);
-  }
-  vec3 cardBodyFxShade(vec3 base, vec2 uv, float uDim, float uHighlight, float uTime) {
-    vec3 c = base;
-    // 禁用：去饱和 + 压暗 + 微冷（「打不出去」的冷却感；旧乘法灰化的精致版）
-    if (uDim > 0.001) {
-      float g = dot(c, vec3(0.299, 0.587, 0.114));
-      c = mix(c, vec3(g), 0.62 * uDim) * mix(1.0, 0.66, uDim);
-      c = mix(c, c * vec3(0.92, 0.97, 1.08), uDim);
-    }
-    // 高亮：提亮 + 微暖 + 极轻呼吸（可点/被选中的活物感）
-    if (uHighlight > 0.001) {
-      float breath = 0.5 + 0.5 * sin(uTime * 2.4);
-      c *= 1.0 + uHighlight * (0.10 + 0.05 * breath);
-      c = mix(c, c * vec3(1.06, 1.03, 0.90), uHighlight);
-    }
-    return c;
-  }
-`;
+const cbfHash = Fn(([p]) =>
+  fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453123)));
+
+const cbfNoise = Fn(([p]) => {
+  const i = floor(p);
+  const f = fract(p);
+  const u = f.mul(f).mul(f.mul(-2.0).add(3.0));
+  return mix(
+    mix(cbfHash(i), cbfHash(i.add(vec2(1.0, 0.0))), u.x),
+    mix(cbfHash(i.add(vec2(0.0, 1.0))), cbfHash(i.add(vec2(1.0, 1.0))), u.x),
+    u.y);
+});
+
+// 状态档（C0 下段）：禁用压暗 / 高亮提暖
+const cbfShade = Fn(([base, uDim, uHighlight, uTime]) => {
+  const c = base.toVar();
+  If(uDim.greaterThan(0.001), () => {
+    const g = dot(c, vec3(0.299, 0.587, 0.114));
+    c.assign(mix(c, vec3(g), uDim.mul(0.62)).mul(mix(1.0, 0.66, uDim)));
+    c.assign(mix(c, c.mul(vec3(0.92, 0.97, 1.08)), uDim));
+  });
+  If(uHighlight.greaterThan(0.001), () => {
+    const breath = sin(uTime.mul(2.4)).mul(0.5).add(0.5);
+    c.mulAssign(uHighlight.mul(breath.mul(0.05).add(0.10)).add(1.0));
+    c.assign(mix(c, c.mul(vec3(1.06, 1.03, 0.90)), uHighlight));
+  });
+  return c;
+});
 
 /**
- * 给牌面材质打 C0 特效补丁（幂等：已打过直接取原记录）。
- * @returns {{ uBurn:{value}, uSeed:{value}, uDim:{value}, uHighlight:{value}, uTime:{value} }}
+ * 给牌面材质挂 C0 特效（幂等：已挂过直接取原记录）。
+ * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, rebind: () => void }}
  */
 export function attachCardBodyFx(material) {
   if (material.userData[PATCH_KEY]) return material.userData[PATCH_KEY];
   const rec = {
-    uBurn: { value: 0 },
-    uSeed: { value: 0 },
-    uDim: { value: 0 },
-    uHighlight: { value: 0 },
-    uTime: { value: 0 },
+    uBurn: uniform(0),
+    uSeed: uniform(0),
+    uDim: uniform(0),
+    uHighlight: uniform(0),
+    uTime: uniform(0),
+    // 牌面纹理落地（_setBakedFace 换脸）后调：重建 colorNode 链
+    // （同构图命中 program 缓存，变换换脸只换纹理绑定不重编译）
+    rebind: () => {
+      if (!material.map) { material.colorNode = null; return; }
+      // ⚠ TSL 纪律：If/Discard 必须在 Fn 栈内——整条合成包进一个 Fn 再调用
+      material.colorNode = Fn(([tex]) => {
+        const base = materialColor.mul(tex);
+        const fxUv = uv();
+        const c = cbfShade(base.rgb, rec.uDim, rec.uHighlight, rec.uTime).toVar();
+        // 焚毁（C0 上段，离场演出）：双频值噪声咬边火线，自底向上吞蚀
+        If(rec.uBurn.greaterThan(0.001), () => {
+          const n = cbfNoise(fxUv.mul(vec2(5.0, 8.0)).add(vec2(rec.uSeed, rec.uSeed.mul(0.7)))).mul(0.6)
+            .add(cbfNoise(fxUv.mul(vec2(11.0, 17.0)).sub(rec.uSeed)).mul(0.4));
+          const line = rec.uBurn.mul(1.45).sub(0.2);              // 前沿自底向上推进（两端留噪声余量）
+          const d = fxUv.y.sub(line).add(n.sub(0.5).mul(0.45));   // 距前沿的有符号距离
+          If(d.lessThan(-0.05), () => {
+            Discard();                                            // 已燃尽区域
+          }).ElseIf(d.lessThan(0.02), () => {
+            // 火线辉光带（深橙→亮黄，HDR 过阈）
+            const g = oneMinus(d.add(0.05).div(0.07));
+            const ember = mix(vec3(0.55, 0.12, 0.01), vec3(1.0, 0.88, 0.42), g.mul(g));
+            c.assign(mix(c.mul(0.3), ember.mul(g.mul(0.9).add(1.15)), g));
+          }).ElseIf(d.lessThan(0.16), () => {
+            // 前沿上方炭化预热（焦黑泛红）
+            const c1 = oneMinus(d.sub(0.02).div(0.14));
+            c.assign(mix(c, c.mul(vec3(0.4, 0.26, 0.2)).add(vec3(0.09, 0.015, 0.0)), c1.mul(0.85)));
+          });
+        });
+        return vec4(c, base.a);
+      })(texture(material.map, uv()));
+      material.needsUpdate = true;
+    },
   };
   material.userData[PATCH_KEY] = rec;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uBurn = rec.uBurn;
-    shader.uniforms.uSeed = rec.uSeed;
-    shader.uniforms.uDim = rec.uDim;
-    shader.uniforms.uHighlight = rec.uHighlight;
-    shader.uniforms.uTime = rec.uTime;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vCardFxUv;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvCardFxUv = uv;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-varying vec2 vCardFxUv;
-uniform float uBurn;
-uniform float uSeed;
-uniform float uDim;
-uniform float uHighlight;
-uniform float uTime;
-${GLSL_CARD_BODY_FX}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-{
-  // 状态档（C0 下段）：禁用压暗 / 高亮提暖
-  diffuseColor.rgb = cardBodyFxShade(diffuseColor.rgb, vCardFxUv, uDim, uHighlight, uTime);
-  // 焚毁（C0 上段，离场演出）：双频值噪声咬边火线，自底向上吞蚀
-  if (uBurn > 0.001) {
-    float n = cardBodyFxNoise(vCardFxUv * vec2(5.0, 8.0) + vec2(uSeed, uSeed * 0.7)) * 0.6
-            + cardBodyFxNoise(vCardFxUv * vec2(11.0, 17.0) - uSeed) * 0.4;
-    float line = uBurn * 1.45 - 0.2;               // 前沿自底向上推进（两端留噪声余量）
-    float d = vCardFxUv.y - line + (n - 0.5) * 0.45; // 距前沿的有符号距离
-    if (d < -0.05) {
-      discard;                                      // 已燃尽区域
-    } else if (d < 0.02) {
-      float g = 1.0 - (d + 0.05) / 0.07;            // 火线辉光带（深橙→亮黄，HDR 过阈）
-      vec3 ember = mix(vec3(0.55, 0.12, 0.01), vec3(1.0, 0.88, 0.42), g * g);
-      diffuseColor.rgb = mix(diffuseColor.rgb * 0.3, ember * (1.15 + 0.9 * g), g);
-    } else if (d < 0.16) {
-      float c1 = 1.0 - (d - 0.02) / 0.14;           // 前沿上方炭化预热（焦黑泛红）
-      diffuseColor.rgb = mix(diffuseColor.rgb,
-        diffuseColor.rgb * vec3(0.4, 0.26, 0.2) + vec3(0.09, 0.015, 0.0), c1 * 0.85);
-    }
-  }
-}`);
-  };
-  // 全体卡牌共享一个 program 变体（USE_MAP 等标准参数仍在缓存键里，有/无贴图各自成立）
-  material.customProgramCacheKey = () => 'weky-card-body-fx';
-  material.needsUpdate = true;
+  if (material.map) rec.rebind();
   return rec;
 }
 
-/** 取已打的补丁记录（未打 → null）。 */
+/** 取已挂的记录（未挂 → null）。 */
 export function cardBodyFxOf(material) { return material.userData[PATCH_KEY] ?? null; }

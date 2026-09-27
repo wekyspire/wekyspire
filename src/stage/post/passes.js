@@ -1,7 +1,31 @@
-// 共享后处理件（stage/post/ 层，2026-09-26 结构大更新 Phase 0）：
+// 共享后处理件（stage/post/ 层）——WebGPU 迁移 TSL 版（2026-09-27，GLSL 字符串件全部重写）：
 // 全屏 pass 的**唯一事实源**——体积月光 composer（scenes/volumetricMoon.js）与
-// uiScene composer（post/uiComposer.js）共用同一套 shader / 工具，bloom 阈值、
-// 色调映射曲线等全局约定只在这里各有一份，改一处两链同步。
+// uiScene composer（post/uiComposer.js）共用同一套节点函数，bloom 阈值等全局约定
+// 只在这里各有一份，改一处两链同步。
+//
+// TSL 化要点（W2 立的规矩）：
+//   · 全屏 pass = Scene + PlaneGeometry(2,2) + MeshBasicNodeMaterial（colorNode 注入），
+//     正交相机原样（顶点管线与 WebGL 时代数学等价）；纹理输入 = TextureNode，调用方
+//     每帧换 `.value`（RT ping-pong 的标准姿势）；
+//   · 渲进 RT 的 pass 天然无输出变换（isOutputTarget=false），与 WebGL RT 排除一致；
+//   · **RT 纹理采样必须过 passUV（V 翻转）**——WebGPU 帧缓冲原点在左上（WebGL 在
+//     左下），本后端渲出的 RT 纹理内容与 uv() 的屏幕朝向相反（probe-w2 实测：
+//     不翻转则整帧上下颠倒）。NDC 重建/屏幕空间计算仍用 uv()（它跟随片元 NDC
+//     朝向，与后端无关）；只有「把 RT 当纹理读」的采样点用 passUV。
+//
+// 输出变换铁律（flavor A，2026-09-27 用户定，取代 W2 的「节点内 tone + 临时摘
+// renderer.toneMapping」旧规矩——两套约定混用曾致塔楼整帧无 tone）：
+//   · **tone mapping + sRGB 的唯一落点 = 渲染器输出 blit**：渲屏幕（renderTarget=null）
+//     的 render() 自动走「内部 HalfFloat FB → 帧末 blit 施加 renderer.toneMapping +
+//     outputColorSpace」；帧内多条渲屏幕的 pass 顺序汇入同一 FB（首 pass autoClear
+//     清底、后续 pass autoClear=false 线性叠加），末次 blit 对全帧统一变换一次；
+//   · **所有 composer 链终段只出线性 HDR**（bloom 加算完即止）——任何节点内 tone
+//     都会被 blit 再映射一次 = 双重 tone；
+//   · **任何代码不得临时改 renderer.toneMapping/outputColorSpace**：它是全帧共享
+//     状态，帧内最后一个渲屏幕的 blit 按当时值施加给**整帧**（含先前 pass 的内容）——
+//     uiComposer 旧例的摘除窗口曾把塔楼世界的 tone 整帧冲掉（probe-blit 实测：
+//     画布 = sRGB(FB) 恰好无 tone）。调参只走 applyToneMapping（常驻设定，非逐帧）；
+//   · bloom 仍在各链内部、线性段做（tone 必须在其后，否则光晕发灰发脏）。
 //
 // 两条铁律（RT 间接合成成立的前提，uiComposer 依赖）：
 //   ① 终段合成用 premultiplied（ONE, ONE_MINUS_SRC_ALPHA）——three 法线混合在 RT
@@ -9,28 +33,38 @@
 //   ② uiScene 的加法发光件一律走 additiveLight()（rgb 加算照旧、alpha 不占地）——
 //     否则光斑的 alpha 会在 RT 里「占地」，合成时把背后的世界挡掉。
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import {
+  Fn, texture, uv,
+  vec2, vec4, clamp, max, oneMinus,
+} from 'three/tsl';
 
-export const VERT = /* glsl */`
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = vec4(position.xy, 0.0, 1.0);
-  }
-`;
+/** RT 纹理采样 UV（V 翻转，理由见文件头注最后一条）。 */
+export const passUV = vec2(uv().x, oneMinus(uv().y));
 
-// 全屏 pass 相机：模块级单例（渲染期无状态，所有 pass 共享一台）
+// 全屏 pass 相机：模块级单例（渲染期无状态，所有 pass 共享一台）。
+// 正交 (-1..1) 无旋转：平面四角直落 NDC——与旧 VERT 的 vec4(position.xy,0,1) 等价。
 const FS_CAM = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-/** 建一个全屏 quad pass（返回只有一子的 Scene）。 */
-export function makeFullScreenPass(fragmentShader, uniforms) {
+/**
+ * 建一个全屏 quad pass（返回只有一子的 Scene）。
+ * @param {Node} colorNode TSL 节点（调用方持 uniform/texture 节点，每帧换 .value）
+ * @param {object} [opts]
+ * @param {boolean} [opts.keepAlpha] RT 要保留 colorNode 的 alpha（如云 march 的透射率）
+ *   时必开：**非透明材质在 NodeBuilder 片元末段被强制 `DiffuseColor.w = 1.0`**
+ *   （opaque_fragment 约定，probe-cloudgal9 实测 WGSL 铁证）——RT alpha 恒 1，
+ *   composite 的 sc·(1−cl.a) 恒为 0（塔楼全黑病灶）。transparent 摘掉这行；
+ *   blending 置 NoBlending 防 NormalBlending 把 rgb 按 alpha 混进 RT 底色。
+ */
+export function makeFullScreenPass(colorNode, { keepAlpha = false } = {}) {
   const scene = new THREE.Scene();
-  scene.add(new THREE.Mesh(
-    new THREE.PlaneGeometry(2, 2),
-    new THREE.ShaderMaterial({
-      uniforms, vertexShader: VERT, fragmentShader,
-      depthTest: false, depthWrite: false,
-    }),
-  ));
+  const mat = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
+  if (keepAlpha) {
+    mat.transparent = true;
+    mat.blending = THREE.NoBlending;
+  }
+  mat.colorNode = colorNode;
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
   return scene;
 }
 
@@ -47,137 +81,72 @@ export function disposeFullScreenPass(scene) {
   }
 }
 
+// ---- bloom 链节点 ----
+
 // bright pass：软膝阈值提亮部（线性空间）。彩灯/屏幕这些 >1 的自发光体才是主角。
 // tOffset（bloom intensity offset 通道，见 fx/bloomOffset.js）：R 通道按 uOffsetScale
 // 加和进亮度判定——绘制结果可主动声明起晕强度，颜色本体不必拉爆 HDR。
 // 注意它只放大权重 w、不直接给颜色：bloom 光色仍取自 tColor 本像素（黑像素无晕）。
-export const FRAG_BRIGHT = /* glsl */`
-  precision highp float;
-  varying vec2 vUv;
-  uniform sampler2D tColor;
-  uniform sampler2D tOffset;
-  uniform float uOffsetScale;
-  uniform float uThreshold;
-  uniform float uKnee;
-  void main() {
-    vec3 c = texture2D(tColor, vUv).rgb;
-    float lum = max(c.r, max(c.g, c.b)) + texture2D(tOffset, vUv).r * uOffsetScale;
-    // 软膝：threshold 以下全黑，以上平滑过渡（硬阈值会让 bloom 边缘出现台阶）
-    float soft = clamp(lum - uThreshold + uKnee, 0.0, 2.0 * uKnee);
-    soft = soft * soft / (4.0 * uKnee + 1e-4);
-    float w = max(soft, lum - uThreshold) / max(lum, 1e-4);
-    gl_FragColor = vec4(c * w, 1.0);
-  }
-`;
+export const tslBright = Fn(([tColor, tOffset, uOffsetScale, uThreshold, uKnee]) => {
+  const c = texture(tColor, passUV).rgb;
+  const lum = max(c.r, max(c.g, c.b)).add(texture(tOffset, passUV).r.mul(uOffsetScale));
+  // 软膝：threshold 以下全黑，以上平滑过渡（硬阈值会让 bloom 边缘出现台阶）
+  const soft = clamp(lum.sub(uThreshold).add(uKnee), 0.0, uKnee.mul(2.0));
+  const softW = soft.mul(soft).div(uKnee.mul(4.0).add(1e-4));
+  const w = max(softW, lum.sub(uThreshold)).div(max(lum, 1e-4));
+  return vec4(c.mul(w), 1.0);
+});
 
 // 分离高斯模糊（9 抽样、线性采样跨步 → 实际覆盖 ~2px 半径；H/V 各跑一次）
-export const FRAG_BLUR = /* glsl */`
-  precision highp float;
-  varying vec2 vUv;
-  uniform sampler2D tSrc;
-  uniform vec2 uDir;      // 像素步长方向（已含半径）
-  void main() {
-    vec3 sum = texture2D(tSrc, vUv).rgb * 0.2270270270;
-    sum += texture2D(tSrc, vUv + uDir * 1.3846153846).rgb * 0.3162162162;
-    sum += texture2D(tSrc, vUv - uDir * 1.3846153846).rgb * 0.3162162162;
-    sum += texture2D(tSrc, vUv + uDir * 3.2307692308).rgb * 0.0702702703;
-    sum += texture2D(tSrc, vUv - uDir * 3.2307692308).rgb * 0.0702702703;
-    gl_FragColor = vec4(sum, 1.0);
-  }
-`;
+export const tslBlur = Fn(([tSrc, uDir]) => {
+  const sum = texture(tSrc, passUV).rgb.mul(0.2270270270).toVar();
+  sum.addAssign(texture(tSrc, passUV.add(uDir.mul(1.3846153846))).rgb.mul(0.3162162162));
+  sum.addAssign(texture(tSrc, passUV.sub(uDir.mul(1.3846153846))).rgb.mul(0.3162162162));
+  sum.addAssign(texture(tSrc, passUV.add(uDir.mul(3.2307692308))).rgb.mul(0.0702702703));
+  sum.addAssign(texture(tSrc, passUV.sub(uDir.mul(3.2307692308))).rgb.mul(0.0702702703));
+  return vec4(sum, 1.0);
+});
 
-// 色调映射库（GLSL 字符串件）：FRAG_FINAL 与 uiComposer 的 UI 终段共享同一份
-// 曲线实现——Neutral/ACES/Reinhard/none 四种，exposure 显式传参（不再读全局 uniform，
-// 行为与原内嵌版逐式等价）。
-export const GLSL_TONE_LIB = /* glsl */`
-  vec3 linearToSrgb(vec3 c) {
-    return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
-  }
-  vec3 toneNeutral(vec3 color, float exposure) {
-    const float StartCompression = 0.8 - 0.04;
-    const float Desaturation = 0.15;
-    color *= exposure;
-    float x = min(color.r, min(color.g, color.b));
-    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-    color -= offset;
-    float peak = max(color.r, max(color.g, color.b));
-    if (peak < StartCompression) return color;
-    float d = 1.0 - StartCompression;
-    float newPeak = 1.0 - d * d / (peak + d - StartCompression);
-    color *= newPeak / peak;
-    float g = 1.0 - 1.0 / (Desaturation * (peak - newPeak) + 1.0);
-    return mix(color, vec3(newPeak), g);
-  }
-  vec3 rrtOdtFit(vec3 v) {
-    vec3 a = v * (v + 0.0245786) - 0.000090537;
-    vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
-    return a / b;
-  }
-  vec3 toneAces(vec3 color, float exposure) {
-    const mat3 inMat = mat3(
-      vec3(0.59719, 0.07600, 0.02840),
-      vec3(0.35458, 0.90834, 0.13383),
-      vec3(0.04823, 0.01566, 0.83777));
-    const mat3 outMat = mat3(
-      vec3( 1.60475, -0.10208, -0.00327),
-      vec3(-0.53108,  1.10813, -0.07276),
-      vec3(-0.07367, -0.00605,  1.07602));
-    color *= exposure / 0.6;
-    color = inMat * color;
-    color = rrtOdtFit(color);
-    color = outMat * color;
-    return clamp(color, 0.0, 1.0);
-  }
-  vec3 applyTone(vec3 c, int tone, float exposure) {
-    if (tone == 1) return toneNeutral(c, exposure);
-    if (tone == 2) return toneAces(c, exposure);
-    if (tone == 3) return c * exposure / (1.0 + c * exposure);
-    return c; // none：原样直出（与旧 FRAG_FINAL 的 uTone==0 分支一致，不乘曝光）
-  }
-`;
+// ---- 终段合成节点（两链共享）----
+// flavor A（见文件头注「输出变换铁律」）：终段**只出线性 HDR**——tone map 与 sRGB
+// 编码统一由渲染器帧末输出 blit 施加（Khronos PBR Neutral 曲线走 three 内置
+// NeutralToneMapping，与旧手译节点版同一公式）。节点内 tone 库已随 flavor A 删除。
 
-// final：色调映射 + bloom 叠加 + sRGB 输出（世界链终段；alpha 恒 1 直出屏幕）
-export const FRAG_FINAL = /* glsl */`
-  precision highp float;
-  varying vec2 vUv;
-  uniform sampler2D tColor;
-  uniform sampler2D tBloom;
-  uniform float uBloom;
-  uniform float uExposure;
-  uniform int uTone;
-  ${GLSL_TONE_LIB}
+// 世界链终段：线性色 + bloom 加算，直出线性 HDR
+export const tslFinalWorld = Fn(([tColor, tBloom, uBloom]) => {
+  const c = texture(tColor, passUV).rgb.add(texture(tBloom, passUV).rgb.mul(uBloom));
+  return vec4(c, 1.0);
+});
 
-  void main() {
-    vec3 c = texture2D(tColor, vUv).rgb + texture2D(tBloom, vUv).rgb * uBloom;
-    c = applyTone(c, uTone, uExposure);
-    gl_FragColor = vec4(linearToSrgb(c), 1.0);
-  }
-`;
+// UI 链终段：同上加算，唯一差别 = alpha 透传（tColor 的 a 是真覆盖率，
+// 由调用侧以 premultiplied 混合线性叠加进帧缓冲）
+export const tslFinalUi = Fn(([tColor, tBloom, uBloom]) => {
+  const src = texture(tColor, passUV);
+  const c = src.rgb.add(texture(tBloom, passUV).rgb.mul(uBloom));
+  return vec4(c, src.a);
+});
 
 /** 色调映射模式（宿主/调试页共用一份枚举，避免两边写死数字）。 */
 export const TONE_MODES = Object.freeze({ none: 0, neutral: 1, aces: 2, reinhard: 3 });
 
 /**
- * 全局缺省色调映射：直渲路径（StageManager 的 renderer）与体积光 composer 必须一致。
- * 选 Neutral（Khronos PBR Neutral）的理由：保色相/饱和，
+ * 全局缺省色调映射：选 Neutral（Khronos PBR Neutral）的理由：保色相/饱和，
  * 只在接近过曝时压高光（0.76 以下基本是恒等，不动既有布光配比）。
  */
 export const DEFAULT_TONE_MODE = 'neutral';
 
 /**
- * 把色调映射选择同步到两条渲染路径：
- *   · composer 合成 shader 的 uTone/uExposure（体积光路径）
- *   · renderer.toneMapping / toneMappingExposure（直渲路径）
- * 传 null/undefined 的 mode 视为 noop（保留现状）。
+ * 设全局色调映射——全帧唯一调参口（flavor A）：写 renderer.toneMapping /
+ * toneMappingExposure，帧末输出 blit 对整帧统一施加一次。
+ * ⚠ 这是常驻设定，不是逐帧开关——任何「渲屏幕前临时改、渲完恢复」的写法都会
+ * 污染全帧输出变换（见文件头注铁律）。传 null/undefined 的 mode 视为 noop。
  */
-export function applyToneMapping(renderer, composer, mode, exposure = 1) {
+export function applyToneMapping(renderer, mode, exposure = 1) {
+  if (!renderer) return;
   const id = TONE_MODES[mode] ?? TONE_MODES.none;
   const THREE_TONE = [THREE.NoToneMapping, THREE.NeutralToneMapping, THREE.ACESFilmicToneMapping, THREE.ReinhardToneMapping];
-  if (renderer) {
-    renderer.toneMapping = THREE_TONE[id];
-    renderer.toneMappingExposure = exposure;
-  }
-  if (composer?.setToneMapping) composer.setToneMapping(id, exposure);
+  renderer.toneMapping = THREE_TONE[id];
+  renderer.toneMappingExposure = exposure;
 }
 
 /**
@@ -197,3 +166,6 @@ export function additiveLight(material) {
   material.transparent = true;
   return material;
 }
+
+// ---- 旧 GLSL 字符串件（FRAG_BRIGHT/FRAG_BLUR/GLSL_TONE_LIB/FRAG_FINAL/VERT）已随
+// W2 删除；fx/gpu/ 两件死文件（gpuParticles/burnEmission）的旧 import 由 W5 compute 化重建。

@@ -6,7 +6,7 @@
 // 预取进共享单例缓存，BattleStage 建视图时同步命中：无"占位色块→补挂"跳变。
 import { getSkillDefinition } from '../../core/skills/registry.js';
 import { sharedCardArtCache } from './cardArtCache.js';
-import { sharedUnitArtCache } from './unitArt.js';
+import { sharedUnitArtCache, playerSwordVariant } from './unitArt.js';
 
 /**
  * @param {object} battle 素材来源（与 assembleBattle 产物同构）
@@ -21,6 +21,9 @@ export function preloadBattleArt(
 ) {
   if (typeof document === 'undefined') return; // node/headless：无图可载（Image 不存在）
   unitCache.get(null, 'player');               // 玩家立牌（side 即文件名，defId 不参与）
+  // 大剑体系立绘变体（牌组斩链最高链位对应的图档；无斩卡 = null 不预载）
+  const swordV = playerSwordVariant(deck.map(rt => rt?.defId));
+  if (swordV) unitCache.get(null, 'player', swordV);
   unitCache.getFile('unit_player_front.png');  // 状态栏头像正视图
   unitCache.getFile('knight_avatar.png');      // 状态栏骑士徽章头像
   unitCache.getFile('remi_avatar.png');        // 状态栏瑞米圆像

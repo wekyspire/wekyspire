@@ -43,6 +43,7 @@ import { Cast } from '../fx/cast.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { runScript } from '../fx/script.js';
 
+import { TSL_READY } from '../fx/tslGate.js';
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 
 // 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
@@ -116,7 +117,8 @@ export class RoomStage {
       }
     }
     const renderer = stageManager?._renderer;
-    if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
+    if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function'
+        && TSL_READY.volumetricMoon) { // tslGate：raymarch 链 TSL 化前回退直渲
       this._composer = createVolumetricMoonlight({ light: this._room.moonlight });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
@@ -828,21 +830,8 @@ export class RoomStage {
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
       if (action.action === 'openSlotPrize') { this.openSlotPrizePicker(); return; }
-      if (action.action === 'toggleSeed') {
-        // 种子包勾选（阶段级模态面板的本地交互态）：确认前是纯 UI 态，就地重绘
-        const sel = this._stagePanelUi?.selected;
-        if (sel) {
-          const id = action.defId;
-          if (sel.has(id)) sel.delete(id);
-          else if (sel.size < (this._stageSnap?.offering?.picks ?? 0)) sel.add(id);
-          if (this._stageSnap) this._setStagePanel(this._stageSnap);
-        }
-        return;
-      }
       return;
     }
-    // 刷新种子候选：旧勾选指向已被换掉的卡，先清掉（确认键可用性据此重算）
-    if (action.action === 'rerollSeedOffering') this._stagePanelUi?.selected.clear();
     // 得卡标记（老虎机卡多选一 / 训练抓牌）：摘下被点的卡 → 收起操纵条 → 播「择卡得卡」
     // 演出（脉冲→飞向玩家状态栏，sequencer 指令化）→ 落袋才上行意图。
     // 操纵条整体 _removePanel 而不是藏起：dock 非模态不吞指针（点击由 _grantBusy 守），

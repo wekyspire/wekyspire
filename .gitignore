@@ -121,3 +121,7 @@ art_src/遗物/out_seedream/
 # 会话/计划草稿（ZCode 工作目录产物）
 .zcode/
 __pycache__/
+
+# AIGC 候选图池（单张数 MB、成百上千张，选型素材不入库；终稿在 enemies_unit/ 与 src/assets/）
+art_src/cards_scenes/
+art_src/enemies_unit_q21/

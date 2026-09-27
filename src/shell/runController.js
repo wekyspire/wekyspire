@@ -713,7 +713,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）
     eventView: () => eventView(run, runCtx),                 // 事件读取（内容与逻辑在 core；测试/调试可用）
     resolveEvent: (id) => resolveEvent(run, id, runCtx),     // 事件结算（只允许一次；效果由内容主动施加）
-    chooseAscensionDimension: cutsceneFlows.chooseAscensionDimension, skipAscension: cutsceneFlows.skipAscension, chooseSeedCards: cutsceneFlows.chooseSeedCards, rerollSeedOffering: cutsceneFlows.rerollSeedOffering,
+    chooseAscensionDimension: cutsceneFlows.chooseAscensionDimension, skipAscension: cutsceneFlows.skipAscension,
     playAscensionScene: cutsceneFlows.playAscensionScene,             // 进阶幕间（正常路径由 leaveRoom 接棒；调试/测试可用）
     equip, unequip, useRelic,
     debug: runDebug,               // 调试模式门面（面板/脚本唯一入口；普通局也可开，改动即转调试局）

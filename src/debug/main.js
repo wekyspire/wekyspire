@@ -35,7 +35,7 @@ canvas.id = 'stage-canvas';
 document.body.appendChild(canvas);
 
 const stageManager = new StageManager();
-stageManager.attach(canvas);
+await stageManager.attach(canvas); // async：WebGPURenderer.init 异步
 const stage = new BattleStage({ bridge, stageManager });
 stageManager.setStage(stage);
 

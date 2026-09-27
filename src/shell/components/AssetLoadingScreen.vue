@@ -12,6 +12,8 @@ const props = defineProps({
   progress: { type: Object, default: () => ({ loaded: 0, total: 0 }) },
   // 失败项数（>0 = 卡在加载界面，只给重试）
   failed: { type: Number, default: 0 },
+  // WebGPU 兼容性检查失败（用户定 2026-09-27：不支持即卡死在本界面，无回退无重试）
+  gpuUnsupported: { type: Boolean, default: false },
 });
 const emit = defineEmits(['retry']);
 
@@ -68,6 +70,13 @@ const etaText = computed(() => {
 <template>
   <div class="asset-loading" role="status" aria-label="资源加载中">
     <div class="al-title">魏启尖塔</div>
+    <!-- WebGPU 不支持：卡死在此（用户定 2026-09-27——游戏需要 compute/原子操作，
+         不做 WebGL 回退）；不给重试（重试也过不了硬件门） -->
+    <div v-if="gpuUnsupported" class="al-fail">
+      <div class="al-fail-text">此设备/浏览器不支持 WebGPU，无法运行本游戏</div>
+      <div class="al-sub">请使用较新的桌面版 Chrome / Edge / Firefox / Safari 并确保硬件加速开启</div>
+    </div>
+    <template v-else>
     <div class="al-bar"><div class="al-fill" :style="{ width: pct + '%' }"></div></div>
     <div class="al-text">
       加载美术资源… {{ progress.loaded ?? 0 }} / {{ progress.total }}
@@ -83,6 +92,7 @@ const etaText = computed(() => {
       <div class="al-fail-text">资源加载失败 {{ failed }} 项——请检查网络后重试</div>
       <button class="al-retry" type="button" @click="emit('retry')">重试</button>
     </div>
+    </template>
   </div>
 </template>
 

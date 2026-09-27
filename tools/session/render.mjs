@@ -8,7 +8,7 @@ import { getEnemyDefinition } from '../../src/core/enemies/registry.js';
 import { getRelicDefinition } from '../../src/core/relics/registry.js';
 import { gatedPromotionTargets } from '../../src/core/run/promotion.js';
 import { PACKS, maxRewardTier } from '../../src/core/run/rewards.js';
-import { ASCENSION_PLACEHOLDER, FIRST_ASCENSION_GRANT } from '../../src/core/run/ascension.js';
+import { ASCENSION_PLACEHOLDER } from '../../src/core/run/ascension.js';
 import { campOptions, campLocked } from '../../src/core/run/rooms/camp.js';
 import { upgradableCards } from '../../src/core/run/rooms/training.js';
 import { slotView, SLOT } from '../../src/core/run/rooms/slotMachine.js';
@@ -221,7 +221,7 @@ function renderRoomCampTraining(S, L, room) {
     const deckIdx = (rt) => `[${run.player.deck.indexOf(rt) + 1}]`;
     if (!run.roomData?.trained) {
       L.push(`训练场（必做·先训练后篝火；累计训练 ${run.player.trainingCount} 次）`);
-      L.push('→ act train 开始训练（修行次数达标会当场引动进阶事件：dim → seed → ability）');
+      L.push('→ act train 开始训练（修行次数达标会当场引动进阶事件：dim → ability）');
       return;
     }
     L.push(`训练场（已开局，累计训练 ${run.player.trainingCount} 次）`);
@@ -361,21 +361,6 @@ function renderAscension(S, L) {
   const run = S.run;
   L.push(`→ dim 火 | dim 木 | dim 空 | dim 跳过`);
   L.push(`  提示：跳过本灵脉进阶 = 选择进阶体修等级（体修等级+1，之后能抽到更高阶的体修卡牌）+生命上限+3+删卡机会1次（不回血、不提魏启）；点火系 = +1魏启上限并回满、回${ASCENSION_PLACEHOLDER.healAmount}血`);
-  if (run.cardOffering) {
-    const off = run.cardOffering;
-    const grant = FIRST_ASCENSION_GRANT[off.dimension];
-    if (grant && run.player.leino[off.dimension] === 1) {
-      const ab = grant.ability ? getAbilityDefinition(grant.ability) : null;
-      L.push(`本次获赠（已入牌组）：${grant.cards.map(id => getSkillDefinition(id)?.name ?? id).join('、')}`
-        + (ab ? ` ｜ 体系能力「${ab.name}」：${plain(ab.description)}` : ''));
-    }
-    L.push(`种子九选三（选3张入组，刷新剩 ${off.rerollsLeft}）:`);
-    off.cards.forEach((id, i) => {
-      const def = getSkillDefinition(id);
-      L.push(`  [${i + 1}] ${def.cardMode === 'chant' ? `咏唱${def.chantWeight ?? 2}·` : ''}${def.name} ${def.tier}阶 ${costText(def)} ${kwText(def)}「${plain(def.describe())}」`);
-    });
-    L.push(`→ seed <#> <卡名>,<#> <卡名>,<#> <卡名> / reroll`);
-  }
   if (run.ascensionOffer) {
     L.push(`能力候选:`);
     run.ascensionOffer.forEach((id, i) => {

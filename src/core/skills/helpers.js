@@ -76,12 +76,13 @@ export function handLimitOf(ctx) {
 }
 
 // 咏唱容量（2026-09-13 批次 13 用户定）：激活咏唱**先吃咏唱容量**、吃饱后的溢出部分
-// 才吃手牌容量。按咏唱开销（权重）计数，不按卡数。默认 1；参数化走 baseStats/
+// 才吃手牌容量。按咏唱开销（权重）计数，不按卡数。默认 2（2026-09-27 用户定上调）；
+// 参数化走 baseStats/
 // runModifiers/battleModifiers（与 maxHandSize 同通道），空系未来在容量增加上动手脚。
 // 数学等价性：cap=1、上限 6 时，W≥1 的占用 = 普通+(W−1) ≡ 旧口径（上限 7）的普通+W
 // ——含咏唱构筑零漂移；仅无咏唱构筑 −1（囤牌税修正）。
 export function chantCapacityOf(ctx) {
-  return ctx.player.chantCapacity ?? 1;
+  return ctx.player.chantCapacity ?? 2;
 }
 
 // 手牌构成分解（口径函数/投影灯珠/headless 文本的唯一同源）：

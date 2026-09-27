@@ -345,8 +345,8 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
       return true;
     },
     describe: () => `护盾${shield}；有/effect{燃烧}时再+${bonus}`,
-    battleDescribe: (sctx) => `护盾${shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0)}`
-      + `（${shield}+${sctx.player.getEffectStacks('burn') > 0 ? bonus : 0}）`,
+    // 无 battleDescribe：条件仅「有燃烧」一条，静态描述即机制（2026-09-27 口径：
+    // 判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
   });
 }
 fireWallCard({ id: 'fireWall', name: '火盾', tier: 'C', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallPlus' });

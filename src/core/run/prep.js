@@ -86,7 +86,7 @@ export function refreshRunModifiers(run, battleState = null) {
   p.attack = (base.attack ?? 0) + patch.attack;
   p.defense = (base.defense ?? 0) + patch.defense;
   p.maxHandSize = (base.maxHandSize ?? 5) + patch.maxHandSize;
-  p.chantCapacity = (base.chantCapacity ?? 1) + patch.chantCapacity;
+  p.chantCapacity = (base.chantCapacity ?? 2) + patch.chantCapacity;
   p.mana = Math.min(p.mana, p.maxMana);        // 上限下调时不残留
   p.actionPoints = Math.min(p.actionPoints, p.maxActionPoints);
   return run;

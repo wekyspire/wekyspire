@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { HighlightFX, ScalePop } from './highlightFX.js';
 import { bakeFraction } from './ManaCrystalObject.js';
+import { deferDisposeTexture } from '../deferredDispose.js';
 
 const GOLD = 0xf0c040;
 const INSUFFICIENT_TINT = '#b8383f'; // 不足态暗红（覆盖高亮）
@@ -92,7 +93,7 @@ export class ApCoinObject extends THREE.Group {
     const old = this._numMaterial.map;
     this._numMaterial.map = baked.texture;
     this._numMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
     this._num.geometry.dispose();
     if (this._numHeight != null) {
       // 按数字面片高度等比定宽（概念图：分式贯穿大半枚币面）
@@ -112,7 +113,7 @@ export class ApCoinObject extends THREE.Group {
     this._coinMaterial.map = asTexture(image);
     this._coinMaterial.opacity = 1;
     this._coinMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
   }
 
   /**

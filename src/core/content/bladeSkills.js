@@ -101,13 +101,13 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
 // slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却，2026-09 设计稿）；
 // 进阶卡只经局内转化获得，转化继承充能状态，无需重复慢热。
 const SLASH_CHAIN = [
-  { id: 'slash', name: '斩', tier: 'C', damage: 15, cd: 3, slow: true },
-  { id: 'rockCleave', name: '裂石斩', tier: 'B', damage: 30, cd: 3 },
-  { id: 'goldCleave', name: '削金斩', tier: 'B', damage: 57, cd: 4 },
-  { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 5 },
-  { id: 'seaCleave', name: '分海斩', tier: 'A', damage: 205, cd: 6 },
-  { id: 'skyCleave', name: '开天斩', tier: 'S', damage: 390, cd: 7 },
-  { id: 'godCleave', name: '断神斩', tier: 'S', damage: 741, cd: 8 },
+  { id: 'slash', name: '斩', tier: 'C', damage: 15, cd: 3 },
+  { id: 'rockCleave', name: '裂石斩', tier: 'B', damage: 30, cd: 4 },
+  { id: 'goldCleave', name: '削金斩', tier: 'B', damage: 57, cd: 5 },
+  { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 6 },
+  { id: 'seaCleave', name: '分海斩', tier: 'A', damage: 205, cd: 7 },
+  { id: 'skyCleave', name: '开天斩', tier: 'S', damage: 390, cd: 8 },
+  { id: 'godCleave', name: '断神斩', tier: 'X', damage: 9999, cd: 9, overwriteDesc: '\italic{斩}'},
 ];
 const SLASH_IDS = new Set(SLASH_CHAIN.map(x => x.id));
 
@@ -178,9 +178,10 @@ function advanceSlashChain(sctx, parentInstr = null) {
 //   焚毁 veto 回库，每次入库额外推进 1 拍，2026-09-13 用户定）。砺刀/花刀是手中
 //   直达加速手段。洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改
 //   伤害/冷却/等阶）。
-const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => registerSkill({
+const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = null }, nextId) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade', ...(slow ? ['slowStart'] : [])],
+  overwriteDesc: overwriteDesc,
   cost: { mana: 0, actionPoint: 2 },
   charges: { max: 1, cooldownTurns: cd },
   // 斩专属词条特效：每次进入牌库时冷却推进 1 拍（skill.js tickCooldownOnEnterDeck 只认此旗标）
@@ -221,8 +222,8 @@ const slashCard = ({ id, name, tier, damage, cd, slow = false }, nextId) => regi
       ]);
     },
   }],
-  describe: () => `${damage}伤害，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
+  describe: () => overwriteDesc || `${damage}伤害，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
+  battleDescribe: (sctx) => overwriteDesc || `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
 });
 for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);

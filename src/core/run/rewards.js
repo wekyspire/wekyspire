@@ -269,11 +269,14 @@ export function seriesAffinityWeight(run, def, counts = null) {
 }
 
 // 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
+// 2026-09-22 用户定：**本局路线（run.route）对应的灵脉包不受等级门禁**——灵脉开局
+// 等级 0 起步，第一场战斗起就必须能开本体系卡包，否则前两场战斗只剩体修包可开。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
   const out = [PACKS.body];
   for (const id of ['fire', 'wood', 'air']) {
-    if ((run?.player?.leino?.[id] ?? 0) >= 1 && packCardPool(run, id).length > 0) out.push(PACKS[id]);
+    const unlocked = (run?.player?.leino?.[id] ?? 0) >= 1 || run?.route === id;
+    if (unlocked && packCardPool(run, id).length > 0) out.push(PACKS[id]);
   }
   return out;
 }

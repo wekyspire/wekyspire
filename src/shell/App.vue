@@ -27,6 +27,7 @@ import DebugOverlay from './components/DebugOverlay.vue';
 import { debugUi, toggleDebugPanel } from './debugState.js';
 import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
+import { probeWebGpuAdapter } from '../stage/fx/tslGate.js';
 
 const canvas = ref(null);
 const frame = ref(null);
@@ -47,6 +48,9 @@ const stage = computed(() => ctrl.value?.run.gameStage ?? 'prep');
 // →"掐掉下载也能带着缺图进游戏"；现在失败计数进 `assetFailed`，界面卡住并给重试键。
 const assetsReady = ref(false);
 const assetFailed = ref(0);
+// WebGPU 兼容门（用户定 2026-09-27）：不支持的设备卡死在加载界面，不做 WebGL 回退。
+// 检测在预载**之前**——不过门的设备连下载都不开始（gpuUnsupported 恒挡 assetsReady）。
+const gpuUnsupported = ref(false);
 const assetProgress = ref({ loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 });
 function startAssetPreload() {
   assetsReady.value = false;
@@ -62,7 +66,12 @@ function startAssetPreload() {
     assetsReady.value = true;
   });
 }
-startAssetPreload();
+// 兼容性检查 → 通过才启动预载（不通过则 gpuUnsupported 置位，加载门永久卡住）
+(async () => {
+  const adapter = await probeWebGpuAdapter();
+  if (!adapter) { gpuUnsupported.value = true; return; }
+  startAssetPreload();
+})();
 
 // 菜单级全局共享 toast：任意菜单级组件 inject('showMenuPopup') 后调用（跨 phase 可用）。
 // 多条 toast 各自 3s 寿命独立消亡；新 toast 从底部进入，旧 toast 被顶起，消亡后其余平滑回落。
@@ -136,6 +145,7 @@ async function autoStartFromUrl() {
     console.log('[debug] 从存档起跑：', saveName, save);
     newGame({ loadSave: { ...save, debugMode: true }, debugMode: true });
   } catch (err) {
+    console.error('[debug] 存档起跑失败：', err); // toast 会消失，异常本体必须留 error 级日志
     showPopup('调试起跑失败', `${saveName}：${err?.message ?? err}（先跑 tools/saveForge.mjs --out ${saveName}）`);
   }
 }
@@ -201,9 +211,11 @@ const fitFrame = () => fitGameFrame({ frame: frame.value, stageManager });
 
 let resizeHandler = null;
 let keyHandler = null;
-onMounted(() => {
+onMounted(async () => {
+  // WebGPU 门没过的设备：渲染器必然起不来，不 attach（加载门已卡死，canvas 保持黑）
+  if (gpuUnsupported.value) return;
   stageManager = new StageManager();
-  stageManager.attach(canvas.value);
+  await stageManager.attach(canvas.value); // async：WebGPURenderer.init 是异步的
   // 卡牌/UI 后处理链（辉光）：settings 下行 + 运行时热切换；?uipost=0 强制关（排障/低档机）
   if (new URLSearchParams(location.search).get('uipost') === '0') settings.fxPost = false;
   stageManager.setUiPostProcessing(settings.fxPost);
@@ -246,6 +258,7 @@ onBeforeUnmount(() => {
     <!-- 菜单层顶层加载门：全量美术预载**全部成功**前挡住一切（最高 z-index）；
          失败时卡住并给重试（用户定 2026-09-12：不准带缺图进游戏） -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" :failed="assetFailed"
+      :gpu-unsupported="gpuUnsupported"
       @retry="startAssetPreload" />
     <!-- 菜单级：开始界面（含 changelog 弹层） -->
     <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />

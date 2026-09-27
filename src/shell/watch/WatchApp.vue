@@ -189,13 +189,13 @@ async function loadSessionList() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   preloadAllArt({
     onProgress: (loaded, total) => { assetProgress.value = { loaded, total }; },
   }).then(() => { assetsReady.value = true; });
 
   stageManager = new StageManager();
-  stageManager.attach(canvas.value);
+  await stageManager.attach(canvas.value); // async：WebGPURenderer.init 异步
   // 右侧 300px 是观战侧栏：取景框为它让位（否则最右敌人的身体会被面板压住）
   const fit = () => fitGameFrame({ frame: frameEl.value, stageManager, reserveRight: SIDEBAR_PX });
   fitHandler = fit;

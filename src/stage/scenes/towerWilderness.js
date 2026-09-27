@@ -7,24 +7,29 @@
 //     远处云堤、云下穹面三处融成同一条暗雾带（无缝的关键 = 三处同色同距离 ramp）；
 //   · HemisphereLight 两半球环境光模拟——上方灰蓝（阴雪天空）、下方偏白（雪地反光），
 //     外加一盏弱冷平行光给雪丘做体积（调参位）；
-//   · 渐变天空穹（上灰蓝 → 下雪白，BackSide 球壳，不吃雾不写深度）+ **雪云体积层**
+//   · 渐变天空穹（上灰蓝 → 下雪白，BackSide 球壳，不吃雾不写深度；TSL 版，
+//     fx/unitBodyFx.js 范式）+ **雪云体积层**
 //     （towerClouds.js：Worley 噪音场 raymarch，1/4 分辨率 + 小域 blur，穹顶合成；
 //     云下仰望/云内环视/云上俯瞰同一条路径，塔身穿云 = 二三阶段）。
-// 雪花：GPU 常驻**实例化四边形**粒子——急迫斜风 + 湍流扭曲 + 沿飞行方向拉伸（速度感，
-// 风源与云层同向）；CPU 每帧只推进 uTime，零属性回写；近场体积盒罩住视锥中段。
-// node/headless 可安全构造（ShaderMaterial/RT/几何不依赖 document；RT pass 只在
+// 雪花：GPU 常驻**实例化四边形**粒子（TSL 版）——急迫斜风 + 湍流扭曲 + 沿飞行方向
+// 拉伸（速度感，风源与云层同向）；CPU 每帧只推进 uTime，零属性回写；近场体积盒罩住
+// 视锥中段。
+// node/headless 可安全构造（NodeMaterial/RT/几何不依赖 document；RT pass 只在
 // 浏览器渲染期的穹顶 onBeforeRender 里跑）。
 
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { CAMERA_AZIMUTH } from '../StageManager.js';
-// shader 源码在同名 .glsl 文件（?raw 原生字符串导入，零插件；编辑器直接认后缀出高亮）。
-// ⚠ dome.frag 里的归一化半径 900.0 与本文件 DOME_RADIUS 同值，改半径时两处一起动。
-import domeVertSrc from './towerWilderness.dome.vert.glsl?raw';
-import domeFragSrc from './towerWilderness.dome.frag.glsl?raw';
-import snowVertSrc from './towerWilderness.snow.vert.glsl?raw';
-import snowFragSrc from './towerWilderness.snow.frag.glsl?raw';
+import {
+  Fn, uniform, varying, uv, positionLocal, cameraPosition, cameraViewMatrix,
+  modelWorldMatrix, instancedBufferAttribute, select, cross,
+  vec2, vec3, vec4, float, mix, fract, floor, sin, cos, exp, length, max, clamp,
+  // ⚠ 本文件已有一个 JS 侧 smoothstep（塔层插值/雪丘压平用），TSL 版取别名
+  smoothstep as tslSmoothstep,
+} from 'three/tsl';
 import { buildTowerClouds, CLOUD_PRESETS } from './towerClouds.js';
 
+import { TSL_READY } from '../fx/tslGate.js';
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
 export const SKY_BOTTOM = 0x59626a;    // 低空/雾色：暗板岩灰（远地/远云/穹面三处同源
@@ -101,9 +106,17 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// ---- 雪花（GPU 常驻实例化四边形；shader 源码在 towerWilderness.snow.*.glsl）----
+// GLSL 语义 mod（x - y*floor(x/y)，y>0 时结果恒非负）。⚠ TSL 的 mod 在 WGSL
+// 侧生成原生 `%`（取余，符号随被除数）——回绕量随时间为负会把雪片甩出盒外，
+// 必须用本 Fn 还原 GLSL 行为（与 moonDust.js 的 modPos 同源，两处就地定义）。
+const modPos = Fn(([x, y]) => x.sub(y.mul(floor(x.div(y)))));
+
+// ---- 雪花（GPU 常驻实例化四边形；WebGPU 迁移 TSL 版，2026-09-27 原 GLSL 逐式平移）----
 // 雪云阶段（2026-09-16 用户定）：急迫斜向纷飞（uStorm 与云层风同源）+ 湍流扭曲 +
 // 沿飞行方向拉伸（速度感）。Points 无法拉伸 → 实例化四边形（每粒一实例，4 顶点）。
+// 结构性口径：顶点合成在**局部系**做——模型矩阵仅平移（setAnchorY 抬盒），
+// 世界系的 billboard 偏移量在局部系逐分量相等，positionNode（局部）+ modelWorldMatrix
+// 取世界位两路并行，与旧 GLSL「model × base 后再加偏移」逐式等价。
 function buildSnowfall({ count = 4800 } = {}) {
   // 近场体积盒贴视锥走廊：相机在 (≈37, 锚点y, 11) 向塔 (58, -10) 及远处雪原看——
   // 盒子罩住「相机→塔→塔后远处」这条走廊即可。全盒均匀撒点，盒体远大于视锥时粒子
@@ -125,30 +138,108 @@ function buildSnowfall({ count = 4800 } = {}) {
   geometry.setAttribute('uv', quad.attributes.uv);
   geometry.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 3));
   geometry.instanceCount = count;
-  const uniforms = {
-    uTime: { value: 0 },
-    uSize: { value: 0.12 },     // 雪片截面直径（世界单位；~旧 Points 像素径同观感）
-    uStretch: { value: 0.4 },   // 拉伸增益（速度单位）
-    uFall: { value: 14 },       // 下落速度基准（storm 配方；calm 配方在 shader 内 mix 到 2.5）
-    uStorm: { value: new THREE.Vector2(STORM_WIND.x, STORM_WIND.z) },
-    uStormAmt: { value: 0 },    // 配方混合（MapStage 按层驱动；0=一章平静雪）
-    uVolMin: { value: VOL_MIN },
-    uVolSpan: { value: span },
-    uOpacity: { value: 0.8 },
-    uFogDensity: { value: FOG_DENSITY },
-  };
-  const material = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader: snowVertSrc,
-    fragmentShader: snowFragSrc,
+
+  // ---- uniforms：TSL uniform() 节点（`.value` 推值口径不变）----
+  const uTime = uniform(0);
+  const uSize = uniform(0.12);     // 雪片截面直径（世界单位；~旧 Points 像素径同观感）
+  const uStretch = uniform(0.4);   // 拉伸增益（速度单位）
+  const uFall = uniform(14);       // 下落速度基准（storm 配方；calm 配方在 shader 内 mix 到 2.5）
+  const uStorm = uniform(new THREE.Vector2(STORM_WIND.x, STORM_WIND.z));
+  const uStormAmt = uniform(0);    // 配方混合（MapStage 按层驱动；0=一章平静雪）
+  const uVolMin = uniform(VOL_MIN);
+  const uVolSpan = uniform(span);
+  const uOpacity = uniform(0.8);
+  const uFogDensity = uniform(FOG_DENSITY);
+
+  // ---- 顶点侧（无控制流 = 纯表达式；select 兜底共线，不进 Fn）----
+  const aSeed = instancedBufferAttribute(geometry.attributes.aSeed, 'vec3');
+  const sA = aSeed.x, sB = aSeed.y, sC = aSeed.z;
+
+  // 逐粒出生点（实例无位置属性，从 seed 派生——否则全体挤在原点靠位移扩散）
+  const origin = uVolMin.add(uVolSpan.mul(vec3(
+    fract(sA.mul(0.731)), fract(sB.mul(0.517)), fract(sC.mul(0.913)))));
+  // 湍流参数（逐粒 x/z 正弦；storm 全幅，calm 收敛到原始配方的慢摆）
+  const ampX = float(2.2).add(fract(sB.mul(7.7)).mul(2.0)).mul(mix(0.6, 1.0, uStormAmt));
+  const wX = float(1.9).add(fract(sA.mul(3.1)).mul(1.3)).mul(mix(0.35, 1.0, uStormAmt));
+  const pX = sA.mul(41.0);
+  const ampZ = float(1.4).add(fract(sC.mul(5.9)).mul(1.2)).mul(mix(0.6, 1.0, uStormAmt));
+  const wZ = float(1.4).add(fract(sB.mul(5.3)).mul(1.1)).mul(mix(0.35, 1.0, uStormAmt));
+  const pZ = sB.mul(23.0);
+  // 正值下落速率
+  const fall = mix(0.5, uFall, uStormAmt).mul(fract(sA.mul(17.31)).mul(0.9).add(0.7));
+  // 速度场（斜风 + 湍流）；位移积分与其**同号一致**（base = origin + disp）。
+  // ⚠ 三处符号必须一致：vel.y = -fall（向下）、disp.y = -fall·t。此前 fall 自身
+  // 被塞过负号 + disp.y 未跟上 → 速度与位移再次反号，雪片朝右下落、长轴朝右上
+  // （视觉即"向左下拉伸"的斜线，2026-09-16 用户报二番）。
+  const wind = uStorm.mul(uStormAmt); // vec2 × float：斜风
+  const vel = vec3(
+    wind.x.add(ampX.mul(sin(wX.mul(uTime).add(pX)))),
+    fall.negate(),
+    wind.y.add(ampZ.mul(sin(wZ.mul(uTime).add(pZ)))));
+  const disp = vec3(
+    wind.x.mul(uTime).add(ampX.div(wX).mul(float(1.0).sub(cos(wX.mul(uTime).add(pX))))),
+    fall.mul(uTime).negate(),
+    wind.y.mul(uTime).add(ampZ.div(wZ).mul(float(1.0).sub(cos(wZ.mul(uTime).add(pZ))))));
+  // 盒内回绕（出生点 + 位移后取模；斜风下三轴都回绕；GLSL 语义 mod 见 modPos 注）
+  const unwrapped = origin.add(disp);
+  const base = vec3(
+    uVolMin.x.add(modPos(unwrapped.x.sub(uVolMin.x), uVolSpan.x)),
+    uVolMin.y.add(modPos(unwrapped.y.sub(uVolMin.y), uVolSpan.y)),
+    uVolMin.z.add(modPos(unwrapped.z.sub(uVolMin.z), uVolSpan.z)));
+  // 世界位中心（模型矩阵仅平移——billboard 偏移在局部/世界逐分量相等，见头注口径）
+  const wp = modelWorldMatrix.mul(vec4(base, 1.0)).xyz;
+  // 实例四边形：长轴沿飞行方向（storm 拉伸；calm stretch=1 即圆片），宽度轴 = 飞行 × 视线
+  const speed = length(vel);
+  const vdir = vel.div(max(speed, 1e-3));
+  const viewDir = cameraPosition.sub(wp).normalize();
+  const sideRaw = cross(vdir, viewDir);
+  const sideLen = length(sideRaw);
+  // 逆光共线兜底（normalize(0) 的 NaN 分支被 select 舍弃）
+  const side = select(sideLen.lessThan(1e-4), vec3(0.0, 1.0, 0.0), sideRaw.normalize());
+  const r = fract(sC.mul(11.3)).mul(0.9).add(0.6);
+  const halfW = uSize.mul(r).mul(0.5);
+  const stretch = mix(1.0, clamp(uStretch.mul(speed).mul(0.14).add(1.0), 1.0, 3.5), uStormAmt);
+  const vStretch = varying(stretch, 'vStretch');
+  const vDepth = varying(cameraViewMatrix.mul(vec4(wp, 1.0)).z.negate(), 'vDepth'); // 视深（片元雾衰减）
+
+  const material = new MeshBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
+    fog: false,
+    // 旧裸 GLSL 手挂 tonemapping/colorspace chunk ≡ NodeMaterial 内建输出链
+    //（toneMapped 缺省 true，渲进 RT 时 three 按目标判定跳过——语义不变）
   });
+  // 位置节点（局部系）：长轴沿飞行方向、宽度轴 = 飞行 × 视线，角点展开成四边形
+  material.positionNode = base
+    .add(side.mul(positionLocal.x.mul(2.0).mul(halfW)))
+    .add(vdir.mul(positionLocal.y.mul(2.0).mul(halfW).mul(stretch)));
+
+  // ---- 片元侧：沿飞行方向拉伸的软条 + 距离雾衰减 ----
+  {
+    // vUv（0..1，y 沿飞行方向）还原截面圆——拉伸只体现在形状上
+    const p = uv().sub(0.5);
+    const d = length(vec2(p.x, p.y.div(max(vStretch, 1.0))));
+    // WGSL 正向边改写：GLSL smoothstep(0.5, 0.12, x) ≡ 1 - smoothstep(0.12, 0.5, x)
+    let a = tslSmoothstep(0.12, 0.5, d).oneMinus().mul(uOpacity);
+    // uFogDensity 与场景 FogExp2 同值同公式（squared exp）——远处雪片自然融雾淡出
+    a = a.mul(exp(uFogDensity.mul(uFogDensity).mul(vDepth).mul(vDepth).negate()));
+    // 近机淡出：盒随相机锚点平移（相机在盒内），贴脸雪片按屏幕比例放大到巨幅
+    // 且可能跨近裁剪面拉花（2026-09-16 用户报"泼水"）——5~14 单位内平滑隐去
+    a = a.mul(tslSmoothstep(5.0, 14.0, vDepth));
+    material.colorNode = vec4(0.75, 0.77, 0.8, a);
+  }
+
   const object = new THREE.Mesh(geometry, material);
   object.name = 'snowfall';
   object.frustumCulled = false; // 盒内回绕，包围球没意义
   object.renderOrder = 80;
-  return { object, uniforms };
+  return {
+    object,
+    uniforms: {
+      uTime, uSize, uStretch, uFall, uStorm, uStormAmt,
+      uVolMin, uVolSpan, uOpacity, uFogDensity,
+    },
+  };
 }
 
 /**
@@ -168,24 +259,34 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   const fog = new THREE.FogExp2(SKY_BOTTOM, FOG_DENSITY);
 
   // ---- 天空穹：渐变（地平线雾色 → 天顶灰蓝），不吃引擎雾不写深度、最先画 ----
-  // shader 源码在 towerWilderness.dome.*.glsl（uTop/uBottom 由本文件头部常量注入）。
+  // WebGPU 迁移 TSL 版（2026-09-27，原 GLSL dome.*.glsl 逐式平移）。
+  // 归一化半径与 DOME_RADIUS = 900 同值（改半径时两处一起动）。
+  // 调参位：smoothstep 两端（0.56=雾带顶、0.92=天顶渐入）与 uTop/uBottom
+  //（头部 SKY_TOP/SKY_BOTTOM 注入，uBottom 与 FogExp2 雾色同源）。
   // toneMapped:false——r185 雾在 tone map/sRGB 编码**之后**混入、雾色 uniform 直转
   // 输出色空间（全雾像素屏色 = 色号本值，不过 tone map）。穹顶要与被雾融的雪原
   // 无缝相接就必须同语义：编码但不受 tone map（与 three 对 background 色的处理
-  // 一致）；否则 tone map 把穹顶压暗一截 → 地平线接缝（2026-09-16）。
+  // 一致）；否则 tone map 把穹顶压暗一截 → 地平线接缝（2026-09-16）。NodeMaterial
+  // 的内建输出链自动按渲染目标判定（进 RT 线性管线时跳过输出变换，整帧只在
+  // towerClouds 合成段统一走）——旧版手挂 tonemapping/colorspace chunk 的语义由此接管。
+  // 云层不再在此合成（旧穹顶 UV 合成会被不透明几何盖掉，云内俯视出横向分界）——
+  // 已迁入 towerClouds.js 三段管线的末段 transmittance composite。
   const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 16);
-  const domeMat = new THREE.ShaderMaterial({
-    uniforms: {
-      uTop: { value: new THREE.Color(SKY_TOP) },
-      uBottom: { value: new THREE.Color(SKY_BOTTOM) },
-    },
-    vertexShader: domeVertSrc,
-    fragmentShader: domeFragSrc,
+  const domeMat = new MeshBasicNodeMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
     toneMapped: false,
   });
+  {
+    const uTop = uniform(new THREE.Color(SKY_TOP));    // 天顶：灰蓝（阴雪天空）
+    const uBottom = uniform(new THREE.Color(SKY_BOTTOM)); // 低空/雾色：暗板岩灰
+    const h = clamp(positionLocal.y.div(900.0).mul(0.5).add(0.5), 0.0, 1.0);
+    // 地平线雾带压平：浓雾天观感——下半球到略高于地平线整段都是雾白
+    // （与 FogExp2 融掉的远端雪原无缝相接），往上才 smoothstep 渐入天顶灰蓝
+    const t = tslSmoothstep(0.56, 0.92, h);
+    domeMat.colorNode = vec4(mix(uBottom, uTop, t), 1.0);
+  }
   const dome = new THREE.Mesh(domeGeo, domeMat);
   dome.position.set(0, 20, 40); // 罩住相机（距中心 ~157）与整片雪原
   dome.renderOrder = -10;
@@ -196,12 +297,15 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   // ---- 雪云体积层（towerClouds.js）：mesh pass → 云 march（读场景深度）→ 合成。
   // 接入 = StageManager 的 composeScene 钩子（本件产出 clouds，MapStage 委托
   // composeFrame；gallery 主循环直接调同一条管线）。
-  const clouds = buildTowerClouds({
+  // tslGate：云 march 链未迁移前不建（MapStage 的 composeScene 同开关不接管）
+  const clouds = TSL_READY.towerClouds ? buildTowerClouds({
     sunDir: new THREE.Vector3(-60, 90, -40), // 与 rim 平行光同向（月光透云）
-  });
-  clouds.uniforms.uSkyTop.value.setHex(SKY_TOP);
-  clouds.uniforms.uSkyBottom.value.setHex(SKY_BOTTOM);
-  clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
+  }) : null;
+  if (clouds) {
+    clouds.uniforms.uSkyTop.value.setHex(SKY_TOP);
+    clouds.uniforms.uSkyBottom.value.setHex(SKY_BOTTOM);
+    clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
+  }
 
   // ---- 光照：雪夜，两半球环境光（上灰蓝天空 / 下偏白雪地反光）+ 弱冷平行光做雪丘体积 ----
   const hemi = new THREE.HemisphereLight(0x8fa3bd, 0xd8dde2, 0.1);
@@ -253,9 +357,12 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   disposables.push(fieldGeo, fieldMat);
 
   // ---- 雪花 ----
-  const snow = buildSnowfall();
-  group.add(snow.object);
-  disposables.push(snow.object.geometry, snow.object.material);
+  // tslGate：雪片 shader 随塔楼大气组一并迁移（未迁移前无雪——中间态）
+  const snow = TSL_READY.towerClouds ? buildSnowfall() : null;
+  if (snow) {
+    group.add(snow.object);
+    disposables.push(snow.object.geometry, snow.object.material);
+  }
 
   return {
     group,
@@ -264,7 +371,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
     /** 环境件随层锚点爬升：雪盒平移（回绕在局部空间，整体平移即跟随相机）+
      *  层跟随光抬到锚点上方 2。塔与雪原本体、云板、一层静态光 central 固定不动。 */
     setAnchorY(y) {
-      snow.object.position.y = y;
+      if (snow) snow.object.position.y = y;
       track.position.y = y + 2;
     },
     /** 雪相配方混合（0=一章平静雪 1=雪云急迫；towerStormLevel 按层求值）。
@@ -274,10 +381,11 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
      *  后场景雾密度才变小，一二三章恒定；用户定 2026-09-16）。 */
     setStormLevel(v, floor = null) {
       const t = Math.min(1, Math.max(0, v));
-      snow.uniforms.uStormAmt.value = t;
+      if (snow) snow.uniforms.uStormAmt.value = t;
+      if (!clouds) { /* tslGate：云缺席时雾衰减仍生效（下面 density 段） */ }
       const a = CLOUD_PRESETS.ch1;
       const b = CLOUD_PRESETS.ch2;
-      for (const k in a) clouds.params[k] = a[k] + (b[k] - a[k]) * t;
+      if (clouds) for (const k in a) clouds.params[k] = a[k] + (b[k] - a[k]) * t;
       let density = FOG_DENSITY;
       if (floor != null) {
         const clear = smoothstep(33, 38, floor);   // 四章太虚：雾密度 0.015 → 0.004
@@ -286,16 +394,18 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
       }
       // 远云融雾与地面雾同一密度标尺（march 侧同为平方指数）——四章雾变薄时远云
       // 同步少融，暗雾带不悬空；一二三章 density=FOG_DENSITY，系数 1 无扰动。
-      clouds.params.haze *= density / FOG_DENSITY;
-      clouds.syncParams();
+      if (clouds) {
+        clouds.params.haze *= density / FOG_DENSITY;
+        clouds.syncParams();
+      }
     },
-    get stormLevel() { return snow.uniforms.uStormAmt.value; },
+    get stormLevel() { return snow ? snow.uniforms.uStormAmt.value : 0; },
     update(dt) {
-      snow.uniforms.uTime.value += dt;
-      clouds.update(dt);   // 云层 advect 时钟（风中滚动）
+      if (snow) snow.uniforms.uTime.value += dt;
+      clouds?.update(dt);   // 云层 advect 时钟（风中滚动）
     },
     dispose() {
-      clouds.dispose();
+      clouds?.dispose();
       for (const d of disposables) d.dispose();
       disposables.length = 0;
       group.removeFromParent();

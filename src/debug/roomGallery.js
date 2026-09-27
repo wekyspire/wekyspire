@@ -4,6 +4,8 @@
 // 打开：npm run dev 后访问 /roomGallery.html?recipe=ch1&seed=demo。
 
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
+import { TSL_READY } from '../stage/fx/tslGate.js';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { DUNGEON } from '../stage/scenes/dungeon.js';
@@ -37,10 +39,9 @@ const canvas = document.createElement('canvas');
 canvas.id = 'room-canvas';
 document.body.appendChild(canvas);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new WebGPURenderer({ canvas, antialias: true });
+await renderer.init(); // WebGPURenderer 异步初始化（TLA，es2022）
 renderer.setPixelRatio(window.devicePixelRatio);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 window.__scene = scene; // 调试探针：隔离渲染诊断
@@ -99,12 +100,12 @@ function build(recipeId, seed) {
   scene.fog = fogDef
     ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
     : new THREE.Fog(0x060a14, 165, 310);
-  if (room.moonlight && typeof renderer.setRenderTarget === 'function'
+  if (TSL_READY.volumetricMoon && room.moonlight && typeof renderer.setRenderTarget === 'function'
       && !new URLSearchParams(location.search).has('nocomposer')) {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
-  applyToneMapping(renderer, composer, tmMode, tmExp);
+  applyToneMapping(renderer, tmMode, tmExp);
   // bloom 旋钮：?bloom=强度 &bthr=阈值 &bknee=软膝 &brad=半径（缺省不动 = 用烘焙值）
   const q = new URLSearchParams(location.search);
   const knob = (k) => (q.has(k) ? Number(q.get(k)) : undefined);
