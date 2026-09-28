@@ -2,7 +2,6 @@ import BattleKernel from '../kernel/BattleKernel.js';
 import { createBattleState, aliveEnemies, swapCostOf } from '../state/battleState.js';
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
-import { getSkillDefinition } from '../skills/registry.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { DumpCardsInstruction } from '../instructions/cards.js';
 import { PlayerTurnInstruction, TurnLoopInstruction } from '../instructions/turn.js';
@@ -101,16 +100,17 @@ export function playerEndTurn(battle) {
 // 玩家弃牌（2026-09-13 改制，原「换牌·弃1抽1」废除）：支付一次阶梯费用
 // （swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中**自由卡**（2026-09-28 用户定：
 // 激活咏唱不可弃——它们另有解除途径（免费解除=停在场上终止效果），被弃反而绕过
-// 设计契约；「自由牌」口径 = 未激活咏唱，见 namedTerms「自由」）（回牌库底，无抽牌
-// ——补给由下一回合「抽到容量」提供）。费用走资源指令子节点（PRE 可修饰）。
+// 设计契约；「自由牌」口径 = 未激活咏唱。迷你卡与弃牌无关——迷你只管手牌计数
+// （计 0 张容量），弃牌选集照常包含它）（回牌库底，无抽牌——补给由下一回合
+// 「抽到容量」提供）。费用走资源指令子节点（PRE 可修饰）。
 export function canDumpCards(battle, uniqueIDs) {
   const { ctx } = battle;
   const turn = currentPlayerTurn(battle);
   if (!turn || !turn._waiting || turn.endRequested) return false;
   if (!uniqueIDs?.length) return false;
   const hand = ctx.battleState.zones.hand;
-  // 「自由牌」= 未激活咏唱；「迷你」卡计 0 张手牌、不构成弃牌负担（namedTerms「迷你」）
-  const freeId = (s) => !s.isActivated && !getSkillDefinition(s.defId)?.keywords?.includes('mini');
+  // 「自由牌」= 未激活咏唱（迷你不参与此判定）
+  const freeId = (s) => !s.isActivated;
   if (!uniqueIDs.every(id => hand.some(s => s.uniqueID === id && freeId(s)))) return false;
   return ctx.player.actionPoints >= swapCostOf(ctx.battleState);
 }

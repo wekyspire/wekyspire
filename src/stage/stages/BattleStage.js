@@ -491,10 +491,10 @@ export class BattleStage {
       this._endTurnRequested = false;
     }
     // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）；
-    // 已激活咏唱与「迷你」卡同样摘除（2026-09-28：咏唱不可弃、迷你计 0 张不构成负担）
+    // 已激活咏唱同样摘除（2026-09-28：咏唱不可弃。迷你卡照常可弃——只管手牌计数）
     if (this._dumpSel.size) {
       const freeIds = new Set(
-        snapshot.hand?.filter(c => !c.isActivated && !c.mini)
+        snapshot.hand?.filter(c => !c.isActivated)
           .map(c => c.uniqueID) ?? []);
       for (const id of [...this._dumpSel]) if (!freeIds.has(id)) this._dumpSel.delete(id);
     }
@@ -1125,10 +1125,10 @@ export class BattleStage {
     this._dumpMode = on;
     // D3 一键全弃（2026-09-21）：进模式即全选当前手牌——主按钮的「弃掉全部N张」
     // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）。
-    // 2026-09-28：只选自由牌（激活咏唱不可弃）；「迷你」卡计 0 张手牌、不构成弃牌负担，
-    // 同样不入选（进模式只剩迷你+咏唱时主按钮应提示无牌可弃而非空集确认）
+    // 2026-09-28：只选自由牌（激活咏唱不可弃）；迷你卡照常入选——迷你只管手牌
+    // 计数（计 0 张容量），与弃牌无关（同日用户裁定解耦）
     if (on) for (const c of this._snapshot.hand ?? []) {
-      if (!c.isActivated && !c.mini) this._dumpSel.add(c.uniqueID);
+      if (!c.isActivated) this._dumpSel.add(c.uniqueID);
     }
     else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面

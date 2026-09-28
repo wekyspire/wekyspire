@@ -448,6 +448,7 @@ registerSkill({
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  keywords: ['mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
   use(sctx, stage) {
     if (stage === 0) {
       sctx.self._find = requestPoolSelection(sctx, {

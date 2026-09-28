@@ -199,7 +199,7 @@ function meltCard({ id, name, tier, weak, per, promotesTo }) {
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust'],
+    keywords: ['exhaust', 'mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
     promotesTo,
     use(sctx) {
       const stacks = sctx.player.getEffectStacks('burn');
@@ -252,7 +252,7 @@ function explosiveArtCard({ id, tier, promotesTo }) {
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust', 'innate'],
+    keywords: ['exhaust', 'innate', 'mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
     promotesTo,
     use(sctx) {
       if (twin) addCard(sctx, twin, { toZone: 'hand' });
@@ -319,7 +319,7 @@ function residualHeatCard({ id, name = '余热', tier, per, back, promotesTo }) 
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust'],
+    keywords: ['exhaust', 'mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
     promotesTo,
     use(sctx) {
       const consumed = sctx.battleState.history.turn.manaConsumed ?? 0;
@@ -403,7 +403,7 @@ function silenceCard({ id, tier, shield, promotesTo }) {
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust'],
+    keywords: ['exhaust', 'mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
     promotesTo,
     use(sctx) {
       for (const c of [...sctx.battleState.zones.hand]) {
@@ -434,7 +434,7 @@ function reliefValveCard({ id, tier, base, perMana, promotesTo }) {
     cost: { mana: 'X', actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust'],
+    keywords: ['exhaust', 'mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
     promotesTo,
     use(sctx) {
       const X = sctx.self.xCost?.mana ?? 0;

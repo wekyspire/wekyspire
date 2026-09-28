@@ -3,7 +3,6 @@ import {
   respondInput, isWaitingPlayerInput, canDumpCards,
 } from '../core/flow/battle.js';
 import { canUseSkill } from '../core/skills/helpers.js';
-import { getSkillDefinition } from '../core/skills/registry.js';
 
 // 玩家意图层：UI 操作 → flow API 的唯一入口（Stage Picker / Shell 按钮都走这里）。
 // 同时暴露可用性查询（按钮置灰、Picker 仲裁用），避免 UI 直接读 Core 状态做判断。
@@ -25,10 +24,9 @@ export function createIntents(battle) {
     },
     canEndTurn: () => isWaitingPlayerInput(battle),
     // 弃牌动作整体可用性（按钮置灰用）：有自由牌 + 费够 + 自由行动窗
-    // （自由牌 = 未激活咏唱；「迷你」卡计 0 张手牌、不构成弃牌负担，不入选）
+    // （自由牌 = 未激活咏唱；迷你卡照常可弃——迷你只管手牌计数，与弃牌无关）
     canDump: () => {
-      const free = ctx.battleState.zones.hand.filter(s => !s.isActivated
-        && !getSkillDefinition(s.defId)?.keywords?.includes('mini'));
+      const free = ctx.battleState.zones.hand.filter(s => !s.isActivated);
       return free.length > 0 && canDumpCards(battle, [free[0].uniqueID]);
     },
   };

@@ -91,11 +91,13 @@ flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'S', base: 10, per: 2 });
 // 作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
 // 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
-const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null }) => registerSkill({
+const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, mini = false }) => registerSkill({
   id, name, type: 'fire', tier, series: 'burnDoubler',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: 1, cooldownTurns: 2 },
   cardMode: 'normal',
+  // 迷你（A/S 档专属，设计稿 2026-09-28）：计 0 张手牌——冷却大牌捏在手里不占手位
+  keywords: mini ? ['mini'] : [],
   promotesTo,
   use(sctx) {
     for (const unit of allAliveUnits(sctx.battleState, sctx.player)) {
@@ -112,8 +114,8 @@ const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null }) => registe
   },
 });
 burnDoubler({ id: 'burnBurstPlus', name: '焚烧', tier: 'B', ap: 2, mult: 2, promotesTo: 'burnBurstGrand' });
-burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2 });
-burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
+burnDoubler({ id: 'burnBurstGrand', name: '焚天', tier: 'A', ap: 1, mult: 2, mini: true });
+burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, mini: true });
 
 // ==== 鬼火（§2.2 咏唱：死亡传播）===============================================
 // 鬼火 B/A（1AP，咏唱3/2——2026-09-21 大调：原单档 B 咏唱1 扩为两阶）｜
