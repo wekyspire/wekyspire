@@ -381,15 +381,24 @@ function execBattle(S, cmd, t) {
     }
     case 'swap': // 旧会话兼容（改制前单张换牌 → 一键全弃）
     case 'dump': {
-      // 弃牌（2026-09-21 D3 一键全弃）：付一次阶梯费（swapCostOf）弃掉**全部**手牌——
-      // 不再支持逐张挑选（UI 侧亦无挑选语义）；旧会话的编号/卡名参数一律忽略
+      // 弃牌（2026-09-21 D3 一键全弃）：付一次阶梯费（swapCostOf）弃掉**全部自由牌**。
+      // 与 UI 同口径（激活咏唱不可弃）：headless 旧实现把全量 uniqueID 直接塞给 core，
+      // 手上一有点亮咏唱就被整体拒绝、报错还误指 AP/行动窗——0929 试玩实报
+      // 「dump 三局一次都没成功」的根因
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
       if (!hand.length) throw new Error('手牌为空，无法弃牌');
-      const ids = hand.map(s => s.uniqueID);
+      const free = hand.filter(s => !s.isActivated);
+      if (!free.length) throw new Error('手牌只有已激活的咏唱卡，没有可弃的自由牌');
+      const ids = free.map(s => s.uniqueID);
+      const handCount = hand.length; // 执行后 hand 会被搬空，消息先快照
       const cost = swapCostOf(battle.battleState);
-      if (!playerDumpCards(battle, ids)) throw new Error(`无法弃牌（需 ${cost}AP/不在自由行动窗）`);
-      S.lastOutcome = `弃牌（付 ${cost}AP 弃全部 ${ids.length} 张）`;
+      if (battle.ctx.player.actionPoints < cost) {
+        throw new Error(`无法弃牌（阶梯费 ${cost}AP，当前 ${battle.ctx.player.actionPoints}AP）`);
+      }
+      if (!playerDumpCards(battle, ids)) throw new Error('无法弃牌（当前不在你的自由行动窗）');
+      S.lastOutcome = `弃牌（付 ${cost}AP 弃 ${ids.length}/${handCount} 张自由牌`
+        + `${handCount !== ids.length ? '，激活咏唱保留' : ''}）`;
       return;
     }
     case 'end': {
