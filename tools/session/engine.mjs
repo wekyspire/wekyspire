@@ -121,7 +121,12 @@ export function battleLogText(S, tail = 10) {
         if ((p.dealt ?? 0) <= 0 && (p.shieldAbsorbed ?? 0) <= 0 && (p.defenseBlocked ?? 0) <= 0) break;
         const src = p.source?.name ?? (p.pierce ? '持续伤害' : '环境'); // 燃烧/中毒等无来源穿透伤
         const via = p.skillDefId ? `[${getSkillDefinition(p.skillDefId)?.name ?? p.skillDefId}]` : '';
+        // PRE 侧净减伤（甲壳减半/伤残/虚弱等不吃盾不占防，0929 三路试玩都在此对不上账：
+        // 预演所见即所得、落地也真减，但日志行不归因——「15 怎么变 8」成了悬案）
+        const preCut = (p.gross ?? (p.dealt ?? 0) + (p.shieldAbsorbed ?? 0) + (p.defenseBlocked ?? 0))
+          - (p.dealt ?? 0) - (p.shieldAbsorbed ?? 0) - (p.defenseBlocked ?? 0);
         lines.push(`${src}${via} → ${p.target?.name}: ${p.dealt}伤`
+          + `${preCut > 0 ? `（减${preCut}·甲壳/伤残/虚弱类）` : ''}`
           + `${p.pierce ? '（穿透）' : ''}${p.shieldAbsorbed ? `（盾挡${p.shieldAbsorbed}）` : ''}`
           + `${p.defenseBlocked ? `（防挡${p.defenseBlocked}）` : ''}`);
         break;
