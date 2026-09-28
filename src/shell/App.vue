@@ -27,6 +27,7 @@ import DebugOverlay from './components/DebugOverlay.vue';
 import { debugUi, toggleDebugPanel } from './debugState.js';
 import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
+import { startCloudNoiseBake } from '../stage/scenes/cloudNoise.js';
 import { probeWebGpuAdapter } from '../stage/fx/tslGate.js';
 
 const canvas = ref(null);
@@ -56,6 +57,7 @@ function startAssetPreload() {
   assetsReady.value = false;
   assetFailed.value = 0;
   assetProgress.value = { loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 };
+  startCloudNoiseBake(); // 云噪声 3D 纹理烘焙与美术下载并行（分片让出主线程，不占加载门）
   preloadAllArt({
     onProgress: (loaded, total) => { assetProgress.value = { ...assetProgress.value, loaded, total }; },
     // stats 的计数字段叫 done——必须映射回 loaded，否则整条替换会把 loaded 抹成 undefined
