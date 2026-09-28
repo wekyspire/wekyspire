@@ -45,7 +45,7 @@ export function render(S) {
     L.push(`遗物槽位 ${used}/${p.relicSlots}：`
       + p.relics.map((id) => {
         const d = getRelicDefinition(id);
-        const tags = [d?.rarity ?? 'C', d?.nonSlot ? '非槽位式' : `${cost(id)}槽`];
+        const tags = [d?.rarity ?? 'C', d?.nonSlot ? '非槽位式' : `${cost(id)}槽${cost(id) === 0 ? '·需装备' : ''}`];
         if ((p.equippedRelics ?? []).includes(id)) tags.push('已装备');
         return `${d?.name ?? id}(${tags.join('·')})`;
       }).join(' / '));
