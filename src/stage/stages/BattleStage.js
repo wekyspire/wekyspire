@@ -324,6 +324,7 @@ export class BattleStage {
       this.gpuParticles?.update(dt); // GPU 粒子：emission 图集 → cursor → state 全 GPU
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
+      this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
       for (const unit of this._units.values()) {
         unit.update(dt);
         let fwd = this._sm.camera.localToWorld(new THREE.Vector3(0, 0, 1));
@@ -781,6 +782,17 @@ export class BattleStage {
     }
     this.picker.removePickable(id);
     if (type === EventNames.ANIM_CARD_BURNT) {
+      // 牌库来源的焚毁（腐食甲虫啃牌库顶）：视图停在牌库堆上且隐形、从未烘面——
+      // 先烘面显形、飞到中央展示位（宾语展示同机位），落定再原地燃尽；
+      // 否则焚毁整场演给一张隐形空白卡（"吃卡没感觉"的病根）。手牌卡维持原地烧。
+      if (!view.visible && payload?.cardView) {
+        view.setCard(payload.cardView);
+        view.visible = true;
+        return this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+          durationMs: 320,
+          onComplete: () => this._burnOut(id, view, finish),
+        });
+      }
       return this._burnOut(id, view, finish);
     }
     // 回手牌（宾语转化归位/牌库抽卡）：交还手牌跟踪层——_entering 标记待飞，
@@ -1706,9 +1718,18 @@ export class BattleStage {
     // 攻击方突进解算：来源 → 目标的方向 / 步长 / 前倾角（standee 绕脚转，符号 = 目标方向）
     const srcId = payload?.source?.uniqueID ?? null;
     const src = srcId != null ? (this._units.get(srcId) ?? null) : null;
+    // 瑞米冲撞（2026-09-28 用户定：核心陪伴角色，协战要有专属身体演出）：它的补刀在
+    // core 是附级（不吃加成/不触发受击响应），通用路径因此不给突进——这里按来源特判
+    // 放行，并把配方升回「有击退有撞击感」（只动演出参数，core 语义不变）。
+    const remiCharge = !!src && src._defId === 'remi' && !src._dead;
+    if (remiCharge) {
+      r.knockback = true;
+      if (r.flash == null) r.flash = 0xfff2d8; // 物理撞击的淡暖白闪（非伤害红闪）
+    }
     const lunging = !!src && srcId !== this._snapshot?.player?.uniqueID
-      && !src._dead && (payload?.type ?? 'major') === 'major';
+      && !src._dead && ((payload?.type ?? 'major') === 'major' || remiCharge);
     const sx = src?.position.x ?? 0;
+    const sy = src?.position.y ?? 0; // 地板高度（冲锋跳弧的基准——别裸写 0，slotTransform 的 y 是地板）
     const sz = src?.position.z ?? 0;
     const ddx = unit.position.x - sx;
     const ddz = unit.position.z - sz;
@@ -1717,9 +1738,41 @@ export class BattleStage {
     const uz = ddz / dist;
     const reach = Math.min(Math.max(dist * 0.42, 2.5), 8); // 步长随间距，留身位不贴脸
     const strikeLean = -Math.sign(ddx || 1) * 0.18;
+    // 瑞米冲撞参数：全距离贴身（留 4.2 身位间隙防穿模）；前倾角加大（小身板大动作才读得出）
+    const chargeTravel = Math.max(dist - 4.2, dist * 0.55);
+    const chargeLean = -Math.sign(ddx || 1) * 0.30;
 
     const h = runScript(async (ctx) => {
-      if (lunging) {
+      if (lunging && remiCharge) {
+        // 冲撞四拍：蹲伏蓄势 → 全距离冲刺（小跳弧+前扑）→ 撞击 → 高弹后跳+二跳回家。
+        // 被打断（收拍/拆台）经 onKill 归位归零，不晾在半路上（正常结束也过这，幂等）。
+        ctx.onKill(() => { src.position.x = sx; src.position.y = sy; src.position.z = sz; src.resetPose?.(); });
+        // ① 蹲伏蓄势（下压 + 撑宽 + 微后仰）
+        await ctx.custom(srcId, {
+          durationMs: 170, ease: 'power2.out',
+          onUpdate: (t) => {
+            src.position.x = sx - ux * 1.2 * t;
+            src.position.z = sz - uz * 1.2 * t;
+            src.setPose({ squash: 1 - 0.30 * t, widen: 1 + 0.25 * t, lean: -chargeLean * 0.35 * t });
+          },
+        });
+        // ② 冲锋（弹起拉长 → 前扑：低跳弧全距离压进）——锋尖抵近即接触，受击演出自此起
+        await ctx.custom(srcId, {
+          durationMs: 200, ease: 'power2.in',
+          onUpdate: (t) => {
+            src.position.x = sx - ux * 1.2 + ux * (chargeTravel + 1.2) * t;
+            src.position.z = sz - uz * 1.2 + uz * (chargeTravel + 1.2) * t;
+            src.position.y = sy + Math.sin(Math.PI * t) * 1.3;
+            src.setPose({
+              squash: 0.70 + 0.38 * t,          // 回弹拉长（跃起流线）
+              widen: 1.25 - 0.37 * t,
+              lean: -chargeLean * 0.35 + chargeLean * 1.35 * t, // 后仰 → 前扑
+            });
+          },
+        });
+        // ③ 撞击瞬间：挤进身位 + 撞扁（起手帧，命中段与④并行接上）
+        src.setPose({ squash: 0.82, widen: 1.14, lean: chargeLean });
+      } else if (lunging) {
         // 突进被打断（收拍/拆台）不许把攻击方晾在半路上：归位 + 姿态清零（正常结束也过这，幂等）
         ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose?.(); });
         // ① 蓄势后拉（反向微仰）
@@ -1743,7 +1796,34 @@ export class BattleStage {
       }
       // ③ 收势回位：不起新 await 链——与受击方演出并行，末尾统一等齐
       const recover = lunging
-        ? ctx.custom(srcId, {
+        ? remiCharge
+          ? (async () => {
+            // ④ 反弹跳回：高弧后跳（被撞开的上弹感，后仰渐回）→ 低弧二跳回家
+            const cx = sx + ux * chargeTravel, cz = sz + uz * chargeTravel;
+            const mx = sx + ux * chargeTravel * 0.45, mz = sz + uz * chargeTravel * 0.45;
+            await ctx.custom(srcId, {
+              durationMs: 200, ease: 'power1.out',
+              onUpdate: (t) => {
+                src.position.x = cx + (mx - cx) * t;
+                src.position.z = cz + (mz - cz) * t;
+                src.position.y = sy + Math.sin(Math.PI * t) * 2.6;
+                src.setPose({
+                  squash: 0.82 + 0.18 * t, widen: 1.14 - 0.14 * t,
+                  lean: chargeLean - chargeLean * 1.75 * t, // 前扑 → 后弹仰身
+                });
+              },
+            });
+            await ctx.custom(srcId, {
+              durationMs: 240, ease: 'power1.inOut',
+              onUpdate: (t) => {
+                src.position.x = mx + (sx - mx) * t;
+                src.position.z = mz + (sz - mz) * t;
+                src.position.y = sy + Math.sin(Math.PI * t) * 1.4;
+                src.setPose({ lean: -chargeLean * 0.75 * (1 - t), squash: 1, widen: 1 });
+              },
+            });
+          })()
+        : ctx.custom(srcId, {
           durationMs: 220, ease: 'power2.out',
           onUpdate: (t) => {
             src.position.x = sx + ux * reach * (1 - t);
@@ -1755,7 +1835,10 @@ export class BattleStage {
 
       // 全屏受击演出（命中瞬间；non-blocking 旁路，不占队列节拍）：烈度 = 基础烈度 ×
       // 配方震荡系数（附级 = 0）+ 致命加成；收击方是友军（主角/盟友）追加视角边缘压暗压红渐晕
-      const severity = damageSeverity(dealt, absorbed) * r.shakeScale + (dealt > 0 ? r.shakeBonus : 0);
+      const severity = Math.max(
+        damageSeverity(dealt, absorbed) * r.shakeScale + (dealt > 0 ? r.shakeBonus : 0),
+        remiCharge && dealt > 0 ? 1.2 : 0, // 冲撞贴脸一击要有「咚」的落地感（附级配方本无震荡）
+      );
       if (severity > 0) {
         this.shake.impulse(severity);
         if (unit.side !== 'enemy') this._vignette.pulse(severity);

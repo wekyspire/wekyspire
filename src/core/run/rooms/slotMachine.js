@@ -215,8 +215,9 @@ function makeMinor(run, kind) {
       return id ? { relicId: id } : null;
     }
     case 'special': {
-      // 文档里的「特殊物品等」尚未定义 → 占位为已有的两种小资源（果实/训练次数）
-      return { special: run.rng.next() < 0.5 ? 'fruit' : 'training' };
+      // 文档里的「特殊物品等」尚未定义 → 占位为已有的两种小资源（果实/训练次数）。
+      // 果实是瑞米养成资源——肉鸽模式无瑞米（2026-09-28），小资源恒为训练次数。
+      return { special: run.storyMode && run.rng.next() < 0.5 ? 'fruit' : 'training' };
     }
     default: return null;
   }
@@ -262,7 +263,11 @@ function makeMajor(run, kind) {
       const ids = draftRelics(run, 1, { rarity: 'S', sources: ['draft'] });
       return ids.length ? { relicId: ids[0] } : null;
     }
-    case 'special': return { special: run.rng.next() < 0.5 ? 'fruit' : 'training' };
+    case 'special': {
+      // 文档里的「特殊物品等」尚未定义 → 占位为已有的两种小资源（果实/训练次数）。
+      // 果实是瑞米养成资源——肉鸽模式无瑞米（2026-09-28），小资源恒为训练次数。
+      return { special: run.storyMode && run.rng.next() < 0.5 ? 'fruit' : 'training' };
+    }
     default: return null;
   }
 }

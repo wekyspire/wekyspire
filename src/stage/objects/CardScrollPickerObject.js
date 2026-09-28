@@ -54,13 +54,13 @@ export class CardScrollPickerObject extends ScrollPickerObject {
    * @param {object} data
    *   title / hint: 文案
    *   cards: [{ uniqueID, defId, view, enabled, tipDefId }]（顺序即展示顺序，行优先）
-   *   multi/picks: 多选与目标张数（缺省单选 1 张）
+   *   multi/picks/minPicks: 多选与目标张数（缺省单选 1 张；minPicks 传入即 M..N 区间）
    *   confirmLabel: 确认键文案
    *   tips: hover 是否弹卡牌 tooltip（缺省 true；删卡类入口传 false——2026-09-26 用户定）
    */
-  open({ title = '选择卡牌', hint = '', cards = [], multi = false, picks = 1, confirmLabel = '确认', tips = true } = {}) {
+  open({ title = '选择卡牌', hint = '', cards = [], multi = false, picks = 1, minPicks = null, confirmLabel = '确认', tips = true } = {}) {
     return super.open({
-      title, hint, items: cards, multi, picks, confirmLabel,
+      title, hint, items: cards, multi, picks, minPicks, confirmLabel,
       cols: 6, itemW: CARD_WIDTH * SCALE, itemH: CARD_HEIGHT * SCALE, gapX: 2, gapY: 2.4,
       buildItem: (c, i, { x, yTop }) => {
         const id = CARD_ID(c.uniqueID);

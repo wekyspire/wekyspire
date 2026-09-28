@@ -153,7 +153,12 @@ export function createBridgePresenter({
 
     // ---- 离场类：先离场飞行动画，后 sync（飞进坟堆数字才+1） ----
     cardDiscarded: (p) => { anim(EventNames.ANIM_CARD_DISCARDED, p); syncState(); },
-    cardBurnt: (p) => { anim(EventNames.ANIM_CARD_BURNT, p); syncState(); },
+    // 焚牌离场：载荷代投影 cardView（牌库来源的卡——如腐食甲虫啃牌库顶——不在 hand
+    // 投影内且视图从未烘面，Stage 无从取卡面；同 cardShowcased 的代投影理由）
+    cardBurnt: (p) => {
+      anim(EventNames.ANIM_CARD_BURNT, { ...p, cardView: projectCard?.(p.card) ?? null });
+      syncState();
+    },
     cardMoved: (p) => { anim(EventNames.ANIM_CARD_MOVED, p); syncState(); },
     cardsDumped: (p) => { anim(EventNames.ANIM_CARDS_DUMPED, p); syncState(); },
 

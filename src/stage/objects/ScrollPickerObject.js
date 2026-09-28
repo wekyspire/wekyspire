@@ -65,6 +65,7 @@ export class ScrollPickerObject extends THREE.Group {
     this._hovered = null;
     this._multi = false;
     this._picks = 1;
+    this._minPicks = 1;
     this._itemH = 1;
     this._nodes = [];     // 需释放的非子件面片（背板、标题、轨道…）
     this._buttons = new Map();
@@ -91,19 +92,23 @@ export class ScrollPickerObject extends THREE.Group {
    *     · setState(state) 视觉态（'disabled' | 'highlighted' | 'normal'）
    *   cols / itemW / itemH / gapX / gapY: 网格布局（行优先）
    *   multi / picks: 多选与目标件数（缺省单选 1 件）
-   *   confirmLabel: 确认键文案
+   *   minPicks: 多选的下界（缺省 = picks，即"恰好 N 件"；传入即 M..N 区间，
+   *             确认键在 minPicks ≤ 已选 ≤ picks 时点亮，已选到 picks 即不可再加）
+   *   confirmLabel: 确认键文案（多选时自动追加进度「（已选/目标）」）
    */
   open({
     title = '选择', hint = '', items = [], buildItem = null,
     cols = 6, itemW = 2, itemH = 2, gapX = 2, gapY = 2.4,
-    multi = false, picks = 1, confirmLabel = '确认',
+    multi = false, picks = 1, minPicks = null, confirmLabel = '确认',
   } = {}) {
     this.close();
     if (!buildItem || !items.length) return this;
     this._opened = true;
     this._multi = multi;
     this._picks = Math.max(1, picks);
+    this._minPicks = Math.max(0, Math.min(this._picks, minPicks ?? this._picks));
     this._itemH = itemH;
+    this._itemW = itemW;
     this.confirmHook = null;   // 得卡演出钩子（一次一设；见 onClick 的 CONFIRM 分支）
     this.visible = true;
 
@@ -166,6 +171,7 @@ export class ScrollPickerObject extends THREE.Group {
     this._hideTooltip();
     for (const e of this._entries) {
       this._picker?.removePickable(e.id);
+      this._disposeBadge(e);
       this.remove(e.obj);
       e.obj.dispose?.();
     }
@@ -293,8 +299,53 @@ export class ScrollPickerObject extends THREE.Group {
       // 完全滚出可视带的候选：隐藏即可不可见也可命中（Picker 的 visibleUp 守卫）
       e.obj.visible = bottom < bandTop && top > bandBottom;
       e.obj.position.y = top - h / 2;
+      if (e.badge) {   // 序号角标挂右上角逐件跟随（picker 空间，不随 entry.obj 的局部缩放）
+        const r = e.badge.userData.r;
+        e.badge.position.set(e.x + this._itemW / 2 - r * 0.55, top - r * 0.55, Z.CONTENT + 0.2);
+        e.badge.visible = e.obj.visible;
+      }
     }
     this._syncScrollbar();
+  }
+
+  /** 逐帧驱动候选件的 fx（选中高亮/禁用压暗是 C0 shader 档，收敛在各自 update 里）。
+   *  宿主舞台经 stagePickerKit.update 调到这里；没人调的话选中态永远停在 0。 */
+  update(dt) {
+    if (!this._opened) return;
+    for (const e of this._entries) e.obj.updateFx?.(dt);
+  }
+
+  // 多选序号角标：淡蓝描边圆牌 + 白字序号（扁平，同按钮 active 主题色板）
+  _makeBadge() {
+    const r = Math.max(0.9, Math.min(1.5, this._itemW * 0.12));
+    const g = new THREE.Group();
+    const outer = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 28),
+      new THREE.MeshBasicMaterial({ color: 0x8fb6dd }),
+    );
+    const inner = new THREE.Mesh(
+      new THREE.CircleGeometry(r * 0.78, 28),
+      new THREE.MeshBasicMaterial({ color: 0x34547e }),
+    );
+    inner.position.z = 0.01;
+    const fontPx = Math.round(r * 11);
+    const text = new TextBlockObject({ bakeText: this._bakeText, fontPx, tint: '#ffffff' });
+    text.setText('1');
+    text.placeCenterTop(0, fontPx / 20);   // 行高 ≈ fontPx/10 世界单位，垂直居中于圆牌
+    text.position.z = 0.02;
+    g.add(outer, inner, text);
+    g.userData.r = r;
+    g.userData.text = text;
+    return g;
+  }
+
+  _disposeBadge(e) {
+    const b = e.badge;
+    if (!b) return;
+    e.badge = null;
+    this.remove(b);
+    b.userData.text?.dispose?.();
+    b.children.forEach(c => { if (c !== b.userData.text) { c.geometry?.dispose?.(); c.material?.dispose?.(); } });
   }
 
   _addScrollbar(bandH) {
@@ -371,15 +422,32 @@ export class ScrollPickerObject extends THREE.Group {
   }
 
   _applySelection() {
+    // 多选序号角标（2026-09-28 glm-flash 验收发现：多选时选中卡只有着色呼吸，
+    // 静态读不出「选了哪几张、第几张」）：选中件右上角挂 picker 自有的小圆牌，
+    // 白字序号 = 点选顺序；角标位置/可见性随滚动（_applyScroll 统一摆）。
+    const order = this._multi ? this.selectedKeys : [];
     for (const e of this._entries) {
+      const idx = order.indexOf(e.key);
+      if (idx >= 0) {
+        if (!e.badge) { e.badge = this._makeBadge(); this.add(e.badge); }
+        e.badge.userData.text.setText(String(idx + 1));
+      } else if (e.badge) {
+        this._disposeBadge(e);
+      }
       if (!e.enabled) { e.setState('disabled'); continue; }
       const picked = this._selected.has(e.key);
       e.setState(picked || this._hovered === e ? 'highlighted' : 'normal');
     }
+    if (order.length) this._applyScroll();   // 有角标在挂就重摆一次（不滚也要落位）
     const confirm = this._buttons.get(CONFIRM_ID);
     if (confirm) {
-      const ok = this._selected.size === (this._multi ? this._picks : 1);
-      confirm.setData({ label: this._confirmLabel ?? '确认', enabled: ok, active: ok });
+      // 多选：下界 minPicks、上界 picks（恰好 N = minPicks 缺省同 picks）；按钮带进度
+      const n = this._selected.size;
+      const ok = this._multi ? (n >= this._minPicks && n <= this._picks) : n === 1;
+      const label = this._multi
+        ? `${this._confirmLabel ?? '确认'}（${n}/${this._picks}）`
+        : (this._confirmLabel ?? '确认');
+      confirm.setData({ label, enabled: ok, active: ok });
       this._buttonActions.set(CONFIRM_ID, { action: 'confirm', enabled: ok });
     }
   }

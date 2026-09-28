@@ -20,9 +20,9 @@ import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor, mergeRecipeOverride } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
-import { upgradableCards, beginTraining, trainUpgradeStart, trainUpgrade, trainDrawChoices, trainDraw } from '../core/run/rooms/training.js';
+import { upgradableCards, beginTraining, trainUpgradeStart, trainUpgrade, trainDrawChoices, trainDraw, trainUpgradeModes } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campLocked as campGateLocked } from '../core/run/rooms/camp.js';
-import { SLOT } from '../core/run/rooms/slotMachine.js';
+import { SLOT, devourReady } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { createRunContext } from '../core/run/runContext.js';
 import { createRunPresenter } from './runPresenter.js';
@@ -30,6 +30,7 @@ import { ascensionReady, LEINO_DIMENSIONS } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
 import { panelSnapshot } from '../core/run/panelSnapshot.js';
 import { createRunShowcase } from './runShowcase.js';
+import { settings, persistSettings } from './settings.js';
 import { createRunMachines } from './runMachines.js';
 import { DisplayModel } from '../bridge/displayModel.js';
 import { RunEvents } from './runEvents.js';
@@ -111,7 +112,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
   refreshRunModifiers(run);
-  run.storyMode = isStory; // 模式只影响剧情演出（对话剧本）；战斗内瑞米机制两模式一致
+  run.storyMode = isStory; // 模式口径（2026-09-28 扩）：剧情演出 + 瑞米（同伴出战/营地游荡/果实养成）只在故事模式；肉鸽模式无瑞米
   run.debugMode = isDebug; // 调试局：存档走 debug 槽（saves.modeOf）+ 面板可开
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
@@ -136,11 +137,12 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       usesLeft: def?.uses ? (run.relicUses[id] ?? 0) : null,
     };
   });
-  // 瑞米区视图（run 快照）：被打跑 = 未出战整区隐藏；战斗外恒满血（营地语义：
-  // 每场按满血出战）。满血值借 createUnit 读（内容定义无静态面板字段可查）。
+  // 瑞米区视图（run 快照）：瑞米是故事模式同伴（2026-09-28 起肉鸽模式整区隐藏）；
+  // 故事模式里被打跑 = 未出战整区隐藏；战斗外恒满血（营地语义：每场按满血出战）。
+  // 满血值借 createUnit 读（内容定义无静态面板字段可查）。
   // （攻/盾横幅已删 2026-09-20 用户定：瑞米意图显示其行动）
   const remiMaxHp = getAllyDefinition('remi')?.createUnit().maxHp ?? null;
-  const remiView = () => (!remiMaxHp || run.remi.drivenOff)
+  const remiView = () => (!run.storyMode || !remiMaxHp || run.remi.drivenOff)
     ? { present: false }
     : { present: true, hp: remiMaxHp };
   const syncMapStatus = () => {
@@ -177,6 +179,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 构造期不调用它们，初始化顺序安全。
   const showcase = createRunShowcase({
     run, runPresenter,
+    slot,   // 老虎机演出播放态（maybeShowSlotPrize 要等转轮落定再弹）
     panelStage: () => panelStage(),
     roomStage: () => roomStage,
     notify: () => notify(),
@@ -221,7 +224,68 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     runBus.emit(RunEvents.STAGE_CHANGED, { stage: run.gameStage, floor: run.floor });
     // 新遗物 → 特写（差分见 runShowcase.js）：放在最后，确保面板/资源行已按新状态重绘
     showcase.diffNewRelics();
+    // 老虎机产出特写兜底（2026-09-28：面板领奖按钮全删后的安全网）——拉杆动画落定那拍
+    // 演出若被占，这里在每次状态迁移后重试唤起（播成功才记已播，见 runShowcase）。
+    showcase.maybeShowSlotPrize();
+    maybeTutorDevour();
+    maybeNarrateDemonRoll();
   };
+
+  // 恶魔 roll 解说（2026-09-28 用户定：面板指引文本全删，改对话简述）——
+  // 超额取款入账、机器切恶魔形态那一刻讲：生涯首次讲清规则（持久化 settings），
+  // 之后每次只一句「你知道该干什么。」。电平触发：每次 notify 重查，pendingRoll
+  // 对象 identity 当"本次已讲"标记。
+  // ⚠ 让位必须带重试：上一发词条→金币特写常常还没收完（uiBusy），而恶魔 roll 挂着期间
+  // 玩家可能一个 notify 都不再触发（选词条本身不产生 notify）——纯让位会把
+  // 首遇解说永久吞掉。忙时 600ms 自来重试，直到讲出或局面翻篇（守卫自清）。
+  let narratedDemonRoll = null;
+  let demonNarrateTimer = null;
+  function maybeNarrateDemonRoll() {
+    const pr = run.bank?.pendingRoll;
+    if (!pr) { narratedDemonRoll = null; return; }
+    if (pr === narratedDemonRoll) return;
+    if (run.gameStage !== 'room') return;
+    if (panelStage()?.uiBusy) {
+      if (!demonNarrateTimer) {
+        demonNarrateTimer = setTimeout(() => { demonNarrateTimer = null; maybeNarrateDemonRoll(); }, 600);
+      }
+      return;
+    }
+    narratedDemonRoll = pr;
+    const first = !settings.demonRollTutored;
+    if (first) { settings.demonRollTutored = true; persistSettings(); }
+    void cutscene.play({
+      steps: [{
+        type: 'dialogue',
+        pages: [{
+          speaker: '恶魔轮盘',
+          text: first
+            ? '支付代价的时候到了。\n转动恶魔轮盘，然后选一个诅咒承受。'
+            : '你知道该干什么。',
+        }],
+      }],
+    });
+  }
+
+  // 吞噬首满教学（2026-09-28 用户定）：生涯首次把老虎机喂到张嘴时弹一次指引对话，
+  // 持久化在 settings（跨局只弹一次）；UI 上不放任何吞噬说明文本。
+  // 电平触发（每次 notify 重查）——演出忙/产出待领时让位，等下一拍再弹。
+  function maybeTutorDevour() {
+    if (settings.slotDevourTutored) return;
+    if (run.gameStage !== 'room' || run.currentRoom !== 'slot' || !devourReady(run)) return;
+    if (run.slotPending || panelStage()?.uiBusy) return;
+    settings.slotDevourTutored = true;
+    persistSettings();
+    void cutscene.play({
+      steps: [{
+        type: 'dialogue',
+        pages: [{
+          speaker: '老虎机',
+          text: '「咯啦……咯啦……」\n老虎机嚼够了硬币，满意地张开了嘴。\n点它的投料口，可以粉碎一张卡或一件遗物换金币。',
+        }],
+      }],
+    });
+  }
   let logSeq = 0;
   const pushLog = ({ text, kind }) => {
     log.unshift({ id: ++logSeq, text, kind }); // 稳定 key（unshift 列表用 index key 会全量重渲）
@@ -429,8 +493,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         stageManager,
         bus: animBus,
         snap: panelSnapshot(run, panelExtras()),
-        // 房间活物（2026-09-25）：瑞米在场 = 未被击退（骑士常驻，无血条）
-        units: { remi: !run.remi?.drivenOff },
+        // 房间活物（2026-09-25）：瑞米在场 = 故事模式且未被击退（骑士常驻，无血条；
+        // 2026-09-28 起瑞米是故事模式同伴，肉鸽模式不在营地游荡）
+        units: { remi: !!run.storyMode && !run.remi?.drivenOff },
       }));
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
       roomStage.setRunSequencer(runSequencer);   // 得卡演出的指令化挂点（与离房切幕串行）
@@ -580,11 +645,41 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (ascensionDue) { void cutsceneFlows.playAscensionScene(); return; }
     notify();
   }
-  // 尾款升级（2026-09-21 新制两拍）：先选模式（升 2 张 C→B / 升 1 张 B→A），再逐张晋升
-  function trainingUpgradeMode(mode) {
+  // 尾款升级自动链（2026-09-28 交互迁移）：模式二选一（对话 overlay；只有一种可用直接定）
+  // → 全屏选卡（twoC 多选两张一次完，oneB 单选）。整条链在抓牌落地那拍自动唤起——
+  // 面板不再摆模式/升级按钮；overlay 被中途关掉时由面板「继续修行…」重入本链（幂等）。
+  async function trainingUpgradeFlow() {
     if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
-    trainUpgradeStart(run, mode);
-    notify();
+    const pending = run.roomData.pendingUpgrade;
+    if (typeof pending !== 'object' || !pending.mode) {
+      const modes = trainUpgradeModes(run);
+      const can2C = modes.twoC.length >= 2;
+      const can1B = modes.oneB.length >= 1;
+      let mode = null;
+      if (can2C && can1B) {
+        await cutscene.play({
+          steps: [{
+            type: 'dialogue',
+            pages: [{
+              speaker: '训练桩',
+              text: '抓到的卡要配一次修行。选一种修行方式：',
+              choices: [
+                { id: 'twoC', label: '夯实基础', hint: '升 2 张 C 阶卡' },
+                { id: 'oneB', label: '精益求精', hint: '升 1 张 B 阶卡' },
+              ],
+            }],
+            onChoice: (id) => { mode = id; },
+          }],
+        });
+      } else {
+        mode = can2C ? 'twoC' : 'oneB';
+      }
+      // 对话期间局面可能已变（尾款被别的路径清掉/离房）——落 core 前重查
+      if (!mode || !run.roomData?.pendingUpgrade || run.gameStage !== 'room') return;
+      try { trainUpgradeStart(run, mode); } catch (err) { console.warn('[training]', err.message); return; }
+      notify();
+    }
+    panelStage()?.openUpgradePicker?.('training');
   }
   function trainingUpgrade(uniqueID, targetId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
@@ -592,18 +687,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.roomData?.pendingUpgrade) notify();  // twoC 还剩一张：原地刷新候选
     else maybeLeaveRoom();
   }
-  // 可选段开局：掷四选一候选。⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**
-  // （曾因沿用旧「trained=已锁」语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；
-  // 是否已开局/已收束由 trainDrawChoices 的 core 守卫兜。
+  // 可选段开局：掷四选一候选 → 当场开全屏 overlay（2026-09-28：不再内嵌面板卡阵）。
+  // ⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**（曾因沿用旧「trained=已锁」
+  // 语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；core 守卫兜已开局/已收束。
   function trainingDrawRoll() {
     if (run.gameStage !== 'room' || run.roomData?.pendingUpgrade) return;
     trainDrawChoices(run);
     notify();
+    panelStage()?.openTrainingDrawPicker?.();
   }
   function trainingDraw(defId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.drawChoices) return;
-    trainDraw(run, defId); // 欠升级态没有跳过出口（UI 不渲染），null 只会是放弃候选
-    if (run.roomData?.pendingUpgrade) notify();
+    trainDraw(run, defId); // 欠升级态没有跳过出口，null 只会是放弃候选（picker 返回）
+    if (run.roomData?.pendingUpgrade) { notify(); void trainingUpgradeFlow(); }
     else maybeLeaveRoom();
   }
   function campChoose(option) {
@@ -655,7 +751,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     chooseRewardPack: (i) => chooseRewardPack(i.packId),
     claimReward: (i) => claimReward(i.defId ?? null),
     trainingBegin: () => trainingBegin(),
-    trainingUpgradeMode: (i) => trainingUpgradeMode(i.mode),
+    // 尾款重入保险（面板「继续修行…」）：模式未选先弹二选一，已选直接开选卡
+    trainingUpgradeResume: () => { void trainingUpgradeFlow(); },
+    // 抓牌候选重开兜底（overlay 被异常关掉时；正常流程掷完即自动开）
+    trainingDrawPick: () => { panelStage()?.openTrainingDrawPicker?.(); },
     trainingUpgrade: (i) => trainingUpgrade(i.uniqueID, i.targetId ?? null),
     trainingDrawRoll: () => trainingDrawRoll(),
     trainingDraw: (i) => trainingDraw(i.defId ?? null),
@@ -673,6 +772,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 离局清理（App.toTitle/newGame 调用）：战斗舞台释放 + 挂起演出瞬落
   // （动画不可序列化——重进/读档由检查点重建稳态）
   function dispose() {
+    if (demonNarrateTimer) { clearTimeout(demonNarrateTimer); demonNarrateTimer = null; }
     battleStage?.dispose();
     battleStage = null;
     roomStage?.dispose();
@@ -707,7 +807,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getRoomStage: () => roomStage,   // 场景式休息房舞台（App 的指针路由据此转发）
     enterRestRoomScene,              // 显式进入场景式休息房（读档/调试/测试用；正常路径由 claimReward 触发）
     startBattle, claimReward, chooseRewardPack,
-    trainingBegin, trainingUpgradeMode, trainingUpgrade, trainingDrawRoll, trainingDraw,
+    trainingBegin, trainingUpgrade, trainingDrawRoll, trainingDraw,
     campChoose, leaveRoom, bankDo: machines.bankDo, gurpasDo: machines.gurpasDo, spin: machines.spin, reportSlotAnimDone: machines.reportSlotAnimDone, leaveSlot, triggerEvent: cutsceneFlows.triggerEvent, leaveEvent: cutsceneFlows.leaveEvent,
     playEventScene: cutsceneFlows.playEventScene,                 // 显式播事件幕间（正常路径由进房自动触发；幂等）
     enterRoomPresentation,          // 进房演出派发（事件幕间 / 房间场景；测试与调试可用）

@@ -103,12 +103,13 @@ export function assembleBattle(run) {
   for (const unit of enemies) getEnemyDefinition(unit.defId)?.onSpawn?.(unit, enemies);
   return {
     enemies,
-    allies: run.remi.drivenOff ? [] : [getAllyDefinition('remi').createUnit()],
+    allies: (!run.storyMode || run.remi.drivenOff) ? [] : [getAllyDefinition('remi').createUnit()],
     seed: deriveBattleSeed(run.seed, run.floor),
   };
 }
 
-// 按当前遭遇装配战斗（战斗种子 = derive(runSeed, floor)；瑞米被打跑则不出战）
+// 按当前遭遇装配战斗（战斗种子 = derive(runSeed, floor)；瑞米是故事模式同伴（2026-09-28
+// 起肉鸽模式不出战），故事模式里被打跑则不再出战直至营地找回）
 export function createRunBattle(run, { presenter = null, config = {} } = {}) {
   expectStage(run, 'battle');
   const { enemies, allies, seed } = assembleBattle(run);

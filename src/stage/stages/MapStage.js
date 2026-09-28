@@ -280,6 +280,8 @@ export class MapStage {
 
   /** 特写是否在播（宿主据此吞掉面板输入）。 */
   get showcasing() { return this._pickerKit.showcasing; }
+  /** 套件级模态占用（特写/升级演出/全屏界面开着）——宿主编排器据此避让自动演出。 */
+  get uiBusy() { return this._pickerKit.uiBusy; }
 
   // ---- 角色对话/思索泡泡（通用接口，用户定 2026-09-11）----
   // 场景里的角色（商店老板、瑞米、事件 NPC…）异步说话/思索时用：
@@ -341,6 +343,13 @@ export class MapStage {
 
   /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
   openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
+
+  /** 训练抓牌四选一（全屏 overlay；占位房间路径用——场景房走 RoomStage 同名口）。 */
+  openTrainingDrawPicker() {
+    const ok = this._pickerKit.openTrainingDrawPicker(this._snap);
+    if (ok) this._syncCardArtSub();
+    return ok;
+  }
 
   /**
    * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。

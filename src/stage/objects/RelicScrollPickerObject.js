@@ -130,11 +130,12 @@ export class RelicScrollPickerObject extends ScrollPickerObject {
    * @param {object} data
    *   title / hint: 文案
    *   relics: [{ id, name, rarity, desc }]（顺序即展示顺序，行优先；desc 由调用方补）
+   *   multi/picks/minPicks: 多选与目标件数（缺省单选 1 件；minPicks 传入即 M..N 区间）
    *   confirmLabel: 确认键文案（如「确认粉碎」）
    */
-  open({ title = '选择遗物', hint = '', relics = [], confirmLabel = '确认' } = {}) {
+  open({ title = '选择遗物', hint = '', relics = [], multi = false, picks = 1, minPicks = null, confirmLabel = '确认' } = {}) {
     return super.open({
-      title, hint, items: relics, confirmLabel,
+      title, hint, items: relics, multi, picks, minPicks, confirmLabel,
       cols: 5, itemW: TILE.w, itemH: TILE.h, gapX: 2.2, gapY: 2.6,
       buildItem: (r, i, { x, yTop }) => {
         const tile = new RelicTile({ bakeText: this._bakeText, relic: r });

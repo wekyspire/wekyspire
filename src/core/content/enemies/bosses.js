@@ -45,8 +45,8 @@ function attachPressureCounter(kernel, unit, owner) {
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  // 2026-09-21 用户定：一章 Boss 集体加强——基础 +7，经 11 层 ×3.4 缩放 ≈ 实战 +24（153→177）
-  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 52 }),
+  // 血量口径（2026-09-28 用户定）：难度制 v2 取消单敌人缩放后基础值即实战值——恢复 155
+  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 155 }),
   // 多部件（fx Phase 5 首件试点，2026-09-23；同日视觉大改）：本体 + 3 团环绕火球
   // （程序化焰身/光晕/彗尾 sprite + 点光，无美术素材；P2 剧本推 heat 催成狂暴态）
   // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
@@ -160,7 +160,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'kardas', name: '卡达斯',
-  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 34 }), // 2026-09-21：+7 基础 ≈ 实战 +24（92→116）
+  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 128 }), // 2026-09-28：难度制 v2 后基础值即实战值，恢复 128
   onBattleStart(ctx, unit) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
       target: unit, effectId: 'flameDemon', stacks: 1 }));
@@ -225,7 +225,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
-  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 54 }), // 2026-09-21：+7 基础 ≈ 实战 +24（160→184）
+  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 168 }), // 2026-09-28：难度制 v2 后基础值即实战值，恢复 168
   onBattleStart(ctx, unit) {
     // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
     ctx.kernel.submitInstruction(new AddEffectInstruction({

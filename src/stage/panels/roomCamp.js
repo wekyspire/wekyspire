@@ -2,49 +2,30 @@
 // 2026-09-18 训练改版：训练 = 必做阶段且先于篝火。训练节拍 =
 // 开始（升阶，达标当场进阶）→ 可选段（4 选 1 抓一张 → 抓了欠一次升级）→ 篝火解锁。
 
-import { withLabels, upgradeButton, pushCampGroup, roomHeader } from './shared.js';
+import { pushCampGroup, roomHeader } from './shared.js';
 
 /**
  * 训练部分（营地·训练场合并房的训练半场）：
- * 开始训练（必做）→ 四选一抓牌（可选，抓了欠升级尾款）→ 尾款新制（2026-09-21 D4）：
- * 先选模式（升 2 张 C→B / 升 1 张 B→A，按牌组实况亮灯），再逐张选卡晋升。
- * 占位房间与**场景式房间**（RoomStage 点训练桩开的那份）共用同一份。
+ * 开始训练（必做）→ 抓牌四选一（可选，抓了欠升级尾款）→ 尾款（升 2 张 C→B / 升 1 张 B→A）。
+ * 2026-09-28 交互迁移：抓牌与升级全部走全屏 overlay（自动唤起），面板只剩入口与状态——
+ * 「挑选/升级」类按钮只保留**重入保险**（overlay 被返回/异常关掉时再开一次），正常流程
+ * 玩家一个也不用点。
  */
 export function trainingWidgets(w, snap) {
   const t = snap.training ?? {};
   if (!t.started) {
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '训练（必做）：开始这次修行——修行次数达标会当场引动进阶突破。' });
     w.push({ kind: 'button', id: 'train:begin', width: 260, size: 'main', label: '开始训练', action: { action: 'trainingBegin' } });
-  } else if (t.pendingUpgrade && !t.upgradeMode) {
-    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '抓到的卡要配一次修行——选一种修行方式：' });
-    const modes = t.upgradeModes ?? { twoC: 0, oneB: 0 };
-    if (modes.twoC >= 2) {
-      w.push({ kind: 'button', id: 'train:modeC', width: 300, size: 'main', label: '夯实基础：升 2 张 C 阶卡', action: { action: 'trainingUpgradeMode', mode: 'twoC' } });
-    }
-    if (modes.oneB >= 1) {
-      w.push({ kind: 'button', id: 'train:modeB', width: 300, size: 'main', label: '精益求精：升 1 张 B 阶卡', action: { action: 'trainingUpgradeMode', mode: 'oneB' } });
-    }
   } else if (t.pendingUpgrade) {
-    const tierLabel = t.upgradeMode === 'twoC' ? 'C' : 'B';
-    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: `升级 ${tierLabel} 阶卡（还需 ${t.upgradeRemaining} 张）：` });
-    w.push(upgradeButton('training', `升级一张 ${tierLabel} 阶卡`));
+    // 尾款未清：正常流程在抓牌落地那拍自动弹「模式二选一 → 全屏选卡」；这里只留重入
+    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '还欠一次升级' });
+    w.push({ kind: 'button', id: 'train:resume', width: 260, size: 'main', label: '继续修行…', action: { action: 'trainingUpgradeResume' } });
   } else if (t.choices?.length) {
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '择一张加入牌组（抓了就欠一次升级）：' });
-    w.push({
-      kind: 'cards', idPrefix: 'train', cols: 4, scale: 0.8,
-      items: t.choicesCards.map(x => ({
-        defId: x.defId, view: withLabels(x.view),
-        // grantCard：得卡标记——舞台据此先播「择卡得卡」演出再上行意图
-        action: { action: 'trainingDraw', defId: x.defId, grantCard: true },
-      })),
-    });
-    w.push({ kind: 'button', id: 'train:pass', width: 200, label: '这些都不合适', action: { action: 'trainingDraw', defId: null } });
+    // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底
+    w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '挑选抓牌候选…', action: { action: 'trainingDrawPick' } });
   } else if (!t.optionalDone) {
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '修行之余，还可以抓一张新卡（抓了就欠一次升级）：' });
-    w.push({ kind: 'button', id: 'train:roll', width: 240, label: '抓牌（四选一）', action: { action: 'trainingDrawRoll' } });
-    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '（不想要就不抓，点「继续前进」离开）' });
+    w.push({ kind: 'button', id: 'train:roll', width: 300, size: 'main', label: '继续训练：获得新卡牌并升级现有卡', action: { action: 'trainingDrawRoll' } });
   } else {
-    w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练部分：本房已完成' });
+    w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练完成' });
   }
 }
 
@@ -52,12 +33,14 @@ export function trainingWidgets(w, snap) {
 export function campWidgets(w, snap) {
   const c = snap.camp ?? { options: [] };
   if (c.locked) {
-    w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '先把训练收尾，再来火边歇息。' });
+    w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练之后，再来火边歇息吧！' });
     return;
   }
-  w.push({ kind: 'sub', align: 'center', tint: c.used ? '#6f7a92' : '#9aa3b8', text: '营地部分（本房一次）：' });
-  if (c.used) w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '本房营地动作已用过' });
-  else pushCampGroup(w, c);
+  // w.push({ kind: 'sub', align: 'center', tint: c.used ? '#6f7a92' : '#9aa3b8', text: '营地' });
+  // if (c.used) w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '本房营地动作已用过' });
+  /*else */
+  
+  if(!c.used) pushCampGroup(w, c);
 }
 
 /**

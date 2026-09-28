@@ -75,7 +75,7 @@ export class PanelObject extends THREE.Group {
    *   onIntent: (action) => void  点击路由出口（宿主接 runController）
    *   bakeText / bakeButton / bakeFace: 注入烘焙（缺省浏览器实现，node 退化占位）
    */
-  constructor({ form = 'anchored', onIntent = null, bakeText = null, bakeButton = null, bakeFace = null, bakeBadge = null } = {}) {
+  constructor({ form = 'anchored', onIntent = null, bakeText = null, bakeButton = null, bakeFace = null, bakeBadge = null, overrideOpacity = null} = {}) {
     super();
     this.form = form;
     this._g = FORMS[form] ?? FORMS.anchored;
@@ -95,6 +95,7 @@ export class PanelObject extends THREE.Group {
     this._rowPickIds = new Set(); // 可 hover 文本行的 pickable id（attachPicker/清理都要摘）
     this._rowSeq = 0;   // 可 hover 文本行的 pickable id 序号
     this.kind = null;
+    this._overrideOpacity = overrideOpacity; // 注入背板透明度（单测用假值）
     if (form === 'modal') this.position.set(0, UI_CAMERA_LOOK_AT_Y, Z.PANEL);
     else if (form === 'dock') this.position.set(0, DOCK_BOTTOM, Z.PANEL); // 实际 y 在 setWidgets 里按内容高回推
     else this.position.set(-HALF_UI_W + this._g.marginX / PX_PER_WU,
@@ -231,7 +232,7 @@ export class PanelObject extends THREE.Group {
     if (!this._backdrop) {
       this._backdrop = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
+        new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: this._overrideOpacity ?? 0.86 }),
       );
       this.add(this._backdrop);
     }

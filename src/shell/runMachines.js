@@ -80,22 +80,30 @@ export function createRunMachines(ctx) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
     if (run.slotPending) return; // 上一次产出还没处理
     const prize = spinSlot(run); // 逻辑先行：扣费与定奖立即结算，演出随后揭示产出
+    const SPIN_FUSE_MS = 4000;   // 保险丝时长（指令 durationMs 与 slot.anim 兜底共用）
     runSequencer.enqueueInstruction({
       meta: { event: 'room:slot-spin', prize: prize.kind },
-      durationMs: 4000, // 前端卡死保险丝（UI 未回执时兜底推进）
+      durationMs: SPIN_FUSE_MS, // 前端卡死保险丝（UI 未回执时兜底推进）
       start: ({ id, emit }) => {
         slot.anim = { id, prize };
-        slotFinish = (reportId) => {
+        let fallback = null;
+          slotFinish = (reportId) => {
           if (reportId !== id) return false;
+          clearTimeout(fallback);
           slot.anim = null;
           slot.lastSpin = prize; // 结果在动画落定后揭示（渐进揭示语义）
           slotFinish = null;
-          // 揭示后必须重推面板快照：面板是**快照驱动**的（漏掉它的症状＝永远停在「转动中」）
+          // 揭示后必须重推面板快照：面板是**快照驱动**的（漏掉它的症状＝永远停在「转动中」）；
+          // 中奖的获得演出由 notify 链尾的 maybeShowSlotPrize 唤起（放弃/收下都在那个演出里，
+          // 它就着 slot.anim 已清这一拍才弹——不会盖住转轮）
           ctx.notify();
-          showcase.maybeShowSlotPrize();   // 中奖即唤起获得演出（放弃/收下都在那个演出里）
           emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
           return true;
         };
+        // 保险丝路径兜底：sequencer 超时只杀指令、不会清 slot.anim——不清的话「转轮在播」
+        // 闸门永锁（中奖演出弹不出、lastSpin 不揭示）。同拍走一遍正常 settle（emit 幂等：
+        // 指令可能已被保险丝标 finished，finish() 对重复完成直接返回 true）。
+        fallback = setTimeout(() => slotFinish?.(id), SPIN_FUSE_MS);
       },
     });
     ctx.notify();

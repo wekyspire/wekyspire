@@ -19,7 +19,7 @@ import { buyShopItem } from '../core/run/rooms/shop.js';
 import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 
 export function createRunShowcase(ctx) {
-  const { run, runPresenter, actions } = ctx;
+  const { run, runPresenter, actions, slot } = ctx;
 
   // ---- 获得遗物特写（用户定 2026-09-12）----
   // 遗物获取路径很多（奖励选包 / 商店货架 / 老虎机奖品 / 古尔帕斯 / 事件…），逐个接线必漏；
@@ -126,19 +126,26 @@ export function createRunShowcase(ctx) {
    * 处理（"没有获得感"）。点任意处 = 收下（需要选一张的奖项：随后在面板/全屏选卡里选；
    * 免费指定升级：随后自动开选卡界面）；点「跳过」= 放弃这份产出。
    * 一次产出只播一次（按对象身份去重；领取/放弃后 pending 清空，自然复位）。
+   * 2026-09-28 健壮化：**播成功才记已播**（此前先记后播，特写被占就永久漏播、产出只剩
+   * 面板兜底按钮）；并挂进 notify 链（runController），演出空闲时自动重唤起——面板上的
+   * 「领取/放弃」按钮因此得以全删（取消语义：跳过/返回 = 放弃）。
    */
   let shownSlotPrize = null;
   function maybeShowSlotPrize() {
     const p = run.slotPending;
     if (!p) { shownSlotPrize = null; return false; }
     if (p === shownSlotPrize) return false;
-    shownSlotPrize = p;
+    // 转轮还在转：等落定那拍 notify 再弹（core 先行结算，slotPending 在动画开拍时就挂上了，
+    // 不等就盖住转轮——「还没转完获得演出就蹦出来」的病根，2026-09-28）。
+    // 落定路径：slot.anim 在 slotFinish（UI 回执/保险丝兜底）里清掉并补一次 notify。
+    if (slot?.anim) return false;
     const stage = ctx.panelStage();
     if (!stage?.showcaseItem) return false;
+    if (stage.uiBusy) return false;   // 特写/选卡界面在播：等下一拍 notify 再试（不记已播）
     const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
     const freeUpgrade = p.upgrade?.kind === 'free';
     const major = p.tier === 'major';
-    stage.showcaseItem({
+    const shown = stage.showcaseItem({
       title: slotPrizeText(p),
       desc: `老虎机 · ${major ? '★ 大奖' : '小奖'}`,
       effect: needsPick ? '收下之后，在候选里选一张带走'
@@ -156,7 +163,8 @@ export function createRunShowcase(ctx) {
         else actions.slotTake(null);
       },
     });
-    return true;
+    if (shown) shownSlotPrize = p;   // 播成功才记已播（被占时下一拍 notify 重试）
+    return !!shown;
   }
 
   // 离房安慰奖（SLOT_MACHINE.md：同一层拉了 ≥4 次杆没中奖（D5） → 送可乐/鸡腿二选一）：
