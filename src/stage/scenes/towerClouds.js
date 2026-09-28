@@ -8,6 +8,9 @@
 //   ③ transmittance 合成：col = cloudInscatter + scene * T → 屏幕。
 // 接入 = StageManager 的 composeScene 钩子（MapStage 委托 composeFrame，BattleStage
 // 体积光同范式）；云体 = Worley base + perlin+worley detail 侵蚀 + 独立随风 offset 场。
+// **噪声源 = cloudNoise.js 烘焙的 64³ RGBA8 3D 纹理**（2026-09-27 性能修复：WGSL
+// 程序噪声循环较 GLSL 慢 2-3 倍，1080p march 曾占帧耗 82%、4K 跌破 60fps——
+// 全部噪声改纹理采样后单步 ~110 次 hash → ~10 次采样；观感统计等价，公式未动）。
 // 云板按 y 求交，相机在云下/云内/云上三种相对位置同一路径（TOWER.md 四阶段）。
 // node/headless 可安全构造（RT/材质创建不触 GL；管线只在浏览器 composeFrame 里跑）。
 //
@@ -33,11 +36,14 @@
 //     blackTex 兜底初始化防首帧 null。
 import * as THREE from 'three';
 import {
-  Fn, If, Loop, Break, uniform, texture, uv, screenCoordinate, select,
-  vec2, vec3, vec4, float, bool, mix, clamp, abs, max, min, mod, pow, sqrt,
-  exp, fract, sin, dot, length, floor, smoothstep, oneMinus,
+  Fn, If, Loop, Break, uniform, texture, texture3D, uv, screenCoordinate, select,
+  vec2, vec3, vec4, float, bool, mix, clamp, abs, max, min, pow,
+  exp, fract, sin, dot, length, smoothstep, oneMinus,
 } from 'three/tsl';
 import { makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass, passUV } from '../post/passes.js';
+import {
+  CLOUD_NOISE_CELLS, CLOUD_NOISE_SIZE, getCloudNoiseTexture, getCloudNoiseTextureAsync,
+} from './cloudNoise.js';
 
 const RT_SCALE = 0.25;          // 云 RT 1/4 分辨率（用户定：省性能 + blur 降噪）
 const CORNER_NDC = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
@@ -70,32 +76,14 @@ export const CLOUD_PRESETS = {
   },
 };
 
-// ================= 云 march 节点链（GLSL towerClouds.march.frag.glsl 逐式平移）=================
+// ================= 云 march 节点链（噪声源 = cloudNoise.js 烘焙 3D 纹理，见该文件头注）====
 
-const tcHash3 = Fn(([p]) => {
-  return fract(sin(vec3(
-    dot(p, vec3(127.1, 311.7, 74.7)),
-    dot(p, vec3(269.5, 183.3, 246.1)),
-    dot(p, vec3(113.5, 271.9, 124.6)))).mul(43758.5453));
-});
-
-// Worley F1 反相（billow：单元中心亮=云团）。27 邻域标准实现。
-// GLSL 的 x/y/z 三重 -1..1 循环展平成一重 27 次循环（k = (x+1)+3(y+1)+9(z+1)；
-// min 累积与遍历顺序无关，数学等价）。
-const tcWorley = Fn(([q, cell]) => {
-  const f = q.div(cell);
-  const i = floor(f);
-  const fr = fract(f);
-  const d = float(1e9).toVar();
-  Loop(27, ({ i: k }) => {
-    const kf = float(k);
-    const g = vec3(kf.mod(3.0), kf.div(3.0).mod(3.0), kf.div(9.0)).sub(1.0);
-    const o = tcHash3(i.add(g));
-    const r = g.add(o).sub(fr);
-    d.assign(min(d, dot(r, r)));
-  });
-  return oneMinus(clamp(sqrt(d), 0.0, 1.0));
-});
+// 烘焙采样帮手：原 tcWorley(q, cell) ≡ R 通道 q/(cell×格数)；tcVnoise(q) ≡ B 通道
+// q/格数。平铺周期 = 格数×格长（世界单位），Repeat 包裹。通道语义见 cloudNoise.js。
+const texR = (u, q, cell) => texture3D(u.uNoise, q.div(cell.mul(CLOUD_NOISE_CELLS.R))).r;
+const texG = (u, q, cell) => texture3D(u.uNoise, q.div(cell.mul(CLOUD_NOISE_CELLS.G))).g;
+const texB = (u, q) => texture3D(u.uNoise, q.div(CLOUD_NOISE_CELLS.B)).b;
+const texA = (u, q, cell) => texture3D(u.uNoise, q.div(cell.mul(CLOUD_NOISE_CELLS.A))).a;
 
 // 云密度场：2 倍频 worley（细层以 0.35 倍风速漂移 → 层间剪切=滚动感）+ 垂直剖面
 // （云底平齐、中段最厚、顶缘碎散）。返回 >0 的"过门槛密度"，0 = 空气。
@@ -103,8 +91,8 @@ const tcWorley = Fn(([q, cell]) => {
 const tcCloudField = Fn(([u, p]) => {
   const adv = vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y).mul(u.uCloudTime);
   const q = p.add(adv);
-  const w = tcWorley(q, u.uCloudScale).mul(0.62)
-    .add(tcWorley(
+  const w = texR(u, q, u.uCloudScale).mul(0.62)
+    .add(texR(u,
       q.mul(2.6).add(vec3(31.7, 11.3, 7.7))
         .add(vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y).mul(u.uCloudTime).mul(-0.65)),
       u.uCloudScale).mul(0.38));
@@ -113,39 +101,24 @@ const tcCloudField = Fn(([u, p]) => {
   return max(w.mul(profile).sub(oneMinus(u.uCoverage)), 0.0);
 });
 
-// 值噪音（quintic 插值 8 角）——perlin 通道的便宜实现，fbm 后观感一致
-const tcHash1 = Fn(([p]) => fract(sin(dot(p, vec3(127.1, 311.7, 74.7))).mul(43758.5453)));
-
-const tcVnoise = Fn(([p]) => {
-  const i = floor(p);
-  const f = fract(p);
-  const u = f.mul(f).mul(f.mul(-2.0).add(3.0));
-  return mix(
-    mix(mix(tcHash1(i), tcHash1(i.add(vec3(1.0, 0.0, 0.0))), u.x),
-        mix(tcHash1(i.add(vec3(0.0, 1.0, 0.0))), tcHash1(i.add(vec3(1.0, 1.0, 0.0))), u.x), u.y),
-    mix(mix(tcHash1(i.add(vec3(0.0, 0.0, 1.0))), tcHash1(i.add(vec3(1.0, 0.0, 1.0))), u.x),
-        mix(tcHash1(i.add(vec3(0.0, 1.0, 1.0))), tcHash1(i.add(vec3(1.0, 1.0, 1.0))), u.x), u.y),
-    u.z);
-});
-
-// 细节侵蚀场：**perlin + worley**（用户定），独立于主场的更快随风 advect——
+// 细节侵蚀场：**perlin(B) + worley(G)**（用户定），独立于主场的更快随风 advect——
 // 高频絮条以错速扫过云体 → 云内视角读作薄纱掠面。
 // gust = 云内阵风倍率（GLSL 版的文件级 g_gust 可变全局在 TSL 无对应物，改穿参）。
 const tcDetailField = Fn(([u, p, gust]) => {
   const q = p.add(vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y)
     .mul(u.uCloudTime.mul(1.45).mul(gust))).mul(u.uDetailFreq);
-  return tcVnoise(q).mul(0.62)
-    .add(tcWorley(q.add(vec3(11.3, 5.1, 8.7)), 1.35).mul(0.38));
+  return texB(u, q).mul(0.62)
+    .add(texG(u, q.add(vec3(11.3, 5.1, 8.7)), float(1.35)).mul(0.38));
 });
 
-// 独立随风 offset 场：**perlin + worley**（用户定）——主场采样点被它水平推着走。
+// 独立随风 offset 场：**perlin(B) + worley(A)**（用户定）——主场采样点被它水平推着走。
 // 云内视角 gust 加速 → 阵风脉冲 + 薄纱层掠过的大风感；wo y 分量为 0（风是水平的）。
 const tcWarpOffset = Fn(([u, p, gust]) => {
   const q = p.add(vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y)
     .mul(u.uCloudTime.mul(0.85).mul(gust))).mul(u.uWarpFreq);
-  const wx = tcVnoise(q).sub(0.5);
-  const wz = tcVnoise(q.add(vec3(23.7, 11.9, 5.3))).sub(0.5);
-  const gustPulse = tcWorley(q.mul(0.73).add(vec3(3.1, 17.3, 9.7)), 1.21).sub(0.55); // 阵风脉冲通道
+  const wx = texB(u, q).sub(0.5);
+  const wz = texB(u, q.add(vec3(23.7, 11.9, 5.3))).sub(0.5);
+  const gustPulse = texA(u, q.mul(0.73).add(vec3(3.1, 17.3, 9.7)), float(1.21)).sub(0.55); // 阵风脉冲通道
   return vec3(wx, 0.0, wz)
     .add(vec3(gustPulse.mul(0.35), 0.0, gustPulse.mul(-0.28)))
     .mul(u.uWarpAmt);
@@ -157,11 +130,11 @@ const tcHgPhase = Fn(([c, g]) => {
     .div(pow(float(1.0).add(g2).sub(g.mul(c).mul(2.0)), 1.5).mul(4.0 * PI));
 });
 
-// 光 march 用的密度场 lite 版：单倍频 worley + 剖面（27 tap）。完整场的 warp/detail
-// 对遮蔽贡献是二阶的，光 march 每样本省下 100+ tap。
+// 光 march 用的密度场 lite 版：单倍频 worley + 剖面（烘焙后 = 1 次纹理采样）。
+// 完整场的 warp/detail 对遮蔽贡献是二阶的，不采。
 const tcCloudDensityLite = Fn(([u, p]) => {
   const adv = vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y).mul(u.uCloudTime);
-  const w = tcWorley(p.add(adv), u.uCloudScale);
+  const w = texR(u, p.add(adv), u.uCloudScale);
   const hr = clamp(p.y.sub(u.uCloudBase).div(max(1.0, u.uCloudTop.sub(u.uCloudBase))), 0.0, 1.0);
   const profile = smoothstep(0.0, 0.16, hr).mul(oneMinus(smoothstep(0.68, 1.0, hr)));
   return max(w.mul(profile).sub(oneMinus(u.uCoverage)), 0.0);
@@ -404,6 +377,23 @@ export function buildTowerClouds({
   const tBlurSrc = texture(blackTex);     // blur 输入（Cloud/Blur 两拍轮换）
   const tCompScene = texture(blackTex);   // composite：场景色
   const tCompCloud = texture(blackTex);   // composite：云 march 结果
+  // 烘焙云噪声（cloudNoise.js）：先建空 3D 纹理（全 0 = 暂时无云），烘焙完成
+  // 就地填数 + needsUpdate 重传（同实例换内容，链不重编）；烘焙在启动期完成，
+  // 实践中无云窗口不可见）
+  const noiseTex = new THREE.Data3DTexture(
+    new Uint8Array(CLOUD_NOISE_SIZE ** 3 * 4), CLOUD_NOISE_SIZE, CLOUD_NOISE_SIZE, CLOUD_NOISE_SIZE);
+  noiseTex.minFilter = THREE.LinearFilter;
+  noiseTex.magFilter = THREE.LinearFilter;
+  noiseTex.wrapS = noiseTex.wrapT = noiseTex.wrapR = THREE.RepeatWrapping;
+  noiseTex.needsUpdate = true;
+  {
+    const ready = getCloudNoiseTexture();
+    if (ready) noiseTex.image.data.set(ready.image.data);
+    else getCloudNoiseTextureAsync().then((tex) => {
+      noiseTex.image.data.set(tex.image.data);
+      noiseTex.needsUpdate = true;
+    });
+  }
   const uTexel = uniform(new THREE.Vector2()); // 1/云 RT 尺寸
   const uDir = uniform(new THREE.Vector2(1, 0)); // blur 方向 (1,0)/(0,1)
 
@@ -437,6 +427,7 @@ export function buildTowerClouds({
     uInnerStepScale: uniform(params.innerStep), // 云内步长收紧倍率（近场细节更密，用户定特调）
     // 场景深度（composeFrame 每帧接 rtScene 深度纹理与相机参数）
     uSceneDepth: tSceneDepth,
+    uNoise: noiseTex,                      // 烘焙云噪声 3D 纹理（cloudNoise.js，裸纹理——texture3D() 只认实例）
     uCamNear: uniform(0.1),
     uCamFar: uniform(2000),
     uCamWorldInv: uniform(new THREE.Matrix4()), // 相机世界逆矩阵（世界射线 → 视空间射线）
