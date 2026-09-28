@@ -7,8 +7,22 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   // 恶魔 roll 进行中：机器已切恶魔形态、拉杆锁定（core 同款守卫）——面板只讲这一件事
   if (snap.bank?.pendingRoll) { demonRollWidgets(w, snap.bank.pendingRoll, sceneChoice); return; }
   const s = snap.slot ?? {};
+
+  // 场景路径（2026-09-28 用户定）：领奖/选奖/放弃全部走获得演出与全屏 overlay，
+  // 指引信息机器身上的计数器已经讲了——面板只留拉杆一枚按钮（价格在按钮上，免费显示免费）。
+  if (sceneChoice) {
+    w.push({
+      kind: 'button', id: 'slot:spin', width: 260, size: 'main',
+      label: s.spinning ? '转动中…'
+        : (s.freeRolls > 0 ? `拉杆！（免费${s.freeRolls > 1 ? ` ×${s.freeRolls}` : ''}）` : `拉杆！（${s.cost} 金）`),
+      enabled: !!s.canSpin && !s.spinning,
+      action: { action: 'spin' },
+    });
+    return w;
+  }
+
+  // ---- 以下为非场景兜底路径（占位房间/降级：没有 3D 机器与 overlay 挂点，按钮必须留全）----
   const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
-  // 价格只在按钮上带一次（2026-09-22 精简）；「已拉」为全口径（含免费抽，与吞噬进度同口径）
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
     text: `持有 ${s.money} 金`
@@ -26,9 +40,6 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     w.push({ kind: 'gap' });
     w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#e8eefb' : '#c3cee0',
       text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
-    // 多选一奖项（2026-09-22 统一）：候选只出现在**全屏 overlay**（选卡/选遗物界面）——
-    // 中奖即自动「获得演出 → dismiss 接候选界面」，这里不再内嵌卡行/遗物按钮墙（旧逻辑已删，
-    // 用户报"没统一为获取动画 + 全屏多选"）。只留一个重开入口兜底（界面被异常关闭时）。
     if ((pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0) {
       w.push({
         kind: 'button', id: 'slot:pickPrize', width: 300, size: 'sub',
@@ -42,8 +53,6 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
         action: { action: 'openUpgradePicker', source: 'slot', local: true },
       });
     }
-    // 「放弃」兜底：演出/界面的「跳过」「返回」都是放弃，这里给面板侧的第三个出口
-    // （headless 之外的降级路径 / 玩家改主意）。
     w.push({
       kind: 'button', id: 'slot:decline', width: 220, size: 'sub',
       label: '放弃',
@@ -75,9 +84,8 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     action: { action: 'spin' },
   });
 
-  // 吞噬：累积满 7 次 roll 才可粉碎一件遗物/卡换金币。
-  // **入口是一个按钮**（不再把候选平铺成按钮墙）：点它 → dialogue 层问「粉碎什么？」
-  // → 全屏选卡/选遗物界面。编排在 runController（Stage 只上报"入口被点了"）。
+  // 吞噬：累积满 7 次 roll 才可粉碎一件遗物/卡换金币（兜底路径保留按钮入口；
+  // 场景路径的入口 = 机器投料口热区 + 首满教学对话框，不进面板）。
   const dv = s.devour ?? {};
   w.push({ kind: 'gap' });
   w.push({
@@ -100,21 +108,19 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
 
 /**
  * 恶魔 roll 进行中（机器已切恶魔形态）：**词条在场景里选**（老虎机上那三张卡片），
- * 面板只给状态与三条效果文本（对着卡片读）。
- * @param sceneChoice true = 场景里选（不给按钮，只有可读行）；false = 无场景的占位路径（给按钮）
+ * 悬停转轮出 tooltip。场景路径面板一个字的指引都不留（2026-09-28 用户定：文本膨胀
+ * 全删，规则由首遇/例行对话讲——runController.maybeNarrateDemonRoll）。
+ * 无场景的占位路径（gallery/headless 降级）没有转盘可点，才需要这里的按钮兜底，
+ * 否则那条路会卡死。
  */
 export function demonRollWidgets(w, pr, sceneChoice) {
+  if (sceneChoice) return true;
   w.push({ kind: 'gap' });
   w.push({ kind: 'title', text: '😈 恶魔 roll', align: 'center' });
   w.push({
     kind: 'sub', align: 'center', tint: '#cfe0f5',
-    text: `超额取款已入账 ${pr.gold} 金——`
-      + (sceneChoice ? '在轮盘上选一个词条承受（悬停看效果）' : '选一个词条承受：'),
+    text: `超额取款已入账 ${pr.gold} 金——选一个词条承受：`,
   });
-  // 场景路径**不再列词条**（用户定 2026-09-13）：那三个词条就是转盘停下来的三面，悬停转轮
-  // 出 tooltip，操纵条里再抄一遍纯属重复。无场景的占位路径（gallery/headless 降级）没有转盘
-  // 可点，才需要这里的按钮兜底，否则那条路会卡死。
-  if (sceneChoice) return true;
   for (const o of pr.options) {
     w.push({
       kind: 'button', id: `bank:pick:${o.id}`, width: 440, size: 'sub',
@@ -132,16 +138,10 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   w.push({ kind: 'gap' });
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
-    text: `存款 ${bk.deposit} 金 ｜ 连击 ${bk.combo} ｜ 每层利率 每 ${bk.ratePer} 金产 ${bk.rateYield} 金`,
+    text: `每 ${bk.ratePer} 金币生产 ${bk.rateYield} 金币！（连续${bk.combo}层未存取款）`,
   });
   if (bk.deposit > 0) {
-    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金` });
-  }
-  if (bk.pendingDebuffs?.length) {
-    w.push({
-      kind: 'sub', align: 'center', tint: '#ff8a80',
-      text: '身负恶魔词条：' + bk.pendingDebuffs.map(d => `${d.name}(剩${d.battlesLeft}场)`).join('、'),
-    });
+    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金币` });
   }
   if (bk.pendingRoll) {
     demonRollWidgets(w, bk.pendingRoll, sceneChoice);
@@ -158,7 +158,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
         if (n <= 0) continue;
         w.push({
           kind: 'button', id: `bank:deposit:${key}`, width: 300, size: 'sub',
-          label: `${label}（${n} 金）`,
+          label: `${label}（${n} 金币）`,
           action: { action: 'bankDeposit', amount: n },
         });
       }
@@ -166,24 +166,21 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
     if (bk.deposit > 0) {
       w.push({
         kind: 'button', id: 'bank:withdraw', width: 340, size: 'sub',
-        label: `取款（${bk.deposit} 金，会打断连击）`,
+        label: `全部提现！`,
         action: { action: 'bankWithdraw' },
       });
     }
     if (bk.canOverdraft) {
-      w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '超额取款（立刻拿钱，代价是恶魔词条）：' });
+      w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '承受诅咒并获取更多金钱！' });
       for (const t of bk.tiers) {
         w.push({
           kind: 'button', id: `bank:overdraft:${t.id}`, width: 240, size: 'sub',
-          label: `${t.name} +${t.gold} 金`,
+          label: `${t.gold} 金币`,
           action: { action: 'bankOverdraft', tier: t.id },
         });
       }
     } else if (bk.lockout > 0) {
-      w.push({
-        kind: 'sub', align: 'center', tint: '#77809a',
-        text: `银行机暂时不让你超额取款（再过 ${bk.lockout} 次见面）`,
-      });
+      // 此时暂时无法继续超额取款
     }
   }
   for (const offer of bk.offers ?? []) {

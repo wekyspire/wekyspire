@@ -22,9 +22,11 @@ import { RoomUnitObject } from '../objects/RoomUnitObject.js';
 // 瑞米姿势表：idle/back 用既有立牌，其余等用户手绘图集（2026-09-25 定：qwen 一致性
 // 不达标，用户自绘）。手绘落盘命名 = src/assets/stage/remi_pose_<姿势>.webp（透明底），
 // 缺图自动回落 idle——画几张生效几张，不用改代码。
+// facing = 素材固有的成脸朝向（+1 面右 / -1 面左，缺省 +1）：front 面左、back 面右——
+// 标错了移动时就是「屁股朝前走」。
 const REMI_POSES = {
-  idle: 'unit_remi_front.webp',
-  back: 'unit_remi.webp',
+  idle: { file: 'unit_remi_front.webp', facing: -1 },
+  back: { file: 'unit_remi.webp', facing: +1 },
   sit: 'remi_pose_sit.webp',
   curious: 'remi_pose_curious.webp',
   sleepy: 'remi_pose_sleepy.webp',

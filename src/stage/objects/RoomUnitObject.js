@@ -25,7 +25,10 @@ export class RoomUnitObject extends THREE.Group {
    *   name: 单位名（'knight' | 'remi' | …，指令寻址用）
    *   unitArt: UnitArtCache（缺省 null = 永远占位色块，node 单测用）
    *   art: { idle: 'unit_player_front.png', sit: 'remi_pose_sit.webp', … }
-   *        pose 名 → 素材文件名（经缓存 getFile 解析；idle 必给）
+   *        pose 名 → 素材文件名（经缓存 getFile 解析；idle 必给）。
+   *        值也可以是 { file, facing }：facing = 该素材**固有的成脸朝向**（+1 面右 / -1 面左，
+   *        缺省 +1）——同一个单位的不同立绘可能朝不同方向（瑞米 front 面左 / back 面右），
+   *        镜像翻面按 pose 各自的固有朝向折算，否则移动时会「屁股朝前走」。
    *   standeeHeight: 立牌世界高度
    */
   constructor({ name, unitArt = null, art = {}, standeeHeight = DEFAULT_HEIGHT } = {}) {
@@ -33,7 +36,12 @@ export class RoomUnitObject extends THREE.Group {
     this.name = `room-unit:${name}`;
     this.unitName = name;
     this._unitArt = unitArt;
-    this._art = art;
+    this._art = {};        // pose → file
+    this._artFacing = {};  // pose → ±1（素材固有成脸朝向，缺省 +1 面右）
+    for (const [k, v] of Object.entries(art)) {
+      if (typeof v === 'string') this._art[k] = v;
+      else if (v?.file) { this._art[k] = v.file; this._artFacing[k] = v.facing >= 0 ? 1 : -1; }
+    }
     this._standeeHeight = standeeHeight;
     this._pose = 'idle';
     this._facing = 1;            // +1 右 / -1 左（镜像系数）
@@ -87,15 +95,19 @@ export class RoomUnitObject extends THREE.Group {
     if (!pose || pose === this._pose) return false;
     this._pose = (pose in this._art) ? pose : 'idle';
     this._applyPoseArt();
+    this._billboard.scale.x = this._faceScale(); // 不同 pose 素材朝向可能相反，立即重折算
     return true;
   }
 
-  /** 朝向：+1 面右 / -1 面左（镜像翻面）。 */
+  /** 当前 pose 的镜像系数：逻辑朝向 × 素材固有朝向（缺省 +1 = 素材本身就面右）。 */
+  _faceScale() { return this._facing * (this._artFacing[this._pose] ?? 1); }
+
+  /** 朝向：+1 面右 / -1 面左（镜像翻面，按当前 pose 的素材固有朝向折算）。 */
   face(dir) {
     const d = dir >= 0 ? 1 : -1;
     if (d === this._facing) return;
     this._facing = d;
-    this._billboard.scale.x = d;   // 负值镜像（贴图水平翻转）
+    this._billboard.scale.x = this._faceScale();
   }
 
   /**
@@ -147,11 +159,11 @@ export class RoomUnitObject extends THREE.Group {
       // 压缩拉伸：起跳/落地压扁（y 压 x 拉伸），空中拉长
       const squash = Math.sin(k * Math.PI * 2);   // -1..1..-1
       this._billboard.scale.y = 1 + squash * 0.16;
-      this._billboard.scale.x = (this._facing) * (1 - squash * 0.12);
+      this._billboard.scale.x = this._faceScale() * (1 - squash * 0.12);
       if (k >= 1) {
         this._billboard.position.y = 0;
         this._billboard.scale.y = 1;
-        this._billboard.scale.x = this._facing;
+        this._billboard.scale.x = this._faceScale();
         const done = this._hop;
         this._nextHop();
         done.resolve?.();
@@ -162,7 +174,7 @@ export class RoomUnitObject extends THREE.Group {
       const b = Math.sin(this._bobT * 2.1);
       this._billboard.position.y = Math.max(0, b) * 0.14;
       this._billboard.scale.y = 1 + b * 0.02;
-      this._billboard.scale.x = this._facing * (1 - b * 0.02);
+      this._billboard.scale.x = this._faceScale() * (1 - b * 0.02);
     }
     // 面向相机（只水平转正，不俯仰）
     if (camera) {

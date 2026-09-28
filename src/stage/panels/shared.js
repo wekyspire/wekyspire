@@ -31,15 +31,6 @@ export const ROOM_META = {
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
 
-/**
- * 「升级一张卡」入口（训练场尾款用）：按一下进入**全屏选卡界面**
- * （本动作由舞台本地消化——界面里的卡来自快照的 upgradeCards；确认时才把选中的卡上报 core）。
- */
-export const upgradeButton = (source, label = '升级一张卡') => ({
-  kind: 'button', id: `${source}:upgrade`, width: 300, size: 'main',
-  label, action: { action: 'openUpgradePicker', source, local: true },
-});
-
 /** 营地动作瓦片（休整/找回瑞米）：占位面板与场景式面板共用（模块作用域）。
  *  2026-09-21 D4：营地不再能升级卡（升级全部收进训练房新制）。 */
 export const pushCampGroup = (w, c = { options: [] }) => {
@@ -51,12 +42,12 @@ export const pushCampGroup = (w, c = { options: [] }) => {
     // ⚠ 瓦片副标题是**单行不换行**（bakeButtonFace 的 sublabel，画在瓦片画布上）：
     // 超出瓦片宽度会被**画布裁掉**（症状：两头的字没了只剩中间）。故 desc 压到 ~6 个汉字，
     // 完整口径放到下面的说明行（sub 行会换行/缩放，放得下）
-    tiles.push({ id: 'rest', name: '🔥 休整', desc: '回血 35%', action: { action: 'campChoose', option: 'rest' } });
+    tiles.push({ id: 'rest', name: '🔥 休整', desc: '恢复35%生命值', action: { action: 'campChoose', option: 'rest' } });
   }
   if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
-  if (c.options.includes('rest')) {
-    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '休整 = 回复 35% 最大生命，并把魏启全部回满' });
-  }
+  // if (c.options.includes('rest')) {
+  //   w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '休整 = 回复 35% 最大生命，并把魏启全部回满' });
+  // }
 };
 
 /** 老虎机产出的可读文本（表现层翻译；引擎只给载荷）。 */

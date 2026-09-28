@@ -283,6 +283,7 @@ export class RoomStage {
         form: entry.form,
         onIntent: (a, info) => this._onPanelAction(a, info),
         bakeFace: this._bakeFace,
+        overrideOpacity: 0
       });
       this._stagePanelKind = snap.kind;
       this.uiScene.add(this._stagePanel);
@@ -343,6 +344,9 @@ export class RoomStage {
   /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里；2026-09-22 统一全屏 overlay）。 */
   openSlotPrizePicker() { return this._pickerKit.openSlotPrizePicker(this._snap); }
 
+  /** 训练抓牌四选一（全屏 overlay；候选取自当前房间快照）。 */
+  openTrainingDrawPicker() { return this._pickerKit.openTrainingDrawPicker(this._snap); }
+
   /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
   openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
 
@@ -353,6 +357,8 @@ export class RoomStage {
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
 
   get showcasing() { return this._pickerKit.showcasing; }
+  /** 套件级模态占用（特写/升级演出/全屏界面开着）——宿主编排器据此避让自动演出。 */
+  get uiBusy() { return this._pickerKit.uiBusy; }
   get cardPicker() { return this._pickerKit.cardPicker; }
   get relicPicker() { return this._pickerKit.relicPicker; }
 
@@ -799,6 +805,7 @@ export class RoomStage {
         // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
         // widget 各自的 tint 在 dock 形态下被忽略（见 PanelObject 的 dock 分支）
         bakeText: this._dockBakeText(),
+        overrideOpacity: 0
       });
       this.uiScene.add(this._panel);
     }

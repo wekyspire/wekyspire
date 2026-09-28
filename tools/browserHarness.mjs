@@ -247,7 +247,9 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     clickPickerConfirm: async () => helpers.clickAt(await page.evaluate(() => {
       const rs = window.__shell.ctrl.value.getRoomStage?.();
       const sm = window.__shell.stageManager;
-      const b = [...(rs?.cardPicker?._buttons?.values() ?? [])].find(x => /确认/.test(x.data?.label ?? ''));
+      // 结构定位：确认键在 _buttons 里的 key 恒为 'picker:confirm'
+      // （按文案 /确认/ 匹配会漏「加入牌组」这类自定义标签——训练抓牌/卡包 confirmLabel 不含"确认"）
+      const b = rs?.cardPicker?._buttons?.get('picker:confirm');
       if (!b) return null;
       const V = sm.camera.position.constructor;
       const w = b.getWorldPosition(new V());

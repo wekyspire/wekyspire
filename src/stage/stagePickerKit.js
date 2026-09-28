@@ -51,42 +51,45 @@ const UPGRADE_SOURCES = {
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
+    // 尾款新制多选（2026-09-28）：twoC 模式一次选 2 张（恰好 N = picks；张数来自快照
+    // upgradeRemaining——模式已由壳层 trainUpgradeStart 落定，候选已按等阶过滤）
+    picks: (s) => Math.max(1, s?.training?.upgradeRemaining ?? 1),
     intent: (uniqueID, targetId = null) => ({ action: 'trainingUpgrade', uniqueID, targetId }),
-    title: '选择要升级的卡', confirmLabel: '确认升级',
-    hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
+    title: '选择要升级的卡牌', confirmLabel: '确认升级',
+    hint: '悬停以查看升级后的卡面',
   },
   bankUpgrade: {
     upgrade: true,
     cards: (s) => s?.bank?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'bankUpgradeOffer', uniqueID, targetId }),
-    title: '选择要升级的卡', confirmLabel: '确认升级',
-    hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
+    title: '选择要升级的卡牌', confirmLabel: '确认升级',
+    hint: '悬停以查看升级后的卡面',
   },
   bankBurn: {
     cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤）
     intent: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
-    title: '选择要焚毁的卡', confirmLabel: '确认焚毁',
-    hint: '恶魔词条·忘却：焚毁一张（S 级豁免）｜ 滚轮翻页',
+    title: '选择要焚毁的卡牌', confirmLabel: '确认焚毁',
+    hint: '恶魔令你忘却',
   },
   slot: {
     upgrade: true,
     cards: (s) => s?.slot?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'slotPickUpgrade', uniqueID, targetId }),
-    title: '选择要升级的卡', confirmLabel: '确认升级',
-    hint: '悬停查看升级后的卡面 ｜ 滚轮翻页（只列出当前可升级的卡）',
+    title: '删除一张卡牌', confirmLabel: '确认升级',
+    hint: '悬停以查看升级后的卡面',
   },
   gurpasRemove: {
     cards: (s) => s?.gurpas?.removeCards,   // 删卡服务：整副牌组（不限等阶）
     intent: (uniqueID) => ({ action: 'gurpasRemove', uniqueID }),
-    title: '选择要删除的卡', confirmLabel: '确认删除',
-    hint: '这张牌将从牌库中彻底消失 ｜ 滚轮翻页',
+    title: '删除一张卡牌', confirmLabel: '确认删除',
+    hint: '这张牌将从牌库中彻底消失',
     tips: false,   // 删卡界面不弹卡牌 tooltip（2026-09-26 用户定）——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
     cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
-    title: '选择要删除的卡', confirmLabel: '确认删除',
-    hint: '这张牌将从牌库中彻底消失 ｜ 滚轮翻页',
+    title: '删除一张卡牌', confirmLabel: '确认删除',
+    hint: '这张牌将从牌库中彻底消失',
     tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
   ascensionRemove: {
@@ -94,8 +97,8 @@ const UPGRADE_SOURCES = {
     // 仅文案不同——title 用户钦定「删一张卡」；「返回」只收起界面（不删也行）。
     cards: (s) => s?.cardRemoval?.removeCards,
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
-    title: '删一张卡', confirmLabel: '确认删除',
-    hint: '体修精进的赠礼：这张牌将从牌库中彻底消失（也可以不删）｜ 滚轮翻页',
+    title: '删除一张卡牌', confirmLabel: '确认删除',
+    hint: '这张卡牌将从牌库中彻底消失',
     tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
 };
@@ -264,6 +267,8 @@ export function createStagePickerKit({
       const cards = (def.cards(snap) ?? []).filter(c => c.enabled !== false);
       if (!cards.length) return false;
       const picker = ensureCardPicker();
+      // 多选（训练尾款 twoC）：来源声明 picks——确认键恰好 picks 张点亮（多选进度见骨架）
+      const picks = Math.max(1, typeof def.picks === 'function' ? def.picks(snap) : (def.picks ?? 1));
       const fire = (uniqueID, targetId = null) => {
         const intent = def.intent(uniqueID, targetId);
         if (intent) onIntent?.(intent);
@@ -280,6 +285,52 @@ export function createStagePickerKit({
       const hookMain = () => {
         if (!def.upgrade) { picker.confirmHook = null; return; }
         picker.confirmHook = (keys) => {
+          // 多选链（训练尾款 twoC，2026-09-28）：摘下全部选中卡 → 逐张「（有分叉先开
+          // 晋升方向子面板）→ 变身演出 → 上行意图」。子面板「返回」= 中止余下（已晋升的
+          // 保留，尾款剩余挂起，由面板「继续修行…」重入）。
+          if (keys.length > 1) {
+            const taken = keys.map(k => ({
+              c: cards.find(x => x.uniqueID === k) ?? null,
+              entry: picker.takeEntry(k),
+            }));
+            picker.close();
+            const disposeRest = (from) => {
+              for (let j = from; j < taken.length; j++) taken[j].entry?.obj?.dispose?.();
+            };
+            const step = (i) => {
+              if (i >= taken.length) return;
+              const { c, entry } = taken[i];
+              if (!c) { step(i + 1); return; }
+              // viaBranch：分叉确认的演出卡在屏幕中央新建（同单选链的开场面貌），摘下件释放
+              const doFly = (targetId, viaBranch = false) => {
+                let cardObj = entry?.obj ?? null;
+                if (viaBranch && cardObj) { cardObj.dispose?.(); cardObj = null; }
+                playCardUpgrade({
+                  card: cardObj,
+                  fromDefId: c?.defId ?? null, fromView: c?.view ?? null,
+                  toDefId: targetId ?? c?.tipDefId ?? null,
+                  toView: targetViewOf(c, targetId ?? c?.tipDefId),
+                  onDone: () => { fire(c.uniqueID, targetId); step(i + 1); },
+                });
+              };
+              if (c.toDefIds?.length > 1) {
+                confirmFn = (ids2) => doFly(ids2[0], true);
+                cancelFn = () => disposeRest(i);   // 中止链：余下摘下件释放，尾款挂起等重入
+                picker.open({
+                  title: `选择晋升方向（${i + 1}/${taken.length}）`,
+                  hint: '这张卡可以晋升为以下形态之一 ｜ 悬停查看卡面 ｜ 「返回」中止本次升级',
+                  cards: (c.toViews ?? []).map(t => ({
+                    uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
+                  })),
+                  confirmLabel: '确认晋升',
+                });
+                return;   // confirmHook 保持 null（open 已重置）：子面板确认直接落 doFly
+              }
+              doFly(null);
+            };
+            step(0);
+            return;
+          }
           const c = cards.find(x => x.uniqueID === keys[0]) ?? null;
           const entry = c ? picker.takeEntry(keys[0]) : null;   // 摘下原卡（不随 close 释放）
           picker.close();
@@ -299,9 +350,10 @@ export function createStagePickerKit({
         };
         cancelFn = null;   // 升级/焚毁/删除：返回 = 只收起界面（不做放弃）
         picker.open({
-          title: def.title,
+          title: picks > 1 ? `${def.title}（${picks} 张）` : def.title,
           hint: def.hint,
           cards: cards.map(toCardEntry),
+          multi: picks > 1, picks,
           confirmLabel: def.confirmLabel,
           tips: def.tips !== false,   // 删卡类源关 hover 预览（2026-09-26 用户定）
         });
@@ -334,6 +386,45 @@ export function createStagePickerKit({
       };
       picker.attachPicker(pickerNow());
       openMain();
+      return true;
+    },
+
+    /**
+     * 训练抓牌四选一（2026-09-28 交互迁移：面板内嵌卡阵 → 全屏 overlay，与卡包同节拍）。
+     * 确认 = 选中的卡入组——先播「择卡得卡」演出，落袋后上行 `trainingDraw(defId)`；
+     * 「返回」= 放弃整段可选（`trainingDraw(null)`，与旧面板「这些都不合适」同语义）。
+     * @returns 是否真的打开了（无候选 → false）
+     */
+    openTrainingDrawPicker(snap = null) {
+      const choices = snap?.training?.choicesCards ?? [];
+      if (!choices.length) return false;
+      const picker = ensureCardPicker();
+      confirmFn = (ids) => { onIntent?.({ action: 'trainingDraw', defId: ids[0] }); };
+      cancelFn = () => { onIntent?.({ action: 'trainingDraw', defId: null }); };
+      picker.attachPicker(pickerNow());
+      picker.open({
+        title: '训练抓牌 · 四选一',
+        hint: '择一张加入牌组（抓了欠一次升级）｜ 不想要就点「返回」放弃 ｜ 滚轮翻页',
+        cards: choices.map(c => ({
+          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+        })),
+        confirmLabel: '加入牌组',
+      });
+      // 得卡演出钩子（与卡包同款：open 之后设，接管关闭与上行时机）
+      picker.confirmHook = (keys) => {
+        const entry = picker.takeEntry(keys[0]);
+        picker.close();
+        grantBusy = true;
+        const done = () => { grantBusy = false; confirmFn?.(keys); };
+        if (!entry) { done(); return; }
+        scene()?.add(entry.obj);
+        playCardGrantFlight({
+          card: entry.obj,
+          target: typeof getAnchor === 'function' ? getAnchor() : null,
+          sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
+          onDone: done,
+        });
+      };
       return true;
     },
 
@@ -506,9 +597,14 @@ export function createStagePickerKit({
 
     /**
      * 逐帧驱动获得物特写（自带 in/hold/out 时序；未创建/空闲时无事发生）。
-     * 舞台的帧循环调用它（套件的三个成员里只有特写需要帧驱动）。
+     * 2026-09-28：选卡/选遗物界面的候选件也要逐帧 fx——选中高亮是 C0 shader 档，
+     * 目标值收敛在 update 里，没人 tick 就永远停在 0（「选中了没高亮」的病根）。
      */
-    update(dt) { showcase?.update(dt); },
+    update(dt) {
+      showcase?.update(dt);
+      cardPicker?.update(dt);
+      relicPicker?.update(dt);
+    },
 
     /** 滚轮：全屏界面开着才消费（返回是否真的动了；全屏界面是模态，滚轮只作用于它）。 */
     handleWheel(deltaY) {      if (cardPicker?.opened) return cardPicker.scrollBy(deltaY / 100);

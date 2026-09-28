@@ -36,15 +36,15 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   w.push({ kind: 'title', text: '售货机', align: 'center' });
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
-    text: `持有 ${snap.money} 金币`
-      + (shop.discount < 1 ? ` ｜ 瑞米给了折扣（${Math.round(shop.discount * 10)} 折）` : ''),
+    text: 
+      (shop.discount < 1 ? `大甩卖，全场 ${Math.round(shop.discount * 10)} 折！` : ''),
   });
   // 购买有两条路：**直接点货架上的商品**（场景里的 billboard，买不起价格标红）或这里的按钮。
   // 场景版（dock 停靠面板）**不再放按钮**：货架就在眼前的 3D 里，重复一排按钮只会把面板顶高、
   // 把货架挤到操纵条下面去；占位版（standalone）没有 3D 货架，才需要按钮。
   w.push({
     kind: 'sub', align: 'center', tint: '#77809a',
-    text: buttons ? '选择要买的商品：' : '点击货架上的商品直接购买（买不起的价格标红）｜点面板外可拉远',
+    text: buttons ? '选择要购买的商品：' : '买点什么吧！',
   });
   if (shop.broken) {
     w.push({
