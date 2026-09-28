@@ -886,7 +886,10 @@ function execRoomEvent(S, t) {
     }
     const r = playEvent(run, { choice });
     S.roomDone = true;
-    S.lastOutcome = `事件：${eventResultText(r)}`;
+    // resolve 结果页的叙述文本必须带上（0929 试玩实报：拆无可拆/彩头滚落等无效果
+    // 日志的分支，只给效果摘要会显示成「无事发生」，玩家以为选项坏了）
+    const narr = r?.pages?.at(-1)?.text;
+    S.lastOutcome = `事件：${eventResultText(r)}${narr ? `\n  ${plain(narr)}` : ''}`;
     return;
   }
   if (a === 'skip') { // 不想触发事件时直接离开（与老虎机同口径）

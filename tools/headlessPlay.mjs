@@ -127,7 +127,11 @@ try {
 } catch (err) {
   console.error(`✗ ${err.message}`);
   console.error('（动作未入档，状态未变）当前状态：');
-  try { console.log(render(S)); } catch { /* 状态本身异常时保持纯报错 */ }
+  try {
+    console.log(render(S));
+    // 尾部复述（0929 试玩实报：✗ 在状态块顶部，读尾部的调用方整段错过、以为静默失败）
+    console.error(`✗（重述）${err.message}`);
+  } catch { /* 状态本身异常时保持纯报错 */ }
   process.exit(1);
 }
 if (!noRecord) {

@@ -23,6 +23,7 @@ export const costText = (def) => {
 export const kwText = (def) => (def.keywords ?? [])
   .filter(k => k !== 'blade').map(k => ({
     exhaust: '消耗', transient: '短暂', innate: '固有', anchored: '锁定', slowStart: '慢热',
+    mini: '迷你', blood: '卖血',
   }[k] ?? k)).join(' ');
 
 export const effectsText = (unit) => unit.effects?.length
