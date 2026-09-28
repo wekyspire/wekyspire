@@ -6,6 +6,7 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
+import { withMomentumBonus } from './aiAct.js';
 import { AddEffectInstruction } from './effects.js';
 import { applyPendingDebuffsToBattle } from '../run/rooms/bank.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
@@ -171,11 +172,11 @@ export class PreBattleInstruction extends BattleInstruction {
       // 盟友（瑞米等）同规则——AIUnit 意图不是敌方专利
       for (const e of battleState.enemies) {
         const def = getEnemyDefinition(e.defId);
-        e.intention = def.getIntention ? def.getIntention(e, battleState) : { kinds: ['unknown'] };
+        e.intention = def.getIntention ? withMomentumBonus(e, def.getIntention(e, battleState)) : { kinds: ['unknown'] };
       }
       for (const a of battleState.allies) {
         const def = getAllyDefinition(a.defId);
-        a.intention = def.getIntention ? def.getIntention(a, battleState) : { kinds: ['unknown'] };
+        a.intention = def.getIntention ? withMomentumBonus(a, def.getIntention(a, battleState)) : { kinds: ['unknown'] };
       }
       ctx.kernel.submitInstruction(
         new DrawCardsInstruction({ count: ctx.battleState.config.initialDraw }), this);

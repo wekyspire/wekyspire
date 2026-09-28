@@ -315,7 +315,7 @@ function execBattle(S, cmd, t) {
         + `｜AP ${apCost === 'X' ? 'X(全部)' : apCost}（有 ${pl.actionPoints}）`
         + (freeToggle ? '｜已激活咏唱：本次免费' : ''));
       // 冷却只在「充能耗尽」时才是阻塞原因（满充能卡预置的计时是无意义残留，不展示，免误导）
-      L.push(`  充能: 剩余 ${rt.remainingUses}`
+      L.push(`  充能: ${Number.isFinite(rt.remainingUses) ? `剩余 ${rt.remainingUses}` : '无限制'}`
         + (rt.remainingUses <= 0 && rt.currentCooldown > 0
           ? `，冷却剩 ${rt.currentCooldown} 拍（每回合开始推进 1 拍`
             + `${def.cooldownOnEnterDeck ? '；此卡入库时再推进 1 拍' : ''}）` : ''));

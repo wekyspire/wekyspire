@@ -87,12 +87,15 @@ function renderBattle(S, L) {
     if (al.isDead()) continue;
     L.push(`瑞米: HP ${al.hp}/${al.maxHp} 意图: ${intentText(al)}`);
   }
-  // 批次 13 容量分解（用户要求 headless 注明状态）：普通/咏唱容量/溢出三段
+  // 批次 13 容量分解（用户要求 headless 注明状态）：普通/咏唱容量/溢出三段；
+  // 迷你卡计 0 张不占位但实体在列表里——单独注记张数，免得「占用5/5 却列出 7 张」被当 bug
   const _bd = handBreakdown(bs);
   const _cap = p.chantCapacity ?? 1;
   const _used = _bd.normal + Math.max(0, _bd.chantW - _cap);
-  L.push(`牌库 ${bs.zones.deck.length}（lib 查抽牌顺序——顺序抽，可预知） | 焚毁 ${bs.zones.burnt.length} | `
-    + `手牌 占用${_used}/${p.maxHandSize}（普通${_bd.normal} + 咏唱溢出${Math.max(0, _bd.chantW - _cap)}） | `
+  const _mini = bs.zones.hand.filter((c) => defOf(c).keywords?.includes('mini')).length;
+  L.push(`牌库 ${bs.zones.deck.length}（lib 查抽牌顺序——抽牌严格按顺序，可预知） | 焚毁 ${bs.zones.burnt.length} | `
+    + `手牌 占用${_used}/${p.maxHandSize}（普通${_bd.normal} + 咏唱溢出${Math.max(0, _bd.chantW - _cap)}）`
+    + `${_mini ? `｜迷你${_mini}张（列得出不占位）` : ''} | `
     + `咏唱容量 ${Math.min(_bd.chantW, _cap)}/${_cap}`);
   L.push(`手牌:`);
   // 咏唱图例（0927 实录：咏唱被当成一次性结算，第二下把引擎解除了——点亮/解除语义常驻提示）
