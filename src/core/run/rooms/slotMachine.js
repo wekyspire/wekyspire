@@ -88,11 +88,23 @@ const rarOf = (def) => (['C', 'B', 'A', 'S'].includes(def?.rarity) ? def.rarity 
 
 // ---- 机器状态 ----
 
-/** 本次遇到的老虎机瞬态（进房时初始化；离房丢弃）。每次进房赠送 2 次免费抽（D5）。 */
+/**
+ * 进房初始化（runFlow.completeRewards 在踏入老虎机房时调用）：瞬态机器状态 + 本房
+ * 免费抽赠送（D5）。赠送必须发生在**进房时机**——早先挂在 slotState 懒初始化里时，
+ * spinSlot 在懒初始化之前读免费次数，任何"进房后先 spin 后渲染"的调用序（headless
+ * 回放即如此）都会让本房第一拉错误走付费分支（2026-09-27 试玩实录：-5 金且免费次数
+ * 不减；浏览器因进房即建面板而侥幸无恙）。
+ */
+export function enterSlotRoom(run) {
+  const fresh = !run.slot || run.slot.floor !== run.floor;
+  if (fresh) run.slot = { floor: run.floor, rolls: 0, sinceMinor: 0, sinceMajor: 0 };
+  if (fresh) run.slotFreeRolls = (run.slotFreeRolls ?? 0) + SLOT.freeRollsPerVisit;
+}
+
+/** 本次遇到的老虎机瞬态（懒初始化兜底——正常流由 enterSlotRoom 先行；只建瞬态不发免费抽）。 */
 function slotState(run) {
   if (!run.slot || run.slot.floor !== run.floor) {
     run.slot = { floor: run.floor, rolls: 0, sinceMinor: 0, sinceMajor: 0 };
-    run.slotFreeRolls = (run.slotFreeRolls ?? 0) + SLOT.freeRollsPerVisit;
   }
   return run.slot;
 }
@@ -330,7 +342,7 @@ export function spinSlot(run) {
     st.sinceMinor += 1;
     st.sinceMajor += 1;
     // 未中奖不是"产出"：不挂 pending，玩家可以立刻再拉杆（headless 试玩 report-r1-A 缺陷#5）
-    return { tier: 'none', kind: 'nothing', cost };
+    return { tier: 'none', kind: 'nothing', cost, free };
   }
   st.won = true;   // 本房中过奖 → 不再给离房安慰奖
   if (tier === 'major') { st.sinceMajor = 0; st.sinceMinor += 1; }
@@ -354,6 +366,7 @@ export function spinSlot(run) {
   }
 
   prize.cost = cost;
+  prize.free = free;
   run.slotPending = prize;
   return prize;
 }

@@ -29,12 +29,13 @@ registerSkill({
 });
 
 // ⑨ 雪狼（第 1 章精英，2026-09-22 重写）：血牛 + 节奏骚扰——开局压制（虚弱2 + 攻9），
-// 随后三拍循环：攻12+盾10 → 攻7×3 → 向玩家手牌随机位置塞 2 张「震慑」
+// 随后三拍循环（2026-09-28 数值大调：塞牌拍提前开循环、攻击 12/7×3 → 6/6×3、盾 10→14）：
+// 塞 2 张「震慑」入玩家手牌 → 攻6+盾14 → 攻6×3
 //（塞牌挤占手牌上限与位置敏感卡；满手时震慑改落牌库，AddCard 的兜底语义）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'snowwolf', name: '雪狼',
-  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 88 }),
+  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 98 }),
   act(actx) {
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
@@ -48,20 +49,20 @@ registerEnemy({
     }
     const phase = (actx.unit.actionIndex - 1) % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 12 + atk,
-      }));
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 }));
-    } else if (phase === 1) {
-      for (let i = 0; i < 3; i++) {
-        actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: actx.unit, target: actx.player, amount: 7 + atk,
-        }));
-      }
-    } else {
       for (let i = 0; i < 2; i++) {
         actx.kernel.submitInstruction(new AddCardInstruction({
           defId: 'shockCard', toZone: 'hand', index: 'random',
+        }));
+      }
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: actx.unit, target: actx.player, amount: 6 + atk,
+      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 14 }));
+    } else {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: actx.unit, target: actx.player, amount: 6 + atk,
         }));
       }
     }
@@ -72,9 +73,9 @@ registerEnemy({
       return { kinds: ['debuff', 'attack'], hits: 1, damage: 9 + atk, note: '赋予玩家虚弱2（攻击-2）' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 12 + atk, note: '自身护盾+10' };
-    if (phase === 1) return { kinds: ['attack'], hits: 3, damage: 7 + atk };
-    return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
+    if (phase === 0) return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
+    if (phase === 1) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+14' };
+    return { kinds: ['attack'], hits: 3, damage: 6 + atk };
   },
 });
 

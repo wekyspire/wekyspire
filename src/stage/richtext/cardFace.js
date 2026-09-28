@@ -334,6 +334,29 @@ function drawHeader(ctx, card, manaCrystal) {
   ctx.textAlign = 'left';
 }
 
+// ---- 费用徽章位置单一事实源（2026-09-28）----
+// 绘制规则（上面的代码就是实现）：右上右对齐向左排，魏启先 (186,26)，AP 其左 25px，
+// 半径 12.5；零开销不出徽章（故只耗 AP 的卡 AP 徽章顶到最右）。
+// 消费方：resourceDrainFx（粒子汇聚锚点）、cardBodyFx（徽章辉光 mask）——两边必须
+// 与绘制处逐位一致，规则改动只许改这里。
+export const COST_BADGE_RADIUS = 12.5;                    // 徽章半径（纹理 px）
+/**
+ * 该卡面实际出席的费用徽章列表（纹理坐标，v 为顶起 0..1）。
+ * @returns {Array<{kind:'mana'|'ap', u:number, vTop:number}>} 可能为空（0 费卡）
+ */
+export function costBadgeUvs(cost) {
+  const out = [];
+  let bx = 186;
+  if (cost?.mana === 'X' || (cost?.mana ?? 0) > 0) {
+    out.push({ kind: 'mana', u: bx / CARD_FACE_SIZE.width, vTop: 26 / CARD_FACE_SIZE.height });
+    bx -= 25;
+  }
+  if (cost?.actionPoint === 'X' || (cost?.actionPoint ?? 0) > 0) {
+    out.push({ kind: 'ap', u: bx / CARD_FACE_SIZE.width, vTop: 26 / CARD_FACE_SIZE.height });
+  }
+  return out;
+}
+
 // 实心小菱形（分隔线/饰钉共用形状）
 function drawDiamond(ctx, cx, cy, r, color) {
   ctx.beginPath();

@@ -15,9 +15,11 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 //     起始组共两张），以及拳/盾填充卡的晋升通道（见 promotion.js 的 FILLER_STARTERS
 //     门禁）。旧「AP 上限 +1」（2026-09-21 D1）已废弃——体修与法师同为 3 AP。
 
-const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard']);
-// 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线
-const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard', 'guard']);
+const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'badOmen']);
+// 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；各路线填充组各带一张「情况不对」
+// = 迷你保险（2026-09-28 用户定收窄为一张：四路线起手都恰好一张，体修走起始组自带、
+// 灵脉路线走填充；情况不对带迷你词条计 0 张手牌，抽到不卡手）
+const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard', 'guard', 'badOmen']);
 
 export const ROUTES = Object.freeze({
   body: Object.freeze({

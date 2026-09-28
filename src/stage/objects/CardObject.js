@@ -16,6 +16,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：C0 着�
 import { additiveLight } from '../post/passes.js';
 import { CardFxLayer } from './CardFxLayer.js';
 import { hitTestRegions } from '../richtext/layout.js';
+import { costBadgeUvs } from '../richtext/cardFace.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
 
 // 余烬色板（加色混合，r/g/b 0~1）：火线喷出的火星从深橙到亮黄
@@ -90,6 +91,9 @@ export class CardObject extends THREE.Group {
     const old = this._material.map;
     this._material.map = texture;
     this._material.needsUpdate = true;
+    // 费用徽章位置随卡面数据刷新（C0 徽章辉光 mask 的唯一数据源——绘制规则的
+    // 单一事实源在 cardFace.costBadgeUvs，换脸/晋升/变换全经此落点故不会漂移）
+    if (this.fx?.body) this.fx.body.costBadges = costBadgeUvs(this._cardData?.cost);
     this.fx?.body?.rebind?.(); // C0 着色链随新脸重建（同构图命中 program 缓存，只换纹理绑定）
     deferDisposeTexture(old);
     this._hitRegions = hitRegions || [];

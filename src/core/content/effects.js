@@ -952,7 +952,7 @@ registerEffect({
   type: 'buff',
   stacking: 'count',
   name: '融合',
-  description: '死亡时，友军所有史莱姆恢复 6 生命并获得 2 力量。',
+  description: '死亡时，友军所有史莱姆恢复 8 生命并获得 2 力量。',
   icon: '🫠',
   color: 'green',
   subscriptions: (unit) => [{
@@ -966,7 +966,7 @@ registerEffect({
     react: (instr, ctx) => {
       for (const e of aliveEnemies(ctx.battleState)) {
         if (e === unit || !SLIME_FAMILY.has(e.defId)) continue;
-        ctx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 6 }), instr);
+        ctx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 8 }), instr);
         ctx.kernel.submitInstruction(
           new AddEffectInstruction({ target: e, effectId: 'strength', stacks: 2 }), instr);
       }

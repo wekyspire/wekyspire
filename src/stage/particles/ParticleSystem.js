@@ -1,4 +1,8 @@
 // ParticleSystem（§4.8）：两类粒子池，由 StageManager.onTick 驱动（BattleStage 接线）。
+// ⚠ DEPRECATED（2026-09-28，粒子池 v2 落地）：GPU 池（fx/gpu/particlePool.js）已是
+//   唯一新粒子底座——常驻联动（燃烧火星）与一次性爆发（资源消耗爆散/汇聚）均已迁入。
+//   本 CPU 池只剩存量一次性爆发消费者（伤害数字/图标/碎屑等），新特效一律走 GPU 池
+//   burst；存量消费者逐个迁移后本文件删除（PARTICLE_SYSTEM_V2.md §退役线）。
 //   ① Points 池：单 THREE.Points + 对象池的轻量点粒子（火花/碎屑爆发）；
 //      spawnEmitter 提供持续发射（燃烧光环/咏唱逸散等常驻特效），stop 即停。
 //      加色混合下黑色=不可见，死粒子颜色归零并归还池位。真 3D——z 必须传场景内

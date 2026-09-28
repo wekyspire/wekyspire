@@ -73,11 +73,11 @@ const TEMPLATES = [
   { id: 'rotHeart', name: '腐败之心', cost: 10, minFloor: 4, maxFloor: 10, once: true, excl: ['rotEye'],
     slots: [{ fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenTreeHeart' }] },
   { id: 'creviceA', name: '石缝生物A', cost: 5, minFloor: 3, maxFloor: 10, once: true, excl: ['creviceB', 'creviceC'],
-    slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBallA' }] },
+    slots: [{ fixed: 'blastPodB' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBallA' }] },
   { id: 'creviceB', name: '石缝生物B', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['creviceA', 'creviceC'],
     slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToadA' }] },
   { id: 'creviceC', name: '石缝生物C', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['creviceA', 'creviceB'],
-    slots: [{ fixed: 'blastPod' }, { fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToadA' }] },
+    slots: [{ fixed: 'blastPodB' }, { fixed: 'blastPodB' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToadA' }] },
   { id: 'rockfall', name: '石头崩落', cost: 10, minFloor: 4, maxFloor: 10, once: true,
     slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'rockSnail' }] },
   { id: 'grassA', name: '草地麻烦A', cost: 6, minFloor: 4, maxFloor: 10, once: true, excl: ['grassB'],
@@ -86,12 +86,12 @@ const TEMPLATES = [
     slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }] },
   { id: 'grassBigA', name: '草地大麻烦A', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['grassBigB'],
     slots: [{ fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'diggerMole' }] },
-  { id: 'grassBigB', name: '草地大麻烦B', cost: 11, minFloor: 4, maxFloor: 10, once: true, excl: ['grassBigA'],
-    slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'diggerMole' }] },
+  { id: 'grassBigB', name: '草地大麻烦B', cost: 10, minFloor: 4, maxFloor: 10, once: true, excl: ['grassBigA'],
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'carrionBeetleB' }, { fixed: 'diggerMole' }] },
   { id: 'staticFieldA', name: '静电草地A', cost: 6, minFloor: 4, maxFloor: 10, once: true, excl: ['staticFieldB'],
-    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuff' }] },
+    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuffB' }] },
   { id: 'staticFieldB', name: '静电草地B', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['staticFieldA'],
-    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'carrionBeetle' }] },
+    slots: [{ fixed: 'staticPuff' }, { fixed: 'staticPuff' }, { fixed: 'staticPuffB' }, { fixed: 'carrionBeetle' }] },
   { id: 'skyLandFeast', name: '空陆大餐', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['bugSwarm'],
     slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'diggerMole' }] },
   { id: 'bugSwarm', name: '全是虫虫', cost: 8, minFloor: 4, maxFloor: 10, once: true, excl: ['skyLandFeast'],
@@ -286,9 +286,10 @@ export function generateEncounter(run) {
   const out = slots.map(s => descriptorOf(s.defId, s.d));
 
   // ---- 编成后处理 ----
-  // 静电毛球：16–24 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
+  // 静电毛球：15–24 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
+  // staticPuffB 固定 12 血（2026-09-28 用户定）——精确 id 匹配不覆盖 B 变体
   for (let i = 0; i < out.length; i++) {
-    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([16, 18, 20, 22, 24]) };
+    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([15, 18, 21, 24]) };
   }
   // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉自带错拍）
   const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork']);

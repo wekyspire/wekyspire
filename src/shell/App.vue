@@ -52,6 +52,8 @@ const assetFailed = ref(0);
 // WebGPU 兼容门（用户定 2026-09-27）：不支持的设备卡死在加载界面，不做 WebGL 回退。
 // 检测在预载**之前**——不过门的设备连下载都不开始（gpuUnsupported 恒挡 assetsReady）。
 const gpuUnsupported = ref(false);
+// 非安全上下文（http + 非 localhost）导致的 WebGPU 缺席——失败页据此换引导文案
+const gpuInsecure = ref(false);
 const assetProgress = ref({ loaded: 0, total: 0, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 });
 function startAssetPreload() {
   assetsReady.value = false;
@@ -71,7 +73,14 @@ function startAssetPreload() {
 // 兼容性检查 → 通过才启动预载（不通过则 gpuUnsupported 置位，加载门永久卡住）
 (async () => {
   const adapter = await probeWebGpuAdapter();
-  if (!adapter) { gpuUnsupported.value = true; return; }
+  if (!adapter) {
+    // 区分「非安全上下文」与「真不支持」（2026-09-28 用户裸 IP 访问踩坑）：http +
+    // 非 localhost 下 navigator.gpu 根本不存在，失败页需要给出可操作的引导而非
+    // 一句「设备不支持」（浏览器明明支持）。
+    gpuInsecure.value = typeof window !== 'undefined' && window.isSecureContext === false;
+    gpuUnsupported.value = true;
+    return;
+  }
   startAssetPreload();
 })();
 
@@ -260,7 +269,7 @@ onBeforeUnmount(() => {
     <!-- 菜单层顶层加载门：全量美术预载**全部成功**前挡住一切（最高 z-index）；
          失败时卡住并给重试（用户定 2026-09-12：不准带缺图进游戏） -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" :failed="assetFailed"
-      :gpu-unsupported="gpuUnsupported"
+      :gpu-unsupported="gpuUnsupported" :gpu-insecure="gpuInsecure"
       @retry="startAssetPreload" />
     <!-- 菜单级：开始界面（含 changelog 弹层） -->
     <StartScreen v-else-if="phase === 'menu'" :saves="saves" @start="onStart" />

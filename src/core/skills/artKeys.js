@@ -3,7 +3,8 @@
 // 异链异名 = 异键（每张卡独一无二）。覆盖 = 给 def.image 赋值；未列入的卡维持 series 键解析。
 import { allSkills } from './registry.js';
 
-const ART_KEY_OVERRIDES = {
+// 导出给 genArtKeys.mjs：再生时先扣掉本表再按自然键分组（幂等，见 apply 注释）
+export const ART_KEY_OVERRIDES = {
   "absoluteFlame": "absoluteFlame",
   "adrenaline": "adrenaline",
   "adrenalineA": "adrenaline",
@@ -99,6 +100,7 @@ const ART_KEY_OVERRIDES = {
   "toughItOut": "endure",
   "eternalSpark": "eternalSpark",
   "expand": "expand",
+  "fanFlame": "fanFlame",
   "cannonFist": "fastPunch",
   "fastPunch": "fastPunch",
   "trueFist": "fastPunch",
@@ -118,13 +120,23 @@ const ART_KEY_OVERRIDES = {
   "fireBall": "fireBolt",
   "fireBolt": "fireBolt",
   "fireControlBurn": "fireControlBurn",
-  "fireControlDetonate": "fireControlBurn",
-  "fireControlSpread": "fireControlBurn",
+  "fireControlDetonate": "fireControlDetonate",
   "fireControlDisturb": "fireControlDisturb",
-  "fireControlGather": "fireControlDisturb",
-  "fireControlHarvest": "fireControlDisturb",
+  "fireControlFinderAcroA": "fireControlFinderAcroC",
+  "fireControlFinderAcroB": "fireControlFinderAcroC",
+  "fireControlFinderAcroC": "fireControlFinderAcroC",
+  "fireControlFinderAtkA": "fireControlFinderAtkC",
+  "fireControlFinderAtkB": "fireControlFinderAtkC",
+  "fireControlFinderAtkC": "fireControlFinderAtkC",
+  "fireControlFinderGuardA": "fireControlFinderGuardC",
+  "fireControlFinderGuardB": "fireControlFinderGuardC",
+  "fireControlFinderGuardC": "fireControlFinderGuardC",
+  "fireControlGather": "fireControlGather",
+  "fireControlHarvest": "fireControlHarvest",
   "fireControlRefine": "fireControlRefine",
   "fireControlScorch": "fireControlScorch",
+  "fireControlShift": "fireControlShift",
+  "fireControlSpread": "fireControlSpread",
   "fireControlSupreme": "fireControlSupreme",
   "fireMastery": "fireMastery",
   "fireWard": "fireWard",
@@ -220,7 +232,6 @@ const ART_KEY_OVERRIDES = {
   "karmaFire": "karmaFire",
   "lastStand": "lastStand",
   "lastStandMaster": "lastStand",
-  "latentSpark": "latentSpark",
   "leverage": "leverage",
   "redirect": "leverage",
   "taiji": "leverage",
@@ -257,6 +268,7 @@ const ART_KEY_OVERRIDES = {
   "playWithFire": "playWithFire",
   "pluckStar": "pluckStar",
   "pointShot": "pointShot",
+  "pokeFire": "pokeFire",
   "powerStance": "powerStance",
   "powerStanceA": "powerStance",
   "practiceBlade": "practiceBlade",
@@ -302,9 +314,8 @@ const ART_KEY_OVERRIDES = {
   "smeltCardPlus": "smeltCard",
   "snakeFist": "snakeFist",
   "soulOfWar": "soulOfWar",
-  "quickSpark": "sparkSeed",
+  "latentSpark": "sparkSeed",
   "sparkSeed": "sparkSeed",
-  "stimulant": "stimulant",
   "hiddenEdge": "storeEdge",
   "sheathEdge": "storeEdge",
   "storeEdge": "storeEdge",
@@ -344,9 +355,15 @@ const ART_KEY_OVERRIDES = {
 };
 
 // 内容登记完毕后调用一次（content/index.js 尾部）：把链级键写进 def.image。
+// 原创键留档 _image0（2026-09-28 幂等修复）：genArtKeys 二次再生时按「表值≠自然键」
+// 还原分组——否则直接读 def.image 会让每个已拆键各自成单链组被跳过，旧表被洗没
+//（美术大挂的根因）。
 export function applyArtKeyOverrides() {
   for (const def of allSkills()) {
     const k = ART_KEY_OVERRIDES[def.id];
-    if (k) def.image = k;
+    if (k && def.image !== k) {
+      if (def.image != null) def._image0 ??= def.image;
+      def.image = k;
+    }
   }
 }

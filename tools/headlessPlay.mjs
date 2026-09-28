@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   HELP, freshState, freshStateFromSave, exec, render, renderDeck, renderLib, renderRelics, renderTerms,
+  renderRules, renderLog,
   sessionDir, sessionPath, stageCn, writeSession,
 } from './playSession.mjs';
 
@@ -109,8 +110,9 @@ try {
   process.exit(1);
 }
 const action = argv.join(' ').trim();
-// 纯视图命令不进 exec；preview 只读（进 exec 取结果但不入档）
-const pureView = !action || /^(state|help|terms|deck|lib|relics)$/.test(action);
+// 纯视图命令不进 exec；preview 只读（进 exec 取结果但不入档）。log 可带条数参数（log 60）
+const pureView = !action || /^(state|help|terms|deck|lib|relics|rules)$/.test(action)
+  || /^log(\s+\d+)?$/.test(action);
 const noRecord = pureView || action.startsWith('preview');
 
 let S;
@@ -166,6 +168,11 @@ else {
     else if (action === 'lib') console.log(renderLib(S));
     else if (action === 'relics') console.log(renderRelics(S));
     else if (action === 'terms') console.log(renderTerms(S));
+    else if (action === 'rules') console.log(renderRules());
+    else if (/^log(\s+\d+)?$/.test(action)) {
+      const n = Number.parseInt((action.match(/^log\s+(\d+)$/) ?? [])[1] ?? '40', 10);
+      console.log(renderLog(S, n));
+    }
     else console.log(render(S));
   } catch (renderErr) {
     console.error(`✗ 动作${noRecord ? '（纯视图）' : '已入档'}但状态渲染失败：${renderErr.message}`

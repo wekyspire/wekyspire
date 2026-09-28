@@ -429,9 +429,12 @@ function execBattle(S, cmd, t) {
           const i = idxOk(num(idxArg), cands.length, '候选');
           const id = cands[i];
           if (nameArg != null) {
+            // 候选可能是区内 runtime（uniqueID）或纯 defId（发现池新卡）——名字校验按同一
+            // 解析链取中文名（0927 实录：应答只能敲 fireControlDisturb 这类裸 id）
             const card = byId.get(id);
-            const actual = card ? defOf(card).name : id;
-            if (!nameMatches(nameArg, actual)) {
+            const def = card ? defOf(card) : getSkillDefinition(id);
+            const actual = def?.name ?? id;
+            if (!nameMatches(nameArg, actual) && !nameMatches(nameArg, id)) {
               throw new Error(`候选第${idxArg}个是「${actual}」，不是「${nameArg}」——请对照待输入列表重试`);
             }
           }
@@ -753,7 +756,9 @@ function execRoomSlot(S, t) {
   // 拉一次杆：产出会挂起（文档：产出总是可以放弃）→ 需 claim/drop 处理
   if (a === 'spin') {
     const prize = spinSlot(run);
-    S.lastOutcome = `老虎机(-${prize.cost}金币)：${prize.tier === 'none' ? '未中奖（无产出，可直接再 act spin）' : slotResultText(prize)}`
+    // 免费拉杆显示「免费」而非扣费额——0927 试玩实录：免费抽显示 (-5金币) 误导血亏排查
+    const costTag = prize.free ? '（免费）' : `(-${prize.cost}金币)`;
+    S.lastOutcome = `老虎机${costTag}：${prize.tier === 'none' ? '未中奖（无产出，可直接再 act spin）' : slotResultText(prize)}`
       + (prize.tier === 'none' ? '' : '（用 act claim <#|id> 领取 / act drop 放弃）');
     return;
   }

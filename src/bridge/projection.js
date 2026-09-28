@@ -60,6 +60,7 @@ export const KEYWORD_LABELS = Object.freeze({
   slowStart: '慢热',
   anchored: '锁定',
   blood: '卖血',
+  mini: '迷你', // 计为 0 张手牌（不占手牌计数/不构成弃牌负担，2026-09-28 用户定）
   blade: '刀法', // 系列标签（2026-09-22 修：此前裸透传英文 blade 到卡面页脚）
 });
 
@@ -86,6 +87,10 @@ export function projectCardFull(battle, rt) {
       return d ? { ...c, mana: c.mana + d } : c;
     })(),
     keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
+    // mini 词条权威布尔位：keywords 已翻成中文标签（'迷你'），表现层判 mini 一律读
+    // 这里、不许 includes('mini')（2026-09-28 弃牌坏态根因：英文键永不命中，迷你卡
+    // 混进弃牌选集后 core 的自由牌校验整体拒绝，弃牌确认静默失败）
+    mini: (def.keywords ?? []).includes('mini'),
     cardMode: def.cardMode ?? 'normal',
     chantWeight: def.chantWeight ?? null,
     pack: def.pack ?? null, // 'common' = 通用灰卡：卡面走偏白主题色

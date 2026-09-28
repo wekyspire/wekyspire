@@ -124,9 +124,9 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3 });
 // 死亡检测挂应用原语 POST（2026-09-15 拆分：死亡发生在受击结算处，不筛主/附级）；
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
-const willOWispCard = ({ id, tier, chantWeight, promotesTo = null }) => registerSkill({
+const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => registerSkill({
   id, name: '鬼火', type: 'fire', tier, series: 'willOWisp',
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight,
   promotesTo,
@@ -150,8 +150,8 @@ const willOWispCard = ({ id, tier, chantWeight, promotesTo = null }) => register
   describe: () => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
   battleDescribe: () => '敌人死亡时，其/effect{燃烧}传播给所有敌人',
 });
-willOWispCard({ id: 'willOWisp', tier: 'B', chantWeight: 3, promotesTo: 'willOWispPlus' });
-willOWispCard({ id: 'willOWispPlus', tier: 'A', chantWeight: 2 });
+willOWispCard({ id: 'willOWisp', tier: 'B', chantWeight: 1, ap: 1, promotesTo: 'willOWispPlus' });
+willOWispCard({ id: 'willOWispPlus', tier: 'A', chantWeight: 1, ap: 0 });
 
 // ==== 镜燃系列（§2.1：获得反哺；镜燃 2026-09-18 设计稿 C→B）======================
 // 镜燃 C / 业火 A｜自己获得燃烧时，把本次增加的层数等量施加给
@@ -167,7 +167,7 @@ function burnMirror({ id, name, tier, spread }) {
     id, name, type: 'fire', tier, series: 'mirrorBurn',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 3,
+    cardMode: 'chant', chantWeight: 2,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
@@ -330,9 +330,9 @@ class BurnHandForManaInstruction extends BattleInstruction {
     }
   }
 }
-const smeltChantCard = ({ id, name, tier, mana, chantWeight, promotesTo }) => registerSkill({
+const smeltChantCard = ({ id, name, tier, mana, chantWeight, ap, promotesTo }) => registerSkill({
   id, name, type: 'fire', tier, series: 'fireChant',
-  cost: { mana: 0, actionPoint: 1 },
+  cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight,
   promotesTo,
@@ -348,8 +348,8 @@ const smeltChantCard = ({ id, name, tier, mana, chantWeight, promotesTo }) => re
   describe: () => `选1手牌焚毁，获得${mana}魏启`,
   battleDescribe: (sctx) => `选1手牌焚毁，获得${mana}魏启`,
 });
-smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'B', mana: 2, chantWeight: 2, promotesTo: 'smeltCardPlus' });
-smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'A', mana: 2, chantWeight: 1 });
+smeltChantCard({ id: 'smeltCard', name: '炼化', tier: 'B', mana: 2, chantWeight: 1, ap: 1, promotesTo: 'smeltCardPlus' });
+smeltChantCard({ id: 'smeltCardPlus', name: '炼解', tier: 'A', mana: 2, chantWeight: 1, ap: 0 });
 
 // 绝炎 A｜1AP，咏唱1（2026-09-18 设计稿咏唱 5→1——燃烧免疫的价值在常亮不在门槛），
 // 任何燃烧层数免疫消耗和下降。

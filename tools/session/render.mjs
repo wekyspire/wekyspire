@@ -95,6 +95,10 @@ function renderBattle(S, L) {
     + `手牌 占用${_used}/${p.maxHandSize}（普通${_bd.normal} + 咏唱溢出${Math.max(0, _bd.chantW - _cap)}） | `
     + `咏唱容量 ${Math.min(_bd.chantW, _cap)}/${_cap}`);
   L.push(`手牌:`);
+  // 咏唱图例（0927 实录：咏唱被当成一次性结算，第二下把引擎解除了——点亮/解除语义常驻提示）
+  if (bs.zones.hand.some((c) => defOf(c).cardMode === 'chant')) {
+    L.push('  ※ 咏唱：打出=点亮（每回合P5自动触发，占咏唱容量+手牌权重）；已点亮的再打出=解除离场');
+  }
   bs.zones.hand.forEach((c, i) => L.push('  ' + cardLine(i + 1, c, S.battle.ctx)));
   L.push(`本回合累计: 打${bs.history.turn.played} 弃${bs.history.turn.discarded} 抽${bs.history.turn.drawn}`);
   const pi = bs.pendingInput?.request;
@@ -106,8 +110,16 @@ function renderBattle(S, L) {
     if (pi.candidates?.length) {
       const byId = new Map();
       for (const z of ['hand', 'deck', 'burnt', 'pending']) for (const c of bs.zones[z]) byId.set(c.uniqueID, c);
-      L.push(`  候选（来源 ${pi.source ?? '?'}，共 ${pi.candidates.length} 张）: `
-        + pi.candidates.map((id, i) => `[${i + 1}] ${byId.has(id) ? defOf(byId.get(id)).name : id}`).join(' '));
+      L.push(`  候选（来源 ${pi.source ?? '?'}，共 ${pi.candidates.length} 张）:`);
+      // 候选可能是区内 runtime（uniqueID）或纯 defId（发现池等尚未入区的卡）——defId
+      // 也解析成中文名+卡面（0927 实录：候选只显 fireControlDisturb 裸 id，应答还得敲 id）
+      pi.candidates.forEach((id, i) => {
+        const rt = byId.get(id);
+        if (rt) { L.push(`    [${i + 1}] ${defOf(rt).name}`); return; }
+        const def = getSkillDefinition(id) ?? getRelicDefinition(id);
+        L.push(def ? `    [${i + 1}] ${def.name} ${def.tier ? `${def.tier}阶 ` : ''}「${plain(def.describe?.() ?? def.description ?? '')}」`
+          : `    [${i + 1}] ${id}`);
+      });
     }
   }
   if (pi) {
@@ -484,5 +496,43 @@ export function renderTerms() {
   for (const def of allEffects()) {
     L.push(`  ${def.name}（${def.type === 'buff' ? '增益' : '减益'}） — ${def.description}`);
   }
+  return L.join('\n');
+}
+
+// 战斗长日志（log [N]，默认 40，上限 200）：「最近结算」只给尾部 10 条，复杂回合的
+// 中间过程（0927 实录：咏唱解除的证据行被截掉，只能靠读源码复盘）需要更长窗口核对。
+export function renderLog(S, tail = 40) {
+  const n = Math.max(1, Math.min(200, Number.isFinite(tail) ? tail : 40));
+  const log = battleLogText(S, n);
+  return [`【战斗日志】最近 ${log.length} 条（log <N> 调 1~200；非战斗阶段为上场战斗尾档）：`]
+    .concat(log.map((l) => `  · ${l}`)).join('\n');
+}
+
+// 规则速查（rules）：回合结构/基础语义/主语约定。LLM 试玩常因机制口径不清吃大亏
+// （0927 实录：咏唱当一次性结算、焰刃「正在燃烧」读成目标燃烧、以为留手会弃掉）。
+// 事实源：instructions/turn.js（七阶段）、battleRoot.js（PreBattle/护盾清零/魏启半开）、battle.md。
+export function renderRules() {
+  const L = ['【规则速查】（词条细则看 terms；本表只讲结构与时序）'];
+  L.push('□ 玩家回合七阶段：P1 回合开始（AP回满·魏启+1·回合开始效果结算→然后护盾清零）'
+    + ' → P2 冷却推进（手牌与牌库里的计时卡各推进1拍） → P3 抽牌（抽至手牌容量，咏唱按权重占位；'
+    + '首回合不抽——起手牌由开战发放） → P4 你操作 → P5 咏唱触发（全部已点亮咏唱在此结算）'
+    + ' → P7 盟友行动 → P8 回合结束结算 → P9 超载尾弃（超容量手牌从尾部弃回牌库底，激活咏唱豁免）');
+  L.push('□ 敌方回合：先快照行动者 → 回合开始效果（敌方燃烧跳伤、复苏复活都在此）→ 依次行动 → 刷新意图。'
+    + '跳伤在行动**之前**（被烧死的敌人本回合不攻击）；复活归来的单位本回合不行动（快照已定）。');
+  L.push('□ 持续伤害按**所属方**回合开始结算，跳完-1层：敌方燃烧在敌方阶段开头跳、你的自燃在你回合开头跳。'
+    + '你的护盾在你的回合开始清零（先结算跳伤后清——残盾吃得到跳伤；开局盾首回合豁免）；'
+    + '敌方护盾每个敌方回合开始清零。');
+  L.push('□ 战斗开始：护盾/效果清零、AP回满、魏启=上限一半（下取整，回合开始再+1）；牌组克隆洗牌后发起新手牌。'
+    + '牌库顶=下一张抽到的；打出/弃掉的**非消耗**卡回牌库底（无弃牌堆、无重洗）；'
+    + '消耗卡本场移除、下场战斗回归；战斗中新获得的卡（发现产物/敌人塞的牌）本场临时，战后不沉淀。');
+  L.push('□ 手牌：未打出的牌**保留到下回合**（P3只补空位——留手=放弃等额新牌）。');
+  L.push('□ 咏唱卡：打出=付费**点亮**（每回合P5自动触发，占咏唱容量+手牌权重）；再次打出=**解除**离场（无触发）。'
+    + '点亮是持续状态，不是一次性结算。');
+  L.push('□ 卡面主语约定：裸写「效果X N」（燃烧4/护盾6/攻击+7）= **自己**获得或自身状态；「目标/敌人」= 卡牌目标。'
+    + '「正在燃烧」类条件判的是你自己。');
+  L.push('□ 伤害管线：基础值+面板 → PRE修饰 → 减**防御**（固定值）→ 护盾吸收 → 生命。'
+    + '蓄势只被**生命伤害**扣层（盾挡/防挡不算）；荆棘按受击次数反伤；闪避使下一次受击落空。');
+  L.push('□ 常用排查：why <手牌#|卡名>（为什么打不出）| lib（预知抽牌顺序）| log <N>（长战斗日志）'
+    + '| terms（词条/效果表）| rules（本表）');
   return L.join('\n');
 }

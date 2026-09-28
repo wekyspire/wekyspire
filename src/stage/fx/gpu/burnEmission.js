@@ -2,7 +2,7 @@
 // WebGPU compute 化重写——旧版是 64px/格 的 RT 图集片元 pass（每活跃单位一列，
 // 全场 4096 纹素/单位全量驻留，spawn pass 再随机纹素 rejection 采样）；compute 后
 // **不再是纹理**：每帧一个压缩 pass 把「热纹素」紧缩成 storage buffer 条目列表
-// （vec4 = 世界坐标 xyz + 发射强度 w），spawn 侧（gpuParticles 的粒子 compute）
+// （vec4 = 世界坐标 xyz + 发射强度 w），spawn 侧（burnSparks custom 类型的粒子 compute）
 // 随机取条目 + 强度门控即可。语义与旧图集一一对应：
 //   · 数据源以旧实现为准——立绘 alpha（body.material.map，剪影门控）×
 //     **本体着色同一份燃烧场函数**（unitBodyFx.js 的 ubfBurnEmission TSL 件，
@@ -98,10 +98,10 @@ export function createBurnEmission({ maxUnits = 6 } = {}) {
   }
 
   /**
-   * 本帧压缩的 compute 节点列表（不直接派发——gpuParticles 把它与粒子 pass 合并成
+   * 本帧压缩的 compute 节点列表（不直接派发——粒子池 v2 把它与粒子 pass 合并成
    * **一次** renderer.compute 提交，保证 reset → 压缩 → spawn 的队列内顺序）。
    * 仅活跃燃烧单位列表非空时被调。
-   * @param {Array<{unit: *}>} burnUnits 活跃燃烧单位列表（gpuParticles 持有）
+   * @param {Array<{unit: *}>} burnUnits 活跃燃烧单位列表（burnSparks custom 类型持有）
    * @returns {Array} 本帧要派发的 ComputeNode 列表（reset + 逐活跃单位压缩）
    */
   function update(burnUnits) {

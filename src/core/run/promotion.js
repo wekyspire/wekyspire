@@ -63,5 +63,6 @@ export function promoteCard(run, uniqueID, targetId = null) {
       : targets[0]);
   if (!next) return null; // 晋升目标内容缺省/被门禁挡下 → 跳过（占位）
   Object.assign(runtime, createSkillRuntime(next), { uniqueID: runtime.uniqueID });
+  runtime.promoted = true; // 「已升级」标记：卡面行为分叉用（火种系：升级=抽牌加一，2026-09-28）
   return runtime;
 }
