@@ -579,11 +579,13 @@ registerEffect({
         target: unit, effectId: 'blastFuse', stacks: -1,
       }), instr);
       if (stacks <= 1) {
-        // 归零引爆：玩家阵营全体 20 群伤 + 自爆（走正规死亡结算）
+        // 归零引爆：玩家阵营全体 20 群伤 + 自爆（走正规死亡结算）。fixed = 定值爆炸
+        // （2026-09-29 试玩实报：不带 fixed 会吃爆囊自身蓄势 PRE 加成，20 变 22 与
+        // 「炸 20」卡面语义不符；fixed 仍走护盾吸收，可被满盾挡下）
         for (const t of [ctx.player, ...aliveAllies(ctx.battleState)]) {
           if (t.isDead()) continue;
           ctx.kernel.submitInstruction(new DealDamageInstruction({
-            source: unit, target: t, amount: 20, type: 'major', tags: ['blast'],
+            source: unit, target: t, amount: 20, fixed: true, type: 'major', tags: ['blast'],
           }), instr);
         }
         ctx.kernel.submitInstruction(new DealDamageInstruction({

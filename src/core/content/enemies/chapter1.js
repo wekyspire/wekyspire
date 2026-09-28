@@ -263,7 +263,9 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
         return { kinds: ['defend'], note: '蜷缩防御（下回合起正常行动）' };
       }
       const gripsNow = !(delayedGrip && unit.actionIndex === 0);
-      const phase = (delayedGrip ? unit.actionIndex + 1 : unit.actionIndex) % 3;
+      // 相位口径与 act 对齐（B 类同为 +2——2026-09-29 试玩实报：意图写 +1 比 act 慢
+      // 一拍，首拍显示「盾回蔓延」实际攻 9，「防御+强化藏攻击」骗掉布防）
+      const phase = (delayedGrip ? unit.actionIndex + 2 : unit.actionIndex) % 3;
       const attacking = phase === 2;
       return {
         kinds: attacking
