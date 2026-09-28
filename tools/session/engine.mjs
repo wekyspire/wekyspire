@@ -370,11 +370,11 @@ function execBattle(S, cmd, t) {
       const sideLoss = [...handBefore.entries()]
         .filter(([uid]) => uid !== skill.uniqueID && !stillHand.has(uid))
         .map(([uid, nm]) => `${nm}→${inBurnt.has(uid) ? '焚毁' : inDeck.has(uid) ? '牌库底' : '离场'}`);
-      // 默认目标回执（0929 试玩实报：无目标出牌实际打谁看不出，误判送掉输出窗）——
-      // 出牌前的首个存活敌即 engine/core 的 enemyTarget 口径
-      const autoT = targetArg == null && defOf(skill).targetMode === 'enemy'
-        ? battle.battleState.enemies.find(e => !e.isDead())?.name : null;
-      S.lastOutcome = `打出 ${name}${note}${deadTargetNote}${autoT ? `（默认目标：${autoT}）` : ''}`
+      // 目标回执（0929 试玩实报：显式指定目标同样看不出打的是谁——敌人同名扎堆时
+      // 无法对账；默认目标与指定目标统一点名）
+      const targetNote = defOf(skill).targetMode === 'enemy'
+        ? `（目标：${target?.name ?? battle.battleState.enemies.find(e => !e.isDead())?.name ?? '?'}）` : '';
+      S.lastOutcome = `打出 ${name}${note}${targetNote}${deadTargetNote}`
         + (sideLoss.length ? `\n  顺带离手：${sideLoss.join('、')}` : '');
       if (isBattleFinished(battle)) settleBattle(S);
       return;
