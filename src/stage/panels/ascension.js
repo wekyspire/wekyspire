@@ -15,7 +15,7 @@ export function buildAscensionPanel(snap) {
     items: (snap.dims ?? []).map((d) => {
       const meta = DIM_META[d.id] ?? { label: d.id, glyph: '?', color: '#8a93b2' };
       return {
-        id: d.id, name: `${meta.glyph} ${meta.label}`, desc: `等级 ${d.level}`,
+        id: d.id, name: meta.label, desc: `等级 ${d.level}`, // 不拼 glyph（与 label 首字同形，见 runCutsceneFlows 同步修）
         action: { action: 'chooseAscensionDimension', dimension: d.id },
       };
     }),

@@ -104,7 +104,9 @@ export function createRunCutsceneFlows(ctx) {
       const meta = DIM_META[id] ?? { label: id };
       return {
         id,
-        label: `${meta.glyph ?? ''}${meta.label}（等级 ${run.player.leino?.[id] ?? 0}）`,
+        // 不拼 glyph：字素（炎/木/风）与 label 首字同形，连读成「炎火灵脉/木木灵脉」
+        // 错词（夜测 r6路5 实报，每局进阶必现）；hint 行「突破火灵脉」即目标口径。
+        label: `${meta.label}（等级 ${run.player.leino?.[id] ?? 0}）`,
         hint: `突破${meta.label}`,
       };
     }),
