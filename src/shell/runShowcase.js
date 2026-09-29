@@ -17,6 +17,7 @@ import { showcaseItemOf } from './runPresenter.js';
 import { chooseDemonDebuff, DEMON_DEBUFFS } from '../core/run/rooms/bank.js';
 import { buyShopItem } from '../core/run/rooms/shop.js';
 import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
+import { tooltipHide } from './tooltipHub.js';
 
 export function createRunShowcase(ctx) {
   const { run, runPresenter, actions, slot } = ctx;
@@ -196,6 +197,8 @@ export function createRunShowcase(ctx) {
     if (run.gameStage !== 'room' || !run.shop) return;
     const it = run.shop.items?.[index];
     const res = buyShopItem(run, index);
+    tooltipHide(); // 购买结算拍清悬空 tooltip：商品视图即离场（药水等"买了立即生效"件
+                   // 没有后续 picker 接力——不清会空货位挂框 ≥8s，夜测 r4路2 两跑实证）
     // 买到的东西都要"到手那一拍"：卡包也走获得演出（展示卡包图 → 演完自动开包），
     // 与药水/遗物同一条链（购买必须走获得演出）
     shopPendingShow = it

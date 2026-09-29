@@ -106,6 +106,9 @@ export class ScrollPickerObject extends THREE.Group {
   } = {}) {
     this.close();
     if (!buildItem || !items.length) return this;
+    // 全屏模态开 = 悬空 tooltip 必清（售出商品位/离场对象的 tooltip 若不清会压在
+    // 候选卡上 ≥25s，DOM 层叠在 picker 之上——夜测 r3路1/r4路2 实证）
+    this._hideTooltip();
     this._opened = true;
     this._multi = multi;
     this._picks = Math.max(1, picks);
