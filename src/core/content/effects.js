@@ -2,14 +2,13 @@ import { registerEffect, getEffectDefinition } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction, ClearShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { UseSkillInstruction } from '../instructions/skill.js';
 import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import AIActInstruction from '../instructions/aiAct.js';
 import { aliveEnemies, aliveAllies } from '../state/battleState.js';
 
-// 燃烧：自己阵营回合开始时受到等于层数的**固定伤害**（EFFECTS.md 2026-09 定调：
-// 固定＝跳过修正与防御、护盾可挡，不穿透），然后层数 -1。
+// 燃烧：自己阵营回合开始时受到等于层数的**固定伤害**（EFFECTS.md：固定＝跳过修正与
+// 防御、护盾可挡，不穿透），然后层数 -1。
 // 烈焰亲和的减免在此就地折算——固定伤害 payload 白名单为空、PRE 不可修饰。
 // 行为完全由订阅表达，结算指令里无任何"燃烧"特判。
 registerEffect({
@@ -39,10 +38,9 @@ registerEffect({
   }],
 });
 
-// 防御（EFFECTS.md 词条）：受到的伤害减少层数层。2026-09-16 效果化：原为角色数值
-// （前端面板显示不出，玩家看不见自己/敌人的防御），改走效果轨——各单位 base 防御由
-// PreBattle 统一转入（battleRoot），此后增减一律 AddEffect（敌人「重甲恢复/冲锋破防」
-// 同口径）。常驻不衰减；结算公式读 getStat('defense') 不变，pierce/fixed 照旧绕过。
+// 防御（EFFECTS.md 词条）：受到的伤害减少层数层。各单位 base 防御由 PreBattle 统一
+// 转入效果轨（battleRoot），此后增减一律 AddEffect。常驻不衰减；结算公式读
+// getStat('defense') 不变，pierce/fixed 照旧绕过。
 registerEffect({
   id: 'defense',
   type: 'buff',
@@ -56,12 +54,10 @@ registerEffect({
 
 // 格挡（体修·拆体系核心资源，BODY_CULTIVATION_CARDS §0）：buff 层数，≠ 护盾池。
 // 受主级攻击时伤害减免 33%（向下取整），层数 -1；扣尽由 AddEffect 通用逻辑注销订阅。
-// 原型验证：test/posture.test.js（此处为正式落地，语义不变）。
-// 2026-09-20 用户裁决：减半 → 免 25%；2026-09-26 稿：25% → 33%。基础免伤深度仍交给
-// **武者（44%）/ 武帝（55%）**两级能力抬高（见 abilities.js），
-// 即"想靠格挡活命必须投入能力位"。
-// 两原语拆分（2026-09-15）：挂**应用原语 PRE**（受击侧最后修正）+ 只认主级——
-// 附级伤害（荆棘反伤/精通抽卡伤/tick）是格挡「响应」不该拦的东西，吃盾但不动格挡层。
+// 基础免伤深度由**武者（44%）/ 武帝（55%）**两级能力抬高（见 abilities.js）——
+// "想靠格挡活命必须投入能力位"。
+// 挂**应用原语 PRE**（受击侧最后修正）+ 只认主级——附级伤害（荆棘反伤/精通抽卡伤/
+// tick）是格挡「响应」不该拦的东西，吃盾但不动格挡层。
 registerEffect({
   id: 'block',
   type: 'buff',
@@ -74,10 +70,9 @@ registerEffect({
     when: ApplyDamageInstruction,
     phase: 'pre',
     // 固定伤害跳过修正步（F2），且其 payload 白名单为空——对 fixed 伤害调用 setPayload 会抛错。
-    // 穿透伤害整条格挡响应链都不参与（2026-09-21 用户裁决修复）：EFFECTS.md 的伤害分类
-    // 写死「穿透伤害：防御、护盾、格挡都不减免」——此前 filter 漏了 pierce，穿透被照常
-    // 减 33%/44%/55%，还白吃一层格挡。读 basePierce（应用原语的穿透在受击侧不可改，
-    // 见 instructions/combat.js 的 modifiablePayload 注释）。
+    // 穿透伤害整条格挡响应链都不参与（EFFECTS.md 伤害分类：「穿透伤害：防御、护盾、
+    // 格挡都不减免」）。读 basePierce（应用原语的穿透在受击侧不可改，见
+    // instructions/combat.js 的 modifiablePayload 注释）。
     filter: (instr) => instr.target === unit && !instr.fixed && !instr.basePierce
       && instr.type === 'major',
     react: (instr, ctx) => {
@@ -88,11 +83,10 @@ registerEffect({
   }],
 });
 
-// 忍耐（拆组合机制词，2026-09-14；2026-09-20 稿去掉「自己回合开始时消失」——
-// 常驻受击引擎，不再是一次性姿态）：每受到一次伤害获得层数相当的格挡。
+// 忍耐（拆组合机制词；常驻受击引擎，非一次性姿态）：每受到一次伤害获得层数相当的格挡。
 // 触发口径：实际造成生命值伤害的结算（被护盾全额吸收不算）；自伤付费（selfcost
-// 标记，狂拳类失去生命是代价不是挨打）不算；**主级**伤害才算（2026-09-15 两原语
-// 拆分定调：附级反伤/抽卡伤是格挡响应不该触发的东西）。
+// 标记，狂拳类失去生命是代价不是挨打）不算；**主级**伤害才算（附级反伤/抽卡伤是
+// 格挡响应不该触发的东西）。
 registerEffect({
   id: 'endure', type: 'buff', stacking: 'count',
   name: '忍耐',
@@ -162,12 +156,10 @@ registerEffect({
   }],
 });
 
-// 荆棘：受到主级攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡；
-// 无来源的环境伤害不反）。2026-09 定调：反伤不再穿透——穿透固定伤害过强。
-// 敌我通用（针鼠竖刺 / 未来反伤遗物同语言）。效果条目见 skills/EFFECTS.md。
-// 两原语拆分（2026-09-15）：挂**应用原语 POST**（受击响应）+ 只认主级；反伤本身是
-// **附级**伤害（type:'minor'）——不吃加成、不触发对面再响应，天然不连锁（原先靠
-// tags 'thorns' 过滤防互弹，现在类型口径就是防递归的本体）。
+// 荆棘：受到主级攻击时，攻击来源受到层数点普通伤害（走防御/护盾管线，可被挡，
+// 不穿透；无来源的环境伤害不反）。敌我通用（针鼠竖刺 / 反伤遗物同语言）。
+// 挂**应用原语 POST**（受击响应）+ 只认主级；反伤本身是**附级**伤害（type:'minor'）
+// ——不吃加成、不触发对面再响应，天然不连锁。
 registerEffect({
   id: 'thorns',
   type: 'buff',
@@ -192,9 +184,6 @@ registerEffect({
 });
 
 // 虚弱：每层攻击 -1（可把攻击压到负——伤害算式对负面板天然衰减，减半/加成仍对称生效）。
-// 赎罪（宴厅主教设计，2026-09-13 用户定稿写进效果本体=所有虚弱来源共享）：
-// 虚弱在玩家身上时，每回合打出 3 张**非攻击牌**自净 1 层。
-// 「攻击牌」= 该次出牌的指令子树含对敌伤害（被盾挡下也算攻击）；咏唱发动同样计数。
 registerEffect({
   id: 'weaken',
   type: 'debuff',
@@ -203,30 +192,9 @@ registerEffect({
     attack: (stacks) => -stacks,
   },
   name: '虚弱',
-  description: '每层使攻击降低 1 点。每回合打出 3 张非攻击牌可净化 1 层。',
+  description: '每层使攻击降低 1 点。',
   icon: '📉',
   color: 'purple',
-  subscriptions: (unit) => [{
-    when: UseSkillInstruction,
-    phase: 'post',
-    // 只认玩家自己持虚弱时的玩家出牌（敌方持虚弱不享受赎罪——它不"出牌"）
-    filter: (instr, ctx) => ctx.player === unit && !unit.isDead(),
-    react: (instr, ctx) => {
-      const dealtToEnemy = (node) => node.children?.some(c =>
-        (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
-      if (dealtToEnemy(instr)) return; // 攻击牌不计
-      unit._atonement = (unit._atonement ?? 0) + 1;
-      if (unit._atonement < 3) return;
-      unit._atonement = 0;
-      ctx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'weaken', stacks: -1 }), instr);
-    },
-  }, {
-    when: PlayerTurnStartInstruction,
-    phase: 'post',
-    filter: (instr, ctx) => ctx.player === unit,
-    react: (instr, ctx) => { unit._atonement = 0; },
-  }],
 });
 
 // 防火（EFFECTS.md）：燃烧结算时跳过伤害（层数照常 -1——燃烧自身的递减在 burn 反应里
@@ -264,8 +232,8 @@ registerEffect({
 // 炎魔（火灵脉体系效果，EFFECTS.md）：造成伤害时，赋予伤害对象燃烧1（按当前层数）。
 // 循环防护双保险：燃烧跳伤 source 为空天然不触发；'burn' 标记伤害一律不触发（防
 // 自馈级联）。目标已死亡不赋予。荆棘反伤等非 burn 标记的己方伤害照常附带（设计语义）。
-// 2026-09-15 用户定：**未造成生命伤害不附带燃烧**（被护盾全额吸收/被闪避的结算
-// dealt=0 → 不烧）——防住了就是真防住；无火系泄压件与后期大净化构筑的体验修复。
+// **未造成生命伤害不附带燃烧**（被护盾全额吸收/被闪避的结算 dealt=0 → 不烧）
+// ——防住了就是真防住。
 registerEffect({
   id: 'flameDemon',
   type: 'buff',
@@ -277,8 +245,8 @@ registerEffect({
   subscriptions: (unit) => [{
     when: DealDamageInstruction,
     phase: 'post',
-    // 发动侧特效附加（两原语拆分 2026-09-15）：留在结算原语 POST + 只认主级——
-    // 附级伤害（荆棘反伤/精通抽卡伤）不附带燃烧。
+    // 发动侧特效附加：留在结算原语 POST + 只认主级——附级伤害（荆棘反伤/抽卡伤）
+    // 不附带燃烧。
     filter: (instr) => instr.source === unit && !unit.isDead()
       && instr.type === 'major'
       && (instr.result?.dealt ?? 0) > 0
@@ -291,11 +259,10 @@ registerEffect({
   }],
 });
 
-// 暴怒（卡达斯体系效果，2026-09-13 用户定）：受伤时获得等同**当前层数**的力量；
-// 己方回合开始时层数清零（力量不清——压力设计：打它越狠，它下一拍越痛，
-// 但层数不跨回合复利）。读 result.dealt（护盾/防御吸收后的实际生命损失）；
-// 只回应**主级**攻击（2026-09-15 两原语拆分落地：附级反伤/抽卡伤/tick 不算「被打」
-// ——此前注释就这么宣称，但 filter 没排除，燃烧跳伤一直在偷偷叠层，本次拆分顺手修正）。
+// 暴怒（卡达斯体系效果）：受伤时获得等同**当前层数**的力量；己方回合开始时层数清零
+// （力量不清——压力设计：打它越狠，它下一拍越痛，但层数不跨回合复利）。
+// 读 result.dealt（护盾/防御吸收后的实际生命损失）；只回应**主级**攻击
+// （附级反伤/抽卡伤/tick 不算「被打」）。
 registerEffect({
   id: 'rage',
   type: 'buff',
@@ -334,8 +301,8 @@ registerEffect({
   ],
 });
 
-// 中毒（EFFECTS.md，2026-09 定调）：回合结束时受到层数点**穿透伤害**（防御与护盾
-// 都不减免），然后层数 -1。与燃烧的区别：回合末结算 + 穿透（燃烧为固定伤害、护盾可挡）。
+// 中毒（EFFECTS.md）：回合结束时受到层数点**穿透伤害**（防御与护盾都不减免），
+// 然后层数 -1。与燃烧的区别：回合末结算 + 穿透（燃烧为固定伤害、护盾可挡）。
 registerEffect({
   id: 'poison',
   type: 'debuff',
@@ -410,12 +377,11 @@ registerEffect({
 
 // ==== 呼吸系列（刀系·弃牌回补）==================================================
 // 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层
-// （武者/完美另加格挡，每层各 block 层；力量加成已按 2026-09-16 用户裁决移除）。
+// （武者/完美另加格挡，每层各 block 层）。
 // 正面增益：监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销），敌方清除增益时
 // 随层数一并拆除；回合末自行消散（提交 -全部层数 → 过零自动注销订阅）。
 // 换牌（R3）内部走弃牌指令，同样触发。全系效果同强度（格挡1）；阶梯差在卡牌侧：
-// C/B 纯消耗整战一次、A 完美呼吸去消耗（2026-09-21 大调：阶差从效果强度移到
-// 「消耗词条」这个机制跃迁点——本效果的 block 曾滞留旧档 2，已随卡面归 1）。
+// C/B 纯消耗整战一次、A 完美呼吸去消耗。
 
 // 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
 const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
@@ -456,8 +422,8 @@ registerBreathEffect({ id: 'breath', name: '呼吸' });
 registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', block: 1 });
 registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', block: 1 });
 
-// 治疗（EFFECTS.md 2026-09 新增）：回合开始时恢复层数点生命，失去所有层数——
-// 与再生的区别是整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。
+// 治疗（EFFECTS.md）：回合开始时恢复层数点生命，失去所有层数——与再生的区别是
+// 整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。
 registerEffect({
   id: 'mend',
   type: 'buff',
@@ -485,7 +451,7 @@ registerEffect({
 // 闪避：免疫下一次攻击（层数 -1）。判定口径与火墙一致：「攻击」= 有来源、
 // 非燃烧/中毒等环境标记的伤害指令（玩家普攻/多段/固定伤害都算；燃烧跳伤、
 // 中毒结算不算）。被 veto 的结算无联动（A4）——荆棘不反、命中探针不触发。
-// 可储存但会蒸发（2026-09-14 定，防多层蓄成永久无敌）：持有者**回合开始时**层数 -1——
+// 可储存但会蒸发（防多层蓄成永久无敌）：持有者**回合开始时**层数 -1——
 // 挂在回合开始而非结束，保证本回合拿的闪避一定能挡过这轮敌方攻击。
 registerEffect({
   id: 'dodge',
@@ -498,9 +464,8 @@ registerEffect({
   subscriptions: (unit) => [{
     when: ApplyDamageInstruction,
     phase: 'pre',
-    // 两原语拆分（2026-09-15）：挂应用原语 PRE（受击侧拦截）+ 只认主级——
-    // 附级伤害（原先靠排除 burn/poison tag）现在被类型口径天然排除，且荆棘反伤、
-    // 精通抽卡伤也不再消耗闪避层。
+    // 挂应用原语 PRE（受击侧拦截）+ 只认主级——附级伤害（荆棘反伤/精通抽卡伤）
+    // 不消耗闪避层。
     filter: (instr) => instr.target === unit
       && instr.source
       && instr.type === 'major',
@@ -519,7 +484,7 @@ registerEffect({
   }],
 });
 
-// 晕眩（EFFECTS.md 2026-09 新增）：回合行动时跳过行动，层数 -1。
+// 晕眩（EFFECTS.md）：回合行动时跳过行动，层数 -1。
 // AI 单位（敌人/盟友）经 AIActInstruction PRE veto 实现（被取消的结算无联动，A4；
 // 层数 -1 作为 veto 替代指令插入）；玩家的「行动」是回合阶段机的 P4 操作段，
 // 订阅无法 veto 一个 WAIT，由 PlayerTurnInstruction 内按层数跳过（见 turn.js）。
@@ -541,10 +506,9 @@ registerEffect({
   }],
 });
 
-// 引线（EFFECTS.md 2026-09-22 重定义·爆炸引线）：自己回合结束时层数 -1，**层数归 0
-// 时引爆**——对玩家阵营全体造成 14 群伤并自爆死亡（2026-09-29 用户定：20→14）。持有者
-// 被提前击杀则什么都不发生（新生版爆囊的定时炸弹口径：杀它=拆弹，拖满倒计时=挨炸）。
-// 旧「亡语按层数加伤」语义随旧爆囊一起退役。
+// 引线（EFFECTS.md·爆炸引线）：自己回合结束时层数 -1，**层数归 0 时引爆**——
+// 对玩家阵营全体造成 14 群伤并自爆死亡。持有者被提前击杀则什么都不发生
+// （新生版爆囊的定时炸弹口径：杀它=拆弹，拖满倒计时=挨炸）。
 registerEffect({
   id: 'blastFuse',
   type: 'buff',
@@ -565,8 +529,7 @@ registerEffect({
       }), instr);
       if (stacks <= 1) {
         // 归零引爆：玩家阵营全体 14 群伤 + 自爆（走正规死亡结算）。fixed = 定值爆炸
-        // （2026-09-29 试玩实报：不带 fixed 会吃爆囊自身蓄势 PRE 加成、与定值爆炸语义
-        // 不符；fixed 仍走护盾吸收，可被满盾挡下）
+        // 不吃蓄势等修正，仍走护盾吸收、可被满盾挡下。
         for (const t of [ctx.player, ...aliveAllies(ctx.battleState)]) {
           if (t.isDead()) continue;
           ctx.kernel.submitInstruction(new DealDamageInstruction({
@@ -581,14 +544,14 @@ registerEffect({
   }],
 });
 
-// 奇迹（2026-09 用户定，塞西莉亚体系通用机制）：生命拒绝降到 0 或以下——minHp 地板 = 1
+// 奇迹（塞西莉亚体系通用机制）：生命拒绝降到 0 或以下——minHp 地板 = 1
 // 走 getStat 读轨，与伤害管线同源、不特判。
 // 自己回合结束时层数 -1；**层数归零 = 奇迹终结 = 死亡**。
 // 归零结算顺序不可颠倒：先由 AddEffect 摘掉地板（层数归零同时注销本订阅），再以 fixed
 // 伤害直落 0——反过来的话地板会把致命伤再挡回 1，永远死不掉。
 // 归零死亡带 tags:['miracle']：塞西莉亚之恩赐的「致命拦截」按此标记豁免，否则
 // 「延迟死亡 → 奇迹耗尽 → 又被拦截」会自我续命成不死。
-// 同一效果供两处复用：遗物「塞西莉亚之恩赐」（奇迹1）与旧版技能「塞西莉亚奇迹」（奇迹3）。
+// 同一效果供两处复用：遗物「塞西莉亚之恩赐」（奇迹1）与技能「塞西莉亚奇迹」（奇迹3）。
 registerEffect({
   id: 'miracle',
   type: 'buff',
@@ -620,8 +583,7 @@ registerEffect({
   }],
 });
 
-// ---- 脆弱 / 伤残（EFFECTS.md §负面效果；2026-09-11 实装）----
-// 这两个是老虎机「恶魔 roll」也需要的通用负面效果，遗物「老旧的战术目镜」先用上。
+// ---- 脆弱 / 伤残（EFFECTS.md §负面效果；恶魔 roll 与遗物共用的通用负面效果）----
 
 // 脆弱：获得护盾时，获得量减少层数层（不可小于 0）。层数不随触发递减（文档未写递减）。
 registerEffect({
@@ -771,8 +733,8 @@ registerEffect({
   ],
 });
 
-// 弹道干扰（神兵躯壳，2026-09-20 用户设计稿）：段数减免标记——每层令目标**下一次扫射**
-// 的段数 -2（整量消耗，扫射结算时清空）。首用：Boss【回忆】洗入玩家牌库的「躲闪」。
+// 弹道干扰（神兵躯壳）：段数减免标记——每层令目标**下一次扫射**的段数 -2
+// （整量消耗，扫射结算时清空）。首用：Boss【回忆】洗入玩家牌库的「躲闪」。
 // 纯标记效果（无订阅，读数与清除都写在神兵躯壳的 act/getIntention 里）。
 // type 定为 buff（与凝滞同一条理由）：这是打在机器上的干扰标记，不该被它自己的
 // 「纯净」当负面效果吃掉——纯净 3 若把它拦下，玩家手里 7 张躲闪就全是废牌。
@@ -800,7 +762,7 @@ registerEffect({
   statModifiers: { minHp: () => 1 },
 });
 
-// 充能（2026-09-14 用户定，静电毛球）：每层攻击 +1；**受攻击时层数 -2**（提前放电）。
+// 充能（静电毛球）：每层攻击 +1；**受攻击时层数 -2**（提前放电）。
 // 与蓄势的差异：蓄势是纯滚雪球标记（不打它就白白变强），充能可被玩家攻击泄放——
 // 「不打它越充越强，打它有泄压收益」的攻防节奏抉择；与力量的差异：力量不因受击衰减。
 registerEffect({
@@ -817,8 +779,8 @@ registerEffect({
   subscriptions: (unit) => [{
     when: ApplyDamageInstruction,
     phase: 'post',
-    // 被打中护盾也算「受攻击」（电是接触即放）；无来源的环境伤害不触发；附级伤害
-    // 不触发（2026-09-15 拆分：泄放是受击响应，只认主级攻击）
+    // 被打中护盾也算「受攻击」（电是接触即放）；无来源的环境伤害不触发；
+    // 泄放是受击响应，只认主级攻击。
     filter: (instr) => instr.target === unit && instr.source
       && instr.type === 'major' && !unit.isDead(),
     react: (instr, ctx) => {
@@ -831,10 +793,10 @@ registerEffect({
   }],
 });
 
-// 紧勒（EFFECTS.md：「手牌上限减少层数张」。实装首用：腐苔球的腐烂蔓延）——第一章
-// 「卡手」主题的语言。效果轨实现（2026-09-29 用户定）：扣减走 statModifiers，
-// handLimitOf 经 getStat 折入——修正的生命周期 = 效果实例的生命周期（战斗结束随
-// PreBattle/PostBattle 的 clearEffects 自动出清，不再有直改字段与重算互相覆盖的窗口）。
+// 紧勒（EFFECTS.md：「手牌上限减少层数张」。首用：腐苔球的腐烂蔓延）——第一章
+// 「卡手」主题的语言。效果轨实现：扣减走 statModifiers，handLimitOf 经 getStat 折入
+// ——修正的生命周期 = 效果实例的生命周期（战斗结束随 PreBattle/PostBattle 的
+// clearEffects 自动出清，不存在直改字段与重算互相覆盖的窗口）。
 // 「施加者死亡时归还其施加的层数」是施加方行为（腐苔球亡语），非效果本体规则。
 registerEffect({
   id: 'constrict',
@@ -864,7 +826,7 @@ registerEffect({
   color: 'blue',
 });
 
-// ---- 章 1 新敌效果四件（EFFECTS.md 2026-09-22 用户补定义）----
+// ---- 章 1 敌用效果（甲壳 / 电动 / 蓄势 / 融合）----
 
 // 甲壳：受到主级伤害时伤害减半，然后层数 -1。挂应用原语 PRE（受击侧最后修正，
 // 与格挡同管线），只认主级、非固定、非穿透（穿透不吃减伤是 EFFECTS.md 伤害分类铁律）。
@@ -911,11 +873,10 @@ registerEffect({
   },
 });
 
-// 蓄势（EFFECTS.md 2026-09-22 新定义）：所有伤害增加层数层（发动侧 PRE，逐次伤害
-// 各自加成——多段攻击每段都吃到）；受到任何**生命值**伤害（dealt>0，被盾全额吸收
-// 不算）时层数 -1。与力量的差异：力量走攻击面板（进意图公式）且不因受击衰减，
-// 蓄势直接加在每次伤害上且会被打掉——「趁热打铁，别让它养起来」的攻防拉扯。
-// （旧「蓄势」= 面板 +1/层 的读轨标记已并入力量，不再单独存在。）
+// 蓄势（EFFECTS.md）：所有伤害增加层数层（发动侧 PRE，逐次伤害各自加成——多段攻击
+// 每段都吃到）；受到任何**生命值**伤害（dealt>0，被盾全额吸收不算）时层数 -1。
+// 与力量的差异：力量走攻击面板（进意图公式）且不因受击衰减，蓄势直接加在每次伤害上
+// 且会被打掉——「趁热打铁，别让它养起来」的攻防拉扯。
 registerEffect({
   id: 'momentum',
   type: 'buff',
@@ -948,10 +909,10 @@ registerEffect({
   ],
 });
 
-// 融合（EFFECTS.md 既有定义，2026-09-22 随新小史莱姆实装为自持亡语）：死亡时，友军
-// 所有史莱姆族恢复 8 生命并获得 2 力量——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
+// 融合（EFFECTS.md，自持亡语）：死亡时，友军所有史莱姆族恢复 8 生命并获得 2 力量
+// ——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
 // 亡语挂在效果自身的死亡响应上（任何持有「融合」的单位都生效，不依赖敌人 def.onDeath）；
-// 史莱姆族口径：slime / slimeB / slimeletA / slimeletB / slimelet / bigSlime（2026-09-27 加 slimeB）。
+// 史莱姆族口径：slime / slimeB / slimeletA / slimeletB / slimelet / bigSlime。
 const SLIME_FAMILY = new Set(['slime', 'slimeB', 'slimeletA', 'slimeletB', 'slimelet', 'bigSlime']);
 registerEffect({
   id: 'fusion',
