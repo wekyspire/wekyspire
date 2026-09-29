@@ -21,14 +21,14 @@ export function promotionTargets(def) {
   return ids.filter(hasSkill);
 }
 
-// 通用填充卡（拳/盾，2026-09-21 D2/D4）：不走体修路线无法升级——填充卡是全体系
+// 通用填充卡（拳/盾）：不走体修路线无法升级——填充卡是全体系
 // 起始牌组的凑数位，晋升通道是体修路线的专属甜头（StS Strike/Defend 不可升级的变体口径）。
 const FILLER_STARTERS = new Set(['punch', 'guard']);
 
 // 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
-// S 阶不可经晋升获得（2026-09 定）：训练场/老虎机升级一律到不了 S——晋升链
+// S 阶不可经晋升获得：训练场/老虎机升级一律到不了 S——晋升链
 // 本身保留（作为未来特殊事件的升 S 通道数据），S 的常规来源只有事件直出。
-// 2026-09-21 D4：「一次升两阶」随训练新制（升 2 张 C→B / 升 1 张 B→A）废除——
+// 「一次升两阶」已随训练新制（升 2 张 C→B / 升 1 张 B→A）废除——
 // 升级收益刻意做小（等阶扁平化），单步晋升是唯一口径。
 export function gatedPromotionTargets(run, def) {
   if (FILLER_STARTERS.has(def?.id) && run.route !== 'body') return [];
@@ -46,7 +46,7 @@ export function canPromoteRuntime(runtime, run) {
 }
 
 // 晋升 deck 内一张卡。targetId 可选（分叉时指定）；**缺省且多分叉时按 run.rng 确定性
-// 随机取一条**（用户定 2026-09-13：随机升级随机选分叉——老虎机随机升级/headless 兜底都走
+// 随机取一条**（随机升级随机选分叉——老虎机随机升级/headless 兜底都走
 // 这条；营地/训练场等 UI 流由升级子面板显式传 targetId）。无可用目标（含被等阶门禁挡下）
 // 返回 null（调用方决定跳过）。uniqueID 保持不变（牌面身份稳定），其余运行时状态
 // 按新定义重置。
@@ -63,6 +63,6 @@ export function promoteCard(run, uniqueID, targetId = null) {
       : targets[0]);
   if (!next) return null; // 晋升目标内容缺省/被门禁挡下 → 跳过（占位）
   Object.assign(runtime, createSkillRuntime(next), { uniqueID: runtime.uniqueID });
-  runtime.promoted = true; // 「已升级」标记：卡面行为分叉用（火种系：升级=抽牌加一，2026-09-28）
+  runtime.promoted = true; // 「已升级」标记：卡面行为分叉用（火种系：升级=抽牌加一）
   return runtime;
 }

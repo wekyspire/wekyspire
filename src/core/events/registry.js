@@ -12,7 +12,7 @@ import { createRegistry } from '../registryFactory.js';
 //     resolve(run, choiceId, ctx) -> { pages: [...] }   // **只返回结果页**；效果自己在里面施加
 //   }
 //
-// 「效果自己施加」是这套系统的关键（用户定 2026-09-13）：事件选完选项后**主动**调用
+// 「效果自己施加」是这套系统的关键：事件选完选项后**主动**调用
 // `run/runEffects.js` 的效果原语（gainMoney/healPlayer/gainRelic…），由原语负责改 run 状态
 // 并声明表现意图；**不再**返回 { money: 15 } 之类载荷让 Shell 去解释执行。
 // `resolve` 的返回值只有叙事（结果页），Shell 拿它继续播片即可，对"事件做了什么"一无所知。

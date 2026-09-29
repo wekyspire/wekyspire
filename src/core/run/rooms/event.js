@@ -1,11 +1,11 @@
-// 事件房（RUN_DESIGN §4.4；用户定 2026-09-12 改版，2026-09-13 内容化）：**随机事件 = 对话 + 选项 + 逻辑**。
+// 事件房（RUN_DESIGN §4.4）：**随机事件 = 对话 + 选项 + 逻辑**。
 //
 // 形态：不走 UI 面板、不做 3D 场景——由 Shell 用 cutscene 播（幕间 CG + 普通对话 + 选项），
 // `dialogue` step 的 `bg` 即事件背景图（见 `shell/overlay/eventArt.js`）。本文件只是**房间侧逻辑**：
 // 抽取、视图、结算落账。**内容与效果在 `core/content/events/*`**（定义进 `core/events/registry.js`），
 // 效果由内容自己主动施加（见 `core/run/runEffects.js`）——这里不做任何效果解释。
 //
-// 结算契约（用户定 2026-09-13）：
+// 结算契约：
 //   resolveEvent(run, choiceId, ctx) -> { eventId, name, pages, effects }
 //   · pages   = 结果页（纯叙事），Shell 接着播
 //   · effects = 本次施加的效果流水（纯描述，文本前端/日志用）——**不是**待执行的载荷

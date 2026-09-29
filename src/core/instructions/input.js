@@ -5,7 +5,7 @@ import BattleInstruction, { WAIT } from '../kernel/BattleInstruction.js';
 export default class AwaitPlayerInputInstruction extends BattleInstruction {
   constructor({ request }, opts = {}) {
     super(opts);
-    // 请求形状（2026-09-11 扩）：
+    // 请求形状：
     //   { kind: 'selectCards'|'selectHandCard'|'selectDeckCard'|'confirm',
     //     source?: 'hand'|'deck',        // 卡牌集来自哪个区（决定前端能否复用场上实例）
     //     min?, max?,                    // 选 M~N 张（区间；缺省用 count 退化到精确张数）

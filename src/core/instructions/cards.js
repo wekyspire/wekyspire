@@ -179,7 +179,7 @@ export class AddCardInstruction extends BattleInstruction {
   }
 }
 
-// 弃牌：玩家流程动作（非技能卡）。2026-09-13 改制（用户定）：原「换牌」（弃 1 抽 1）
+// 弃牌：玩家流程动作（非技能卡）。原「换牌」（弃 1 抽 1）
 // 废除——抽到满体系下补给由下一回合的「抽到容量」提供，本动作改为**支付一次阶梯
 // 费用（swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中任意张卡**（回牌库底），
 // 作为手牌排出口（打不完/全是打不出的牌时主动清空留手位）。
@@ -281,7 +281,7 @@ export class TransformCardInstruction extends BattleInstruction {
 // 纯标记——不打断任何玩家操作（照常打出/弃置），离手即免除。结算与清标由施加方的
 // 订阅负责（enemies.js intactDrone 的 PlayerTurnEnd 订阅：手牌中的锁定卡焚毁、
 // 全 zone 清标——本轮锁定结算完毕，离手的卡不带标回库）。
-// 2026-09-20：可锁**牌库里的卡**（神兵躯壳【蓄能】要锁「你最先抽到的三张」= 牌库顶
+// 可锁**牌库里的卡**（神兵躯壳【蓄能】要锁「你最先抽到的三张」= 牌库顶
 // 三张，抽到手上才带标、回合末仍在手则焚）——原实现只查手牌，会静默锁空。
 // 过期引用无害：锁定时已离场的 uniqueID 静默跳过（与弃/移同哲学）。
 export class LockCardsInstruction extends BattleInstruction {

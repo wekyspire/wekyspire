@@ -5,7 +5,7 @@ import { PLAYER_BASE_AP } from '../state/player.js';
 // 战前准备阶段（RUN_DESIGN §4.5）：prep 阶段的遗物装卸与主动使用。
 // 遭遇预告 = run.encounter（createRun/advanceFloor 已按 seed+floor 确定性生成）。
 //
-// 槽位口径（用户 2026-09-10 定，以 RELICS.md 为准）：**权重和** Σcost ≤ relicSlots(3)，
+// 槽位口径（以 RELICS.md 为准）：**权重和** Σcost ≤ relicSlots(3)，
 // 不是"件数"。cost 0 = 可装备但不占槽；`nonSlot: true` = 非槽位式，**不进装卸界面、
 // 恒生效**（拾起即算 / 营地与战后钩子类）。
 // 已拥有排除（一局内遗物唯一）在抽选侧（relics/draft.js）保证；本文件只做落地。
@@ -31,7 +31,7 @@ export function usedSlots(run) {
 }
 
 /**
- * 拾取时永久增加生命上限（同时回等量当前生命——用户 2026-09-10 定）。
+ * 拾取时永久增加生命上限（同时回等量当前生命）。
  * 必须同时抬 baseStats，否则下一次 refreshRunModifiers 会把成长抹掉。
  */
 export function gainMaxHp(run, amount) {

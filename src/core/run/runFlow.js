@@ -48,9 +48,9 @@ export function deriveBattleSeed(seed, floor) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-// 奖励房派发（§1/§4；2026-09-11 用户定：**营地与训练场合并**）。
+// 奖励房派发（§1/§4；**营地与训练场合并为同一房**）。
 // 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地·训练场合并房**（二者总是一起出现，
-// 固定不随机）；商店层（4/8、15/19…）整层是**商店房**（售货机摆在固定位置，用户定 2026-09-12）；
+// 固定不随机）；商店层（4/8、15/19…）整层是**商店房**（售货机摆在固定位置）；
 // 其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
 // 后果（有意为之）：回复来源集中在合并层（2/6/10/14/18/21/26/30/32/34/38/42/43）。
 export function roomOfFloor(floor, rng) {
@@ -68,7 +68,7 @@ export { generateEncounter }; // 转发保旧引用兼容（直接 import 自 ru
 // ---- 建局 ----
 // profile：跨局持久内容（故事模式接缝 §6.4；单次游玩传空，行为不变）。
 // totalFloors：塔高覆盖位（故事模式可变更塔结构；测试用）。
-// route：开局路线（2026-09-21 D2，routes.js）——体系专属起始牌组 + 灵脉 1 级 +
+// route：开局路线（routes.js）——体系专属起始牌组 + 体系能力；
 // 体系能力（体修 = AP+1，无灵脉赠送）。route = null 显式跳过（裸 fixture/调试用）；
 // 读档不经这里（restoreRunFromSave 恢复现场）。
 export function createRun({ seed = 1, profile = null, player = null, totalFloors = TOTAL_FLOORS, route = 'body' } = {}) {
@@ -98,7 +98,7 @@ export function enterBattle(run) {
 // 真实游戏（runController → createBridge）共用，瑞米出战/种子派生规则改一处即可。
 export function assembleBattle(run) {
   const enemies = run.encounter.map(spawnEnemy); // 描述符（楼层缩放终值）| 裸 id（测试直塞兼容）
-  // 敌人开局被动（2026-09-14 第四章高压敌）：onSpawn(unit, enemies) 在进战斗前执行——
+  // 敌人开局被动：onSpawn(unit, enemies) 在进战斗前执行——
   // 持盾像的群体初始盾要赶在玩家先手前生效（真·抗首回合爆发）。战斗内时点的开局特性
   // （塞牌类）不走此钩子，走敌方首拍行动（AddCard 只有战斗内才有 zones 可落）。
   for (const unit of enemies) getEnemyDefinition(unit.defId)?.onSpawn?.(unit, enemies);
@@ -109,7 +109,7 @@ export function assembleBattle(run) {
   };
 }
 
-// 按当前遭遇装配战斗（战斗种子 = derive(runSeed, floor)；瑞米是故事模式同伴（2026-09-28
+// 按当前遭遇装配战斗（战斗种子 = derive(runSeed, floor)；瑞米是故事模式同伴
 // 起肉鸽模式不出战），故事模式里被打跑则不再出战直至营地找回）
 export function createRunBattle(run, { presenter = null, config = {} } = {}) {
   expectStage(run, 'battle');
@@ -120,7 +120,7 @@ export function createRunBattle(run, { presenter = null, config = {} } = {}) {
 // 战斗终局回写：胜利 → reward（生成战后固定奖励）；失败 → end(defeat)。
 // battle 传入时同步瑞米状态：HP 归零 = 被打跑（§3），之后不再出战直至营地找回。
 // Boss 通关奖励：HP 回满（章间断层修复——「险胜 Boss 带残血进下一章被处刑」是
-// 20 局试玩的头号死亡漏斗，2026-09 定案：满血进章；营地休整相应降档至 30%）。
+// 满血进章（章间是头号死亡漏斗）；营地休整相应降档至 30%）。
 export function finishBattle(run, verdict, battle = null) {
   expectStage(run, 'battle');
   const remi = battle?.battleState.allies.find(a => a.defId === 'remi');
@@ -139,7 +139,7 @@ export function finishBattle(run, verdict, battle = null) {
       if (relicId) grantRelic(run, relicId);
     }
     run.gameStage = 'reward';
-    // 来源通道（2026-09-21 D4-d，等阶门禁从等级制改为来源制）：精英/Boss 战后走
+    // 来源通道（等阶门禁按来源制）：精英/Boss 战后走
     // elite 通道（B/A 分布——A 直出只挂在这里）；普通战后走 normal（C/B，上限 B）。
     // encounter 元素可能是缩放描述符（{defId,...}），取 defId 反查。
     const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
@@ -174,7 +174,7 @@ export function completeRewards(run) {
 }
 
 // room 阶段完成（房间内部逻辑在 rooms/，本函数只迁移阶段）。
-// 2026-09-18 训练改版：训练 = 必做阶段且先于篝火——campTraining/training 房未训练不许离房；
+// 训练 = 必做阶段且先于篝火——campTraining/training 房未训练不许离房；
 // 抓卡尾款（pendingUpgrade）未清不许离房。进阶事件已在训练开始时房内先行（beginTraining），
 // 下面的达标检查保留为兜底（编排层异常漏播时离房仍能接上）。
 export function completeRoom(run) {

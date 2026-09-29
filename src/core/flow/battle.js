@@ -19,7 +19,7 @@ export function createBattle({
   runState, enemies = [], allies = [], seed = 1, presenter = null, config = {},
 }) {
   const battleState = createBattleState({ enemies, allies, seed });
-  // drawPerTurn = 每回合抽牌数**上限**（2026-09-13 两级手牌制：回合开始抽到容量为止，
+  // drawPerTurn = 每回合抽牌数**上限**（两级手牌制：回合开始抽到容量为止，
   // 但不超过此值——99 ≈ 必抽满新制，调小退化为"固定抽 N"旧制，A/B 试玩同路径）
   battleState.config = { initialDraw: 4, drawPerTurn: 99, swapBaseCost: 0, maxEnemies: 4, ...config };
   battleState.result = null;
@@ -97,8 +97,8 @@ export function playerEndTurn(battle) {
   return true;
 }
 
-// 玩家弃牌（2026-09-13 改制，原「换牌·弃1抽1」废除）：支付一次阶梯费用
-// （swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中**自由卡**（2026-09-28 用户定：
+// 玩家弃牌（原「换牌·弃1抽1」废除）：支付一次阶梯费用
+// （swapCostOf：首 0 逐次 +1，能力可封顶）→ 弃掉手中**自由卡**（
 // 激活咏唱不可弃——它们另有解除途径（免费解除=停在场上终止效果），被弃反而绕过
 // 设计契约；「自由牌」口径 = 未激活咏唱。迷你卡与弃牌无关——迷你只管手牌计数
 // （计 0 张容量），弃牌选集照常包含它）（回牌库底，无抽牌——补给由下一回合

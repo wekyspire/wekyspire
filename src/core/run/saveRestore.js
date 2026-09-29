@@ -1,6 +1,6 @@
 // 存档快照 → run 的恢复原语（core 层，环境无关）：
 //   浏览器读档（shell/runController）与 headless 工具（tools/session/engine）共用同一份，
-//   两边的读档语义不会漂移。2026-09-21 从 runController 提取（headless 需要它，但 headless
+//   两边的读档语义不会漂移。从 runController 提取（headless 需要它，但 headless
 //   不能把 Vue/shell 拖进来）。
 //
 // 语义：存档 = 检查点。**真实档**落盘只在 prep，恢复后必处 prep；**调试档**（造档工具产出 /

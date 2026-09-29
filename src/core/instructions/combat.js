@@ -1,7 +1,7 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
 
-// ==== 伤害两原语（2026-09-15 用户定架构）====
+// ==== 伤害两原语（结算原语 DealDamage / 应用原语 ApplyDamage）====
 //
 // 伤害拆「结算（发动）」与「应用（受击）」两个原语、两个阶段：
 //
@@ -55,7 +55,7 @@ export class DealDamageInstruction extends BattleInstruction {
 
   execute(ctx) {
     const target = this.target;
-    // 过期目标守卫（2026-09-11 用户报）：目标缺失或已死 → **静默落空**。
+    // 过期目标守卫：目标缺失或已死 → **静默落空**。
     // 起因：多段伤害是一次性捕获目标后连打 N 段（各 content 自己写 for 循环），
     // 目标在中间段被击杀时，剩余段仍会结算并播放"虚空伤害"演出，且重复触发死亡。
     // 与「过期引用无害」的既有哲学一致（弃牌/换牌等指令的同款前置守卫）。
@@ -66,7 +66,7 @@ export class DealDamageInstruction extends BattleInstruction {
     // 结算原语未被取消 → 插入应用原语（子节点）。**两段式**（return false）：应用原语
     // 连同其 POST 子树完整结算后本指令才完成——本原语的 POST 订阅才能读到回填后的
     // 结算明细。旧版此处 return true：POST 先于子节点执行，result 恒为占位 0
-    // （dealt>0 类订阅全部静默失效：肾上腺素/以攻为守/炎魔/控火灼，2026-09-17 修）。
+    // （dealt>0 类订阅全部静默失效：肾上腺素/以攻为守/炎魔/控火灼）。
     if (this._stage === 0) {
       const apply = new ApplyDamageInstruction({
         source: this.source,
@@ -164,7 +164,7 @@ export class ApplyDamageInstruction extends BattleInstruction {
       // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡（r21-a6 实报）。
       // skillDefId 覆写优先：斩链打出拍「先变身后结算」，self.defId 已是下一阶名
       skillDefId: this.skillDefId ?? this.skill?.defId ?? null,
-      // 演出语义透传（2026-09-22 fx 架构 Phase 1）：附级伤害（燃烧/中毒/荆棘 tick）
+      // 演出语义透传：附级伤害（燃烧/中毒/荆棘 tick）
       // 靠 type='minor' 在舞台侧降规格（小数字、无击退、无震荡）；tags 供配方表配色；
       // killed 供致命击加重。全是标量，wire 描述符可序列化，观战端同源一致。
       type: this.type, tags: [...this.tags], fixed: this.fixed, killed: target.isDead(),
@@ -198,7 +198,7 @@ export function wouldBeLethal(instr, target) {
 
 // 清空护盾（回合开始的护盾重置）。**执行时机必须晚于回合开始的效果结算**：
 // 燃烧等「固定伤害」按 EFFECTS.md 可被护盾吸收，若先清盾再结算，护盾那一步永远读到 0，
-// 燃烧就会事实上变成穿透（2026-09 修：此前正是这个顺序 bug）。
+// 燃烧就会事实上变成穿透（顺序敏感，勿调换）。
 export class ClearShieldInstruction extends BattleInstruction {
   constructor({ target }, opts = {}) {
     super(opts);

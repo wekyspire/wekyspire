@@ -15,12 +15,12 @@ import { getEffectDefinition } from '../../effects/registry.js';
 // 本文件是**引擎**（headless 与前端共用同一份）。前端目前是占位 UI（能用即可，视觉效果后做）。
 //
 // 已实装
-//   · 赠抽：每次进老虎机房免费赠送 2 抽（2026-09-21 D5；免费抽照常计入粉碎/安慰奖/保底爬坡）
-//   · 涨价：单价 5 起，每次付费 roll 后 +3（2026-09-21 D4-a 自 +6 降——粉碎换金兼负删卡主渠道）
+//   · 赠抽：每次进老虎机房免费赠送 2 抽（免费抽照常计入粉碎/安慰奖/保底爬坡）
+//   · 涨价：单价 5 起，每次付费 roll 后 +3（粉碎换金兼负删卡主渠道）
 //   · 保底：小奖 18% 起、每次未中 +7%；大奖 2% 起、每次未中 +2%；中奖后各自重置；
 //           小奖+大奖 > 100% 时小奖实际按 (100% − 大奖) 计
 //   · 奖项：小奖/大奖两档（档内权重见 MINOR/MAJOR），**产出总是可以放弃**；
-//           卡类奖项按 2026-09-21 D4 新等阶制重述：分布与体系等级脱钩——小奖走 normal
+//           卡类奖项走来源通道制：分布与体系等级脱钩——小奖走 normal
 //           通道（C/B），大奖走 elite 通道（B/A）；S 永不入包（「老虎机不出 S」天然一致）
 //   · 吞噬：累积 roll 每满 7 次可粉碎一件遗物或一张卡换金币（价值表按稀有度/等阶）；
 //           S 级嚼不动（吐出来）；诅咒卡 → 下次 roll 免费
@@ -31,7 +31,7 @@ import { getEffectDefinition } from '../../effects/registry.js';
 
 export const SLOT = Object.freeze({
   baseCost: 5,        // 首次单价
-  costStep: 3,        // 每次付费 roll 后涨价（2026-09-21 自 6 降为 3）
+  costStep: 3,        // 每次付费 roll 后涨价
   freeRollsPerVisit: 2, // 每次进房赠送的免费抽数（D5）
   minorBase: 0.18, minorStep: 0.07,   // 小奖概率（未中即累加，中奖重置）
   majorBase: 0.02, majorStep: 0.02,   // 大奖概率
@@ -50,7 +50,7 @@ export const SLOT = Object.freeze({
   // 吞噬价值表（gold 区间，rng 定值）
   devourValue: {
     relic: { C: [20, 30], B: [40, 50], A: [60, 70] },   // S 嚼不动
-    card: { C: [3, 10], B: [10, 20], A: [20, 30] },     // D 阶已移除（2026-09-21 D4）
+    card: { C: [3, 10], B: [10, 20], A: [20, 30] },
   },
   moneySmall: [10, 30],
   moneyBig: [200, 400],
@@ -92,7 +92,7 @@ const rarOf = (def) => (['C', 'B', 'A', 'S'].includes(def?.rarity) ? def.rarity 
  * 进房初始化（runFlow.completeRewards 在踏入老虎机房时调用）：瞬态机器状态 + 本房
  * 免费抽赠送（D5）。赠送必须发生在**进房时机**——早先挂在 slotState 懒初始化里时，
  * spinSlot 在懒初始化之前读免费次数，任何"进房后先 spin 后渲染"的调用序（headless
- * 回放即如此）都会让本房第一拉错误走付费分支（2026-09-27 试玩实录：-5 金且免费次数
+ * 回放即如此）都会让本房第一拉错误走付费分支（试玩实录过 -5 金且免费次数
  * 不减；浏览器因进房即建面板而侥幸无恙）。
  */
 export function enterSlotRoom(run) {
@@ -122,7 +122,7 @@ export const slotPending = (run) => run.slotPending ?? null;
 
 /**
  * 离房安慰奖是否欠着：**同一层内累计拉杆 ≥ SLOT.giftAfterPulls 次且全程零获奖**、且还没领过
- * （2026-09-21 D5 收紧：原为 ≥2 次）。免费抽也计入拉杆数（默认按「是」，见 REBALANCE D5 待钉）。
+ * 。免费抽也计入拉杆数（默认按「是」）。
  * 只在"要离开房间"时兑现（见 takeSlotGift）——所以它是 leave 流程的一环，不是 pending 产出。
  */
 export function slotGiftDue(run) {
@@ -191,7 +191,7 @@ function rollUpgradeCopy(run) {
 }
 
 /** 小奖：返回 payload（null = 该奖项当前无货，换一个再掷）。
- *  卡类奖项走 normal 通道（C/B，与体系等级脱钩——2026-09-21 D4 新等阶制）。 */
+ *  卡类奖项走 normal 通道（C/B，与体系等级脱钩）。 */
 function makeMinor(run, kind) {
   switch (kind) {
     case 'moneySmall': return { money: intIn(SLOT.moneySmall, run.rng) };
@@ -228,7 +228,7 @@ function makeMinor(run, kind) {
     }
     case 'special': {
       // 文档里的「特殊物品等」尚未定义 → 占位为已有的两种小资源（果实/训练次数）。
-      // 果实是瑞米养成资源——肉鸽模式无瑞米（2026-09-28），小资源恒为训练次数。
+      // 果实是瑞米养成资源——肉鸽模式无瑞米，小资源恒为训练次数。
       return { special: run.storyMode && run.rng.next() < 0.5 ? 'fruit' : 'training' };
     }
     default: return null;
@@ -236,7 +236,7 @@ function makeMinor(run, kind) {
 }
 
 /** 大奖：返回 payload。卡包类奖项走 elite 通道（B/A 分布——A 直出挂在大奖/精英/Boss，
- *  见 2026-09-21 D4-d）；S 永不入包（D4-c），「超越」由 A 档承担。 */
+ *  来源通道制）；S 永不入包，「超越」由 A 档承担。 */
 function makeMajor(run, kind) {
   switch (kind) {
     case 'moneyBig': return { money: intIn(SLOT.moneyBig, run.rng) };
@@ -277,7 +277,7 @@ function makeMajor(run, kind) {
     }
     case 'special': {
       // 文档里的「特殊物品等」尚未定义 → 占位为已有的两种小资源（果实/训练次数）。
-      // 果实是瑞米养成资源——肉鸽模式无瑞米（2026-09-28），小资源恒为训练次数。
+      // 果实是瑞米养成资源——肉鸽模式无瑞米，小资源恒为训练次数。
       return { special: run.storyMode && run.rng.next() < 0.5 ? 'fruit' : 'training' };
     }
     default: return null;
@@ -413,7 +413,7 @@ export function takeSlotPrize(run, choice = null) {
   }
   if (p.choices) {
     // 空候选（历史脏档/旧版 rollTiered 空手）按「无候选奖」处理——收下落空但不抛错，
-    // 免得 pending 卡死（2026-09-22 硬化；根因已在 rollTiered 修掉）
+    // 免得 pending 卡死（防御性硬化；根因已在 rollTiered 修掉）
     if (p.choices.length > 0) {
       if (!choice) throw new Error('这份产出需要选一张卡');
       if (!p.choices.some(c => c.id === choice)) throw new Error(`卡不在候选里：${choice}`);

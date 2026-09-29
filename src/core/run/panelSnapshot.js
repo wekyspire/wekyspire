@@ -8,7 +8,7 @@
 //      重抄一遍推导，产生第二事实源。放 core 则中继可同源复用。
 //
 // 本文件不含任何表现字段：播放进度等纯演出状态（老虎机 spin 速度/位置）留在 Stage，
-// 只有「影响决策与游戏逻辑流程」的东西才进快照（用户 2026-09 定）。
+// 只有「影响决策与游戏逻辑流程」的东西才进快照。
 //
 // 增量约定：面板逐个迁移，每迁一个在此加一个分支；未迁移的 stage 返回 null，
 // 宿主据此**不装配** Three 面板（对应 Vue 面板仍在渲染）。
@@ -125,7 +125,7 @@ export function rewardSnapshot(run) {
 /**
  * 进阶事件（房间层·模态面板）：选一条主维度突破（维度顺序与等级取自 core）。
  * 首次 0→1 的获赠宣告在进阶幕间的结果页（runCutsceneFlows.ascensionResultPage），
- * 面板不再承担（2026-09-22 种子包删除后）。
+ * 面板不再承担。
  */
 export function ascensionSnapshot(run) {
   const p = run.player;
@@ -181,7 +181,7 @@ export function roomSnapshot(run, extra = {}) {
       } : {
         kind: 'pack',
         packId: run.shopPending.packId,
-        packName: PACKS[run.shopPending.packId]?.name ?? run.shopPending.packId, // 显示名（2026-09-22：裸 id 上屏修复）
+        packName: PACKS[run.shopPending.packId]?.name ?? run.shopPending.packId, // 显示名（不裸露 id）
         cards: (run.shopPending.choices ?? []).map(id => ({
           defId: id,
           view: cardViewFromDef(getSkillDefinition(id), { player: p }),
@@ -197,7 +197,7 @@ export function roomSnapshot(run, extra = {}) {
   // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地·训练场合并房）共用
   if (room === 'training' || room === 'campTraining') {
     const choices = run.roomData?.drawChoices ?? null;
-    const pending = run.roomData?.pendingUpgrade;   // 2026-09-21 新制：{mode, remaining}
+    const pending = run.roomData?.pendingUpgrade;   // {mode, remaining}
     const modes = trainUpgradeModes(run);
     snap.training = {
       started: !!run.roomData?.trained,  // 训练已开始（升阶已记；合并房里篝火门看它）
@@ -221,7 +221,7 @@ export function roomSnapshot(run, extra = {}) {
   }
 
   // 营地部分：'camp'（旧单房，兼容保留）与合并房共用
-  // 2026-09-21 D4：营地不再能升级卡——不再下发 upgradeCards
+  // 营地不再能升级卡——不下发 upgradeCards
   if (room === 'camp' || room === 'campTraining') {
     snap.camp = {
       options: campOptions(run),
@@ -291,7 +291,7 @@ export function roomSnapshot(run, extra = {}) {
       pending: pending ? {
         tier: pending.tier, kind: pending.kind,
         money: pending.money ?? null,
-        healPct: pending.healPct ?? null,   // 2026-09-22 修：漏投影会让文案回落到裸 kind「heal」
+        healPct: pending.healPct ?? null,   // 漏投影会让文案回落到裸 kind「heal」
         special: pending.special ?? null,
         relicId: pending.relicId ?? null,
         upgradeCopyId: pending.upgradeCopyId ?? null,
@@ -302,7 +302,7 @@ export function roomSnapshot(run, extra = {}) {
           view: cardViewFromDef(getSkillDefinition(c.id), { player: p }),
         })),
         // 遗物三选一（relicA 大奖）：补全 rarity/desc——全屏选遗物界面（RelicScrollPicker）
-        // 与吞噬/遗物包的条目同构，2026-09-22 领奖统一 overlay 后不再走面板按钮墙
+        // 与吞噬/遗物包的条目同构（领奖统一 overlay，不走面板按钮墙）
         relicChoices: (pending.relicChoices ?? null)?.map(r => {
           const def = getRelicDefinition(r.id);
           return {

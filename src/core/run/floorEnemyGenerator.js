@@ -1,5 +1,5 @@
 // floorEnemyGenerator：按楼层难度挑选遭遇编成（run 层，确定性）。
-// 难度制 v2（2026-09-24 用户定稿：**取消单敌人难度缩放**）：
+// 难度制 v2（**取消单敌人难度缩放**）：
 //   1. 每只敌人只有一组**固定数值**（设计卡写多少，玩家就看到多少——数值语义不再发散）；
 //      敌人元数据只剩 `{ base, floorMin, floorMax }` + 可选 `unique / elite`：
 //      base = 固定难度（该敌的战力档位）、楼层区间 = 允许出没层、unique 每场至多一只、
@@ -9,7 +9,7 @@
 //   4. 生成 = 在「本层允许、且编成难度落在 [D−2, D+2] 漂移窗内」的模板里，
 //      按「编成难度距 D 越近越常出」加权随机取一，槽位再按敌人 base 就近取材；
 //   5. 后处理：静电毛球血量随机 / 音叉群错拍（见文件尾）。
-//      （2026-09-29 用户裁定：旧「同种错拍」机制不再适用，整条删除——
+//      （「同种错拍」机制已删除——
 //       同种多只的错峰一律由 B 变体起始节拍或定义内机制表达。）
 // 确定性：编成选取全部由 deriveBattleSeed(run.seed, floor) 派生 rng 驱动，
 // 同 seed 同 floor 恒定（回放/测试可复现）。
@@ -19,11 +19,11 @@ import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
-// 章1 表驱动（用户 2026-09-22 ENEMIES_1 重写：陡升后收平等 Boss），章 2–4 每 2 层 +1；
+// 章1 表驱动（陡升后收平等 Boss），章 2–4 每 2 层 +1；
 // Boss 层难度按章取值。D 是一层战斗的总预算，与编成难度对齐（漂移 ±2）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
 const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
-const CHAPTER1_CURVE = [2, 3, 5, 6, 7, 10, 10, 10, 10, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss；L6/9 位是精英占位值，普通层不消费）。2026-09-22 用户两调：前段放缓（L2/L3 build 零成长窗口）+ 中段再压（L4 8→6、L5 9→7、L7/8 11/12→10——实测 L5 cost9 组合断崖）
+const CHAPTER1_CURVE = [2, 3, 5, 6, 7, 10, 10, 10, 10, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss；L6/9 位是精英占位值，普通层不消费）。前段放缓（L2/L3 是 build 零成长窗口）+ 中段压平
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
@@ -42,14 +42,14 @@ export function floorDifficulty(floor) {
 // 编成难度：显式 `cost` 优先（章1 主题战 = 设计卡标定的遭遇难度，不等于槽位 base 之和），
 // 否则 = 各槽位难度之和（钉死位取该敌 base；通配位取当层池的代表难度——池面 base
 // 的众数低值，通配位是变量，模板难度只作锚）。
-// 章规则元数据（ENEMIES_1.md 2026-09-22）：`once: true` 一局至多出现一次；
+// 章规则元数据（ENEMIES_1.md）：`once: true` 一局至多出现一次；
 // `excl: [...]` 与列出的模板互斥（对方出现过则本模板不再出）。历史由「确定性重放
 // 1..floor-1 的普通层模板选择」推得（同 seed 同分布，无新增存档字段）。
 const TEMPLATES = [
   { id: 'tutorial', name: '教学单挑', minFloor: 1, maxFloor: 1, slots: [{ fixed: 'slime' }] },
   { id: 'slimeWar', name: '史莱姆战', minFloor: 2, maxFloor: 4, slots: [{ fixed: 'slime' }, {}] },
   { id: 'duo', name: '双人组', minFloor: 2, maxFloor: 24, slots: [{}, {}] },
-  // —— 第一章主题战（ENEMIES_1.md 2026-09-22 全量重写；cost=设计卡标定遭遇难度）——
+  // —— 第一章主题战（ENEMIES_1.md；cost=设计卡标定遭遇难度）——
   { id: 'wraithBurst', name: '怨灵爆发', cost: 6, minFloor: 4, maxFloor: 6, once: true,
     slots: [{ fixed: 'wraithA' }, { fixed: 'wraithB' }] },
   { id: 'slimeNest', name: '黏巢', cost: 3, minFloor: 2, maxFloor: 3, once: true,
@@ -102,7 +102,7 @@ const TEMPLATES = [
     slots: [{ fixed: 'diggerMole' }, { fixed: 'rottenTreeHeart' }, { fixed: 'rockSnail' }] },
   { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
   { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
-  // —— 第二~四章主题编队（2026-09-13 总策划批次）——
+  // —— 第二~四章主题编队 ——
   { id: 'palaceGuard', name: '宫廷卫队', minFloor: 12, maxFloor: 21, slots: [{ fixed: 'palaceGuard' }, {}] },
   { id: 'honorGuard', name: '仪仗队', minFloor: 14, maxFloor: 21, slots: [{ fixed: 'herald' }, { fixed: 'palaceGuard' }, {}] },
   { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
@@ -150,7 +150,7 @@ export const isEliteFloor = (floor) =>
   floor % FLOORS_PER_CHAPTER === 6 || floor % FLOORS_PER_CHAPTER === 9;
 
 // 当层可用敌人（通配池 / 精英池）：楼层区间命中 + 非 Boss + 精英标志匹配。
-// **按 id 排序**（2026-09-24 定）：取材池的顺序决定 rng.pick 的落点，排序后
+// **按 id 排序**：取材池的顺序决定 rng.pick 的落点，排序后
 // 生成流与内容文件组织方式彻底解耦（拆分/挪动不改遭遇分布）。
 // difficulty 缺失视为不可生成（防御）。
 function eligiblePool(floor, elite = false) {
@@ -211,14 +211,14 @@ function templateUsable(tpl, floor, eliteDay, usedOnce) {
 }
 
 // 选模板（纯函数：同 floor/rng/usedOnce 恒定同结果——历史重放依赖这一点）。
-// 难度窗是硬门槛（2026-09-22 用户定）：编成难度与当层预算差超过 ±DRIFT 的战斗
+// 难度窗是硬门槛：编成难度与当层预算差超过 ±DRIFT 的战斗
 // **永不生成**——含兜底路径（通用模板常驻各层难度窗内，窗空即数据配错，直接抛错
 // 比静默破窗好）。权重随难度差衰减：diff 0/1/2 → 4/2/1。
 function pickTemplateInner(floor, eliteDay, rng, usedOnce = new Set()) {
   const D = floorDifficulty(floor);
   const costs = new Map(TEMPLATES.map(t => [t, templateCost(t, floor)]));
   const usable = TEMPLATES.filter(t => templateUsable(t, floor, eliteDay, usedOnce) && costs.get(t) != null);
-  // 优先往低随机（2026-09-26 用户定，全局规则——取代当日早先的商店层特例）：常规池 =
+  // 优先往低随机（全局规则）：常规池 =
   // [D−DRIFT, D]，只往小随不往大随；池子空了（本局 once 模板耗尽等）才逐级上浮
   // D+1、D+2 **补位**——上浮是兜底不是平级选项。三层试玩实测死亡集中在编成难度
   // 越过本层预算的「上漂尖刺」（F4 28%/F6 21%），压制上尾即可，D 本身不动。

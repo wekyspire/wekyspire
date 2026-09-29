@@ -1,11 +1,11 @@
 import { allSkills, getSkillDefinition } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
 
-// 战后奖励（RUN_DESIGN §1 + 2026-09 卡包化 + 2026-09-21 大调 D4）：
+// 战后奖励（RUN_DESIGN §1，卡包制 + 大调 D4）：
 //   金币固定入账 → 玩家选一个**卡包**（基础包恒开，其余维度需该维度灵脉等级 ≥1）
 //   → 包内技能 3 选 1（或跳过）。
 //
-// 2026-09-21 大调 D4（见 battle_gameplay/REBALANCE_2026_09.md）：
+// 大调 D4（决策记录见 battle_gameplay/REBALANCE_2026_09.md）：
 //   · **灵脉等级与卡包概率脱钩**——分布不再按体系等级取行，改按**来源通道**：
 //     normal（普通战后/训练抓牌）= C/B 两档；elite（精英/Boss 战后、老虎机大奖）
 //     = B/A 两档。A 直出只挂精英/Boss，其余只能靠训练场升（升级门禁仍看体系等级，
@@ -22,7 +22,7 @@ export const REWARDS_PLACEHOLDER = {
 
 export const TIER_RANK = { C: 1, B: 2, A: 3, S: 4 };
 
-// ---- 等阶分布表（2026-09-21 大调 D4，暂定值待实测调参）：按来源通道 ----
+// ---- 等阶分布表（暂定值待实测调参）：按来源通道 ----
 // normal：普通战后开包 + 训练房抓牌；elite：精英/Boss 战后 + 老虎机卡包大奖。
 export const REWARD_TIER_TABLE = Object.freeze({
   normal: Object.freeze({ C: 65, B: 35 }),
@@ -49,10 +49,10 @@ export const PACKS = Object.freeze({
 });
 
 // 通用卡注入：概率 + 保底计数（run.commonPity 累计未注入次数，达 pity 必注入）
-// 2026-09-13 用户定 30%→45%：R9 三连「新内容 0 观测」的曝光率加码（门禁过深，
+// 45% 高注入率：曝光率优先（门禁过深时
 // 通用件是跨体系构筑的胶水，先让玩家看得见）。
 export const COMMON_INJECT = Object.freeze({ chance: 0.45, pity: 4 });
-// 基础包专用注入浓度（2026-09-14 用户定「大幅提升」，体修包更名基础卡包的另一半）：
+// 基础包专用注入浓度：
 // 主注入 90%、保底 2 次开包，命中后独立掷 secondChance 再换第二张（不同位、不重复）。
 // 期望每包 ≈1.35 张通用卡（浓度 ~45%）——通用卡是强力单卡但不能成体系（C 位）：
 // 灵脉玩家开基础包收益升，体修玩家的体修候选被稀释到平均 1.65 张/包，前期成型
@@ -71,8 +71,7 @@ export function packOf(def) {
 // 卡包等级：体修看隐藏的 player.bodyLevel（跳过进阶 +1），灵脉看 leino[维度]
 export function packLevel(run, packId) {
   if (packId === 'body') {
-    // 体修门禁 = 隐藏的 player.bodyLevel，**只看它**（2026-09-21 用户定：体修单立等级
-    // 后灵脉不再反哺——撤销 2026-09-13 第 10 轮的 max(体修, 最高灵脉) 反哺口径；
+    // 体修门禁 = 隐藏的 player.bodyLevel，**只看它**（体修单立等级后灵脉不反哺）；
     // 灵脉玩家想看体修高阶卡，走「跳过进阶」这条体修快车道）。沿革：反哺当年是为
     // 「不跳进阶的玩家永远 0 级、体修 B/A 对灵脉路线永久不可见」开的口子，同日
     // 曾先修过「反哺至多到 A、S 体修独占」，如今整条撤销、回归单立。
@@ -98,7 +97,7 @@ export const DEEP_GATES = Object.freeze({
   burst: Object.freeze(['pyroBlast', 'fireWard']), // 爆炎深入：回响烈焰/背水一战/放手一搏
   fist: Object.freeze(['boxer']),                  // 拳深入：万变拳/假动作/拳压…
   blade: Object.freeze(['bladeMaster']),           // 刀深入：练刀/开刃/斩灭…
-  block: Object.freeze(['warrior']),               // 拆深入：架势（2026-09-21 稿同步补装）
+  block: Object.freeze(['warrior']),               // 拆深入：架势
   renew: Object.freeze(['renew']),                 // 生息深入：世界树之心
   blight: Object.freeze(['blightLord']),           // 瘴毒深入：瘟神附体
   gale: Object.freeze(['galeFury']),               // 御风深入：天闪
@@ -109,7 +108,7 @@ export function deepGateOpen(run, def) {
   return (DEEP_GATES[def.deep] ?? []).some(id => run?.player?.abilities?.includes(id));
 }
 
-// ---- 牌组门槛与定向亲和（2026-09-20 用户稿：体修肘击小体系「持有肘击才进卡包、
+// ---- 牌组门槛与定向亲和（肘击小体系「持有肘击才进卡包、
 // 肘击越多权重越高」的通用落地；def 声明、rewards 解释，内容侧不侵入本文件）----
 //   def.requiresAnyOf = [卡id…]：牌组中不持有其中任一张 → 不入奖励池（牢大/牢大归来/坠机）。
 //   def.affinityCards = [卡id…]：牌组中每持有 1 张，档内权重 +35%（至多计 4 张，
@@ -131,9 +130,9 @@ export function deckAffinityWeight(run, def) {
 }
 
 // 单包卡池：包归属 + 排除 Z/S 与 canSpawnAsReward=false + 深入卡门禁 + 牌组门槛。
-// S 永不入包（2026-09-21 D4-c：S 只走事件投放）；capTier 由通道上限给出（来源制，
+// S 永不入包（只走事件投放）；capTier 由通道上限给出（来源制，
 // 与体系等级脱钩）。
-// **例外（2026-09-22 用户定）：体修卡的出池上限仍看隐藏体修等级**——不走体修
+// **例外：体修卡的出池上限仍看隐藏体修等级**——不走体修
 // （bodyLevel 0）时，通道上限再高，基础包/训练抓牌/老虎机大奖里也只有 C 阶体修卡。
 // 灵脉包保持 D4 脱钩（概率只看来源通道）；通用注入走 'common' 包，不吃此钳制。
 export function packCardPool(run, packId = 'body', capTier = null) {
@@ -147,7 +146,7 @@ export function packCardPool(run, packId = 'body', capTier = null) {
     && deckGateOpen(run, def));
 }
 
-// 通用注入池：构成与非常规卡同口径（2026-09-21 缺漏扫描 #2——同一通道上限，
+// 通用注入池：构成与非常规卡同口径（同一通道上限，
 // 原按门禁剔除低阶的规则废除）。
 export function commonPool(run, capTier) {
   return packCardPool(run, 'common', capTier ?? rewardTierCap());
@@ -168,7 +167,7 @@ export function rollTiered(run, pool, count, table = REWARD_TIER_TABLE.normal, a
   while (picks.length < count && byTier.size) {
     let entries = [...byTier.entries()]
       .filter(([tier, defs]) => defs.length > 0 && (table[tier] ?? 0) > 0);
-    // 降档兜底（2026-09-22 修，qa 实测触发）：表有权重的等阶在池里一张都没有时
+    // 降档兜底：表有权重的等阶在池里一张都没有时
     //（典型态：体修路线 + elite 通道——体修 0 级把基础包钳到 C，elite 表只有 B/A），
     // 把份额摊给**池内实际存在**的等阶（权重 = 剩余张数）。不兜底的后果：
     //   · 精英战零卡奖励（只剩金币）；
@@ -243,7 +242,7 @@ function rollWeighted(run, defs, weightOf, count, affinityOf = null) {
   return picks;
 }
 
-// ---- 子体系亲和加权（2026-09-13 用户定，「中期子体系大成」定向探索）----
+// ---- 子体系亲和加权（「中期子体系大成」定向探索）----
 // 开包/训练抽卡时，与玩家牌组**同 series** 的卡出率提升：每张同 series 持卡 +35%，
 // 至多计 4 张（峰值 ×2.4——档内 5 卡时目标卡从 20% 提到约 37%，定向但不碾压多样性）。
 // 只作用于体系包抽取的档内选卡；**通用注入不受影响**（injectCommon 不走 rollWeighted）；
@@ -269,7 +268,7 @@ export function seriesAffinityWeight(run, def, counts = null) {
 }
 
 // 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
-// 2026-09-22 用户定：**本局路线（run.route）对应的灵脉包不受等级门禁**——灵脉开局
+// **本局路线（run.route）对应的灵脉包不受等级门禁**——灵脉开局
 // 等级 0 起步，第一场战斗起就必须能开本体系卡包，否则前两场战斗只剩体修包可开。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
@@ -325,9 +324,9 @@ export function spawnRewards(run, { channel = 'normal' } = {}) {
 
 // 通用注入（三选一共享）：按概率/保底把候选替换为通用卡，返回 { injected, slot }。
 // channel = 本次抽取的来源通道——注入卡与主池同口径：先按通道分布表掷等阶、再档内取
-//（2026-09-21 缺漏扫描 #2「同一等阶分布口径」；旧实现是池内均匀， elite 通道会注入 C）。
+//（同一等阶分布口径；不做池内均匀，否则 elite 通道会注入 C）。
 // packId = 所开卡包：'body'（基础包）走 BODY_PACK_INJECT 高浓度参数且命中后可再
-// 换第二张（2026-09-14）；其余包/训练抓牌（不传）维持 COMMON_INJECT 单张口径。
+// 换第二张；其余包/训练抓牌（不传）维持 COMMON_INJECT 单张口径。
 export function injectCommon(run, choices, channel = 'normal', packId = null) {
   const spec = packId === 'body' ? BODY_PACK_INJECT : COMMON_INJECT;
   const pity = run.commonPity ?? 0;
@@ -378,7 +377,7 @@ export function chooseRewardPack(run, packId) {
 // 训练属 normal 来源（A 直出只挂精英/Boss）；并集池内各包卡数不一，用「表概率 /
 // 该（包×等阶）组卡数」的每卡份额走通用加权，多包共存时档间比例近似分布表），
 // 并同样注入通用卡。
-// 训练房抓牌候选 = 战后三选一 +1（2026-09-13 用户定：曝光率加码——训练房是
+// 训练房抓牌候选 = 战后三选一 +1（曝光率加码——训练房是
 // 「已解锁卡包并集」的定向窗口，候选多一张让新内容更容易被看见；战后开包不变）。
 export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount + 1) {
   const counts = seriesCounts(run);

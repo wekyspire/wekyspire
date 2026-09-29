@@ -72,7 +72,7 @@ export class PlayerTurnInstruction extends BattleInstruction {
         ctx.battleState.turn.count += 1;
         resetTurnHistory(ctx.battleState);
         // 护盾重置不在这里——它由 battleRoot 注册的订阅在**回合开始效果结算之后**执行
-        // （先清盾会让燃烧等固定伤害永远吃不到护盾，2026-09 修）
+        // （先清盾会让燃烧等固定伤害永远吃不到护盾——顺序敏感，勿调换）
         ctx.player.actionPoints = ctx.player.maxActionPoints;
         // 魏启自然恢复：每回合开始 +1（battle.md §6；走指令——上限截断与 PRE 修饰同管线）
         // 银行机恶魔词条（无梦/噩梦/失眠）在指定回合内暂停自动回复
@@ -101,7 +101,7 @@ export class PlayerTurnInstruction extends BattleInstruction {
         if (ctx.battleState.turn.count > 1) {
           const d = ctx.battleState.debuffs;
           const penalty = ctx.battleState.turn.count <= (d?.drawPenaltyTurns ?? 0) ? 1 : 0;
-          // 抽到**手牌容量**（加权口径，2026-09-13 两级手牌制）：留手 = 放弃等额新牌，
+          // 抽到**手牌容量**（加权口径，两级手牌制）：留手 = 放弃等额新牌，
           // 囤牌自动被课税。config.drawPerTurn 是"每回合抽牌数上限"调参旋钮——
           // 99 ≈ 必抽满（新制），调小退化为"固定抽 N"旧制，A/B 试玩同一条代码路径
           const room = handLimitOf(ctx) - effectiveHandCount(ctx);
@@ -171,7 +171,7 @@ export class EnemyTurnInstruction extends BattleInstruction {
     switch (this._stage) {
       case 0:
         ctx.battleState.turn.side = 'enemy';
-        // 行动者快照在回合开始效果**之前**取（2026-09-27 用户定）：EnemyTurnStart
+        // 行动者快照在回合开始效果**之前**取：EnemyTurnStart
         // 的订阅链会复活单位（腐败根须 reviveKit）——刚复活的敌人不得卷入本回合
         // 行动（与召唤尾插同语义：本回合出现的单位下回合起参战）。
         this._actors = aliveEnemies(ctx.battleState);

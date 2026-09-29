@@ -8,7 +8,7 @@
 //   showcase({ kind, title, desc, effect?, amount?, defId?, relicId? })
 //     = "请把这次获得物特写演出来"（金币/卡牌/遗物/道具…）。**怎么演是表现层的事**：
 //     artKey/tint/时长/是否可跳过都由 Shell 决定，core 只给语义（kind + 文案 + 数量）。
-//   unitCommand({ unit, op, ... })                    （2026-09-25 加入）
+//   unitCommand({ unit, op, ... })
 //     = "请让房间里的单位动一下"（op = moveTo/pose/face/wander；描述符可序列化，
 //       直播回放可直接重放指令流）。经 runEffects.unitAction 间接调用，别手调。
 //

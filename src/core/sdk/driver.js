@@ -90,7 +90,7 @@ export class BattleDriver {
     return this;
   }
 
-  // 弃牌（2026-09-13 改制：付一次阶梯费弃任意张）：[defId|uniqueID…] 数组或单个
+  // 弃牌（付一次阶梯费弃任意张）：[defId|uniqueID…] 数组或单个
   dump(list) {
     const hand = this.state.zones.hand;
     const ids = (Array.isArray(list) ? list : [list]).map(x => {
