@@ -88,7 +88,8 @@ export function createBridgePresenter({
     heal: (p) => {
       anim(EventNames.ANIM_HEAL, p);
       syncState();
-      log(`${p.target.name} 恢复 ${p.healed} 点生命`, 'combat');
+      // 满血时的治疗（实际恢复 0）不播日志——「岩螺 恢复 0 点生命」纯噪音（夜测 r2路3 实报）
+      if ((p.healed ?? 0) > 0) log(`${p.target.name} 恢复 ${p.healed} 点生命`, 'combat');
     },
     shield: (p) => { anim(EventNames.ANIM_SHIELD, p); syncState(); },
     resource: (p) => { anim(EventNames.ANIM_RESOURCE, p); syncState(); },

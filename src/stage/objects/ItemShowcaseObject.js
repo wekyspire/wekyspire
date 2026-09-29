@@ -56,17 +56,30 @@ function easeOutBack(t, k = 1.7) {
 
 /**
  * 占位美术（没有素材时的程序化贴图）：
- *   'gold' → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
- *            获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
+ *   'gold'  → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
+ *             获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
+ *   'pack'  → **卡包**（三张错叠卡背 + 束带结；老虎机择卡奖/商店卡包走它）
+ *   'relic' → **遗物**（多面宝石 + 底座；无 3D 模型也无素材的遗物兜底——夜测 r2路5
+ *             拾荒者的口袋纯色方块实报）
  *   其它 key → null（退回 tint 色块）
  * headless（无 document）返回 null。
  */
 function bakePlaceholderArt(key) {
-  if (key !== 'gold' || typeof document === 'undefined') return null;
-  const S = 256;
+  if (typeof document === 'undefined') return null;
+  if (key === 'gold') return bakeGoldPile();
+  if (key === 'pack') return bakePack();
+  if (key === 'relic') return bakeRelicGem();
+  return null;
+}
+
+function canvasOf(S = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = S;
-  const ctx = canvas.getContext('2d');
+  return [canvas, canvas.getContext('2d'), S];
+}
+
+function bakeGoldPile() {
+  const [canvas, ctx, S] = canvasOf();
   const coin = (x, y, r) => {
     // 币身（圆柱侧面）+ 币面 + 高光
     ctx.fillStyle = '#b8862a';
@@ -85,6 +98,72 @@ function bakePlaceholderArt(key) {
   // 前排两枚散币
   coin(S * 0.26, S * 0.76, 40);
   coin(S * 0.75, S * 0.78, 38);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function bakePack() {
+  const [canvas, ctx, S] = canvasOf();
+  const card = (x, y, rot, fill) => {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot);
+    const w = S * 0.3, h = S * 0.42;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(-w / 2 + 5, -h / 2 + 6, w, h);            // 投影
+    ctx.fillStyle = fill;
+    ctx.fillRect(-w / 2, -h / 2, w, h);                    // 卡背
+    ctx.strokeStyle = '#c9b382'; ctx.lineWidth = 5;
+    ctx.strokeRect(-w / 2 + 6, -h / 2 + 6, w - 12, h - 12); // 描边内框
+    ctx.restore();
+  };
+  // 三张错叠（后深前浅，读作"一沓"）
+  card(S * 0.44, S * 0.5, -0.12, '#5d4a6e');
+  card(S * 0.56, S * 0.5, 0.1, '#6e5a80');
+  card(S * 0.5, S * 0.52, -0.02, '#8a6fa0');
+  // 束带 + 结（横跨卡面的封条）
+  ctx.fillStyle = '#c9a84c';
+  ctx.fillRect(S * 0.24, S * 0.44, S * 0.52, S * 0.1);
+  ctx.strokeStyle = '#8a6118'; ctx.lineWidth = 4;
+  ctx.strokeRect(S * 0.24, S * 0.44, S * 0.52, S * 0.1);
+  ctx.fillStyle = '#e8c766';
+  ctx.beginPath(); ctx.arc(S * 0.5, S * 0.49, S * 0.075, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,246,214,0.6)';
+  ctx.beginPath(); ctx.arc(S * 0.48, S * 0.47, S * 0.03, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function bakeRelicGem() {
+  const [canvas, ctx, S] = canvasOf();
+  const cx = S / 2, cy = S * 0.46, r = S * 0.26;
+  // 底座（金属托）
+  ctx.fillStyle = '#8a8f9c';
+  ctx.beginPath(); ctx.ellipse(cx, S * 0.78, S * 0.24, S * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#b8bfcc';
+  ctx.fillRect(cx - S * 0.05, S * 0.66, S * 0.1, S * 0.12);
+  // 宝石（八边形 + 刻面 + 高光）
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const [px, py] = [cx + Math.cos(a) * r, cy + Math.sin(a) * r * 1.12];
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#7fc3e8'; ctx.fill();
+  ctx.strokeStyle = '#3d6d8c'; ctx.lineWidth = 6; ctx.stroke();
+  // 上刻面高光
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const [px, py] = [cx + Math.cos(a) * r * 0.55, cy + Math.sin(a) * r * 0.62 - r * 0.12];
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(224,244,255,0.75)'; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath(); ctx.arc(cx - r * 0.28, cy - r * 0.34, r * 0.1, 0, Math.PI * 2); ctx.fill();
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;

@@ -716,6 +716,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // 训练必做 + 尾款未清：不让走（核心同款硬门；这里先不给动作，提示交给房间义务门泡泡）
     if (!run.roomData?.trained && (run.currentRoom === 'campTraining' || run.currentRoom === 'training')) return;
     if (run.roomData?.pendingUpgrade) return;
+    if (run.shopPending) return; // 商店已购未开的卡包没领完不许离房（同 leaveSlot 的 slotPending 硬门——防静默丢弃成幽灵购买，夜测 r2路1 实报）
     // 兜底路径：训练开始时的房内进阶因异常漏播 → 离房时接棒（黑幕中点迁移 + 换台，
     // 揭幕揭开的就是进阶对话）。正常流程到这里 ascensionReady 必为 false。
     if ((run.currentRoom === 'campTraining' || run.currentRoom === 'training') && ascensionReady(run)) {

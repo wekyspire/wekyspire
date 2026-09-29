@@ -47,7 +47,11 @@ export class PreBattleInstruction extends BattleInstruction {
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
       // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1
       player.shield = 0;
+      // debug 无敌是「面板开关」语义（开了就该一直无敌直到手动关）——跨战斗边界
+      // 保活，不随下面的效果清空消失（夜测 r2路2 探针实报：战前开启进战斗即失效）
+      const keepInvuln = player.getEffect?.('invulnerable') != null;
       player.clearEffects();
+      if (keepInvuln) player.addEffect('invulnerable', 1);
       player.actionPoints = player.maxActionPoints;
       player.mana = Math.floor(player.maxMana / 2);
       // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清

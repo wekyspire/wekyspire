@@ -22,6 +22,12 @@ export const syncBeats = {
     if (snapshot.seq != null && snapshot.seq < this._snapshotSeq) return;
     if (snapshot.seq != null) this._snapshotSeq = snapshot.seq;
     this._snapshot = snapshot;
+    // 终局那拍（verdict 落定）直接压暗常驻 HUD 按钮：终局后 sync 停更，停在最后
+    // 一拍的按钮态是"玩家回合亮态"（奖励模态有 setPanel 压暗兜着，败北面板是
+    // Vue 层不走 setPanel——夜测 r2路2 实测败北侧按钮全亮可点样式误导）。
+    if (snapshot.verdict != null) {
+      for (const btn of Object.values(this._buttons)) btn?.setVisualState?.('disabled');
+    }
     // 换回合解锁「结束回合」的已点标记：**只认新的玩家回合**（'player:N' 变化）。
     // 敌方侧快照（side 变 'enemy'）不能解锁——否则敌方阶段的动画积压期手牌提前解禁，
     // 又能"抢着"打出下一回合的牌（实报的误操作窗口）
