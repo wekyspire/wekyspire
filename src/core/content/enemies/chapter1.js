@@ -222,7 +222,8 @@ registerEnemy({
   },
 });
 
-// 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，效果轨可见），三拍循环
+// 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，效果轨直读——2026-09-29 起
+// 紧勒经 statModifiers 进 handLimitOf，不再直改 player.maxHandSize），三拍循环
 // （拍1 纯蔓延 → 拍2 自愈盾回 → 拍3 攻 9）；亡语归还自己施加的全部紧勒层数（杀了就松手）。
 // A/B 类（2026-09-22 用户定，头轮试玩反馈紧勒叠太快）：B 类紧勒晚一拍起步——第 2 拍
 // 才开始蔓延，给玩家一个手牌完整的首回合抢输出；同场 2 只苔球的编成一律 A/B 配合
@@ -245,7 +246,6 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
         unit._grip = (unit._grip ?? 0) + 1;
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: player, effectId: 'constrict', stacks: 1 }));
-        player.maxHandSize = Math.max(2, (player.maxHandSize ?? 5) - 1);
       }
       // 三拍循环（2026-09-28 数值大调，攻击欲望↓）：拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻9。
       // B 类首拍算循环第三拍（用户定：第一拍攻9 起手，第 2 拍起正常蔓延循环）——相位 +2。
@@ -283,7 +283,6 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
       if (grip > 0) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: actx.player, effectId: 'constrict', stacks: -grip }));
-        actx.player.maxHandSize += grip;
       }
     },
   });

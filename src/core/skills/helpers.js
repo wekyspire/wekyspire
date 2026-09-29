@@ -68,11 +68,13 @@ export function canUseSkill(ctx, self) {
 // 玩家获得所有已激活咏唱卡的 activated 能力；无激活数上限——其代价是手牌压力：
 // 激活的咏唱卡按咏唱值（chantWeight）计多张手牌（咏唱3 = 占 3 张手牌位）。
 
-// 手牌容量（跨回合留存口径；旧档无字段时兜底 5；能力可修改 player.maxHandSize）：
+// 手牌容量（跨回合留存口径；旧档无字段时兜底 5）：
 // 回合开始抽牌抽到此上限，回合结束超载部分被尾弃（P9）。
-// 2026-09-13 批次 13 起 7→6（用户定「1 咏唱容量 + 6 手牌」一步到位）。
+// 效果轨（2026-09-29 用户定）：紧勒/扩容经效果 statModifiers 折入（getStat），
+// 修正生命周期 = 效果实例生命周期；下限 2（腐苔球直改字段时代的既有地板，保留——
+// 紧勒不把手牌挤到归零）。
 export function handLimitOf(ctx) {
-  return ctx.player.maxHandSize ?? 5;
+  return Math.max(2, ctx.player.getStat('maxHandSize'));
 }
 
 // 咏唱容量（2026-09-13 批次 13 用户定）：激活咏唱**先吃咏唱容量**、吃饱后的溢出部分

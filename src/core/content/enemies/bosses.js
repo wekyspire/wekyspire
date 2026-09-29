@@ -291,13 +291,13 @@ registerEnemy({
 
 // ②‴ 22 层 Boss · 宫殿骑士长（章2 阵型主题结业考，Boss 池三之一，2026-09-13 重做加深）
 // 护驾：首拍召集 2 名宫廷侍从（Boss 生成器只产单 Boss，随从只能 act 内召；首拍不攻
-//   = 给玩家一个先手窗）；**侍从 ≥2 时**才「督战」（全体蓄势1 + **仪仗威压：自身格挡2**，
+//   = 给玩家一个先手窗）；**侍从 ≥2 时**才「督战」（全体力量1 + **仪仗威压：自身格挡2**，
 //   不亲自攻击），且每回合自我净化——燃烧层数减半（燃烧交互铁律：仪仗威严，侍从环伺时
 //   火焰近不了身；亲征形态失去净化与格挡 = 给火系留「先清侍从再引爆」的输出窗）。
 // 亲征（侍从不足 2）：攻16 → 攻16 → 盾10 三拍循环；每隔一拍行动结束，若侍从 <2
 //   且有 ≥2 空位，重新召集 1 名（凑回护驾形态）。
 // 考试点：快速清侍从制造亲征窗口倾泻爆发（处刑姿态攻 16 是窗口的代价）；拖久则
-//   盾 + 格挡 + 蓄势滚雪球。**清场才能获胜**（用户定 2026-09-13：Boss 死≠即胜，
+//   盾 + 格挡 + 力量滚雪球。**清场才能获胜**（用户定 2026-09-13：Boss 死≠即胜，
 //   侍从必须清完）。
 registerEnemy({
   difficulty: { base: 11, floorMin: 22, floorMax: 22 },
@@ -314,10 +314,10 @@ registerEnemy({
     }
     const squires = aliveEnemies(bs).filter(e => e.defId === 'courtSquire').length;
     if (squires >= 2) {
-      // 护驾：督战（全体蓄势1）+ 仪仗威压（自身格挡2）+ 自我净化（燃烧减半，向下取整）
+      // 护驾：督战（全体力量1）+ 仪仗威压（自身格挡2）+ 自我净化（燃烧减半，向下取整）
       for (const e of aliveEnemies(bs)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: e, effectId: 'focus', stacks: 1 }));
+          target: e, effectId: 'strength', stacks: 1 }));
       }
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'block', stacks: 2 }));
@@ -348,7 +348,7 @@ registerEnemy({
   getIntention: (unit, battleState) => {
     if (unit.actionIndex === 0) return { kinds: ['summon'], note: '召集 2 名宫廷侍从' };
     if (aliveEnemies(battleState).filter(e => e.defId === 'courtSquire').length >= 2) {
-      return { kinds: ['buff'], note: '督战：全体蓄势1、自身格挡2；侍从≥2时每回合燃烧减半' };
+      return { kinds: ['buff'], note: '督战：全体力量1、自身格挡2；侍从≥2时每回合燃烧减半' };
     }
     const phase = (unit._duelIndex ?? 0) % 3;
     if (phase < 2) {
@@ -1190,7 +1190,7 @@ registerEnemy({
 //   跨线【吸食】：自愈12+力量1；
 //   二段·瘾发（40~70%）：灵脉虹吸（偷玩家一个增益的全部层数）→ 谵妄突袭 (8+atk)×2
 //     （偷来的力量立刻变现）→ 戒断（盾12+格挡2）；
-//   跨线【过量】：自伤6+力量2+蓄势2；
+//   跨线【过量】：自伤6+力量4；
 //   三段·渊素暴走（<40%）：每拍【过载】自伤4换力量1（自焚死钟——龟缩玩家的胜路是
 //     「赢=不死」）；灵潮倾泻 (6+atk)×3 → 掠夺成性（偷2魏启+1AP+力量1）→
 //     渊素反噬（fixed 5，自愈5——吸玩家的命）。
@@ -1232,8 +1232,7 @@ registerEnemy({
       // 【过量】
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: unit, amount: 6, fixed: true, tags: ['overdose'] }));
-      actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'strength', stacks: 2 }));
-      actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'focus', stacks: 2 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'strength', stacks: 4 }));
       return;
     }
     // 三段过载：每拍自伤4换力量1（自焚死钟，先于行动结算）
@@ -1321,7 +1320,7 @@ registerEnemy({
     if (phase !== (unit._phase ?? 1)) {
       return phase === 2
         ? { kinds: ['buff'], note: '吸食：自愈12、力量+1（渊素共鸣：每次获得负面效果力量+1）' }
-        : { kinds: ['buff'], note: '过量：自伤6、力量+2、蓄势+2，进入暴走' };
+        : { kinds: ['buff'], note: '过量：自伤6、力量+4，进入暴走' };
     }
     const beat = (unit._beat ?? 0) % 3;
     if (phase === 1) {

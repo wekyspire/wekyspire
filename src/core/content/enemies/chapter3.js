@@ -40,7 +40,7 @@ registerEnemy({
   },
 });
 
-// ⑧ 岩甲龟：龟缩（盾7 + 荆棘1）→ 重击 循环——盾棘一体的防御压迫，
+// ⑧ 岩甲龟：龟缩（盾10 + 荆棘1 + 力量1）→ 重击 循环——盾棘一体的防御压迫，
 // 打盾要吃反伤，绕盾要挨重击
 registerEnemy({
   difficulty: { base: 4, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-40→23-32
@@ -52,11 +52,11 @@ registerEnemy({
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'thorns', stacks: 1,
       }));
-      // 缩壳蓄势（2026-09-14 马拉松修复）：双龟阵曾是「无风险马拉松」（32 层两份试玩
-      // 死于 15~20+ 回合龟拳磨血）——每次缩壳 +1 蓄势，攻拍 10+atk 随之线性上涨，
+      // 缩壳蓄力（2026-09-14 马拉松修复）：双龟阵曾是「无风险马拉松」（32 层两份试玩
+      // 死于 15~20+ 回合龟拳磨血）——每次缩壳 +1 力量，攻拍 10+atk 随之线性上涨，
       // 拖得越久龟拳越痛，磨盘战有时间账单。
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 1,
+        target: actx.unit, effectId: 'strength', stacks: 1,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -65,12 +65,12 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1 + 蓄势+1' }
+    ? { kinds: ['defend', 'buff'], note: '自身护盾10 + 荆棘1 + 力量+1' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
 // ㉑ 贪杯鬼（章3·滚雪球）：喝酒（自愈 5 + 力量 1）×2 → 醉拳 12，三拍循环。
-// 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是蓄势，
+// 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是纯力量轴，
 // 贪杯鬼是自愈+力量双轴）。
 registerEnemy({
   difficulty: { base: 6, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）

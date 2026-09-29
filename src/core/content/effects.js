@@ -191,21 +191,6 @@ registerEffect({
   }],
 });
 
-// 聚力（旧「蓄势」，2026-09-22 更名让位）：每层攻击 +1（纯读轨标记，滚雪球压力源
-// ——暗影刺客/筹算灵等蓄力型敌人用）。新语义的「蓄势」见文件尾 momentum（伤害加成口径）。
-registerEffect({
-  id: 'focus',
-  type: 'buff',
-  stacking: 'count',
-  statModifiers: {
-    attack: (stacks) => stacks,
-  },
-  name: '聚力',
-  description: '每层使攻击提高 1 点。',
-  icon: '⚡',
-  color: 'yellow',
-});
-
 // 虚弱：每层攻击 -1（可把攻击压到负——伤害算式对负面板天然衰减，减半/加成仍对称生效）。
 // 赎罪（宴厅主教设计，2026-09-13 用户定稿写进效果本体=所有虚弱来源共享）：
 // 虚弱在玩家身上时，每回合打出 3 张**非攻击牌**自净 1 层。
@@ -428,9 +413,9 @@ registerEffect({
 // （武者/完美另加格挡，每层各 block 层；力量加成已按 2026-09-16 用户裁决移除）。
 // 正面增益：监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销），敌方清除增益时
 // 随层数一并拆除；回合末自行消散（提交 -全部层数 → 过零自动注销订阅）。
-// 换牌（R3）内部走弃牌指令，同样触发。呼吸卡本体是纯消耗、整战一次
-// （2026-09-13 用户定基本约定：焚毁彻底离场不回）——阶梯 C 纯抽 / B 抽+格挡1 /
-// A 抽+格挡2，全系 2AP（2026-09-16 用户裁决），阶差全在 block。
+// 换牌（R3）内部走弃牌指令，同样触发。全系效果同强度（格挡1）；阶梯差在卡牌侧：
+// C/B 纯消耗整战一次、A 完美呼吸去消耗（2026-09-21 大调：阶差从效果强度移到
+// 「消耗词条」这个机制跃迁点——本效果的 block 曾滞留旧档 2，已随卡面归 1）。
 
 // 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
 const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
@@ -469,7 +454,7 @@ function registerBreathEffect({ id, name, block = 0 }) {
 }
 registerBreathEffect({ id: 'breath', name: '呼吸' });
 registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', block: 1 });
-registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', block: 2 });
+registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', block: 1 });
 
 // 治疗（EFFECTS.md 2026-09 新增）：回合开始时恢复层数点生命，失去所有层数——
 // 与再生的区别是整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。
@@ -846,19 +831,37 @@ registerEffect({
   }],
 });
 
-// 紧勒（EFFECTS.md 目录既有定义：「手牌上限减少层数张」。实装首用：腐苔球的腐烂蔓延）
-// ——第一章「卡手」主题的语言。显示轨（玩家看得见层数在涨）；上限的实际扣减由施加方
-// 在 act 里直改 player.maxHandSize（handLimitOf 直读实例字段不走效果轨；战斗内有效，
-// 战后 refreshRunModifiers 从 baseStats 重算自动恢复）。施加者死亡时归还自己施加的
-// 层数（腐苔枯萎即松手——绑怪生命周期，杀了就松的教学化口径）。
+// 紧勒（EFFECTS.md：「手牌上限减少层数张」。实装首用：腐苔球的腐烂蔓延）——第一章
+// 「卡手」主题的语言。效果轨实现（2026-09-29 用户定）：扣减走 statModifiers，
+// handLimitOf 经 getStat 折入——修正的生命周期 = 效果实例的生命周期（战斗结束随
+// PreBattle/PostBattle 的 clearEffects 自动出清，不再有直改字段与重算互相覆盖的窗口）。
+// 「施加者死亡时归还其施加的层数」是施加方行为（腐苔球亡语），非效果本体规则。
 registerEffect({
   id: 'constrict',
   type: 'debuff',
   stacking: 'count',
+  statModifiers: {
+    maxHandSize: (stacks) => -stacks,
+  },
   name: '紧勒',
-  description: '手牌上限减少层数张（施加者死亡时解除其施加的部分）。',
+  description: '手牌上限减少层数张。',
   icon: '🪢',
   color: 'purple',
+});
+
+// 扩容（EFFECTS.md 目录既有定义：「手牌上限提升层数张」）：紧勒的镜像，同走效果轨。
+// 暂无内容来源（空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨——见 airSkills）。
+registerEffect({
+  id: 'expand',
+  type: 'buff',
+  stacking: 'count',
+  statModifiers: {
+    maxHandSize: (stacks) => stacks,
+  },
+  name: '扩容',
+  description: '手牌上限提升层数张。',
+  icon: '🖐️',
+  color: 'blue',
 });
 
 // ---- 章 1 新敌效果四件（EFFECTS.md 2026-09-22 用户补定义）----
@@ -910,8 +913,9 @@ registerEffect({
 
 // 蓄势（EFFECTS.md 2026-09-22 新定义）：所有伤害增加层数层（发动侧 PRE，逐次伤害
 // 各自加成——多段攻击每段都吃到）；受到任何**生命值**伤害（dealt>0，被盾全额吸收
-// 不算）时层数 -1。与聚力的差异：聚力走攻击面板（进意图公式），蓄势直接加在每次
-// 伤害上且会被打掉——「趁热打铁，别让它养起来」的攻防拉扯。
+// 不算）时层数 -1。与力量的差异：力量走攻击面板（进意图公式）且不因受击衰减，
+// 蓄势直接加在每次伤害上且会被打掉——「趁热打铁，别让它养起来」的攻防拉扯。
+// （旧「蓄势」= 面板 +1/层 的读轨标记已并入力量，不再单独存在。）
 registerEffect({
   id: 'momentum',
   type: 'buff',
@@ -945,7 +949,7 @@ registerEffect({
 });
 
 // 融合（EFFECTS.md 既有定义，2026-09-22 随新小史莱姆实装为自持亡语）：死亡时，友军
-// 所有史莱姆族恢复 6 生命并获得 2 力量——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
+// 所有史莱姆族恢复 8 生命并获得 2 力量——打小的喂大的，斩杀顺序与 AOE 的低压力教学。
 // 亡语挂在效果自身的死亡响应上（任何持有「融合」的单位都生效，不依赖敌人 def.onDeath）；
 // 史莱姆族口径：slime / slimeB / slimeletA / slimeletB / slimelet / bigSlime（2026-09-27 加 slimeB）。
 const SLIME_FAMILY = new Set(['slime', 'slimeB', 'slimeletA', 'slimeletB', 'slimelet', 'bigSlime']);

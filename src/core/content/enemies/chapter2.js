@@ -48,7 +48,7 @@ registerEnemy({
     : { kinds: ['attack', 'defend'], hits: 1, damage: 13 + unit.getStat('attack'), note: '自身护盾+4' }),
 });
 
-// ④ 暗影刺客：蓄势滚雪球——攻 → 蓄势+2（每层攻击+1）→ 突袭（高基数），
+// ④ 暗影刺客：力量滚雪球——攻 → 力量+2 → 突袭（高基数），
 // 拖久了威胁线性上升，逼玩家集火或速杀
 registerEnemy({
   difficulty: { base: 4, floorMin: 12, floorMax: 32 },
@@ -58,7 +58,7 @@ registerEnemy({
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 2,
+        target: actx.unit, effectId: 'strength', stacks: 2,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -69,7 +69,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['buff'], note: '自身蓄势+2（攻击+2）' };
+    if (phase === 1) return { kinds: ['buff'], note: '自身力量+2' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 14) + unit.getStat('attack') };
   },
 });
@@ -129,7 +129,7 @@ registerEnemy({
     : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
 });
 
-// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军蓄势2（它自己脆，给玩家一拍反应窗），
+// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军力量2（它自己脆，给玩家一拍反应窗），
 // 此后攻5。杀得快等于白赚，杀不掉全队滚雪球——与雪狼开局虚弱镜像：一个压玩家，一个抬敌人。
 registerEnemy({
   difficulty: { base: 4, floorMin: 12, floorMax: 22 },
@@ -139,7 +139,7 @@ registerEnemy({
     if (actx.unit.actionIndex === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: e, effectId: 'focus', stacks: 2,
+          target: e, effectId: 'strength', stacks: 2,
         }));
       }
       return;
@@ -149,7 +149,7 @@ registerEnemy({
     }));
   },
   getIntention: (unit) => (unit.actionIndex === 0
-    ? { kinds: ['buff'], note: '全体友军蓄势+2（攻击+2）' }
+    ? { kinds: ['buff'], note: '全体友军力量+2' }
     : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') }),
 });
 
