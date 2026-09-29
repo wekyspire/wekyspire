@@ -8,7 +8,9 @@
 //   3. 模板（主题编成）= 固定结构 + 楼层区间 + **编成难度**（各槽 base 之和）；
 //   4. 生成 = 在「本层允许、且编成难度落在 [D−2, D+2] 漂移窗内」的模板里，
 //      按「编成难度距 D 越近越常出」加权随机取一，槽位再按敌人 base 就近取材；
-//   5. 后处理不变：同种错拍 / 石茧群延迟苏醒 / 音叉群错拍（见文件尾）。
+//   5. 后处理：静电毛球血量随机 / 音叉群错拍（见文件尾）。
+//      （2026-09-29 用户裁定：旧「同种错拍」机制不再适用，整条删除——
+//       同种多只的错峰一律由 B 变体起始节拍或定义内机制表达。）
 // 确定性：编成选取全部由 deriveBattleSeed(run.seed, floor) 派生 rng 驱动，
 // 同 seed 同 floor 恒定（回放/测试可复现）。
 
@@ -292,16 +294,6 @@ export function generateEncounter(run) {
   for (let i = 0; i < out.length; i++) {
     if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([20, 23, 26, 29]) };
   }
-  // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉自带错拍）
-  const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork']);
-  const nthOf = new Map();
-  for (let i = 0; i < out.length; i++) {
-    const s = out[i];
-    if (SYNC_EXEMPT.has(s.defId) || s.wakeDelay != null) continue;
-    const n = (nthOf.get(s.defId) ?? 0) + 1;
-    nthOf.set(s.defId, n);
-    if (n % 2 === 0) out[i] = { ...s, actionIndex: 1 };
-  }
   // 音叉群：第二只起 wakeDelay=1（两台大振恒错拍）
   const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);
   if (forks.length > 1) {
@@ -328,6 +320,5 @@ export function spawnEnemy(entry) {
   if (entry.attack != null) unit.attack = entry.attack;
   if (entry.wakeDelay != null) unit.wakeDelay = entry.wakeDelay;
   if (entry.wakeStrength != null) unit.wakeStrength = entry.wakeStrength;
-  if (entry.actionIndex != null) unit.actionIndex = entry.actionIndex;
   return unit;
 }

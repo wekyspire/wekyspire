@@ -6,8 +6,8 @@
 //     走偏白主题色 COMMON_THEME，靠色相与所有体系卡拉开距离（不加文字角标，用户定）；
 //   等阶（tier）→ 只有等阶标记（左上菱形徽章）随等阶着色；边框粗细/内描边/箔金是等阶的
 //     「形」，色相仍属灵脉；
-//   特殊词条（固有/消耗/迷你/不朽/短暂）→ 顶部彩条（居中 1/4 卡宽，取优先级最高一枚，
-//     见 KEYWORD_ACCENTS）+ 页脚词条逐词点缀色（2026-09-29 用户定）；
+//   特殊词条（固有/消耗/迷你/不朽/短暂）→ 顶部彩条（居中 1/4 卡宽，多词条从上往下
+//     堆叠全数显示，见 KEYWORD_ACCENTS）+ 页脚词条逐词点缀色（2026-09-29 用户定）；
 //   开销徽章（右上，右对齐）：魏启=蓝 + 水晶素材（options.manaCrystal，缺省蓝色圆回落）、
 //     行动点=黄圆；初始为 0 的开销不显示；
 //   卡图（options.art，浏览器端由 CardArtCache 供 canvas）→ 名称下方图区，有图时正文区下移；
@@ -62,7 +62,7 @@ const BODY_TOP_WITH_ART = ART_RECT.y + ART_RECT.h + 8; // 142
 
 // 特殊词条点缀色（2026-09-29 用户定）：固有白 / 消耗亮橙 / 迷你淡紫 / 不朽灰白 / 短暂淡蓝。
 // 键 = 页脚词条标签（KEYWORD_LABELS 翻译后的中文，与 drawFooter 的 bits 同语）；
-// 「不朽」当前无卡在用，先入表待实装。两处消费：顶部彩条（取优先级最高一枚）+ 页脚逐词着色。
+// 「不朽」当前无卡在用，先入表待实装。两处消费：顶部彩条（多词条全数堆叠）+ 页脚逐词着色。
 export const KEYWORD_ACCENTS = Object.freeze({
   '消耗': '#ff9a45',
   '固有': '#ffffff',
@@ -70,16 +70,15 @@ export const KEYWORD_ACCENTS = Object.freeze({
   '短暂': '#a8cdf2',
   '迷你': '#c7b3f7',
 });
-// 顶部彩条只画一道：多词条卡（如 情况不对 = 固有+消耗+迷你）按「打法约束最重」排序取色，
-// 其余词条由页脚着色补全。消耗（一次性经济）> 固有（起手位）> 不朽 > 短暂 > 迷你。
+// 顶部彩条堆叠序（2026-09-29 用户定：多词条卡从上往下全数显示）：消耗（一次性经济）
+// > 固有（起手位）> 不朽 > 短暂 > 迷你——排序只为堆叠稳定，不再取舍。
 const ACCENT_PRIORITY = ['消耗', '固有', '不朽', '短暂', '迷你'];
 
-/** 卡面顶部彩条颜色：命中的特殊词条里优先级最高的一枚；无 → null（不画）。 */
-function topKeywordAccent(card) {
+/** 卡面顶部彩条颜色列表：命中的特殊词条按堆叠序返回（多枚 = 多条）；无 → 空数组（不画）。 */
+function keywordAccentBars(card) {
   const bits = new Set(card.keywords ?? []);
   if (card.cardMode && card.cardMode !== 'normal' && card.cardMode !== 'chant') bits.add(card.cardMode);
-  for (const k of ACCENT_PRIORITY) if (bits.has(k)) return KEYWORD_ACCENTS[k];
-  return null;
+  return ACCENT_PRIORITY.filter(k => bits.has(k)).map(k => KEYWORD_ACCENTS[k]);
 }
 
 function hexToRgb(hex) {
@@ -252,14 +251,15 @@ function drawFrame(ctx, card) {
   ctx.restore();
   // 四边中点饰钉（灵脉色小菱形）
   drawEdgeStuds(ctx, theme);
-  // 特殊词条顶部彩条（2026-09-29 用户定）：居中、长 = 卡宽 1/4、厚随边框线、
-  // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。画在饰钉之后：顶边中点饰钉
-  // 与彩条同位，彩条盖钉（信号优先）。
-  const accent = topKeywordAccent(card);
-  if (accent) {
-    ctx.fillStyle = accent;
-    ctx.fillRect(W / 2 - (W / 4) / 2, 2.5, W / 4, frame.width);
-  }
+  // 特殊词条顶部彩条（2026-09-29 用户定）：居中、长 = 卡宽 1/4、每条厚随边框线、
+  // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。多词条**从上往下堆叠全数显示**
+  // （首条在框带内，后续依次下探；三词条 S 卡堆高 ~20px，仍在标题带之上）。画在饰钉
+  // 之后：顶边中点饰钉与首条同位，彩条盖钉（信号优先）。
+  const bars = keywordAccentBars(card);
+  bars.forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(W / 2 - (W / 4) / 2, 2.5 + i * frame.width, W / 4, frame.width);
+  });
   // 等阶标记：左上角菱形 + 字母——卡面上唯一随等阶着色的元素，
   // 中心与标题基线对齐（标题 textBaseline=middle @y26）
   drawTierBadge(ctx, 16, 26, tier, tColor);
