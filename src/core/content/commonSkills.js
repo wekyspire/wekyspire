@@ -23,7 +23,7 @@ import { requestHandSelection, selected } from './cardKit.js';
 
 // ---- 状态卡（敌方塞入，非奖励池）----
 
-// 灼伤（燃焰术士塞入的状态牌，2026-09-13 用户设计）：无法打出；回合结束时若还在
+// 灼伤（燃焰术士塞入的状态牌）：无法打出；回合结束时若还在
 // 手牌中，受到 2 点固定伤害。塞的是「牌库」——抽到手上才开始计时；dump（付费弃牌）
 // 与焚毁类处理卡是它的两个出口。Z 阶 + canSpawnAsReward:false 双保险永不入奖励池。
 registerSkill({
@@ -44,7 +44,7 @@ registerSkill({
   describe: () => '无法打出。回合结束时，若此卡在手牌中，受到2点伤害',
 });
 
-// 迷眼粉尘（嗡嗡虫塞入的状态牌，2026-09-14 章1「塔基爆发」）：灼伤的**轻量版**
+// 迷眼粉尘（嗡嗡虫塞入的状态牌）：灼伤的**轻量版**
 // （1 伤，第一章口径）——无法打出，回合结束时若还在手牌中受到 1 点固定伤害。
 // 与粘液（软卡手：1AP 抽 1 的处理税）构成两档卡手语言；dump 弃牌与焚毁类是它的出口。
 registerSkill({
@@ -65,7 +65,7 @@ registerSkill({
   describe: () => '无法打出。回合结束时，若此卡在手牌中，受到1点伤害',
 });
 
-// 墨渍（第四章高压敌塞入的状态牌，2026-09-14 用户设计）：灼伤同款口径、数值加重一档
+// 墨渍（第四章高压敌塞入的状态牌）：灼伤同款口径、数值加重一档
 // （在手回合末受 3 伤）——档案馆巨像/墨海母核的持续干扰件。处理出口同为 dump/焚毁。
 registerSkill({
   id: 'inkBlot', image: 'inkBlot', name: '墨渍', type: 'normal', tier: 'Z',
@@ -85,7 +85,7 @@ registerSkill({
   describe: () => '无法打出。回合结束时，若此卡在手牌中，受到3点伤害',
 });
 
-// 活页（装订巨蟒塞入的重物牌，2026-09-14 用户设计「开局塞大卡」）：不是纯死重——
+// 活页（装订巨蟒塞入的重物牌）：不是纯死重——
 // 2AP 打出可自伤 4 换抽 2，是「付代价的清障选择」：留着占手牌位挤容量，打掉付血换过牌。
 // 消耗（打出即焚）；Z 阶 + canSpawnAsReward:false 双保险永不入奖励池。
 registerSkill({
@@ -105,7 +105,7 @@ registerSkill({
   describe: () => '自伤4，抽2',
 });
 
-// 躲闪（神兵躯壳二阶段【回忆】洗入牌库 7 张的答案牌，2026-09-20 用户设计稿）：
+// 躲闪（神兵躯壳二阶段【回忆】洗入牌库 7 张的答案牌）：
 // 1AP，消耗——令神兵的下次扫射段数 -2（层数标记「弹道干扰」）。
 // 终塔 Boss 的扫射是**段数伤害**：护盾/格挡按段分摊，单发大盾吃得下，段数多才要命——
 // 所以答案不在「更厚的盾」而在「按段拆」。同一张卡也是**污染**（7 张稀释牌库，
@@ -131,8 +131,7 @@ registerSkill({
 });
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
-// 2026-09-21 大调（COMMON_CARDS 定稿）：纯化 D→C，深度纯化 C→B 且护盾 7→5，
-// 补 A 档极致纯化（纳气2，7护盾）。
+// 纯化 C，深度纯化 B（5 盾），A 档极致纯化（纳气2，7护盾）。
 
 // 纯化（C）：1MP，冷却1：纳气2，2护盾。
 registerSkill({
@@ -223,9 +222,6 @@ registerSkill({
 });
 
 // ---- 汲取·汲取线（AP 换纳气，长冷却）----
-// 2026-09-21 大调：C 汲取冷却 3→4、纳气 2→1；补 B 档（同名汲取，冷却3）；
-// 压榨 B→A、纳气 3→2。
-
 // 汲取（C）：1AP，冷却3：纳气1。
 // 汲取（B）：1AP，冷却2：纳气1。
 // 压榨（A）：1AP，冷却2：纳气2。
@@ -247,8 +243,7 @@ drawQiCard('drawQiPlus', '汲取', 'B', 2, 1, 'squeezeQi');
 drawQiCard('squeezeQi', '压榨', 'A', 2, 2);
 
 // ---- 魏启罐系列（无费用消耗品：纳气 N）----
-// 2026-09-21 大调：魏启罐 D→C 纳气 1→2、高级 C→B 纳气 2→3、冉牌 5→4、何猥 12→8；
-// 极品魏启罐（manaJarUltra）从设计稿移除，删卡。
+// 魏启罐 C 纳气2 / 高级 B 纳气3 / 冉牌 A 纳气4 / 何猥 S 纳气8。
 
 const manaJar = (id, name, tier, stacks) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
@@ -269,7 +264,7 @@ manaJar('manaJarRoyal', '冉牌魏启罐', 'A', 4);
 manaJar('manaJarLegend', '何猥魏启罐', 'S', 8);
 
 // ---- 激发系列（魏启 → AP 即时转换，消耗）----
-// 2026-09-21 大调：激发 C→B；爆发 B→A 且 4AP→3AP；充分激发 B→A。
+// 激发 B 2魏2AP / 爆发 A 2魏3AP / 充分激发 A 1魏2AP。
 
 const stimulant = (id, name, tier, mana, ap) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
@@ -289,7 +284,7 @@ stimulant('burstStimulant', '爆发', 'A', 2, 3);
 stimulant('fullStimulant', '充分激发', 'A', 1, 2);
 
 // ---- 灵能护盾系列（MP 换纯护盾）----
-// 灵力护盾 C / 灵能护盾 B：1MP，冷却1：6/8 护盾（2026-09-29 大调）。
+// 灵力护盾 C / 灵能护盾 B：1MP，冷却1：6/8 护盾。
 // 通用包的纯防御位——无纳气、无格挡，性价比随等阶拉开。
 const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
@@ -348,7 +343,7 @@ registerSkill({
 });
 
 // 早有防备 C/B/A（1MP，消耗，固有）：起手在手的 8/10/12 护盾（先手防御位；
-// 固有开局直接入手，不占初始抽牌位）。2026-09-21 大调补 B/A 档成链。
+// 固有开局直接入手，不占初始抽牌位）。
 const prePreparedCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '早有防备', type: 'normal', pack: 'common', tier,
   image: 'prePrepared',
@@ -368,7 +363,6 @@ prePreparedCard('prePreparedPlus', 'B', 10, 'prePreparedA');
 prePreparedCard('prePreparedA', 'A', 12);
 
 // 盼盼小面包 C/B/A（1AP，消耗）：恢复 3/4/5 生命（即时治疗，走 ApplyHeal 管线）。
-// 2026-09-21 大调补 B/A 档成链。
 const panpanBreadCard = (id, tier, heal, promotesTo = null) => registerSkill({
   id, name: '盼盼小面包', type: 'normal', pack: 'common', tier,
   image: 'panpanBread',
@@ -390,7 +384,6 @@ panpanBreadCard('panpanBreadA', 'A', 5);
 // 午休 C/B/A（消耗，设计稿未写费用 → 0 费）：晕眩1，治疗12/16/20。
 // 代价语言：跳过下一次行动阶段换一张大治疗账单——「治疗」是效果（回合开始整取回血后
 // 清零，见 content/effects.js），与晕眩同在下一回合开始生效：睡这一觉 = 下回合动不了。
-// 2026-09-21 大调：D→C 并补 B/A 档成链。
 const noonNapCard = (id, tier, mend, promotesTo = null) => registerSkill({
   id, name: '午休', type: 'normal', pack: 'common', tier,
   image: 'noonNap',
@@ -478,8 +471,8 @@ murmurCard('murmurChant', 'C', 1, 'murmurChantPlus');
 murmurCard('murmurChantPlus', 'B', 0);
 
 // 扩容 A/S（消耗，设计稿未写费用 → 0 费）：本场战斗咏唱容量 +1/+2
-// （applyBattleModifier 战斗级通道，战斗结束自动归零——与空系自在系列同口径，
-// 「扩容只给咏唱容量」用户定 2026-09-14）。
+// （applyBattleModifier 战斗级通道，战斗结束自动归零——与空系自在系列同口径；
+// 这张「扩容」只给咏唱容量，与火系「膨胀」给手牌上限是两条轨）。
 const expandChantCard = (id, tier, n) => registerSkill({
   id, name: '扩容', type: 'normal', pack: 'common', tier,
   image: 'expandChant',
@@ -496,10 +489,10 @@ const expandChantCard = (id, tier, n) => registerSkill({
 expandChantCard('expandChant', 'A', 1);
 expandChantCard('expandChantS', 'S', 2);
 
-// ---- 高速魏启罐系列（2026-09-12 设计稿新增）----
+// ---- 高速魏启罐系列 ----
 // 与上面「魏启罐」的区别：**即时回蓝**（GainMana，走上限截断）而不是「纳气」（下回合开始整取）。
 // 无费用、无冷却、消耗——纯应急燃料（同阶比纳气罐少 1 点量，换"现在就能用"）。
-// 2026-09-21 大调：A 档改名「豪华魏启罐」、4→3（与文档定稿对齐）。
+// B 高速魏启罐回 2 / A 豪华魏启罐回 3。
 const swiftManaJar = (id, name, tier, amount) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
   image: 'manaJar',
@@ -516,7 +509,7 @@ const swiftManaJar = (id, name, tier, amount) => registerSkill({
 swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
 swiftManaJar('swiftManaJarPlus', '豪华魏启罐', 'A', 3);
 
-// ---- HeLiCoPtEr（A，消耗，2026-09-12 设计稿新增；2026-09-21 大调：设计稿未写费用 → 0费）----
+// ---- HeLiCoPtEr（A，消耗，设计稿未写费用 → 0费）----
 // 「将手中自由牌变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
 // keepPower 延续；与斩链的局内转化同一指令）→ 目标卡 = 肘击系列的免费形态
 // `fierceElbowFree`（0 费咏唱1、P5 随机伤害、伤害带 `elbow` 标记**吃牢大翻倍**，

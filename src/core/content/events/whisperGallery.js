@@ -1,4 +1,4 @@
-// 事件：风语回廊（2026-09-14，空灵脉镜像教学）。
+// 事件：风语回廊（空灵脉镜像教学）。
 // 决策轴：生命换体系卡（御风组尝鲜）；空灵脉持有者获得「聆听」联动选项。
 import { registerEvent } from '../../events/registry.js';
 import { gainMoney, gainCard, damagePlayer } from '../../run/runEffects.js';

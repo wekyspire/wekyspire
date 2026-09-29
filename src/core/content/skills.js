@@ -19,8 +19,8 @@ export function resolvedDamageText(sctx, base) {
 
 // ① 纯伤害攻击牌（真拳系列 C 位：拳→快拳→炮拳→真拳）
 registerSkill({
-  // 通用填充卡（2026-09-21 D2/D4：拳/盾是全体系起始牌组的填充位，不走体修路线
-  // 无法升级）；不进任何奖励池——开包即提升，填充卡不占奖励位（StS Strike 同款）。
+  // 通用填充卡（拳/盾是全体系起始牌组的填充位，不走体修路线无法升级）；
+  // 不进任何奖励池——开包即提升，填充卡不占奖励位（StS Strike 同款）。
   id: 'punch', name: '拳', type: 'normal', tier: 'C', series: 'punch',
   canSpawnAsReward: false,
   cost: { mana: 0, actionPoint: 1 },
@@ -50,7 +50,7 @@ export function enemyTarget(sctx) {
 }
 
 // ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
-// 2026-09-21 大调：D→C 且去掉冷却（冷却1 移给 B 坚固盾——升阶的阶差）。
+// 无冷却（冷却1 在 B 坚固盾——升阶的阶差）。
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'C', series: 'block',
   canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
@@ -66,7 +66,7 @@ registerSkill({
 });
 
 // ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
-// 点火是火体系的燃烧入口——2026-09 改为首次点亮火灵脉时由进阶获赠直发
+// 点火是火体系的燃烧入口——由首次点亮火灵脉时进阶获赠直发
 // （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
   id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',

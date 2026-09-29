@@ -46,10 +46,9 @@ export function handIndex(sctx) {
   return handIndexAtPlay(sctx);
 }
 
-// 【后手】：此牌作为手牌中**最后一张自由牌**打出（2026-09-21 用户定，NAMED.md 同步）——
-// 判据是位置：打出那一刻其右侧没有别的自由牌（右侧全是激活咏唱不挡；左侧的牌不管）。
-// 旧口径（2026-09-13「唯一非激活卡」）要求清空整只手，过苛；新口径只需把它打在最右。
-// 邻牌等物理位置语义不受影响（飞刀献祭照旧，用户划线）。
+// 【后手】：此牌作为手牌中**最后一张自由牌**打出（NAMED.md 同口径）——
+// 判据是位置：打出那一刻其右侧没有别的自由牌（右侧全是激活咏唱不挡；左侧的牌不管），
+// 只需把它打在最右。邻牌等物理位置语义不受影响（飞刀献祭照旧）。
 // 结算中自身已离手（pending），handIndexAtPlay 捕获打出时手位——其后的牌
 // （slice(i)）即当时位于它右侧的牌；预览态（canUse/battleDescribe）自身仍在手，
 // 右侧 = slice(selfIndex + 1)。
@@ -63,7 +62,7 @@ export function isLastHandCardAtPlay(sctx) {
   return hand.slice(selfIndex + 1).every(c => c.isActivated);
 }
 
-// 【先手】：此牌作为本回合打出的第一张牌（敏捷连击系判据，2026-09-13 用户拍板）——
+// 【先手】：此牌作为本回合打出的第一张牌（敏捷连击系判据）——
 // 位置不可控变时序可控；每回合天然限触发一次（「第一张」只有一张），数值因此无需下调。
 // 咏唱发动也是一次打出，会抢先手位=真实顺序抉择。
 // 结算读 UseSkill stage 1 捕获（嵌套出牌时母卡已占 pending 坑，不算第一张）；
@@ -114,7 +113,7 @@ export function aoeAttackProbes(sctx, base) {
   return probes;
 }
 
-// 【命中】统一谓词（2026-09-21 用户定，与 NAMED 词条一致）：**造成伤害即命中**——
+// 【命中】统一谓词（与 NAMED 词条一致）：**造成伤害即命中**——
 // 打在护盾上（shieldAbsorbed）也算；被闪避/被 veto/目标已死（全零）算未命中。
 // 接受一组伤害指令（探针），返回命中的段数。多段伤害天然能触发多次。
 export function damageLandedCount(probes) {
@@ -189,8 +188,7 @@ export function breakAllBlock(sctx, target = sctx.player) {
 
 // 【短暂】：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，抽到不打出也不许
 // "攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态。
-// ⚠ 短暂只有「在手」这一种形态（2026-09-13 用户定基本约定：焚毁即彻底离场，无例外）
-// ——原「消耗+短暂=焚毁后回合末回库」形态（returnToDeckAtTurnEnd）已废除。
+// ⚠ 短暂只有「在手」这一种形态——焚毁即彻底离场，无例外。
 export function leaveHandAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
   return {
@@ -210,8 +208,8 @@ export function triggerChant(sctx) {
 // ---- 结算期选牌 ----
 
 /**
- * 通用「从指定卡牌集里选 min~max 张」请求（2026-09-11）——**结算期选牌请求形状的唯一事实源**
- * （用户定 2026-09-13：所有多选卡牌操作统一走这一条，不再各自手搓请求对象）。
+ * 通用「从指定卡牌集里选 min~max 张」请求——**结算期选牌请求形状的唯一事实源**
+ * （所有多选卡牌操作统一走这一条，不各自手搓请求对象）。
  *
  * `source` 只描述卡牌集来自哪个区：'hand' 的候选在战斗场景里**已有唯一 CardObject**，
  * 前端界面应当**接管/移动**这些实例（不渲染副本）；'deck'/'burnt' 等区的候选在场景里
@@ -221,7 +219,7 @@ export function triggerChant(sctx) {
  *   · **多选（max > 1）永远走覆盖层**（'overlay'）：卡阵 + 逐张点选 + 确认按钮。
  *     历史教训：手牌多选曾走"在手牌上逐张累加"的私有通道，而该通道只认旧字段 `count`——
  *     新请求只发 min/max 时它读到 undefined，点牌被判成单选、校验不过 → 界面死锁
- *     （用户 2026-09-13 报的「二重花刀打出后卡死」）。多选从此只有一条路。
+ *     （「二重花刀打出后卡死」）。多选从此只有一条路。
  *   · 单选（max = 1）：手牌来源**原地点牌即应答**；非手牌来源仍走覆盖层（场景里无可点对象）。
  *
  * 候选为空时**返回 null 不提交**（空集无合法应答，会把界面挂死）——调用方据此跳过。
@@ -290,8 +288,8 @@ export function selected(instr) {
 
 // 是否刀法牌（培植/开刃/砺刀系列的作用域判定）。
 // 判据 = 「blade 系列」而非「keywords 含 blade」：碎铁/出鞘等**斩的衍生与处理牌**是
-// 刀法牌，但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）——
-// 用户 2026-09-12 定：碎铁应吃到关于刀法牌的一切效果与增益（养刀术/锻刀术/练刀/砺刀系）。
+// 刀法牌（吃到关于刀法牌的一切效果与增益——养刀术/锻刀术/练刀/砺刀系），
+// 但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）。
 export function isBladeCard(card) {
   const def = getSkillDefinition(card.defId);
   return def.series === 'blade' || def.keywords?.includes('blade') === true;
