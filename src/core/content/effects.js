@@ -811,8 +811,8 @@ registerEffect({
   color: 'purple',
 });
 
-// 扩容（EFFECTS.md 目录既有定义：「手牌上限提升层数张」）：紧勒的镜像，同走效果轨。
-// 暂无内容来源（空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨——见 airSkills）。
+// 扩容（EFFECTS.md：「手牌上限提升层数张」）：紧勒的镜像，同走效果轨。
+// 首用：火系「膨胀」。空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨（见 airSkills）。
 registerEffect({
   id: 'expand',
   type: 'buff',
