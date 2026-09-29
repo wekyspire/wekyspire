@@ -49,12 +49,17 @@ const ANTI_THROTTLE_ARGS = [
  *   viewport  缺省 1280x720
  *   url       缺省 dev server 根
  *   exe       指定浏览器可执行文件（缺省 Playwright 自带的 chromium）
+ *   unlockFps true = 追加帧率解锁 flags（--disable-frame-rate-limit 等，体积云量测
+ *             验证过有效）：rAF 摆脱 60fps vsync 上限。测试加速用（配 ?tickScale=），
+ *             默认关——日常验证要贴近真实游玩帧率。
  */
-export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, url = DEFAULT_URL, exe = null } = {}) {
+export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, url = DEFAULT_URL, exe = null, unlockFps = false } = {}) {
   const exePath = exe ?? process.env.CHROME_EXE ?? join(homedir(),
     'AppData', 'Local', 'ms-playwright', 'chromium-1228', 'chrome-win64', 'chrome.exe');
   const browser = await chromium.launch({
-    executablePath: exePath, headless, args: ANTI_THROTTLE_ARGS,
+    executablePath: exePath, headless,
+    // 帧率解锁只加 flag，不加任何 --use-gl/--use-angle 软渲染开关（那是 1.9fps 病根）
+    args: unlockFps ? [...ANTI_THROTTLE_ARGS, '--disable-frame-rate-limit', '--disable-gpu-vsync'] : ANTI_THROTTLE_ARGS,
   });
   const page = await browser.newPage({ viewport });
   const errors = [];

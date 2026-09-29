@@ -6,7 +6,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "node tools/fuzz/battleFuzz.mjs",
+    "test:fuzz": "node tools/fuzz/battleFuzz.mjs --games 150",
+    "test:browser": "node tools/fuzz/battleFuzzBrowser.mjs",
+    "test:legacy": "vitest run"
   },
   "dependencies": {
     "gsap": "^3.13.0",

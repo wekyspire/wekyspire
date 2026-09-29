@@ -12,6 +12,7 @@
 // 显示假设：游玩分辨率固定 16:9（1920x1080，z=0 世界宽 ≈177.8），不做其它比例适配。
 
 import * as THREE from 'three';
+import gsap from 'gsap';
 import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
@@ -250,10 +251,22 @@ export class StageManager {
     if (this._running || !this._renderer) return;
     this._running = true;
     this._clock = new THREE.Timer(); // Clock 在 webgpu 包已弃用（Console 刷警告）
+    // 时间流速开关（测试加速用）：`?tickScale=k` 同步缩放 dt 与 gsap 时间轴——
+    // 演出补间/物理一并 k 倍速，协议时序（节拍顺序/finish 链）不变。默认 1 与
+    // 常规游玩逐字节等价。掉帧保护同步放宽（clamp 本义是防偶发掉帧跳变，持续
+    // 放大 dt 属测试预期）。⚠ 持续大 dt 对二阶弹簧/阻力积分是大步长，测试场景
+    // 推荐配帧率解锁（--disable-frame-rate-limit）拉高真帧率、用小倍率（2-4）。
+    const tickScale = (typeof location !== 'undefined'
+      && Number(new URLSearchParams(location.search).get('tickScale')) > 0)
+      ? Number(new URLSearchParams(location.search).get('tickScale')) : 1;
+    if (tickScale !== 1 && typeof gsap !== 'undefined') {
+      gsap.globalTimeline.timeScale(tickScale);
+      gsap.ticker.lagSmoothing(0); // 时间轴拉快后关防跳变补偿（它会按墙钟往回补时间）
+    }
     const tick = () => {
       if (!this._running) return;
       this._clock.update();
-      const dt = Math.min(this._clock.getDelta(), 0.1); // 掉帧保护：单帧最多推进 100ms
+      const dt = Math.min(this._clock.getDelta() * tickScale, 0.1 * tickScale); // 掉帧保护：单帧最多推进 100ms×k
       this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
       // 相机位姿唯一的落笔点：运镜写 pose、震荡等写偏移通道，这里渲染前一次性合成
