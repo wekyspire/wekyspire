@@ -357,11 +357,21 @@ export function createSlotMachine(ctx) {
       // 投料口：进度满 = 直接进"粉碎物品"链（对话 → 选卡/遗物）；没满就先聚焦机器（看得出还差几次）
       if (hit?.id?.startsWith('room:crusher:')) {
         const rig = ctx.rigs().get('slot');
-        if (rig?.devourReady?.()) { ctx.intent({ action: 'requestDevour' }); return true; }
+        if (rig?.devourReady?.()) {
+          rig.setCrusherHover?.(false);   // 对话/全屏界面期间 hover 事件断流，先收掉高亮
+          ctx.intent({ action: 'requestDevour' });
+          return true;
+        }
         ctx.focusMachine('slot');
         return true;
       }
       return false;
+    },
+
+    /** 通知型 hover：粉碎口热区 → 金牙/喉腔提亮（聚焦怼脸时整机 hover 反馈已关，
+     *  口的「可点」暗示走这条——RoomStage 对机器模块的原样 hover 转发）。 */
+    hover(hit) {
+      ctx.rigs().get('slot')?.setCrusherHover?.(!!hit?.id?.startsWith?.('room:crusher:'));
     },
 
     /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'，

@@ -420,6 +420,15 @@ export class PanelObject extends THREE.Group {
     return { widget: w, object: null, top: y, h: groupH, contentH: groupH };
   }
 
+  /**
+   * 逐帧驱动卡阵的卡面 fx（hover/勾选高亮是 C0 shader 档，目标值收敛在 update 里——
+   * 没人 tick 就永远停在 0，「面板卡阵 hover 不亮」的病根，2026-09-29）。宿主舞台在
+   * 自己的帧驱动里调（与 stagePickerKit.update 同一节拍）。
+   */
+  update(dt) {
+    for (const c of this._cards) c.object.updateFx?.(dt);
+  }
+
   _clearRows() {
     // 文本行：object 即面片，逐行释放
     for (const { object } of this._rows) {

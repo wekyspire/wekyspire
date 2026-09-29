@@ -531,6 +531,7 @@ export class MapStage {
       this._loadout?.update(dt);         // 遗物装卸区（容量条缓动/图标抬升/弹回）
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._pickerKit.update(dt);        // 获得物特写（自带 in/hold/out 时序）
+      this._panel?.update(dt);            // 休息面板卡阵的 fx（hover 高亮收敛）
       this._wilderness?.update(dt);      // 荒原环境（雪花 GPU 推进）
       this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
       this._bubbles.update(dt);

@@ -3,11 +3,10 @@
 // 与选卡界面（CardScrollPickerObject）共用同一套骨架（ScrollPickerObject 基类）——
 // 滚动/选中/确认/返回/背板/tooltip/拾取登记全在基类，本文件只回答"一件遗物长什么样"。
 //
-// 候选件形态（2026-09-12 接上立绘）：**立绘 + 名字 + 描述**——
-//   上半是 `assets/relics/<遗物名>` 的立绘（透明底、白描边，直接贴即可），
-//   下方依次是稀有度色的名字与灰字描述；稀有度徽标仍在左上角。
-//   素材未落盘的遗物（内容先行、美术未到）自动退化为原来的**纯文字藏品卡**，
-//   所以内容侧照常能加新遗物，不必等图。
+// 候选件形态（2026-09-29 用户定：**无底板**——立绘 + 名字 + 描述直接摆在背板上，
+// 点击盒是隐形面）：上半是 `assets/relics/<遗物名>` 的立绘，下方依次是稀有度徽标、
+// 稀有度色的名字与灰字描述（三者统一**左对齐**）。素材未落盘的遗物自动退化为纯文字卡。
+// hover/选中的反馈 = 整件轻微放大 + 立绘提亮（不再画 rect 背景）。
 //
 // hover 出遗物 tooltip（`{ type:'relic' }`，与面板里的遗物条目同一套浮层）。
 
@@ -23,12 +22,11 @@ export const RARITY_COLORS = Object.freeze({
 const rarityColor = (r) => RARITY_COLORS[r] ?? RARITY_COLORS.C;
 
 // 尺寸对齐选卡界面（卡 26×35.1 世界单位 ×0.62 ≈ 16×22）：遗物卡略宽（要横排名字+描述），
-// 5 列 ≈ 109 世界单位宽（UI 全宽 177.8）——第一版按 7.6×5.6 做，在 720p 下只有 55×40 px，太小。
-// 2026-09-12 接立绘后加高到 32：立绘占满上方 19 见方（不拉伸，素材是方形构图），
-// 下方留白带放名字 + 描述（描述 3 行以内放得下）。
+// 5 列 ≈ 109 世界单位宽（UI 全宽 177.8）。立绘占上方 19 见方（不拉伸，素材是方形构图），
+// 下方留白带放徽标/名字/描述（描述 3 行以内放得下）。
 const TILE = { w: 20, h: 32 };
 const ART = { size: 19, top: 0.4 };      // 立绘：边长 19 的正方形，顶边距卡顶 0.4
-const INNER = { color: 0x0d1018, highlight: 0x1b2436 };
+const TEXT_X = -TILE.w / 2 + 1.0;        // 徽标/名字/描述统一左缘
 
 /** 一件候选遗物的显示对象（自建材质；dispose 时随界面释放）。 */
 class RelicTile extends THREE.Group {
@@ -36,17 +34,12 @@ class RelicTile extends THREE.Group {
     super();
     this._relic = relic;
     const col = rarityColor(relic.rarity);
-    this._frame = new THREE.Mesh(
+    // 隐形点击盒：拾取面必须 visible（Picker 会滤掉 invisible 对象），用 opacity 0 代替
+    const clickBox = new THREE.Mesh(
       new THREE.PlaneGeometry(TILE.w, TILE.h),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(col), transparent: true, opacity: 0.42 }),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
     );
-    this.add(this._frame);
-    this._inner = new THREE.Mesh(
-      new THREE.PlaneGeometry(TILE.w - 0.34, TILE.h - 0.34),
-      new THREE.MeshBasicMaterial({ color: INNER.color, transparent: true, opacity: 0.95 }),
-    );
-    this._inner.position.z = 0.02;
-    this.add(this._inner);
+    this.add(clickBox);
     // 立绘（key = 遗物显示名）：素材未就绪先留空，贴图晚到再补（订阅见下）
     const artY = TILE.h / 2 - ART.top - ART.size / 2;
     this._art = new THREE.Mesh(
@@ -56,20 +49,20 @@ class RelicTile extends THREE.Group {
     this._art.position.set(0, artY, 0.04);
     this._art.visible = false;
     this.add(this._art);
-    // 左上角稀有度徽标 + 名字（两者都用稀有度色）
+    // 左上角稀有度徽标 + 名字 + 描述：三者同一左缘（2026-09-29 对齐修正）
     const badge = new TextBlockObject({ bakeText, fontPx: 22, tint: col });
     badge.setText(`[${relic.rarity ?? 'C'}]`);
-    badge.placeLeftTop(-TILE.w / 2 + 1.0, TILE.h / 2 - 1.0);
+    badge.placeLeftTop(TEXT_X, TILE.h / 2 - 1.0);
     badge.position.z = 0.06;
     this.add(badge);
     const name = new TextBlockObject({ bakeText, fontPx: 30, tint: col });
     name.setText(relic.name ?? relic.id);
-    name.placeCenterTop(0, TILE.h / 2 - ART.top - ART.size - 0.8);
+    name.placeLeftTop(TEXT_X, TILE.h / 2 - ART.top - ART.size - 1.2);
     name.position.z = 0.06;
     this.add(name);
     this._desc = new TextBlockObject({ bakeText, fontPx: 20, tint: '#9aa3b8' });
     this._desc.setText(relic.desc ?? '', { maxWidth: (TILE.w - 2.0) * 10 });
-    this._desc.placeLeftTop(-TILE.w / 2 + 1.0, TILE.h / 2 - ART.top - ART.size - 3.4);
+    this._desc.placeLeftTop(TEXT_X, TILE.h / 2 - ART.top - ART.size - 3.8);
     this._desc.position.z = 0.06;
     this.add(this._desc);
     // 立绘惰性套用：先试一次；未命中就订阅加载完成（贴成即退订，dispose 兜底）
@@ -90,13 +83,12 @@ class RelicTile extends THREE.Group {
     return true;
   }
 
-  /** 视觉态（基类按 hover/选中/禁用调用）：描边与内底两级亮度。 */
+  /** 视觉态（基类按 hover/选中/禁用调用）：整件缩放 + 立绘提亮（无底板可调）。 */
   setVisualState(state) {
-    const frame = this._frame.material;
-    const inner = this._inner.material;
-    if (state === 'disabled') { frame.opacity = 0.16; inner.color.setHex(INNER.color); inner.opacity = 0.6; return; }
-    if (state === 'highlighted') { frame.opacity = 1; inner.color.setHex(INNER.highlight); inner.opacity = 1; return; }
-    frame.opacity = 0.42; inner.color.setHex(INNER.color); inner.opacity = 0.95;
+    if (state === 'disabled') { this.scale.setScalar(0.94); this._art.material?.color?.setScalar(0.6); return; }
+    if (state === 'highlighted') { this.scale.setScalar(1.06); this._art.material?.color?.setScalar(1.25); return; }
+    this.scale.setScalar(1);
+    this._art.material?.color?.setScalar(1);
   }
 
   dispose() {

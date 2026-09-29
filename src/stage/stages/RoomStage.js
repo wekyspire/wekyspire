@@ -895,6 +895,8 @@ export class RoomStage {
     );
     this._continue.update(dt);
     this._pickerKit.update(dt);
+    this._panel?.update(dt);       // dock 面板卡阵 fx
+    this._stagePanel?.update(dt);  // 阶段模态面板卡阵 fx（hover 高亮收敛）
     for (const key of this._bubbles.keys) {   // 泡泡跟随物件（相机在动，每帧重投影）
       const entry = this._markers.find(m => m.name === key)?.entry;
       if (entry) this._bubbles.moveTo(key, ...Object.values(this._uiAnchorOf(entry, 14)));
