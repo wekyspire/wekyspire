@@ -10,7 +10,6 @@
 
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
-import { TSL_READY } from '../stage/fx/tslGate.js';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
@@ -346,7 +345,7 @@ function rebuild() {
   scene.fog = fogDef
     ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
     : new THREE.Fog(0x070a12, 165, 310);
-  if (TSL_READY.volumetricMoon && room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
+  if (room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }

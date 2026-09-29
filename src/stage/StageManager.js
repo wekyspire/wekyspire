@@ -1,8 +1,7 @@
 // StageManager（§4.1）：单全屏 canvas 的 three.js 舞台总管。
-// 渲染器 = WebGPURenderer（全量迁移，quest_prompts/WEBGPU_MIGRATION.md）：
-// 默认 WebGPU 后端；`?forceWebGL=1` 强制 WebGL2 后端跑同一套 TSL（迁移期验收对照口，
-// 生产版随 WebGL 兼容逻辑一并撤除）。**不支持 WebGPU 的设备由加载门卡死**（App.vue
-// 预检 probeWebGpuAdapter），本层不做回退。attach 因此是 async（renderer.init 是异步的）。
+// 渲染器 = WebGPURenderer（全量迁移完成，quest_prompts/WEBGPU_MIGRATION.md）。
+// **不支持 WebGPU 的设备由加载门卡死**（App.vue 预检 probeWebGpuAdapter），本层不做回退。
+// attach 因此是 async（renderer.init 是异步的）。
 // 世界坐标约定：z=0 平面上屏幕高度 ≈ 100 世界单位，y 向上，x 向右。
 // 布局一律用世界坐标计算；resize 只改相机视锥，不动任何场景对象。
 // 相机选小 FOV PerspectiveCamera + 斜方向俯视：
@@ -17,7 +16,6 @@ import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
 import { CameraDirector } from './fx/camera.js';
-import { TSL_READY, forceWebGLBackend } from './fx/tslGate.js';
 import { flushDeferredDisposals } from './deferredDispose.js';
 
 export const WORLD_HEIGHT = 100;
@@ -51,13 +49,13 @@ export class StageManager {
   /**
    * @param {object} options
    *   worldHeight: number = 100
-   *   createRenderer: ({canvas}) => renderer-like   缺省 WebGPURenderer（后端按
-   *     ?forceWebGL=1 切换）；单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
+   *   createRenderer: ({canvas}) => renderer-like   缺省 WebGPURenderer；
+   *     单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
    */
   constructor(options = {}) {
     this._worldHeight = options.worldHeight || WORLD_HEIGHT;
     this._createRenderer = options.createRenderer || (({ canvas }) =>
-      new WebGPURenderer({ canvas, antialias: true, forceWebGL: forceWebGLBackend() }));
+      new WebGPURenderer({ canvas, antialias: true }));
     this._renderer = null;
     this._camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
     // 相机距离：让 z=0 平面的可视高恰好 = worldHeight（与旧正交约定无缝衔接），
@@ -273,13 +271,13 @@ export class StageManager {
         // 牌桌 UI 的世界坐标在地板平面之下（y<-30），同 pass 会被地板 z-test 裁掉；
         // UI 本质是前景覆盖层，与 3D 世界不做深度交互。
         // 后处理开：uiScene → RT + bloom 链，premultiplied 盖回屏幕（post/uiComposer）；
-        // 后处理关 / 假 renderer（单测无 setRenderTarget）/ uiPost 未迁完（tslGate）：直渲。
+        // 后处理关 / 假 renderer（单测无 setRenderTarget）：直渲。
         const ui = this._stage.uiScene;
         if (ui) {
           const r = this._renderer;
           const prevAutoClear = r.autoClear;
           r.autoClear = false;
-          if (this._uiPostEnabled && TSL_READY.uiPost && typeof r.setRenderTarget === 'function') {
+          if (this._uiPostEnabled && typeof r.setRenderTarget === 'function') {
             if (!this._uiComposer) {
               this._uiComposer = createUiComposer();
               this._uiComposer.resize(this._viewWidth || 2, this._viewHeight || 2, this._devicePixelRatio());

@@ -28,7 +28,7 @@ import { debugUi, toggleDebugPanel } from './debugState.js';
 import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
 import { startCloudNoiseBake } from '../stage/scenes/cloudNoise.js';
-import { probeWebGpuAdapter } from '../stage/fx/tslGate.js';
+import { probeWebGpuAdapter } from '../stage/webgpuProbe.js';
 
 const canvas = ref(null);
 const frame = ref(null);

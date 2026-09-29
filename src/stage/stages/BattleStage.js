@@ -71,7 +71,6 @@ import { getEnemyDefinition } from '../../core/enemies/registry.js';
 // 卡面世界尺寸：权威定义在 objects/cardMetrics.js（休息阶段面板共用同一尺寸源）；
 // 此处再导出以保持既有引用（测试 / ZonePileObject 取参）不破。
 import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
-import { TSL_READY } from '../fx/tslGate.js';
 export { CARD_WIDTH, CARD_HEIGHT };
 
 export const PLAY_LINE_Y = -20;
@@ -177,8 +176,7 @@ export class BattleStage {
     // 体积月光 composer（ray marching，场景带投影月光且 renderer 支持 RT 时接管世界 pass；
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）
     const renderer = stageManager._renderer;
-    if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function'
-        && TSL_READY.volumetricMoon) { // tslGate：raymarch 链 TSL 化前回退直渲
+    if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
       this._composer = createVolumetricMoonlight({ light: this._scene3D.moonlight });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
@@ -1628,12 +1626,7 @@ export class BattleStage {
   _transformFx(id, card = null, onDone = null, mode = 'charReveal') {
     const view = this._views.get(id);
     if (!view || !card) { onDone?.(); return; }
-    if (!TSL_READY.cardTransform) { // tslGate：演出未迁移——直接落地终态（换脸），无演出
-      view.applyBakedFace(card, this._bakeFace(card));
-      onDone?.();
-    } else {
-      playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
-    }
+    playCardTransform(view, card, { mode, bakeFace: this._bakeFace, onDone });
     // 体量呼吸裹在演出外（变换的重量感）：缓起 1.08 → 随白光收束回程
     const s0 = view.scale.x || 1;
     this.animator.animate(id, { scale: s0 * 1.08 }, {
@@ -1661,11 +1654,7 @@ export class BattleStage {
         // 谷底起变换演出（charReveal 接管换脸——不再瞬时 setCard + 金爆，
         // 金光粒子的职责由燃烧尾迹/白光承担）
         if (payload?.cardView) {
-          if (!TSL_READY.cardTransform) { // tslGate：直接换脸，无演出
-            view.applyBakedFace(payload.card, this._bakeFace(payload.card));
-          } else {
-            playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
-          }
+          playCardTransform(view, payload.cardView, { bakeFace: this._bakeFace });
         }
         this.animator.animate(id, { scale: s0 * 1.42 }, { // 过冲弹起（跃迁感）
           durationMs: 170,

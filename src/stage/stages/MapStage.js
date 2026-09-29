@@ -22,7 +22,6 @@ import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, T
 import { Cast } from '../fx/cast.js';
 import { runScript } from '../fx/script.js';
 
-import { TSL_READY } from '../fx/tslGate.js';
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
 // 战前准备/地图舞台：大雪荒原 + 孤立塔楼（观感重做，替占位夜空+色块塔）。
@@ -77,12 +76,9 @@ export class MapStage {
     // 塔楼层世界 pass 由雪云管线接管（StageManager composeScene 钩子，BattleStage
     // 体积光同范式）：mesh pass → 云 march（读场景深度）→ transmittance 合成。
     // UI pass（uiScene）仍由 StageManager 在其后兜底渲染，不受影响。
-    // tslGate：雪云 march 未迁移前不接管世界 pass（直渲兜底——mesh 全可见，只缺云）
-    if (TSL_READY.towerClouds) {
-      this.composeScene = ({ renderer, scene, camera }) => {
-        this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
-      };
-    }
+    this.composeScene = ({ renderer, scene, camera }) => {
+      this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
+    };
     // 逻辑机位（视差的基座）：锚点摆位与爬升 tween 只写它，tick 统一把「机位 +
     // 鼠标视差偏移」落到共享相机（onEnter 设/onExit 还协议不变）
     this._basePose = null;

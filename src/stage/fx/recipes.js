@@ -9,7 +9,6 @@
 // 调视觉参数只改本文件；新增体系/标签主题 = 表里加一行。
 import { getSkillDefinition } from '../../core/skills/registry.js';
 import { makeBodyFlames } from './bodyFlames.js';
-import { TSL_READY } from './tslGate.js';
 import { makeVaporPlumes } from './vaporPlumes.js';
 import { makeStasisShell } from './stasisShell.js';
 import { makeStunStars } from './stunStars.js';
@@ -151,8 +150,7 @@ export function resolveDamageRecipe(payload = {}) {
 const UNIT_AURA_THEMES = {
   burn: {
     layer: 1,
-    // tslGate：TSL 重写未落地前不建件（WebGPURenderer 下裸 GLSL = 黑洞）
-    build: (layer) => TSL_READY.bodyFlames ? makeBodyFlames(layer, { color: 0xff8a3a }) : null,
+    build: (layer) => makeBodyFlames(layer, { color: 0xff8a3a }),
     // 层数 → 烧灼进度（境界锚点）：
     //   3 层 0.29（局部碳化 + 火星，可读）｜ 30 层 0.67（烧透橙红，只留少部分原纹理）｜
     //   60 层 1.0（白炙，HDR 过阈交 bloom）；30 层内线性，30→60 走余量段，60 后封顶
@@ -178,7 +176,7 @@ const UNIT_AURA_THEMES = {
   },
   stasis: {
     layer: 2,
-    build: (layer) => TSL_READY.stasisShell ? makeStasisShell(layer) : null, // tslGate
+    build: (layer) => makeStasisShell(layer),
     levelOf: () => 0.9, // ⚠ stasisShell 结晶前锋按 /0.9 归一——改稳态值要同步改 shader
     enterDur: 0.55, // 结晶前锋自下而上扫过（stasisShell front 段）
     exitDur: 0.7,

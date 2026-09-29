@@ -43,7 +43,6 @@ import { Cast } from '../fx/cast.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { runScript } from '../fx/script.js';
 
-import { TSL_READY } from '../fx/tslGate.js';
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 
 // 聚焦机位处方（**点物件先推近，推到位再显示它的操纵 UI**）：
@@ -117,8 +116,7 @@ export class RoomStage {
       }
     }
     const renderer = stageManager?._renderer;
-    if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function'
-        && TSL_READY.volumetricMoon) { // tslGate：raymarch 链 TSL 化前回退直渲
+    if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
       this._composer = createVolumetricMoonlight({ light: this._room.moonlight });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);

@@ -29,7 +29,6 @@ import {
 } from 'three/tsl';
 import { buildTowerClouds, CLOUD_PRESETS } from './towerClouds.js';
 
-import { TSL_READY } from '../fx/tslGate.js';
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
 export const SKY_BOTTOM = 0x59626a;    // 低空/雾色：暗板岩灰（远地/远云/穹面三处同源
@@ -297,15 +296,12 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   // ---- 雪云体积层（towerClouds.js）：mesh pass → 云 march（读场景深度）→ 合成。
   // 接入 = StageManager 的 composeScene 钩子（本件产出 clouds，MapStage 委托
   // composeFrame；gallery 主循环直接调同一条管线）。
-  // tslGate：云 march 链未迁移前不建（MapStage 的 composeScene 同开关不接管）
-  const clouds = TSL_READY.towerClouds ? buildTowerClouds({
+  const clouds = buildTowerClouds({
     sunDir: new THREE.Vector3(-60, 90, -40), // 与 rim 平行光同向（月光透云）
-  }) : null;
-  if (clouds) {
-    clouds.uniforms.uSkyTop.value.setHex(SKY_TOP);
-    clouds.uniforms.uSkyBottom.value.setHex(SKY_BOTTOM);
-    clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
-  }
+  });
+  clouds.uniforms.uSkyTop.value.setHex(SKY_TOP);
+  clouds.uniforms.uSkyBottom.value.setHex(SKY_BOTTOM);
+  clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
 
   // ---- 光照：雪夜，两半球环境光（上灰蓝天空 / 下偏白雪地反光）+ 弱冷平行光做雪丘体积 ----
   const hemi = new THREE.HemisphereLight(0x8fa3bd, 0xd8dde2, 0.1);
@@ -357,12 +353,9 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   disposables.push(fieldGeo, fieldMat);
 
   // ---- 雪花 ----
-  // tslGate：雪片 shader 随塔楼大气组一并迁移（未迁移前无雪——中间态）
-  const snow = TSL_READY.towerClouds ? buildSnowfall() : null;
-  if (snow) {
-    group.add(snow.object);
-    disposables.push(snow.object.geometry, snow.object.material);
-  }
+  const snow = buildSnowfall();
+  group.add(snow.object);
+  disposables.push(snow.object.geometry, snow.object.material);
 
   return {
     group,
@@ -371,7 +364,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
     /** 环境件随层锚点爬升：雪盒平移（回绕在局部空间，整体平移即跟随相机）+
      *  层跟随光抬到锚点上方 2。塔与雪原本体、云板、一层静态光 central 固定不动。 */
     setAnchorY(y) {
-      if (snow) snow.object.position.y = y;
+      snow.object.position.y = y;
       track.position.y = y + 2;
     },
     /** 雪相配方混合（0=一章平静雪 1=雪云急迫；towerStormLevel 按层求值）。
@@ -381,11 +374,10 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
      *  后场景雾密度才变小，一二三章恒定）。 */
     setStormLevel(v, floor = null) {
       const t = Math.min(1, Math.max(0, v));
-      if (snow) snow.uniforms.uStormAmt.value = t;
-      if (!clouds) { /* tslGate：云缺席时雾衰减仍生效（下面 density 段） */ }
+      snow.uniforms.uStormAmt.value = t;
       const a = CLOUD_PRESETS.ch1;
       const b = CLOUD_PRESETS.ch2;
-      if (clouds) for (const k in a) clouds.params[k] = a[k] + (b[k] - a[k]) * t;
+      for (const k in a) clouds.params[k] = a[k] + (b[k] - a[k]) * t;
       let density = FOG_DENSITY;
       if (floor != null) {
         const clear = smoothstep(33, 38, floor);   // 四章太虚：雾密度 0.015 → 0.004
@@ -394,18 +386,16 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
       }
       // 远云融雾与地面雾同一密度标尺（march 侧同为平方指数）——四章雾变薄时远云
       // 同步少融，暗雾带不悬空；一二三章 density=FOG_DENSITY，系数 1 无扰动。
-      if (clouds) {
-        clouds.params.haze *= density / FOG_DENSITY;
-        clouds.syncParams();
-      }
+      clouds.params.haze *= density / FOG_DENSITY;
+      clouds.syncParams();
     },
-    get stormLevel() { return snow ? snow.uniforms.uStormAmt.value : 0; },
+    get stormLevel() { return snow.uniforms.uStormAmt.value; },
     update(dt) {
-      if (snow) snow.uniforms.uTime.value += dt;
-      clouds?.update(dt);   // 云层 advect 时钟（风中滚动）
+      snow.uniforms.uTime.value += dt;
+      clouds.update(dt);   // 云层 advect 时钟（风中滚动）
     },
     dispose() {
-      clouds?.dispose();
+      clouds.dispose();
       for (const d of disposables) d.dispose();
       disposables.length = 0;
       group.removeFromParent();

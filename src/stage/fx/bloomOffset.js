@@ -30,17 +30,6 @@ export const BLOOM_LAYER = 7;
  *  WebGPU 迁移后 = TSL UniformNode（.value 读写语义不变，FX 材质的 colorNode 直接引用）。 */
 export const bloomPassFlag = uniform(0);
 
-/** 片元声明件（ShaderMaterial 片元头 include）。⚠ WebGPU 迁移后仅存量 GLSL 件（tslGate
- *  隔离中）引用——TSL 件直接 `select(bloomPassFlag.greaterThan(0.5), …)`，W6 随闸门一并删除。 */
-export const GLSL_BLOOM_OFFSET_DECL = /* glsl */`
-uniform float uBloomPass;
-`;
-
-/** 片元尾写件：偏移 pass 中输出 (expr,0,0,1) 并提前 return（主渲染零影响）。⚠ 同上：仅存量 GLSL 用。 */
-export function glslBloomOffsetWrite(expr) {
-  return `if (uBloomPass > 0.5) { gl_FragColor = vec4((${expr}), 0.0, 0.0, 1.0); return; }`;
-}
-
 /** 把对象挂上/摘出偏移 pass 层（递归子级；FX 件的 group 根一次调用即可）。 */
 export function setBloomWriter(obj, on = true) {
   obj.traverse((o) => { if (on) o.layers.enable(BLOOM_LAYER); else o.layers.disable(BLOOM_LAYER); });
