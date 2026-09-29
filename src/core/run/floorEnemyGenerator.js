@@ -69,9 +69,9 @@ const TEMPLATES = [
   { id: 'greatToadPool', name: '大蛤蟆漩涡', cost: 8, minFloor: 4, maxFloor: 10, once: true, excl: ['toadPool'],
     slots: [{ fixed: 'pufferToadA' }, { fixed: 'pufferToadB' }, { fixed: 'pufferToadC' }, { fixed: 'mossBallA' }] },
   { id: 'rotEye', name: '腐败之眼', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['rotHeart', 'mudFlat'],
-    slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }] },
+    slots: [{ fixed: 'mossBallA' }, { fixed: 'mossBallB' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRootB' }] },
   { id: 'rotHeart', name: '腐败之心', cost: 10, minFloor: 4, maxFloor: 10, once: true, excl: ['rotEye'],
-    slots: [{ fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenTreeHeart' }] },
+    slots: [{ fixed: 'rottenRoot' }, { fixed: 'rottenRoot' }, { fixed: 'rottenRootB' }, { fixed: 'rottenTreeHeart' }] },
   { id: 'creviceA', name: '石缝生物A', cost: 5, minFloor: 3, maxFloor: 10, once: true, excl: ['creviceB', 'creviceC'],
     slots: [{ fixed: 'blastPodB' }, { fixed: 'stoneCocoon' }, { fixed: 'mossBallA' }] },
   { id: 'creviceB', name: '石缝生物B', cost: 9, minFloor: 4, maxFloor: 10, once: true, excl: ['creviceA', 'creviceC'],
@@ -270,7 +270,8 @@ export function generateEncounter(run) {
   // unique 敌人已被前面槽位占用则不再进池。
   const used = new Set();
   const slots = picked.slots.map((slot) => {
-    if (slot.fixed) { used.add(slot.fixed); return { defId: slot.fixed, d: getEnemyDefinition(slot.fixed).difficulty.base }; }
+    // 固定槽难度取该敌 base；模板专属变体（如根须B）无难度元数据 → 0（仅展示/调试用）
+    if (slot.fixed) { used.add(slot.fixed); return { defId: slot.fixed, d: getEnemyDefinition(slot.fixed).difficulty?.base ?? 0 }; }
     const full = slotPool(slot, floor);
     const avail = full.filter(x => !(x.unique && used.has(x.id)));
     const poolOfSlot = avail.length > 0 ? avail : full;
@@ -286,10 +287,10 @@ export function generateEncounter(run) {
   const out = slots.map(s => descriptorOf(s.defId, s.d));
 
   // ---- 编成后处理 ----
-  // 静电毛球：15–24 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
-  // staticPuffB 固定 12 血（2026-09-28 用户定）——精确 id 匹配不覆盖 B 变体
+  // 静电毛球：20–29 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
+  // staticPuffB 固定 17 血——精确 id 匹配不覆盖 B 变体
   for (let i = 0; i < out.length; i++) {
-    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([15, 18, 21, 24]) };
+    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([20, 23, 26, 29]) };
   }
   // 同种错拍：同 defId 多只按 0/1 交错起始节拍（例外：典礼方阵刻意齐拍、音叉自带错拍）
   const SYNC_EXEMPT = new Set(['wardStatue', 'tuningFork']);

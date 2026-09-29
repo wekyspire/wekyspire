@@ -557,15 +557,15 @@ registerEffect({
 });
 
 // 引线（EFFECTS.md 2026-09-22 重定义·爆炸引线）：自己回合结束时层数 -1，**层数归 0
-// 时引爆**——对玩家阵营全体造成 20 群伤并自爆死亡。持有者被提前击杀则什么都不发生
-//（新生版爆囊的定时炸弹口径：杀它=拆弹，拖满倒计时=挨炸）。旧「亡语按层数加伤」
-// 语义随旧爆囊一起退役。
+// 时引爆**——对玩家阵营全体造成 14 群伤并自爆死亡（2026-09-29 用户定：20→14）。持有者
+// 被提前击杀则什么都不发生（新生版爆囊的定时炸弹口径：杀它=拆弹，拖满倒计时=挨炸）。
+// 旧「亡语按层数加伤」语义随旧爆囊一起退役。
 registerEffect({
   id: 'blastFuse',
   type: 'buff',
   stacking: 'count',
   name: '爆炸引线',
-  description: '自己回合结束时层数减少 1；层数归零时爆炸——对玩家阵营全体造成 20 伤害，自身死亡。',
+  description: '自己回合结束时层数减少 1；层数归零时爆炸——对玩家阵营全体造成 14 伤害，自身死亡。',
   icon: '🧨',
   color: 'red',
   subscriptions: (unit) => [{
@@ -579,13 +579,13 @@ registerEffect({
         target: unit, effectId: 'blastFuse', stacks: -1,
       }), instr);
       if (stacks <= 1) {
-        // 归零引爆：玩家阵营全体 20 群伤 + 自爆（走正规死亡结算）。fixed = 定值爆炸
-        // （2026-09-29 试玩实报：不带 fixed 会吃爆囊自身蓄势 PRE 加成，20 变 22 与
-        // 「炸 20」卡面语义不符；fixed 仍走护盾吸收，可被满盾挡下）
+        // 归零引爆：玩家阵营全体 14 群伤 + 自爆（走正规死亡结算）。fixed = 定值爆炸
+        // （2026-09-29 试玩实报：不带 fixed 会吃爆囊自身蓄势 PRE 加成、与定值爆炸语义
+        // 不符；fixed 仍走护盾吸收，可被满盾挡下）
         for (const t of [ctx.player, ...aliveAllies(ctx.battleState)]) {
           if (t.isDead()) continue;
           ctx.kernel.submitInstruction(new DealDamageInstruction({
-            source: unit, target: t, amount: 20, fixed: true, type: 'major', tags: ['blast'],
+            source: unit, target: t, amount: 14, fixed: true, type: 'major', tags: ['blast'],
           }), instr);
         }
         ctx.kernel.submitInstruction(new DealDamageInstruction({

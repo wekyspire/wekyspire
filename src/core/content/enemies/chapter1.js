@@ -329,7 +329,7 @@ pufferToadDef('pufferToadB', 1); // B 类：鼓气 → 攻7 → 攻10 → 重击
 pufferToadDef('pufferToadC', 2); // C 类：鼓气 → 攻7 → 攻7 → 攻10 → 重击18∞
 
 // 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 20 并
-// 自爆）。三拍节奏：攻4 → 攻9 → 原地待爆（2026-09-28 大调：首拍 5→4、二拍 8→9）。
+// 自爆）。三拍循环（2026-09-29 用户定：第二拍攻9 改防御）：攻4 → 护盾6 → 待爆。
 // B 类（2026-09-28 用户定）：开局多一拍缩囊蓄势（蓄势2+盾4，不攻击），第 2 拍起正常
 // 循环——只配石缝生物 A/C 编队，压首回合入场伤害。
 function blastPodDef(id, cautious = false) {
@@ -357,28 +357,26 @@ function blastPodDef(id, cautious = false) {
           source: unit, target: player, amount: 4 + unit.getStat('attack'),
         }));
       } else if (phase === 1) {
-        actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: player, amount: 9 + unit.getStat('attack'),
-        }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
       }
       // phase 2：原地待爆（引线在回合结束自然走）
     },
     getIntention: (unit) => {
       const atk = unit.getStat('attack');
       const fuse = unit.getEffectStacks('blastFuse');
-      const boom = `爆炸引线${fuse}：归零时对玩家阵营全体炸 20（击杀它=拆弹）`;
+      const boom = `爆炸引线${fuse}：归零时对玩家阵营全体炸 14（击杀它=拆弹）`;
       if (cautious && unit.actionIndex === 0) {
         return { kinds: ['defend', 'buff'], note: `缩囊蓄势：护盾+4、蓄势+2。${boom}` };
       }
       const phase = (((cautious ? unit.actionIndex - 1 : unit.actionIndex) % 3) + 3) % 3;
       if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 4 + atk, note: boom };
-      if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: boom };
+      if (phase === 1) return { kinds: ['defend'], note: `护盾+6。${boom}` };
       return { kinds: ['unknown'], note: `准备引爆！${boom}` };
     },
   });
 }
-blastPodDef('blastPod');        // A 类：攻4 → 攻9 → 待爆（2026-09-28 大调：首拍 5→4）
-blastPodDef('blastPodB', true); // B 类：缩囊蓄势（盾4+蓄势2）→ 攻4 → 攻9 → 待爆
+blastPodDef('blastPod');        // A 类：攻4 → 盾6 → 待爆（2026-09-29：攻9 拍改防御）
+blastPodDef('blastPodB', true); // B 类：缩囊蓄势（盾4+蓄势2）→ 攻4 → 盾6 → 待爆
 
 // 石茧（2026-09-28 用户定）：开局多一拍破茧预热（蓄势4+攻6），其后原节奏伤害统一 -2：
 // 拍1 重击 13，拍2+ 攻4+盾9。
@@ -558,14 +556,15 @@ registerEnemy({
 });
 
 // 静电毛球：电动（每有一个友军攻击+3，友军增减即时反映面板）——集群越厚它越凶。
-// 每拍电击（攻4）并为友军全员蓄势+1：群战里的成长引擎。血量 15–24 随机（生成器定档）。
-// B 类（2026-09-28 用户定）：固定 12 血的轻量变体——只进静电草地 A/B 编队替换一只，
-// 削集群血厚。
-function staticPuffDef(id, maxHp) {
+// 两拍循环（2026-09-29 用户定）：拍0 电击（攻4）并为友军全员蓄势+1，拍1 防御12。
+// 血量 20–29 随机（生成器定档）。
+// B 类：固定 17 血、起始节拍=防御拍（错开集群的开局输出峰，2026-09-29 用户定）——
+// 只进静电草地 A/B 编队替换一只。
+function staticPuffDef(id, maxHp, startBeat = 0) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
     id, name: '静电毛球',
-    createUnit: () => new Enemy({ defId: id, name: '静电毛球', maxHp }),
+    createUnit: () => new Enemy({ defId: id, name: '静电毛球', maxHp, actionIndex: startBeat }),
     onBattleStart(ctx, unit) {
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'dynamo', stacks: 1,
@@ -573,6 +572,10 @@ function staticPuffDef(id, maxHp) {
     },
     act(actx) {
       const { unit, player, battleState: bs } = actx;
+      if (unit.actionIndex % 2 === 1) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
+        return;
+      }
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player,
         amount: 4 + unit.getStat('attack', bs), // 蓄势走 PRE 订阅（防双计）
@@ -584,6 +587,7 @@ function staticPuffDef(id, maxHp) {
       }
     },
     getIntention: (unit, battleState) => {
+      if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], note: '护盾+12' };
       const atk = unit.getStat('attack', battleState);
       const friends = battleState
         ? aliveEnemies(battleState).filter(u => u !== unit && !u.isDead()).length : 1;
@@ -593,8 +597,8 @@ function staticPuffDef(id, maxHp) {
     },
   });
 }
-staticPuffDef('staticPuff', 20);  // 基础：15–24 随机（生成器覆盖 maxHp）
-staticPuffDef('staticPuffB', 12); // B 类：固定 12 血
+staticPuffDef('staticPuff', 25);  // 基础：20–29 随机（生成器覆盖 maxHp）
+staticPuffDef('staticPuffB', 17, 1); // B 类：固定 17 血、从防御拍起步
 
 // 嗡嗡虫 A/B（塞卡干扰位，成群出现）：登场闪避1；三拍循环——A 类先塞后打，B 类先打后塞。
 // 迷眼粉尘塞牌库随机位（抽到手上才开始计时），尾拍是 2×5 的多段撞击。
@@ -651,30 +655,47 @@ buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍
 
 // 腐败根须：会复苏的一直攻击——死亡后隔 1 回合复活（无限次；作为场上最后一只
 // 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血，复苏固定 11 血。两拍循环：攻6 → 攻4×3。
-// 2026-09-28 数值大调（渐强型削血+攻击↓）：18→15 血、复苏 13→11、攻 8→6。
-registerEnemy({
-  difficulty: { base: 2, floorMin: 2, floorMax: 16 },
-  id: 'rottenRoot', name: '腐败根须',
-  createUnit: () => new Enemy({ defId: 'rottenRoot', name: '腐败根须', maxHp: 15 }),
-  ...reviveKit({ times: Infinity, hp: 11 }),
-  act(actx) {
-    const { unit, player } = actx;
-    if (unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 6 + unit.getStat('attack'),
-      }));
-    } else {
-      for (let i = 0; i < 3; i++) {
+// 腐败根须：会复苏的持续输出位——无限复活（死后 1 回合、固定 11 血）。三拍循环
+// （2026-09-29 用户定：攻 6→5、4×3→2×3、新增第三拍蓄势1）：攻5 → 攻2×3 → 蓄势1。
+// B 变体（2026-09-29 用户定）：从第三拍（蓄势）起步，错开群根须的开局输出峰；
+// 无难度元数据 = 不进通配/精英池，只经根须主题战固定槽出场。
+function rottenRootDef(id, startBeat = 0) {
+  registerEnemy({
+    ...(id === 'rottenRoot' ? { difficulty: { base: 2, floorMin: 2, floorMax: 16 } } : {}),
+    id, name: '腐败根须',
+    createUnit: () => new Enemy({ defId: id, name: '腐败根须', maxHp: 15, actionIndex: startBeat }),
+    ...reviveKit({ times: Infinity, hp: 11 }),
+    act(actx) {
+      const { unit, player } = actx;
+      const phase = unit.actionIndex % 3;
+      if (phase === 0) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: player, amount: 4 + unit.getStat('attack'),
+          source: unit, target: player, amount: 5 + unit.getStat('attack'),
+        }));
+      } else if (phase === 1) {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 2 + unit.getStat('attack'),
+          }));
+        }
+      } else {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'momentum', stacks: 1,
         }));
       }
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack'), note: '复苏：死后1回合复活' }
-    : { kinds: ['attack'], hits: 3, damage: 4 + unit.getStat('attack'), note: '复苏：死后1回合复活' }),
-});
+    },
+    getIntention: (unit) => {
+      const revive = '复苏：死后1回合复活';
+      const atk = unit.getStat('attack');
+      const phase = unit.actionIndex % 3;
+      if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 5 + atk, note: revive };
+      if (phase === 1) return { kinds: ['attack'], hits: 3, damage: 2 + atk, note: revive };
+      return { kinds: ['buff'], note: `蓄势+1。${revive}` };
+    },
+  });
+}
+rottenRootDef('rottenRoot');
+rottenRootDef('rottenRootB', 2);
 
 // 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。三拍：攻5 → 攻3×3 → 力量3。
 // 2026-09-28 数值大调（血厚型加血+攻击↓+力量拍）：45→57 血、攻 6→5、4×3→3×3、
