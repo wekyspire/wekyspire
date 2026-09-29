@@ -27,6 +27,7 @@
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { EventNames } from '../../bridge/events.js';
+import { dispatchAnimBeat } from './battleBeats.js';
 import { DisplayModel } from '../../bridge/displayModel.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
@@ -99,19 +100,6 @@ export { PLAYER_STATUS_POS };
 const BUBBLE_HEAD_DY = 30;
 // 手牌满被挡下时骑士的自语（思索泡泡而非飘字）
 const HAND_FULL_LINE = '我无法掌控更多手牌了！';
-
-// 单位行动姿态表（非主角角色行动要有身体反馈——
-// 增强/攻击/防御三种姿态分流，削弱随效果节拍白捡一路）。squash/widen 绕脚底
-// 压扁撑宽、lean 绕脚前倾（符号在节拍内按朝向算），flash 为立牌染色（restoreColor 复原）。
-// 攻击姿态不在此表：它是「突进位移 + 前倾」，编排在 _damageHit 里（接触瞬间 = 命中演出）。
-const UNIT_POSES = Object.freeze({
-  // 防御：蜷缩支撑（压扁 + 撑宽 = 沉住马步），蓝闪
-  defend: { squash: 0.78, widen: 1.16, lean: 0, flash: 0x8fc3ff, inMs: 110, holdMs: 110, outMs: 190 },
-  // 增强：拔地而起（拔高 + 收窄 = 气势上行），金闪
-  buff: { squash: 1.18, widen: 0.94, lean: 0, flash: 0xffd34c, inMs: 130, holdMs: 90, outMs: 200 },
-  // 削弱：佝偻前倾（压扁 + 微倾 = 气势受挫），紫闪；lean 朝向对方阵营（节拍内按 side 赋号）
-  debuff: { squash: 0.84, widen: 1.06, lean: 0.1, flash: 0xb26ee8, inMs: 130, holdMs: 80, outMs: 190 },
-});
 
 export class BattleStage {
   /**
@@ -1384,144 +1372,9 @@ export class BattleStage {
   }
 
   _dispatchAnim(type, payload, finish) {
-    // 状态同步节拍：显示状态在此推进（应用快照 + reconcile），立即 finish
-    if (type === EventNames.ANIM_STATE_SYNC) {
-      this._applySnapshot(payload?.snapshot);
-      return finish();
-    }
-
-    // 卡牌离场节拍（弃/焚/迁移）：播放该卡的离场飞行并阻塞本节拍——
-    // 离场时序完全由 sequencer 编排（sync 节拍排在离场之后，牌库数字飞进才+1）
-    if (type === EventNames.ANIM_CARD_DISCARDED || type === EventNames.ANIM_CARD_BURNT
-      || type === EventNames.ANIM_CARD_MOVED) {
-      const id = payload?.card?.uniqueID ?? payload?.skill?.uniqueID ?? payload?.uniqueID ?? null;
-      return this._departureBeat(id, type, payload, finish);
-    }
-    // 入手抽牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍；
-    // 造牌入库（toZone 'deck'）则走 _addCardBeat：卡面生成 → 飞入牌库 → 计数随其后 sync 跳增
-    if (type === EventNames.ANIM_CARD_DRAWN) {
-      // 因手牌上限没抽到牌（core 在载荷里分开记了 blockedByHandLimit 与 deckEmpty）：
-      // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（实报）
-      if (payload?.blockedByHandLimit) this._handPressureHint();
-      return this._pulsePile('deck', finish);
-    }
-    if (type === EventNames.ANIM_CARD_ADDED) {
-      return this._addCardBeat(payload, finish);
-    }
-    if (type === EventNames.ANIM_CARDS_DUMPED) {
-      // 弃牌动作节拍（动作级）：牌堆脉冲——弃置本体由每张卡的 ANIM_CARD_DISCARDED 承担
-      return this._pulsePile('deck', finish);
-    }
-    // 结算宾语展示（转化前半）：从原位飞到中央展示位（高于发动展示位，避免叠卡）
-    if (type === EventNames.ANIM_CARD_SHOWCASE) {
-      return this._showcaseBeat(payload, finish);
-    }
-    // 转化闪变（后半）：换脸 + 金色迸发 + 尺寸脉冲——宾语变化的生效反馈主体
-    if (type === EventNames.ANIM_CARD_TRANSFORMED) {
-      return this._transformBeat(payload, finish);
-    }
-    if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
-    // 资源消耗/获取（魏启/AP 数字跳动）：数字由 syncState 承担；消耗粒子是纯装饰
-    // 并行拍——立即 finish 不占队列。卡费消耗（skillUniqueID 归属）的爆散+汇聚
-    // 已在 _skillDisplay 编排（先汇聚后发动），此处只补非卡来源的纯爆散
-    if (type === EventNames.ANIM_RESOURCE) return this._resourceBeat(payload, finish);
-    // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
-    // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
-    // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）。
-    // 发动点亮且卡带激活能力（载荷 anim 描述符，core 按 def.activated 判定）时，
-    // 先在展示位播激活演出再放行——「这张卡被点亮了」要看得见。
-    if (type === EventNames.ANIM_CHANT_TOGGLED) {
-      const id = payload?.skill?.uniqueID ?? null;
-      const release = () => {
-        if (id != null && this.model.getZone(id) === 'held' && this._views.has(id)) {
-          this.model.setZone(id, 'hand');
-          this._entering.add(id); // 从展示位飞回扇形锚点
-        }
-      };
-      if (payload?.on && payload?.anim) {
-        return this._chantActivateBeat(id, payload.anim, () => { release(); finish(); });
-      }
-      release();
-      return finish();
-    }
-    // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
-    // ⚠ 判据必须是「视图可见」（= 卡在手牌），不是 _views 是否命中——牌库中的卡视图保留
-    // 但 visible=false，打在它上面的脉冲肉眼不可见（障：斩弃回牌库看不到
-    // 冷却动画，脉冲全喂给了隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍
-    // 紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。
-    // 立即 finish——non-blocking，不占队列节拍
-    if (type === EventNames.ANIM_COOLDOWN_TICK) {
-      const delta = payload?.delta ?? 1;
-      const id = payload?.skill?.uniqueID ?? null;
-      const view = id != null ? this._views.get(id) : null;
-      if (view?.visible) {
-        this._pulseCard(id, delta < 0 ? 0xc87070 : 0x66ff99);
-      } else if (delta > 0) {
-        this._pulseDeckPile(0x66ff99); // 反向（衰败）只可能在手牌，无退路需求
-      }
-      return finish();
-    }
-    // 卡牌威力提升（公共节拍）：卡面放缩脉冲 —— 手牌里由弹簧层收养后自然弹回锚点，
-    // 展示/结算位的卡自己补间回原位。同时叠一层金色加色闪光（fx 层）。
-    if (type === EventNames.ANIM_CARD_POWER_UP) {
-      return this._cardPowerBeat(payload, finish);
-    }
-
-    const target = this._findAnimTarget(payload);
-    // 通用剧本闸口（fx 架构）：剧本自寻址（cast/unitById），不走 target 投影
-    if (type === EventNames.ANIM_SCRIPT) return this._scriptBeat(payload, finish);
-    if (type === EventNames.ANIM_DAMAGE && target) return this._damageHit(target, payload, finish);
-    if (type === EventNames.ANIM_UNIT_DEATH && target) return this._unitDeathBeat(target, payload, finish);
-    if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
-    // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
-    // 治疗追加 +N 绿色文本粒子（无重力上飘）。
-    // 护盾/效果另接**行动姿态**（非主角行动要有身体语言）——
-    // 护盾 = 防御蜷缩、效果按 type 分增强拔起/削弱佝偻，替换旧通用脉冲（时长同量级）；
-    // 治疗保持通用脉冲（治疗者姿态未定义，不硬造）。
-    if (target && (type === EventNames.ANIM_HEAL || type === EventNames.ANIM_SHIELD || type === EventNames.ANIM_EFFECT)) {
-      const fx = {
-        [EventNames.ANIM_HEAL]: { color: 0x66ff9e, accent: 0xd0ffe0, gravity: 18 },
-        [EventNames.ANIM_SHIELD]: { color: 0x8fc3ff, accent: 0xeaf4ff, gravity: -8 },
-        [EventNames.ANIM_EFFECT]: { color: 0xffd34c, accent: 0xffedb0, gravity: -6 },
-      }[type];
-      this.particles.spawn(target.position.x, target.position.y, { count: 16, color: fx.color, speed: 10, ttl: 0.6, size: 1.4, gravity: fx.gravity, z: target.position.z ?? 0 });
-      this.particles.spawn(target.position.x, target.position.y, { count: 8, color: fx.accent, speed: 16, ttl: 0.45, size: 1.0, gravity: fx.gravity, z: target.position.z ?? 0 });
-      if (type === EventNames.ANIM_HEAL && (payload?.healed ?? 0) > 0) {
-        const p = this._unitToUI(target, (Math.random() - 0.5) * 3, 4);
-        this.particles.spawnText(
-          p.x, p.y,
-          `+${payload.healed}`,
-          {
-            fontSize: Math.min(30 + payload.healed * 2, 72), color: '#4ade80',
-            vx: (Math.random() - 0.5) * 6, vy: 14,
-            gravity: 0, drag: 1.2, ttl: 1.0, scalePop: 0.4,
-            space: 'ui',
-          },
-        );
-      }
-      if (type === EventNames.ANIM_SHIELD) return this._poseBeat(target, UNIT_POSES.defend, finish);
-      // 效果姿态只摆「获得/叠层」：层数衰减/扣尽（燃烧跳完 -1 等）读作消退，
-      // 不配「被施加」的强姿态——回落下方通用脉冲（旧行为）
-      if (type === EventNames.ANIM_EFFECT && (payload?.delta ?? 1) > 0) {
-        return this._poseBeat(target, payload?.type === 'debuff' ? UNIT_POSES.debuff : UNIT_POSES.buff, finish);
-      }
-    }
-    if (!target) { finish(); return; }
-    // 通用脉冲：放大→平滑回程→finish（不硬切 scale）。单位带槽位 baseScale（假透视），
-    // 脉冲围绕 baseScale 起伏；还在桌上的卡重回跟踪（补间回锚点，含悬浮 scale）
-    const targetId = target.uniqueID;
-    const bs = target._baseScale ?? 1;
-    this.animator.animate(targetId, { scale: bs * 1.15 }, {
-      durationMs: 150,
-        onComplete: () => {
-          const zone = this.model.getZone(targetId);
-          if (zone === 'hand') {
-            finish(); // 弹簧层自动收养（动画已落定回 idle），从脉冲位滑回锚点
-          } else {
-            this.animator.animate(targetId, { scale: bs }, { durationMs: 120, onComplete: finish });
-          }
-        },
-    });
+    // 分发已表驱动（battleBeats.js 的 ANIM_BEATS）：加新演出去表里登记 + 宿主实现
+    // _xxxBeat 方法，不在此插 if 分支；未登记类型走通用脉冲兜底。
+    return dispatchAnimBeat(this, type, payload, finish);
   }
 
   // 发动展示（全局唯一卡牌：展示用本体，无替身无瞬移）：
