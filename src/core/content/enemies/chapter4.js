@@ -1,5 +1,4 @@
 // 章4 小怪（图书馆，34~44 层普通池；含族A 玻璃连炮 / 族B 巨兽渐强 / 族C 机制反制三族）。
-// 拆分自原 content/enemies.js（2026-09-24，内容零改动）。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy } from '../../enemies/registry.js';
@@ -20,10 +19,9 @@ registerEnemy({
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：12→16（章4 输出 60-100+）
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 }));
       }
-      // 盾拍蓄力（2026-09-14 马拉松修复）：禁书库防挡 3+全体盾 16 曾把小刀流磨到
-      // 无风险长跑——盾拍自身 +2 力量，大攻击（14+atk）随回合线性上涨，拖久必痛。
+      // 盾拍蓄力：盾拍自身 +2 力量，大攻击（14+atk）随回合线性上涨，拖久必痛。
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'strength', stacks: 2,
       }));
@@ -94,7 +92,7 @@ registerEnemy({
       return;
     }
     if (phase === 2) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 })); // 数值意识（2026-09-16）：8→12
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
       return;
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -108,7 +106,7 @@ registerEnemy({
   },
 });
 
-// ============ 第四章高压敌（2026-09-14 用户设计：特色战斗三族 + 机制四件套）============
+// ============ 第四章高压敌（特色战斗三族 + 机制四件套）============
 // 设计总纲（第四轮设计稿定稿）：每场战斗是一个有「破解方程」的谜题——
 //   族A 玻璃连炮：开局重压（合计 40+ 直伤）+ 持续中压 + 异常轮转；弱点是分体（杀一只
 //     少一份伤害与异常源），破解=以攻为守、爆发削员。血量终值 50+（基准 20-30）。
@@ -301,8 +299,6 @@ registerEnemy({
 // ⑥ 墨海母核（B3 墨海涨潮）：两拍循环「触须横扫 12+atk ↔ 涨墨（玩家紧勒+1——手牌
 // 上限 -1，走效果轨，至多叠 2 层 = 基准-2 保底 + 塞 1 墨渍）」。单回合峰值温和，全部
 // 压力来自操作空间收缩——「可打但越来越挤」。
-// （2026-09-29 紧勒效果轨化：旧实现直写 bs.modifiers.maxHandSize 且不触发
-// refreshRunModifiers，战中从不生效——本敌的涨墨自此才真正落地。）
 registerEnemy({
   difficulty: { base: 11, floorMin: 36, floorMax: 43 },
   id: 'inkTideCore', name: '墨海母核',
@@ -500,7 +496,7 @@ registerEnemy({
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：10→16
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 }));
       }
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -531,7 +527,7 @@ registerEnemy({
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: e, effectId: 'strength', stacks: 2 }));
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 })); // 数值意识（2026-09-16）：8→12 / 14→18
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 }));
       }
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 18 }));
@@ -578,7 +574,7 @@ registerEnemy({
     const { unit } = actx;
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 16 })); // 数值意识（2026-09-16）：10→16（章4 输出 60-100+）
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 16 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'strength', stacks: 2 }));
     } else if (phase === 1) {
@@ -620,7 +616,7 @@ registerEnemy({
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: actx.player, amount: 11 + unit.getStat('attack') }));
     } else {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 })); // 数值意识（2026-09-16）：6→10
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 }));
     }
   },
   getIntention: (unit) => {

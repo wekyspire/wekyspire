@@ -1,5 +1,4 @@
 // 精英怪（每章第 6/9 层的精英池，difficulty.elite = true；随从（无难度元数据、不进生成池）跟各自召唤主）。
-// 拆分自原 content/enemies.js（2026-09-24，内容零改动）。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy, getEnemyDefinition } from '../../enemies/registry.js';
@@ -10,10 +9,10 @@ import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { aliveEnemies } from '../../state/battleState.js';
 
-// ==== 精英怪（2026-09 难度制）：机制更强 / 基准数值更高 / 难度≈两个普通敌人 ====
+// ==== 精英怪：机制更强 / 基准数值更高 / 战力≈两个普通敌人 ====
 // 精英只经「精英怪房」模板出场（difficulty.elite: true 同时把它挡在普通通配池外）。
-// 缩放锚点：精英的基准数值按自身 base 难度授权（雪狼 55 血 = 难5 白板），
-// 属性按 (d − base) 缩放——普通敌人按 (d − 2) 缩放，两套锚点见 ENEMY_GENERATION.md。
+// v2 起精英也是固定数值（createUnit() 授权面板，不缩放）——base 只是战力档位标签
+//（雪狼 base 10 ≈ 两个 d5 白板），见 ENEMY_GENERATION.md。
 
 // 震慑（雪狼衍生塞牌）：消耗，无效果，1AP——纯手牌淤积（占手牌位 + 打出收 AP 税），
 // 可换牌/弃牌处理。只经 AddCard 入场，不入奖励池（同碎铁口径）。
@@ -28,8 +27,7 @@ registerSkill({
   describe: () => '无效果',
 });
 
-// ⑨ 雪狼（第 1 章精英，2026-09-22 重写）：血牛 + 节奏骚扰——开局压制（虚弱2 + 攻9），
-// 随后三拍循环（2026-09-28 数值大调：塞牌拍提前开循环、攻击 12/7×3 → 6/6×3、盾 10→14）：
+// ⑨ 雪狼（第 1 章精英）：血牛 + 节奏骚扰——开局压制（虚弱2 + 攻9），随后三拍循环：
 // 塞 2 张「震慑」入玩家手牌 → 攻6+盾14 → 攻6×3
 //（塞牌挤占手牌上限与位置敏感卡；满手时震慑改落牌库，AddCard 的兜底语义）。
 registerEnemy({
@@ -79,7 +77,7 @@ registerEnemy({
   },
 });
 
-// ⑫ 沼泽伏击者（第 1 章精英，2026-09-22 重写）：爆发——开局自带护盾20（防首回合
+// ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
 // 被斩杀），首拍扑咬 25；随后三拍循环：盾15+中毒5 → 盾15+攻10 → 晕眩发呆（破盾窗口）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
@@ -123,9 +121,9 @@ registerEnemy({
   },
 });
 
-// ⑳ 碎岩穿山甲（第 1 章精英，2026-09-22 重写）：重甲 + 蓄势冲锋——固定防御 3
+// ⑳ 碎岩穿山甲（第 1 章精英）：重甲 + 蓄势冲锋——固定防御 3
 //（白板 6 伤拳只磨出 3）；两拍循环：蓄力（盾15 + 蓄势6）→ 冲锋（攻12，
-// 蓄势让每一击都吃满加成）。旧「冲锋失衡防御归零」机制已随新稿移除。
+// 蓄势让每一击都吃满加成）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'rockPangolin', name: '碎岩穿山甲',
@@ -143,7 +141,7 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player,
-        amount: 12 + unit.getStat('attack'), // 蓄势走 PRE 订阅（双计 bug 2026-09-22 修：意图曾少一份）
+        amount: 12 + unit.getStat('attack'), // 蓄势走 PRE 订阅，不双计
       }));
     }
   },

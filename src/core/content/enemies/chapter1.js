@@ -1,5 +1,5 @@
 // 章1 小怪（首个 Boss 前 · 第 1–10 层普通池）。
-// 2026-09-22 用户全量重写 ENEMIES_1.md：v2 固定数值（面板即所见），主题战编成见
+// 设计卡 = ENEMIES_1.md；v2 固定数值（面板即所见），主题战编成见
 // floorEnemyGenerator.js；效果定义一律以 battle_gameplay/skills/EFFECTS.md 为准。
 
 import Enemy from '../../state/enemy.js';
@@ -66,11 +66,10 @@ registerSkill({
 
 // ---- 普通怪 ----
 
-// 史莱姆：教学基准怪——攻 12 → 盾 8 两拍循环。第 1 层固定单挑；2–4 层史莱姆战固定位。
-// 史莱姆B：防攻变体（先盾后攻）——史莱姆爆发主题战的压场位：首拍起盾不下压，
-// 给小史莱姆的塞粘液/融合滚雪球留出铺开时间（2026-09-27 用户定）。
+// 史莱姆：教学基准怪——攻 9 → 盾 9 两拍循环。36 血。第 1 层固定单挑；2–4 层史莱姆战固定位。
+// 史莱姆B：防攻变体（先盾后攻，36 血）——史莱姆爆发主题战的压场位：首拍起盾不下压，
+// 给小史莱姆的塞粘液/融合滚雪球留出铺开时间。
 // 楼层区间即模板出没层；通配位就近取材贴最低 base（小史莱姆 1），B 实际不进编成。
-// 2026-09-28 数值大调：27→36 血、攻 12→9、盾 8→9（总体血量↑/首拍杀伤↓）。
 function slimeDef(id, { name, attackFirst, difficulty }) {
   registerEnemy({
     id, name, difficulty,
@@ -100,7 +99,7 @@ function wraithDef(id, opener) {
   registerEnemy({
     id, name: '怨灵',
     difficulty: { base: 3, floorMin: 2, floorMax: 6 },
-    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 37 }), // 2026-09-29 大调：28→37
+    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 37 }),
     act(actx) {
       const { unit, player } = actx;
       if (unit.actionIndex === 0) return open(actx);
@@ -157,8 +156,8 @@ function slimeletDef(id, firstIsAttack) {
     act(actx) {
       const { unit, player } = actx;
       // 行动先执行、actionIndex 后自增（aiAct.js）：首拍恒为 0。firstIsAttack=true 时
-      // 偶数拍（含首拍）重拳、false 时首拍塞粘液轻拍——2026-09-28 修三目倒置
-      //（旧写法 1:0 让 A/B 实际行为与文档对调）。
+      // 偶数拍（含首拍）重拳、false 时首拍塞粘液轻拍（⚠ 三目方向易倒置——写反会让
+      // A/B 实际行为与文档对调）。
       const jab = unit.actionIndex % 2 === (firstIsAttack ? 0 : 1);
       if (jab) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -185,8 +184,7 @@ function slimeletDef(id, firstIsAttack) {
 slimeletDef('slimeletA', false); // A 类：拍1 塞粘液攻2 → 拍2 攻4
 slimeletDef('slimeletB', true);  // B 类：拍1 攻4 → 拍2 塞粘液攻2
 
-// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻10 → 攻4+荆棘3。
-// 2026-09-28 数值大调：28→37 血、循环 6/10/6 → 4/10/4、盾 8→10（血量↑/攻击↓）。
+// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻10 → 攻4+荆棘3。37 血。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
@@ -222,15 +220,13 @@ registerEnemy({
   },
 });
 
-// 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，效果轨直读——2026-09-29 起
-// 紧勒经 statModifiers 进 handLimitOf，不再直改 player.maxHandSize），三拍循环
-// （拍1 纯蔓延 → 拍2 自愈盾回 → 拍3 攻 9）；亡语归还自己施加的全部紧勒层数（杀了就松手）。
-// A/B 类（2026-09-22 用户定，头轮试玩反馈紧勒叠太快）：B 类紧勒晚一拍起步——第 2 拍
-// 才开始蔓延，给玩家一个手牌完整的首回合抢输出；同场 2 只苔球的编成一律 A/B 配合
-// （见 floorEnemyGenerator），单只编成用 A。
-// C 类（2026-09-22 用户定，双苔球+史莱姆开场 28 伤团灭复盘）：首拍纯防御（护盾+8，
-// 不攻击不蔓延），第 2 拍起才进入正常循环——把该编成的一只苔球换成 C 类，
-// T1 齐射 28→20 且首拍零紧勒。
+// 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，紧勒经效果轨 statModifiers
+// 进 handLimitOf），三拍循环（拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻 9）；亡语归还自己
+// 施加的全部紧勒层数（杀了就松手）。
+// A/B 类：B 类紧勒晚一拍起步——第 2 拍才开始蔓延，给玩家一个手牌完整的首回合抢输出；
+// 同场 2 只苔球的编成一律 B+C 配合（见 floorEnemyGenerator），单只编成用 A。
+// C 类：首拍纯防御（护盾+8，不攻击不蔓延），第 2 拍起才进入正常循环——双苔球编成里
+// 把一只换成 C 类，T1 齐射压力与首拍紧勒同时降档。
 function mossBallDef(id, delayedGrip, openingGuard = false) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
@@ -247,12 +243,12 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: player, effectId: 'constrict', stacks: 1 }));
       }
-      // 三拍循环（2026-09-28 数值大调，攻击欲望↓）：拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻9。
-      // B 类首拍算循环第三拍（用户定：第一拍攻9 起手，第 2 拍起正常蔓延循环）——相位 +2。
+      // 三拍循环：拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻9。
+      // B 类首拍算循环第三拍（第一拍攻9 起手，第 2 拍起正常蔓延循环）——相位 +2。
       const phase = (delayedGrip ? unit.actionIndex + 2 : unit.actionIndex) % 3;
       if (phase === 1) {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
-        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 })); // 回血 8→5（2026-09-22 用户定）
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 }));
       } else if (phase === 2) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: player, amount: 9 + unit.getStat('attack') }));
@@ -263,8 +259,8 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
         return { kinds: ['defend'], note: '蜷缩防御（下回合起正常行动）' };
       }
       const gripsNow = !(delayedGrip && unit.actionIndex === 0);
-      // 相位口径与 act 对齐（B 类同为 +2——2026-09-29 试玩实报：意图写 +1 比 act 慢
-      // 一拍，首拍显示「盾回蔓延」实际攻 9，「防御+强化藏攻击」骗掉布防）
+      // 相位口径与 act 对齐（B 类同为 +2——⚠ 两处必须同步改，否则意图比 act 慢一拍，
+      // 「防御+强化」的预告下藏着攻击，骗掉布防）
       const phase = (delayedGrip ? unit.actionIndex + 2 : unit.actionIndex) % 3;
       const attacking = phase === 2;
       return {
@@ -292,11 +288,10 @@ mossBallDef('mossBallB', true);  // B 类：首拍攻9 不缠（算循环第三�
 mossBallDef('mossBallC', false, true); // C 类：首拍纯防御（盾8），第 2 拍起正常循环
 
 // 鼓腹蟾：渐强威胁——鼓气 → 启动段 → 永远重击 18。放着不管会出事，但打它没有任何
-// 反制机制（2026-09-22 稿去掉旧「被攻击膨胀」）——纯粹的 DPS 检查。
-// A/B/C 类（2026-09-22 用户定，蟾群团灭复盘：三蟾同步齐射 30→54 无解）：B/C 启动段
-// 各多插一/两拍「攻 7」过渡拍——重击到达时间 A=T3 / B=T4 / C=T5，蟾群编成可用不同型错峰
-// 后齐射变轮射（T3 峰值 54→35），玩家每回合有可防御窗口；单蟾 18 不动，仍考验 DPS
-// 与启动速度（拖到 T5 三蟾照样齐 54）。
+// 反制机制——纯粹的 DPS 检查。
+// A/B/C 类：B/C 启动段各多插一/两拍「攻 7」过渡拍——重击到达时间 A=T3 / B=T4 / C=T5，
+// 蟾群编成用不同型错峰，后齐射变轮射，玩家每回合有可防御窗口；单蟾 18 不动，
+// 仍考验 DPS 与启动速度（拖到 T5 三蟾照样齐 54）。
 function pufferToadDef(id, ramped) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
@@ -327,9 +322,9 @@ pufferToadDef('pufferToadA', 0); // A 类：鼓气 → 攻10 → 重击18∞
 pufferToadDef('pufferToadB', 1); // B 类：鼓气 → 攻7 → 攻10 → 重击18∞
 pufferToadDef('pufferToadC', 2); // C 类：鼓气 → 攻7 → 攻7 → 攻10 → 重击18∞
 
-// 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 20 并
-// 自爆）。三拍循环（2026-09-29 用户定：第二拍攻9 改防御）：攻4 → 护盾6 → 待爆。
-// B 类（2026-09-28 用户定）：开局多一拍缩囊蓄势（蓄势2+盾4，不攻击），第 2 拍起正常
+// 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 14 并
+// 自爆）。三拍循环：攻4 → 护盾6 → 待爆。
+// B 类：开局多一拍缩囊蓄势（蓄势2+盾4，不攻击），第 2 拍起正常
 // 循环——只配石缝生物 A/C 编队，压首回合入场伤害。
 function blastPodDef(id, cautious = false) {
   registerEnemy({
@@ -374,11 +369,10 @@ function blastPodDef(id, cautious = false) {
     },
   });
 }
-blastPodDef('blastPod');        // A 类：攻4 → 盾6 → 待爆（2026-09-29：攻9 拍改防御）
+blastPodDef('blastPod');        // A 类：攻4 → 盾6 → 待爆
 blastPodDef('blastPodB', true); // B 类：缩囊蓄势（盾4+蓄势2）→ 攻4 → 盾6 → 待爆
 
-// 石茧（2026-09-28 用户定）：开局多一拍破茧预热（蓄势4+攻6），其后原节奏伤害统一 -2：
-// 拍1 重击 13，拍2+ 攻4+盾9。
+// 石茧：开局破茧预热（蓄势4+攻6），拍1 重击 13，拍2+ 攻4+盾9。46 血。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'stoneCocoon', name: '石茧',
@@ -432,7 +426,7 @@ registerEnemy({
         target: unit, effectId: 'momentum', stacks: 3,
       }));
     } else {
-      const per = 1 + unit.getStat('attack'); // 蓄势由 momentum 的 PRE 订阅统一加（双计 bug 2026-09-22 修）
+      const per = 1 + unit.getStat('attack'); // 蓄势由 momentum 的 PRE 订阅统一加，不双计
       for (let i = 0; i < 4; i++) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: player, amount: per,
@@ -466,9 +460,8 @@ registerEnemy({
     damage: 5 + unit.getStat('attack'), note: '藤鞭：中毒2（春风：第一次死亡后复苏）' }),
 });
 
-// 腐食甲虫：出场自带甲壳2（主级伤害减半/层）。三拍循环（2026-09-28 大调，攻击欲望↓）：
-// 攻3+啃食牌库顶 → 攻8 → 攻8。
-// B 类（2026-09-28 用户定）：首拍获得甲壳1（不攻击），第 2 拍起接正常循环——只配
+// 腐食甲虫：出场自带甲壳2（主级伤害减半/层）。三拍循环：攻3+啃食牌库顶 → 攻8 → 攻8。
+// B 类：首拍获得甲壳1（不攻击），第 2 拍起接正常循环——只配
 // 草地大麻烦B 编队，压首回合入场伤害。
 function carrionBeetleDef(id, cautious = false) {
   registerEnemy({
@@ -555,9 +548,9 @@ registerEnemy({
 });
 
 // 静电毛球：电动（每有一个友军攻击+3，友军增减即时反映面板）——集群越厚它越凶。
-// 两拍循环（2026-09-29 用户定）：拍0 电击（攻4）并为友军全员蓄势+1，拍1 防御12。
+// 两拍循环：拍0 电击（攻4）并为友军全员蓄势+1，拍1 防御12。
 // 血量 20–29 随机（生成器定档）。
-// B 类：固定 17 血、起始节拍=防御拍（错开集群的开局输出峰，2026-09-29 用户定）——
+// B 类：固定 17 血、起始节拍=防御拍（错开集群的开局输出峰）——
 // 只进静电草地 A/B 编队替换一只。
 function staticPuffDef(id, maxHp, startBeat = 0) {
   registerEnemy({
@@ -614,7 +607,7 @@ function buzzbugDef(id, firstIsAttack) {
     act(actx) {
       const { unit, player } = actx;
       // 首拍恒为 phase 0（见 slimelet 同款注释）：firstIsAttack=true 首拍攻1×4、
-      // false 首拍振翅塞粉尘——2026-09-28 修三目倒置（旧写法 A/B 行为与文档对调）。
+      // false 首拍振翅塞粉尘（⚠ 三目方向易倒置——写反会让 A/B 行为与文档对调）。
       const phase = unit.actionIndex % 3;
       const swarm = phase === 2;
       const jab = phase === (firstIsAttack ? 0 : 1);
@@ -652,11 +645,9 @@ function buzzbugDef(id, firstIsAttack) {
 buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍3 撞×5
 buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×5
 
-// 腐败根须：会复苏的一直攻击——死亡后隔 1 回合复活（无限次；作为场上最后一只
-// 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血，复苏固定 11 血。两拍循环：攻6 → 攻4×3。
-// 腐败根须：会复苏的持续输出位——无限复活（死后 1 回合、固定 11 血）。三拍循环
-// （2026-09-29 用户定：攻 6→5、4×3→2×3、新增第三拍蓄势1）：攻5 → 攻2×3 → 蓄势1。
-// B 变体（2026-09-29 用户定）：从第三拍（蓄势）起步，错开群根须的开局输出峰；
+// 腐败根须：会复苏的持续输出位——无限复活（死后 1 回合、固定 11 血；作为场上最后一只
+// 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血。三拍循环：攻5 → 攻2×3 → 蓄势1。
+// B 变体：从第三拍（蓄势）起步，错开群根须的开局输出峰；
 // 无难度元数据 = 不进通配/精英池，只经根须主题战固定槽出场。
 function rottenRootDef(id, startBeat = 0) {
   registerEnemy({
@@ -696,9 +687,8 @@ function rottenRootDef(id, startBeat = 0) {
 rottenRootDef('rottenRoot');
 rottenRootDef('rottenRootB', 2);
 
-// 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。三拍：攻5 → 攻3×3 → 力量3。
-// 2026-09-28 数值大调（血厚型加血+攻击↓+力量拍）：45→57 血、攻 6→5、4×3→3×3、
-// 新增第三拍力量3（攻3×3 后的蓄力拍，长战渐强）。
+// 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。57 血。三拍：攻5 → 攻3×3 → 蓄势3
+//（第三拍是攻3×3 后的蓄力拍，长战渐强）。
 registerEnemy({
   difficulty: { base: 3, floorMin: 2, floorMax: 16 },
   id: 'rottenTreeHeart', name: '腐败树心',
@@ -734,6 +724,6 @@ registerEnemy({
 });
 
 // 灵脉虹吸的黑名单：纯玩家侧触发逻辑（偷过去语义反转）与内部计数轨不可偷。
-// blastFuse（2026-09-22 重定义）仍是敌方式倒计时——玩家挂着只会炸自己，不可偷。
+// blastFuse 仍是敌方式倒计时——玩家挂着只会炸自己，不可偷。
 // bosses.js 的吞噬者（灵脉虹吸）同表共用——此前它引用了未导出的本表（潜在 ReferenceError）。
 export const ESSENCE_STEAL_BLACKLIST = new Set(['naqi', 'blastFuse', 'fusion']);
