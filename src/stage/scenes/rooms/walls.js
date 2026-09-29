@@ -43,7 +43,7 @@ function archFrame(w, h, color) {
   return new THREE.Mesh(paint(new THREE.ShapeGeometry(shape), color), materialOf('stone'));
 }
 
-// 矩形轮廓（体素墙洞口口径：洞是矩形，门洞视觉件必须同形——尖拱配矩形洞会露馅，用户定 2026-09）。
+// 矩形轮廓（体素墙洞口口径：洞是矩形，门洞视觉件必须同形——尖拱配矩形洞会露馅）。
 function rectShape(w, h) {
   const s = new THREE.Shape();
   s.moveTo(-w / 2, 0);
@@ -70,7 +70,7 @@ function rectVoid(w, h, color = P.night) {
  * 沿墙分段砌实体段（洞口之间填空）。axis='x'：墙沿 x 走（背墙），fixed=z；
  * axis='z'：墙沿 z 走（左墙），fixed=x。segs=[{u0,u1,y0,y1}]（u=沿墙坐标）。
  * cavity（可选）= 皮肤暗腔 {u0,u1}：皮肤带 [FLOOR_Y, FLOOR_Y+SKIN_TOP] 且 u 在腔区间内
- * **不砌任何实体**（用户定 2026-09：视野带内墙面 100% 纯体素，体素墙不要大长方体）——
+ * **不砌任何实体**（视野带内墙面 100% 纯体素，体素墙不要大长方体）——
  * 该区间由皮肤体素柱 + 暗腔背板构成（背板兼任挡光，柱间缝透的光打在背板上不漏）；
  * 视野外（带上方/腔外）保持全墙厚简单大盒挡光（墙厚铁律不动）。
  */
@@ -142,7 +142,7 @@ function brickPatch(rng, axis, fixed, x0, y0, cols, rows) {
   return g;
 }
 
-// ---- 墙面大起伏处方（用户反馈：三面光板 + 小挂件太无趣）----
+// ---- 墙面大起伏处方（反馈：三面光板 + 小挂件太无趣）----
 // 扶壁肋（沿墙每 20~28 一根全高肋，rng 断残）+ 双腰线檐口（洞口处分段避让）：
 // 纯 kit 图元程序化生成，与墙身同批合批（每墙十几个 box，零负担），
 // 保证无论立面道具 roll 如何，墙面自带纵向节奏与凸出阴影。
@@ -298,7 +298,7 @@ export function buildBackWall(rng, { door = null, slits = [], brickChance = 0.5,
   wallSegments(group, 'x', fixedC, segs, { th: wallTh, cavity: skinCfg ? skinU : null });
 
   if (door) {
-    // 方形门洞（体素墙洞口是矩形，门视觉件同形——用户定 2026-09）
+    // 方形门洞（体素墙洞口是矩形，门视觉件同形）
     const doorVoid = rectVoid(door.w, door.h);
     doorVoid.position.set(door.x, FLOOR_Y, BACK_WALL_Z + 0.4);
     group.add(doorVoid);

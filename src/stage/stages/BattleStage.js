@@ -98,10 +98,10 @@ export { PLAYER_STATUS_POS };
 
 // 角色头顶的对话/思索泡泡：锚点抬到头顶之上（单位立牌高 ~26 世界单位，原点在脚底）
 const BUBBLE_HEAD_DY = 30;
-// 手牌满被挡下时骑士的自语（用户定 2026-09-11；思索泡泡而非飘字）
+// 手牌满被挡下时骑士的自语（思索泡泡而非飘字）
 const HAND_FULL_LINE = '我无法掌控更多手牌了！';
 
-// 单位行动姿态表（2026-09-22 用户定：非主角角色行动要有身体反馈——
+// 单位行动姿态表（非主角角色行动要有身体反馈——
 // 增强/攻击/防御三种姿态分流，削弱随效果节拍白捡一路）。squash/widen 绕脚底
 // 压扁撑宽、lean 绕脚前倾（符号在节拍内按朝向算），flash 为立牌染色（restoreColor 复原）。
 // 攻击姿态不在此表：它是「突进位移 + 前倾」，编排在 _damageHit 里（接触瞬间 = 命中演出）。
@@ -196,7 +196,7 @@ export class BattleStage {
     // 右让牌库图标（x = 80）；baseY 压低让下缘可越出屏底（-65），与重叠、
     // 外倾共同压缩满 10 张所需空间。机制参数（挤开/提拉放大/z 抬升）见 LayoutEngine。
     this.layout.registerContainer('hand', {
-      minX: -40.5, maxX: 58.5,        // 横界 2026-08 缩 10%：满手外缘不再压牌库图标（中心 9 不变）
+      minX: -40.5, maxX: 58.5,        // 横界：满手外缘不压牌库图标（中心 9 不变）
       baseY: -51.3,                   // 随卡高放大（保持已验收的下潜比例 ≈9% 卡高）
       minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3：重叠率与旧版一致（≈52% 可见）
       radius: 95,
@@ -307,7 +307,7 @@ export class BattleStage {
       }
     }
 
-    // Boss 演出光池（light:fx0 / light:fx1，2026-09-24）：**入场即挂在场景里、强度 0**。
+    // Boss 演出光池（light:fx0 / light:fx1）：**入场即挂在场景里、强度 0**。
     // 为什么必须是池：演出中途 new PointLight + add = 前向渲染器重编译全部受光材质
     // （PCG 房实测 1.2s 主线程长任务，画面冻住、收尾弹栈的机位硬切全部被吞进冻结里
     // ——09-24「卡达斯转段相机跃变」的根因）。剧本一律 `cast.get('light:fxN')` 借灯，
@@ -349,7 +349,7 @@ export class BattleStage {
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
       this._vignette.update(dt);  // 友军受击渐晕释放
-      this.shake.update(dt);      // 震荡只登记偏移通道，落笔在导演的 commit()（渲染前）
+      this.shake.update(dt);      // 震荡只登记偏移通道，落笔在导演的 commit（渲染前）
     });
 
     // 区域图标（牌库）：点击开查看器，计数经 reconcile 同步
@@ -363,7 +363,7 @@ export class BattleStage {
       this.animator.register(`pile:${key}`, pile);
     }
 
-    // 手牌容量指示条（批次 13，用户定 2026-09-13；2026-09-18 改版）：手牌扇**上方**居中一排——
+    // 手牌容量指示条（批次 13，用户定 ；改版）：手牌扇**上方**居中一排——
     // 最左咏唱容量珠（蓝），其余手牌珠（绿=普通/黄=溢出咏唱/灰=空）；数据=投影 handCapacity。
     // 摆位铁律：旧版摆在扇内 y=-56.5 被 26×35 的卡面永久盖住（"永远看不见"病灶）——卡顶缘
     // ≈ baseY+半高 = -33.75，取 y=-30 落在扇形上缘与战线（-20）之间的空带；x=9 = 扇形中心
@@ -388,12 +388,12 @@ export class BattleStage {
     this._buttonSigs = {};
     this._btnData = {};   // 每个按钮最近一次的数据（悬停态变化时据此重烘）
     this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
-    // 弃牌模式（2026-09-21 D3 一键全弃：点弃牌按钮进入 = 全选所有手牌，
+    // 弃牌模式（D3 一键全弃：点弃牌按钮进入 = 全选所有手牌，
     // 主按钮变「弃掉全部N张」作确认步（兼误触防护）；阶梯费照旧付一次。
-    // 2026-09-13 旧制为逐张多选，已随 D3 废除——诅咒/状态卡的卡手设计由此重新长牙）
+    // 旧制为逐张多选，已随 D3 废除——诅咒/状态卡的卡手设计由此重新长牙）
     this._dumpMode = false;
     this._dumpSel = new Set();
-    // ---- 战后奖励面板宿主（用户定 2026-09-12）----
+    // ---- 战后奖励面板宿主----
     // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
     // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
     // 场景切换被黑幕盖住（此前是战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）。
@@ -414,10 +414,10 @@ export class BattleStage {
       getSequencer: () => this._runSequencer,
       getAnchor: () => this._deckAnchor(),
     });
-    // 「结束回合」的**已点过**标记（用户定 2026-09-12）：动画积压期也允许点结束回合
+    // 「结束回合」的**已点过**标记：动画积压期也允许点结束回合
     // （后端其实是同步结算完的，只是在放动画），点完立刻上灰，直到**下一回合开始**的
     // 快照落定才解锁——避免"动画没放完就点不动按钮，只能干等"。
-    // 用户定 2026-09-13：这枚标记同时是**手牌交互锁**——点击之后到下一回合快照落定之前，
+    // 用户定 这枚标记同时是**手牌交互锁**——点击之后到下一回合快照落定之前，
     // 整手压灰、打牌/换卡全部关闭（后端早已推进到下一回合的 WAIT，不锁就能"抢着"打出
     // 下一回合的牌：结算没错，但画面还在放上一回合的动画，纯误操作）。
     this._endTurnRequested = false;
@@ -486,13 +486,13 @@ export class BattleStage {
     this._snapshot = snapshot;
     // 换回合解锁「结束回合」的已点标记：**只认新的玩家回合**（'player:N' 变化）。
     // 敌方侧快照（side 变 'enemy'）不能解锁——否则敌方阶段的动画积压期手牌提前解禁，
-    // 又能"抢着"打出下一回合的牌（用户 2026-09-13 报的误操作窗口）
+    // 又能"抢着"打出下一回合的牌（实报的误操作窗口）
     const key = `${snapshot.turn?.side ?? '?'}:${snapshot.turn?.count ?? -1}`;
     if (this._endTurnRequested && snapshot.turn?.side === 'player' && key !== this._endTurnLockKey) {
       this._endTurnRequested = false;
     }
     // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）；
-    // 已激活咏唱同样摘除（2026-09-28：咏唱不可弃。迷你卡照常可弃——只管手牌计数）
+    // 已激活咏唱同样摘除（咏唱不可弃。迷你卡照常可弃——只管手牌计数）
     if (this._dumpSel.size) {
       const freeIds = new Set(
         snapshot.hand?.filter(c => !c.isActivated)
@@ -584,7 +584,7 @@ export class BattleStage {
       }
       const resolved = resolveUnitAuras(
         // ⚠ 真死单位解空效果表（在挂 aura 走 exit 收殓）——否则尸体隐藏后 aura 仍活，
-        // 燃烧发射器在尸体锚点上永远撒火星（2026-09-27 验收 agent 抓：烧死的怪原地
+        // 燃烧发射器在尸体锚点上永远撒火星（验收 agent 抓：烧死的怪原地
         // 喷火星 15s+）。时机天然对齐：死亡节拍「先演后变」，快照带上 isDead 时尸体
         // 恰好收殓隐藏。假死（reviving）不在此列——复苏后仍在烧，aura 保持。
         unitProj.isDead && !unitProj.reviving ? [] : unitProj.effects,
@@ -630,7 +630,7 @@ export class BattleStage {
    * 尸体稳态收殓：把「快照已判死、视图却仍站着」的单位直接落到死后稳态（隐藏）。
    * 正常路径不受影响（死亡演出播毕已隐藏，本方法幂等跳过）。
    * 用途：**中途接入/跳段的播放端**——死亡演出节拍不在队列里，只剩快照的 isDead，
-   * 不补的话尸体会带着 0/xx 血条一直站着（观战端重放/接入已见，2026-09）。
+   * 不补的话尸体会带着 0/xx 血条一直站着（观战端重放/接入已见）。
    * 与「动画不可序列化 → 读档/恢复落到稳态」同一口径，故实现在 Stage 而非某个页面。
    * @returns 本次收殓的尸体数
    */
@@ -773,7 +773,7 @@ export class BattleStage {
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
       // 冷却薄纱（特效层持久指示，高度 = 剩余冷却比例：全灰=刚入冷、半灰=冷了一半）+
-      // 剩余拍数水印（用户定 2026-09-13 第三版视觉）；衰败推深超基准 = 暗红薄纱
+      // 剩余拍数水印（第三版视觉）；衰败推深超基准 = 暗红薄纱
       const max = card.charges?.max ?? Infinity;
       const cdTurns = card.charges?.cooldownTurns ?? 0;
       const cooling = card.remainingUses < max;
@@ -1060,7 +1060,7 @@ export class BattleStage {
 
   _syncButtons(proj) {
     const pending = proj.pendingInput?.request ?? null;
-    // 「在玩家的回合里」：**按回合轨道判定而非 waitingPlayerInput**（用户定 2026-09-12）。
+    // 「在玩家的回合里」：**按回合轨道判定而非 waitingPlayerInput**。
     // waitingPlayerInput 是"内核当下是否挂着玩家回合的 WAIT"——一次出牌的结算过程中
     // 会瞬间为 false（演出节拍捕获的快照因此把它拍成 false），于是**动画积压期按钮是灰的**，
     // 玩家打完牌想收尾只能干等动画放完。改用 turn.side/count（整回合稳定不变）+ 已点标记：
@@ -1074,7 +1074,7 @@ export class BattleStage {
     let label = '结束回合';
     let enabled = inPlayerTurn && !pending && !this._endTurnRequested;
     if (this._dumpMode) {
-      // 弃牌模式：主按钮 = 确认全弃（付一次阶梯费弃掉全部手牌，2026-09-21 D3 改制）
+      // 弃牌模式：主按钮 = 确认全弃（付一次阶梯费弃掉全部手牌，D3 改制）
       const n = this._dumpSel.size;
       label = n > 0 ? `弃掉全部${n}张` : '弃牌';
       enabled = n >= 1;
@@ -1098,7 +1098,7 @@ export class BattleStage {
     const cost = proj.swapCost;
     // 弃牌同样按回合轨道判定（动画期可点）；费用用显示态估算，真正的可用性由 core 的
     // canDumpCards 兜底（点不动就静默失败）。反复点按钮只是"进入/取消模式"的开关（无害）。
-    // 回合过渡锁（_endTurnRequested）期间弃牌一并关闭——与打牌同一把锁（用户定 2026-09-13）
+    // 回合过渡锁（_endTurnRequested）期间弃牌一并关闭——与打牌同一把锁
     const canDump = inPlayerTurn && !pending && !this._endTurnRequested && proj.hand.length > 0
       && proj.player.actionPoints >= cost;
     this._setButtonState('swap', {
@@ -1125,9 +1125,9 @@ export class BattleStage {
   _setDumpMode(on) {
     if (this._dumpMode === on || !this._snapshot) return;
     this._dumpMode = on;
-    // D3 一键全弃（2026-09-21）：进模式即全选当前手牌——主按钮的「弃掉全部N张」
+    // D3 一键全弃：进模式即全选当前手牌——主按钮的「弃掉全部N张」
     // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）。
-    // 2026-09-28：只选自由牌（激活咏唱不可弃）；迷你卡照常入选——迷你只管手牌
+    // 只选自由牌（激活咏唱不可弃）；迷你卡照常入选——迷你只管手牌
     // 计数（计 0 张容量），与弃牌无关（同日用户裁定解耦）
     if (on) for (const c of this._snapshot.hand ?? []) {
       if (!c.isActivated) this._dumpSel.add(c.uniqueID);
@@ -1151,7 +1151,7 @@ export class BattleStage {
   }
 
   /**
-   * 大剑体系立绘对账（2026-09-22 用户定）：牌堆（手牌+牌库+焚毁）里斩链最高链位 →
+   * 大剑体系立绘对账：牌堆（手牌+牌库+焚毁）里斩链最高链位 →
    * 骑士带剑立绘档。斩只能由大剑遗物洗入/局内转化产生，故「牌堆有斩卡」即体系在场。
    * 场内只升不降（_swordArtRank latch）：斩转化在 pending 区的瞬间投影只剩 uniqueID
    * 没有 defId，直读会闪回低档；转化单向升阶，latch 语义与内容一致。
@@ -1358,7 +1358,7 @@ export class BattleStage {
         view.setVisualState(this._dumpSel.has(id) ? 'highlighted' : 'normal');
       } else if (this._endTurnRequested && zone === 'hand') {
         // 回合过渡锁（点了结束回合、下一回合快照未落）：整手压灰——锁定期打牌/换卡全关
-        // （用户定 2026-09-13；放在结算期分支之后：应答输入的候选高亮不受锁影响）
+        // （放在结算期分支之后：应答输入的候选高亮不受锁影响）
         view.setVisualState('disabled');
       } else if (zone === 'hand' && !pending) {
         view.setVisualState(this.bridge.intents.canPlayCard(id) ? 'normal' : 'disabled');
@@ -1403,7 +1403,7 @@ export class BattleStage {
     // 造牌入库（toZone 'deck'）则走 _addCardBeat：卡面生成 → 飞入牌库 → 计数随其后 sync 跳增
     if (type === EventNames.ANIM_CARD_DRAWN) {
       // 因手牌上限没抽到牌（core 在载荷里分开记了 blockedByHandLimit 与 deckEmpty）：
-      // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（用户 2026-09-11 报）
+      // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（实报）
       if (payload?.blockedByHandLimit) this._handPressureHint();
       return this._pulsePile('deck', finish);
     }
@@ -1448,7 +1448,7 @@ export class BattleStage {
     }
     // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
     // ⚠ 判据必须是「视图可见」（= 卡在手牌），不是 _views 是否命中——牌库中的卡视图保留
-    // 但 visible=false，打在它上面的脉冲肉眼不可见（2026-09-13 用户报障：斩弃回牌库看不到
+    // 但 visible=false，打在它上面的脉冲肉眼不可见（障：斩弃回牌库看不到
     // 冷却动画，脉冲全喂给了隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍
     // 紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。
     // 立即 finish——non-blocking，不占队列节拍
@@ -1477,7 +1477,7 @@ export class BattleStage {
     if (type === EventNames.ANIM_UNIT_SPAWN && target) return this._unitSpawnBeat(target, finish);
     // 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
     // 治疗追加 +N 绿色文本粒子（无重力上飘）。
-    // 护盾/效果另接**行动姿态**（2026-09-22 用户定：非主角行动要有身体语言）——
+    // 护盾/效果另接**行动姿态**（非主角行动要有身体语言）——
     // 护盾 = 防御蜷缩、效果按 type 分增强拔起/削弱佝偻，替换旧通用脉冲（时长同量级）；
     // 治疗保持通用脉冲（治疗者姿态未定义，不硬造）。
     if (target && (type === EventNames.ANIM_HEAL || type === EventNames.ANIM_SHIELD || type === EventNames.ANIM_EFFECT)) {
@@ -1548,7 +1548,7 @@ export class BattleStage {
       if (mana > 0 || ap > 0) {
         this._drainFx.playCardCost({ mana, ap, cardView: view });
         drainDelay = DRAIN_FLIGHT_MS;
-        // 徽章辉光（2026-09-28 用户定）：粒子抵达时点亮 → 衰减，与汇聚组成
+        // 徽章辉光：粒子抵达时点亮 → 衰减，与汇聚组成
         // 「能量注入开销标」的闭环。mask 位置已在 _setBakedFace 随卡面烘进 C0 链
         // （costBadges），这里只推强度；与卡牌位移演出正交，直推 uniform。
         const body = view?.fx?.body;
@@ -1760,19 +1760,19 @@ export class BattleStage {
 
 
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
-  //   攻击方姿态（2026-09-22 用户定：非主角行动要有身体反馈）：主级伤害的来源单位
+  //   攻击方姿态（非主角行动要有身体反馈）：主级伤害的来源单位
   //     （敌人/盟友；主角除外——其反馈由卡牌演出承担）向目标「蓄势后拉 → 发力突进」，
   //     锋尖抵近那一帧 = 受击演出（火花/数字/震荡）起点；收势回位与受击方击退并行。
   //     附级 tick（燃烧/中毒）与环境伤害不摆（无身体语言，减法即丰富）。
   //   生命值受伤（dealt>0）：闪色 + 火花簇 + 伤害数字 + 击退（节拍阻塞，幅度随伤害缩放；
-  //     盟友受击是生动版——击退 + 向后小跳几步再跳回槽位，2026-09-22 用户定）；
+  //     盟友受击是生动版——击退 + 向后小跳几步再跳回槽位）；
   //   附级伤害（type='minor'，燃烧/中毒/荆棘 tick 等）：配方降规格——小数字、无翻红、
   //     无击退、无震荡、短节拍（减法即丰富：tick 不再每次满屏红闪）；
   //   致命击（killed）：配方加重——震荡加成 + 数字放大；
   //   护盾吸收（absorbed>0）：蓝色火花 + 灰色吸收数字（较小、偏移开）；
   //     吸穿护盾的最后一击（显示盾量 - 吸收 ≤ 0）追加破碎粒子——破碎只由伤害驱动，
   //     自然消失（回合开始清零）只是保护框随 sync 静默隐去；
-  //   无生命值伤害不翻红不击退（用户定），节拍短停即收。
+  //   无生命值伤害不翻红不击退，节拍短停即收。
   // HP/盾量数字的显示状态变化在本节拍后的 sync 才应用——先演后变
   _damageHit(unit, payload, finish) {
     const dealt = payload?.dealt ?? 0;
@@ -1782,7 +1782,7 @@ export class BattleStage {
     // 攻击方突进解算：来源 → 目标的方向 / 步长 / 前倾角（standee 绕脚转，符号 = 目标方向）
     const srcId = payload?.source?.uniqueID ?? null;
     const src = srcId != null ? (this._units.get(srcId) ?? null) : null;
-    // 瑞米冲撞（2026-09-28 用户定：核心陪伴角色，协战要有专属身体演出）：它的补刀在
+    // 瑞米冲撞（核心陪伴角色，协战要有专属身体演出）：它的补刀在
     // core 是附级（不吃加成/不触发受击响应），通用路径因此不给突进——这里按来源特判
     // 放行，并把配方升回「有击退有撞击感」（只动演出参数，core 语义不变）。
     const remiCharge = !!src && src._defId === 'remi' && !src._dead;
@@ -1958,7 +1958,7 @@ export class BattleStage {
             ? (Math.sign(x0 - srcX) || (unit.side === 'enemy' ? 1 : -1))
             : (unit.side === 'enemy' ? 1 : -1);
           if (unit.side === 'ally') {
-            // 盟友（瑞米）受击要生动（2026-09-22 用户定）：冲击击退 → 向后小跳两步
+            // 盟友（瑞米）受击要生动：冲击击退 → 向后小跳两步
             // （y 弧线 + 后撤步进，后仰逐跳回正）→ 一步跳回槽位。
             // 被打断（收拍/拆台）经 onKill 归位归零，不晾在半路上（正常结束也过这，幂等）。
             const y0 = unit.position.y;
@@ -2021,7 +2021,7 @@ export class BattleStage {
     });
   }
 
-  // 行动姿态节拍（防御/增强/削弱，2026-09-22 用户定）：立牌绕脚「蓄势 → 定势 → 弹回」，
+  // 行动姿态节拍（防御/增强/削弱）：立牌绕脚「蓄势 → 定势 → 弹回」，
   // 配姿态色立牌染色（flash → 收尾 restoreColor）。取代旧通用缩放脉冲——同等时长量级，
   // 但三种行动各有身体语言。姿态起点恒为中立（节拍串行，上一拍已归位）；
   // 被打断（收拍/拆台）经 onKill 归零姿态 + 复原染色，不留半蹲（正常结束也过这，幂等）。
@@ -2058,7 +2058,7 @@ export class BattleStage {
     });
   }
 
-  // 单位入场演出（召唤，用户定 2026-08）：与死亡倾倒同轴的语言反演——
+  // 单位入场演出（召唤）：与死亡倾倒同轴的语言反演——
   // billboard「以脚为轴」从平躺立起（squash-stretch：立起过程中纵向压扁再弹开，
   // 果冻感）→ 立定瞬间落地扬尘（与死亡落尘同粒子语言）→ 两次衰减摇晃站稳
   // （sin 包络 × (1-t)，绕脚底前后微倾）→ 归位 finish。
@@ -2069,7 +2069,7 @@ export class BattleStage {
     const px = unit.position.x;
     const py = unit.position.y;
     const pz = unit.position.z;
-    // 复活接入（假死尸体起立，2026-09-22）：恢复可见/影子/读数/材质（兜底：若走了
+    // 复活接入（假死尸体起立）：恢复可见/影子/读数/材质（兜底：若走了
     // 焚毁链，restoreBody 把透明焦黑材质复原），从**当前倾角**起立——假死尸停在 82°，
     // 正好以「从地上挣起来」的同一语言复苏；普通召唤 rotation.x≈0 时维持原 78° 平躺起立。
     unit.restoreBody?.();
@@ -2111,7 +2111,7 @@ export class BattleStage {
     });
   }
 
-  // 单位死亡演出（用户定 2026-08）：立牌「以脚为轴」向后倾倒（重力加速）→
+  // 单位死亡演出：立牌「以脚为轴」向后倾倒（重力加速）→
   // 落地扬尘 + 一次阻尼回弹 → 焚毁（焦黑化 + alphaTest 侵蚀淡出 + 余烬升腾）→
   // 整体隐藏收殓。节拍阻塞至收殓，其后的 sync 才应用 isDead 面色（先演后变）。
   // 倾倒作用于 billboard 的 X 轴（YXZ 序下与 faceCamera 的 yaw 正交组合，逐帧
@@ -2119,7 +2119,7 @@ export class BattleStage {
   // 绕原点转即天然「栽倒」而非「缩没」。
   _unitDeathBeat(unit, payload, finish) {
     const id = unit.uniqueID;
-    // 假死分支（将复苏：春风/复苏系，2026-09-22 用户定补前端假死/复活语义）——
+    // 假死分支（将复苏：春风/复苏系，补前端假死/复活语义）——
     // 倒地留尸不焚毁：复苏时 ANIM_UNIT_SPAWN 从倒地姿态重新立起。判据读 **payload
     // 里 core unit 的复活倒计时**（结算内同步挂上，实时）；不能用本舞台快照——
     // unitDied 是「先 anim 后 sync」，死亡节拍播放时快照还是旧投影（reviving 未至），
@@ -2243,7 +2243,7 @@ export class BattleStage {
     }
   }
 
-  /** 手牌被上限挡下：整手牌红色脉冲 + 骑士头顶**思索泡泡**自语（用户定 2026-09-11）。 */
+  /** 手牌被上限挡下：整手牌红色脉冲 + 骑士头顶**思索泡泡**自语。 */
   _handPressureHint(text = HAND_FULL_LINE) {
     for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03 });
     const proj = this._snapshot;
@@ -2442,7 +2442,7 @@ export class BattleStage {
   /**
    * 战斗常驻按钮（结束回合 / 换卡）的悬停态。这两枚是**直接挂在舞台上**的 CardObject，
    * 不像休息房面板按钮那样走 `PanelObject.onHover → ButtonObject.setHovered` —— 漏喂就完全
-   * 没有 hover 反馈（用户 2026-09-13 报"结束回合和换卡没有 hover 效果"）。悬停走按钮面的
+   * 没有 hover 反馈（实报"结束回合和换卡没有 hover 效果"）。悬停走按钮面的
    * active 主题（淡蓝底），与整套 `bakeButtonFace` 按钮同一套语言；传 null 清空
    * （模态/拖拽/瞄准期间不该留高亮）。
    */
@@ -2459,7 +2459,7 @@ export class BattleStage {
     if (key === 'main') this._updateDoomMarks();
   }
 
-  // 「将弃」预告（用户定 2026-09-13，Three 层特效）：hover 结束回合按钮时，给 P9 会被
+  // 「将弃」预告（Three 层特效）：hover 结束回合按钮时，给 P9 会被
   // 尾弃的手牌挂红色呼吸描边（CardFxLayer.setDoomed）。名单来自投影 overflowVictims
   // （与核心清理同一算法），只在玩家自由行动窗展示——已点结束回合（锁）/结算期都不亮
   _updateDoomMarks() {
@@ -2489,7 +2489,7 @@ export class BattleStage {
 
   // 滚轮：转发给选卡套件（全屏选卡界面的滚动）。战斗舞台此前漏了这一手（Map/Room 都有）
   // ——战后删卡界面画在战斗舞台 uiScene 上，App 的 activeStage() 会把滚轮喂到这里，
-  // 缺这个方法时静默落空（用户 2026-09-21 报「删卡界面滚轮无响应」的病灶）。
+  // 缺这个方法时静默落空（实报「删卡界面滚轮无响应」的病灶）。
   handleWheel(deltaY) {
     return this._pickerKit.handleWheel(deltaY);
   }
@@ -2515,7 +2515,7 @@ export class BattleStage {
       }
     }
     // 弃牌模式下点手牌是"切换选中"，不进入拖拽/瞄准
-    // 回合过渡锁（_endTurnRequested）：锁定期手牌不发起任何出牌交互（用户定 2026-09-13）
+    // 回合过渡锁（_endTurnRequested）：锁定期手牌不发起任何出牌交互
     if (hit.kind === 'card' && !proj?.pendingInput && !this._dumpMode && !this._endTurnRequested) {
       // 前端拒绝以显示态为准：渲染为灰（disabled）的卡不可发起交互——显示态落后
       // 于后端（动画积压期）时，玩家看到什么就是什么，不可能"抢先"后端出牌
@@ -2523,7 +2523,7 @@ export class BattleStage {
       if (displayPlayable && this.bridge.intents.canPlayCard(hit.id)) {
         // 按投影 targetMode 分流：选目标卡进瞄准（卡留手牌），免目标卡旧式拖拽（卡随指针）。
         // **可选目标只剩一个时不进瞄准**：退化成免目标卡的拖拽交互（拖过出牌线即打出，
-        // 目标自动取那唯一的候选人）——用户定 2026-09-13：单目标也**不要**"点一下就出牌"，
+        // 目标自动取那唯一的候选人）——用户定 单目标也**不要**"点一下就出牌"，
         // 出牌手势必须一致（"点按"在手牌里没有语义，误触代价太大）。
         const targetMode = proj?.hand.find(c => c.uniqueID === hit.id)?.targetMode ?? 'none';
         const solo = (targetMode === 'enemy' || targetMode === 'ally')
@@ -2618,7 +2618,7 @@ export class BattleStage {
       return;
     }
     if (hit.kind === 'card' && this._dumpMode) {
-      // D3 一键全弃（2026-09-21）：弃牌模式下点手牌无逐张挑选语义（进模式已全选）；
+      // D3 一键全弃：弃牌模式下点手牌无逐张挑选语义（进模式已全选）；
       // 确认走主按钮，取消走再点弃牌按钮。回合过渡锁期间模式已退，这里是兜底
       return;
     }
@@ -2627,15 +2627,15 @@ export class BattleStage {
       // 灰按钮必须真的点不动，杜绝"显示灰但后端已可结算"的抢先操作
       if (!this._buttons.main.cardData?.enabled) return;
       if (this._dumpMode) {
-        // 弃牌提交：付一次阶梯费弃掉全部手牌（2026-09-21 D3 一键全弃）；失败保持模式便于重试
+        // 弃牌提交：付一次阶梯费弃掉全部手牌（D3 一键全弃）；失败保持模式便于重试
         if (this.bridge.intents.dumpCards([...this._dumpSel])) this._setDumpMode(false);
       } else if (this._pick) this.bridge.interaction.respond([...this._pick.selection]);
       else if (pending?.kind === 'confirm') this.bridge.interaction.respond(true);
       else {
-        // 结束回合（用户定 2026-09-12）：点完**立刻**上灰（不等 sync 节拍），直到下一回合
+        // 结束回合：点完**立刻**上灰（不等 sync 节拍），直到下一回合
         // 开始；后端同步结算，所以动画积压期点也不会丢意图。下发失败（回合已过/终局）
         // 则回滚标记，避免按钮假死。
-        // 同时进入**手牌交互锁**（用户定 2026-09-13）：锁 key 记下点击时快照的回合轨道，
+        // 同时进入**手牌交互锁**：锁 key 记下点击时快照的回合轨道，
         // 解锁只认新的玩家回合快照（见 _applySnapshot）；reconcile 让锁态立刻上手
         this._endTurnRequested = true;
         this._endTurnLockKey = `${this._snapshot?.turn?.side ?? '?'}:${this._snapshot?.turn?.count ?? -1}`;
@@ -2740,7 +2740,7 @@ export class BattleStage {
     if (this._overCardId === id) return;
     this._overCardId = id;
     this._refreshShiftFace();
-    // 容量珠 hover 联动（2026-09-29 用户定）：指针压着的卡 → 它占用的珠/迷你竖线改 HDR 色
+    // 容量珠 hover 联动：指针压着的卡 → 它占用的珠/迷你竖线改 HDR 色
     this._capacityBeads.setHover(this._capFootprintOf(id));
   }
 
@@ -2810,7 +2810,7 @@ export class BattleStage {
     }
     this._viewer.rebake(); // 查看器内的卡同享到图重烘（关闭态为空操作）
     // 面板（奖励三选一 overlay）与全屏选卡界面的候选卡不在卡组、未经预热，
-    // 首拍常为无图占位——一并重烘（用户 2026-09-25 报"选卡空白卡，手牌却有图"）
+    // 首拍常为无图占位——一并重烘（实报"选卡空白卡，手牌却有图"）
     this._panel?.rebakeCards?.();
     this._pickerKit?.rebakeCards?.();
   }

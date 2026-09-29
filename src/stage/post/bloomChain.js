@@ -1,4 +1,4 @@
-// bloom 三段链（bright → 半分辨率 H blur → V blur）抽成的共享件——TSL 版（W2，2026-09-27）：
+// bloom 三段链（bright → 半分辨率 H blur → V blur）抽成的共享件——TSL 版（W2）：
 // 体积月光 composer 与 uiScene composer 各持一条，参数各自、实现一份。
 // 阈值约定（volumetricMoon 迁移注释）：管路是 HDR 的（HalfFloat 线性），但内容不是
 // HDR 创作的——漫反射受光面 ~1~2，阈值必须卡在其上（缺省 1.45），只有乘算推到

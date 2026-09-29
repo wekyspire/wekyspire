@@ -1,8 +1,8 @@
-// 房型配方层 · 地形分区 v2（用户定 2026-09：heightmap 管线，取代矩形分区）：
+// 房型配方层 · 地形分区 v2（heightmap 管线，取代矩形分区）：
 //   perlin 值噪声 fbm 高度场 → 单位占位 control（keepout 距离场 blend，站位区强制归零）
 //   → 分类图（高台/低谷/平坦量化 + 连通域 + 分区 flatten）→ 裂缝 carving（ridge 噪声窄带）
 //   → 靠墙斜坡 carve → 0.5 量化 → 体素柱几何（kit 顶点色合批口径）。
-// 摆放规则（用户定）：低谷/平面/高台可摆任意装饰与结构；裂缝（深沟/深不见底）仅 rubble
+// 摆放规则：低谷/平面/高台可摆任意装饰与结构；裂缝（深沟/深不见底）仅 rubble
 // 类装饰；斜坡（|∇h| 陡带）仅小型 rubble 且垂直坡面法线摆放；岩浆河 = 塔基场景预留留空。
 // 战场水平铁律由占位 control 保证：站位区/战线走廊的高度被距离场压回 0（单位永不踏上地形）。
 //
@@ -82,7 +82,7 @@ export function generateTerrain(rng, recipe, keepout, anchors = [], bounds = {})
     }
   }
 
-  // ---- 2) 单位占位 control：站位区/战线走廊距离场把高度压回 0（用户定：站位留空水平）----
+  // ---- 2) 单位占位 control：站位区/战线走廊距离场把高度压回 0（：站位留空水平）----
   // 内缘 +2 起压、外缘 +16 全放开；构图锚点 8 内压平
   for (let j = 0; j < nz; j++) {
     for (let i = 0; i < nx; i++) {
@@ -96,7 +96,7 @@ export function generateTerrain(rng, recipe, keepout, anchors = [], bounds = {})
     }
   }
 
-  // ---- 3) 靠墙斜坡 carve（用户定：斜坡必须靠着墙体生成）----
+  // ---- 3) 靠墙斜坡 carve（：斜坡必须靠着墙体生成）----
   // 在墙根 carve 线性坡：坡顶贴墙（H），坡脚朝室内延伸到 rampLen 归零；体素柱天然成坡。
   const rampCount = cfg.slopes ?? 1;
   const rampWalls = ['left', 'back'].slice(0, Math.max(0, rampCount));
@@ -148,7 +148,7 @@ export function generateTerrain(rng, recipe, keepout, anchors = [], bounds = {})
     }
   }
   // 裂缝连贯化：剔除孤立格（8 邻域内裂缝邻居 <2 的散格溶解为平地）——ridge 细线被 keepout
-  // 斩断后残留的孤立黑方块读作随机污渍而非地裂（用户报障：地板体素黑得异常）
+  // 斩断后残留的孤立黑方块读作随机污渍而非地裂（报障：地板体素黑得异常）
   for (let j = 1; j < nz - 1; j++) {
     for (let i = 1; i < nx - 1; i++) {
       const k = at(i, j);
@@ -297,7 +297,7 @@ const CAT_COLOR = {
   flat: (hh, tone) => shade(P.floor, tone),
   platform: (hh, tone) => shade(P.stone, 0.04 + tone * 0.5), // 石质台面（P.slab 过亮会发光）
   basin: (hh, tone) => shade(P.stone, -0.28 + tone),
-  // 裂缝不调色（用户定 2026-09：不用黑色体素填充——真洞 + 场景光照自然暗下去）
+  // 裂缝不调色：不用黑色体素填充——真洞 + 场景光照自然暗下去
   fissure: (hh, tone) => shade(P.floor, tone),
   'slope-ramp': (hh, tone) => shade(P.stone, -0.12 + tone),
 };
@@ -309,7 +309,7 @@ export function buildTerrain(grid) {
   const size = cell - gap;
   const solid = new THREE.Group();
   solid.name = 'terrain';
-  // 统一深基柱（用户定 2026-09）：每格柱从 BASE 直通顶面——裂缝/坑格是真洞（顶面深、
+  // 统一深基柱：每格柱从 BASE 直通顶面——裂缝/坑格是真洞（顶面深、
   // 侧壁由邻格柱面露出），不填 unlit 黑柱。柱底全部落在同一深度，衬板在更下面兜底。
   const BASE = -13;
   for (let j = 0; j < nz; j++) {
@@ -324,7 +324,7 @@ export function buildTerrain(grid) {
     }
   }
   // 底衬板：封住块间细缝与洞底的视线（缝底/洞底见它而非夜空穹顶）——相机浅角度从缝穿过去
-  // 会瞄到穹顶亮部，读出"缝会发光"的亮边（用户报障）；必须在最深柱底之下
+  // 会瞄到穹顶亮部，读出"缝会发光"的亮边（报障）；必须在最深柱底之下
   const span = [(grid.x1 ?? FLOOR_X1) - FLOOR_X0 + 8, (grid.z1 ?? FLOOR_Z1) - FLOOR_Z0 + 8];
   solid.add(K.put(
     K.plate({ color: shade(P.stone, -0.48), w: span[0], d: span[1], th: 0.4 }),

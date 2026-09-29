@@ -1,14 +1,14 @@
-// 凝滞壳（L2 笼罩层首个实现，stasis 主题件，VFX 结构大更新 Phase 2，2026-09-26）：
+// 凝滞壳（L2 笼罩层首个实现，stasis 主题件，VFX 结构大更新 Phase 2）：
 // 「冻在壳里的单位」——壳面 quad 与本体同几何同 UV，采样同一张立绘 map（tBody），
 // 并用 unitBodyFx 同一份着色函数（W4 TSL 化 = ubfShade） + **共享本体 uniform 实例**重算下层状态：
 // 燃烧中的单位被凝滞，壳内影仍透橙（同源重算 = 「下层长什么样」对上层 =
 // 同函数 + 同 uniform 记录，零 RT；真邻域采样的件才走懒建 per-unit 小 RT）。
 // 挂 _standee（不挂 L 分组）：壳随姿态通道一起前倾/蜷缩——冻住的是「当时的姿势」。
-// alpha 纪律（2026-09-26 用户验收修）：壳体**只存在于立绘剪影内 + 剪影边缘一圈霜线**
+// alpha 纪律（验收修）：壳体**只存在于立绘剪影内 + 剪影边缘一圈霜线**
 // （4 邻域 alpha 梯度检测边缘）——剪影外的透明区不许结壳，否则矩形玻璃板糊脸。
 // 退化分支：map 未就位（占位色块期）→ 纯冻晶薄板（uHasBody=0）；立绘后到 tick 自愈重绑。
 // 总控一个标量 setLevel(0..1)；壳体哑光不过 bloom 阈（凝滞是「停」，不是发光体）。
-// —— WebGPU 迁移 TSL 版（2026-09-27，原裸 GLSL 片元重写）：
+// —— WebGPU 迁移 TSL 版（原裸 GLSL 片元重写）：
 //   · 内影 = `ubfShade(body.rgb, uv(), uBurn, uPoison, uTime.mul(0.15), uCalm)`（W4 共享件
 //     直接 import，时间冻慢 ×0.15 的口径在调用点保留）；壳是哑光件，只取 .rgb 不转发偏移；
 //   · uBurn/uPoison/uCalm/uTime 直接引用 L0 的 uniform 节点实例（unitFxLayer.body 共享件——
@@ -49,7 +49,7 @@ function buildShellColorNode(t, u) {
     const shimmer = sin(u.uTime.mul(0.8).add(vUv.y.mul(7.0))).mul(0.15).add(0.85);
     const shell = u.uTint.mul(shimmer);
     // 剪影判定阈值化：近透明区（暗角/羽化边 alpha 0.2~0.4）不算剪影——不结壳
-    // （用户验收修：直接乘 body.a 会把整张 quad 蒙成玻璃板）
+    // （验收修：直接乘 body.a 会把整张 quad 蒙成玻璃板）
     const sa = smoothstep(0.3, 0.65, body.a);
     // 剪影边缘霜线：4 邻域 alpha 极差（max-min）→ 边缘两侧各出一圈薄霜，实心区与远处为零
     const aR = u.uTexel.x.mul(1.5), aT = u.uTexel.y.mul(1.5);
@@ -60,7 +60,7 @@ function buildShellColorNode(t, u) {
     const rim = clamp(max(max(a0, a1), max(a2, a3)).sub(min(min(a0, a1), min(a2, a3))).mul(1.8), 0.0, 1.0).mul(u.uHasBody).toVar();
     // 合成：剪影内结霜影（尊重立绘 opacity），边缘霜线最亮；剪影外零壳
     const c = mix(inner, shell, 0.42).add(shell.mul(rim).mul(0.5)).toVar();
-    // 结晶前锋（赋予/消除过渡演出，2026-09-26 用户定）：front 由 level 归一驱动
+    // 结晶前锋（赋予/消除过渡演出）：front 由 level 归一驱动
     // （0.9 = recipes 的 levelOf 稳态值）——进入时冰霜自下而上扫过全身、前锋挂冰蓝
     // 亮线（结晶一闪）；退出时同一公式反向，冰霜向下消退（解冻）。
     const front = clamp(u.uLevel.div(0.9), 0.0, 1.0).mul(1.15).toVar();

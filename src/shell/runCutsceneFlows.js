@@ -24,12 +24,12 @@ export function createRunCutsceneFlows(ctx) {
   const { run, runCtx, runPresenter, cutscene, showcase, lifecycle } = ctx;
   // ctx.notify() 晚绑定；ctx.setRoomScenePending(v) 晚绑定
 
-  // ---- 随机事件（用户定 2026-09-12：**不做 3D 场景，也不用旧 UI 面板**）----
+  // ---- 随机事件（**不做 3D 场景，也不用旧 UI 面板**）----
   // 事件 = 对话 + 选项 + 逻辑：进房即播一段**幕间**——背景 CG（占位美术，见 overlay/eventArt.js）
   // + 普通对话 → 摆出选项（`cutscene` 的 dialogue step 原生支持 choices）→ 玩家选 → core 结算
   // → 接着播结果页 → **切幕**回塔楼（事件房没有场景舞台，一直在 MapStage 上）。
   // 进出都是幕间：进 = wipe step 后面的对话被"揭开"（切幕开始 → 事件画面就位 → 切幕结束，
-  // 用户 2026-09-12 报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
+  // 实报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
   // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
   let eventPlaying = false;
   async function playEventScene() {
@@ -58,7 +58,7 @@ export function createRunCutsceneFlows(ctx) {
       ctx.notify();                             // 金币/生命变化先反映到塔楼状态栏
       if (!res) return false;                   // 没选就退出（异常路径：不结算也不离房）
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: res.pages }] });
-      // 退出切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
+      // 退出切幕（cutscene 回塔楼本质上和场景切换没区别）：
       // 黑幕盖住 → 阶段迁移 + 塔楼刷新 → 揭幕；获得演出排在揭幕之后（不然会被黑幕吞掉半截）。
       // completeRoom 在此推进楼层 → 揭幕即排相机爬升（事件房不换台，swapRoomToMap 摸不到这里）。
       await lifecycle.exitSceneAfterCutscene(() => {
@@ -93,7 +93,7 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
   }
 
-  // ---- ascension（**进阶 = cutscene + dialogue**，用户定 2026-09-12）----
+  // ---- ascension（**进阶 = cutscene + dialogue**）----
   // 形态：训练达标离开营地房 → 与房间迁移**同一段切幕**（黑幕中点迁移 + 换台，揭幕揭开的就是
   // 进阶对话）→ 旁白 + 「择维度」选项（对话选项，非面板）→ 结果页 → （首次 0→1）九选三面板收尾
   // → 结束时切幕回塔楼。美术：占位 CG，真素材丢 `src/assets/images/events/ascension.webp` 自动顶替。
@@ -117,7 +117,7 @@ export function createRunCutsceneFlows(ctx) {
     }
     let text = `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
       + `生命回复 ${ASCENSION_PLACEHOLDER.healAmount} 点，魏启上限 +${ASCENSION_PLACEHOLDER.manaGain}。`;
-    // 首次点亮该维度：宣告体系赠礼（基石卡直入牌组 + 体系能力；2026-09-22 种子包删除后
+    // 首次点亮该维度：宣告体系赠礼（基石卡直入牌组 + 体系能力；种子包删除后
     // 获赠展示挪到此处——原来是种子包面板的副标题）
     if (run.player.leino?.[id] === 1) {
       const g = FIRST_ASCENSION_GRANT[id];
@@ -132,7 +132,7 @@ export function createRunCutsceneFlows(ctx) {
   };
 
   /**
-   * 能力授予幕间（精英/大师能力，2026-09-13 实装）：进阶结算挂起 ascensionOffer 时播。
+   * 能力授予幕间（精英/大师能力，实装）：进阶结算挂起 ascensionOffer 时播。
    * 选项 = 候选能力（【精英】/【大师】前缀 + 名字与描述）+ 「暂且不取」；
    * 选定即 chooseAscensionAbility 同步结算（null = 跳过，能力池下次进阶还会再出）。
    */
@@ -207,8 +207,8 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
       if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
       // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
-      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼（用户定 2026-09-12）
-      // 跳过进阶的删卡反哺（用户定 2026-09-13）：揭幕后就地开全屏删卡界面（title「删一张卡」）。
+      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼
+      // 跳过进阶的删卡反哺：揭幕后就地开全屏删卡界面（title「删一张卡」）。
       // 可跳过——「返回」只收起界面，机会经 prep 面板的「使用删卡机会」按钮长期保留。
       // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
       if (picked === 'skip') ctx.panelStage?.()?.openUpgradePicker?.('ascensionRemove');

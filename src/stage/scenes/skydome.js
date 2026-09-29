@@ -1,5 +1,5 @@
 // 程序化夜空穹顶（skydome）：纯 shader 生成，零贴图零外部资产。
-// 大球壳 BackSide + MeshBasicNodeMaterial（WebGPU 迁移 TSL 版，2026-09-27，
+// 大球壳 BackSide + MeshBasicNodeMaterial（WebGPU 迁移 TSL 版，
 // 原裸 GLSL shader 逐式平移，范式见 fx/unitBodyFx.js 头注）：
 // 地平线暗紫 → 天顶蓝黑的渐变、3D 格 hash 星野（只出地平线以上）、月亮盘 + 广晕。
 // 方向采样以**相机位置**为原点（positionWorld - camPos），与球壳中心无关——
@@ -28,7 +28,7 @@ const hash31 = Fn(([p]) => {
  * 建程序化夜空穹顶。
  * @param {object} options
  *   moonDir: THREE.Vector3 月亮方向（世界，会归一化）
- *   flat: 调试模式（用户定 2026-09）——纯低饱和中调冷蓝直出，方便区分「天空透墙洞」
+ *   flat: 调试模式——纯低饱和中调冷蓝直出，方便区分「天空透墙洞」
  *         与「暗墙体」；后续乘 godlight transmittance 的正式版接回完整 shader
  * @returns {THREE.Mesh} 挂进世界场景即可（调用点不判空直调 updateSkydome）
  */

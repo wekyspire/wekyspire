@@ -52,7 +52,7 @@ function defaultBakeBadge(size) {
   ctx.scale(S, S);
   const r = size / 2;
   // 底盘：淡蓝圆 + 深色描边（外描边让徽标在任意卡图上都有边界）——UI 走冷色扁平风格，
-  // 金色只留给金钱相关内容（用户定 2026-09-12）
+  // 金色只留给金钱相关内容
   ctx.beginPath();
   ctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
   ctx.fillStyle = '#7fa9d4';

@@ -1,4 +1,4 @@
-// 纹理延迟销毁器（WebGPU 迁移后的正式方案，2026-09-27 probe-w2 确诊）：
+// 纹理延迟销毁器（WebGPU 迁移后的正式方案，probe-w2 确诊）：
 // 换图即 dispose 时，上一帧（甚至本帧更早已经录制的 pass）绑定组仍引用旧纹理——
 // WebGPU 提交在 GPU 时间线异步执行，CPU 侧 dispose 立刻销毁 GPUTexture，仍在飞/已排队
 // 的 submit 携带已销毁纹理 → GPUValidationError 刷屏。WebGL 时代 gl.deleteTexture 由

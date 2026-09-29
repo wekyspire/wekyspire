@@ -38,7 +38,7 @@ export class CardScrollPickerObject extends ScrollPickerObject {
   /**
    * 卡图异步到图后重烘（宿主舞台经 stagePickerKit 在 cardArt.addOnLoad 里调）：
    * 候选卡不在卡组里、没被 preloadBattleArt 预热，首拍常是占位卡面——
-   * 不补这一手，选卡界面会永远停在无图占位（用户 2026-09-25 报"选卡界面空白卡"）。
+   * 不补这一手，选卡界面会永远停在无图占位（实报"选卡界面空白卡"）。
    */
   rebakeCards() {
     if (!this._opened) return;
@@ -56,7 +56,7 @@ export class CardScrollPickerObject extends ScrollPickerObject {
    *   cards: [{ uniqueID, defId, view, enabled, tipDefId }]（顺序即展示顺序，行优先）
    *   multi/picks/minPicks: 多选与目标张数（缺省单选 1 张；minPicks 传入即 M..N 区间）
    *   confirmLabel: 确认键文案
-   *   tips: hover 是否弹卡牌 tooltip（缺省 true；删卡类入口传 false——2026-09-26 用户定）
+   *   tips: hover 是否弹卡牌 tooltip（缺省 true；删卡类入口传 false）
    */
   open({ title = '选择卡牌', hint = '', cards = [], multi = false, picks = 1, minPicks = null, confirmLabel = '确认', tips = true } = {}) {
     return super.open({
@@ -76,7 +76,7 @@ export class CardScrollPickerObject extends ScrollPickerObject {
           obj, key: c.uniqueID, id, enabled: c.enabled,
           meta: { uniqueID: c.uniqueID, defId: c.defId, view: c.view, tipDefId: c.tipDefId },
           // 预览用 `tipDefId ?? defId`（升级入口传的是升阶后的卡；无目标时预览自身，hover 不落空）；
-          // 升级分叉（tipDefIds 多张）→ 多卡并列预览（「可升方向全摆出来」，用户定 2026-09-13）。
+          // 升级分叉（tipDefIds 多张）→ 多卡并列预览（「可升方向全摆出来」）。
           // tips=false 的入口（删卡）整卡不弹——tip 置 null 后基类 hover 自然静默
           tip: !tips ? null : (c.tipDefIds?.length > 1)
             ? { type: 'cards', payload: { cardIds: c.tipDefIds } }

@@ -1,4 +1,4 @@
-// 单向 notify 分发口（fx 架构，2026-09-22 Phase 4）：
+// 单向 notify 分发口（fx 架构，Phase 4）：
 // 「战斗中 3D 场景物体可 PCG 交互（碎裂/震荡）」的落地形态——**纯异步单向通信**：
 // 外界只 notify 事件（重击落地、爆炸冲击……），不读回值、不等结果、不进节拍。
 // 交互模式由 PCG 资源自身声明（prop def 的 behaviors → interactions 表，逻辑模板

@@ -3,10 +3,10 @@
 // 状态与生命周期在 tooltipHub（同 token 抑制、跟随移动、边缘翻转），本组件纯呈现——
 // 内容模型 { title, body, tint?, markup?, cardPreview? } 由 shell/tooltip.js 统一解析。
 // cardPreview 模型渲染整卡预览（CardFacePreview 战场同源烘焙）；宿主 pointer-events:none
-// 天然隔断预览内热区——嵌套 hover 一层即止（用户定）。
+// 天然隔断预览内热区——嵌套 hover 一层即止。
 // **markup 正文**（model.markup）：遗物/效果/术语描述里的 /card{} /named{} /effect{}
 // 由 RichTextInline 渲染成图标 + 特征色名称（不再把 markup 原样印出来）。它是**纯呈现**，
-// 不挂热区——tooltip 全局唯一、随叫随到，不带嵌套最省事（用户 2026-09-19 定）。
+// 不挂热区——tooltip 全局唯一、随叫随到，不带嵌套最省事。
 // z 层：面板 20 之上、模态弹窗 60 之下（模态期间不悬浮）。
 import CardFacePreview from './CardFacePreview.vue';
 import RichTextInline from './RichTextInline.vue';

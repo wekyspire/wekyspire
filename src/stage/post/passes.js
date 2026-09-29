@@ -1,4 +1,4 @@
-// 共享后处理件（stage/post/ 层）——WebGPU 迁移 TSL 版（2026-09-27，GLSL 字符串件全部重写）：
+// 共享后处理件（stage/post/ 层）——WebGPU 迁移 TSL 版（GLSL 字符串件全部重写）：
 // 全屏 pass 的**唯一事实源**——体积月光 composer（scenes/volumetricMoon.js）与
 // uiScene composer（post/uiComposer.js）共用同一套节点函数，bloom 阈值等全局约定
 // 只在这里各有一份，改一处两链同步。
@@ -10,10 +10,10 @@
 //   · 渲进 RT 的 pass 天然无输出变换（isOutputTarget=false），与 WebGL RT 排除一致；
 //   · **RT 纹理采样必须过 passUV（V 翻转）**——WebGPU 帧缓冲原点在左上（WebGL 在
 //     左下），本后端渲出的 RT 纹理内容与 uv() 的屏幕朝向相反（probe-w2 实测：
-//     不翻转则整帧上下颠倒）。NDC 重建/屏幕空间计算仍用 uv()（它跟随片元 NDC
+//     不翻转则整帧上下颠倒）。NDC 重建/屏幕空间计算仍用 uv（它跟随片元 NDC
 //     朝向，与后端无关）；只有「把 RT 当纹理读」的采样点用 passUV。
 //
-// 输出变换铁律（flavor A，2026-09-27 用户定，取代 W2 的「节点内 tone + 临时摘
+// 输出变换铁律（flavor A，取代 W2 的「节点内 tone + 临时摘
 // renderer.toneMapping」旧规矩——两套约定混用曾致塔楼整帧无 tone）：
 //   · **tone mapping + sRGB 的唯一落点 = 渲染器输出 blit**：渲屏幕（renderTarget=null）
 //     的 render() 自动走「内部 HalfFloat FB → 帧末 blit 施加 renderer.toneMapping +
@@ -30,7 +30,7 @@
 // 两条铁律（RT 间接合成成立的前提，uiComposer 依赖）：
 //   ① 终段合成用 premultiplied（ONE, ONE_MINUS_SRC_ALPHA）——three 法线混合在 RT
 //     里留下的 rgb 本就是预乘色、alpha 是真覆盖率，数学上与直渲逐像素等价；
-//   ② uiScene 的加法发光件一律走 additiveLight()（rgb 加算照旧、alpha 不占地）——
+//   ② uiScene 的加法发光件一律走 additiveLight（rgb 加算照旧、alpha 不占地）——
 //     否则光斑的 alpha 会在 RT 里「占地」，合成时把背后的世界挡掉。
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';

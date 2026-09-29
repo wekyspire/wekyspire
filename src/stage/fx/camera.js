@@ -1,4 +1,4 @@
-// 相机导演（fx 架构脊柱之三，2026-09-22 定稿；09-23 改单点合成）：
+// 相机导演（fx 架构脊柱之三，；09-23 改单点合成）：
 // 四件事——命名机位库、flyTo 运镜、override 栈、**叠加偏移通道**。
 //   pose 库：registerPose('bossIntro', { position, lookAt })，内容一律住 fx/scripts/
 //   （Boss 专属机位跟 Boss 剧本同文件；通用机位住 scripts/cameras/）——本类只持栈与原语。
@@ -121,7 +121,7 @@ export class CameraDirector {
 
   /** 回基准机位（补间版 restoreBaseCamera——舞台退场的收尾运镜）。fov 一并飞回：
    *  长焦对抗机位（duelPose 压过 fov）若只飞位不飞焦，弹栈的 restoreBaseCamera 仍会
-   *  瞬切视场角（2026-09-24 随 kardas 收尾硬切一并修）。 */
+   *  瞬切视场角（随 kardas 收尾硬切一并修）。 */
   flyHome(opts = {}) {
     const base = this._sm.cameraBase;
     if (!base) return Promise.resolve(false);
@@ -265,7 +265,7 @@ export class CameraDirector {
  * 压小、俯角压平，并按新 fov 反解距离以保住原来的取景范围。
  * 为什么走这条路而不是把镜头怼到主体脸上：对抗感来自**透视压缩**——远机位 + 窄视场
  * 会把前后两排拉到同一层平面上（长焦的老手艺），而推近特写只是把队友挤出画框、
- * 把回合制对撞拍成了大头照（pyro P2 实拍定论 2026-09-23）。
+ * 把回合制对撞拍成了大头照（pyro P2 实拍定论 ）。
  * @param {{position:{x,y,z}, lookAt:{x,y,z}, fov:number}} base 基准取景（CameraDirector#basePose）
  * @param {number} fovScale 视场角缩放（<1 = 更长焦）
  * @param {number} elScale 俯角缩放（<1 = 更平视）

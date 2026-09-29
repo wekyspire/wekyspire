@@ -1,11 +1,11 @@
 // StageManager（§4.1）：单全屏 canvas 的 three.js 舞台总管。
-// 渲染器 = WebGPURenderer（2026-09-27 全量迁移，quest_prompts/WEBGPU_MIGRATION.md）：
+// 渲染器 = WebGPURenderer（全量迁移，quest_prompts/WEBGPU_MIGRATION.md）：
 // 默认 WebGPU 后端；`?forceWebGL=1` 强制 WebGL2 后端跑同一套 TSL（迁移期验收对照口，
 // 生产版随 WebGL 兼容逻辑一并撤除）。**不支持 WebGPU 的设备由加载门卡死**（App.vue
 // 预检 probeWebGpuAdapter），本层不做回退。attach 因此是 async（renderer.init 是异步的）。
 // 世界坐标约定：z=0 平面上屏幕高度 ≈ 100 世界单位，y 向上，x 向右。
 // 布局一律用世界坐标计算；resize 只改相机视锥，不动任何场景对象。
-// 相机选小 FOV PerspectiveCamera + 斜方向俯视（用户定）：
+// 相机选小 FOV PerspectiveCamera + 斜方向俯视：
 //   眼高高于场景内全部水平面（地板/柱帽），透视方向全场一致——不出现"地板俯视、
 //   柱顶仰视"的矛盾（眼高若夹在场景中部，眼上物露底面、眼下物露顶面，读起来像两个视角）。
 //   azimuth 让相机从右侧斜看向场景（纵深/体积感更强）；
@@ -22,15 +22,15 @@ import { flushDeferredDisposals } from './deferredDispose.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
-export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
+export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（右侧视角）
 export const CAMERA_ELEVATION = 20;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
 export const CAMERA_LOOK_AT = Object.freeze({ x: 0, y: -15, z: 0 }); // 视轴锚在牌桌上方，底部留给手牌构图
-// 世界相机取景缩放（用户定 2026-09：0.79 ≈ 距离 235→185）。房间 PCG 道具全面 2x+ 放大后，
+// 世界相机取景缩放（0.79 ≈ 距离 235→185）。房间 PCG 道具全面 2x+ 放大后，
 // 原距离下战场空旷感强；拉近让房间/道具铺满画面。只作用于世界相机距离——worldHeight/
 // UI 正交视锥/布局坐标系全部不动（UI 取景、布局、拾取反投影不受影响），代价是 z=0 平面
 // 可视高 ≈79（画面外圈内容出画，由房型配方按新机位校核）。
 export const CAMERA_ZOOM = 0.79;
-// UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角（用户定）。
+// UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角。
 // 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs
 // 手牌 z=20+ 位置错乱、卡牌飞行 z 变化时忽大忽小）；正交下布局坐标↔屏幕线性映射，
 // 拾取/拖拽反投影也线性，一类问题全消。

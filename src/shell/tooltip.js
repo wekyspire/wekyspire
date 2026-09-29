@@ -61,7 +61,7 @@ function cardModel({ cardId, params }) {
 }
 
 // cards：多卡并列预览（升级分叉的 hover——候选卡的全部可升方向并排摆，用户定
-// 2026-09-13）。单张时退化为与 card 相同的单卡模型，少一层并列样式分叉。
+// ）。单张时退化为与 card 相同的单卡模型，少一层并列样式分叉。
 function cardsModel({ cardIds = [], params }) {
   const defs = cardIds.filter(id => id != null && hasSkill(id)).map(id => getSkillDefinition(id));
   if (!defs.length) return { title: `[cards] ${cardIds.join(',')}`, body: '' };
@@ -82,7 +82,7 @@ function relicModel({ relicId }) {
   if (relicId == null || !hasRelic(relicId)) return { title: `[relic] ${relicId}`, body: '' };
   const def = getRelicDefinition(relicId);
   const slot = def.nonSlot ? '非槽位式 · 恒生效' : `${def.cost ?? 1} 槽`;
-  // flavor（铭刻）：效果描述之后另起一段的铭文（2026-09-13 用户补：宗师的心得；
+  // flavor（铭刻）：效果描述之后另起一段的铭文（补：宗师的心得；
   // 靠 .tip-body 的 pre-line 换行）。铭刻是散文、不含 markup，与效果描述拼成一段
   // 统一按 markup 解析——散文段原样落成纯文本片段
   const effect = def.description ?? '';

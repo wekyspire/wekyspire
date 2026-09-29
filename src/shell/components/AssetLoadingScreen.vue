@@ -1,7 +1,7 @@
 <script setup>
 // 菜单层顶层加载界面：全量美术预载（assetManifest.preloadAllArt）的进度门。
 // App.vue 在预载**全部成功**前渲染本组件并扣住开始界面。
-// ⚠ 失败不放行（用户定 2026-09-12）：终止下载/断网导致 onerror 时，进度**卡住**并给出
+// ⚠ 失败不放行：终止下载/断网导致 onerror 时，进度**卡住**并给出
 // 失败提示与重试键——早期 onerror 只计数就 resolve，于是"掐掉下载也能进游戏"（缺图跑）。
 // position:fixed 锚定 #game-frame（transform 包含块），z-index 压过一切菜单级 UI。
 // 视觉：扁平（白字淡蓝按钮、细描边、小圆角）——与全局 UI 风格一致。
@@ -12,15 +12,15 @@ const props = defineProps({
   progress: { type: Object, default: () => ({ loaded: 0, total: 0 }) },
   // 失败项数（>0 = 卡在加载界面，只给重试）
   failed: { type: Number, default: 0 },
-  // WebGPU 兼容性检查失败（用户定 2026-09-27：不支持即卡死在本界面，无回退无重试）
+  // WebGPU 兼容性检查失败（不支持即卡死在本界面，无回退无重试）
   gpuUnsupported: { type: Boolean, default: false },
   // 失败原因细分：非安全上下文（http + 非 localhost——navigator.gpu 根本不存在）。
-  // 与硬件真不支持区分开，给「换 https/localhost」的可操作引导（2026-09-28 裸 IP 踩坑）
+  // 与硬件真不支持区分开，给「换 https/localhost」的可操作引导（裸 IP 踩坑）
   gpuInsecure: { type: Boolean, default: false },
 });
 const emit = defineEmits(['retry']);
 
-// 进度条按**下载体积**驱动（用户定 2026-09-13：按张数时大量小图瞬间刷满、大图干等，观感像坏了）：
+// 进度条按**下载体积**驱动（按张数时大量小图瞬间刷满、大图干等，观感像坏了）：
 // 字节来自 HEAD 探测，个别条目探测缺席会让字节停在 9x%——故"全部落定"强制 100%；
 // 整段探测失败（totalBytes=0）退化为按张数。
 const pct = computed(() => {
@@ -73,7 +73,7 @@ const etaText = computed(() => {
 <template>
   <div class="asset-loading" role="status" aria-label="资源加载中">
     <div class="al-title">魏启尖塔</div>
-    <!-- WebGPU 不支持：卡死在此（用户定 2026-09-27——游戏需要 compute/原子操作，
+    <!-- WebGPU 不支持：卡死在此（游戏需要 compute/原子操作，
          不做 WebGL 回退）；不给重试（重试也过不了硬件门） -->
     <div v-if="gpuUnsupported" class="al-fail">
       <div class="al-fail-text">此设备/浏览器不支持 WebGPU，无法运行本游戏</div>
@@ -94,7 +94,7 @@ const etaText = computed(() => {
       <span v-if="speedText && etaText"> ｜ </span>
       <span v-if="etaText">剩余 {{ etaText }}</span>
     </div>
-    <!-- 失败：不放行（用户定 2026-09-12——掐断下载不得进入游戏），给重试 -->
+    <!-- 失败：不放行（掐断下载不得进入游戏），给重试 -->
     <div v-if="failed > 0" class="al-fail">
       <div class="al-fail-text">资源加载失败 {{ failed }} 项——请检查网络后重试</div>
       <button class="al-retry" type="button" @click="emit('retry')">重试</button>

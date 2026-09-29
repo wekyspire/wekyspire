@@ -20,7 +20,7 @@
           <button v-else key="story" class="main-btn-story" @click="launch(null)">进入尖塔</button>
         </Transition>
       </div>
-      <!-- 开局路线（2026-09-21 D2，杀戮尖塔式选角）：只影响新开局；读档以存档现场为准 -->
+      <!-- 开局路线（D2，杀戮尖塔式选角）：只影响新开局；读档以存档现场为准 -->
       <div class="route-row">
         <button
           v-for="r in routeList" :key="r.id"
@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
 .save-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .save-title { font-size: 12px; letter-spacing: 3px; color: #7d87a8; }
 .save-empty { font-size: 13px; color: #5d6584; padding: 4px 0; }
-/* 标题：白字（不再金色发光大字——用户定 2026-09-12 的扁平风格） */
+/* 标题：白字（不再金色发光大字——用户定 的扁平风格） */
 .title {
   margin: 0; font-size: 54px; letter-spacing: 8px; color: #eef4ff;
   text-shadow: 0 2px 10px rgba(0, 0, 0, .55);

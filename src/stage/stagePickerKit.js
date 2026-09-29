@@ -47,11 +47,11 @@ import { withLabels } from './panels/shared.js';
 const UPGRADE_SOURCES = {
   // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
   // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
-  // （camp 源 2026-09-21 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
+  // （camp 源 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
-    // 尾款新制多选（2026-09-28）：twoC 模式一次选 2 张（恰好 N = picks；张数来自快照
+    // 尾款新制多选：twoC 模式一次选 2 张（恰好 N = picks；张数来自快照
     // upgradeRemaining——模式已由壳层 trainUpgradeStart 落定，候选已按等阶过滤）
     picks: (s) => Math.max(1, s?.training?.upgradeRemaining ?? 1),
     intent: (uniqueID, targetId = null) => ({ action: 'trainingUpgrade', uniqueID, targetId }),
@@ -83,7 +83,7 @@ const UPGRADE_SOURCES = {
     intent: (uniqueID) => ({ action: 'gurpasRemove', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
     hint: '这张牌将从牌库中彻底消失',
-    tips: false,   // 删卡界面不弹卡牌 tooltip（2026-09-26 用户定）——浏览的是自己的牌组，逐卡弹预览只是噪音
+    tips: false,   // 删卡界面不弹卡牌 tooltip——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
     cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
@@ -93,7 +93,7 @@ const UPGRADE_SOURCES = {
     tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
   ascensionRemove: {
-    // 跳过进阶的删卡反哺（用户定 2026-09-13）：与 Boss 奖励同一计数器/同一结算，
+    // 跳过进阶的删卡反哺：与 Boss 奖励同一计数器/同一结算，
     // 仅文案不同——title 用户钦定「删一张卡」；「返回」只收起界面（不删也行）。
     cards: (s) => s?.cardRemoval?.removeCards,
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
@@ -243,7 +243,7 @@ export function createStagePickerKit({
     /**
      * 卡图异步到图后重烘选卡界面（宿主在 cardArt.addOnLoad 里调；合批由宿主负责）。
      * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
-     * （用户 2026-09-25 报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
+     * （实报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
      */
     rebakeCards() { cardPicker?.rebakeCards?.(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
@@ -255,8 +255,8 @@ export function createStagePickerKit({
     /**
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
      * 所有入口都只列**可用**候选（`enabled !== false`：升级入口的 enabled = 有晋升目标，
-     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标——用户 2026-09-11 报）。
-     * **晋升分叉**（用户定 2026-09-13）：确认的卡带多个晋升目标时不直接上行，换开
+     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标——实报）。
+     * **晋升分叉**：确认的卡带多个晋升目标时不直接上行，换开
      * 「选择晋升方向」子面板（候选 = 各分叉目标卡面），确认才带 targetId 上行；
      * 子面板「返回」= 回上一级重选（不消费升级机会——意图未上行，core 未结算）。
      * @returns 是否真的打开了（无候选 / 未知 source → false，编排器据此跳过）
@@ -285,7 +285,7 @@ export function createStagePickerKit({
       const hookMain = () => {
         if (!def.upgrade) { picker.confirmHook = null; return; }
         picker.confirmHook = (keys) => {
-          // 多选链（训练尾款 twoC，2026-09-28）：摘下全部选中卡 → 逐张「（有分叉先开
+          // 多选链（训练尾款 twoC）：摘下全部选中卡 → 逐张「（有分叉先开
           // 晋升方向子面板）→ 变身演出 → 上行意图」。子面板「返回」= 中止余下（已晋升的
           // 保留，尾款剩余挂起，由面板「继续修行…」重入）。
           if (keys.length > 1) {
@@ -355,7 +355,7 @@ export function createStagePickerKit({
           cards: cards.map(toCardEntry),
           multi: picks > 1, picks,
           confirmLabel: def.confirmLabel,
-          tips: def.tips !== false,   // 删卡类源关 hover 预览（2026-09-26 用户定）
+          tips: def.tips !== false,   // 删卡类源关 hover 预览
         });
         hookMain();
       };
@@ -390,7 +390,7 @@ export function createStagePickerKit({
     },
 
     /**
-     * 训练抓牌四选一（2026-09-28 交互迁移：面板内嵌卡阵 → 全屏 overlay，与卡包同节拍）。
+     * 训练抓牌四选一（交互迁移：面板内嵌卡阵 → 全屏 overlay，与卡包同节拍）。
      * 确认 = 选中的卡入组——先播「择卡得卡」演出，落袋后上行 `trainingDraw(defId)`；
      * 「返回」= 放弃整段可选（`trainingDraw(null)`，与旧面板「这些都不合适」同语义）。
      * @returns 是否真的打开了（无候选 → false）
@@ -431,7 +431,7 @@ export function createStagePickerKit({
     /**
      * 卡包三选一（买到即开）：全屏 overlay，**可放弃**。
      * 确认 = 选中的卡入组——先播「择卡得卡」演出（脉冲→飞入收编锚点，sequencer 指令化），
-     * 演出落袋后才上行意图（钱已花，选择权仍在玩家，用户定 2026-09-12）；返回 = 放弃这个卡包。
+     * 演出落袋后才上行意图（钱已花，选择权仍在玩家）；返回 = 放弃这个卡包。
      */
     openShopPackPicker(snap = null) {
       const pend = snap?.shop?.pending;
@@ -469,7 +469,7 @@ export function createStagePickerKit({
     },
 
     /**
-     * 遗物包三选一（售货机「稀有度遗物包」，2026-09-13 用户定）：全屏 overlay，**可放弃**。
+     * 遗物包三选一（售货机「稀有度遗物包」）：全屏 overlay，**可放弃**。
      * 确认 = 选中的遗物入包（获得特写由拥有集差分自动兜）；返回 = 放弃（钱已花，不退）。
      * 候选走程序化藏品卡（RelicScrollPickerObject），与老虎机吞噬的遗物侧同一份 picker。
      */
@@ -490,7 +490,7 @@ export function createStagePickerKit({
     },
 
     /**
-     * 老虎机中奖产出的**多选一**（2026-09-22 统一：获得演出 dismiss 后接全屏 overlay，
+     * 老虎机中奖产出的**多选一**（统一：获得演出 dismiss 后接全屏 overlay，
      * 不再走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
      * 演出 → `slotTake(choice)`；「返回」= 放弃这份产出（`slotDecline`，与卡包同口径——
      * 演出里的「跳过」也是放弃，两条出口殊途同归）。遗物类奖项走 RelicScrollPicker。
@@ -549,7 +549,7 @@ export function createStagePickerKit({
      * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
      * 候选数据由编排器给（kit 不读 run）：cards 走与升级入口同一份卡面烘焙，
      * relics 走程序化藏品卡（`objects/RelicScrollPickerObject.js`）。
-     * 卡面投影在 kit 内兜底（编排器只给 {uniqueID, defId} 也能烘出真卡面——2026-09-29
+     * 卡面投影在 kit 内兜底（编排器只给 {uniqueID, defId} 也能烘出真卡面——
      * 修复「粉碎选卡全是白卡」：bakeFace 拿不到 view 就无米下锅）；删卡类入口不弹卡牌
      * tooltip（tips:false，与 bossRemove/gurpasRemove 同口径——浏览的是自己的牌组）。
      * @returns 是否真的打开了（无候选时 false，编排器据此跳过）
@@ -610,7 +610,7 @@ export function createStagePickerKit({
 
     /**
      * 逐帧驱动获得物特写（自带 in/hold/out 时序；未创建/空闲时无事发生）。
-     * 2026-09-28：选卡/选遗物界面的候选件也要逐帧 fx——选中高亮是 C0 shader 档，
+     * 选卡/选遗物界面的候选件也要逐帧 fx——选中高亮是 C0 shader 档，
      * 目标值收敛在 update 里，没人 tick 就永远停在 0（「选中了没高亮」的病根）。
      */
     update(dt) {
@@ -651,7 +651,7 @@ export function createStagePickerKit({
     },
 
     /**
-     * 按下转发（2026-09-21 滚动条拖拽）：点击语义在各舞台是「抬起」判定，而滚动条拖拽
+     * 按下转发（滚动条拖拽）：点击语义在各舞台是「抬起」判定，而滚动条拖拽
      * 必须从按下那拍开始——宿主 handlePointerDown 里调这里，把按下（含指针坐标）交给
      * 开着的全屏界面（当前只有选卡界面的滚动条用；其余界面没有按下语义，返回 false）。
      */

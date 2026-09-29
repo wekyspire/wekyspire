@@ -47,7 +47,7 @@ export function snapshotRun(run) {
     debugMode: run.debugMode ?? false, // 调试局标记：读档走 debug 槽语义（恢复房/阶段，见 runController）
     floor: run.floor,
     totalFloors: run.totalFloors,
-    route: run.route ?? 'body',   // 开局路线（2026-09-21 D2）；旧档无此字段 → 体修口径
+    route: run.route ?? 'body',   // 开局路线（D2）；旧档无此字段 → 体修口径
     gameStage: run.gameStage,
     result: run.result,
     // 房型房间的现场（只有调试局会读它：真实档语义 = 检查点，恒在 prep 恢复；
@@ -70,7 +70,7 @@ export function snapshotRun(run) {
     slotFreeRolls: run.slotFreeRolls ?? 0,
     slotApples: run.slotApples ?? 0,
     // 银行机状态（存款/连击/超额取款黑名单/待选恶魔词条/词条附赠操作）与跨战斗词条队列：
-    // 不存档的话，读档会把存款吞掉、也能把恶魔 roll 的代价赖掉（2026-09-12 补）
+    // 不存档的话，读档会把存款吞掉、也能把恶魔 roll 的代价赖掉
     bank: run.bank ? {
       ...run.bank,
       blackCleared: [...(run.bank.blackCleared ?? [])],

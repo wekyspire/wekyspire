@@ -29,7 +29,7 @@ const importText = ref('');
 const exportText = ref('');
 const pick = ref({ card: '', relic: '', effect: 'burn', battleCard: '', pack: '' });
 
-// ---- 拖拽移位（2026-09-27 用户定）：缺省顶部居中（旧缺省左上角会遮塔楼层按钮）——
+// ---- 拖拽移位：缺省顶部居中（旧缺省左上角会遮塔楼层按钮）——
 // 抓住标题栏拖动换位置，坐标持久化到 localStorage；钳制防拖出屏外找不回
 const panelEl = ref(null);
 const POS_KEY = 'wekyspire:debugPanelPos';

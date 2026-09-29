@@ -1,9 +1,9 @@
-// 老虎机 rig（用户定 2026-09-11）：把 `props/slotMachine.js` 的可动件驱动起来。
+// 老虎机 rig：把 `props/slotMachine.js` 的可动件驱动起来。
 // 反馈分层（原则：交互反馈丰富且分层）：
 //   · 常驻：机体微微抖动（"活着"）+ 彩灯缓慢呼吸
 //   · hover：机体轻微上浮放大 + 彩灯提亮（由交互层调用 setHover）
 //   · 拉杆：拉杆快速拉下 → 缓慢弹起（弹性回位）；三点亮起同步起转
-//   · 转轮：**四段时序，全程 C1 连续**（用户定 2026-09-11："转久一点、减速曲线细一点、
+//   · 转轮：**四段时序，全程 C1 连续**（"转久一点、减速曲线细一点、
 //     锁定前要有卡入位的回滚/滑入"）：
 //       ① 起转加速 → ② 长匀速（中间轮最久） → ③ 指数减速（尾段"将停未停"地缓缓蹭过去，
 //       即真机那种"自然停下会卡在两格之间"的悬念） → ④ **卡入位**：阻尼弹簧把已经冲过
@@ -116,7 +116,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   // 转轮面数由资产决定（道具导出 SYMBOLS 长度）；资产侧只有 kit 共享材质，
   // 彩灯/指示灯的逐帧改色**由 rig 持独立材质**（资产禁自建材质是契约）。
   const SYM = reels[0]?.userData?.symbols?.length ?? 5;
-  // 锁定指示灯配色（用户定 2026-09-11：锁定前灭、锁定后亮）：暗铁 / 亮金 / 中奖闪用
+  // 锁定指示灯配色（锁定前灭、锁定后亮）：暗铁 / 亮金 / 中奖闪用
   // **亮度一律乘算、不调 shade()**：① shade 是朝白插值，提亮会同时去饱和（提两档就白）；
   // ② 乘到真 HDR（线性 >1）才能进 bloom 的亮部通道——管线是 HDR 的，自发光体就得写 >1。
   const brighten = (hex, k) => new THREE.Color(hex).multiplyScalar(k);
@@ -169,7 +169,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   }
   applyReelArt();
 
-  // ---- 粉碎口 + 摇杆次数计数器（用户定 2026-09-11）----
+  // ---- 粉碎口 + 摇杆次数计数器----
   // 资产只出几何与可点热区（userData.pickId），逐帧驱动与烘焙全在 rig：
   //   · 计数器面板 = 一张自绘 canvas（七格刻度 + 数字滚动），材质由 rig 建
   //   · 投料口暗腔 = 可点热区（粉碎时闪红）；金牙 = 咬合缩放 + 进度满时发亮
@@ -203,7 +203,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     throat.parent.add(mawProxy);
   }
 
-  /** 计数器面板 = **翻牌（split-flap）显示**（用户定 2026-09-11："要做成翻牌显示，
+  /** 计数器面板 = **翻牌（split-flap）显示**（"要做成翻牌显示，
    *  不是能量条"）：两张卡（当前值 / 上限），每张分上下两片叶子 + 中缝；数字变化时上半片
    *  像真翻牌一样折叠落下（见 drawFlap 的两段时序）。刻度点阵那种"能量条"读法已删。 */
   function drawFlap(ctx, bx, by, w, h, digit, { dim = false, ready = false, from = digit, flip = 1 } = {}) {
@@ -392,7 +392,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   // ---- 彩灯：常态呼吸 + 灯效（InstancedMesh + instanceColor，逐实例写色）----
   // **逐颗底色**来自资产登记的 tints[]（一圈彩灯颜色不同才有"赌具"味），缺省暖金。
   // "亮起"用**乘算提亮**保住色相（详见下方 brighten 注释）——近白（flameCore）或朝白插值
-  // 都会把整圈彩灯糊成白色（用户报障"彩灯亮起的时候都一律显示为白色"）。
+  // 都会把整圈彩灯糊成白色（报障"彩灯亮起的时候都一律显示为白色"）。
   const bulbTints = bulbRing?.tints ?? [];
   const lampTints = lampRing?.tints ?? [];
   const bulbMesh = bulbRing?.mesh ?? null;
@@ -423,7 +423,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       }
     }
     if (bulbMesh.instanceColor) bulbMesh.instanceColor.needsUpdate = true;
-    // ---- 三颗锁定指示灯：**转轮没停就灭、停稳就亮**（用户定 2026-09-11）----
+    // ---- 三颗锁定指示灯：**转轮没停就灭、停稳就亮**----
     // 中奖时随灯效闪（用各灯自己的底色，不再糊白）。
     for (let i = 0; i < lampTints.length; i++) {
       const locked = st.spin ? !!st.spin.locked[i] : true;   // 待机 = 已在槽位上 = 亮
@@ -440,7 +440,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     }
     if (lampMesh?.instanceColor) lampMesh.instanceColor.needsUpdate = true;
   }
-  // ---- 恶魔 roll 的机械演出（用户定 2026-09-11）----
+  // ---- 恶魔 roll 的机械演出----
   // 闸口 = 盖住转轮窗的板：关 → 换盘 → 开。整段是**时序脚本**（每步 dur + 插值函数），
   // 由 update 推进；脚本跑完前 isBusy() 为真（宿主据此禁掉拉杆/输入）。
   // 恶魔态风格（彩灯 + 光照偏暗红）走 demonK 权重，与机械动画解耦——宿主可单独拉。
@@ -534,11 +534,11 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     applyArtPanels();   // 画牌贴图：图刚解码完的那一帧贴上（之后就空转）
     applyReelArt();     // 轮盘图案同理
     // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
-    // 此时机器只该有极轻微的呼吸感（用户 2026-09-11：再缩一倍 → calm ≈ 0.16）。
+    // 此时机器只该有极轻微的呼吸感（再缩一倍 → calm ≈ 0.16）。
     st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
     const calm = 1 - 0.84 * st.focus;
 
-    // ---- 横向拨针：被转轮带着抖/偏，停轮后弹簧归位（用户定 2026-09-11）----
+    // ---- 横向拨针：被转轮带着抖/偏，停轮后弹簧归位----
     if (needle) {
       const target = -st.spinEnergy * 0.055;              // 转得越猛，针被压得越偏
       const K_SPRING = 90, DAMP = 9;                      // 欠阻尼（ζ≈0.47）→ 归位带一点回摆
@@ -549,7 +549,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     }
 
     // ---- 常驻抖动：机体微微抖（幅度小但持续；中奖时叠加"激动"抖动）----
-    // **层次反馈**（用户定）：转轮高速转动时整机跟着震（转盘带动机构），转速降下来震动也弱，
+    // **层次反馈**：转轮高速转动时整机跟着震（转盘带动机构），转速降下来震动也弱，
     // 落槽瞬间再叠一次"咔"式弹跳；追光怼脸时统一按 calm 压制。
     const idleAmp = (st.hover > 0.5 ? 0.02 : 0.012) * calm;
     const vibAmp = 0.05 * st.spinEnergy * calm;
@@ -599,7 +599,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     }
 
     // ---- 转轮：① 加速 → ② 长匀速 → ③ 指数减速（将停未停）→ ④ 卡入位（阻尼弹回槽位）----
-    // 顺带测**当前转速**（角度差分）：转轮的动能驱动"机体随转轮一起震"（层次反馈，用户定）。
+    // 顺带测**当前转速**（角度差分）：转轮的动能驱动"机体随转轮一起震"（层次反馈）。
     if (st.spin) {
       const s = st.spin;
       s.elapsed += dt;
@@ -723,7 +723,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     devourReady,
     crush,
     /** 可点热区（宿主射线拾取用）：投料口暗腔 + 计数器面板。 */
-    /** 粉碎入口热区 = 投料口拾取代理（罩住喉腔+金牙；2026-09-29 用户定——计数器翻牌
+    /** 粉碎入口热区 = 投料口拾取代理（罩住喉腔+金牙；——计数器翻牌
      *  只是显示件，此前混进热区会让玩家「点到 7 上也进了粉碎」）。 */
     crusherTargets: () => [mawProxy ?? throat].filter(Boolean),
     /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */

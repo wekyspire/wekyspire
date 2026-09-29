@@ -1,4 +1,4 @@
-// RoomStage：**场景式休息房**（第一间 = 赌厅 casino / 老虎机房，用户定 2026-09-11）。
+// RoomStage：**场景式休息房**（第一间 = 赌厅 casino / 老虎机房）。
 //
 // 与塔楼层（MapStage）/战斗层（BattleStage）并列的第三个舞台：由 runController 在
 // `gameStage === 'room'` 且该房间有休息房配方时，经 **cutscene 幕间黑幕** 切进来
@@ -6,7 +6,7 @@
 //
 // 呈现：PCG 房间几何（`getScene('pcg:<recipe>')`）+ 可动机器 rig + 头顶浮标（可点）；
 // 点机器 → 该机器的操作面板**停靠**在屏幕下沿（PanelObject 的 dock 形态），房间始终看得见；
-// 右下角常驻**「继续前进」大箭头**（用户新增美术）——场景式休息房没有自动离开，玩家点它
+// 右下角常驻**「继续前进」大箭头**（新增美术）——场景式休息房没有自动离开，玩家点它
 // 才离开休息室回塔楼层（宿主据此走 `leaveRoom` 意图 → completeRoom → 幕间黑幕回塔楼）。
 //
 // 数据边界（THREE_UI_MIGRATION 铁律）：本舞台**不读 run 状态**——面板走 `setPanel(snap)`
@@ -46,14 +46,14 @@ import { runScript } from '../fx/script.js';
 import { TSL_READY } from '../fx/tslGate.js';
 const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2;
 
-// 聚焦机位处方（用户定 2026-09-11：**点物件先推近，推到位再显示它的操纵 UI**）：
+// 聚焦机位处方（**点物件先推近，推到位再显示它的操纵 UI**）：
 // fracH = 物件占可视高比例；bottom = 物件底边离屏底的比例（其余下沿留给停靠面板）；
 // pad = 横向装得下时的余量。距离与视轴下移都由这几个比例**反解**（不手调 margin）。
 // 默认一套适用所有尺寸（距离自适应），个别物件要贴脸/退远时由**机器模块的 focusOf** 覆盖。
 const FOCUS_DEFAULT = { fracH: 0.50, bottom: 0.46, pad: 0.92 };
 
 const ZOOM_MS = 0.62;   // 推近/拉远的补间时长（秒）
-// 「继续前进」按钮：右下角（用户定）——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
+// 「继续前进」按钮：右下角——避开下沿停靠面板（面板宽 62 wu、居中），故放最右侧
 const CONTINUE_POS = { x: HALF_UI_W - 16, y: UI_CAMERA_LOOK_AT_Y - 30 };
 
 export class RoomStage {
@@ -95,7 +95,7 @@ export class RoomStage {
     this._camTween = null;   // { from, to, t, dur, then }：推近/拉远的机位补间
     this._unsubTick = null;
 
-    // fx 门面地基（2026-09-22 Phase 4）：命名寻址 + notify 分发——房间 cutscene 剧本
+    // fx 门面地基（Phase 4）：命名寻址 + notify 分发——房间 cutscene 剧本
     // 经 cast('prop:<名字>') 拿机器/陈设句柄；带 behaviors 的道具经 notify 被动响应
     this._cast = new Cast();
     this._notifyHub = createNotifyHub({ cast: this._cast });
@@ -129,7 +129,7 @@ export class RoomStage {
     this._rigs = new Map();      // name -> rig
     this._markers = [];          // { name, entry, marker(箭头浮标), hover }
 
-    // ---- 房间活物（用户 2026-09-25 定）：骑士常驻立牌（无血条）+ 瑞米在场游荡 ----
+    // ---- 房间活物：骑士常驻立牌（无血条）+ 瑞米在场游荡 ----
     // 单位指令通道（后端驱动）：core 事件 → presenter → runController → roomUnitCommand，
     // 与 cutscene 的 unit 步骤共用（见 stages/roomUnits.js 头注）。
     this._roomUnits = createRoomUnits({
@@ -175,7 +175,7 @@ export class RoomStage {
     this._bakeLabel = bakeLabel || defaultBakeLabel();
     // 卡面烘焙（与战场/塔楼层同源）：**全屏选卡界面也必须拿到它**——漏传的症状是
     // "候选卡一张都看不到、但 hover 预览正常"（预览走 tooltip 的 DOM 卡面，不经过这里；
-    // 用户 2026-09-12 报"篝火处升级选卡界面卡牌隐身"的真凶）。面板与选卡界面共用这一份。
+    // 实报"篝火处升级选卡界面卡牌隐身"的真凶）。面板与选卡界面共用这一份。
     this._bakeFace = (typeof document !== 'undefined')
       ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
       : null;
@@ -197,7 +197,7 @@ export class RoomStage {
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
     // 立绘晚到补挂（与塔楼层/战场同源同款）：漏这一步的症状是「休息房里玩家与瑞米的
-    // 头像都是空圆」（用户 2026-09-13 报赌博层头像失踪）。素材通常已预载就绪，先挂一次；
+    // 头像都是空圆」（实报赌博层头像失踪）。素材通常已预载就绪，先挂一次；
     // 未就绪则由 addOnLoad 回调补挂（水晶/金币的晚到补挂走 PlayerStatusObject 自己的订阅）。
     this._unsubArt = this._unitArt?.addOnLoad(() => this._applyAvatar());
     // 房间单位立牌的素材晚到补挂（骑士/瑞米/未来姿势图）
@@ -205,7 +205,7 @@ export class RoomStage {
     this._applyAvatar();
     // 卡图晚到重烘（与战场/塔楼层同语言）：房间面板（训练四选一/种子包）与全屏选卡的
     // 候选卡都不在卡组里、没有战斗预热，首拍常是无图占位——不订阅就永远空白
-    // （用户 2026-09-25 报）。每图一通知，用脏标记合批成一拍。
+    // （实报）。每图一通知，用脏标记合批成一拍。
     {
       let dirty = false;
       this._unsubCardArt = sharedCardArtCache.addOnLoad(() => {
@@ -252,7 +252,7 @@ export class RoomStage {
 
   /** 房间面板快照下行（notify 每次都推）：存下 + 按需重绘已打开的机器面板。 */
   setPanel(snap) {
-    // 非 room 快照 = **阶段级模态面板**（如房内进阶的种子包九选三——2026-09-18 训练改版：
+    // 非 room 快照 = **阶段级模态面板**（如房内进阶的种子包九选三——训练改版：
     // beginTraining 达标即切 'ascension'，进阶在房间舞台上播，快照 kind 变 'ascension'）。
     // 以 PANEL_BUILDERS 模态托管（与 MapStage 同一 builder 表）；kind 变化自然拆装。
     if (!snap || snap.kind !== 'room') {
@@ -263,7 +263,7 @@ export class RoomStage {
     }
     // ⚠ 房间快照只重绘**已打开的机器面板**：离房时编排器会先推一份新阶段的快照（prep/…），
     // 那一份走上面的模态分支拆掉；这里若照单全收机器面板，已打开的面板会用错快照重绘一次
-    // （用户报"点继续后营地 UI 突变了一下"——那一帧正是营地面板拿 prep 快照重绘的结果，
+    // （报"点继续后营地 UI 突变了一下"——那一帧正是营地面板拿 prep 快照重绘的结果，
     // 随后才被幕间黑幕盖住）。
     this._removeStagePanel();
     this._snap = snap;
@@ -333,7 +333,7 @@ export class RoomStage {
   openUpgradePicker(source) { return this._pickerKit.openUpgradePicker(source, this._snap); }
 
   /**
-   * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开，用户定 2026-09-12）。
+   * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开）。
    * **可放弃**：确认 = 选中的卡入组；返回 = 放弃这个卡包（钱已花，选择权在玩家）。
    */
   openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
@@ -341,7 +341,7 @@ export class RoomStage {
   /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
   openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
 
-  /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里；2026-09-22 统一全屏 overlay）。 */
+  /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里；统一全屏 overlay）。 */
   openSlotPrizePicker() { return this._pickerKit.openSlotPrizePicker(this._snap); }
 
   /** 训练抓牌四选一（全屏 overlay；候选取自当前房间快照）。 */
@@ -395,7 +395,7 @@ export class RoomStage {
     const hit = this._picker.hover(x, y);
     if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     // 阶段级模态面板（房内进阶的种子包等）在台：hover 全归它，机器/浮标/继续键/停靠面板
-    // 一律不亮——模态语义（2026-09-18 用户报「种子包只能刷新不能选卡」的病灶之一：
+    // 一律不亮——模态语义（「种子包只能刷新不能选卡」的病灶之一：
     // 阶段面板收不到 hover/click 路由）。
     if (this._stagePanel) {
       this._hoverName = null;
@@ -412,7 +412,7 @@ export class RoomStage {
     const name = this._focused ? null : this._machineOf(hit);
     // zoom-in（已聚焦某台）期间不响应 hover：hover 放大/提亮是**全景下的可交互暗示**
     // （"这东西能点"），推近之后玩家已经在跟它交互了，再跟着鼠标缩放只会让人以为画面在抖
-    // （用户定 2026-09-12）。故聚焦时统一喂 null，机器 rig 与浮标都不进入 hover 态。
+    // 。故聚焦时统一喂 null，机器 rig 与浮标都不进入 hover 态。
     this._hoverName = name;
     for (const [n, rig] of this._rigs) rig.setHover?.(n === name);
     for (const m of this._markers) m.hover = (m.name === name);   // 箭头浮标 hover 提亮
@@ -558,7 +558,7 @@ export class RoomStage {
       // 无 rig 件的 hover 放大基准（配方的 scale 已烘进 object.scale，这里存一份当基准）
       entry.baseScale = entry.object.scale.x || 1;
       entry._hoverK = 0;
-      // 头顶浮标 = **一枚跳动的发光箭头**（用户定 2026-09-12：去掉地面光圈与光柱，只留箭头）。
+      // 头顶浮标 = **一枚跳动的发光箭头**（去掉地面光圈与光柱，只留箭头）。
       // ⚠ y 必须落在房间地平（FLOOR_Y）上：道具都摆在 FLOOR_Y 平面，浮标写 y=0 会飘到半空
       // （30 世界单位的悬空，与机器读作两件东西）；箭尖指着机器顶上方一点点，
       // 高度从**包围盒顶**算，各种尺度的机器都不用逐个调参。
@@ -624,7 +624,7 @@ export class RoomStage {
    * 房里**还欠着的事**（null = 可以离房）：由各**机器模块自报**（`pendingDuty`）。
    * 语义分两档（硬拦 / 软提示）由模块自己定义与提示，本舞台只做聚合：
    *   · **硬拦**（如 'demon' / 'shop' / 'forced'）——钱已到手或升级已发生，不处理完不许走；
-   *   · **软提示**（如 'camp'）——休整是可选收益（训练同理，用户定 2026-09-12），
+   *   · **软提示**（如 'camp'）——休整是可选收益（训练同理），
    *     第一次点「继续前进」只弹一句泡泡，再点一次就放行（各模块自己记"提示过没有"）。
    */
   _pendingRoomDuty() {
@@ -802,7 +802,7 @@ export class RoomStage {
         onIntent: (a, info) => this._onPanelAction(a, info),
         // 卡面烘焙与战场/塔楼层同源（pending 的卡阵、选卡界面都要真卡面，不能没有）
         bakeFace: this._bakeFace,
-        // 操纵条文字**统一白字 + 黑边**（用户 2026-09-12）：烘焙层直接定色，
+        // 操纵条文字**统一白字 + 黑边**：烘焙层直接定色，
         // widget 各自的 tint 在 dock 形态下被忽略（见 PanelObject 的 dock 分支）
         bakeText: this._dockBakeText(),
         overrideOpacity: 0
@@ -810,7 +810,7 @@ export class RoomStage {
       this.uiScene.add(this._panel);
     }
     // 停靠面板只放"这台机器能做的事"：**不再给「返回房间」按钮**——点面板外的房间空白处
-    // 即拉远回全景（用户定 2026-09-12：推近后的退出口应当是"点别处"，UI 里多一个返回键既
+    // 即拉远回全景（推近后的退出口应当是"点别处"，UI 里多一个返回键既
     // 占地方又和底部操纵条的语义打架）。widgets 由该机器模块的 panel builder 产出。
     const entry = this._markers.find(m => m.name === this._panelKind)?.entry;
     const mod = entry ? this._moduleOfKind[entry.kind] : null;
@@ -872,7 +872,7 @@ export class RoomStage {
       m.marker.setHighlight(m.name === this._focused || !!m.hover);
       m.marker.update(dt);
       // 无 rig 的陈设交互物（篝火/训练桩）的 hover 反馈：整体轻微放大——老虎机/银行机/售货机
-      // 由各自 rig 做同类反馈，这里给"没有 rig 的可交互物"补上同一套可交互暗示（用户定 2026-09-12）。
+      // 由各自 rig 做同类反馈，这里给"没有 rig 的可交互物"补上同一套可交互暗示。
       // zoom-in 时 _hoverName 恒 null，故自然不会缩放（该反馈只属于全景）。
       if (!this._rigs.has(m.name)) {
         const want = this._hoverName === m.name ? 1 : 0;
@@ -887,7 +887,7 @@ export class RoomStage {
     this._roomUnits?.tick(dt, this._sm?.camera ?? null);
     // 「继续前进」的明度：获得演出/全屏选择界面是**模态覆盖层**，期间这枚常驻按钮必须明显不可用。
     // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点
-    // （用户 2026-09-13 报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
+    // （实报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
     // 卡包待选 / 强绑抓牌）压到 0.4，正常为 1。放帧驱动是因为演出起止不走快照。
     this._continue.setDim(
       this._pickerKit.uiBusy ? 0.18

@@ -5,14 +5,14 @@
 // 非卡来源的消耗（维持费等）纯爆散（burst 不带目的锚）。
 // 卡牌发动演出的衔接 = 调用方按 DRAIN_FLIGHT_MS 推迟起飞（编排常量，不做 GPU→CPU 回读）。
 //
-// 手感旋钮（用户调参区）：类型的 spawn/destination/render 全参数在下表；
+// 手感旋钮（调参区）：类型的 spawn/destination/render 全参数在下表；
 // 编排时长 = DRAIN_FLIGHT_MS；每点费用粒子数 = PARTICLES_PER_POINT。
 import * as THREE from 'three';
 import { defineParticleType } from './particleTypes.js';
 import { costBadgeUvs, COST_BADGE_RADIUS } from '../../richtext/cardFace.js';
 
 /** 汇聚抵达的编排时长（卡牌发动展示延迟量）——必须 ≥ 实际抵达时间，否则卡先飞走
- *  粒子追进牌库（2026-09-28 用户拍板：提速解决；GPU alive 读回延迟数百 ms 当不了
+ *  粒子追进牌库（提速解决；GPU alive 读回延迟数百 ms 当不了
  *  节拍锚，故用固定编排延迟——retarget/节拍回读已在 PARTICLE_SYSTEM_V2 §八排期）。
  *  提速后实测 burst→抵达 ≈0.3-0.5s（steerK 200 / delay+ramp 0.22 / arrival gain 8）。 */
 export const DRAIN_FLIGHT_MS = 600;
@@ -24,7 +24,7 @@ const MAX_BURST = 130;
 // 只耗 AP 时 AP 顶最右等排位细节都在那边，这里不许再存一份常量）。
 // 卡 quad（cardWidth×cardHeight）与纹理同比例，直接按比例换算世界偏移。
 // domainMode 0（圆盘填充）：粒子目标点落在徽章盘面内——曾用 3（圆周均布），
-// 背侧目标点让粒子穿过圆心，视觉上「微微飞过头」（2026-09-28 用户验收）。
+// 背侧目标点让粒子穿过圆心，视觉上「微微飞过头」（验收）。
 
 // 魏启 = 冰蓝；AP = 暖金（与状态栏两图标同色系的能量化表达）
 const T_MANA = defineParticleType({
@@ -53,7 +53,7 @@ export function createResourceDrainFx(pool, getters) {
 
   const count = (amount) => Math.min(MAX_BURST, Math.max(10, Math.round(amount * PARTICLES_PER_POINT)));
 
-  // 锚点跟随（2026-09-28 用户验收抓：锚点曾是出牌时点的一次性快照，卡牌飞展示位
+  // 锚点跟随（验收抓：锚点曾是出牌时点的一次性快照，卡牌飞展示位
   // 后粒子仍汇向手牌旧位）。跟随条目存活期每帧重算徽章世界位（含 scale 变化）
   // → moveAnchor 行更新（粒子存域内参数，目标点每帧现算，平滑追踪零跳变）。
   const _followers = []; // { anchor, cardView, badges, kind, t }
@@ -74,7 +74,7 @@ export function createResourceDrainFx(pool, getters) {
 
   /**
    * 卡费消耗：双资源各自爆散 → 汇聚到卡面**自己的费用徽章**（魏启→魏启徽章、
-   * AP→AP 徽章；各一个跟随式 circle 锚。2026-09-28 用户定：目的地 = 开销标位置）。
+   * AP→AP 徽章；各一个跟随式 circle 锚。目的地 = 开销标位置）。
    * cardView = CardObject（读 position/cardWidth/cardHeight）。
    */
   function playCardCost({ mana = 0, ap = 0, cardView }) {

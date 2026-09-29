@@ -1,9 +1,9 @@
-// 塔楼层场景（2026-09-15 观感重做，替占位「纯色夜空 + 星点 + 色块塔」）：
+// 塔楼层场景（观感重做，替占位「纯色夜空 + 星点 + 色块塔」）：
 // 一片大雪的荒原之中，一座孤独伫立的塔楼——billboard 纸片塔（层块归 MapStage 的
 // setFloor/arriveFloor 舞台接口，本件只管环境）。
 //
-// 大气（TOWER.md 四阶段氛围的第一块基石，2026-09-16 起进入真大气渲染）：
-//   · FogExp2 指数大气透视——雾色 = 低空色（**暗雾**，用户定 2026-09-16），远端雪原、
+// 大气（TOWER.md 四阶段氛围的第一块基石，进入真大气渲染）：
+//   · FogExp2 指数大气透视——雾色 = 低空色（**暗雾**），远端雪原、
 //     远处云堤、云下穹面三处融成同一条暗雾带（无缝的关键 = 三处同色同距离 ramp）；
 //   · HemisphereLight 两半球环境光模拟——上方灰蓝（阴雪天空）、下方偏白（雪地反光），
 //     外加一盏弱冷平行光给雪丘做体积（调参位）；
@@ -39,14 +39,14 @@ export const FOG_DENSITY = 0.015;      // 指数雾密度：~50 单位能见度�
 export const GROUND_BASE_Y = -58;      // 雪原高度（固定：塔世界固定，相机随层爬升）
 const DOME_RADIUS = 900;
 // 雪花风暴配方斜风（二三章 storm 配方专用；一章平静雪不用它）。云层 advect 风是
-// towerClouds.js 独立调定的观感值（用户 2026-09-16），两者不再同源——风暴云的风
+// towerClouds.js 独立调定的观感值，两者不再同源——风暴云的风
 // 待二三章美术 pass 时与 STORM_WIND 重新对齐。
 export const STORM_WIND = { x: 7, z: 2.5 };
 
-// 雪相/云观感的分章混合系数（TOWER.md 四阶段，2026-09-16 用户定）：
+// 雪相/云观感的分章混合系数（TOWER.md 四阶段）：
 // 11 层 boss 前恰在云外（ch1 平静雪）、12 层入云、12-33 层完全在云内（ch2 风暴）、
 // 34 层起太虚回静。混合跨 5 层（11→16 入、33→38 出）——雪速渐变摊到多次攀爬里，
-// 不挤在一次爬升中造成"短暂明显加快"（用户报）。云板几何由 CLOUD_PRESETS.base/top
+// 不挤在一次爬升中造成"短暂明显加快"（报）。云板几何由 CLOUD_PRESETS.base/top
 // 对齐塔层（18..174），与本地曲线配套。
 export function towerStormLevel(floor) {
   const rise = smoothstep(11, 16, floor);
@@ -74,7 +74,7 @@ export function towerFacingY(from = { x: 58, z: -10 }) {
 }
 
 /**
- * 塔楼层专属机位（用户定 2026-09-15：塔楼投影至少占屏 1/3）：
+ * 塔楼层专属机位（塔楼投影至少占屏 1/3）：
  * 沿世界相机基准方向（az/el 同角）拉近到塔前 `dist` 处，视线锚在塔中心向画面
  * 左侧偏 `lateral`——塔落在画面右侧（常驻面板在左，长期构图不挡塔）。
  * 世界相机是三舞台共享的，机位借用走「onEnter 设、onExit restoreBaseCamera」协议。
@@ -111,8 +111,8 @@ const smoothstep = (a, b, x) => {
 // 必须用本 Fn 还原 GLSL 行为（与 moonDust.js 的 modPos 同源，两处就地定义）。
 const modPos = Fn(([x, y]) => x.sub(y.mul(floor(x.div(y)))));
 
-// ---- 雪花（GPU 常驻实例化四边形；WebGPU 迁移 TSL 版，2026-09-27 原 GLSL 逐式平移）----
-// 雪云阶段（2026-09-16 用户定）：急迫斜向纷飞（uStorm 与云层风同源）+ 湍流扭曲 +
+// ---- 雪花（GPU 常驻实例化四边形；WebGPU 迁移 TSL 版，原 GLSL 逐式平移）----
+// 雪云阶段：急迫斜向纷飞（uStorm 与云层风同源）+ 湍流扭曲 +
 // 沿飞行方向拉伸（速度感）。Points 无法拉伸 → 实例化四边形（每粒一实例，4 顶点）。
 // 结构性口径：顶点合成在**局部系**做——模型矩阵仅平移（setAnchorY 抬盒），
 // 世界系的 billboard 偏移量在局部系逐分量相等，positionNode（局部）+ modelWorldMatrix
@@ -120,7 +120,7 @@ const modPos = Fn(([x, y]) => x.sub(y.mul(floor(x.div(y)))));
 function buildSnowfall({ count = 4800 } = {}) {
   // 近场体积盒贴视锥走廊：相机在 (≈37, 锚点y, 11) 向塔 (58, -10) 及远处雪原看——
   // 盒子罩住「相机→塔→塔后远处」这条走廊即可。全盒均匀撒点，盒体远大于视锥时粒子
-  // 都撒到画外（旧盒 3.2M 单位³ 视锥只占 ~2%，720 粒同屏只剩十几粒——2026-09-16
+  // 都撒到画外（旧盒 3.2M 单位³ 视锥只占 ~2%，720 粒同屏只剩十几粒——
   // 用户报大雪量不够）。盒随 setAnchorY 平移（相机爬升跟随）。
   const VOL_MIN = new THREE.Vector3(-43, -15, -40);
   const VOL_MAX = new THREE.Vector3(75, 40, 20);
@@ -170,7 +170,7 @@ function buildSnowfall({ count = 4800 } = {}) {
   // 速度场（斜风 + 湍流）；位移积分与其**同号一致**（base = origin + disp）。
   // ⚠ 三处符号必须一致：vel.y = -fall（向下）、disp.y = -fall·t。此前 fall 自身
   // 被塞过负号 + disp.y 未跟上 → 速度与位移再次反号，雪片朝右下落、长轴朝右上
-  // （视觉即"向左下拉伸"的斜线，2026-09-16 用户报二番）。
+  // （视觉即"向左下拉伸"的斜线，二番）。
   const wind = uStorm.mul(uStormAmt); // vec2 × float：斜风
   const vel = vec3(
     wind.x.add(ampX.mul(sin(wX.mul(uTime).add(pX)))),
@@ -224,7 +224,7 @@ function buildSnowfall({ count = 4800 } = {}) {
     // uFogDensity 与场景 FogExp2 同值同公式（squared exp）——远处雪片自然融雾淡出
     a = a.mul(exp(uFogDensity.mul(uFogDensity).mul(vDepth).mul(vDepth).negate()));
     // 近机淡出：盒随相机锚点平移（相机在盒内），贴脸雪片按屏幕比例放大到巨幅
-    // 且可能跨近裁剪面拉花（2026-09-16 用户报"泼水"）——5~14 单位内平滑隐去
+    // 且可能跨近裁剪面拉花（"泼水"）——5~14 单位内平滑隐去
     a = a.mul(tslSmoothstep(5.0, 14.0, vDepth));
     material.colorNode = vec4(0.75, 0.77, 0.8, a);
   }
@@ -259,14 +259,14 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   const fog = new THREE.FogExp2(SKY_BOTTOM, FOG_DENSITY);
 
   // ---- 天空穹：渐变（地平线雾色 → 天顶灰蓝），不吃引擎雾不写深度、最先画 ----
-  // WebGPU 迁移 TSL 版（2026-09-27，原 GLSL dome.*.glsl 逐式平移）。
+  // WebGPU 迁移 TSL 版（原 GLSL dome.*.glsl 逐式平移）。
   // 归一化半径与 DOME_RADIUS = 900 同值（改半径时两处一起动）。
   // 调参位：smoothstep 两端（0.56=雾带顶、0.92=天顶渐入）与 uTop/uBottom
   //（头部 SKY_TOP/SKY_BOTTOM 注入，uBottom 与 FogExp2 雾色同源）。
   // toneMapped:false——r185 雾在 tone map/sRGB 编码**之后**混入、雾色 uniform 直转
   // 输出色空间（全雾像素屏色 = 色号本值，不过 tone map）。穹顶要与被雾融的雪原
   // 无缝相接就必须同语义：编码但不受 tone map（与 three 对 background 色的处理
-  // 一致）；否则 tone map 把穹顶压暗一截 → 地平线接缝（2026-09-16）。NodeMaterial
+  // 一致）；否则 tone map 把穹顶压暗一截 → 地平线接缝。NodeMaterial
   // 的内建输出链自动按渲染目标判定（进 RT 线性管线时跳过输出变换，整帧只在
   // towerClouds 合成段统一走）——旧版手挂 tonemapping/colorspace chunk 的语义由此接管。
   // 云层不再在此合成（旧穹顶 UV 合成会被不透明几何盖掉，云内俯视出横向分界）——
@@ -330,7 +330,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   group.add(track);
 
   // ---- 雪原：起伏地面（三组错频正弦缓丘 + 塔基周围压平），受半球光与指数雾 ----
-  // 幅员 3600 见方（用户定 2026-09-16）：远缘 ~1800 在任何雾密度下都被完全抹成雾色
+  // 幅员 3600 见方：远缘 ~1800 在任何雾密度下都被完全抹成雾色
   // （平方指数雾最小 ρ=0.004 时 (ρd)²≈52），任何机位的视线都终结在「已是雾色的
   // 地面」而不是雪原边缘/穹面下半球——地平线地面接缝的根治。近场细节由正弦波长
   // （100~300）对 14 单位网格的采样保证（每波长 7+ 采样），无须渐进细分。
@@ -378,7 +378,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
      *  同一个系数驱动**云层分章预设插值**（CLOUD_PRESETS ch1↔ch2）——爬升跨章时
      *  雪、云观感一起连续渐变，不在揭幕瞬间跳变。
      *  @param floor 可选：当前（或插值中）层号——驱动四章太虚的雾衰减（离开三章
-     *  后场景雾密度才变小，一二三章恒定；用户定 2026-09-16）。 */
+     *  后场景雾密度才变小，一二三章恒定）。 */
     setStormLevel(v, floor = null) {
       const t = Math.min(1, Math.max(0, v));
       if (snow) snow.uniforms.uStormAmt.value = t;

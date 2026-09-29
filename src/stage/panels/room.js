@@ -38,7 +38,7 @@ export function buildRoomPanel(snap) {
   }
 
   if (snap.room === 'event') {
-    // 随机事件已改成**幕间播片**（cutscene 的 CG + 对话 + 选项，用户定 2026-09-12）：
+    // 随机事件已改成**幕间播片**（cutscene 的 CG + 对话 + 选项）：
     // 事件房没有场景舞台、也不再走面板交互——进房即自动播（runController.playEventScene）。
     // 这里只留一句话与一个**安全阀**入口（万一没自动播起来，玩家还能手动触发，不会被卡住）。
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: ROOM_META.event.hint });
@@ -50,7 +50,7 @@ export function buildRoomPanel(snap) {
   }
 
   if (snap.room === 'shop') {
-    // 商店房：**一整间货房**（用户定 2026-09-12）。场景版（RoomStage）点售货机开货架面板；
+    // 商店房：**一整间货房**。场景版（RoomStage）点售货机开货架面板；
     // 这里是无场景的占位路径（headless/降级）——同一份货架内容，末尾给"离开房间"。
     return buildShopPanel(snap, { standalone: true });
   }

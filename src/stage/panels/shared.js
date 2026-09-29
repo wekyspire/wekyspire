@@ -32,7 +32,7 @@ export const ROOM_META = {
 };
 
 /** 营地动作瓦片（休整/找回瑞米）：占位面板与场景式面板共用（模块作用域）。
- *  2026-09-21 D4：营地不再能升级卡（升级全部收进训练房新制）。 */
+ *  D4：营地不再能升级卡（升级全部收进训练房新制）。 */
 export const pushCampGroup = (w, c = { options: [] }) => {
   const tiles = [];
   if (c.options.includes('recoverRemi')) {

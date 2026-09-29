@@ -27,7 +27,7 @@ function resolveTargetZone(ctx, toZone) {
 // from: 'top'（默认）| 'bottom'（回旋斩"牌库末抽牌"类机制）。
 // reason: 抽牌缘由标记（'turnStart' = 回合开始抽牌），供 filter 区分
 // "回合开始抽牌数修正"（龟守/神龟姿态）与技能抽牌。
-// 超载判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一，用户定）：
+// 超载判定走加权口径（激活咏唱按咏唱值计多张——咏唱与手牌压力统一）：
 // 顶到超载后不再抽。牌库抽空即落空（FIFO 无重洗——牌库是唯一循环区，无弃牌堆可回收）。
 export class DrawCardsInstruction extends BattleInstruction {
   constructor({ count = 1, from = 'top', reason = null }, opts = {}) {
@@ -67,7 +67,7 @@ export class DrawCardsInstruction extends BattleInstruction {
   }
 }
 
-// 焚牌：任意 zone → 焚毁区。手牌中的激活咏唱先熄灭（离手不变量，含焚毁——用户定）。
+// 焚牌：任意 zone → 焚毁区。手牌中的激活咏唱先熄灭（离手不变量，含焚毁）。
 export class BurnCardInstruction extends BattleInstruction {
   constructor({ uniqueID }, opts = {}) {
     super(opts);

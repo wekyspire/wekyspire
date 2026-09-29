@@ -1,6 +1,6 @@
-// 眩晕星（L3 表意层首件，stun 主题件，VFX 结构大更新 Phase 2，2026-09-26）：
+// 眩晕星（L3 表意层首件，stun 主题件，VFX 结构大更新 Phase 2）：
 // 三颗五角星绕头缓转 + 轨迹拖影（每颗带 2 颗滞后淡影）——表意件读一次即懂「晕了」。
-// 形制（2026-09-26 用户验收定）：五角星（程序化烘焙纹理，非光球）；
+// 形制（验收定）：五角星（程序化烘焙纹理，非光球）；
 // 轨道按单位 AABB 抬升加宽——y 过头顶（1.04H）、半径取体半宽外扩（_groundRadius），
 // 不穿模（旧版 0.86H 轨道嵌进史莱姆圆顶）。
 // 纵深读法：星在 billboard 局部 x/z 面绕椭圆，近端大亮、远端小暗（模拟绕后）；
@@ -46,7 +46,7 @@ export function makeStunStars(layer, { color = 0xffd34c } = {}) {
   if (typeof document === 'undefined') return null;
   const unit = layer.unit;
   const H = unit._standeeHeight ?? 22;
-  // AABB 轨道（用户验收：不穿模）——高过头顶，横向半径随体半宽外扩
+  // AABB 轨道（验收：不穿模）——高过头顶，横向半径随体半宽外扩
   const orbitY = H * 1.04;
   const orbitRx = Math.max(H * 0.30, (unit._groundRadius ?? H * 0.35) * 0.9);
   const group = new THREE.Group();
@@ -70,7 +70,7 @@ export function makeStunStars(layer, { color = 0xffd34c } = {}) {
   let t = Math.random() * Math.PI * 2;
   let phase = Math.random() * Math.PI * 2; // 公转相位：转速随 level 渐入（积分制，变速不跳相）
   // 弹入曲线（back-out，c1=1.7/c3=2.7 经典参数）：星星逐颗以约 10% 过冲缩放就位
-  // ——赋予/消除过渡演出（2026-09-26 用户定）：进入逐颗「叮」地弹入，退出逆序缩没
+  // ——赋予/消除过渡演出：进入逐颗「叮」地弹入，退出逆序缩没
   const backOut = (x) => { const u = x - 1; return 1 + 2.7 * u * u * u + 1.7 * u * u; };
   const place = (s, a, i, k, lk) => {
     // k=0 主星，k>0 拖影——滞后相位 + 体量/亮度递减；lk = 本颗星的局部 level（弹入进度）

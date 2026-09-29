@@ -1,4 +1,4 @@
-// 单位特效统一宿主（L0–L3 固定层级的落点，VFX 结构大更新 Phase 2，2026-09-26）：
+// 单位特效统一宿主（L0–L3 固定层级的落点，VFX 结构大更新 Phase 2）：
 // 每单位一件，UnitObject 构造时自建（对位 CardFxLayer——卡牌侧同款收口）。
 // 职责：
 //   · 持有 L0 本体补丁记录（unitBodyFx：uBurn/uPoison/uCalm/uTime 单 program 多 uniform）；
@@ -12,7 +12,7 @@
 //   L1 贴体层：sprite 叠层   z 0.50~0.70（vapor 0.65~0.70）
 //   L2 笼罩层：壳/罩件       z 0.80      （默认同源重算——共享 GLSL 件+同 uniforms 零 RT）
 //   L3 表意层：表意小件      z 0.95      （眩晕星等最上 additive 件）
-// ⚠ 悬挂点铁律（2026-09-26 系统性修正）：**采样本体纹理/剪影的 sheet 件挂 _standee**
+// ⚠ 悬挂点铁律（系统性修正）：**采样本体纹理/剪影的 sheet 件挂 _standee**
 //   （stasisShell、bodyFlames）——姿态通道（squash/widen/lean/呼吸/位移）打在 _standee
 //   上，挂 billboard 分组会在单位播动画时与本体脱锚；世界向粒子/sprite（毒雾、火星）
 //   才挂本层的 L 分组。

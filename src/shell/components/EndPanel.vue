@@ -3,7 +3,7 @@
 const props = defineProps({ ctrl: { type: Object, required: true } });
 const emit = defineEmits(['restart']);
 const run = props.ctrl.run;
-// 生产版封顶第一章（2026-09-24）：11 层 Boss 后的胜利不是登顶，文案随口径切换
+// 生产版封顶第一章：11 层 Boss 后的胜利不是登顶，文案随口径切换
 const IS_PROD = import.meta.env.PROD;
 </script>
 
@@ -24,7 +24,7 @@ const IS_PROD = import.meta.env.PROD;
   padding: 26px 44px; color: #dbe4f4; font-family: sans-serif; text-align: center;
 }
 h2 { margin: 0 0 10px; font-size: 28px; color: #eef4ff; }
-h2.victory { color: #cfe6ff; }   /* 扁平冷色（金色只留金钱相关内容，用户定 2026-09-12） */
+h2.victory { color: #cfe6ff; }   /* 扁平冷色（金色只留金钱相关内容） */
 h2.defeat { color: #ff8f88; }
 p { color: #9aa3c0; font-size: 13px; }
 button {

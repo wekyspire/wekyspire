@@ -33,7 +33,7 @@ export const PICKER_LAYOUT = {
   bandBottom: UI_CAMERA_LOOK_AT_Y - 31,
   footerY: UI_CAMERA_LOOK_AT_Y - 42,
   barX: HALF_UI_W - 2.0,   // 滚动条靠右
-  barW: 0.42,              // 更细（用户 2026-09-11）；thumb 略宽于轨道便于抓握
+  barW: 0.42,              // 更细；thumb 略宽于轨道便于抓握
 };
 const LAYOUT = PICKER_LAYOUT;
 const Z = PICKER_Z;
@@ -363,7 +363,7 @@ export class ScrollPickerObject extends THREE.Group {
       new THREE.MeshBasicMaterial({ color: 0x7fa9d4, transparent: true, opacity: 0.5 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
-    // 滚动条可交互（2026-09-21 用户报「无法点击滚动条」）：轨道 + 滑块都注册成拾取件
+    // 滚动条可交互（「无法点击滚动条」）：轨道 + 滑块都注册成拾取件
     // ——按下滑块 = 抓住拖拽；按轨道 = 跳到该处并接续拖拽（见 onPointerDown/onHover）。
     this._picker?.addPickable(TRACK_ID, this._bar.track, { kind: 'button', space: 'ui' });
     this._picker?.addPickable(THUMB_ID, this._bar.thumb, { kind: 'button', space: 'ui' });
@@ -422,7 +422,7 @@ export class ScrollPickerObject extends THREE.Group {
   }
 
   _applySelection() {
-    // 多选序号角标（2026-09-28 glm-flash 验收发现：多选时选中卡只有着色呼吸，
+    // 多选序号角标（glm-flash 验收发现：多选时选中卡只有着色呼吸，
     // 静态读不出「选了哪几张、第几张」）：选中件右上角挂 picker 自有的小圆牌，
     // 白字序号 = 点选顺序；角标位置/可见性随滚动（_applyScroll 统一摆）。
     const order = this._multi ? this.selectedKeys : [];

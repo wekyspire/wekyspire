@@ -46,7 +46,7 @@ export { RunEvents };
 // run 本体经 reactive() 暴露（状态只存 id 与数字，代理安全）；
 // 每次阶段迁移经 runBus 发事件——阶段 8 的 cutscene/剧情在此订阅注入。
 
-// 起始卡组由开局路线授予（core/run/routes.js，2026-09-21 D2）——不再有全局默认卡组。
+// 起始卡组由开局路线授予（core/run/routes.js，D2）——不再有全局默认卡组。
 
 // PCG 房型开关：true = 战斗房间按章节/Boss 走配方层（scenes/rooms），
 // false = 全部回退手工大厅 dungeon（一键回滚，排查表现问题时用）
@@ -99,7 +99,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     seed: save?.seed ?? seed,
     player: new Player({ maxHp: PLAYER_BASE_HP, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
     route: save ? null : route,   // 读档恢复现场，不重复结算路线授予
-    // 生产版封顶第一章（2026-09-24 用户定）：11 层 Boss 打完即终局（胜利/失败）——
+    // 生产版封顶第一章：11 层 Boss 打完即终局（胜利/失败）——
     // 二章及以后的内容与数值还没到能见人的时候。dev 保持全程 44 层。
     // totalFloors 走 core 的覆盖位：advanceFloor 的终局判定/塔楼高度/层数文案全部随之。
     totalFloors: import.meta.env.PROD ? FLOORS_PER_CHAPTER : TOTAL_FLOORS,
@@ -112,7 +112,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   // 装备遗物的 run 级修正每次从基准重算（增删装备/读档后都对齐；杜绝逐战叠加）
   refreshRunModifiers(run);
-  run.storyMode = isStory; // 模式口径（2026-09-28 扩）：剧情演出 + 瑞米（同伴出战/营地游荡/果实养成）只在故事模式；肉鸽模式无瑞米
+  run.storyMode = isStory; // 模式口径（扩）：剧情演出 + 瑞米（同伴出战/营地游荡/果实养成）只在故事模式；肉鸽模式无瑞米
   run.debugMode = isDebug; // 调试局：存档走 debug 槽（saves.modeOf）+ 面板可开
 
   let battleBridge = null;   // markRaw：战斗桥含 kernel/three 引用，不入响应式
@@ -137,10 +137,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       usesLeft: def?.uses ? (run.relicUses[id] ?? 0) : null,
     };
   });
-  // 瑞米区视图（run 快照）：瑞米是故事模式同伴（2026-09-28 起肉鸽模式整区隐藏）；
+  // 瑞米区视图（run 快照）：瑞米是故事模式同伴（肉鸽模式整区隐藏）；
   // 故事模式里被打跑 = 未出战整区隐藏；战斗外恒满血（营地语义：每场按满血出战）。
   // 满血值借 createUnit 读（内容定义无静态面板字段可查）。
-  // （攻/盾横幅已删 2026-09-20 用户定：瑞米意图显示其行动）
+  // （攻/盾横幅已删 瑞米意图显示其行动）
   const remiMaxHp = getAllyDefinition('remi')?.createUnit().maxHp ?? null;
   const remiView = () => (!run.storyMode || !remiMaxHp || run.remi.drivenOff)
     ? { present: false }
@@ -193,9 +193,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
   if (run.gameStage === 'prep' || run.gameStage === 'end') persist(); // 初始即检查点（首层开局/读档落位）  // 该房间是否由**幕间/房间场景**呈现（事件幕间 or 有休息房配方）——呈现中塔楼层**不渲染房间面板**：
   // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕随后
-  // 才盖住（用户 2026-09-12 报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
+  // 才盖住（实报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
   // 不用"有配方"直接推断——无舞台/占位路径仍要把面板留给塔楼层。
-  // 2026-09-18 训练改版：**房内进阶**期间（gameStage 'ascension' 且 roomStage 存活——
+  // 训练改版：**房内进阶**期间（gameStage 'ascension' 且 roomStage 存活——
   // currentRoom/roomData 原地保留）也按"房间场景呈现中"处理——阶段模态面板（种子包九选三）
   // 画在 RoomStage 上，塔楼不得再建一份不可见的重复面板（指针已路由到 RoomStage，
   // 见 App.vue activeStage）。离房路径的 ascension 已清 currentRoom/roomStage，条件自然不成立。
@@ -208,7 +208,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'room') roomScenePending = false;
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
     const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）
-    // 战后奖励**画在战斗舞台上**（用户定 2026-09-12）：战斗结束后不换舞台，奖励 overlay 直接
+    // 战后奖励**画在战斗舞台上**：战斗结束后不换舞台，奖励 overlay 直接
     // 盖在战斗房间前；"战斗房 → 塔楼"的场景切换在**领奖后的切幕中点**完成（见 afterRewardToFloor）。
     // 无战斗舞台（headless/降级）时自然落到塔楼层（mapStage）——行为与旧版一致。
     if (run.gameStage === 'reward') battleStage?.setPanel?.(snap);
@@ -224,14 +224,14 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     runBus.emit(RunEvents.STAGE_CHANGED, { stage: run.gameStage, floor: run.floor });
     // 新遗物 → 特写（差分见 runShowcase.js）：放在最后，确保面板/资源行已按新状态重绘
     showcase.diffNewRelics();
-    // 老虎机产出特写兜底（2026-09-28：面板领奖按钮全删后的安全网）——拉杆动画落定那拍
+    // 老虎机产出特写兜底（面板领奖按钮全删后的安全网）——拉杆动画落定那拍
     // 演出若被占，这里在每次状态迁移后重试唤起（播成功才记已播，见 runShowcase）。
     showcase.maybeShowSlotPrize();
     maybeTutorDevour();
     maybeNarrateDemonRoll();
   };
 
-  // 恶魔 roll 解说（2026-09-28 用户定：面板指引文本全删，改对话简述）——
+  // 恶魔 roll 解说（面板指引文本全删，改对话简述）——
   // 超额取款入账、机器切恶魔形态那一刻讲：生涯首次讲清规则（持久化 settings），
   // 之后每次只一句「你知道该干什么。」。电平触发：每次 notify 重查，pendingRoll
   // 对象 identity 当"本次已讲"标记。
@@ -267,7 +267,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     });
   }
 
-  // 吞噬首满教学（2026-09-28 用户定）：生涯首次把老虎机喂到张嘴时弹一次指引对话，
+  // 吞噬首满教学：生涯首次把老虎机喂到张嘴时弹一次指引对话，
   // 持久化在 settings（跨局只弹一次）；UI 上不放任何吞噬说明文本。
   // 电平触发（每次 notify 重查）——演出忙/产出待领时让位，等下一拍再弹。
   function maybeTutorDevour() {
@@ -294,7 +294,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   // ---- cutscene（游戏流程手动驱动：对话剧本 + 幕间转场）----
   // S3：剧本 step 编译为 run sequencer 指令——与战斗/房间/塔楼演出同一时钟。
-  // **切幕器独立于内容播放器**（用户定 2026-09-12）：`sceneWipe` 由 cutscene 播放器驱动、
+  // **切幕器独立于内容播放器**：`sceneWipe` 由 cutscene 播放器驱动、
   // 由 App.vue 的 SceneWipeOverlay 渲染——黑幕的**目的地**可以是 3D 舞台，也可以是一段
   // cutscene 内容（事件房：切幕开始 → 对话/CG 就位 → 切幕结束）。
   const sceneWipe = createSceneWipe();
@@ -329,7 +329,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     roomStage: () => roomStage,
   });
 
-  // ---- 幕间流（随机事件 / 进阶，用户定 2026-09-12：对话 + 选项 + 同步结算 + 切幕出场）----
+  // ---- 幕间流（随机事件 / 进阶，用户定 对话 + 选项 + 同步结算 + 切幕出场）----
   // 编排整体在 runCutsceneFlows.js；lifecycle 是本控制器注入的房间/舞台生命周期动作，
   // 全部箭头晚绑定（swapRoomToMap/exitSceneAfterCutscene 在下方才定义，运行期才取值）。
   const cutsceneFlows = createRunCutsceneFlows({
@@ -343,7 +343,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       completeRoomSwapToMap: () => { completeRoom(run); swapRoomToMap(); notify(); },
       // 塔楼在台且楼层已推进 → 排相机爬升（幂等）。不换台的幕间退出（事件房/进阶收尾）
       // 也走这里：升层可能发生在幕间内部（onChoice 同步结算），爬升的排期点统一放在
-      // 各条「揭幕回塔楼」的节拍上（2026-09-16 用户报：1 层事件房升 2 层没有爬升）。
+      // 各条「揭幕回塔楼」的节拍上（1 层事件房升 2 层没有爬升）。
       arriveMapFloor: () => arriveMapFloor(),
       exitSceneAfterCutscene: (fn) => exitSceneAfterCutscene(fn),
     },
@@ -387,7 +387,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       if (stageManager) {
         battleStage?.dispose(); // 上一场舞台即刻释放（场景图 + composer 渲染目标）
         const sceneId = USE_PCG_ROOMS ? sceneIdForFloor(run.floor) : 'dungeon';
-        // Boss 房间覆写（敌人 def roomOverride，2026-09-23）：Boss 把房间改成自己的
+        // Boss 房间覆写（敌人 def roomOverride）：Boss 把房间改成自己的
         // 主题房——pyro 全场压暗 + 木质装饰品大增（转段「烧起来」的燃料与明暗落差）
         const roomOverride = enemies.reduce(
           (ovr, u) => mergeRecipeOverride(ovr, getEnemyDefinition(u.defId)?.roomOverride), null);
@@ -396,7 +396,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           bridge, stageManager, displayModel, scene: sceneId, sceneSeed: `${seed}:room:${run.floor}`,
           roomOverride,
         });
-        // 战后奖励面板落在战斗舞台上（用户定 2026-09-12）：意图出口与塔楼层同一套
+        // 战后奖励面板落在战斗舞台上：意图出口与塔楼层同一套
         battleStage.setPanelIntentHandler?.(dispatchPanelIntent);
         battleStage.setRunSequencer?.(runSequencer);   // 得卡演出的指令化挂点（与切幕/清层串行）
         stageManager.setStage(battleStage);
@@ -419,21 +419,21 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     })().finally(() => { battlePending = false; });
   }
 
-  // 退场（用户定 2026-09-12 调整节拍）：**先落战后奖励、不切幕、也不换舞台** ——
+  // 退场（调整节拍）：**先落战后奖励、不切幕、也不换舞台** ——
   // 奖励 overlay 直接盖在**战斗房间**上（面板由战斗舞台承载，见 notify 的 reward 分支）；
   // 领完/跳过奖励后（claimReward → afterRewardToFloor）才切幕，并在**黑幕中点**把舞台
   // 换成塔楼层、播"楼层 clear（当前层高亮块长出）"动画。
   function endBattle(result, bridge) {
     finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
     battleBridge = null;
-    // 状态栏提前同步（用户 2026-09-11 报）：原来只有链条末尾的 notify() 会刷状态栏，
+    // 状态栏提前同步（实报）：原来只有链条末尾的 notify 会刷状态栏，
     // 于是爬塔动画播完才看到战后的血量/金币。这里在战斗舞台上先把状态推上去。
     notify();   // 推 reward 面板（落在战斗舞台）→ 奖励 overlay 即刻可交互，背景仍是战斗房间
   }
 
   /**
    * 奖励环节收尾（claimReward 之后）：切幕 → 塔楼 → **楼层 clear 动画** → 战后剧本 → 进房。
-   * 节拍要点（用户定 2026-09-12）：玩家点完领取/跳过，才把奖励 overlay 收掉并揭幕塔楼；
+   * 节拍要点：玩家点完领取/跳过，才把奖励 overlay 收掉并揭幕塔楼；
    * 阶段迁移（completeRewards）已在 claimReward 里完成，这里只做呈现与演出。
    */
   async function afterRewardToFloor() {
@@ -474,7 +474,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     void afterRewardToFloor();
   }
 
-  // ---- 场景式休息房（第一间 = 赌厅 casino，用户定 2026-09-11）----
+  // ---- 场景式休息房（第一间 = 赌厅 casino）----
   // 全屏选卡/选遗物/获得物特写都画在**当前活动舞台**的 uiScene 上（只有活动舞台会被渲染）：
   // 房间场景打开时归 RoomStage，否则归塔楼层 MapStage。两个舞台同名同义的接口即此契约。
   const panelStage = () => roomStage ?? mapStage;
@@ -493,8 +493,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         stageManager,
         bus: animBus,
         snap: panelSnapshot(run, panelExtras()),
-        // 房间活物（2026-09-25）：瑞米在场 = 故事模式且未被击退（骑士常驻，无血条；
-        // 2026-09-28 起瑞米是故事模式同伴，肉鸽模式不在营地游荡）
+        // 房间活物：瑞米在场 = 故事模式且未被击退（骑士常驻，无血条；
+        // 瑞米是故事模式同伴，肉鸽模式不在营地游荡）
         units: { remi: !!run.storyMode && !run.remi?.drivenOff },
       }));
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
@@ -508,7 +508,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   /**
    * 进房后的**演出派发**（阶段迁移落进 'room' 后调用一次）：
-   *   · 事件房 → 播事件幕间（cutscene：CG + 对话 + 选项；不做 3D 场景，用户定 2026-09-12）
+   *   · 事件房 → 播事件幕间（cutscene：CG + 对话 + 选项；不做 3D 场景）
    *   · 有休息房配方的房间 → 幕间黑幕切进房间场景（RoomStage）
    *   · 其余（无配方）→ 留在塔楼层 + 占位面板
    * 两条路各自幂等（事件已在播/场景已切都不重复）。
@@ -528,7 +528,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   /**
    * 离开房间场景：黑幕中点换回塔楼层。
    * @param beforeSwap 在**黑幕盖住之后**执行（核心阶段迁移 + notify 都放这里）——这是用户
-   *   2026-09-12 定的节拍：先起幕间切幕演出，再同步 state、转移场景，最后揭幕。
+   *   的节拍：先起幕间切幕演出，再同步 state、转移场景，最后揭幕。
    *   在前端状态必然经历一瞬"旧场景 + 新快照"（面板突变/取景突变）的场合，只有把同步
    *   压进黑幕里才能让那些 invalid 中转帧完全不被看见。
    */
@@ -540,7 +540,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画随后播
     // 先释放战斗舞台、**后**换台：BattleStage 无 onExit，全部清理在 dispose——其中
     // shake.dispose 会把相机回基位。此前先 setStage 后 dispose，塔楼机位（onEnter 刚摆）
-    // 被回退到战斗基准机位：塔/雪原全在雾外，战后揭幕只剩天空穹的灰蓝（2026-09-16 用户报）。
+    // 被回退到战斗基准机位：塔/雪原全在雾外，战后揭幕只剩天空穹的灰蓝。
     // 换台发生在黑幕中点，先拆后换并不可见。
     battleStage?.dispose();
     battleStage = null;
@@ -611,7 +611,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
 
   /**
-   * **cutscene 退出回舞台**的切幕（用户定 2026-09-12：cutscene 回塔楼本质上和场景切换没区别）：
+   * **cutscene 退出回舞台**的切幕（cutscene 回塔楼本质上和场景切换没区别）：
    * 黑幕盖住 → beforeSwap（阶段迁移/面板刷新）→ 揭幕（揭开的就是刷新后的舞台）。
    * 与 exitRestRoomScene 的区别：**不换舞台**——目的地就是当前舞台本身，cutscene 内容层收起即露出。
    * 无舞台（headless）时同步直落（不排黑幕，不影响逻辑）。
@@ -622,7 +622,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     return true;
   }
 
-  // ---- rooms（2026-09-18 训练改版：训练必做且先于篝火；进阶在训练开始那一刻房内先行）----
+  // ---- rooms（训练改版：训练必做且先于篝火；进阶在训练开始那一刻房内先行）----
   // 各入口先查 gameStage：连点/迟到点击会让核心变更先落地、completeRoom 再抛错，造成重复结算
   // 训练节拍：开始（beginTraining，达标则切 'ascension' 由进阶幕间接力播完自动回房）→
   // 可选段（4 选 1 抓一张 → 抓了就欠一次升级 pendingUpgrade）→ 篝火解锁（营地/训练各自一次）。
@@ -645,7 +645,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (ascensionDue) { void cutsceneFlows.playAscensionScene(); return; }
     notify();
   }
-  // 尾款升级自动链（2026-09-28 交互迁移）：模式二选一（对话 overlay；只有一种可用直接定）
+  // 尾款升级自动链（交互迁移）：模式二选一（对话 overlay；只有一种可用直接定）
   // → 全屏选卡（twoC 多选两张一次完，oneB 单选）。整条链在抓牌落地那拍自动唤起——
   // 面板不再摆模式/升级按钮；overlay 被中途关掉时由面板「继续修行…」重入本链（幂等）。
   async function trainingUpgradeFlow() {
@@ -687,7 +687,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.roomData?.pendingUpgrade) notify();  // twoC 还剩一张：原地刷新候选
     else maybeLeaveRoom();
   }
-  // 可选段开局：掷四选一候选 → 当场开全屏 overlay（2026-09-28：不再内嵌面板卡阵）。
+  // 可选段开局：掷四选一候选 → 当场开全屏 overlay（不再内嵌面板卡阵）。
   // ⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**（曾因沿用旧「trained=已锁」
   // 语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；core 守卫兜已开局/已收束。
   function trainingDrawRoll() {
@@ -723,13 +723,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       return;
     }
     // 节拍：幕间黑幕先起 → 黑幕中点做阶段迁移（completeRoom + notify）→ 揭幕时已是塔楼新层。
-    // 迁移若发生在黑幕之前，玩家会看到"营地面板/取景突然变成塔楼"的一帧（用户报过的突变）。
+    // 迁移若发生在黑幕之前，玩家会看到"营地面板/取景突然变成塔楼"的一帧（报过的突变）。
     void exitRestRoomScene(() => { completeRoom(run); notify(); });
   }
   function leaveSlot() {
     if (run.gameStage !== 'room') return;
     if (run.roomData?.pendingUpgrade) return;
-    if (run.slotPending) return; // 产出没处理完不许离房（2026-09-22 qa 修：防静默丢弃成幽灵奖项）
+    if (run.slotPending) return; // 产出没处理完不许离房（qa 修：防静默丢弃成幽灵奖项）
     void exitRestRoomScene(() => { completeRoom(run); notify(); });   // 同 leaveRoom：迁移压进黑幕
   }
 
@@ -738,7 +738,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   function unequip(relicId) { unequipRelic(run, relicId); notify(); }
   function useRelic(relicId) { prepUseRelic(run, relicId); notify(); }
 
-  // ---- 休息阶段面板：意图上行（表驱动，2026-09-13 起）----
+  // ---- 休息阶段面板：意图上行（表驱动）----
   // 意图表 = Stage 上报的 { action, ... } → 处理器：本地条目 + 各域模块自登记的 intents
   // （机器流 runMachines / 幕间流 runCutsceneFlows / 获得演出 runShowcase）。Stage 侧不判断
   // 可用性（enabled 由快照下发），这里只把语义落到既有入口；未知 action 静默忽略（与旧

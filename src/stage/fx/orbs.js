@@ -1,4 +1,4 @@
-// 环绕火球挂接件（多部件敌人首件，fx Phase 5，2026-09-23；同日视觉大改）：
+// 环绕火球挂接件（多部件敌人首件，fx Phase 5，；同日视觉大改）：
 // 敌人 def 声明 orbs: { count, color, radius, height, size, speed, bob }，
 // BattleStage 建视图时挂上。
 // 每团火 = 四层 sprite 叠出「火焰感」（纯程序化纹理，无美术素材）：

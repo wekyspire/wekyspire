@@ -22,7 +22,7 @@
 // 带原型方法）」或「自带函数字段（技能定义）」：
 //   投影产物（projectUnit/projectCardFull）也是含 uniqueID+defId 的纯对象，
 //   若一并按 id 压平，name/hp/maxHp/shield/text/cost/… 会被整片抹掉
-//   （sync 快照里单位与卡面就全丢字段了——2026-09 踩过）。
+//   （sync 快照里单位与卡面就全丢字段了——踩过）。
 
 import { ANIM_TIMING, EventNames } from './events.js';
 

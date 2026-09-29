@@ -16,7 +16,7 @@ const DEFS = {
   glass: { kind: 'std', roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.62 },
   // 磨砂玻璃（frost）：**大面积近景透明面**专用。glass 族的低粗糙度是给远景小件（药瓶/
   // 水洼/窗格）的，用在玩家 zoom-in 正对的大块柜门上会把灯池照成一片白斑（眩光/脏污感，
-  // 用户 2026-09-13 报「售货机玻璃反光太干扰视觉」）。这里 roughness 拉满、metalness 归零
+  // 实报「售货机玻璃反光太干扰视觉」）。这里 roughness 拉满、metalness 归零
   // = 只留柔和透光渐变、几乎不反高光；透明口径与 glass 族一致。
   frost: { kind: 'std', roughness: 0.95, metalness: 0, transparent: true, opacity: 0.62 },
   cloth: { kind: 'std', roughness: 1, side: THREE.DoubleSide },

@@ -59,7 +59,7 @@ const resultText = save?.result === 'victory' ? '登顶成功' : save?.result ==
 }
 .menu {
   width: 340px; background: rgba(8, 11, 18, .96);
-  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角（用户定 2026-09-12） */
+  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角 */
   padding: 22px 26px; color: #dbe4f4;
 }
 h2 { margin: 0 0 14px; font-size: 22px; color: #eef4ff; text-align: center; }

@@ -1,4 +1,4 @@
-// bloom intensity offset 通道（2026-09-26 用户定的 bloom pass 增强，「根治」方案）：
+// bloom intensity offset 通道（的 bloom pass 增强，「根治」方案）：
 // 问题：HDR 阈值创作约定下，想让某区域起晕只能把颜色乘算推过阈——峰值贴阈会让
 // bloom 断断续续、糊成白色斑块（白炙阶段实测教训）；「拉爆 HDR」又会烧掉颜色本身。
 // 根治 = 场景渲染之外另渲一张「bloom 强度偏移」RT（R 通道），bright 段在阈值判定前
@@ -16,7 +16,7 @@
 //
 // 渲染侧（两条 composer 同手法）：主渲之后、bloom 之前，把相机层掩码临时切到
 // BLOOM_LAYER + bloomPassFlag 置 1，清黑重渲一遍场景 → offsetRT 喂 bloom 链。
-// ⚠ WebGPU 迁移口径修正（2026-09-27 probe-w2 确诊）：旧版世界链「offsetRT 共享场景
+// ⚠ WebGPU 迁移口径修正（probe-w2 确诊）：旧版世界链「offsetRT 共享场景
 // 深度纹理」在本后端不成立——渲染通道描述符按 RT 缓存、失效判据不含深度纹理身份，
 // 第二个 RT 首用触发共享深度 needsUpdate → 纹理销毁重建 → 第一个 RT 的缓存描述符
 // 永久引用已销毁纹理。故世界链改「独立深度 + depth-only 预填」（depthPrepass 模式）。
@@ -81,7 +81,7 @@ export function renderBloomOffsetPass(renderer, scene, camera, { clearDepth = fa
   }
   bloomPassFlag.value = 1;
   camera.layers.set(BLOOM_LAYER);
-  // 灯光层豁免（2026-09-27 probe-w2 确诊的 4fps 病灶）：three 的灯光收集按相机层
+  // 灯光层豁免（probe-w2 确诊的 4fps 病灶）：three 的灯光收集按相机层
   // 掩码过滤（projectObject 的 layers.test），偏移 pass 只开 BLOOM_LAYER 会把全部灯
   // 滤掉 → 本 pass 的 lightsNode 动态缓存键 ≠ 主渲 → 同一张材质跨 pass 反复
   // needsUpdate → renderObject/管线每帧销毁重建（WGSL 逐字节相同也救不回来，

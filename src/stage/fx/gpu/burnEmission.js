@@ -1,4 +1,4 @@
-// 燃烧发射条目表（GPU 粒子系统的「GPU 侧生成粒子 metadata」环节，2026-09-27）：
+// 燃烧发射条目表（GPU 粒子系统的「GPU 侧生成粒子 metadata」环节）：
 // WebGPU compute 化重写——旧版是 64px/格 的 RT 图集片元 pass（每活跃单位一列，
 // 全场 4096 纹素/单位全量驻留，spawn pass 再随机纹素 rejection 采样）；compute 后
 // **不再是纹理**：每帧一个压缩 pass 把「热纹素」紧缩成 storage buffer 条目列表

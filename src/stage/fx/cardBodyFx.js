@@ -1,10 +1,10 @@
-// 卡牌本体特效（C0 牌面着色层）——WebGPU 迁移 TSL 版（2026-09-27，原 onBeforeCompile 字符串补丁重写）。
+// 卡牌本体特效（C0 牌面着色层）——WebGPU 迁移 TSL 版（原 onBeforeCompile 字符串补丁重写）。
 // 范式与 unitBodyFx.js 同源（W3 立，细则见该文件头注）：uniform = TSL uniform() 节点
 // （`.value` 推值口径不变，CardFxLayer/CardObject 调用点零改动）；着色链 = TSL Fn 组合；
 // colorNode 全量接管 diffuse（base = materialColor）；牌面纹理经
 // _setBakedFace 异步落地 → 落地后 rec.rebind() 建链。
 // ⚠ TSL 的 materialColor 已含 map（MaterialNode.COLOR = color × map）——
-// 再乘一次 texture(map) = tex²，中调被平方压暗（2026-09-27 战斗画面偏暗根因，
+// 再乘一次 texture(map) = tex²，中调被平方压暗（战斗画面偏暗根因，
 // 实测板面 0.251²=0.063 与 FB 读数逐位吻合）；GLSL 版补丁作用于 map 之后无此坑。
 // 效果语义与 GLSL 版逐式一致（视觉零回归）：
 //   uBurn      0..1  焚毁吞蚀（离场演出）：自底向上噪声火线 + 炭化预热 + 逐格 discard；
@@ -12,7 +12,7 @@
 //   uSeed            焚毁噪声种子（每张卡咬边形状不同，点燃时写入）
 //   uDim       0..1  禁用态：去饱和 + 压暗 + 微冷
 //   uHighlight 0..1  高亮态：提亮 + 微暖 + 极轻呼吸（uTime 驱动）
-//   uCostGlow  0..1  费用徽章辉光（出牌消耗反馈，2026-09-28 用户定）：徽章 mask 内
+//   uCostGlow  0..1  费用徽章辉光（出牌消耗反馈）：徽章 mask 内
 //                    原色 ×4——徽章数字/图标等高亮像素被拉过 bloom 阈 1.45 起晕，
 //                    暗环乘完仍暗，天然「只有图案在发光」；另叠阈下加色保底可读性。
 //                    （×4 的冗余是为衰减后段留的：uCostGlow≈0.5 时峰值仍过阈。）

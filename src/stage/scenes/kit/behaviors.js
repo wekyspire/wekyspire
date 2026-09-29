@@ -1,4 +1,4 @@
-// propKit 交互行为模板目录（WORKFLOW §5）——首件落地：flutterOnImpact（2026-09-22 fx Phase 4）。
+// propKit 交互行为模板目录（WORKFLOW §5）——首件落地：flutterOnImpact（fx Phase 4）。
 // 契约：行为模板返回 { interactions: { <event>: { radius?, respond(handle, payload) } } }；
 // 资产侧 behaviors 字段只允许实例化模板（逻辑在 kit，参数在道具），composeRoom 把带
 // behaviors 的道具排除出静态合批、登记进 notifiables；舞台经 cast（prop: 前缀）+

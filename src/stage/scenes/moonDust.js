@@ -1,4 +1,4 @@
-// 月光浮尘云（STAGE_DESIGN §2'）——WebGPU 迁移 TSL 版（2026-09-27，原裸 GLSL
+// 月光浮尘云（STAGE_DESIGN §2'）——WebGPU 迁移 TSL 版（原裸 GLSL
 // shader 逐式平移，范式见 fx/unitBodyFx.js 头注）：常驻噪音浮尘体积——
 // 不是 spawn/死亡型粒子，而是一片常驻尘埃场，全 GPU 驱动：
 //   顶点：值噪声三轴漂移（无纹理、无 simplex 依赖，手搓 hash 值噪声）
@@ -175,7 +175,7 @@ export function buildMoonDust({ count = 1500, beamRatio = 0.4, beams = [] } = {}
   });
 
   // ---- 片元侧：圆片软边 + shadow 硬件比较采样（无控制流 = 纯表达式）----
-  // 旧 gl_PointCoord ≡ 底四边形 uv()（0..1）
+  // 旧 gl_PointCoord ≡ 底四边形 uv（0..1）
   const d = length(uv().sub(0.5));
   // WGSL 正向边改写：GLSL smoothstep(0.5, 0.18, x) ≡ 1 - smoothstep(0.18, 0.5, x)
   const alpha = oneMinus(smoothstep(0.18, 0.5, d));

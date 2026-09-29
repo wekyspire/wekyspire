@@ -1,5 +1,5 @@
 // ParticleSystem（§4.8）：两类粒子池，由 StageManager.onTick 驱动（BattleStage 接线）。
-// ⚠ DEPRECATED（2026-09-28，粒子池 v2 落地）：GPU 池（fx/gpu/particlePool.js）已是
+// ⚠ DEPRECATED（粒子池 v2 落地）：GPU 池（fx/gpu/particlePool.js）已是
 //   唯一新粒子底座——常驻联动（燃烧火星）与一次性爆发（资源消耗爆散/汇聚）均已迁入。
 //   本 CPU 池只剩存量一次性爆发消费者（伤害数字/图标/碎屑等），新特效一律走 GPU 池
 //   burst；存量消费者逐个迁移后本文件删除（PARTICLE_SYSTEM_V2.md §退役线）。

@@ -71,7 +71,7 @@ function buildRun() {
     roomUi = { slot: { anim: null, lastSpin: null } };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
-    // 进阶事件：进 ascension 阶段（2026-09-22 种子包删除后只剩维度抉择面板）
+    // 进阶事件：进 ascension 阶段（只剩维度抉择面板）
     r.gameStage = 'ascension';
   } else if (PANEL === 'reward') {
     // 战后奖励：赢一场即进 reward（初始只解锁体修包 → 核心自动开包，直接进三选一）
@@ -129,7 +129,7 @@ mapStage.setPanelIntentHandler((intent) => {
     else if (a === 'chooseRewardPack') chooseRewardPack(run, intent.packId);
     else if (PANEL === 'room') {
       // 房间层：真走 core，并让「老虎机演出 → 回执 → 揭示」在陈列页也跑通
-      // （2026-09-18 训练改版：train 开局 → 可选四选一 → 尾款升级；陈列页不播房内进阶幕间）
+      // （train 开局 → 可选四选一 → 尾款升级；陈列页不播房内进阶幕间）
       if (a === 'trainingBegin') { if (beginTraining(run)) { chooseAscension(run, null); } }
       else if (a === 'trainingUpgradeMode') trainUpgradeStart(run, intent.mode);
       else if (a === 'trainingUpgrade') trainUpgrade(run, intent.uniqueID);

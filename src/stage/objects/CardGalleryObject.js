@@ -95,7 +95,7 @@ export class CardGalleryObject extends THREE.Group {
         bakeFace: this._bakeFace,
       });
       obj.setCard(cardProj);
-      // 牌库查看器同样给出冷却进度（用户定 2026-09-13）：高度=剩余比例的薄纱 + 拍数水印，
+      // 牌库查看器同样给出冷却进度：高度=剩余比例的薄纱 + 拍数水印，
       // 与手牌同语言；仅 deck 区展示（焚毁区卡已彻底离场，残留计时无意义）
       if (zone === 'deck') {
         const max = cardProj.charges?.max ?? Infinity;

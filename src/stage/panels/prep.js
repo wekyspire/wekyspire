@@ -1,7 +1,7 @@
 // 战前准备面板（塔楼层）：层数 / 敌人预告 / 遗物装卸（图标 + 拖拽 + 容量条）/ 进入战斗。
 import { RelicLoadoutObject, relicLoadoutSpec } from '../objects/RelicLoadoutObject.js';
 
-/** 战前准备（塔楼层）：层数 / 敌人预告 / 遗物装卸（2026-09-24 交互升级）/ 进入战斗。 */
+/** 战前准备（塔楼层）：层数 / 敌人预告 / 遗物装卸（交互升级）/ 进入战斗。 */
 export function buildPrepPanel(snap) {
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战前准备' });

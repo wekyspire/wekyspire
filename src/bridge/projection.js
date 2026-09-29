@@ -60,8 +60,8 @@ export const KEYWORD_LABELS = Object.freeze({
   slowStart: '慢热',
   anchored: '锁定',
   blood: '卖血',
-  mini: '迷你', // 计为 0 张手牌（不占手牌计数，2026-09-28 用户定；只管计数，与弃牌无关）
-  blade: '刀法', // 系列标签（2026-09-22 修：此前裸透传英文 blade 到卡面页脚）
+  mini: '迷你', // 计为 0 张手牌（不占手牌计数，；只管计数，与弃牌无关）
+  blade: '刀法', // 系列标签（此前裸透传英文 blade 到卡面页脚）
 });
 
 export function projectCardFull(battle, rt) {
@@ -76,7 +76,7 @@ export function projectCardFull(battle, rt) {
     image: def.image ?? null,
     // 费用徽章同口径带上逐卡动态加价（manaCostDelta，如蓄热火球链「每次打出+1」）——
     // 手牌 sig 含 cost，蓄热次数变化会触发卡面重烘，徽章不漂移。
-    // runtime costOverride（2026-09-21 覆写通道）命中时直接显示覆写费用，动态加价不叠加
+    // runtime costOverride（覆写通道）命中时直接显示覆写费用，动态加价不叠加
     //（与结算/canUse 同口径）。
     cost: (() => {
       const c = def.cost ?? { mana: 0, actionPoint: 0 };
@@ -87,7 +87,7 @@ export function projectCardFull(battle, rt) {
       return d ? { ...c, mana: c.mana + d } : c;
     })(),
     // keywords = 展示用中文标签（KEYWORD_LABELS 翻译后，如 'mini' → '迷你'）——判英文
-    // 词条键永不命中，别拿它做逻辑判断（2026-09-28 弃牌坏态根因）；逻辑判定读 core 侧 def
+    // 词条键永不命中，别拿它做逻辑判断（弃牌坏态根因）；逻辑判定读 core 侧 def
     keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
     chantWeight: def.chantWeight ?? null,
@@ -175,7 +175,7 @@ export function projectBattle(battle) {
         normalUsed: normal,
         chantCapUsed: Math.min(chantW, cap),
         chantOverflowUsed: Math.max(0, chantW - cap),
-        miniUsed: mini,   // 迷你张数（计 0 容量）：珠条画幻影槽竖线（2026-09-29 用户定）
+        miniUsed: mini,   // 迷你张数（计 0 容量）：珠条画幻影槽竖线
       };
     })(),
     // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts

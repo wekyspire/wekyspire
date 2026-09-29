@@ -233,7 +233,7 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
   });
 
   // 演出机位退场：先补间飞回基准机位（flyHome 连 fov 一起飞），再弹栈——
-  // 直接 pop 会瞬时硬切 63u + 4.8°（用户报「动画结束后相机弹回原位」的病灶，09-24 修）
+  // 直接 pop 会瞬时硬切 63u + 4.8°（报「动画结束后相机弹回原位」的病灶，09-24 修）
   await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('kardasP2');
   unit.restoreColor?.();

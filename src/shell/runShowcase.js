@@ -1,4 +1,4 @@
-// 「到手那一拍」的演出编排（从 runController 抽出的第一个域，用户定 2026-09-12 的原则）：
+// 「到手那一拍」的演出编排（从 runController 抽出的第一个域，用户定 的原则）：
 // **core 结算已经发生**，这里只管"什么时候播、播在哪个舞台、播完接什么"——时序归 Shell。
 //
 // 由 runController 构造（`createRunShowcase(ctx)`），ctx 里的引用一律**晚绑定**：
@@ -21,7 +21,7 @@ import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 export function createRunShowcase(ctx) {
   const { run, runPresenter, actions, slot } = ctx;
 
-  // ---- 获得遗物特写（用户定 2026-09-12）----
+  // ---- 获得遗物特写----
   // 遗物获取路径很多（奖励选包 / 商店货架 / 老虎机奖品 / 古尔帕斯 / 事件…），逐个接线必漏；
   // 这里统一在 notify 那一拍做**拥有集差分**：动作跑完后多出来的遗物 = 刚到手，播一次特写
   // （物品图查 `assets/relics/<遗物名>`，没素材就退化成色块——组件自带兜底）。
@@ -46,7 +46,7 @@ export function createRunShowcase(ctx) {
       desc: `遗物 · ${def.rarity ?? 'C'} 级 · ${cost}`,
       effect: def.description ?? '',
       // 设计稿 RELICS.md 里该遗物的斜体文本（铭文）——获得演出最下方一行斜体
-      // （2026-09-21 用户定；定义侧 flavor 字段与设计稿逐字同步，见 smoke-relic-flavor）
+      // （定义侧 flavor 字段与设计稿逐字同步，见 smoke-relic-flavor）
       flavor: def.flavor ?? null,
       artKey: def.name ?? def.id,
       tint: parseInt((RARITY_COLORS[def.rarity] ?? RARITY_COLORS.C).slice(1), 16),
@@ -94,7 +94,7 @@ export function createRunShowcase(ctx) {
     else if (offer === 'burn') ctx.panelStage()?.openUpgradePicker?.('bankBurn');
   }
   /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
-   *  金币那拍**不再写"代价：xxx"**（用户定 2026-09-13：上一拍刚演过，纯冗余）。 */
+   *  金币那拍**不再写"代价：xxx"**（上一拍刚演过，纯冗余）。 */
   function showDemonReward() {
     clearTimeout(demonFuse);
     demonFuse = null;
@@ -112,21 +112,21 @@ export function createRunShowcase(ctx) {
       onDismiss: () => ctx.panelStage()?.showcaseItem?.({
         title: `+${p.gold} 金币`,
         desc: '银行机超额取款',
-        artKey: 'gold',   // 无素材时组件烘"金币堆"占位（用户要的观感）
+        artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
         tint: 0xffd75e,
         autoDismissMs: 1700,
-        // 两拍都演完 → 有"立马做一件事"的附赠就直接开选卡界面（用户定 2026-09-13）
+        // 两拍都演完 → 有"立马做一件事"的附赠就直接开选卡界面
         onDismiss: openBankOfferPicker,
       }),
     });
   }
 
   /**
-   * 中奖落定 → **直接唤起获得演出**（用户定 2026-09-12）：产出不再由操纵条里的「领取」按钮
+   * 中奖落定 → **直接唤起获得演出**：产出不再由操纵条里的「领取」按钮
    * 处理（"没有获得感"）。点任意处 = 收下（需要选一张的奖项：随后在面板/全屏选卡里选；
    * 免费指定升级：随后自动开选卡界面）；点「跳过」= 放弃这份产出。
    * 一次产出只播一次（按对象身份去重；领取/放弃后 pending 清空，自然复位）。
-   * 2026-09-28 健壮化：**播成功才记已播**（此前先记后播，特写被占就永久漏播、产出只剩
+   * 健壮化：**播成功才记已播**（此前先记后播，特写被占就永久漏播、产出只剩
    * 面板兜底按钮）；并挂进 notify 链（runController），演出空闲时自动重唤起——面板上的
    * 「领取/放弃」按钮因此得以全删（取消语义：跳过/返回 = 放弃）。
    */
@@ -136,7 +136,7 @@ export function createRunShowcase(ctx) {
     if (!p) { shownSlotPrize = null; return false; }
     if (p === shownSlotPrize) return false;
     // 转轮还在转：等落定那拍 notify 再弹（core 先行结算，slotPending 在动画开拍时就挂上了，
-    // 不等就盖住转轮——「还没转完获得演出就蹦出来」的病根，2026-09-28）。
+    // 不等就盖住转轮——「还没转完获得演出就蹦出来」的病根）。
     // 落定路径：slot.anim 在 slotFinish（UI 回执/保险丝兜底）里清掉并补一次 notify。
     if (slot?.anim) return false;
     const stage = ctx.panelStage();
@@ -157,7 +157,7 @@ export function createRunShowcase(ctx) {
       onSkip: () => actions.slotDecline(),
       onDismiss: () => {
         if (freeUpgrade) { actions.slotTake(null); ctx.panelStage()?.openUpgradePicker?.('slot'); }
-        // 多选一奖项（2026-09-22 统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
+        // 多选一奖项（统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
         // 「返回」= 放弃——不再落回 dock 面板的内嵌卡行/按钮墙（旧逻辑已删）
         else if (needsPick) ctx.panelStage()?.openSlotPrizePicker?.();
         else actions.slotTake(null);
@@ -169,7 +169,7 @@ export function createRunShowcase(ctx) {
 
   // 离房安慰奖（SLOT_MACHINE.md：同一层拉了 ≥4 次杆没中奖（D5） → 送可乐/鸡腿二选一）：
   // 场景端播完"吐出→点选→飞出"后上行到这里结算，再播一次获得物特写（获得动画），
-  // **然后自动把"离房"接着走完**（用户定 2026-09-13）：触发点就是玩家点「继续前进」，
+  // **然后自动把"离房"接着走完**：触发点就是玩家点「继续前进」，
   // 整条链是"离房 → 机器凑上来吐货 → 二选一 → 获得演出 → 离房切幕"，中间不需要玩家再点一次。
   const GIFT_TINT = { cola: 0xc0392b, chicken: 0xd9a05b };
   function slotTakeGift(choice) {
@@ -187,7 +187,7 @@ export function createRunShowcase(ctx) {
   }
 
   // ---- 商店（售货机，SHOP.md §一）----
-  // 商店房 = 一整间货房（用户定 2026-09-12）：点货架上的商品即买。**演出顺序**是
+  // 商店房 = 一整间货房：点货架上的商品即买。**演出顺序**是
   // 「机器出货（场景 rig）→ 物品获得特写」——所以这里买入只记下"待演出"，等场景回执
   // `shopAnimDone` 再播特写；否则全屏特写会直接盖住出货的开门/掉落/翻板那几拍。
   function shopBuy(index) {
@@ -195,7 +195,7 @@ export function createRunShowcase(ctx) {
     const it = run.shop.items?.[index];
     const res = buyShopItem(run, index);
     // 买到的东西都要"到手那一拍"：卡包也走获得演出（展示卡包图 → 演完自动开包），
-    // 与药水/遗物同一条链（用户定 2026-09-12：购买必须走获得演出）
+    // 与药水/遗物同一条链（购买必须走获得演出）
     shopPendingShow = it
       ? { index, kind: it.kind, name: it.name, effect: it.effect, relicId: it.relicId ?? null }
       : null;
@@ -230,9 +230,9 @@ export function createRunShowcase(ctx) {
     return true;
   }
   const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e, relic: 0xc9a86a };
-  /** 买到手的那件东西的特写（单件遗物已改为**遗物包三选一**（2026-09-13 用户定），
+  /** 买到手的那件东西的特写（单件遗物已改为**遗物包三选一**，
    *  遗物直购不复存在，kind 'relic' 现在恒为遗物包：特写演完自动开三选一）。
-   *  出货演出播完即**自动收下**（用户定 2026-09-13）：机器那边已经演过一遍"出货"，
+   *  出货演出播完即**自动收下**：机器那边已经演过一遍"出货"，
    *  这里只是把到手的那件亮一下，不需要玩家再点一次"收货"——操纵条里也不另设收货 UI。 */
   function shopShowcase(p) {
     if (!p) return false;
@@ -257,7 +257,7 @@ export function createRunShowcase(ctx) {
 
   /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
   function flushRunPresentations() {
-    // 单位演出指令（2026-09-25）：事件驱动房间单位移动/形态——同排水时机送活动舞台。
+    // 单位演出指令：事件驱动房间单位移动/形态——同排水时机送活动舞台。
     // 只有房间舞台实现 roomUnitCommand（battle/map 无房间活物，静默丢弃）。
     for (const cmd of runPresenter.drainUnitCommands()) {
       ctx.panelStage()?.roomUnitCommand?.(cmd);

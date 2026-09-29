@@ -1,6 +1,6 @@
 // 合并房陈设（营地·训练场）：篝火 / 训练桩——**没有 rig 的交互物样板**（浮标 + 拾取 + 推近）。
 // 逻辑自 RoomStage 原样下沉：本模块只提供取景/面板/义务门，机器 rig 的创建交给默认（null）。
-// 2026-09-18 训练改版：训练 = 必做阶段且先于篝火——「继续前进」的硬门相应换成
+// 训练改版：训练 = 必做阶段且先于篝火——「继续前进」的硬门相应换成
 // 未训练 / 尾款升级未清（可重复拦，不像篝火软提示那样放行一次后就放行）。
 import * as THREE from 'three';
 import { buildCampPartPanel, buildTrainingPartPanel } from '../panels/index.js';
@@ -57,12 +57,12 @@ export function createCampTrainingMachine(ctx) {
     // 陈设型：无 rig（不设 createRig）
     kinds: ['camp', 'training'],
     // 篝火（营地·训练场的交互物）：主体 = **火盆 + 火焰**（不含三足）——整件取景时腿占了半屏，
-    // 火苗顶到画外；换成"看火"，机器一般怼近一点（用户定 2026-09-12 的交互节奏）。
+    // 火苗顶到画外；换成"看火"，机器一般怼近一点（的交互节奏）。
     // 训练桩没有覆盖（null = 默认整件取景）。
     focusOf: (entry) => (entry.kind === 'camp'
       ? { fracH: 0.6, bottom: 0.38, pad: 0.9, subject: bowlSubject }
       : null),
-    // 合并房（营地·训练场）：**点谁开谁的面板**（用户定 2026-09-12 修正）——篝火只给营地选项、
+    // 合并房（营地·训练场）：**点谁开谁的面板**（正）——篝火只给营地选项、
     // 训练桩只给训练选项。早期版本两件都开同一份"营地+训练"合并面板，用户报"点了没区别、
     // 交互物形同虚设"；两件东西各司其职，玩家点哪件就知道自己在处理哪半边。
     // （篝火面板在训练未收尾时显示锁定行——快照 camp.locked。）
@@ -72,7 +72,7 @@ export function createCampTrainingMachine(ctx) {
      * 义务门贡献（null = 这段不欠事）：
      *   · 'train'          —— 训练没开始（硬拦，训练必做且先于篝火）；
      *   · 'pendingUpgrade' —— 抓卡后的尾款升级（硬拦）；
-     *   · 'camp'           —— 休整是**可选收益**（用户定 2026-09-12），属软提示（见 onContinue）。
+     *   · 'camp'           —— 休整是**可选收益**，属软提示（见 onContinue）。
      */
     pendingDuty(snap) {
       if (!snap) return null;

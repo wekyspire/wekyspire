@@ -1,10 +1,10 @@
-// 伤害演出配方表（fx 架构「配方」筐的首个落地，2026-09-22）：
+// 伤害演出配方表（fx 架构「配方」筐的首个落地）：
 // 高频同构演出（每次伤害命中）走查表，不再在 BattleStage 里写内联魔法数。
-// 决议链：BASE（主级默认 = 2026-09 现行暖红模板）
+// 决议链：BASE（主级默认 = 现行暖红模板）
 //   → TAG 主题覆写（payload.tags 首个命中：burn/poison/thorns/blood/miracle…）
 //   → SERIES 主题覆写（payload.skillDefId → 技能注册表反查 series，如刀法银白斩痕）
 //   → MINOR 降规格覆写（payload.type==='minor'：小数字、无击退、无震荡、无闪红、
-//     短节拍——附级伤害「减法即丰富」，2026-09-19 hit-fx 方案第 1 层落地）
+//     短节拍——附级伤害「减法即丰富」，hit-fx 方案第 1 层落地）
 //   → KILL 加重覆写（payload.killed：震荡加成、数字放大）
 // 调视觉参数只改本文件；新增体系/标签主题 = 表里加一行。
 import { getSkillDefinition } from '../../core/skills/registry.js';
@@ -15,7 +15,7 @@ import { makeStasisShell } from './stasisShell.js';
 import { makeStunStars } from './stunStars.js';
 import gsap from 'gsap';
 
-// 主级默认模板（与 2026-09 _damageHit 现行参数逐项对齐——默认路径零回归）
+// 主级默认模板（与 _damageHit 现行参数逐项对齐——默认路径零回归）
 const BASE = {
   flash: 0xff2222,
   sparks: [
@@ -125,13 +125,13 @@ export function resolveDamageRecipe(payload = {}) {
   return r;
 }
 
-// ============ 常驻 aura 配方（fx 架构「附件」筐，2026-09-22 Phase 2）============
+// ============ 常驻 aura 配方（fx 架构「附件」筐，Phase 2）============
 // 单位的常驻状态 FX（buff 光环等）同样查表：效果投影 → aura 定义。
 // aura 定义挂进 AuraHost（fx/aura.js）——状态机/过渡纪律见该文件；这里只产数据。
 // 铁律：aura 由**显示状态 diff** 驱动（sync 节拍对账），不订阅 core 事件——
 // 观战端经同一份 state sync 自动一致。enter/exit 是 fire-and-forget 短过渡，不进节拍。
 
-// 单位 aura 主题表（VFX 结构大更新 Phase 2，2026-09-26 升级为层级/槽位声明）：
+// 单位 aura 主题表（VFX 结构大更新 Phase 2，升级为层级/槽位声明）：
 // effectId → { layer, build, levelOf, body?, emitter? }。aura def 退化成纯「槽位导演」——
 // 建件收件全在 UnitFxLayer（一效果一槽位，key = effectId），def 的 enter/update/exit
 // 只推 level 标量。字段口径：
@@ -143,7 +143,7 @@ export function resolveDamageRecipe(payload = {}) {
 //   enterDur/exitDur 可选：赋予/消除过渡时长（level 斜坡本身即过渡演出的驱动——
 //           燃烧 0.7/0.9：碳化扩张 + 火舌 stagger；凝滞 0.55/0.7：结晶前锋扫掠/消退；
 //           中毒 0.6/0.7：浸润前锋漫升/退潮 + 毒雾逐股浮现；眩晕 0.4/0.5：星星逐颗
-//           弹入/缩没。各件的过渡造型由 level 标量在 shader/tick 里派生，2026-09-26）
+//           弹入/缩没。各件的过渡造型由 level 标量在 shader/tick 里派生）
 //   emitter 可选：附带点粒子发射参数（粒子进全局 Points 池；gravity 为正 = 上飘，
 //           yOff = 发射位相对单位脚底的抬升，radius = 发射位抖动）
 //   gpuEmit 可选：GPU 粒子池联动（'burn' = 燃烧图集发射，见 fx/gpu/burnSparks.js）——
@@ -153,7 +153,7 @@ const UNIT_AURA_THEMES = {
     layer: 1,
     // tslGate：TSL 重写未落地前不建件（WebGPURenderer 下裸 GLSL = 黑洞）
     build: (layer) => TSL_READY.bodyFlames ? makeBodyFlames(layer, { color: 0xff8a3a }) : null,
-    // 层数 → 烧灼进度（境界锚点，用户 2026-09-26 定）：
+    // 层数 → 烧灼进度（境界锚点）：
     //   3 层 0.29（局部碳化 + 火星，可读）｜ 30 层 0.67（烧透橙红，只留少部分原纹理）｜
     //   60 层 1.0（白炙，HDR 过阈交 bloom）；30 层内线性，30→60 走余量段，60 后封顶
     levelOf: (s) => {
@@ -197,7 +197,7 @@ const UNIT_AURA_THEMES = {
 // exit 渐熄（teardown 时 dispose 归零收尸）。
 function makeAuraDef(effectId, theme, { particles, unit, calm, gpu }) {
   const fxLayer = unit._fxLayer; // UnitFxLayer（UnitObject 构造时自建）
-  // GPU 粒子联动（2026-09-27）：gpuEmit 主题且 GPU 池就位时走 GPU 发射（燃烧火星
+  // GPU 粒子联动：gpuEmit 主题且 GPU 池就位时走 GPU 发射（燃烧火星
   // 从火缘起飞、随风飘散）；否则回退旧 CPU emitter（能力降级/headless 假 renderer）
   const useGpu = !!theme.gpuEmit && !!gpu;
   const spawnAt = theme.emitter && !useGpu

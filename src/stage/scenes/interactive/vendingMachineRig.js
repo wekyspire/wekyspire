@@ -1,9 +1,9 @@
-// 售货机 rig（用户定 2026-09-12）——把 `props/vendingMachine.js` 的可动件驱动起来，并按快照的
+// 售货机 rig——把 `props/vendingMachine.js` 的可动件驱动起来，并按快照的
 // **货架**在四个货位锚点上立起「商品 billboard」。反馈分层（沿用老虎机/银行机的原则）：
 //   · 常驻：灯牌（marquee）缓慢呼吸 + 显示条微闪（读作"通着电的柜子"）
 //   · hover：灯牌提亮（由交互层调用 setHover）；悬到某件货上 → 该件抬起 + 盘子亮一档
-//   · **商品 billboard**（用户 2026-09-12 定的形态）：一张立在托盘上的卡片 = 遗物/药水的
-//     美术图 + 名称 + **价格**；买得起时价格是金色、**买不起时价格是红色**（用户定）。
+//   · **商品 billboard**（的形态）：一张立在托盘上的卡片 = 遗物/药水的
+//     美术图 + 名称 + **价格**；买得起时价格是金色、**买不起时价格是红色**。
 //     卡片每帧正对相机（billboard）；美术由 `art/goodsArt.js` 取（未解码完下一帧再烘）。
 //   · **买到货**：柜门荡开 → 那件卡片掉向出货口 → 出货翻板弹一下 → 柜门合上 → 灯牌爆闪
 //     （演出由"快照里那件变成 sold"触发，见 setStock——购买只发生在点击/面板里，场景侧只负责演）
@@ -33,7 +33,7 @@ const CARD = { w: 0.9, h: 1.2, gap: 0.06 };
 const CARD_PX = { w: 256, h: 360 };
 
 const PRICE_OK = '#ffd75e';      // 买得起：金
-const PRICE_NO = '#ff6060';      // 买不起：红（用户定）
+const PRICE_NO = '#ff6060';      // 买不起：红
 
 /** three 的调色板 token 是**数值** hex（`shade` 返回 number）——canvas 的 fillStyle 只吃字符串。 */
 const cssHex = (n) => `#${(n >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
@@ -66,7 +66,7 @@ function fitText(ctx, text, { fontPx, maxW, weight = 'bold' }) {
 
 /**
  * 烘一张商品卡：商品图（或占位色块）+ 名称 + 价格。
- * ⚠ **不加底板、不加边框**（用户定 2026-09-12）：美术素材自带 alpha，售货机柜内色彩干净、
+ * ⚠ **不加底板、不加边框**：美术素材自带 alpha，售货机柜内色彩干净、
  * 没有可辨认性问题——加一层深色货盘/描边只会把"立在货架上的实物"读成一张 UI 卡片。
  * 文字直接浮在图下方（黑描边保证在亮柜内也读得清）。
  * @returns {{texture, canvas}|null} 无 document（node/headless）→ null
@@ -115,7 +115,7 @@ function bakeCard(item, artTex) {
   fitText(ctx, name, { fontPx: 30, maxW: W - 30 });
   ctx.strokeText(name, W / 2, 224);
   ctx.fillText(name, W / 2, 224);
-  // ③ 价格（**买不起 = 红字**已经说清"钱不够"，不另加「金币不足」小字——用户定 2026-09-13）
+  // ③ 价格（**买不起 = 红字**已经说清"钱不够"，不另加「金币不足」小字）
   const price = `${item.price} 金`;
   fitText(ctx, price, { fontPx: 54, maxW: W - 30 });
   ctx.lineWidth = 7;
@@ -262,8 +262,8 @@ export function createVendingMachineRig({
       tile.index = it.index;
       tile.item = it;
       // hover 说明：遗物货走遗物效果预览（与面板遗物行同一挂钩）；药水/苹果/卡包走
-      // core 算好的 `tip` 文本（无卡面/立绘的东西必须有说明——用户定 2026-09-12）。
-      // token 是**怼脸专属**（用户定 2026-09-13）：未 zoom-in 时商品完全不可交互，
+      // core 算好的 `tip` 文本（无卡面/立绘的东西必须有说明）。
+      // token 是**怼脸专属**：未 zoom-in 时商品完全不可交互，
       // 远景就弹 tooltip 会让人觉得"现在就能买"，与"先推近看货、再点选购买"的节奏矛盾。
       // 逻辑 token 存 tile.token，userData 由 applyTokenGate 按焦点门控写入。
       tile.token = it.relicId

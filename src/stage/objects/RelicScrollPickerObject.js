@@ -3,7 +3,7 @@
 // 与选卡界面（CardScrollPickerObject）共用同一套骨架（ScrollPickerObject 基类）——
 // 滚动/选中/确认/返回/背板/tooltip/拾取登记全在基类，本文件只回答"一件遗物长什么样"。
 //
-// 候选件形态（2026-09-29 用户定：**无底板**——立绘 + 名字 + 描述直接摆在背板上，
+// 候选件形态（**无底板**——立绘 + 名字 + 描述直接摆在背板上，
 // 点击盒是隐形面）：上半是 `assets/relics/<遗物名>` 的立绘，下方依次是稀有度徽标、
 // 稀有度色的名字与灰字描述（三者统一**左对齐**）。素材未落盘的遗物自动退化为纯文字卡。
 // hover/选中的反馈 = 整件轻微放大 + 立绘提亮（不再画 rect 背景）。
@@ -49,7 +49,7 @@ class RelicTile extends THREE.Group {
     this._art.position.set(0, artY, 0.04);
     this._art.visible = false;
     this.add(this._art);
-    // 左上角稀有度徽标 + 名字 + 描述：三者同一左缘（2026-09-29 对齐修正）
+    // 左上角稀有度徽标 + 名字 + 描述：三者同一左缘（对齐修正）
     const badge = new TextBlockObject({ bakeText, fontPx: 22, tint: col });
     badge.setText(`[${relic.rarity ?? 'C'}]`);
     badge.placeLeftTop(TEXT_X, TILE.h / 2 - 1.0);

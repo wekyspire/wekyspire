@@ -28,10 +28,10 @@ const UNIT_ART_FILES = Object.freeze({
   remi: 'unit_remi.png',
   slime: 'unit_slime.png',
   bigSlime: 'unit_slime.png',
-  // slimeB 同理复用：防攻变体，同种个体（2026-09-27 史莱姆爆发压场位）
+  // slimeB 同理复用：防攻变体，同种个体（史莱姆爆发压场位）
   slimeB: 'unit_slime.png',
   slimelet: 'unit_slimelet.png',
-  // A/B 行为变体（2026-09-22 章1重写）复用基底立绘：同种个体，只是行动顺序不同
+  // A/B 行为变体（章1重写）复用基底立绘：同种个体，只是行动顺序不同
   slimeletA: 'unit_slimelet.png',
   slimeletB: 'unit_slimelet.png',
   hedgehog: 'unit_hedgehog.png',
@@ -44,10 +44,10 @@ const UNIT_ART_FILES = Object.freeze({
   swampAmbusher: 'unit_swampAmbusher.png',
   thornWeed: 'unit_thornWeed.png',
   carrionBeetle: 'unit_carrionBeetle.png',
-  // B 变体（2026-09-28 首拍硬化）：复用基底立绘
+  // B 变体（首拍硬化）：复用基底立绘
   carrionBeetleB: 'unit_carrionBeetle.png',
   staticPuff: 'unit_staticPuff.png',
-  // B 变体（2026-09-28 固定12血轻量位）：复用基底立绘
+  // B 变体（固定12血轻量位）：复用基底立绘
   staticPuffB: 'unit_staticPuff.png',
   diggerMole: 'unit_diggerMole.png',
   pufferToadA: 'unit_pufferToad.png',
@@ -70,7 +70,7 @@ const UNIT_ART_FILES = Object.freeze({
 // 所以两张形态图必须**纵向同高**（横向可以差很多，火翼张开属正常）
 const UNIT_ART_VARIANTS = Object.freeze({
   'pyro:p2': 'unit_pyro_p2.png',
-  // 玩家大剑体系（2026-09-22）：佩戴大剑遗物时，骑士立绘随牌堆中斩链最高链位换图
+  // 玩家大剑体系：佩戴大剑遗物时，骑士立绘随牌堆中斩链最高链位换图
   // （五档：铁剑 → 微光 → 灼热 → 炽烈 → 白金）；映射见 playerSwordArt.js
   'player:sword1': 'unit_player_sword1.png',
   'player:sword3': 'unit_player_sword3.png',
