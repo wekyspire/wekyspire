@@ -42,7 +42,7 @@ import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusOb
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ScreenShake, DamageVignette } from '../objects/screenImpactFX.js';
-import { ParticleSystem } from '../particles/ParticleSystem.js';
+import { createBurstFacade } from '../fx/gpu/burstFx.js';
 import { createParticlePool } from '../fx/gpu/particlePool.js';
 import { createBurnLink } from '../fx/gpu/burnSparks.js';
 import { createResourceDrainFx } from '../fx/gpu/resourceDrainFx.js';
@@ -227,21 +227,22 @@ export class BattleStage {
       bakeFace: this._bakeFace, picker: this.picker,
     });
 
-    // ====== 装配：粒子与全屏演出（CPU 池 + GPU 池 v2 / 震荡 / 渐晕 / fx 剧本池 / aura / cast / notify） ======
-    // 粒子系统（受伤/治疗等演出）与卡牌持续特效（咏唱流光），由 StageManager 帧回调驱动
-    this.particles = new ParticleSystem();
-    this.scene.add(this.particles.points);
-    this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
-    this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
-
+    // ====== 装配：粒子与全屏演出（GPU 池 v2 + 飘字组件 / 震荡 / 渐晕 / fx 剧本池 / aura / cast / notify） ======
     // GPU 粒子池 v2（PARTICLE_SYSTEM_V2）：世界空间实例（燃烧火星等常驻联动，经
     // createBurnLink 接 aura recipes 的 gpuEmit）+ UI 空间实例（资源消耗汇聚特效）。
-    // 非 WebGPU 后端返回 null——aura 自动回退 CPU emitter，汇聚特效静默跳过
+    // 非 WebGPU 后端返回 null——燃烧联动与汇聚特效静默跳过
     this.particles2World = createParticlePool(stageManager._renderer, { space: 'world', name: 'particles2World' });
     if (this.particles2World) this.scene.add(this.particles2World.points);
     this._burnLink = createBurnLink(this.particles2World); // null-safe（池缺位 → null）
     this.particles2Ui = createParticlePool(stageManager._renderer, { space: 'ui', name: 'particles2Ui' });
     if (this.particles2Ui) this.uiScene.add(this.particles2Ui.points);
+    // this.particles = 组合门面（fx/gpu/burstFx.js）：一次性爆发 spawn 落 GPU 池 burst
+    // （懒登记 uber 类型）；伤害数字等文本/贴图粒子与剧本 emitter 由 floatFx 承接
+    // （同容器名 points/sprites/spritesUI，场景挂载与既有调用点零改动）
+    this.particles = createBurstFacade(this.particles2World);
+    this.scene.add(this.particles.points);      // emitter 点粒子（Boss 剧本氛围尾巴）
+    this.scene.add(this.particles.sprites);     // 世界内贴图粒子层（3D 场景演出）
+    this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
     this._drainFx = null; // _resources 就位后创建（见下）
 
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：

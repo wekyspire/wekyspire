@@ -602,7 +602,7 @@ export function buildDungeon3D() {
         }
       }
     }
-    // 浮尘由常驻月光浮尘云（moonDust）承担——ParticleSystem 只留火焰粒子（上方火把循环内）
+    // 浮尘由常驻月光浮尘云（moonDust）承担——粒子发射只留火焰粒子（上方火把循环内）
     moonDust.update(dt, moonlight); // 推进 uTime + 同步 shadow uniform（map 未就绪自动隐藏）
   }
 
