@@ -88,12 +88,13 @@ export function chantCapacityOf(ctx) {
 // 手牌构成分解（口径函数/投影灯珠/headless 文本的唯一同源）：
 // normal = 未激活卡张数（「迷你」卡计 0——见下）；chantW = 激活咏唱的共鸣石折扣后权重和。
 export function handBreakdown(battleState) {
-  let normal = 0, chantW = 0;
+  let normal = 0, chantW = 0, mini = 0;
   for (const c of battleState.zones.hand) {
     if (c.isActivated) chantW += chantWeightOf(c, battleState);
     else if (!getSkillDefinition(c.defId)?.keywords?.includes('mini')) normal += 1; // 迷你 = 计 0 张
+    else mini += 1;
   }
-  return { normal, chantW };
+  return { normal, chantW, mini };
 }
 
 // 超载上限 = 容量 + 5（2026-09-13 两级手牌口径，用户定：7 容量 + 12 超载起步）。

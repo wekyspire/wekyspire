@@ -167,7 +167,7 @@ export function projectBattle(battle) {
     // 手牌容量分解（批次 13 灯珠指示器与 headless 文本同源）：蓝珠=咏唱容量占用、
     // 绿珠=普通占用、黄珠=溢出激活咏唱占用、灰=空；超载（合计>max）末尾追加红珠=尾弃张数。
     handCapacity: (() => {
-      const { normal, chantW } = handBreakdown(battleState);
+      const { normal, chantW, mini } = handBreakdown(battleState);
       const cap = chantCapacityOf(ctx);
       return {
         max: handLimitOf(ctx),
@@ -175,6 +175,7 @@ export function projectBattle(battle) {
         normalUsed: normal,
         chantCapUsed: Math.min(chantW, cap),
         chantOverflowUsed: Math.max(0, chantW - cap),
+        miniUsed: mini,   // 迷你张数（计 0 容量）：珠条画幻影槽竖线（2026-09-29 用户定）
       };
     })(),
     // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts

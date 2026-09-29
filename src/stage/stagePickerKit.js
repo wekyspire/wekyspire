@@ -549,6 +549,9 @@ export function createStagePickerKit({
      * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
      * 候选数据由编排器给（kit 不读 run）：cards 走与升级入口同一份卡面烘焙，
      * relics 走程序化藏品卡（`objects/RelicScrollPickerObject.js`）。
+     * 卡面投影在 kit 内兜底（编排器只给 {uniqueID, defId} 也能烘出真卡面——2026-09-29
+     * 修复「粉碎选卡全是白卡」：bakeFace 拿不到 view 就无米下锅）；删卡类入口不弹卡牌
+     * tooltip（tips:false，与 bossRemove/gurpasRemove 同口径——浏览的是自己的牌组）。
      * @returns 是否真的打开了（无候选时 false，编排器据此跳过）
      */
     openDevourPicker({ kind, cards = [], relics = [], onPick = null } = {}) {
@@ -573,9 +576,19 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: '粉碎哪张卡？',
-        hint: '喂给老虎机换金币 ｜ 悬停查看卡面 ｜ 滚轮翻页（诅咒卡另有奖赏）',
-        cards,
+        hint: '喂给老虎机换金币 ｜ 滚轮翻页（诅咒卡另有奖赏）',
+        cards: cards.map((c) => {
+          let view = c.view ?? null;
+          if (!view) {
+            try {
+              const def = getSkillDefinition(c.defId);
+              if (def) view = withLabels(cardViewFromDef(def));
+            } catch { /* 未注册等异常：退回 defId 占位烘焙，不拦开界面 */ }
+          }
+          return { uniqueID: c.uniqueID, defId: c.defId, view, enabled: c.enabled !== false };
+        }),
         confirmLabel: '确认粉碎',
+        tips: false,
       });
       return true;
     },

@@ -215,14 +215,13 @@ registerChargeShuffle({ id: 'comboStrike', name: '连击', tier: 'B', count: 3, 
 // 四重击（A）——大调 B→A
 registerChargeShuffle({ id: 'quadrupleHit', name: '四重击', tier: 'A', count: 4 });
 
-// 无限连击（A）：1AP 消耗 + 咏唱2（2026-09-21 用户定稿）——
+// 无限连击（A）：1AP 消耗 + 咏唱1（2026-09-29 大调：2→1）——
 // 发动后驻手，每次咏唱触发洗入 3 张瞬击（常驻引擎）；再次打出免费解除，因消耗焚毁离场。
-// 咏唱值即代价：激活后手牌抽取受限，引擎与手牌压力对赌。
 registerSkill({
   id: 'endlessCombo', name: '无限连击', type: 'normal', tier: 'A', series: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 2,
+  cardMode: 'chant', chantWeight: 1,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {
@@ -433,7 +432,7 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, promotesTo = nu
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 1, // 2026-09-29 大调：三档咏唱 2→1
     promotesTo,
     use() { return true; },
     activated: {
@@ -583,7 +582,7 @@ registerSkill({
 // ——扫腿线重做为多敌防卡后归属拆；群伤原语上移 cardKit.aoeAttack 共用。
 
 // 狂拳 C → B → A（卖血链，2026-09-21 大调收阶：D 移除、四阶链收三阶，同名；
-// C 12伤+1AP / B 15伤+1AP / A 15伤+2AP）。失去生命 = 无来源固定伤害（跳修正、
+// 2026-09-29 大调：C 9伤 / B 13伤 / A 13伤+2AP）。失去生命 = 无来源固定伤害（跳修正、
 // 护盾可吸收、不触发荆棘/忍耐类反制——纯代价语义）；获得 AP 走指令（伤害换节奏）。
 function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }) {
   registerSkill({
@@ -604,9 +603,9 @@ function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，失去${lifeLoss}生命${ap > 0 ? `，获得${ap}行动点` : ''}`,
   });
 }
-wildPunchCard({ id: 'wildPunch', tier: 'C', damage: 12, lifeLoss: 2, ap: 1, promotesTo: 'bloodRage' });
-wildPunchCard({ id: 'bloodRage', tier: 'B', damage: 15, lifeLoss: 2, ap: 1, promotesTo: 'lastGasp' });
-wildPunchCard({ id: 'lastGasp', tier: 'A', damage: 15, lifeLoss: 2, ap: 2 });
+wildPunchCard({ id: 'wildPunch', tier: 'C', damage: 9, lifeLoss: 2, ap: 1, promotesTo: 'bloodRage' });
+wildPunchCard({ id: 'bloodRage', tier: 'B', damage: 13, lifeLoss: 2, ap: 1, promotesTo: 'lastGasp' });
+wildPunchCard({ id: 'lastGasp', tier: 'A', damage: 13, lifeLoss: 2, ap: 2 });
 
 // 乱拳 C → 雨拳 B → 千手 A → 万手 S（多段链：每段独立结算、独立吃减伤门与触发面。
 // 2026-09-21 大调：D 移除、C 改 3×3、万手升 S 5×6；总伤 9/12/16/30）
@@ -709,7 +708,7 @@ fullChargeCard({ id: 'fullSpirit', name: '全神一击', tier: 'A', base: 8, bon
 // 咏唱2/1/0——每弃 3 张牌，抽 1（太极「每打 N 抽 1」的弃牌镜像；弃牌语言在体修
 // 三子系都有：假动作/呼吸/以无胜有）。计数挂 skillRuntime（跨回合累积，plain data
 // 可序列化）；咏唱值逐阶减磅，S 档零容量压力。
-function discardEngineChant({ id, name, tier, weight, promotesTo = null }) {
+function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
@@ -722,19 +721,20 @@ function discardEngineChant({ id, name, tier, weight, promotesTo = null }) {
         when: DiscardCardInstruction, phase: 'post',
         react: (instr, ctx) => {
           sctx.self.discardCount = (sctx.self.discardCount ?? 0) + 1;
-          if (sctx.self.discardCount % 3 === 0) {
+          if (sctx.self.discardCount % every === 0) {
             ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
           }
         },
       }],
     },
-    describe: () => '每弃3张牌，抽1牌',
-    battleDescribe: (sctx) => `每弃3张牌，抽1牌（已弃${sctx.self.discardCount ?? 0}）`,
+    describe: () => `每弃${every}张牌，抽1牌`,
+    battleDescribe: (sctx) => `每弃${every}张牌，抽1牌（已弃${sctx.self.discardCount ?? 0}）`,
   });
 }
-discardEngineChant({ id: 'hunYuanPlus', name: '变招', tier: 'B', weight: 2, promotesTo: 'hunYuanMaster' });
-discardEngineChant({ id: 'hunYuanMaster', name: '混元', tier: 'A', weight: 1, promotesTo: 'hunYuanS' });
-discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 0 });
+// 2026-09-29 大调：咏唱 2/1/0 → 2/2/1、弃牌比 3/3/3 → 3/2/2
+discardEngineChant({ id: 'hunYuanPlus', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'hunYuanMaster' });
+discardEngineChant({ id: 'hunYuanMaster', name: '混元', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
+discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 1, every: 2 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
 

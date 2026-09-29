@@ -23,6 +23,7 @@ const FLAP_DUR = 0.44;   // 翻牌一次（上叶折下 + 新叶落下）的时�
 
 // rig 内部临时量（避免逐帧分配）：只在同一次 update 内使用，不得跨调用持有
 const TMP_RED = new THREE.Color(P.potionRed);
+const TMP_WARM = new THREE.Color(0x3d2c10);   // 粉碎口 hover 的暗腔暖金（低强度，只透一层底光）
 const TMP_M4 = new THREE.Matrix4();
 const TMP_V3 = new THREE.Vector3();
 
@@ -188,6 +189,19 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   }
   if (throat) throat.material = new THREE.MeshBasicMaterial({ color: P.night });
   if (jaw) jaw.material = new THREE.MeshBasicMaterial({ color: brighten(P.gold, 0.7) });
+  // 粉碎口拾取代理：隐形面板罩住整个投料口、凸出机身最前沿——金牙锯齿稀疏、暗腔凹陷，
+  // 直接拾取会被机身热区按角度截胡（同恶魔词条转轮代理的思路）。可见性 0 但 visible=true
+  // （Picker 会滤掉 invisible 对象）。
+  let mawProxy = null;
+  if (throat) {
+    mawProxy = new THREE.Mesh(
+      new THREE.PlaneGeometry((crusher.mawW ?? 1.4) * 1.06, (crusher.mawH ?? 0.68) * 1.35),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    mawProxy.name = 'slotMawProxy';
+    mawProxy.position.set(crusher.mawX ?? 0, crusher.mawY ?? 2.4, (crusher.mawZ ?? 1.3) + 0.22);
+    throat.parent.add(mawProxy);
+  }
 
   /** 计数器面板 = **翻牌（split-flap）显示**（用户定 2026-09-11："要做成翻牌显示，
    *  不是能量条"）：两张卡（当前值 / 上限），每张分上下两片叶子 + 中缝；数字变化时上半片
@@ -371,6 +385,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     shakeAmp: 0,
     devour: null,        // { value, target, every, ready }：计数器（value 连续量 → 数字滚动）
     crushFx: null,       // { t, seconds, flash }：粉碎演出
+    mawHover: 0,         // 粉碎口 hover 高亮权重（0..1，向 mawHoverTarget 收敛）
+    mawHoverTarget: 0,
   };
 
   // ---- 彩灯：常态呼吸 + 灯效（InstancedMesh + instanceColor，逐实例写色）----
@@ -636,17 +652,22 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       if (d.flip >= 1) d.flipping = false;
       redrawCounter();
     }
-    // ---- 粉碎口外观：进度满 → 金牙/面板脉动发亮；粉碎瞬间 → 口内闪红 ----
+    // ---- 粉碎口外观：进度满 → 金牙/面板脉动发亮；hover → 金牙/喉腔提亮（可点暗示）；
+    //      粉碎瞬间 → 口内闪红 ----
     const readyK = st.devour?.ready && !st.crushFx ? 1 : 0;
+    st.mawHover += (st.mawHoverTarget - st.mawHover) * Math.min(1, dt * 10);
     if (jaw?.material) {
       const flash = st.crushFx?.flash ?? 0;
       // 闪白克制一点：咬合瞬间 ×3.4 已足够进 bloom 亮部通道，×7 会把上下牙糊成一坨白
-      const k = 0.7 + readyK * (1.5 + 1.1 * Math.sin(st.t * 5.2)) + flash * 3.4;
+      const k = 0.7 + readyK * (1.5 + 1.1 * Math.sin(st.t * 5.2)) + st.mawHover * 1.6 + flash * 3.4;
       jaw.material.color.copy(brighten(P.gold, k));
     }
     if (throat?.material) {
       const flash = Math.min(1, st.crushFx?.flash ?? 0);
-      throat.material.color.copy(P.night).lerp(TMP_RED, flash);
+      // hover 暗腔透出一层暖金（读作"口里在发亮"），粉碎闪红叠加在其上
+      throat.material.color.copy(P.night)
+        .lerp(TMP_WARM, st.mawHover * 0.55)
+        .lerp(TMP_RED, flash);
     }
     if (counter?.material) {
       // 面板整体亮度乘子（贴图 × color）：满格时脉动——HDR 乘到 >1 才进 bloom 亮部通道
@@ -702,15 +723,19 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     devourReady,
     crush,
     /** 可点热区（宿主射线拾取用）：投料口暗腔 + 计数器面板。 */
-    crusherTargets: () => [throat, counter].filter(Boolean),
+    /** 粉碎入口热区 = 投料口拾取代理（罩住喉腔+金牙；2026-09-29 用户定——计数器翻牌
+     *  只是显示件，此前混进热区会让玩家「点到 7 上也进了粉碎」）。 */
+    crusherTargets: () => [mawProxy ?? throat].filter(Boolean),
     /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */
     demonTargets: () => reels.filter(Boolean),
     /** 热区 → 语义名（宿主派发意图用）：'crusher' = 投料口，'counter' = 计数器。 */
     pickNameOf: (obj) => {
-      if (obj === throat) return 'crusher';
+      if (obj === mawProxy || obj === throat || obj === jaw) return 'crusher';
       if (obj === counter) return 'counter';
       return null;
     },
+    /** 粉碎口 hover 高亮（0..1，机器模块的 hover 通知驱动；update 里把它混进金牙/喉腔亮度）。 */
+    setCrusherHover(on) { st.mawHoverTarget = on ? 1 : 0; },
     state: st,
   };
 }

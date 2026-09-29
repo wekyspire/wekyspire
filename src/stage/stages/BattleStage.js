@@ -335,6 +335,7 @@ export class BattleStage {
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
+      this._panel?.update(dt);       // 模态面板卡阵的 fx（奖励三选一 hover 高亮收敛）
       for (const unit of this._units.values()) {
         unit.update(dt);
         let fwd = this._sm.camera.localToWorld(new THREE.Vector3(0, 0, 1));
@@ -530,6 +531,7 @@ export class BattleStage {
     this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
     this._capacityBeads.setValue(proj.handCapacity); // 灯珠（批次 13）：与投影同口径，旧快照无此字段时静默跳过
+    this._capacityBeads.setHover(this._capFootprintOf(this._overCardId)); // 手牌变动后 hover 足迹重算（珠位随占用重排）
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
@@ -2738,6 +2740,32 @@ export class BattleStage {
     if (this._overCardId === id) return;
     this._overCardId = id;
     this._refreshShiftFace();
+    // 容量珠 hover 联动（2026-09-29 用户定）：指针压着的卡 → 它占用的珠/迷你竖线改 HDR 色
+    this._capacityBeads.setHover(this._capFootprintOf(id));
+  }
+
+  /**
+   * 卡 → 容量珠足迹：按快照手牌序走一遍占用账（激活咏唱按权重占蓝珠段、
+   * 迷你卡占幻影竖线、其余占绿珠），返回该卡的落位；不在手牌（查看器画廊等）→ null。
+   */
+  _capFootprintOf(cardId) {
+    if (cardId == null) return null;
+    const hand = this._snapshot?.hand ?? [];
+    let nIdx = 0, cIdx = 0, mIdx = 0;
+    for (const c of hand) {
+      if (c.isActivated) {
+        const w = c.chantWeight ?? 1;
+        if (c.uniqueID === cardId) return { kind: 'chant', from: cIdx, count: w };
+        cIdx += w;
+      } else if (c.keywords?.includes('迷你')) {
+        if (c.uniqueID === cardId) return { kind: 'mini', index: mIdx };
+        mIdx += 1;
+      } else {
+        if (c.uniqueID === cardId) return { kind: 'hand', index: nIdx };
+        nIdx += 1;
+      }
+    }
+    return null;
   }
 
   // 差分应用：按住 Shift 时指针压着的卡（手牌/咏唱/查看器画廊）切未应用描述渲染，

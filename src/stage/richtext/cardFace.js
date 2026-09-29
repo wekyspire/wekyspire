@@ -6,6 +6,8 @@
 //     走偏白主题色 COMMON_THEME，靠色相与所有体系卡拉开距离（不加文字角标，用户定）；
 //   等阶（tier）→ 只有等阶标记（左上菱形徽章）随等阶着色；边框粗细/内描边/箔金是等阶的
 //     「形」，色相仍属灵脉；
+//   特殊词条（固有/消耗/迷你/不朽/短暂）→ 顶部彩条（居中 1/4 卡宽，取优先级最高一枚，
+//     见 KEYWORD_ACCENTS）+ 页脚词条逐词点缀色（2026-09-29 用户定）；
 //   开销徽章（右上，右对齐）：魏启=蓝 + 水晶素材（options.manaCrystal，缺省蓝色圆回落）、
 //     行动点=黄圆；初始为 0 的开销不显示；
 //   卡图（options.art，浏览器端由 CardArtCache 供 canvas）→ 名称下方图区，有图时正文区下移；
@@ -57,6 +59,28 @@ const BODY_MAX_WIDTH = CARD_FACE_SIZE.width - 24;
 const BODY_TOP_PLAIN = 56;          // 无卡图时正文区顶
 const ART_RECT = { x: 12, y: 46, w: 176, h: 88 };
 const BODY_TOP_WITH_ART = ART_RECT.y + ART_RECT.h + 8; // 142
+
+// 特殊词条点缀色（2026-09-29 用户定）：固有白 / 消耗亮橙 / 迷你淡紫 / 不朽灰白 / 短暂淡蓝。
+// 键 = 页脚词条标签（KEYWORD_LABELS 翻译后的中文，与 drawFooter 的 bits 同语）；
+// 「不朽」当前无卡在用，先入表待实装。两处消费：顶部彩条（取优先级最高一枚）+ 页脚逐词着色。
+export const KEYWORD_ACCENTS = Object.freeze({
+  '消耗': '#ff9a45',
+  '固有': '#ffffff',
+  '不朽': '#d3dae8',
+  '短暂': '#a8cdf2',
+  '迷你': '#c7b3f7',
+});
+// 顶部彩条只画一道：多词条卡（如 情况不对 = 固有+消耗+迷你）按「打法约束最重」排序取色，
+// 其余词条由页脚着色补全。消耗（一次性经济）> 固有（起手位）> 不朽 > 短暂 > 迷你。
+const ACCENT_PRIORITY = ['消耗', '固有', '不朽', '短暂', '迷你'];
+
+/** 卡面顶部彩条颜色：命中的特殊词条里优先级最高的一枚；无 → null（不画）。 */
+function topKeywordAccent(card) {
+  const bits = new Set(card.keywords ?? []);
+  if (card.cardMode && card.cardMode !== 'normal' && card.cardMode !== 'chant') bits.add(card.cardMode);
+  for (const k of ACCENT_PRIORITY) if (bits.has(k)) return KEYWORD_ACCENTS[k];
+  return null;
+}
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -228,6 +252,14 @@ function drawFrame(ctx, card) {
   ctx.restore();
   // 四边中点饰钉（灵脉色小菱形）
   drawEdgeStuds(ctx, theme);
+  // 特殊词条顶部彩条（2026-09-29 用户定）：居中、长 = 卡宽 1/4、厚随边框线、
+  // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。画在饰钉之后：顶边中点饰钉
+  // 与彩条同位，彩条盖钉（信号优先）。
+  const accent = topKeywordAccent(card);
+  if (accent) {
+    ctx.fillStyle = accent;
+    ctx.fillRect(W / 2 - (W / 4) / 2, 2.5, W / 4, frame.width);
+  }
   // 等阶标记：左上角菱形 + 字母——卡面上唯一随等阶着色的元素，
   // 中心与标题基线对齐（标题 textBaseline=middle @y26）
   drawTierBadge(ctx, 16, 26, tier, tColor);
@@ -512,11 +544,15 @@ function drawFooter(ctx, card) {
   for (let i = 0; i < bits.length; i++) {
     if (i > 0) {
       const sep = ' · ';
+      ctx.fillStyle = cardTheme(card);
       ctx.fillText(sep, x, y);
       x += ctx.measureText(sep).width;
     }
     const label = bits[i];
     const w = ctx.measureText(label).width;
+    // 特殊词条着点缀色（2026-09-29 用户定）：固有/消耗/迷你/不朽/短暂各自的特征色，
+    // 其余词条（冷却/充能/刀法等）保持灵脉主题色
+    ctx.fillStyle = KEYWORD_ACCENTS[label] ?? cardTheme(card);
     ctx.fillText(label, x, y);
     if (getNamedTerm(label)) {
       regions.push({ type: 'named', payload: { name: label }, rect: { x, y: y - 8, w, h: 16 } });
