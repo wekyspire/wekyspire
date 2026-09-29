@@ -492,15 +492,17 @@ condenseFlameCard({ id: 'flameForm', name: '焰形', tier: 'S', naqi: 2, burnPer
 
 // 高热工厂。「纳气N，燃烧4」为**咏唱触发效果**（battle.md P5：激活咏唱卡每回合
 // 在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅（owner=卡牌，熄灭
-// 自动注销），点亮本身不结算。咏唱值取 1（2026-09-13 权重分档：大量 1 咏）。
+// 自动注销），点亮本身不结算。
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
 // 2026-09-21 大调：C 档「发烧」从设计稿移除，系列 B 起步（高热 纳气1 → 白炽 纳气2）。
+// 咏唱 0（2026-09-27 咏唱权重审计：对齐设计稿「咏唱0」——消耗+自施已付清代价，
+// 点亮不占容量，走燃心决同款 0 咏通道）。
 function feverChantCard({ id, name, tier, naqi, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fever',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 1,
+    cardMode: 'chant', chantWeight: 0,
     keywords: ['exhaust'],
     promotesTo,
     use() { return true; },
@@ -527,16 +529,18 @@ feverChantCard({ id: 'whiteFever', name: '白炽', tier: 'A', naqi: 2 });
 // 每回合在咏唱触发阶段结算）——挂 ChantTriggerInstruction POST 订阅，点亮本身
 // 不结算；解除打出免费、回牌库（非消耗），停泵后可再点亮续泵。
 // 燃烧自施是火灵脉的防御代价口径（燃烧换护盾，焰愈/火源归一消化）。
-// 设计稿 A 阶未写费用 → 0 费；咏唱值取 2（中量档——第 5 轮试玩唯一验证为强卡的咏唱，留 2）。
+// 设计稿 A 阶未写费用 → 0 费。
 // 2026-09-21 大调：盾量 11/15/15 → 10/12/12（等阶扁平化收窄档差），自燃 4 不变——
 // 爆燃/焚烧翻倍把自燃推上去是「玩火自焚」身份的正当互动，
 // 乘算局的出口是火源归一/控火术：收，不是给卡本身上锁。
+// 2026-09-27 用户定：全系咏唱 2 → 1（小加强——轻量档不再独占咏唱容量，
+// 可与火焰旋风等 1 档咏唱共存；两局 headless 实测 2 占用与其它咏唱互斥过闷）。
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'kindling',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 1,
     promotesTo,
     use() { return true; },
     activated: {
@@ -816,12 +820,13 @@ firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'A', damage: 
 // 余数保留（计数挂 skillRuntime，跨回合累积；重复熄灭/再激活不清零——计数属于
 // 卡牌身份）。读 result.dealt（燃烧为固定伤害，dealt 即护盾吸收后的实际生命损失；
 // 被防火 veto 的结算无 POST）。档位只压阈值不翻倍率——高阶是「更碎的燃烧也吃得下」。
+// 咏唱 0（2026-09-27 咏唱权重审计：对齐设计稿「咏唱0」——纯被动不占容量）。
 function bloodFlameCard({ id, tier, per, promotesTo }) {
   registerSkill({
     id, name: '血焰', type: 'fire', tier, series: 'patience',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 1,
+    cardMode: 'chant', chantWeight: 0,
     promotesTo,
     use() { return true; },
     activated: {
