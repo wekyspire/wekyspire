@@ -23,7 +23,9 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
       });
       return w;
     }
-    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packId}`, align: 'center' });
+    // packName = 快照侧显示名（panelSnapshot 的 PACKS 表，不裸露 id——夜测 r6路8
+    // 实报「卡包 · body」泄漏内部 id；缺字段时退 packId 兜底）
+    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packName ?? shop.pending.packId}`, align: 'center' });
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组（不想要就放弃）' });
     w.push({
       kind: 'button', id: 'shop:openPack', width: 300, size: 'main',
