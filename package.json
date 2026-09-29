@@ -8,8 +8,7 @@
     "preview": "vite preview",
     "test": "node tools/fuzz/battleFuzz.mjs",
     "test:fuzz": "node tools/fuzz/battleFuzz.mjs --games 150",
-    "test:browser": "node tools/fuzz/battleFuzzBrowser.mjs",
-    "test:legacy": "vitest run"
+    "test:browser": "node tools/fuzz/battleFuzzBrowser.mjs"
   },
   "dependencies": {
     "gsap": "^3.13.0",
@@ -20,7 +19,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.0.0",
-    "vite": "^4.0.0",
-    "vitest": "^4.1.10"
+    "vite": "^4.0.0"
   }
 }
