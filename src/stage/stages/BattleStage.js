@@ -103,6 +103,7 @@ export class BattleStage {
    *   tween: StageAnimator 的 tween 工厂（缺省 gsap，测试注入手动版）
    */
   constructor({ bridge, stageManager, bus = null, bakeFace = null, bakeLabel = null, tween = undefined, scene = 'dungeon', sceneSeed = 'dev', displayModel = null, roomOverride = null }) {
+    // ====== 装配：渲染与场景（双 scene / PCG 场景 / 雾 / 体积月光 composer / 素材缓存与烘焙） ======
     this.bridge = bridge;
     this.name = 'battle';
     this.scene = new THREE.Scene();   // 3D 世界 pass：场景/单位/粒子（与地板正确深度交互）
@@ -169,6 +170,7 @@ export class BattleStage {
     }
     this._tintScratch = new THREE.Color();
 
+    // ====== 装配：布局与动画底座（LayoutEngine / StageAnimator / HandSprings / Picker） ======
     this.layout = new LayoutEngine();
     // 手牌扇形几何：minX/maxX 为卡中心硬区间——左让状态栏面板（UI 底板右缘 ≈ -44.9），
     // 右让牌库图标（x = 80）；baseY 压低让下缘可越出屏底（-65），与重叠、
@@ -193,6 +195,7 @@ export class BattleStage {
     this.picker = new Picker({ stageManager, bus: this._bus });
     this._sm = stageManager;
 
+    // ====== 装配：显示状态与视图登记（DisplayModel / _views / _units / 快照 / 输入态字段） ======
     // 显示状态权威 = run 级 DisplayModel（与共享 sequencer 对等，跨场景存活）；
     // BattleStage 只是它的战斗视图。此处未注入则自建（单场测试/headless 用）。
     this.model = displayModel ?? new DisplayModel();
@@ -224,6 +227,7 @@ export class BattleStage {
       bakeFace: this._bakeFace, picker: this.picker,
     });
 
+    // ====== 装配：粒子与全屏演出（CPU 池 + GPU 池 v2 / 震荡 / 渐晕 / fx 剧本池 / aura / cast / notify） ======
     // 粒子系统（受伤/治疗等演出）与卡牌持续特效（咏唱流光），由 StageManager 帧回调驱动
     this.particles = new ParticleSystem();
     this.scene.add(this.particles.points);
@@ -300,6 +304,7 @@ export class BattleStage {
     }
 
     // 角色对话/思索泡泡层（UI 空间：恒定屏幕尺寸、清晰、压在 3D 场景之上）
+    // ====== 装配：泡泡层与帧循环（onTick：弹簧/场景/粒子/特效收敛/billboard 朝向/状态栏） ======
     this._bubbles = new BubbleLayer();
     this.uiScene.add(this._bubbles);
 
@@ -330,6 +335,7 @@ export class BattleStage {
       this.shake.update(dt);      // 震荡只登记偏移通道，落笔在导演的 commit（渲染前）
     });
 
+    // ====== 装配：舞台 UI 对象（牌堆 / 容量珠 / 按钮 / 面板宿主 / 选卡套件 / 箭头 / 状态栏 / 顶栏 / 汇聚特效） ======
     // 区域图标（牌库）：点击开查看器，计数经 reconcile 同步
     this._piles = {
       deck: new ZonePileObject({ zoneKey: 'deck', label: '牌库', color: '#5aa2e8' }),
@@ -422,6 +428,7 @@ export class BattleStage {
     });
     this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）
 
+    // ====== 装配：总线订阅与键盘（frontendBus 全量节拍 / 素材回调 / Shift 监听，dispose 统一摘除） ======
     // mitt 的 on() 不返回退订函数——必须自持 handler 引用走 off()。
     // （旧写法把 on() 返回值当 off 用，实际是 undefined：'*' 监听跨场泄漏，
     //   幽灵舞台继续处理节拍并污染共享 DisplayModel → 下一场"白卡"）
