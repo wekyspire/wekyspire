@@ -23,10 +23,11 @@ export function createIntents(battle) {
       return !!skill && canUseSkill(ctx, skill);
     },
     canEndTurn: () => isWaitingPlayerInput(battle),
-    // 弃牌动作整体可用性（按钮置灰用）：有手牌 + 费够 + 自由行动窗
+    // 弃牌动作整体可用性（按钮置灰用）：有自由牌 + 费够 + 自由行动窗
+    // （自由牌 = 未激活咏唱；迷你卡照常可弃——迷你只管手牌计数，与弃牌无关）
     canDump: () => {
-      const hand = ctx.battleState.zones.hand;
-      return hand.length > 0 && canDumpCards(battle, [hand[0].uniqueID]);
+      const free = ctx.battleState.zones.hand.filter(s => !s.isActivated);
+      return free.length > 0 && canDumpCards(battle, [free[0].uniqueID]);
     },
   };
 }

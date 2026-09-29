@@ -4,9 +4,10 @@ import BattleInstruction from '../kernel/BattleInstruction.js';
 // 白名单均为 ['amount']，费用管线 = 对消耗指令的 PRE 订阅。
 
 export class ConsumeManaInstruction extends BattleInstruction {
-  constructor({ amount }, opts = {}) {
+  constructor({ amount, sourceSkillId = null }, opts = {}) {
     super(opts);
     this.amount = amount;
+    this.sourceSkillId = sourceSkillId; // 归属卡（表现层汇聚特效锚定用；纯表现载荷）
   }
   get modifiablePayload() { return ['amount']; }
   buildPayload() { this.payload.amount = this.amount; }
@@ -14,7 +15,8 @@ export class ConsumeManaInstruction extends BattleInstruction {
     const before = ctx.player.mana;
     ctx.player.mana = Math.max(ctx.player.mana - this.payload.amount, 0);
     this.result = { consumed: before - ctx.player.mana };
-    ctx.presenter?.resource?.({ kind: 'mana', delta: -(before - ctx.player.mana) });
+    ctx.presenter?.resource?.({ kind: 'mana', delta: -(before - ctx.player.mana),
+      skillUniqueID: this.sourceSkillId ?? undefined });
     return true;
   }
 }
@@ -36,9 +38,10 @@ export class GainManaInstruction extends BattleInstruction {
 }
 
 export class ConsumeActionPointsInstruction extends BattleInstruction {
-  constructor({ amount }, opts = {}) {
+  constructor({ amount, sourceSkillId = null }, opts = {}) {
     super(opts);
     this.amount = amount;
+    this.sourceSkillId = sourceSkillId; // 归属卡（表现层汇聚特效锚定用；纯表现载荷）
   }
   get modifiablePayload() { return ['amount']; }
   buildPayload() { this.payload.amount = this.amount; }
@@ -46,7 +49,8 @@ export class ConsumeActionPointsInstruction extends BattleInstruction {
     const before = ctx.player.actionPoints;
     ctx.player.actionPoints = Math.max(ctx.player.actionPoints - this.payload.amount, 0);
     this.result = { consumed: before - ctx.player.actionPoints };
-    ctx.presenter?.resource?.({ kind: 'actionPoint', delta: -(before - ctx.player.actionPoints) });
+    ctx.presenter?.resource?.({ kind: 'actionPoint', delta: -(before - ctx.player.actionPoints),
+      skillUniqueID: this.sourceSkillId ?? undefined });
     return true;
   }
 }

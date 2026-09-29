@@ -25,6 +25,7 @@
 //   背景 = 程序化 3D 场景（dungeon3D）。
 
 import * as THREE from 'three';
+import gsap from 'gsap';
 import { EventNames } from '../../bridge/events.js';
 import { DisplayModel } from '../../bridge/displayModel.js';
 import { CardObject } from '../objects/CardObject.js';
@@ -38,7 +39,9 @@ import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
 import { ScreenShake, DamageVignette, damageSeverity } from '../objects/screenImpactFX.js';
 import { ParticleSystem } from '../particles/ParticleSystem.js';
-import { createGpuParticles } from '../fx/gpu/gpuParticles.js';
+import { createParticlePool } from '../fx/gpu/particlePool.js';
+import { createBurnLink } from '../fx/gpu/burnSparks.js';
+import { createResourceDrainFx, DRAIN_FLIGHT_MS } from '../fx/gpu/resourceDrainFx.js';
 import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
@@ -249,10 +252,15 @@ export class BattleStage {
     this.scene.add(this.particles.sprites); // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
 
-    // GPU 粒子池（2026-09-27，常驻联动发射：燃烧火星从火缘起飞随风飘散是首例）——
-    // 能力不齐（无 WebGL2/float RT、假 renderer）返回 null，aura 自动回退 CPU emitter
-    this.gpuParticles = createGpuParticles(stageManager._renderer);
-    if (this.gpuParticles) this.scene.add(this.gpuParticles.points);
+    // GPU 粒子池 v2（PARTICLE_SYSTEM_V2）：世界空间实例（燃烧火星等常驻联动，经
+    // createBurnLink 接 aura recipes 的 gpuEmit）+ UI 空间实例（资源消耗汇聚特效）。
+    // 非 WebGPU 后端返回 null——aura 自动回退 CPU emitter，汇聚特效静默跳过
+    this.particles2World = createParticlePool(stageManager._renderer, { space: 'world', name: 'particles2World' });
+    if (this.particles2World) this.scene.add(this.particles2World.points);
+    this._burnLink = createBurnLink(this.particles2World); // null-safe（池缺位 → null）
+    this.particles2Ui = createParticlePool(stageManager._renderer, { space: 'ui', name: 'particles2Ui' });
+    if (this.particles2Ui) this.uiScene.add(this.particles2Ui.points);
+    this._drainFx = null; // _resources 就位后创建（见下）
 
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
     // 震荡是相机导演的一路**叠加偏移通道**（与运镜可合成：转段推镜途中受击照样震，
@@ -321,7 +329,9 @@ export class BattleStage {
       this.springs.update(dt); // 手牌/咏唱静息姿态软收敛（先于演出，本帧姿态到位）
       this._scene3D?.update(dt, this.particles, this._sm.camera.position);
       this.particles.update(dt);
-      this.gpuParticles?.update(dt); // GPU 粒子：emission 图集 → cursor → state 全 GPU
+      this.particles2World?.update(dt); // 粒子池 v2（世界：燃烧火星 custom 类型）
+      this.particles2Ui?.update(dt); // 粒子池 v2（UI 空间：资源汇聚特效）
+      this._drainFx?.update(dt); // 汇聚锚点跟随卡牌（飞展示位期间粒子始终钉徽章）
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
@@ -426,6 +436,11 @@ export class BattleStage {
     this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel, picker: this.picker });
     this.uiScene.add(this._topBar);
     this._resources = { ap: this._statusBar.apCoin, mana: this._statusBar.manaCrystal };
+    // 资源消耗汇聚特效（fx/gpu/resourceDrainFx.js；池缺位时 null，调用点静默跳过）
+    this._drainFx = createResourceDrainFx(this.particles2Ui, {
+      manaPos: () => this._resources.mana.getWorldPosition(new THREE.Vector3()),
+      apPos: () => this._resources.ap.getWorldPosition(new THREE.Vector3()),
+    });
     this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）
 
     // mitt 的 on() 不返回退订函数——必须自持 handler 引用走 off()。
@@ -475,10 +490,13 @@ export class BattleStage {
     if (this._endTurnRequested && snapshot.turn?.side === 'player' && key !== this._endTurnLockKey) {
       this._endTurnRequested = false;
     }
-    // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）
+    // 弃牌选择集随快照对账：已不在手牌的 id 摘除（已弃/已打出/被效果移走）；
+    // 已激活咏唱同样摘除（2026-09-28：咏唱不可弃。迷你卡照常可弃——只管手牌计数）
     if (this._dumpSel.size) {
-      const inHand = new Set(snapshot.hand?.map(c => c.uniqueID) ?? []);
-      for (const id of [...this._dumpSel]) if (!inHand.has(id)) this._dumpSel.delete(id);
+      const freeIds = new Set(
+        snapshot.hand?.filter(c => !c.isActivated)
+          .map(c => c.uniqueID) ?? []);
+      for (const id of [...this._dumpSel]) if (!freeIds.has(id)) this._dumpSel.delete(id);
     }
     this.reconcile();
   }
@@ -568,7 +586,7 @@ export class BattleStage {
         // 喷火星 15s+）。时机天然对齐：死亡节拍「先演后变」，快照带上 isDead 时尸体
         // 恰好收殓隐藏。假死（reviving）不在此列——复苏后仍在烧，aura 保持。
         unitProj.isDead && !unitProj.reviving ? [] : unitProj.effects,
-        { particles: this.particles, unit: obj, gpu: this.gpuParticles });
+        { particles: this.particles, unit: obj, gpu: this._burnLink });
       auras.set(resolved);
       // 存续 aura 的强度追层数：set() 只管增删，burn level 等随 stacks 的更新走
       // def.update（stacks 3→7 火焰随旺；无 update 钩的 def 不受影响）
@@ -1106,8 +1124,12 @@ export class BattleStage {
     if (this._dumpMode === on || !this._snapshot) return;
     this._dumpMode = on;
     // D3 一键全弃（2026-09-21）：进模式即全选当前手牌——主按钮的「弃掉全部N张」
-    // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）
-    if (on) for (const c of this._snapshot.hand ?? []) this._dumpSel.add(c.uniqueID);
+    // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）。
+    // 2026-09-28：只选自由牌（激活咏唱不可弃）；迷你卡照常入选——迷你只管手牌
+    // 计数（计 0 张容量），与弃牌无关（同日用户裁定解耦）
+    if (on) for (const c of this._snapshot.hand ?? []) {
+      if (!c.isActivated) this._dumpSel.add(c.uniqueID);
+    }
     else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
@@ -1399,6 +1421,10 @@ export class BattleStage {
       return this._transformBeat(payload, finish);
     }
     if (type === EventNames.ANIM_SKILL_USED) return this._skillDisplay(payload, finish);
+    // 资源消耗/获取（魏启/AP 数字跳动）：数字由 syncState 承担；消耗粒子是纯装饰
+    // 并行拍——立即 finish 不占队列。卡费消耗（skillUniqueID 归属）的爆散+汇聚
+    // 已在 _skillDisplay 编排（先汇聚后发动），此处只补非卡来源的纯爆散
+    if (type === EventNames.ANIM_RESOURCE) return this._resourceBeat(payload, finish);
     // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
     // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
     // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）。
@@ -1507,9 +1533,35 @@ export class BattleStage {
     const id = payload?.skill?.uniqueID;
     const view = id != null ? this._views.get(id) : null;
     if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
+    // 卡费消耗粒子（资源消耗汇聚特效）：从资源图标爆散 → 汇聚到此卡边缘 →
+    // 汇聚抵达后才起飞发动（DRAIN_FLIGHT_MS 编排延迟）。费用读定义/覆写口径
+    // （PRE 修饰的实付偏差只影响粒子数量级，装饰可接受；X 费取当前读数）
+    let drainDelay = 0;
+    if (this._drainFx) {
+      const ov = payload?.skill?.costOverride;
+      const rawMana = ov?.mana ?? payload?.def?.cost?.mana ?? 0;
+      const rawAp = ov?.actionPoint ?? payload?.def?.cost?.actionPoint ?? 0;
+      const mana = rawMana === 'X' ? (this._resources?.mana.current ?? 0) : +rawMana || 0;
+      const ap = rawAp === 'X' ? (this._resources?.ap.current ?? 0) : +rawAp || 0;
+      if (mana > 0 || ap > 0) {
+        this._drainFx.playCardCost({ mana, ap, cardView: view });
+        drainDelay = DRAIN_FLIGHT_MS;
+        // 徽章辉光（2026-09-28 用户定）：粒子抵达时点亮 → 衰减，与汇聚组成
+        // 「能量注入开销标」的闭环。mask 位置已在 _setBakedFace 随卡面烘进 C0 链
+        // （costBadges），这里只推强度；与卡牌位移演出正交，直推 uniform。
+        const body = view?.fx?.body;
+        if (body?.costBadges?.length) {
+          gsap.fromTo(body.uCostGlow, { value: 1 }, {
+            value: 0, duration: 1.1, delay: DRAIN_FLIGHT_MS / 1000,
+            ease: 'power2.out', overwrite: 'auto',
+          });
+        }
+      }
+    }
     this._displayCard = { id };
     this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
       durationMs: 70,
+      delayMs: drainDelay,
       onComplete: () => {
         this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
           delayMs: 100,
@@ -1527,6 +1579,16 @@ export class BattleStage {
         });
       },
     });
+  }
+
+  // 资源消耗/获取节拍：数字跳动由 syncState 承担；消耗粒子是纯装饰并行拍，
+  // 立即 finish 不占队列。卡费消耗（带 skillUniqueID 归属）的爆散+汇聚已在
+  // _skillDisplay 编排（先汇聚后发动），此处只补非卡来源消耗的纯爆散
+  _resourceBeat(payload, finish) {
+    finish();
+    if (!payload || payload.delta >= 0 || !this._drainFx) return;
+    if (payload.skillUniqueID) return;
+    this._drainFx.playDrain({ kind: payload.kind, amount: -payload.delta });
   }
 
   // 队列中是否已有该卡的离场节拍（弃/焚/迁移）——读队列编排计划，不读后端状态
@@ -2750,8 +2812,12 @@ export class BattleStage {
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;
-    this.gpuParticles?.dispose(); // GPU 粒子池（aura dispose 已先摘除全部活跃单位）
-    this.gpuParticles = null;
+    this.particles2World?.dispose(); // 粒子池 v2（世界）
+    this.particles2World = null;
+    this.particles2Ui?.dispose(); // 粒子池 v2（UI 空间）
+    this.particles2Ui = null;
+    this._drainFx?.dispose(); // 汇聚特效跟随条目清空（池已 dispose，锚点随之失效）
+    this._drainFx = null;
     this.composeScene = null;
     this.composeResize = null;
     this._unsubTick?.();

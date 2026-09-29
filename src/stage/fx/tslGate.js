@@ -20,7 +20,8 @@ export const TSL_READY = {
   cardTransform: true,  // 卡牌变换叠层演出（fx/cardTransform.js）
   bodyFlames: true,     // 单位环身火幕（aura L1）
   stasisShell: true,    // 凝滞结晶壳（aura L2）
-  gpuParticles: true,   // GPU 粒子池三件套（W5 compute 化已落地，2026-09-27）
+  // （gpuParticles 键已随旧池删除——2026-09-28 粒子池 v2（particlePool.js）接管，
+  //   v2 无 WebGL 对照路径，不需要闸门）
 };
 
 // onBeforeCompile 补丁件（unitBodyFx/cardBodyFx/charBurn/ParticleSystem）不在此表——

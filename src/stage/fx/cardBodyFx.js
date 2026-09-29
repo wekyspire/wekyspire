@@ -12,15 +12,21 @@
 //   uSeed            焚毁噪声种子（每张卡咬边形状不同，点燃时写入）
 //   uDim       0..1  禁用态：去饱和 + 压暗 + 微冷
 //   uHighlight 0..1  高亮态：提亮 + 微暖 + 极轻呼吸（uTime 驱动）
+//   uCostGlow  0..1  费用徽章辉光（出牌消耗反馈，2026-09-28 用户定）：徽章 mask 内
+//                    原色 ×4——徽章数字/图标等高亮像素被拉过 bloom 阈 1.45 起晕，
+//                    暗环乘完仍暗，天然「只有图案在发光」；另叠阈下加色保底可读性。
+//                    （×4 的冗余是为衰减后段留的：uCostGlow≈0.5 时峰值仍过阈。）
+//                    徽章位置 = rec.costBadges（CardObject._setBakedFace 按 cardFace.js
+//                    的 costBadgeUvs 填，rebind 时静态烘进 mask——换脸自动跟随）
 //   uTime            秒计时（CardFxLayer 的层内统一钟推进）
 // 纪律：
 //   · 只动 rgb，不碰 alpha——命中热区/透明度语义零影响；
-//   · HDR 约定：焚毁火线峰 ~2.05 过 uiScene bloom 阈 1.45（既有视觉，刻意保留）；
+//   · HDR 约定：焚毁火线峰 ~2.05 与徽章辉光 ×3.4 过 uiScene bloom 阈 1.45（刻意保留）；
 //     状态档（dim/highlight）全部压阈下——状态是读数不是演出；
-//   · 合成顺序固定：状态档 → 焚毁（焚毁最大，盖过一切状态）。
+//   · 合成顺序固定：状态档 → 徽章辉光 → 焚毁（焚毁最大，盖过一切状态）。
 import {
   Fn, If, Discard, uniform, uv, materialColor,
-  vec2, vec3, vec4, mix, sin, dot, floor, fract, oneMinus,
+  vec2, vec3, vec4, mix, sin, dot, floor, fract, oneMinus, length, smoothstep,
 } from 'three/tsl';
 
 const PATCH_KEY = '_cardBodyFx';
@@ -56,7 +62,7 @@ const cbfShade = Fn(([base, uDim, uHighlight, uTime]) => {
 
 /**
  * 给牌面材质挂 C0 特效（幂等：已挂过直接取原记录）。
- * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, rebind: () => void }}
+ * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, uCostGlow, costBadges, rebind: () => void }}
  */
 export function attachCardBodyFx(material) {
   if (material.userData[PATCH_KEY]) return material.userData[PATCH_KEY];
@@ -66,6 +72,10 @@ export function attachCardBodyFx(material) {
     uDim: uniform(0),
     uHighlight: uniform(0),
     uTime: uniform(0),
+    uCostGlow: uniform(0),
+    // 出席费用徽章 [{kind:'mana'|'ap', u, vTop}]（纹理 uv，v 顶起）——
+    // CardObject._setBakedFace 按 cardFace.costBadgeUvs 填；rebind 烘成 mask 常量
+    costBadges: [],
     // 牌面纹理落地（_setBakedFace 换脸）后调：重建 colorNode 链
     // （同构图命中 program 缓存，变换换脸只换纹理绑定不重编译）
     rebind: () => {
@@ -76,6 +86,20 @@ export function attachCardBodyFx(material) {
         const base = materialColor;
         const fxUv = uv();
         const c = cbfShade(base.rgb, rec.uDim, rec.uHighlight, rec.uTime).toVar();
+        // 费用徽章辉光（出牌消耗反馈）：徽章 mask 内原色 ×4 拉爆 HDR——高亮图案
+        // 像素过 bloom 阈起晕，暗环乘完仍暗（「只有徽章图案在发光」，光晕由 bloom
+        // pass 代劳）；再叠阈下同色加色保底徽章整体可读。构建期按 costBadges 静态
+        // 展开（≤2 枚；空数组 = 整段无操作）。
+        If(rec.uCostGlow.greaterThan(0.001), () => {
+          for (const b of rec.costBadges) {
+            // uv 底起 ↔ 徽章 v 顶起；像素距离（×200/270 还原等比圆）
+            const dPx = fxUv.sub(vec2(b.u, 1.0 - b.vTop)).mul(vec2(200.0, 270.0));
+            const m = oneMinus(smoothstep(10.5, 12.5, length(dPx)));
+            const tint = b.kind === 'mana' ? vec3(0.35, 0.55, 1.0) : vec3(1.0, 0.78, 0.3);
+            c.assign(mix(c, c.mul(4.0), m.mul(rec.uCostGlow)));
+            c.addAssign(tint.mul(m).mul(rec.uCostGlow).mul(0.3));
+          }
+        });
         // 焚毁（C0 上段，离场演出）：双频值噪声咬边火线，自底向上吞蚀
         If(rec.uBurn.greaterThan(0.001), () => {
           const n = cbfNoise(fxUv.mul(vec2(5.0, 8.0)).add(vec2(rec.uSeed, rec.uSeed.mul(0.7)))).mul(0.6)

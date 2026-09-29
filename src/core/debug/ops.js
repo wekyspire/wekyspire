@@ -22,6 +22,7 @@ import { generateEncounter } from '../run/runFlow.js';
 import { spawnRewards, chooseRewardPack, availablePacks } from '../run/rewards.js';
 import { ensureShopStock } from '../run/rooms/shop.js';
 import { ensureGurpasStock } from '../run/rooms/gurpas.js';
+import { enterSlotRoom } from '../run/rooms/slotMachine.js';
 import { bankOnVisit } from '../run/rooms/bank.js';
 
 // 走 baseStats + 重算的「上限类」字段 → 该字段在 baseStats 里的键名
@@ -189,7 +190,7 @@ export function enterRoom(run, roomId) {
   run.gameStage = 'room';
   run.rewards = null;
   ensureShopStock(run);                                   // 售货机与房间并存（商店层）
-  if (roomId === 'slot') bankOnVisit(run);                // 见银行机一次（递减超额取款黑名单）
+  if (roomId === 'slot') { enterSlotRoom(run); bankOnVisit(run); } // 免费抽赠送 + 见银行机一次（递减超额取款黑名单）
   if (roomId === 'gurpas') ensureGurpasStock(run);
   return `进入房间：${roomId}`;
 }

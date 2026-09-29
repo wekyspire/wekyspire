@@ -34,6 +34,18 @@ function intentionOf(def, unit, battleState) {
   return def.getIntention ? def.getIntention(unit, battleState) : { kinds: ['unknown'] };
 }
 
+// 意图数值口径要吃 PRE 修饰族里「结算前可预知」的部分：蓄势对该单位所有非固定伤害
+// +层数（effects.js PRE 订阅），getIntention 的 damage 不含它的话预告系统性偏低
+// （0929 试玩实报：石茧意图 13 实打 17）。攻击类数值统一加当前蓄势层数。
+// 注：蓄势受生命伤害会掉层，玩家打完后实打可能低于预告——预报口径与既有一致。
+export function withMomentumBonus(unit, intention) {
+  const stacks = unit.getEffectStacks?.('momentum') ?? 0;
+  if (stacks > 0 && typeof intention?.damage === 'number' && intention.kinds?.includes('attack')) {
+    return { ...intention, damage: intention.damage + stacks };
+  }
+  return intention;
+}
+
 // 全量刷新 AI 单位意图（含晕眩覆写：预告 = 实际，其下回合行动必被 veto 跳过）。
 // 调用点：敌方回合结束预算（turn.js）、每次 AI 行动结算后（本文件）、
 // 玩家每次出牌结算后（skill.js）——三者之外场面不变，意图不会陈旧。
@@ -41,11 +53,11 @@ export function refreshIntentions(ctx) {
   for (const e of aliveEnemies(ctx.battleState)) {
     e.intention = e.getEffectStacks('stun') > 0
       ? { kinds: ['stun'], note: '晕眩：跳过行动' }
-      : intentionOf(getEnemyDefinition(e.defId), e, ctx.battleState);
+      : withMomentumBonus(e, intentionOf(getEnemyDefinition(e.defId), e, ctx.battleState));
   }
   for (const a of aliveAllies(ctx.battleState)) {
     a.intention = a.getEffectStacks('stun') > 0
       ? { kinds: ['stun'], note: '晕眩：跳过行动' }
-      : intentionOf(getAllyDefinition(a.defId), a, ctx.battleState);
+      : withMomentumBonus(a, intentionOf(getAllyDefinition(a.defId), a, ctx.battleState));
   }
 }

@@ -70,7 +70,11 @@ export default defineConfig(({mode}) => {
     },
     server: {
       host: 'localhost',
-      port: 5177
+      port: 5177,
+      // 公网远程验收口：wekyspire-dev.hineven.site 经服务器 Apache 反代 + SSH 反向
+      // 隧道打进本机，Host 头非 localhost 会被 vite ≥4.5 的 DNS rebinding 防护 403。
+      // 白名单只放这一个域（不开 true——dev 服务器暴露面越小越好）。
+      allowedHosts: ['wekyspire-dev.hineven.site'],
     },
     build: {
       // 目标环境 es2022（2026-09-27 WebGPU 迁移随行）：游戏本就只跑支持 WebGPU 的新设备

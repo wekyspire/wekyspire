@@ -763,7 +763,9 @@ adrenalineCard({ id: 'adrenaline', tier: 'B', draw: 2, promotesTo: 'adrenalineA'
 adrenalineCard({ id: 'adrenalineA', tier: 'A', draw: 3 });
 
 // 情况不对（起始套牌泛用保险，等阶记 C——2026-09-21 移除 D 阶）：固有消耗卡——
-// 弃全手牌抽等量，鬼抽时的整体重调。
+// 弃全手牌抽等量，鬼抽时的整体重调。2026-09-28 用户定加「迷你」词条（计 0 张手牌）：
+// 双资源蓄能给了单回合极高爆发上限、数值被下调，反而放大首回合鬼抽挫败感——
+// 迷你让这张保险「起手抽到 = 不鬼抽」，确定性兜底。
 // 2026-09-13 用户定：激活的咏唱卡豁免（与 P9 尾弃同一豁免口径——付费点亮的咏唱不被
 // 保险卡掐灭），只弃非激活的手牌。固有保证起手必然上手（详见 namedTerms「固有」）；
 // 不入奖励池：系统级保险卡，定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
@@ -772,7 +774,7 @@ registerSkill({
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
-  keywords: ['exhaust', 'innate'],
+  keywords: ['exhaust', 'innate', 'mini'],
   canSpawnAsReward: false,
   use(sctx) {
     // 自身已在结算区（pending），手中即其余卡：弃掉非激活咏唱的全部，抽等量
@@ -788,7 +790,8 @@ registerSkill({
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
-// 拳（C）×5 + 盾（C）×4 + 抱头（C）×1 + 肾上腺素 ×1 + 情况不对 ×1
+// 拳（C）×5 + 盾（C）×4 + 抱头（C）×1 + 肾上腺素 ×1 + 情况不对 ×1（2026-09-28 用户定
+// 收窄回一张：双情况不对组合逆天；迷你词条保留——计 0 张手牌，抽到不卡手）
 //（肾上腺素 ×2 ——第二张由体修基础能力追加，见 routes.js）
 // （2026-09-21 用户定：12 张加厚；抱头经「全系 +4 护盾」强化后换回一张盾归位——
 // 格挡链首重新成为体修开局种子）。

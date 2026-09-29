@@ -6,6 +6,7 @@ import { getEnemyDefinition } from '../enemies/registry.js';
 import { spawnRewards, isRewardsClaimed } from './rewards.js';
 import { ascensionReady } from './ascension.js';
 import { ensureShopStock, isShopFloor } from './rooms/shop.js';
+import { enterSlotRoom } from './rooms/slotMachine.js';
 import { accrueBankInterest, consumePendingDebuffs, bankOnDeath, bankOnVisit } from './rooms/bank.js';
 import { ensureGurpasStock, GURPAS_FLOOR } from './rooms/gurpas.js';
 import { activeRelics, grantRelic } from './prep.js';
@@ -165,7 +166,7 @@ export function completeRewards(run) {
     // 售货机与房间**并存**（不占房间名额）：商店层进房时把当层货架掷好（按楼层缓存）
     ensureShopStock(run);
     // 银行机与老虎机成对出现：进老虎机房即算"见到银行机一次"（递减超额取款黑名单）
-    if (run.currentRoom === 'slot') bankOnVisit(run);
+    if (run.currentRoom === 'slot') { enterSlotRoom(run); bankOnVisit(run); }
     if (run.currentRoom === 'gurpas') ensureGurpasStock(run);  // 进店掷货架（同层不重掷）
     return run;
   }

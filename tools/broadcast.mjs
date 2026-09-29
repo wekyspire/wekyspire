@@ -176,9 +176,15 @@ function runSnapshot(S) {
     trainingCount: p.trainingCount, ascensionCount: p.ascensionCount,
     abilities: [...(p.abilities ?? [])], relics: [...(p.equippedRelics ?? [])],
     deck: S.run.player.deck.map(c => ({ defId: c.defId, name: defOf(c)?.name ?? c.defId })),
-    encounter: (S.run.encounter ?? []).map(e => ({
-      defId: e.defId, name: getEnemyDefinition(e.defId)?.name ?? e.defId, maxHp: e.maxHp,
-    })),
+    // encounter 元素双形状：缩放描述符（{defId,...}）｜裸 id 字符串（saveForge --enemy
+    // 测试直塞，spawnEnemy 同吃这两种）——中继按同口径归一，且名字反查不许抛
+    // （未注册 id 退回原值，别让一个坏条目炸掉快照）
+    encounter: (S.run.encounter ?? []).map((e) => {
+      const id = typeof e === 'string' ? e : e?.defId;
+      let name = id ?? '?';
+      try { name = getEnemyDefinition(id)?.name ?? name; } catch { /* 未注册：保留原值 */ }
+      return { defId: id, name, maxHp: typeof e === 'object' ? e.maxHp : undefined };
+    }),
   };
 }
 
@@ -565,5 +571,14 @@ server.on('error', (err) => {
 });
 
 setInterval(() => {
-  for (const name of scanFiles()) watcherFor(name).poll();
+  for (const name of scanFiles()) {
+    // 单个会话的快照/重放异常不得炸掉整个守护进程（2026-09-27 实录：fctest 存档的
+    // encounter 是裸 id 字符串数组，runSnapshot 按对象形状读 e.defId 抛「未注册的敌人:
+    // undefined」，中继整个退出——一个坏会话拖死全部直播流）。记日志、跳过该会话本轮。
+    try {
+      watcherFor(name).poll();
+    } catch (err) {
+      console.error(`[broadcast] 会话 ${name} 轮询失败（跳过本轮）：${err.message}`);
+    }
+  }
 }, INTERVAL);

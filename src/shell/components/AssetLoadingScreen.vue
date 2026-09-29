@@ -14,6 +14,9 @@ const props = defineProps({
   failed: { type: Number, default: 0 },
   // WebGPU 兼容性检查失败（用户定 2026-09-27：不支持即卡死在本界面，无回退无重试）
   gpuUnsupported: { type: Boolean, default: false },
+  // 失败原因细分：非安全上下文（http + 非 localhost——navigator.gpu 根本不存在）。
+  // 与硬件真不支持区分开，给「换 https/localhost」的可操作引导（2026-09-28 裸 IP 踩坑）
+  gpuInsecure: { type: Boolean, default: false },
 });
 const emit = defineEmits(['retry']);
 
@@ -74,7 +77,11 @@ const etaText = computed(() => {
          不做 WebGL 回退）；不给重试（重试也过不了硬件门） -->
     <div v-if="gpuUnsupported" class="al-fail">
       <div class="al-fail-text">此设备/浏览器不支持 WebGPU，无法运行本游戏</div>
-      <div class="al-sub">请使用较新的桌面版 Chrome / Edge / Firefox / Safari 并确保硬件加速开启</div>
+      <div v-if="gpuInsecure" class="al-sub">
+        检测到当前页面不在安全上下文（http + 非 localhost）——WebGPU 只在 https 或 localhost 下可用。<br>
+        若你正在用裸 IP 地址访问，请改用 https 域名（或本机 localhost）后刷新。
+      </div>
+      <div v-else class="al-sub">请使用较新的桌面版 Chrome / Edge / Firefox / Safari 并确保硬件加速开启</div>
     </div>
     <template v-else>
     <div class="al-bar"><div class="al-fill" :style="{ width: pct + '%' }"></div></div>

@@ -157,7 +157,9 @@ export class ApplyDamageInstruction extends BattleInstruction {
 
     ctx.presenter?.damage?.({
       source: this.source, target, dealt: dmg,
-      defenseBlocked, shieldAbsorbed, pierce,
+      // gross = 发动侧修饰后、PRE 管线前的总额（甲壳/伤残/虚弱的净减伤归因基线；
+      // payload.damage 已被 PRE 改写，不能用）
+      gross: this.amount, defenseBlocked, shieldAbsorbed, pierce,
       // 伤害出处卡（标量 id，可序列化）：日志/观战按它归属「哪张牌打的」——
       // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡（r21-a6 实报）。
       // skillDefId 覆写优先：斩链打出拍「先变身后结算」，self.defId 已是下一阶名

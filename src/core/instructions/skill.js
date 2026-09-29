@@ -155,8 +155,10 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
       const mana = rawMana === 'X' ? ctx.player.mana : rawMana;
       const ap = rawAp === 'X' ? ctx.player.actionPoints : rawAp;
       if (rawMana === 'X' || rawAp === 'X') this.skill.xCost = { mana, actionPoint: ap };
-      if (mana > 0) ctx.kernel.submitInstruction(new ConsumeManaInstruction({ amount: mana }), this);
-      if (ap > 0) ctx.kernel.submitInstruction(new ConsumeActionPointsInstruction({ amount: ap }), this);
+      if (mana > 0) ctx.kernel.submitInstruction(new ConsumeManaInstruction(
+        { amount: mana, sourceSkillId: this.skill.uniqueID }), this);
+      if (ap > 0) ctx.kernel.submitInstruction(new ConsumeActionPointsInstruction(
+        { amount: ap, sourceSkillId: this.skill.uniqueID }), this);
       return false;
     }
     // 消耗一次充能，并按需启动冷却计时

@@ -14,7 +14,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     w.push({
       kind: 'button', id: 'slot:spin', width: 260, size: 'main',
       label: s.spinning ? '转动中…'
-        : (s.freeRolls > 0 ? `拉杆！（免费${s.freeRolls > 1 ? ` ×${s.freeRolls}` : ''}）` : `拉杆！（${s.cost} 金）`),
+        : (s.freeRolls > 0 ? `拉杆！（免费${s.freeRolls > 1 ? ` ×${s.freeRolls}` : ''}）` : `拉杆！（${s.cost} 金币）`),
       enabled: !!s.canSpin && !s.spinning,
       action: { action: 'spin' },
     });

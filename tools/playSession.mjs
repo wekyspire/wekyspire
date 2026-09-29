@@ -12,7 +12,7 @@
 // format.mjs（中文文本）/ addressing.mjs（编号+卡名寻址）/ files.mjs（会话文件）。
 // 本文件只做汇总再导出，故 import 路径保持 `tools/playSession.mjs` 不变。
 export { freshState, freshStateFromSave, exec, stageCn } from './session/engine.mjs';
-export { render, renderDeck, renderLib, renderRelics, renderTerms } from './session/render.mjs';
+export { render, renderDeck, renderLib, renderRelics, renderTerms, renderRules, renderLog } from './session/render.mjs';
 export { defOf } from './session/format.mjs';
 export { sessionDir, sessionPath, listSessions, readSession, writeSession } from './session/files.mjs';
 
@@ -37,7 +37,9 @@ export const HELP = `建档：
   进阶: dim 火|木|空|跳过（首次点亮某系：获赠该系基石卡2张+体系能力，再开种子九选三；
         跳过=体修等级+1：之后能抽到更高阶的体修卡牌） | reroll | ability <#|skip>
         | seed <#> <卡名>,<#> <卡名>,<#> <卡名>（选3张入组）
-  通用: state | deck | lib | relics（遗物效果一览） | terms（词条/效果释义） | note <文本> | help
+  通用: state | deck | lib | relics（遗物效果一览） | terms（词条/效果释义） | rules（回合结构/
+        基础语义速查——咏唱点亮解除/留手保留/主语约定「裸写=自己」等，开局先读一遍）
+        | log [N]（长战斗日志，默认40条——「最近结算」只有10条） | note <文本> | help
 ※ 打牌/选牌：**批处理里请只用卡名**（如 play 拳）——卡名是**精确匹配**（2026-09-26 定：不再前缀容错，
   「盾」不会打到「盾墙」）。同名同态直接取第一张；消歧三选一：「拳#2」（第几张）｜「拆招B」（等阶
   后缀）｜「编号+卡名」（仅单次调用可靠——出牌后手牌编号会整体前移）。找不到时报错会附相近名

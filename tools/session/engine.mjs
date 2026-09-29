@@ -121,7 +121,12 @@ export function battleLogText(S, tail = 10) {
         if ((p.dealt ?? 0) <= 0 && (p.shieldAbsorbed ?? 0) <= 0 && (p.defenseBlocked ?? 0) <= 0) break;
         const src = p.source?.name ?? (p.pierce ? '持续伤害' : '环境'); // 燃烧/中毒等无来源穿透伤
         const via = p.skillDefId ? `[${getSkillDefinition(p.skillDefId)?.name ?? p.skillDefId}]` : '';
+        // PRE 侧净减伤（甲壳减半/伤残/虚弱等不吃盾不占防，0929 三路试玩都在此对不上账：
+        // 预演所见即所得、落地也真减，但日志行不归因——「15 怎么变 8」成了悬案）
+        const preCut = (p.gross ?? (p.dealt ?? 0) + (p.shieldAbsorbed ?? 0) + (p.defenseBlocked ?? 0))
+          - (p.dealt ?? 0) - (p.shieldAbsorbed ?? 0) - (p.defenseBlocked ?? 0);
         lines.push(`${src}${via} → ${p.target?.name}: ${p.dealt}伤`
+          + `${preCut > 0 ? `（减${preCut}·甲壳/伤残/虚弱类）` : ''}`
           + `${p.pierce ? '（穿透）' : ''}${p.shieldAbsorbed ? `（盾挡${p.shieldAbsorbed}）` : ''}`
           + `${p.defenseBlocked ? `（防挡${p.defenseBlocked}）` : ''}`);
         break;
@@ -315,7 +320,7 @@ function execBattle(S, cmd, t) {
         + `｜AP ${apCost === 'X' ? 'X(全部)' : apCost}（有 ${pl.actionPoints}）`
         + (freeToggle ? '｜已激活咏唱：本次免费' : ''));
       // 冷却只在「充能耗尽」时才是阻塞原因（满充能卡预置的计时是无意义残留，不展示，免误导）
-      L.push(`  充能: 剩余 ${rt.remainingUses}`
+      L.push(`  充能: ${Number.isFinite(rt.remainingUses) ? `剩余 ${rt.remainingUses}` : '无限制'}`
         + (rt.remainingUses <= 0 && rt.currentCooldown > 0
           ? `，冷却剩 ${rt.currentCooldown} 拍（每回合开始推进 1 拍`
             + `${def.cooldownOnEnterDeck ? '；此卡入库时再推进 1 拍' : ''}）` : ''));
@@ -370,22 +375,35 @@ function execBattle(S, cmd, t) {
       const sideLoss = [...handBefore.entries()]
         .filter(([uid]) => uid !== skill.uniqueID && !stillHand.has(uid))
         .map(([uid, nm]) => `${nm}→${inBurnt.has(uid) ? '焚毁' : inDeck.has(uid) ? '牌库底' : '离场'}`);
-      S.lastOutcome = `打出 ${name}${note}${deadTargetNote}`
+      // 目标回执（0929 试玩实报：显式指定目标同样看不出打的是谁——敌人同名扎堆时
+      // 无法对账；默认目标与指定目标统一点名）
+      const targetNote = defOf(skill).targetMode === 'enemy'
+        ? `（目标：${target?.name ?? battle.battleState.enemies.find(e => !e.isDead())?.name ?? '?'}）` : '';
+      S.lastOutcome = `打出 ${name}${note}${targetNote}${deadTargetNote}`
         + (sideLoss.length ? `\n  顺带离手：${sideLoss.join('、')}` : '');
       if (isBattleFinished(battle)) settleBattle(S);
       return;
     }
     case 'swap': // 旧会话兼容（改制前单张换牌 → 一键全弃）
     case 'dump': {
-      // 弃牌（2026-09-21 D3 一键全弃）：付一次阶梯费（swapCostOf）弃掉**全部**手牌——
-      // 不再支持逐张挑选（UI 侧亦无挑选语义）；旧会话的编号/卡名参数一律忽略
+      // 弃牌（2026-09-21 D3 一键全弃）：付一次阶梯费（swapCostOf）弃掉**全部自由牌**。
+      // 与 UI 同口径（激活咏唱不可弃）：headless 旧实现把全量 uniqueID 直接塞给 core，
+      // 手上一有点亮咏唱就被整体拒绝、报错还误指 AP/行动窗——0929 试玩实报
+      // 「dump 三局一次都没成功」的根因
       const battle = ensureBattle(S);
       const hand = battle.battleState.zones.hand;
       if (!hand.length) throw new Error('手牌为空，无法弃牌');
-      const ids = hand.map(s => s.uniqueID);
+      const free = hand.filter(s => !s.isActivated);
+      if (!free.length) throw new Error('手牌只有已激活的咏唱卡，没有可弃的自由牌');
+      const ids = free.map(s => s.uniqueID);
+      const handCount = hand.length; // 执行后 hand 会被搬空，消息先快照
       const cost = swapCostOf(battle.battleState);
-      if (!playerDumpCards(battle, ids)) throw new Error(`无法弃牌（需 ${cost}AP/不在自由行动窗）`);
-      S.lastOutcome = `弃牌（付 ${cost}AP 弃全部 ${ids.length} 张）`;
+      if (battle.ctx.player.actionPoints < cost) {
+        throw new Error(`无法弃牌（阶梯费 ${cost}AP，当前 ${battle.ctx.player.actionPoints}AP）`);
+      }
+      if (!playerDumpCards(battle, ids)) throw new Error('无法弃牌（当前不在你的自由行动窗）');
+      S.lastOutcome = `弃牌（付 ${cost}AP 弃 ${ids.length}/${handCount} 张自由牌`
+        + `${handCount !== ids.length ? '，激活咏唱保留' : ''}）`;
       return;
     }
     case 'end': {
@@ -429,9 +447,12 @@ function execBattle(S, cmd, t) {
           const i = idxOk(num(idxArg), cands.length, '候选');
           const id = cands[i];
           if (nameArg != null) {
+            // 候选可能是区内 runtime（uniqueID）或纯 defId（发现池新卡）——名字校验按同一
+            // 解析链取中文名（0927 实录：应答只能敲 fireControlDisturb 这类裸 id）
             const card = byId.get(id);
-            const actual = card ? defOf(card).name : id;
-            if (!nameMatches(nameArg, actual)) {
+            const def = card ? defOf(card) : getSkillDefinition(id);
+            const actual = def?.name ?? id;
+            if (!nameMatches(nameArg, actual) && !nameMatches(nameArg, id)) {
               throw new Error(`候选第${idxArg}个是「${actual}」，不是「${nameArg}」——请对照待输入列表重试`);
             }
           }
@@ -753,7 +774,9 @@ function execRoomSlot(S, t) {
   // 拉一次杆：产出会挂起（文档：产出总是可以放弃）→ 需 claim/drop 处理
   if (a === 'spin') {
     const prize = spinSlot(run);
-    S.lastOutcome = `老虎机(-${prize.cost}金币)：${prize.tier === 'none' ? '未中奖（无产出，可直接再 act spin）' : slotResultText(prize)}`
+    // 免费拉杆显示「免费」而非扣费额——0927 试玩实录：免费抽显示 (-5金币) 误导血亏排查
+    const costTag = prize.free ? '（免费）' : `(-${prize.cost}金币)`;
+    S.lastOutcome = `老虎机${costTag}：${prize.tier === 'none' ? '未中奖（无产出，可直接再 act spin）' : slotResultText(prize)}`
       + (prize.tier === 'none' ? '' : '（用 act claim <#|id> 领取 / act drop 放弃）');
     return;
   }
@@ -881,7 +904,10 @@ function execRoomEvent(S, t) {
     }
     const r = playEvent(run, { choice });
     S.roomDone = true;
-    S.lastOutcome = `事件：${eventResultText(r)}`;
+    // resolve 结果页的叙述文本必须带上（0929 试玩实报：拆无可拆/彩头滚落等无效果
+    // 日志的分支，只给效果摘要会显示成「无事发生」，玩家以为选项坏了）
+    const narr = r?.pages?.at(-1)?.text;
+    S.lastOutcome = `事件：${eventResultText(r)}${narr ? `\n  ${plain(narr)}` : ''}`;
     return;
   }
   if (a === 'skip') { // 不想触发事件时直接离开（与老虎机同口径）

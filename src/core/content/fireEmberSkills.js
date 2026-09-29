@@ -153,26 +153,66 @@ heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
 // 上燃烧的被动，与现行火系语言脱节；设计稿行与进阶种子池同步移除。）
 
 // ==== 控火系列（多功能散牌）===================================================
-// 「发现 0 费控火术」的卡池：2026-09-21 起走 runtime 费用覆写通道（skill.costOverride，
-// 见 instructions/skill.js ConsumeSkillResourcesInstruction）——候选与入手都直接
-// 用正式 def，费用覆写盖在 runtime 上随卡旅行；此前的 0 费镜像 def（xxxZero）已拆除。
+// 2026-09-28 用户定：控火术压缩为三张找卡（攻杀/守御/杂技 C/B/A），效果卡改
+// 发现制（不进卡包奖池、不再直接掉落）；效果卡无晋升链（衍生牌不沉淀）。
+// 找卡/无上经 FIRE_CONTROL_IDS 引用池。
 const FIRE_CONTROL_IDS = [];
 
-// 族内晋升分岔（用户定 2026-09-13）：升级必须提升等阶，故同族按等阶跨档互升——
-// C（燃/扰）→ B 三选一（散/收/灼）；B → A 三选一（爆/聚/炼）；S（无上）阶梯外不接。
-// 抉择走升级子面板；随机升级由 promoteCard 随机取分叉。
-const FIRE_CONTROL_B = ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch'];
-const FIRE_CONTROL_A = ['fireControlDetonate', 'fireControlGather', 'fireControlRefine'];
-
-function registerFireControlPair(id, name, tier, mana, targetMode, def, promotesTo = null) {
+// 效果卡注册：canSpawnAsReward: false（只被三张找卡与无上发现，不进奖励池）；
+// 无 promotesTo（衍生牌、不沉淀，升级无意义）。
+function registerFireControlPair(id, name, tier, mana, targetMode, def) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireControl',
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'normal', ...def,
-    cost: { mana, actionPoint: 0 }, targetMode, promotesTo,
+    cardMode: 'normal', canSpawnAsReward: false, ...def,
+    cost: { mana, actionPoint: 0 }, targetMode,
   });
   FIRE_CONTROL_IDS.push(id);
 }
+
+// 找卡注册：同名三链（攻杀/守御/杂技）各 C/B/A，C 1AP、B/A 0AP，全员消耗；
+// 段 0 请求选卡，段 1 addCard 入手（产物真卡，costOverride 不盖——费用即 def）。
+function fireControlFinderCard({ id, name, tier, actionPoint, pool, promotesTo = null }) {
+  registerSkill({
+    id, name, type: 'fire', tier, series: 'fireControlFinder',
+    cost: { mana: 0, actionPoint },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx, stage) {
+      if (stage === 0) {
+        sctx.self._find = requestPoolSelection(sctx, { defs: pool, reason: `${name}：发现一张控火术` });
+        return sctx.self._find ? false : true;
+      }
+      const [defId] = selected(sctx.self._find);
+      sctx.self._find = null;
+      if (defId) addCard(sctx, defId, { toZone: 'hand' });
+      return true;
+    },
+    describe: () => `/named{发现}一张控火术`,
+    battleDescribe: () => `/named{发现}一张控火术`,
+  });
+}
+
+const FC_POOL_ATTACK_C = ['fireControlBurn', 'fireControlScorch'];
+const FC_POOL_ATTACK_A = [...FC_POOL_ATTACK_C, 'fireControlDetonate'];
+const FC_POOL_GUARD_C = ['fireControlDisturb', 'fireControlHarvest'];
+const FC_POOL_GUARD_A = [...FC_POOL_GUARD_C, 'fireControlShift'];
+const FC_POOL_ACRO_C = ['fireControlGather', 'fireControlSpread'];
+const FC_POOL_ACRO_A = [...FC_POOL_ACRO_C, 'fireControlRefine'];
+
+fireControlFinderCard({ id: 'fireControlFinderAtkC', name: '攻杀控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkB' });
+fireControlFinderCard({ id: 'fireControlFinderAtkB', name: '攻杀控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkA' });
+fireControlFinderCard({ id: 'fireControlFinderAtkA', name: '攻杀控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ATTACK_A });
+
+fireControlFinderCard({ id: 'fireControlFinderGuardC', name: '守御控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardB' });
+fireControlFinderCard({ id: 'fireControlFinderGuardB', name: '守御控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardA' });
+fireControlFinderCard({ id: 'fireControlFinderGuardA', name: '守御控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_GUARD_A });
+
+fireControlFinderCard({ id: 'fireControlFinderAcroC', name: '杂技控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroB' });
+fireControlFinderCard({ id: 'fireControlFinderAcroB', name: '杂技控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroA' });
+fireControlFinderCard({ id: 'fireControlFinderAcroA', name: '杂技控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ACRO_A });
 
 // 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
 registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
@@ -187,7 +227,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
   },
-}, ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch']);
+});
 
 // 控火术：灭 已于 2026-09-13 按用户新文档删除（拍板：驱散敌方燃烧与叠炎主轴背道而驰，
 // 清燃烧的正向出口由控火术：收/爆/聚 承担，自身泄压由新卡「灭火」承担）。
@@ -204,7 +244,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy',
         && instr.type === 'major'
         && instr.target.side === 'enemy' && !instr.target.isDead(),
       react: (instr, ctx) => {
-        const stacks = Math.floor((instr.result?.dealt ?? 0) / 3);
+        const stacks = Math.floor((instr.result?.dealt ?? 0) / 2);
         if (stacks > 0) {
           ctx.kernel.submitInstruction(new AddEffectInstruction({
             target: instr.target, effectId: 'burn', stacks,
@@ -214,8 +254,8 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy',
     });
     return true;
   },
-  describe: () => '下次攻击每造成3伤害，赋予/effect{燃烧}1',
-}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
+  describe: () => '下次攻击每造成2伤害，赋予/effect{燃烧}1',
+});
 
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
 // 口径：多成员时按「传播」语义——每名其它成员各获得全额层数（与鬼火
@@ -237,7 +277,7 @@ registerFireControlPair('fireControlSpread', '控火术：散', 'B', 2, 'enemy',
     return true;
   },
   describe: () => '消耗目标全部/effect{燃烧}，叠加到其阵营其它成员身上',
-}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
+});
 
 // 控火术：收 B —— 消耗目标所有燃烧，每 3 层获得 1 魏启（走上限截断管线）。
 registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy', {
@@ -258,7 +298,7 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy'
     const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
     return `消耗目标全部/effect{燃烧}（当前${stacks}层），获得${Math.floor(stacks / 3)}魏启`;
   },
-}, ['fireControlDetonate', 'fireControlGather', 'fireControlRefine']);
+});
 
 // 控火术：扰 C（2026-09 由 B 改 C）—— 消耗自身所有燃烧，每层获得 3 护盾。
 registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none', {
@@ -266,15 +306,15 @@ registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none',
     const stacks = sctx.player.getEffectStacks('burn');
     if (stacks <= 0) return true;
     addEffect(sctx, 'burn', -stacks, sctx.player);
-    gainShield(sctx, stacks * 3);
+    gainShield(sctx, stacks * 2);
     return true;
   },
-  describe: () => '消耗自身全部/effect{燃烧}，每层获得3护盾',
+  describe: () => '消耗自身全部/effect{燃烧}，每层获得2护盾',
   battleDescribe: (sctx) => {
     const stacks = sctx.player.getEffectStacks('burn');
-    return `消耗自身全部/effect{燃烧}（当前${stacks}层），获得${stacks * 3}护盾`;
+    return `消耗自身全部/effect{燃烧}（当前${stacks}层），获得${stacks * 2}护盾`;
   },
-}, ['fireControlSpread', 'fireControlHarvest', 'fireControlScorch']);
+});
 
 // 控火术：爆 A —— 消耗所有敌人的全部燃烧，每层对全体敌人造成 1 点群伤
 // （口径："敌人"取敌方全体——与同系列始终用"目标"指代单体的写法相区别；
@@ -308,7 +348,7 @@ registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 4, 'enemy
 
 // 控火术：聚 A —— 场上所有燃烧迁移至目标（自身/盟友/其余敌人的燃烧全部转移，
 // 目标自身原有层数保留累加）。
-registerFireControlPair('fireControlGather', '控火术：聚', 'A', 4, 'enemy', {
+registerFireControlPair('fireControlGather', '控火术：聚', 'C', 3, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -323,6 +363,25 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'A', 4, 'enemy',
     return true;
   },
   describe: () => '场上所有/effect{燃烧}迁移至目标',
+});
+
+// 控火术：变 A —— 烈焰亲和1，消耗自身所有燃烧，每2层获得烈焰亲和1（2026-09-28 新卡）。
+registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
+  use(sctx) {
+    addEffect(sctx, 'flameAffinity', 1);
+    const stacks = sctx.player.getEffectStacks('burn');
+    if (stacks > 0) {
+      addEffect(sctx, 'burn', -stacks, sctx.player);
+      const extra = Math.floor(stacks / 2);
+      if (extra > 0) addEffect(sctx, 'flameAffinity', extra);
+    }
+    return true;
+  },
+  describe: () => '/effect{烈焰亲和}1，消耗自身所有/effect{燃烧}，每2层获得/effect{烈焰亲和}1',
+  battleDescribe: (sctx) => {
+    const stacks = sctx.player.getEffectStacks('burn');
+    return `/effect{烈焰亲和}${1 + Math.floor(stacks / 2)}（消耗燃烧${stacks}）`;
+  },
 });
 
 // ==== 火墙系列（火盾 C → 火墙 B → 火壁 A：火系的即时格挡补缺）==================
@@ -349,9 +408,9 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
     // 判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
   });
 }
-fireWallCard({ id: 'fireWall', name: '火盾', tier: 'C', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallPlus' });
-fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 10, promotesTo: 'fireWallMaster' });
-fireWallCard({ id: 'fireWallMaster', name: '火壁', tier: 'A', ap: 1, shield: 6, bonus: 13 });
+fireWallCard({ id: 'fireWall', name: '火盾', tier: 'C', ap: 1, shield: 6, bonus: 5, promotesTo: 'fireWallPlus' });
+fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallMaster' });
+fireWallCard({ id: 'fireWallMaster', name: '火壁', tier: 'A', ap: 1, shield: 6, bonus: 9 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，
@@ -377,7 +436,7 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy',
     }
     return true;
   },
-  describe: () => '目标每层/effect{燃烧}和每层负面效果两两抵消',
+  describe: () => '目标每层/effect{燃烧}和每层其它效果两两抵消',
 });
 
 // 控火术：无上 S —— 选并发现一张 0 开销控火术。
@@ -385,16 +444,17 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy',
 // 无终止链；池内候选经请求 overrides 盖 0 费戳，卡面所见即所得），段 1 应答后入手——
 // 0 费走 runtime 费用覆写通道（addCard overrides 盖章，随卡旅行）；手牌满时按 §7.3 降级入牌库。
 registerSkill({
-  id: 'fireControlSupreme', name: '控火术：无上', type: 'fire', tier: 'S', series: 'fireControl',
+  id: 'fireControlSupreme', name: '无上控火术', type: 'fire', tier: 'S', series: 'fireControl',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
+  keywords: ['mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
   use(sctx, stage) {
     if (stage === 0) {
       sctx.self._find = requestPoolSelection(sctx, {
         defs: FIRE_CONTROL_IDS,
         overrides: { costOverride: { mana: 0, actionPoint: 0 } },
-        reason: '控火术：无上——选一张 0 费控火术入手',
+        reason: '无上控火术：选一张 0 费控火术入手',
       });
       return sctx.self._find ? false : true;   // 池空（理论不发生）：无事发生收尾
     }

@@ -38,15 +38,16 @@ function attachPressureCounter(kernel, unit, owner) {
 // ② 11 层 Boss · 燃焰术士（章1 火主题 Boss 池之一，2026-09-13 用户重做稿）：
 // 一阶段四拍：盾6+塞1灼伤 → 燃烧5+攻6 → 攻6+塞1灼伤 → 攻20。灼伤是状态牌
 // （无法打出，回合结束在手牌中受 2 伤——塞牌库随机位，抽到手上才开始计时）。
-// 转段：战斗超 10 回合或血量跌至 80 以下——首拍空转（蓄力），随后四拍循环：
-// 全场燃烧7（含自己）→ 攻10+盾10 → 消耗全场燃烧每层回 2 血 → 攻10+盾10。
+// 转段：第 8 回合起（turn.count > 7）或血量跌至 105 及以下——首拍空转（蓄力），
+// 随后四拍循环：全场燃烧13（含自己）→ 攻10+盾10 → 消耗全场燃烧每层回 2 血 → 攻10+盾10。
 // 机智点：它给自己也点燃烧、再靠「消耗燃烧回血」闭环——玩家的叠炎既是在烧它、
-// 也是在给它备血包（引爆窗口 = 燃烧7 刚挂上、回血拍未到的一拍）。
+// 也是在给它备血包（引爆窗口 = 燃烧13 刚挂上、回血拍未到的一拍）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  // 血量口径（2026-09-28 用户定）：难度制 v2 取消单敌人缩放后基础值即实战值——恢复 155
-  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 155 }),
+  // 血量口径（2026-09-28 用户定）：难度制 v2 取消单敌人缩放后基础值即实战值——165
+  // （同日再 +10，转段线下移至 105）
+  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 165 }),
   // 多部件（fx Phase 5 首件试点，2026-09-23；同日视觉大改）：本体 + 3 团环绕火球
   // （程序化焰身/光晕/彗尾 sprite + 点光，无美术素材；P2 剧本推 heat 催成狂暴态）
   // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
@@ -66,7 +67,7 @@ registerEnemy({
   },
   act(actx) {
     const { unit, battleState: bs } = actx;
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp < 120)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 105)) {
       unit._phase2 = true; unit._phaseBeat = 0; // 转段首拍空转（蓄力）
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT）：core 只报 id+标量参数，
       // 内容全在 stage 侧 fx/scripts/bosses/pyro.js；观战端同源重放
@@ -130,7 +131,7 @@ registerEnemy({
     }
   },
   getIntention: (unit, bs) => {
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp < 120)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 105)) {
       return { kinds: ['buff'], note: '二阶段蓄力：下回合起全场点燃' };
     }
     const atk = unit.getStat('attack');

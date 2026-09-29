@@ -146,7 +146,7 @@ export function resolveDamageRecipe(payload = {}) {
 //           弹入/缩没。各件的过渡造型由 level 标量在 shader/tick 里派生，2026-09-26）
 //   emitter 可选：附带点粒子发射参数（粒子进全局 Points 池；gravity 为正 = 上飘，
 //           yOff = 发射位相对单位脚底的抬升，radius = 发射位抖动）
-//   gpuEmit 可选：GPU 粒子池联动（'burn' = 燃烧图集发射，见 fx/gpu/gpuParticles.js）——
+//   gpuEmit 可选：GPU 粒子池联动（'burn' = 燃烧图集发射，见 fx/gpu/burnSparks.js）——
 //           GPU 池就位时优先于 emitter（emitter 字段留作能力降级的回退路径）
 const UNIT_AURA_THEMES = {
   burn: {
