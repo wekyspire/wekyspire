@@ -135,10 +135,12 @@ export class PanelObject extends THREE.Group {
     for (const w of widgets) {
       if (w.kind === 'gap') { y -= this._g.rowH.gap / PX_PER_WU; continue; }
       // ⚠ size 的语义按 kind 分流：**按钮**的 'sub'/'main' 是"小按钮/主按钮"，
-      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——dock 里曾因此把按钮压成 21px 高，
-      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（报"字体太小看不清"）。
+      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——曾因此把按钮压成 21px 高，
+      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（报"字体太小看不清"）。dock 已修；
+      // 非 dock（modal/anchored）同款中招：prep 删卡按钮被压成 ~10px 无字细带
+      // （夜测 r5路5 实报）——按钮行高判定不按 form，一律按 kind。
       const isDock = this.form === 'dock';
-      const h = (isDock && w.kind === 'button')
+      const h = (w.kind === 'button')
         ? this._g.rowH[w.size === 'main' ? 'main' : 'button']
         : (this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text);
       const hWu = h / PX_PER_WU;
