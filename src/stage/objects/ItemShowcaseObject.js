@@ -169,6 +169,43 @@ function bakeRelicGem() {
   return tex;
 }
 
+/** 通用占位兜底（菱形宝物 + 辉光 + 底影）：专属占位与素材都缺席时顶上，
+ *  保证特写美术区永远有图形（不再是 tint 色块）。 */
+function bakeGenericRelicArt() {
+  const [canvas, ctx, S] = canvasOf();
+  const cx = S / 2, cy = S * 0.48;
+  // 底影
+  const shadow = ctx.createRadialGradient(cx, S * 0.82, 0, cx, S * 0.82, S * 0.3);
+  shadow.addColorStop(0, 'rgba(0,0,0,0.45)');
+  shadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadow;
+  ctx.fillRect(0, S * 0.52, S, S * 0.48);
+  // 菱形主体（双层描边）
+  const drawDiamond = (rr, fill) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr * 0.72, cy);
+    ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr * 0.72, cy);
+    ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+  };
+  drawDiamond(S * 0.3, '#8f9bb5');
+  drawDiamond(S * 0.24, '#c7d3e8');
+  ctx.strokeStyle = '#5d6a85'; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - S * 0.3); ctx.lineTo(cx + S * 0.216, cy);
+  ctx.lineTo(cx, cy + S * 0.3); ctx.lineTo(cx - S * 0.216, cy);
+  ctx.closePath(); ctx.stroke();
+  // 中心辉光 + 高光点
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.2);
+  glow.addColorStop(0, 'rgba(255,250,230,0.95)');
+  glow.addColorStop(1, 'rgba(255,250,230,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(cx, cy, S * 0.2, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /** 放射光束贴图（程序化烘焙：中心亮、向外的锥形光条 + 柔和衰减）。 */function bakeGodRays(size = 512, spokes = 18) {
   // node/headless 无 canvas：返回 null，调用方跳过光束层（特写其余部分照常）
   if (typeof document === 'undefined') return null;
@@ -427,10 +464,14 @@ export class ItemShowcaseObject extends THREE.Group {
     return true;
   }
 
-  /** 程序化占位美术（按 key 缓存复用；无占位则 null → 退回 tint 色块）。 */
+  /** 程序化占位美术（按 key 缓存复用；专属占位缺失时回退通用占位——任何 artKey
+   *  都不再落裸 tint 色块。r3路6/路7 实锤：调用点既有传泛型键（pack）也有传
+   *  遗物名/奖励 kind（relic 名失配、special 无映射），逐键打补丁不如兜底）。 */
   _placeholderOf(key) {
     if (!this._placeholders) this._placeholders = new Map();
-    if (!this._placeholders.has(key)) this._placeholders.set(key, bakePlaceholderArt(key));
+    if (!this._placeholders.has(key)) {
+      this._placeholders.set(key, bakePlaceholderArt(key) ?? bakeGenericRelicArt());
+    }
     return this._placeholders.get(key);
   }
 

@@ -219,7 +219,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     },
     /** 点房间里的 3D 交互物（按 marker 名）。 */
     clickObject: async (name, dy = 6) => helpers.clickAt(await helpers.screenOfWorld(
-      `(() => { const e = rs._markers.find(m => m.name === '${name}').entry; return new V(e.x, -30 + ${dy}, e.z); })()`,
+      `(() => { const e = rs._markers.find(m => m.name === '${name}')?.entry; if (!e) throw new Error('marker 不存在: ${name}'); return new V(e.x, -30 + ${dy}, e.z); })()`,
     )),
     /** 点塔楼层地图上的东西（同一套 worldToScreen，只是用 MapStage 的 marker）。 */
     clickMapObject: async (name, dy = 6) => helpers.clickAt(await page.evaluate((n) => {

@@ -318,6 +318,10 @@ export class BattleStage {
       this._drainFx?.update(dt); // 汇聚锚点跟随卡牌（飞展示位期间粒子始终钉徽章）
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
+      // 常驻 HUD 按钮同为 C0 shader 档（setVisualState 只设目标值，收敛在 updateFx）——
+      // 帧泵不补这一口，终局/模态的压暗目标永远停在 0（夜测 r3路4 probe 实锤：败北现场
+      // _dimT=1 而 _dim=0、updateFx 每秒被泵 0 次——r2 的奖励侧"压暗"实为全屏背板读数）
+      for (const btn of Object.values(this._buttons)) btn?.updateFx?.(dt);
       this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
       this._panel?.update(dt);       // 模态面板卡阵的 fx（奖励三选一 hover 高亮收敛）
       for (const unit of this._units.values()) {
