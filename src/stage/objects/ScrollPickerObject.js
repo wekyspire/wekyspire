@@ -26,10 +26,13 @@ export const PICKER_Z = { BACKDROP: OVERLAY_Z, CONTENT: OVERLAY_Z + 2 };
 
 // 布局（世界单位）：标题带 / 滚动区带 / 底部按钮带。两个子类共用同一套带位，
 // 只有"单件尺寸与列数"不同（由 open 参数给）。
+// 标题带避开顶部资源行（TopResourceBar 占 UI_TOP 往下 ~5 单位，旧 titleY=-3.4 与其
+// 正面同高相撞、金币读数被标题盖住——夜测路6b/8b/2 三路复现）；与战斗面板
+// 「标题在资源行之下错开」的既有惯例对齐。
 export const PICKER_LAYOUT = {
-  titleY: UI_TOP - 3.4,
-  hintY: UI_TOP - 7.2,
-  bandTop: UI_TOP - 10.5,
+  titleY: UI_TOP - 8.2,
+  hintY: UI_TOP - 11.6,
+  bandTop: UI_TOP - 14.5,
   bandBottom: UI_CAMERA_LOOK_AT_Y - 31,
   footerY: UI_CAMERA_LOOK_AT_Y - 42,
   barX: HALF_UI_W - 2.0,   // 滚动条靠右

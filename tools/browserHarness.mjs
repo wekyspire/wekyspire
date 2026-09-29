@@ -123,7 +123,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     sleep,
     waitRoom: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getRoomStage?.()),
     waitBattle: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getBattleStage?.()),
-    waitStage: (stage) => helpers.waitFor(() => window.__shell?.ctrl?.value?.run?.gameStage === stage),
+    waitStage: (stage) => helpers.waitFor(`window.__shell?.ctrl?.value?.run?.gameStage === ${JSON.stringify(stage)}`),
     /** 等幕间播完（cutscene 回 idle）。 */
     waitCutsceneEnd: () => helpers.waitFor(() => window.__shell.ctrl.value.cutscene.state.mode === 'idle'),
     /** 等全部演出队列排空（sequencer + 舞台动画都停了，画面进入静息）。 */
@@ -168,11 +168,27 @@ export async function launch({ headless = true, viewport = { width: 1280, height
       }, [method, args]);
       return out;
     },
-    /** 调试面板的开关（F9 同义；面板会挡住房间点击，交互前先关掉）。 */
+    /** 调试面板的开关（F9 同义；面板会挡住房间点击，交互前先关掉）。
+     *  ?debug=1 的面板在 App 挂载完成后才自动弹出——goto 后立刻关会被它后手弹开
+     *  吞掉全部真鼠标点击（夜测首晚四路撞到的挂载竞态）：关闭路径先等 .dbg 出现，
+     *  关完再断言不可见（DOM 残留时 offsetParent 判定），失败自动重按 F9。 */
     togglePanel: async (open = null) => {
-      const isOpen = await page.evaluate(() => !!document.querySelector('.dbg'));
-      if (open === null || open !== isOpen) await page.keyboard.press('F9');
-      await sleep(300);
+      const visible = () => page.evaluate(() => {
+        const el = document.querySelector('.dbg');
+        return !!el && el.offsetParent !== null;
+      });
+      if (open === null) { await page.keyboard.press('F9'); await sleep(300); return; }
+      if (!open) {
+        // 等面板自动弹出（最多 8s：素材预载期更晚），等不到说明本局没开 debug 面板
+        await page.waitForSelector('.dbg', { timeout: 8000 }).catch(() => {});
+        for (let i = 0; i < 3 && await visible(); i++) {
+          await page.keyboard.press('F9');
+          await sleep(400);
+        }
+      } else if (await visible()) {
+        await page.keyboard.press('F9');
+        await sleep(300);
+      }
     },
 
     // ---- 点击：屏幕坐标一律由页面内的 worldToScreen 算（用错相机会点空）----

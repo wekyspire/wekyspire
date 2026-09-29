@@ -151,7 +151,9 @@ export function createRunShowcase(ctx) {
       effect: needsPick ? '收下之后，在候选里选一张带走'
         : freeUpgrade ? '收下之后，选择要免费升级的卡'
           : '点任意处收下 ｜ 点「跳过」放弃这份产出',
-      artKey: p.money != null ? 'gold' : null,   // 金币奖 → 组件烘"金币堆"占位
+      // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
+      // ＝特写美术区一块空白灰——夜测路7b 实报）
+      artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
       tint: major ? 0xffd75e : 0xd8e2f4,
       skippable: true,
       onSkip: () => actions.slotDecline(),

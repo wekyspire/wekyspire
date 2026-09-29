@@ -491,6 +491,10 @@ export class BattleStage {
     this._panelSnap = snap;
     this._panel.attachPicker(this.picker);
     this._panel.setWidgets(snap.kind, entry.build(snap));
+    // 模态吞点击是既定语义（拖牌/瞄准/战场点击全被面板截获）——常驻 HUD 按钮
+    // （结束回合/弃牌）的视觉要同步压暗，否则全亮可点样式误导（夜测路4b 实报：
+    // 奖励期点「结束回合」无任何反馈）。终局后无新 sync 覆盖，压暗保持到舞台拆除。
+    for (const btn of Object.values(this._buttons)) btn?.setVisualState?.('disabled');
   }
 
   get panel() { return this._panel; }
