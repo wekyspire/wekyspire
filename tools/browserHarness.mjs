@@ -118,7 +118,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     sleep,
     waitRoom: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getRoomStage?.()),
     waitBattle: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getBattleStage?.()),
-    waitStage: (stage) => helpers.waitFor((s) => window.__shell.ctrl.value.run.gameStage === s, []),
+    waitStage: (stage) => helpers.waitFor(() => window.__shell?.ctrl?.value?.run?.gameStage === stage),
     /** 等幕间播完（cutscene 回 idle）。 */
     waitCutsceneEnd: () => helpers.waitFor(() => window.__shell.ctrl.value.cutscene.state.mode === 'idle'),
     /** 等全部演出队列排空（sequencer + 舞台动画都停了，画面进入静息）。 */
