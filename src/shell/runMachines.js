@@ -23,6 +23,7 @@ import {
 } from '../core/run/rooms/slotMachine.js';
 import { takeShopCard, takeShopRelic } from '../core/run/rooms/shop.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
+import { tooltipHide } from './tooltipHub.js';
 
 export function createRunMachines(ctx) {
   const { run, slot, runSequencer, cutscene, showcase } = ctx;
@@ -203,11 +204,13 @@ export function createRunMachines(ctx) {
   function shopTakeCard(defId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
     takeShopCard(run, defId);   // defId = null → 放弃这个卡包（choice 不够好时的出口）
+    tooltipHide();              // 售出商品视图即离场：悬空 tooltip 必清（夜测 r2路3/r3路1 滞留实报）
     ctx.notify();
   }
   function shopTakeRelic(relicId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
     takeShopRelic(run, relicId);   // relicId = null → 放弃这个遗物包（与卡包同口径）
+    tooltipHide();                  // 同上
     ctx.notify();                 // 获得特写由拥有集差分自动兜（runShowcase）
   }
 
