@@ -392,9 +392,10 @@ const martialStanceCard = (id, name, tier, ap, per, weight, promotesTo) => regis
   describe: () => `每层/effect{格挡}，伤害+${per}`,
   battleDescribe: (sctx) => `每层/effect{格挡}令你的伤害+${per}`,
 });
-martialStanceCard('martialStance', '武术姿态', 'C', 1, 2, 3, 'masterStance');
-martialStanceCard('masterStance', '大师姿态', 'B', 0, 2, 3, 'heavenStance');
-martialStanceCard('heavenStance', '天一姿态', 'A', 0, 2, 2, null);
+// 2026-09-29 大调：咏唱 3/3/2 → 2/2/1
+martialStanceCard('martialStance', '武术姿态', 'C', 1, 2, 2, 'masterStance');
+martialStanceCard('masterStance', '大师姿态', 'B', 0, 2, 2, 'heavenStance');
+martialStanceCard('heavenStance', '天一姿态', 'A', 0, 2, 1, null);
 
 // 狂战链（格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
 // 1 层力量；失去格挡（破的负层数 AddEffect）不触发。咏唱 1（2026-09-21 用户定稿）。
@@ -420,14 +421,14 @@ berserkStanceCard('berserkStance', '狂战姿态', 'B', 1, 'berserkMastery');
 berserkStanceCard('berserkMastery', '狂战掌控', 'A', 0, null);
 
 // ==== 咏唱散卡（以无胜有 / 以有胜无）===========================================
-// 手牌形态双向终端：P5 按手牌数给格挡。手牌数按**裸张数**计（2026-09-20 用户定：
+// 手牌形态双向终端：P5 按手牌形态给格挡。手牌数按**裸张数**计（2026-09-20 用户定：
 // 卡面手牌数 = 直观张数，激活咏唱算 1 张，不加权——见 battle.md §1 基础约定）；
-// 触发时激活的自身也在手、算 1 张。设计稿未给咏唱值 → 取 2（落地假设）。
+// 触发时激活的自身也在手、算 1 张。咏唱统一 1（2026-09-29 大调，原落地假设 2）。
 const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3, promotesTo = null } = {}) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 2,
+  cardMode: 'chant', chantWeight: 1,
   promotesTo,
   use() { return true; },
   activated: {
@@ -442,23 +443,25 @@ const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3,
   battleDescribe: (sctx) => `${conditionText}，/effect{格挡}${block}`,
 });
 
-// 以无胜有（B→A）：只有这一张手牌（清手）→ 3 层格挡（A 档 0AP——升阶 = 免费化）。
-handGateChant('winWithout', '以无胜有', 'B', '若你只有1手牌',
-  (sctx, battleState) => battleState.zones.hand.length === 1,
+// 以无胜有（B→A，2026-09-29 用户定稿）：没有自由手牌（手牌全是激活咏唱）→ 3 层格挡
+// （A 档 0AP——升阶 = 免费化）。「自由手牌」= 未激活咏唱（canDumpCards 同口径）。
+const noFreeHand = (sctx, battleState) =>
+  battleState.zones.hand.every(c => c.isActivated);
+handGateChant('winWithout', '以无胜有', 'B', '若你没有自由手牌',
+  noFreeHand,
   { promotesTo: 'winWithoutA' });
-handGateChant('winWithoutA', '以无胜有', 'A', '若你只有1手牌',
-  (sctx, battleState) => battleState.zones.hand.length === 1,
+handGateChant('winWithoutA', '以无胜有', 'A', '若你没有自由手牌',
+  noFreeHand,
   { ap: 0, block: 3 });
 
-// 以有胜无（B→A）：手牌不少于 5 张（囤满手）→ 3 / 4 层格挡。
-// 2026-09-21 大调：门槛 ≥6 → ≥5（随手牌上限 6→5 同步降档；P5 在**回合末**触发、
-// 咏唱驻手，囤 5 张收尾即可达成）。触发时激活的自身也在手、算 1 张。
-handGateChant('haveWithout', '以有胜无', 'B', '若你手牌不少于5张',
-  (sctx, battleState) => battleState.zones.hand.length >= 5,
+// 以有胜无（B→A，2026-09-29 用户定稿）：手牌不少于 4/3 张（囤手）→ 3 层格挡
+// （原 ≥5 给 3/4：门槛与收益双双下调）。触发时激活的自身也在手、算 1 张。
+handGateChant('haveWithout', '以有胜无', 'B', '若你手牌不少于4张',
+  (sctx, battleState) => battleState.zones.hand.length >= 4,
   { promotesTo: 'haveWithoutA' });
-handGateChant('haveWithoutA', '以有胜无', 'A', '若你手牌不少于5张',
-  (sctx, battleState) => battleState.zones.hand.length >= 5,
-  { block: 4 });
+handGateChant('haveWithoutA', '以有胜无', 'A', '若你手牌不少于3张',
+  (sctx, battleState) => battleState.zones.hand.length >= 3,
+  { block: 3 });
 
 // 活动筋骨（C/B/A，1AP（A 级 0AP）冷却2）：获得力量。C 版固定 1；B 版起
 // 「力量 1+N」，N = 此牌本场已打出次数（打出前计数——首打仍为 1，越打越强，

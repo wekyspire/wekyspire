@@ -100,7 +100,7 @@ function wraithDef(id, opener) {
   registerEnemy({
     id, name: '怨灵',
     difficulty: { base: 3, floorMin: 2, floorMax: 6 },
-    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 28 }),
+    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 37 }), // 2026-09-29 大调：28→37
     act(actx) {
       const { unit, player } = actx;
       if (unit.actionIndex === 0) return open(actx);

@@ -390,8 +390,8 @@ hotHandsCard({ id: 'hotHandsMaster', tier: 'A', mana: 1, draw: 4 });
 // §1.1 爆裂防御（2026-09-17 用户定稿：沉默 + 泄压阀）
 // ====================================================================
 
-// 沉默 C/B/A（0费，消耗）：终止你激活的**所有**咏唱卡，获得 9/12/15 护盾
-// （2026-09-21 大调：9/13/17 → 9/12/15）——爆裂
+// 沉默 C/B/A（0费，消耗）：终止你激活的**所有**咏唱卡，获得 8/11/14 护盾
+// （2026-09-29 大调：9/12/15 → 8/11/14）——爆裂
 // 体系的专用防卡兼**远程引爆器**：终止走指令层统一熄灭路径（deactivateChant →
 // 各咏唱自己的 onDisable），爆裂术的终止群伤由它代为引爆；不止爆裂，可燃血液/
 // 旋风等一切激活咏唱一并熄灭——沉默之名。当回合即时盾是火系「铺垫型防御」里
@@ -419,11 +419,11 @@ function silenceCard({ id, tier, shield, promotesTo }) {
     },
   });
 }
-silenceCard({ id: 'silence', tier: 'C', shield: 9, promotesTo: 'silencePlus' });
-silenceCard({ id: 'silencePlus', tier: 'B', shield: 12, promotesTo: 'silenceMaster' });
-silenceCard({ id: 'silenceMaster', tier: 'A', shield: 15 });
+silenceCard({ id: 'silence', tier: 'C', shield: 8, promotesTo: 'silencePlus' });
+silenceCard({ id: 'silencePlus', tier: 'B', shield: 11, promotesTo: 'silenceMaster' });
+silenceCard({ id: 'silenceMaster', tier: 'A', shield: 14 });
 
-// 泄压阀 C/B/A（X魏，消耗）：获得 4X / 5+4X / 5+5X 护盾（2026-09-21 大调：
+// 泄压阀 C/B/A（X魏，消耗）：获得 4+4X / 7+4X / 7+5X 护盾（2026-09-29 大调：
 // 由每魏 5/6/7 改为基础+系数混合档）——即时、可调档的防御位，而这笔消耗照常喂
 // 爆裂蓄能/旋风/余热台账：一张把防御买成引擎燃料的卡。每魏对标：灵力/灵能护盾
 // 5~7/魏（非消耗、定值）、火焰精通 3/魏（永续咏唱）——泄压阀居中，消耗+弹性是
@@ -448,9 +448,9 @@ function reliefValveCard({ id, tier, base, perMana, promotesTo }) {
     },
   });
 }
-reliefValveCard({ id: 'reliefValve', tier: 'C', base: 0, perMana: 4, promotesTo: 'reliefValvePlus' });
-reliefValveCard({ id: 'reliefValvePlus', tier: 'B', base: 5, perMana: 4, promotesTo: 'reliefValveMaster' });
-reliefValveCard({ id: 'reliefValveMaster', tier: 'A', base: 5, perMana: 5 });
+reliefValveCard({ id: 'reliefValve', tier: 'C', base: 4, perMana: 4, promotesTo: 'reliefValvePlus' });
+reliefValveCard({ id: 'reliefValvePlus', tier: 'B', base: 7, perMana: 4, promotesTo: 'reliefValveMaster' });
+reliefValveCard({ id: 'reliefValveMaster', tier: 'A', base: 7, perMana: 5 });
 
 // ====================================================================
 // §1.1 凝焰系列（X魏启 = 消耗所有现有魏启，NAMED「消耗为X」）
@@ -552,9 +552,9 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
     battleDescribe: (sctx) => `护盾${shield}，/effect{燃烧}4`,
   });
 }
-kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 10, ap: 1, promotesTo: 'kindlingBloodPlus' });
-kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 12, ap: 1, promotesTo: 'kindlingBloodMaster' });
-kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 12, ap: 0 });
+kindlingBloodCard({ id: 'kindlingBlood', name: '可燃血液', tier: 'C', shield: 9, ap: 1, promotesTo: 'kindlingBloodPlus' });
+kindlingBloodCard({ id: 'kindlingBloodPlus', name: '可燃血液', tier: 'B', shield: 11, ap: 1, promotesTo: 'kindlingBloodMaster' });
+kindlingBloodCard({ id: 'kindlingBloodMaster', name: '可燃血液', tier: 'A', shield: 11, ap: 0 });
 
 // ====================================================================
 // §1.1 火雨系列（低耗群伤）
@@ -616,16 +616,16 @@ function fuelCard({ id, name, tier, mana, exhaust = true, promotesTo }) {
     describe: () => `选1手牌焚毁，获得${mana}魏启`,
   });
 }
-// 添柴链 2026-09-21 大调定稿：添柴 C 消耗 2魏 / 旺火 B 不消耗 2魏 / 猛火 A 不消耗 3魏。
-// 2026-09-28 晋升分叉（FIRE_VEIN_CARDS §1.1）：添柴 promotesTo 数组二选一——
-// 支链一 旺火→猛火 回魏启；支链二 拨火→扇焰 把回报换成抽牌（焚毁喂坟墓体系）。
-// 分叉抉择：营地/训练场升级子面板显式选，缺省（老虎机随机升级/headless）走 run.rng。
-fuelCard({ id: 'fuelTheFire', name: '添柴', tier: 'C', mana: 2, promotesTo: ['roaringFire', 'pokeFire'] });
+// 添柴链 2026-09-21 大调定稿：添柴 C 消耗 2魏 / 旺火 B 不消耗 2魏 / 烧却 A 不消耗 3魏。
+// 2026-09-29 用户定：晋升分叉收回单链（添柴→旺火→烧却），拨火/扇焰「焚毁换抽」支链删除
+// （焚抽需求由独立的焚风链承担，见下）。
+fuelCard({ id: 'fuelTheFire', name: '添柴', tier: 'C', mana: 2, promotesTo: ['roaringFire'] });
 fuelCard({ id: 'roaringFire', name: '旺火', tier: 'B', mana: 2, exhaust: false, promotesTo: 'blazeUp' });
 
-// 猛火（A，不消耗）：选 1 手牌焚毁 → 获得 3 魏启（2026-09-21 大调：去消耗、去抽2补偿）。
+// 烧却（A，不消耗，2026-09-29 更名自「猛火」）：选 1 手牌焚毁 → 获得 3 魏启
+// （2026-09-21 大调：去消耗、去抽2补偿）。
 registerSkill({
-  id: 'blazeUp', name: '猛火', type: 'fire', tier: 'A', series: 'fuel',
+  id: 'blazeUp', name: '烧却', type: 'fire', tier: 'A', series: 'fuel',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -672,36 +672,6 @@ registerSkill({
   describe: () => '抽2牌焚毁，获得6魏启',
 });
 
-// 拨火/扇焰（添柴支链二，B→A）：选 1 手牌焚毁，回报不回魏启改抽 2/3。
-// 与鼓风（弃置）同形异质：焚毁喂坟墓体系（扒灰/回响烈焰），是叠炎向的调度件。
-function drawFuelCard({ id, name, tier, draw, promotesTo = null }) {
-  registerSkill({
-    id, name, type: 'fire', tier, series: 'fuel',
-    cost: { mana: 0, actionPoint: 1 },
-    charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'normal', targetMode: 'none',
-    promotesTo,
-    canUse: (sctx) => sctx.battleState.zones.hand.some(
-      c => c.uniqueID !== sctx.self.uniqueID),
-    use(sctx, stage) {
-      if (stage === 0) {
-        if (sctx.battleState.zones.hand.length === 0) return true;
-        sctx.self._pick = requestHandSelection(sctx, { count: 1, reason: '选择1张手牌焚毁' });
-        return false;
-      }
-      const [uniqueID] = selected(sctx.self._pick);
-      sctx.self._pick = null;
-      if (uniqueID != null) {
-        burnCard(sctx, uniqueID);
-        drawCards(sctx, draw);
-      }
-      return true;
-    },
-    describe: () => `选1手牌焚毁，抽${draw}`,
-  });
-}
-drawFuelCard({ id: 'pokeFire', name: '拨火', tier: 'B', draw: 2, promotesTo: 'fanFlame' });
-drawFuelCard({ id: 'fanFlame', name: '扇焰', tier: 'A', draw: 3 });
 
 // 焚风 C/B/A（2026-09-28 用户定：独立焚抽链，全员冷却1）：选 1 手牌焚毁，抽 2/3/3；
 // C 1AP → B 1AP 加抽 → A 去行动点。全员冷却1 = 每回合限一次的烧牌过牌，节奏同烫手。
@@ -1119,14 +1089,13 @@ douseFlameCard({ id: 'douseFlamePlus', tier: 'A', ap: 0 });
 // §3.2 通用咏唱
 // ====================================================================
 
-// 火焰精通（A，消耗，咏唱）：激活期间每消耗 1 魏启获得 3 护盾。
-// 读 result.consumed（实际消耗量，经 clamp/费用减免后的真值）。设计稿未写咏唱值，
-// 按默认咏唱2计手牌压力。发动自身 0 费，不会自触发。
+// 火焰精通（A，消耗，咏唱1——2026-09-29 用户定）：激活期间每消耗 1 魏启获得 3 护盾。
+// 读 result.consumed（实际消耗量，经 clamp/费用减免后的真值）。发动自身 0 费，不会自触发。
 registerSkill({
   id: 'fireMastery', name: '火焰精通', type: 'fire', tier: 'A', series: 'common',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 2,
+  cardMode: 'chant', chantWeight: 1,
   keywords: ['exhaust'],
   use() { return true; },
   activated: {
