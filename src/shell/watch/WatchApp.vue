@@ -5,7 +5,6 @@
 // 全量美术预载门（watch.html 静态启动壳，与 index.html 同款）。差别只在数据来源是
 // 「远端 bridge」（src/bridge/remoteBridge.js）而非本地 core——面板读的 ctrl 是个只读假壳。
 import { inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import '../../core/content/index.js';
 import { StageManager } from '../../stage/StageManager.js';
 import { BattleStage } from '../../stage/stages/BattleStage.js';
 import { preloadBattleArt } from '../../stage/art/preload.js';
@@ -27,6 +26,15 @@ const relayBase = props.relayBase;
 const canvas = ref(null);
 const frameEl = ref(null);
 const assetsReady = ref(false);
+// 内容注册表动态加载（L2 切分，与 App.vue 同款）：与美术预载并行，双就绪才揭幕
+const contentReady = ref(false);
+function loadContent() {
+  return import('../../core/content/index.js').then(
+    (m) => { contentReady.value = true; return m; },
+    (err) => { console.error('[watch] 内容模块加载失败：', err); throw err; },
+  ).catch(() => {});   // 观战页无重试 UI：静默失败（画面缺内容件但页面不炸）
+}
+loadContent().then(() => { if (assetsReady.value) window.__bootShell?.dismiss(); });
 const status = ref(remote ? 'connecting' : 'idle'); // idle = 没给 session（显示会话选择）
 const meta = ref(null);
 const runState = ref(null);
@@ -190,7 +198,10 @@ async function loadSessionList() {
 onMounted(async () => {
   preloadAllArt({
     onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
-  }).then(() => { assetsReady.value = true; window.__bootShell?.dismiss(); });
+  }).then(() => {
+    assetsReady.value = true;
+    if (contentReady.value) window.__bootShell?.dismiss();
+  });
 
   stageManager = new StageManager();
   await stageManager.attach(canvas.value); // async：WebGPURenderer.init 异步
@@ -240,7 +251,7 @@ onBeforeUnmount(() => {
       id="stage-canvas" ref="canvas"
       @pointermove="onPointerMove" @pointerdown="onPointerDown" @pointerup="onPointerUp"
     ></canvas>
-    <template v-if="assetsReady">
+    <template v-if="assetsReady && contentReady">
       <BattleHud v-if="remote && runState?.stage === 'battle'" :ctrl="fakeCtrl" />
       <!-- 过渡时刻卡：塔楼/选卡/进阶这些「没有演出节拍」的阶段，在这里按时长停留，
            让观战者看清选了什么（候选行里 ✓ 标出所选，只服务观战页） -->

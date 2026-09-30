@@ -5,7 +5,6 @@
 // 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud 等叠加；休息阶段面板见 stage/panels/。
 // dialogue / cutscene overlay 由 Vue 渲染，跨后两层（CutsceneOverlay）。
 import { onMounted, onBeforeUnmount, ref, computed, provide, watch } from 'vue';
-import '../core/content/index.js'; // 注册全部最小内容
 import { StageManager } from '../stage/StageManager.js';
 import { MapStage } from '../stage/stages/MapStage.js';
 import { createRunController } from './runController.js';
@@ -28,6 +27,27 @@ import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
 import { startCloudNoiseBake } from '../stage/scenes/cloudNoise.js';
 import { probeWebGpuAdapter } from '../stage/webgpuProbe.js';
+// 内容注册表（卡牌/敌人/事件定义，随内容膨胀只会更重）切出急加载图（L2，
+// quest_prompts/ASSET_PACK.md）：动态 import 与 GPU 探测/美术预载**并行**下载；
+// 放行门 = 美术 ∧ 内容双就绪。此前它是静态 import——内容代码（tooltipHub 块
+// 1.55MB 的主要成分）随 modulepreload 急加载，放行时间随内容膨胀线性恶化。
+const contentReady = ref(false);
+let contentPromise = null;
+function loadContent() {
+  contentPromise = import('../core/content/index.js').then(
+    (m) => { contentReady.value = true; return m; },
+    (err) => {
+      contentPromise = null;   // 允许重试（重 import = 重新拉取）
+      console.error('[boot] 内容模块加载失败：', err);
+      window.__bootShell?.failed(1);   // 复用壳的失败态 + 重试
+      throw err;
+    },
+  );
+  return contentPromise;
+}
+// 吞传播：失败 UI 已由 onRejected 推给壳；裸拒绝会触发全局 unhandledrejection
+// （错误探针把标题改成 ERR# 的假警报）。
+loadContent().catch(() => {});
 
 const canvas = ref(null);
 const frame = ref(null);
@@ -54,7 +74,11 @@ const assetsReady = ref(false);
 const gpuUnsupported = ref(false);
 function startAssetPreload() {
   assetsReady.value = false;
-  window.__bootRetry = startAssetPreload;
+  // 统一重试入口：谁没就绪补谁（美术/内容任一失败都会推壳的失败态）
+  window.__bootRetry = () => {
+    if (!assetsReady.value) startAssetPreload();
+    if (!contentReady.value) loadContent().catch(() => {});
+  };
   startCloudNoiseBake(); // 云噪声 3D 纹理烘焙与美术下载并行（分片让出主线程，不占加载门）
   preloadAllArt({
     onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
@@ -65,7 +89,7 @@ function startAssetPreload() {
     assetsReady.value = true;
   });
 }
-watch(assetsReady, (ok) => { if (ok) window.__bootShell?.dismiss(); });
+watch([assetsReady, contentReady], ([a, c]) => { if (a && c) window.__bootShell?.dismiss(); });
 // 兼容性检查 → 通过才启动预载（不通过则 GPU 门 fatal 卡死在壳上）
 (async () => {
   const adapter = await probeWebGpuAdapter();
@@ -147,6 +171,10 @@ async function autoStartFromUrl() {
   if (wantDebug) settings.debugMode = true;
   debugUi.open = true;
   if (!saveName) return;
+  // 内容注册表可能仍在路上（L2 切分后它不再随主包急加载）——等它落定才开局，
+  // 否则战斗装配查注册表直接抛「未注册的技能」。
+  await loadContent().catch(() => {});
+  if (!contentReady.value) return;   // 内容失败：壳已挂失败态+重试，不开局
   try {
     const res = await fetch(`./debug-saves/${saveName}.json`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -273,7 +301,7 @@ onBeforeUnmount(() => {
     ></canvas>
     <!-- 加载门 = index.html 静态启动壳（assetsReady 时已揭幕退场）；
          菜单级：开始界面（含 changelog 弹层） -->
-    <StartScreen v-if="assetsReady && phase === 'menu'" :saves="saves" @start="onStart" />
+    <StartScreen v-if="assetsReady && contentReady && phase === 'menu'" :saves="saves" @start="onStart" />
     <template v-else-if="ctrl">
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
       <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
