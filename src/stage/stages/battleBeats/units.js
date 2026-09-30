@@ -6,8 +6,7 @@ import * as THREE from 'three';
 import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
-import { resolveSlashVariant, slashScaleFor } from '../../fx/spells/index.js';
-import { slashSweep } from '../../fx/spells/blocks.js';
+import { resolveDamageFx, runDamageBeat } from '../../fx/spells/index.js';
 import { runScript } from '../../fx/script.js';
 
 export const unitBeats = {
@@ -59,23 +58,16 @@ export const unitBeats = {
     const chargeLean = -Math.sign(ddx || 1) * 0.30;
 
     const h = runScript(async (ctx) => {
-      // 刀法系命中刀光（伤害节拍驱动，2026-09-30 用户定）：伤害量在伤害节拍才有真值——
-      // 尺寸随伤害缩放；方向语义按卡名（斩=竖/劈=横/刀舞=连击随机/缺省斜）；多段伤害
-      // 逐拍触发 = 连击白送。fire-and-forget（_fxRunScript 舞台寿命锚）：不占本节拍时序，
-      // 受击既有演出（突进/击退/闪光）照常。
-      const slashVar = dealt > 0 ? resolveSlashVariant(payload?.skillDefId) : null;
-      if (slashVar) {
-        const angle = slashVar.jitter != null
-          ? (Math.random() * 2 - 1) * slashVar.jitter   // 连击：逐击随机斜率
-          : slashVar.angle;
-        const s = unit._baseScale ?? 1;
-        const anchor = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
-        this._fxRunScript(async (c) => {
-          await slashSweep(c, this._spellDeps(), {
-            at: anchor, angle, ms: slashVar.ms,
-            scale: slashScaleFor(dealt),
-          });
-        });
+      // 命中演出（伤害节拍驱动，2026-09-30 泛化）：伤害量/攻击来向在这里才有真值——
+      // 尺寸随伤害缩放、方向语义按卡名/体系（刀光斩向、拳面镜像、火系落点爆）；
+      // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送。fire-and-forget
+      // （_fxRunScript 舞台寿命锚）：不占本节拍时序，受击既有演出（突进/击退/闪光）照常。
+      const dmgFx = dealt > 0 ? resolveDamageFx(payload?.skillDefId) : null;
+      if (dmgFx) {
+        this._fxRunScript((c) => runDamageBeat(c, this._spellDeps(), {
+          fx: dmgFx, unit, dealt,
+          fromX: src?.position.x ?? null,   // 拳面镜像：攻击来向
+        }));
       }
       if (lunging && remiCharge) {
         // 冲撞四拍：蹲伏蓄势 → 全距离冲刺（小跳弧+前扑）→ 撞击 → 高弹后跳+二跳回家。

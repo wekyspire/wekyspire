@@ -1,8 +1,11 @@
 // 施术演出模板系统（spellFx，2026-09-30 用户定「动画逻辑生成器」架构）：
 // 类比 PCG 管线（生成器 → 物体生成器 → SDK）的三层——
-//   · 基础块 SDK：fx/spells/blocks.js（cardFlare/arcProjectile/impactBurst/slashSweep…）
+//   · 基础块 SDK：fx/spells/blocks.js（cardFlare/arcProjectile/impactBurst/slashSweep/
+//     punchImpact/fireBurst/lightPillar…）
 //   · 模板生成器：本目录一文件一模板，`build(params)` 拼装基础块产出「动画逻辑本身」
-//   · 决议链 + 节拍接线：本文件（BASE → SERIES_SPELLS → CARD_SPELLS，挂 _skillDisplay 节拍）
+//   · 决议链 + 节拍接线：本文件管施术拍（BASE → SERIES_SPELLS → CARD_SPELLS，
+//     挂 _skillDisplay 节拍）；**伤害拍**（命中那一刻）归 damageFx.js
+//     （resolveDamageFx + runDamageBeat，挂 _damageHit 节拍）。
 //
 // 模板契约（动画逻辑生成器）：
 //   { defaults, build(params) → async (ctx, deps, notify) => void, warm?(deps) }
@@ -19,27 +22,53 @@
 //     自建 mesh/材质必须在 notify 前回收完毕（onKill 只兜异常路径）
 //
 // 决议链（stage 层表驱动——core 的技能 def 不加视觉字段，外观策略集中查表）：
-//   CARD_SPELLS[defId]（逐卡覆写：换模板或调参数）→ SERIES_SPELLS[series]（体系级）
-//   → null（BASE = _skillDisplay 现行为原样，零回归）。参数合并 defaults ← 体系行 ← 逐卡行。
-// 观战兼容：模板选择只用 defId/series（两端同 bundle 反查），wire 契约零改动。
+//   CARD_SPELLS[defId]（逐卡覆写：换模板或调参数）→ SERIES_SPELLS[series]
+//   （体系级 { id, params }）→ null（BASE = _skillDisplay 现行为原样，零回归）。
+//   参数合并 defaults ← 体系行 ← 逐卡行。观战兼容：模板选择只用 defId/series
+//   （两端同 bundle 反查），wire 契约零改动。
 import { getSkillDefinition } from '../../../core/skills/registry.js';
 import { runScript } from '../script.js';
 import { emberBurst } from './emberBurst.js';
-import { bladeSlash } from './bladeSlash.js';
+import { castFlare } from './castFlare.js';
+import { fireballCast } from './fireballCast.js';
+import { fireRainCast } from './fireRainCast.js';
+import { igniteCast } from './igniteCast.js';
+import { heavenCleave } from './heavenCleave.js';
+
+export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
 
 // 模板注册表（一文件一模板，id 即登记键）
-const TEMPLATES = { emberBurst, bladeSlash };
+const TEMPLATES = {
+  emberBurst, castFlare, fireballCast, fireRainCast, igniteCast, heavenCleave,
+};
 
-// 体系级映射（series → 模板 id）。先锋期只挂两系打样；铺量 = 往这里加行。
-// ⚠ 挂上即全体系生效（26 张刀法卡都会获得刀光）——影响面大，逐系验收后再挂。
+// 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
+// （起手色参数化）；投射物体系挂各自的 cast 模板（落点爆在伤害拍）。
 const SERIES_SPELLS = {
-  ember: 'emberBurst',
-  blade: 'bladeSlash',
+  ember:         { id: 'emberBurst' },                                   // 余烬系（旧先锋模板整链）
+  blade:         { id: 'castFlare', params: { flareColor: 0xcfd8ea } },  // 刀法：冷白起手
+  fist:          { id: 'castFlare', params: { flareColor: 0xf2e7d2 } },  // 拳系：暖白起手
+  punch:         { id: 'castFlare', params: { flareColor: 0xf2e7d2 } },  // 基石拳
+  fireBall:      { id: 'fireballCast' },                                 // 火球链+蓄热火球
+  firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
+  fireRain:      { id: 'fireRainCast' },                                 // 火雨/火瀑
+  ignite:        { id: 'igniteCast' },                                   // 点火/烈焰/炙焰/热浪
+  burst:         { id: 'castFlare', params: { flareColor: 0xff9a3d } },  // 爆裂咏唱（新星在伤害拍）
+  selfImmolate:  { id: 'castFlare', params: { flareColor: 0xffb066 } },  // 焰刃/玩火（火刀）
 };
 
 // 逐卡覆写（defId → { template, params }）：换模板或微调参数（同体系内单卡变体）。
 const CARD_SPELLS = {
-  // 例：'meltDown': { template: 'emberBurst', params: { count: 40, speed: 32 } },
+  // 火球链变体：连发双弹 / 大火球加重弹 / 白炽火球热核偏白
+  fireBarrage:    { template: 'fireballCast', params: { shots: 2 } },
+  greaterFireBall: { template: 'fireballCast', params: { size: 3.4, projMs: 380, arcH: 8 } },
+  heatBallMaster: { template: 'fireballCast', params: { hot: [1.0, 0.95, 0.86], color: [1.0, 0.5, 0.2] } },
+  // 先发链体量递进：小弹快掷 / 火矢平弧疾射 / 先发火球标准
+  firstShot:      { template: 'fireballCast', params: { size: 1.7, projMs: 240, arcH: 3 } },
+  firstArrow:     { template: 'fireballCast', params: { size: 1.4, projMs: 200, arcH: 1 } },
+  // S/X 天斩：实体锁全演出（暗柱预兆→双脉冲→巨刃+冲天光柱）
+  skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
+  godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
 };
 
 /**
@@ -53,44 +82,9 @@ export function resolveSpellFx(defId) {
     if (template) return { template, params: { ...(card.params ?? {}) } };
   }
   const def = (() => { try { return getSkillDefinition(defId); } catch { return null; } })();
-  const sid = SERIES_SPELLS[def?.series];
-  const template = sid ? TEMPLATES[sid] : null;
-  return template ? { template, params: {} } : null;
-}
-
-// ---- 刀光方向语义（2026-09-30 用户定：伤害节拍驱动——伤害量在那里才有真值，
-// 且多段伤害逐拍触发 = 连击的「短促随机斜率连击」白送）----
-// 语义源 = 卡名后缀（设计侧命名即数据）：…斩=竖劈斩、…劈=横扫劈、…刀舞=连击；
-// 缺省斜置。数值为旋向弧度（正=顺时针）。
-const SLASH_VARIANTS = {
-  chop:  { angle: 1.38, ms: 320 },   // 斩：竖置（近垂直，微偏读作「劈落」）
-  sweep: { angle: 0.10, ms: 340 },   // 劈：横置
-  combo: { jitter: 0.85, ms: 210 },  // 刀舞：逐击随机斜率 + 短促
-  diagonal: { angle: -0.30, ms: 300 }, // 缺省
-};
-
-/**
- * 刀法卡的刀光方向变体：defId → { angle | jitter, ms }。
- * 返回 null = 非刀法卡（不出刀光）。
- */
-export function resolveSlashVariant(defId) {
-  let def = null;
-  try { def = getSkillDefinition(defId); } catch { return null; }
-  if (!def || def.series !== 'blade') return null;
-  const name = def.name ?? '';
-  if (name.includes('刀舞')) return { ...SLASH_VARIANTS.combo };
-  if (name.endsWith('劈')) return { ...SLASH_VARIANTS.sweep };
-  if (name.endsWith('斩') || name.endsWith('爆斩')) return { ...SLASH_VARIANTS.chop };
-  return { ...SLASH_VARIANTS.diagonal };
-}
-
-/**
- * 伤害量 → 刀光尺寸系数（模板参数化的起效案例：伤害越高刀光越大）。
- * 基准 18 伤害 = 1.0（同阶白板刀伤量级），开方压曲线（大伤害不糊屏）。
- */
-export function slashScaleFor(dealt) {
-  if (!Number.isFinite(dealt) || dealt <= 0) return 1.0;
-  return Math.min(2.1, Math.max(0.7, Math.sqrt(dealt / 18)));
+  const row = SERIES_SPELLS[def?.series];
+  const template = row ? TEMPLATES[row.id] : null;
+  return template ? { template, params: { ...(row?.params ?? {}) } } : null;
 }
 
 /**

@@ -16,13 +16,14 @@
 //     + renderOrder 50（UnitObject 层级基值：盖立绘(0)、让位状态层(60+)/粒子(70+)）；
 //   · 色参用线性三元组 [r,g,b]（shaders.js 尾注的 Color 构造约定）。
 import * as THREE from 'three';
-import { uniform, uv, vec4, float } from 'three/tsl';
+import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
-import { slashShade, darkSlashShade, coreShade } from './shaders.js';
+import { slashShade, darkSlashShade, coreShade, punchShade, fireBurstShade, beamShade } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
-const linearColor = (rgb) => uniform(new THREE.Color(rgb[0], rgb[1], rgb[2]));
+// 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
+const linearColor = (rgb) => vec3(rgb[0], rgb[1], rgb[2]);
 
 /** 卡面起手：HDR 色脉冲过卡面（CardFxLayer.pulse 公共节拍，块只做参数化包装）。 */
 export async function cardFlare(ctx, deps, {
@@ -87,6 +88,20 @@ export async function arcProjectile(ctx, deps, {
         });
       }
     });
+  }
+  // hold：定格 t=0.5 弧中点——投射物轨迹/形状的稳定画布（截图不赌时序）
+  if (new URLSearchParams(location.search).get('spelldebug') === 'hold') {
+    const t = 0.5;
+    quad.position.set(
+      0.5 * (from.x + to.x),
+      0.5 * (from.y + to.y) + Math.sin(Math.PI * t) * arcH,
+      0.5 * ((from.z ?? 0) + (to.z ?? 0)),
+    );
+    uPhase.value = 10;
+    await ctx.wait(3000);
+    deps.scene.remove(quad); geo.dispose(); mat.dispose();
+    if (lamp) lamp.intensity = 0;
+    return;
   }
   const st = { t: 0 };
   await ctx.tweenRaw(st, { t: 1 }, {
@@ -260,5 +275,145 @@ export async function slashSweep(ctx, deps, {
       dark.scale.set(s, s, 1);
     },
     onComplete: () => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); deps.scene.remove(dark); dGeo.dispose(); dMat.dispose(); },
+  });
+}
+
+/**
+ * 拳击冲击块（贴身命中读感）：punchShade 的横向冲击环 + 速度线在目标胸口炸开。
+ * 几何辅助 = quad 旋转 π 镜像左右（来向侧偏置——shader 里前向偏置恒在 +x）。
+ * 粒子暖白火花 + 微尘；灯 punch 借 fx1 池。多段连击逐拍调用 = 密集小冲击白送。
+ */
+export async function punchImpact(ctx, deps, {
+  at, dir = 1, scale = 1.0,
+  color = [1.0, 0.92, 0.78], hot = [1.0, 0.98, 0.92], rim = [0.82, 0.92, 1.25],
+  ms = 260, z = 2,
+  sparkColor = 0xffe9c8, sparkCount = 14, sparkSpeed = 20,
+  lampIntensity = 620,
+} = {}) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const { quad, geo, mat } = spellQuad({
+    shade: punchShade(uv(), uProg, linearColor(color), linearColor(hot), linearColor(rim)),
+    // 面片要显著大于敌人本体——环的职责是「探出轮廓读冲击」，环半径撑满也出不了
+    // 本体 footprint 的话环就永远藏在身体后面（glm-flash 第七轮实测病根）
+    width: 16.0 * scale, height: 9.5 * scale, name: 'spellFx:punch',
+  });
+  quad.position.set(at.x, at.y, (at.z ?? 0) + z);
+  quad.rotation.z = dir < 0 ? Math.PI : 0;   // 左右镜像（y 向条带对称，旋转 π 安全）
+  deps.scene.add(quad);
+  ctx.onKill(() => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); });
+  const dbgV = new URLSearchParams(location.search).get('spelldebug');
+  // hold 取在环半径峰值（0.75：环已探出轮廓、白核已衰——取证帧要避开辉光峰值）
+  if (dbgV === 'hold') { uProg.value = 0.75; await ctx.wait(3000); deps.scene.remove(quad); geo.dispose(); mat.dispose(); return; }
+  deps.particles?.spawn?.(at.x, at.y, {
+    color: sparkColor, count: Math.round(sparkCount * scale), speed: sparkSpeed,
+    size: 0.9, ttl: 0.4, gravity: -30, z: at.z,
+  });
+  const lamp = deps.cast?.get?.('light:fx1') ?? null;
+  if (lamp) {
+    lamp.color.setRGB(color[0], color[1], color[2]);
+    lamp.position.set(at.x, at.y, (at.z ?? 0) + z + 1);
+    ctx.spawn(async (c) => {
+      await c.tweenRaw(lamp, { intensity: lampIntensity }, { durationMs: 70, ease: 'power2.out' });
+      await c.tweenRaw(lamp, { intensity: 0 }, { durationMs: Math.round(ms * 0.9), ease: 'power2.in' });
+    });
+    ctx.onKill(() => { lamp.intensity = 0; });
+  }
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.out',
+    onUpdate: () => {
+      uProg.value = st.t;
+      const s = 0.55 + 0.5 * st.t;   // 几何辅助：整体外扩（环扩张主体在 shader 里）
+      quad.scale.set(s, s, 1);
+    },
+    onComplete: () => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); },
+  });
+}
+
+/**
+ * 火焰爆发块（火球落点 / 爆裂新星）：fireBurstShade 的上倾火体 + 冲击环 + 白热芯。
+ * 锚定语义：at = 爆心**落点**（目标脚边）——quad 底部坐在落点上，火向上烧。
+ * 粒子火花 + 慢速余烬（无主资产，ttl 后台散尽）；灯 punch 借 fx1 池。
+ */
+export async function fireBurst(ctx, deps, {
+  at, scale = 1.0,
+  color = [1.0, 0.42, 0.14], hot = [1.0, 0.86, 0.62], ember = [1.0, 0.18, 0.04],
+  ms = 420,
+  sparkColor = 0xff8c3a, sparkCount = 22, sparkSpeed = 24,
+  linger = { count: 12, speed: 7, ttl: 1.8, size: 0.8, gravity: -6 },
+  lampIntensity = 900, shakeSeverity = 0,
+} = {}) {
+  if (!at) return;
+  // 宽 12：地面冲击环要探出火体/敌人 footprint（9 宽时环全程藏在身体后面）
+  const width = 12.0 * scale, height = 12.0 * scale;
+  const uProg = uniform(0.0);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);   // 湍流相位（非 0 起，避免多实例同步扭动）
+  const { quad, geo, mat } = spellQuad({
+    shade: fireBurstShade(uv(), uProg, linearColor(color), linearColor(hot), linearColor(ember), uSeed),
+    width, height, name: 'spellFx:fireBurst',
+  });
+  quad.position.set(at.x, at.y + height * 0.34, (at.z ?? 0) + 2);   // 底部坐在落点上
+  deps.scene.add(quad);
+  ctx.onKill(() => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); });
+  const dbgV = new URLSearchParams(location.search).get('spelldebug');
+  // hold 取 0.65（地面环接近峰值、火体进 wane 半衰——取证帧避开辉光峰值）
+  if (dbgV === 'hold') { uProg.value = 0.65; await ctx.wait(3000); deps.scene.remove(quad); geo.dispose(); mat.dispose(); return; }
+  deps.particles?.spawn?.(at.x, at.y + 1.5, {
+    color: sparkColor, count: Math.round(sparkCount * Math.sqrt(scale)), speed: sparkSpeed,
+    size: 1.0, ttl: 0.55, gravity: -22, z: at.z,
+  });
+  if (linger) {
+    deps.particles?.spawn?.(at.x, at.y + 1, {
+      color: linger.color ?? sparkColor, count: linger.count,
+      speed: linger.speed, size: linger.size, ttl: linger.ttl,
+      gravity: linger.gravity, z: at.z,
+    });
+  }
+  const lamp = deps.cast?.get?.('light:fx1') ?? null;
+  if (lamp) {
+    lamp.color.setRGB(color[0], color[1], color[2]);
+    lamp.position.set(at.x, at.y + 2.5, (at.z ?? 0) + 3);
+    ctx.spawn(async (c) => {
+      await c.tweenRaw(lamp, { intensity: lampIntensity * scale }, { durationMs: Math.round(ms * 0.3), ease: 'power2.out' });
+      await c.tweenRaw(lamp, { intensity: 0 }, { durationMs: Math.round(ms * 0.9), ease: 'power2.in' });
+    });
+    ctx.onKill(() => { lamp.intensity = 0; });
+  }
+  if (shakeSeverity > 0) deps.shake?.impulse?.(shakeSeverity);
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power1.out',
+    onUpdate: () => {
+      uProg.value = st.t;
+      const s = 0.7 + 0.4 * Math.min(1, st.t * 2.2);   // 几何辅助：头段快膨（火体膨开主体在 shader 里）
+      quad.scale.set(s, s, 1);
+    },
+    onComplete: () => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); },
+  });
+}
+
+/**
+ * 光柱块（S/X 斩的封顶一竖）：beamShade 的竖直光束立在落点上，随进度收细熄灭。
+ * 独立块不占节拍主链——大卡模板在 notify 前后随意挂（无主资产口径：进度推完自灭）。
+ */
+export async function lightPillar(ctx, deps, {
+  at, color = [0.85, 0.92, 1.0], hot = [1.0, 1.0, 1.0],
+  width = 5.0, height = 34.0, ms = 1500, z = 2,
+} = {}) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const { quad, geo, mat } = spellQuad({
+    shade: beamShade(uv(), uProg, linearColor(color), linearColor(hot)),
+    width, height, name: 'spellFx:pillar',
+  });
+  quad.position.set(at.x, at.y + height * 0.5 - 2, (at.z ?? 0) + z);   // 底端坐在落点上（略沉入地面）
+  deps.scene.add(quad);
+  ctx.onKill(() => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); });
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.in',
+    onUpdate: () => { uProg.value = st.t; },
+    onComplete: () => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); },
   });
 }

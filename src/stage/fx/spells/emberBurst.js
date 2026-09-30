@@ -27,7 +27,8 @@ export const emberBurst = {
       const jobs = targets.map((unit, i) => (async () => {
         await ctx.wait(i * prm.staggerMs);
         await arcProjectile(ctx, deps, {
-          from: deps.cardTipWorld(), to: deps.unitAnchor(unit),
+          from: deps.playerAnchor?.() ?? deps.cardTipWorld(),   // 从主角手上飞出（2026-10-01 口径统一）
+          to: deps.unitAnchor(unit),
           color: prm.color, hot: prm.hot, ms: prm.projMs, arcH: prm.arcH,
           trail: { color: prm.burstColor },
         });

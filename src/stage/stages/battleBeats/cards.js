@@ -301,6 +301,20 @@ export const cardBeats = {
         const s = unit._baseScale ?? 1;
         return { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
       },
+      // 单位脚锚 = 落地爆心（火向上烧的爆发/光柱底部坐这里）
+      unitFeet: (unit) => {
+        const s = unit._baseScale ?? 1;
+        return { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
+      },
+      // 主角施术锚 = 抬手高度（2026-10-01 用户定：火弹等投掷物从**主角这儿**飞出来，
+      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者）。缺玩家视图时兜底卡尖。
+      playerAnchor: () => {
+        const id = this._snapshot?.player?.uniqueID;
+        const v = id != null ? (this._units.get(id) ?? null) : null;
+        if (!v) return null;
+        const s = v._baseScale ?? 1;
+        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
+      },
       // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
       // 火弹/投射物从这里起飞
       cardTipWorld: () => {
