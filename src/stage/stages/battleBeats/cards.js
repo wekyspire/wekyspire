@@ -9,6 +9,7 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
+import { runSpellFx } from '../../fx/spells/index.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -239,25 +240,76 @@ export const cardBeats = {
       durationMs: 70,
       delayMs: drainDelay,
       onComplete: () => {
-        this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
-          delayMs: 100,
-          onComplete: () => {
-            this._displayCard = null;
-            finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
-            if (this._views.has(id)) {
-              if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
-                this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
-                this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
-              }
-              // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+        // 卡面收尾（节拍完成时刻执行——held 分流/弹簧收养都以 notify 时点为准）
+        const settle = () => {
+          this._displayCard = null;
+          finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
+          if (this._views.has(id)) {
+            if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
+              this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
+              this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
             }
-          },
-        });
+            // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+          }
+        };
+        // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
+        // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
+        // 全程 hold）。未命中 = BASE 现行为（100ms 停留窗），零回归。
+        const spell = this._runSpellFx(payload, view, settle);
+        if (!spell) {
+          this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
+            delayMs: 100,
+            onComplete: settle,
+          });
+        }
       },
     });
   },
-  // 资源消耗/获取节拍：数字跳动由 syncState 承担；消耗粒子是纯装饰并行拍，
-  // 立即 finish 不占队列。卡费消耗（带 skillUniqueID 归属）的爆散+汇聚已在
+  /**
+   * 施术演出发起（fx/spells 模板系统的舞台接线）：装 deps 服务袋（世界场景/
+   * 粒子门面/灯池/震屏/单位锚/卡面世界点），交 runSpellFx 查决议链跑协程。
+   * 目标解析：载荷 target（玩家指定）优先，缺省按显示态全体存活敌（AOE 语言）。
+   * @returns {null | { done: Promise }} null = 未命中模板（_skillDisplay 走 BASE）
+   */
+  _runSpellFx(payload, view, notify) {
+    const defId = payload?.def?.id ?? payload?.skill?.defId ?? null;
+    if (!defId) return null;
+    const sm = this._sm;
+    const deps = {
+      scene: this.scene,
+      uiScene: this.uiScene,
+      particles: this.particles,
+      cast: this._cast,
+      shake: this.shake,
+      animator: this.animator,
+      cardView: view,
+      targets: () => {
+        const ids = payload?.target ? [payload.target]
+          : this._targetPool('enemy').map(u => u.uniqueID);   // 缺省全体存活敌（显示态口径）
+        return ids.map(id2 => this._units.get(id2)).filter(Boolean);
+      },
+      // 单位锚 = 立绘中心（血条同款高度基准 3.4×scale，z 随单位真实深度）
+      unitAnchor: (unit) => {
+        const s = unit._baseScale ?? 1;
+        return { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
+      },
+      // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
+      // 火弹/投射物从这里起飞
+      cardTipWorld: () => {
+        const p = view.position;
+        const px = sm.worldToScreen(p.x, p.y, p.z, sm.uiCamera);
+        return sm.screenToWorld(px.x, px.y, 24, sm.camera);
+      },
+    };
+    try {
+      return runSpellFx({ defId, deps, notify });
+    } catch (err) {
+      console.warn('[spellFx] 施术演出发起异常（回落 BASE）：', err);
+      return null;
+    }
+  },
+
+  // 资源消耗/获取节拍：数字跳动由 syncState 承担；消耗粒子是纯装饰并行拍，  // 立即 finish 不占队列。卡费消耗（带 skillUniqueID 归属）的爆散+汇聚已在
   // _skillDisplay 编排（先汇聚后发动），此处只补非卡来源消耗的纯爆散
   _resourceBeat(payload, finish) {
     finish();
