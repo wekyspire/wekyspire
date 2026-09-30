@@ -28,4 +28,45 @@ export function flushDeferredDisposals() {
   while (i < queue.length && queue[i].due <= frameNo) i++; // 队列按 due 单调入队，前缀即到期段
   for (let j = 0; j < i; j++) queue[j].res.dispose();
   if (i > 0) queue.splice(0, i);
+  flushBufferGuard();
+}
+
+// ---- uniform UBO 延迟销毁垫片（WebGPU bindingBuffer 版，2026-09-30 夜测病灶）----
+// three 的 Bindings 组销毁 uniform UBO（GPUBuffer label 前缀 'bindingBuffer'）后，
+// 已录制/复用的 bind group 仍可能长期引用它并每帧 submit → GPUValidationError
+// 刷屏（slot 房 ~60 条/s 静置复现，probe-webgpu-id 实锤同 buffer 每 200ms 重复
+// destroy）。与纹理版同一病理（WebGPU 无引用计数安全网），但销毁方在 three 内部，
+// 只能在原生原型层拦截：label 过滤 + 延迟 DESTROY_DELAY_MS 后落刀；若引用方在
+// 窗口内放手（重建新组接管），报错即归零。池上限防极端膨胀（KB 级 × 上限，可忽略）。
+const DESTROY_DELAY_MS = 1000;
+const BUFFER_GUARD_CAP = 256;
+let bufferGuardInstalled = false;
+/** @type {{ buf: GPUBuffer, orig: () => void, due: number }[]} */
+let bufferGuardQueue = [];
+
+/** 安装一次性垫片（渲染器宿主启动时调用；非浏览器/重复调用安全）。 */
+export function installBindingBufferGuard() {
+  if (bufferGuardInstalled || typeof globalThis.GPUBuffer === 'undefined') return;
+  bufferGuardInstalled = true;
+  const origDestroy = GPUBuffer.prototype.destroy;
+  GPUBuffer.prototype.destroy = function destroyPatched() {
+    const label = this.label ?? '';
+    if (!label.startsWith('bindingBuffer')) return origDestroy.call(this);
+    if (bufferGuardQueue.length >= BUFFER_GUARD_CAP) {
+      // 池满：最老的先落刀（宁可偶发一条报错也不无界膨胀）
+      const drop = bufferGuardQueue.shift();
+      drop.orig.call(drop.buf);
+    }
+    bufferGuardQueue.push({ buf: this, orig: () => origDestroy.call(this), due: performance.now() + DESTROY_DELAY_MS });
+  };
+}
+
+/** 每帧随 flushDeferredDisposals 走：到期的 UBO 真正销毁。 */
+function flushBufferGuard() {
+  if (bufferGuardQueue.length === 0) return;
+  const now = performance.now();
+  let i = 0;
+  while (i < bufferGuardQueue.length && bufferGuardQueue[i].due <= now) i++;
+  for (let j = 0; j < i; j++) bufferGuardQueue[j].orig.call(bufferGuardQueue[j].buf);
+  if (i > 0) bufferGuardQueue.splice(0, i);
 }

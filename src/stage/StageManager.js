@@ -17,7 +17,7 @@ import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
 import { CameraDirector } from './fx/camera.js';
-import { flushDeferredDisposals } from './deferredDispose.js';
+import { flushDeferredDisposals, installBindingBufferGuard } from './deferredDispose.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
@@ -250,6 +250,7 @@ export class StageManager {
   start() {
     if (this._running || !this._renderer) return;
     this._running = true;
+    installBindingBufferGuard(); // uniform UBO 延迟销毁垫片（WebGPU bindingBuffer 病灶，见 deferredDispose.js 注释）
     this._clock = new THREE.Timer(); // Clock 在 webgpu 包已弃用（Console 刷警告）
     // 时间流速开关（测试加速用）：`?tickScale=k` 同步缩放 dt 与 gsap 时间轴——
     // 演出补间/物理一并 k 倍速，协议时序（节拍顺序/finish 链）不变。默认 1 与
