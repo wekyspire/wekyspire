@@ -264,6 +264,10 @@ onMounted(async () => {
     stageManager.setRenderQuality(settings.renderQuality);
   }
   watch(() => settings.renderQuality, (q) => stageManager?.setRenderQuality(q));
+  // 最大渲染分辨率帽：画布背板超过帽值压 DPR，浏览器双线性放大到物理分辨率
+  const RES_H = { native: Infinity, qhd: 1440, fhd: 1080 };
+  stageManager.setMaxRenderHeight(RES_H[settings.maxRenderRes] ?? Infinity);
+  watch(() => settings.maxRenderRes, (t) => stageManager?.setMaxRenderHeight(RES_H[t] ?? Infinity));
   fitFrame();
   window.addEventListener('resize', fitFrame);
   stageManager.start();

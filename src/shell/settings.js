@@ -37,6 +37,9 @@ export const settings = reactive({
   // （带宽 ÷1/÷4/÷7；档位映射 = volumetricMoon 的 MOON_QUALITY_PRESETS）。
   // 低档设备（iGPU 共享内存带宽）降档提帧；档位语义只影响月光链，游戏逻辑无关。
   renderQuality: ['high', 'mid', 'low'].includes(saved.renderQuality) ? saved.renderQuality : 'high',
+  // 最大渲染分辨率帽（像素高度；'native' = 不限）：窗口物理分辨率超过帽值时画布
+  // 以帽值渲染、浏览器双线性放大到物理分辨率——4K/高倍屏的填充率救命档。
+  maxRenderRes: ['native', 'qhd', 'fhd'].includes(saved.maxRenderRes) ? saved.maxRenderRes : 'native',
   menuStoryMode: IS_DEV && saved.menuStoryMode === true, // 开始界面模式选择（默认肉鸽：故事模式未开放），回主菜单后保持
   // 调试模式（仅调试用）：开 = 新开局进调试会话（F9 面板 / 存档写 debug 槽 / 开局发一拳）。
   // 持久化只是开发期省事（每次手勾很烦）；调试会话**永不写真实存档槽**，
@@ -52,7 +55,7 @@ export const settings = reactive({
 
 export function persistSettings() {
   writeJson(KEY, {
-    soundOn: settings.soundOn, fxPost: settings.fxPost, renderQuality: settings.renderQuality,
+    soundOn: settings.soundOn, fxPost: settings.fxPost, renderQuality: settings.renderQuality, maxRenderRes: settings.maxRenderRes,
     menuStoryMode: settings.menuStoryMode, debugMode: settings.debugMode,
     slotDevourTutored: settings.slotDevourTutored,
     demonRollTutored: settings.demonRollTutored,
@@ -73,6 +76,13 @@ export function toggleFxPost() {
 export function setRenderQuality(tier) {
   if (!['high', 'mid', 'low'].includes(tier)) return;
   settings.renderQuality = tier;
+  persistSettings();
+}
+
+/** 最大渲染分辨率档（'native'|'qhd'|'fhd'）；非法值静默忽略。 */
+export function setMaxRenderRes(tier) {
+  if (!['native', 'qhd', 'fhd'].includes(tier)) return;
+  settings.maxRenderRes = tier;
   persistSettings();
 }
 

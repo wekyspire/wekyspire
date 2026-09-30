@@ -53,7 +53,7 @@ const ANTI_THROTTLE_ARGS = [
  *             验证过有效）：rAF 摆脱 60fps vsync 上限。测试加速用（配 ?tickScale=），
  *             默认关——日常验证要贴近真实游玩帧率。
  */
-export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, url = DEFAULT_URL, exe = null, unlockFps = false } = {}) {
+export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, deviceScaleFactor = 1, url = DEFAULT_URL, exe = null, unlockFps = false } = {}) {
   const exePath = exe ?? process.env.CHROME_EXE ?? join(homedir(),
     'AppData', 'Local', 'ms-playwright', 'chromium-1228', 'chrome-win64', 'chrome.exe');
   const browser = await chromium.launch({
@@ -61,7 +61,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     // 帧率解锁只加 flag，不加任何 --use-gl/--use-angle 软渲染开关（那是 1.9fps 病根）
     args: unlockFps ? [...ANTI_THROTTLE_ARGS, '--disable-frame-rate-limit', '--disable-gpu-vsync'] : ANTI_THROTTLE_ARGS,
   });
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ viewport, deviceScaleFactor });
   const errors = [];
   const consoleErrors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
