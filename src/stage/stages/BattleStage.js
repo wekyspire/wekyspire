@@ -321,6 +321,9 @@ export class BattleStage {
       this._drainFx?.update(dt); // 汇聚锚点跟随卡牌（飞展示位期间粒子始终钉徽章）
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
+      // 选卡覆盖层的临时候选（instantiate 模式）不在 _views 里——选中高亮是 C0 档
+      // （setVisualState 只设目标值，收敛在 updateFx），漏泵则点了没反应（实报病灶）
+      if (this._pick) for (const e of this._pick.temp.values()) e.object.updateFx?.(dt);
       // 常驻 HUD 按钮同为 C0 shader 档（setVisualState 只设目标值，收敛在 updateFx）——
       // 帧泵不补这一口，终局/模态的压暗目标永远停在 0（夜测 r3路4 probe 实锤：败北现场
       // _dimT=1 而 _dim=0、updateFx 每秒被泵 0 次——r2 的奖励侧"压暗"实为全屏背板读数）
@@ -670,6 +673,21 @@ export class BattleStage {
     };
     this._pick = pick;
     if (pick.mode === 'instantiate') {
+      // 模态遮罩（池/牌库来源的发现类选卡）：压暗战场与手牌、只留候选阵与确认键——
+      // 没有它时「候选直铺战场 + 打出的卡悬在中央发灰」读作界面坏了（2026-10-01 实报）。
+      // 深度分层：手牌(~15)/按钮(0) 在遮罩(28) 之下被压暗；候选(30) 与 HUD 确认键
+      // （_openPick 临时抬到 35）在其上；held 展示卡(60) 保持亮着（正在结算的卡）。
+      const bd = new THREE.Mesh(
+        new THREE.PlaneGeometry(WORLD_HEIGHT * 1.2 * (16 / 9), WORLD_HEIGHT * 1.2),
+        new THREE.MeshBasicMaterial({ color: 0x05070d, transparent: true, opacity: 0.55, depthWrite: false, fog: false }),
+      );
+      bd.name = 'pickBackdrop';
+      bd.position.set(0, UI_CAMERA_LOOK_AT_Y, 28);
+      this.uiScene.add(bd);
+      pick.backdrop = bd;
+      this._btnZ = { main: this._buttons.main.position.z, swap: this._buttons.swap.position.z };
+      this._buttons.main.position.z = 35;
+      this._buttons.swap.position.z = 35;
       const anchors = this._pickAnchors(ids.length);
       ids.forEach((uid, i) => {
         const cardProj = this._findCardProj(uid);
@@ -679,13 +697,14 @@ export class BattleStage {
           uniqueID: pickerId, cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace: this._bakeFace,
         });
         obj.setCard(cardProj);
+        obj.setVisualState('normal');
         const a = anchors[i];
         obj.position.set(a.x, a.y, 30);
         obj.scale.set(a.scale ?? PICK_SCALE, a.scale ?? PICK_SCALE, 1);
         obj.visible = true;
         this.uiScene.add(obj);
         this.picker.addPickable(pickerId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
-        pick.temp.set(pickerId, { object: obj, uniqueID: uid });
+        pick.temp.set(pickerId, { object: obj, uniqueID: uid, baseY: a.y, baseScale: a.scale ?? PICK_SCALE });
       });
     }
     this._layoutAndTrack();
@@ -697,6 +716,16 @@ export class BattleStage {
       this.picker.removePickable(pickerId);
       this.uiScene.remove(entry.object);
       entry.object.dispose();
+    }
+    if (this._pick.backdrop) {
+      this.uiScene.remove(this._pick.backdrop);
+      this._pick.backdrop.geometry.dispose();
+      this._pick.backdrop.material.dispose();
+    }
+    if (this._btnZ) {   // HUD 确认键归位（遮罩期临时抬高）
+      this._buttons.main.position.z = this._btnZ.main;
+      this._buttons.swap.position.z = this._btnZ.swap;
+      this._btnZ = null;
     }
     this._pick = null;
   }
@@ -803,6 +832,21 @@ export class BattleStage {
         view.setVisualState(this.bridge.intents.canPlayCard(id) ? 'normal' : 'disabled');
       } else {
         view.setVisualState('normal');
+      }
+    }
+    // 选卡覆盖层的临时候选（instantiate 模式不在 _views）：选中态 = C0 高亮 + **放大
+    // 抬升**（高亮单独太弱——均亮只 +11/255，像素差分实测读不出「哪张被选了」）；
+    // 基准（baseY/baseScale）在 _openPick 建卡时记账，取消选中回基准
+    if (this._pick) {
+      for (const e of this._pick.temp.values()) {
+        const sel = this._pick.selection.includes(e.uniqueID);
+        e.object.setVisualState(sel ? 'highlighted' : 'normal');
+        // gsapTween 口径：目标 = 物体根，scale 键是等比缩放、y 走 position（传子对象会被
+        // 当成根再取 .position → undefined，补间静默失效——上面实测病灶）
+        this._tweenFactory(e.object, {
+          y: e.baseY + (sel ? 2.4 : 0),
+          scale: e.baseScale * (sel ? 1.16 : 1.0),
+        }, { durationMs: 160, ease: 'power2.out' });
       }
     }
   }
