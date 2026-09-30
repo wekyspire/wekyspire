@@ -58,8 +58,9 @@ export function resolveDamageFx(defId) {
   let def = null;
   try { def = getSkillDefinition(defId); } catch { return null; }
   if (!def) return null;
-  // S/X 天斩：heavenCleave 在施术拍已实体锁演完整场（巨刃+光柱），伤害拍不再补刀光
-  if (def.id === 'godCleave' || def.id === 'skyCleave') return null;
+  // 天斩链（A/S/X）：heavenCleave 在施术拍已实体锁演完整场（压迫+巨刃+光柱+
+  // 断裂），伤害拍不再补刀光——避免双斩读感
+  if (def.id === 'godCleave' || def.id === 'skyCleave' || def.id === 'mountainCleave') return null;
   switch (def.series) {
     case 'blade':
       return { kind: 'slash', variant: slashVariantOf(def) };

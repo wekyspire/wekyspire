@@ -383,7 +383,12 @@ export const unitBeats = {
     // 里 core unit 的复活倒计时**（结算内同步挂上，实时）；不能用本舞台快照——
     // unitDied 是「先 anim 后 sync」，死亡节拍播放时快照还是旧投影（reviving 未至），
     // 误判走真死焚毁链（病灶：复苏后立起的是焚毁透明立牌）。
-    if ((payload?.unit?._reviveCountdown ?? 0) > 0) return this._unitFakeDeathBeat(unit, finish);
+    if ((payload?.unit?._reviveCountdown ?? 0) > 0) {
+      this._cleaveSplit?.delete(id);   // 复苏者不裂——标记不跨假死
+      return this._unitFakeDeathBeat(unit, finish);
+    }
+    // 天斩击杀分支（heavenCleave 施术拍挂的断裂标记）：立牌沿斩缝裂成两半
+    if (this._cleaveSplit?.delete(id)) return this._unitCleaveSplitBeat(unit, finish);
     const billboard = unit.billboard;
     unit.hideIntention(); // 意图即隐：尸体不再预告下一手
     const px = unit.position.x;
@@ -459,6 +464,116 @@ export const unitBeats = {
       onComplete: () => {
         unit.visible = false;
         finish();
+      },
+    });
+  },
+  // 天斩击杀专属（断裂标记消费方）：立牌沿竖直斩缝**裂成两半**——本体隐藏，取其
+  // 几何参数与立绘贴图做两张「半幅 UV」快照面（普通材质——本体是带 L0 补丁的
+  // node 材质，克隆补丁不可靠，尸体将焦化无需补丁），挂 billboard（继承逐帧 yaw，
+  // 不吃 standee 呼吸/姿态）。四拍：裂缝迸开 + 剖面白热闪光（钉住「被劈开」读感）
+  // → 悬停对峙（两半直立留缝——分离姿态的峰值帧，glm-flash 实测：倒伏起手会把
+  // 读感打成「融化」）→ 倒伏（加速分离/外旋/下坠 + 断口火花落尘）→ 焦黑侵蚀淡出
+  // （焚毁同语言）。节拍阻塞至收殓（同死亡链）。
+  _unitCleaveSplitBeat(unit, finish) {
+    const body = unit.body;
+    unit.hideIntention();
+    unit.hideStatus();
+    const { width = 16, height = 22 } = body.geometry?.parameters ?? {};
+    const map = body.material?.map ?? null;
+    const startColor = body.material?.color?.clone() ?? new THREE.Color(0xffffff);
+    const halves = [0, 1].map((i) => {
+      // 半宽几何 + 半幅 UV（各占原位一半，两片拼回原图）：⚠ 不能用全宽几何裁 UV——
+      // 那会把半张脸横向拉伸 2 倍且两片重叠成糊（glm-flash 两轮「融化/灰斑」病根）
+      const geo = new THREE.PlaneGeometry(width / 2, height);
+      const uvAttr = geo.attributes.uv;
+      for (let k = 0; k < uvAttr.count; k++) uvAttr.setX(k, i * 0.5 + uvAttr.getX(k) * 0.5);
+      const mat = new THREE.MeshBasicMaterial({
+        map, color: startColor.clone(), alphaTest: 0.5, transparent: true, fog: false,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.name = 'cleaveHalf';
+      m.position.set((i === 0 ? -1 : 1) * width * 0.25, body.position.y, 0.15);
+      m.castShadow = false;   // 快照面不投影：影子随本体隐去，淡出期不赖地
+      unit.billboard.add(m);
+      return m;
+    });
+    // 剖面闪光：切缝处一线白热（HDR 直推过 bloom 阈——「切面在烧」的读感锚点）
+    const seam = new THREE.Mesh(
+      new THREE.PlaneGeometry(width * 0.05, height * 1.02),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(2.6, 2.4, 1.9), transparent: true,
+        blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, fog: false,
+      }),
+    );
+    seam.name = 'cleaveSeam';
+    seam.position.set(0, body.position.y, 0.3);
+    seam.renderOrder = 50;
+    unit.billboard.add(seam);
+    body.visible = false;
+    const py0 = body.position.y;
+    const { x: px, y: py, z: pz } = unit.position;
+    const id = unit.uniqueID;
+    const cleanHalves = () => {
+      for (const m of halves) { unit.billboard.remove(m); m.geometry.dispose(); m.material.dispose(); }
+      unit.billboard.remove(seam); seam.geometry.dispose(); seam.material.dispose();
+    };
+    const setSep = (sep, tiltL, tiltR, dropL, dropR) => {
+      halves[0].position.x = -width * 0.25 - sep;
+      halves[1].position.x = width * 0.25 + sep * 0.85;
+      halves[0].rotation.z = tiltL;
+      halves[1].rotation.z = tiltR;
+      halves[0].position.y = py0 - dropL;
+      halves[1].position.y = py0 - dropR;
+    };
+    // ①a 裂缝迸开（~0.18s）：弹开一道缝 + 剖面闪光最亮（分离量给足——团状立绘
+    // 要明显大于人形立绘的缝才读得出「两片」，glm-flash 实测口径）
+    this.animator.animateCustom(id, {
+      durationMs: 180, ease: 'power3.out',
+      onUpdate: (t) => setSep(t * width * 0.16, -0.06 * t, 0.05 * t, 0, 0),
+      onComplete: () => {
+        // ①b 悬停对峙（~0.3s）：缝缓慢加宽 + 微外倾——两半立牌姿态的峰值帧
+        this.animator.animateCustom(id, {
+          durationMs: 300, ease: 'power1.inOut',
+          onUpdate: (t) => {
+            setSep(width * 0.16 + t * width * 0.18, -0.06 - 0.08 * t, 0.05 + 0.07 * t, 0.1 * t, 0.14 * t);
+            seam.material.opacity = 1 - t * 0.8;
+          },
+          onComplete: () => {
+            // ② 倒伏（~0.45s）：加速分离 + 外旋 + 不对称下坠
+            this.particles.spawn(px, py + height * 0.3, { count: 16, color: 0xffe2a8, speed: 15, ttl: 0.5, gravity: -12, size: 1.2, z: pz });
+            this.particles.spawn(px, py + 0.8, { count: 16, color: 0xb59a72, speed: 9, ttl: 0.7, gravity: -6, size: 2.0, z: pz });
+            this.particles.spawn(px, py + 0.5, { count: 10, color: 0x857358, speed: 16, ttl: 0.45, gravity: -12, size: 1.4, z: pz });
+            this.animator.animateCustom(id, {
+              durationMs: 450, ease: 'power2.in',
+              onUpdate: (t) => {
+                setSep(
+                  width * 0.34 + t * width * 0.5,
+                  -0.14 - 0.36 * t, 0.12 + 0.26 * t,
+                  0.1 + 1.0 * t * t, 0.14 + 1.55 * t * t,
+                );
+                seam.material.opacity = Math.max(0, 0.2 - t * 0.25);
+              },
+              onComplete: () => {
+                // ③ 焦黑侵蚀淡出（焚毁同语言：先焦后散，alphaTest 阈值侵蚀出烧蚀边）
+                const charColor = new THREE.Color(0x1a0f0a);
+                this.animator.animateCustom(id, {
+                  durationMs: 520, ease: 'power1.in',
+                  onUpdate: (t) => {
+                    for (const m of halves) {
+                      m.material.opacity = 1 - t;
+                      m.material.color.copy(startColor).lerp(charColor, Math.min(1, t * 1.3));
+                    }
+                  },
+                  onComplete: () => {
+                    cleanHalves();
+                    unit.visible = false;
+                    finish();
+                  },
+                });
+              },
+            });
+          },
+        });
       },
     });
   },

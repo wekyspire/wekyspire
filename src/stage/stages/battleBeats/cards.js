@@ -281,6 +281,10 @@ export const cardBeats = {
       shake: this.shake,
       animator: this.animator,
       unitById: (id) => this._units.get(id) ?? null,
+      camera: this._sm.cameraDirector,   // 场景参数演出（天斩 fov 压迫/复原）
+      markCleaveSplit: (units) => {   // 天斩断裂标记（死亡节拍消费）
+        for (const u of units ?? []) this._cleaveSplit?.add(u.uniqueID);
+      },
     };
   },
 

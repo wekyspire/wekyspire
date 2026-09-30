@@ -253,6 +253,9 @@ export class BattleStage {
     this._vignette = new DamageVignette();
     this.uiScene.add(this._vignette.object);
 
+    // 天斩断裂标记（heavenCleave 施术拍挂上 → 死亡节拍消费即摘；舞台拆台清空）
+    this._cleaveSplit = new Set();
+
     // 在途 fx 协程剧本（伤害命中等节拍本体）：dispose 时统一 kill（结构化取消，
     // 防舞台拆除后残段继续改对象）；promise 必达，节拍 finish 链不会断
     this._fxScripts = new Set();
@@ -1195,6 +1198,7 @@ export class BattleStage {
     this._topBar.dispose();
     this.shake.dispose();      // 撤掉震荡那路偏移通道（残留会把下一舞台的相机推歪）
     this._vignette.dispose();
+    this._cleaveSplit.clear();
     // 视图全销毁；模型跨场存活（下一场 beginBattle 重置），不在此清理
     for (const view of this._views.values()) {
       this.uiScene.remove(view);

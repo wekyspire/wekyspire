@@ -66,7 +66,9 @@ const CARD_SPELLS = {
   // 先发链体量递进：小弹快掷 / 火矢平弧疾射 / 先发火球标准
   firstShot:      { template: 'fireballCast', params: { size: 1.7, projMs: 240, arcH: 3 } },
   firstArrow:     { template: 'fireballCast', params: { size: 1.4, projMs: 200, arcH: 1 } },
-  // S/X 天斩：实体锁全演出（暗柱预兆→双脉冲→巨刃+冲天光柱）
+  // S/X 天斩：实体锁全演出 v2（压迫幕+fov 拉大+微震 → 白刃一闪+全屏白闪 →
+  // 白金迸裂+冲天光柱+复原；击杀走立牌断裂两半）。A 摧山斩入档（轻量级）
+  mountainCleave:  { template: 'heavenCleave', params: { grade: 'A' } },
   skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
   godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
 };

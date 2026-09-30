@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
+import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
 import { slashShade, darkSlashShade, coreShade, punchShade, fireBurstShade, beamShade } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
@@ -416,4 +417,87 @@ export async function lightPillar(ctx, deps, {
     onUpdate: () => { uProg.value = st.t; },
     onComplete: () => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); },
   });
+}
+
+// ---- 场景参数演出块（2026-10-01 天斩 v2）：压暗幕 / 全屏白闪 -------------------
+// 设计口径：压暗/闪光走 **uiScene 顶层覆盖面**（DamageVignette 同机制——正交 UI
+// 视界整幅、renderOrder 1000、深度全关），不改 post pass 参数——零管线重建
+// （W2 教训：动 post 链配置会触发 pipeline churn），观战页同屏复用。
+
+/** 压迫幕贴图（模块级单例）：径向渐变，中心留可视、四周沉入冷黑（斩杀预兆的
+ * 「世界退场」感——与受击渐晕的暗红不同调，冷蓝黑）。 */
+let _dreadTexture = null;
+function dreadTexture() {
+  if (_dreadTexture) return _dreadTexture;
+  if (typeof document === 'undefined') return null;   // node：退化纯色面
+  const S = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const c = S / 2;
+  const grad = ctx.createRadialGradient(c, c, 0, c, c, c);
+  grad.addColorStop(0, 'rgba(4, 6, 12, 0)');
+  grad.addColorStop(0.42, 'rgba(4, 6, 12, 0.05)');
+  grad.addColorStop(0.68, 'rgba(3, 5, 10, 0.42)');
+  grad.addColorStop(1, 'rgba(2, 3, 7, 0.97)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, S, S);
+  _dreadTexture = new THREE.CanvasTexture(canvas);
+  _dreadTexture.colorSpace = THREE.SRGBColorSpace;
+  return _dreadTexture;
+}
+
+/**
+ * 压迫幕（句柄式资产块——非 await 型：模板分阶段驱动 level）。
+ * 返回 { set(level, ms, ease?) → Promise, level() }；模板负责收尾 set(0)，
+ * 协程被杀时 onKill 自动摘除。level 语义 = 覆盖强度 0..1（0.85 ≈ 大幅暗淡）。
+ */
+export function dreadVeil(ctx, deps) {
+  const mat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0, depthTest: false, depthWrite: false,
+    color: _dreadTexture ? 0xffffff : 0x04060c,   // node 退化底色（无贴图）
+    map: dreadTexture(), fog: false,
+  });
+  const W = WORLD_HEIGHT * 1.18 * (16 / 9);
+  const H = WORLD_HEIGHT * 1.18;
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+  quad.name = 'spellFx:dreadVeil';
+  quad.position.set(0, UI_CAMERA_LOOK_AT_Y, 490);
+  quad.renderOrder = 1000;
+  quad.visible = false;
+  deps.uiScene?.add(quad);
+  const state = { v: 0 };
+  const apply = () => { mat.opacity = state.v; quad.visible = state.v > 0.005; };
+  ctx.onKill(() => { deps.uiScene?.remove(quad); quad.geometry.dispose(); mat.dispose(); });
+  return {
+    set: (level, ms, ease = 'power2.in') =>
+      ctx.tweenRaw(state, { v: Math.max(0, level) }, { durationMs: ms, ease, onUpdate: apply }),
+    level: () => state.v,
+  };
+}
+
+/**
+ * 全屏白闪（斩落一瞬的曝光读感）：uiScene 纯色覆盖面，intensity 起、指数落。
+ * 自包含块（await 即全程），借 ctx.wait 保险。
+ */
+export async function screenFlash(ctx, deps, {
+  intensity = 0.9, ms = 220, color = 0xffffff,
+} = {}) {
+  const mat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0, depthTest: false, depthWrite: false, color, fog: false,
+  });
+  const W = WORLD_HEIGHT * 1.18 * (16 / 9);
+  const H = WORLD_HEIGHT * 1.18;
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+  quad.name = 'spellFx:screenFlash';
+  quad.position.set(0, UI_CAMERA_LOOK_AT_Y, 489);
+  quad.renderOrder = 999;
+  deps.uiScene?.add(quad);
+  ctx.onKill(() => { deps.uiScene?.remove(quad); quad.geometry.dispose(); mat.dispose(); });
+  const state = { v: intensity };
+  await ctx.tweenRaw(state, { v: 0 }, {
+    durationMs: ms, ease: 'power2.out',
+    onUpdate: () => { mat.opacity = state.v; quad.visible = state.v > 0.005; },
+  });
+  deps.uiScene?.remove(quad); quad.geometry.dispose(); mat.dispose();
 }
