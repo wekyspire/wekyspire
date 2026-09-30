@@ -6,8 +6,10 @@ import { cardFlare, arcProjectile, impactBurst } from './blocks.js';
 
 export const emberBurst = {
   defaults: {
-    color: 0xff7a2d,       // 主爆/火弹色（火焰橙）
-    core: 0xffd9a0,        // 卡面起手脉冲（暖白）
+    color: [1.0, 0.45, 0.18],   // 火弹/爆心晕环色（线性）
+    hot: [1.0, 0.85, 0.63],     // 热核色（暖白）
+    burstColor: 0xff7a2d,       // 粒子爆散色（hex）
+    core: 0xffd9a0,             // 卡面起手脉冲（hex）
     projMs: 320, arcH: 7, staggerMs: 70,
     count: 24, speed: 26, size: 1.1,
     notifyAfterMs: 200,    // 主体落定后的停顿（notify 前让爆点读完）
@@ -26,12 +28,13 @@ export const emberBurst = {
         await ctx.wait(i * prm.staggerMs);
         await arcProjectile(ctx, deps, {
           from: deps.cardTipWorld(), to: deps.unitAnchor(unit),
-          color: prm.color, ms: prm.projMs, arcH: prm.arcH,
-          trail: { color: prm.color },
+          color: prm.color, hot: prm.hot, ms: prm.projMs, arcH: prm.arcH,
+          trail: { color: prm.burstColor },
         });
         await impactBurst(ctx, deps, {
           at: deps.unitAnchor(unit),
-          color: prm.color, count: prm.count, speed: prm.speed, size: prm.size,
+          color: prm.color, hot: prm.hot, burstColor: prm.burstColor,
+          count: prm.count, speed: prm.speed, size: prm.size,
           linger: prm.linger,
           shakeSeverity: i === 0 ? prm.shakeSeverity : 0,   // 多目标只震一次
         });
