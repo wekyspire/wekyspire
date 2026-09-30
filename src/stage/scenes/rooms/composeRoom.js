@@ -41,7 +41,7 @@ const ZONE_TAGS = ['prison', 'barrack', 'chapel', 'crypt', 'library', 'kitchen',
 const BAND_Y = { low: 7, mid: 20, high: 34 }; // 墙面装饰高度带（地板相对挂点高）
 
 // ---- 战场 keepout：由 battleLine + **战区留白带**（keepoutSlots）派生 ----
-// 注意用 keepoutSlots 而非 slots：后者是单位**站位**带（画面安全区，2026-09 收窄防出画），
+// 注意用 keepoutSlots 而非 slots：后者是单位**站位**带（画面安全区，收窄防出画），
 // 留白要覆盖整条战线，两者解耦后改站位不再连带重排 PCG 道具。
 
 function slotPos(slot) {
@@ -90,7 +90,7 @@ function tagWeight(def, weights = {}) {
 // 交互设施（老虎机 / 银行机 / 售货机…：prop 定义带 `interactive` 标签，build 时挂 userData.interactive
 // 由 RoomStage 的 rig 驱动）：**只能由配方 guaranteed 定点摆放**，绝不进任何随机池。
 // 它们带着 container / lamp / metal / glass 这些通用标签，不挡就会在任意 PCG 房间里随机长出
-// （用户 2026-09-13 报：这三台机器只该在特定楼层出现）。楼层门禁在房间调度层（SHOP_FLOORS / slot 房），
+// （实报：这三台机器只该在特定楼层出现）。楼层门禁在房间调度层（SHOP_FLOORS / slot 房），
 // 场景层的口径是"随机撒布永不放交互件"，两者互补。
 const isInteractiveFixture = (d) => (d.tags ?? []).includes('interactive');
 
@@ -175,7 +175,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
   }) => {
     obj.position.set(x, y, z);
     obj.rotation.y = ry;
-    if (tiltX) obj.rotation.x = tiltX; // 斜坡姿态：垂直坡面法线（用户定，非水平摆放）
+    if (tiltX) obj.rotation.x = tiltX; // 斜坡姿态：垂直坡面法线（非水平摆放）
     if (tiltZ) obj.rotation.z = tiltZ;
     if (scale !== 1) obj.scale.setScalar(scale);
     root.add(obj);
@@ -232,7 +232,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
 
   const scatterScale = recipe.scatter.scale ?? 1; // 落地件放大系数（体量撑场面，相机不动）
 
-  // ---- 单调打断体（breaker）：打破"两面墙+一个地板"的基本几何组合（用户定原则）----
+  // ---- 单调打断体（breaker）：打破"两面墙+一个地板"的基本几何组合（原则）----
   // 手段不限于立柱：房中立柱/断柱、墙角塌方体（大石块向上堆高）、岩堆、
   // 木箱高塔（向上堆积）、贴墙斜倒石板（斜线破竖横）——按候选点语义 rng 选型。
   // 所有点位都不进战线走廊（blocked() 由 keepout 保证），footprint 走 scatterScale 放大。
@@ -302,7 +302,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
       build({ rng }) {
         const g = new THREE.Group();
         const inner = new THREE.Group();
-        // 尺寸克制（用户三轮报障"墙色大长方体/体素墙缺失"实为斜板冒充墙体）：
+        // 尺寸克制（三轮报障"墙色大长方体/体素墙缺失"实为斜板冒充墙体）：
         // 窄板（4~5.4 宽）+ 低板（13~20 高）+ 陡斜（42°+）——读作"塌下来的断板"而非墙
         const h = 13 + rng() * 7;
         const slab = K.box({ color: shade(P.stone, -0.3 + rng() * 0.16), size: [3.8 + rng() * 1.6, h, 2.2] });
@@ -363,7 +363,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
       def = BREAKER_DEFS[kind];
     }
     const fp = def.footprint || { x: 4, z: 4 };
-    // 斜靠板收 cap（用户报障：2.2× 后是墙色巨板，读作旧墙体——它只需"斜线破竖横"，不需撑体量）
+    // 斜靠板收 cap（报障：2.2× 后是墙色巨板，读作旧墙体——它只需"斜线破竖横"，不需撑体量）
     const ksc = kind === 'leaningSlab' ? Math.min(scatterScale, 1.35) : scatterScale;
     const bhx = (fp.x / 2) * ksc;
     const bhz = (fp.z / 2) * ksc;
@@ -412,7 +412,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
   // LAMP_WALL_PUSH**——挂件从挂点向下垂（彩灯串/吊灯），落地口径会把光池放到挂点上方；
   // 而灯池还贴墙的话（灯珠离墙 ~1）会在墙上打出爆白的彩色斑，推离墙面才是柔和的彩色氛围光。
   // **落地件也必须推到体外**：老虎机/银行机这类箱体，光池落在 (x,z)=机身中心 = **箱子内部**，
-  // 于是"机身里有个大点光源"（用户报障：机上光照诡异）——按朝向 ry 沿前脸法线推出
+  // 于是"机身里有个大点光源"（报障：机上光照诡异）——按朝向 ry 沿前脸法线推出
   // (半深 + 12)，高度取体量上段；推得太近（~1.6 或 ~6）都会把前脸照爆——
   // 饱和壳色（正红）一旦过曝先丢色相变粉，再被 bloom 抹开，整台机器糊成一团。
   const LAMP_WALL_PUSH = 4.5;
@@ -431,7 +431,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
    * 灯锚（返回**数组**：一个件可以出多盏）。
    * 默认一件一池；道具若声明 `lampBands: [{ h, gain, push? }]`（h = 体量高度比例）
    * 则按分段出池——**这是"用光塑造体量"的接口**：银行机就靠"低位强池 + 高位弱池"
-   * 做出"顶部暗、下方亮"（用户定 2026-09-11），单盏点光给不了上下差。
+   * 做出"顶部暗、下方亮"，单盏点光给不了上下差。
    */
   const lampAnchorOf = (p) => {
     if (!p.tags.includes('lamp')) return [];
@@ -504,7 +504,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
           const fp = d.footprint || { x: 2, z: 2 };
           return Math.max(fp.x, fp.z) <= cfg.cell * 0.95;
         });
-        // 地形分区选品限制（用户定）：裂缝/斜坡仅 rubble 类装饰；斜坡另限小型件
+        // 地形分区选品限制：裂缝/斜坡仅 rubble 类装饰；斜坡另限小型件
         const zn0 = terra.zoneAt(cx, cz);
         const pool = (zn0?.type === 'fissure' || zn0?.type === 'slope')
           ? cellPool.filter(d => (d.tags || []).includes('rubble')
@@ -627,7 +627,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     lampAnchors.push(...lampAnchorOf(placements[placements.length - 1]));
   }
 
-  // ---- 墙根角簇：大件沿墙密堆积，塑造几何起伏（用户反馈"墙角没有大件堆积"）----
+  // ---- 墙根角簇：大件沿墙密堆积，塑造几何起伏（反馈"墙角没有大件堆积"）----
   // 每簇 3~5 件沿墙线性密排（间距 0.4~1.0），首件高概率是程序化木箱货堆——
   // 兜底保证每个激活角都有"立方体级"体量；选品走 container/furniture 中大件池。
   const clusterRng = createRng(`${seed}:${recipeId}:cluster`);
@@ -673,7 +673,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     const target = 3 + Math.floor(clusterRng() * 3);
     for (let n = 0; n < target && (u - spot.to) * dir <= 0; n++) {
       // 首件 75% 用程序化货堆（保证体量），其余从 container 大件池选；
-      // 地形限制（用户定）：斜坡不放（大件躺不进坡面），裂缝仅 rubble
+      // 地形限制：斜坡不放（大件躺不进坡面），裂缝仅 rubble
       const kzn = terra.zoneAt(
         spot.axis === 'x' ? u : spot.wall,
         spot.axis === 'x' ? spot.wall : u,
@@ -708,7 +708,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
   }
 
   // ---- L2 沿街立面：bay 分段 → 开口避让 → wallStructure（允许同 bay 叠加）→ wallDecor（并集层）----
-  // 组合规则（用户定）：bay 只被"开口"硬门约束；墙面结构（柱/凸拱/壁炉/扶壁件）允许互相
+  // 组合规则：bay 只被"开口"硬门约束；墙面结构（柱/凸拱/壁炉/扶壁件）允许互相
   // 重叠摆放（同 bay 主结构 + 叠加结构，二次 roll 排除同 def），扶壁肋只挡装饰不挡结构；
   // 墙面装饰 = 并集层——在除开口/肋体外的所有 bay 独立 roll，与被结构占据的 bay 共存
   // （被凸起遮住的装饰自然浪费，露出的部分强化"挂在上面的组合感"）。
@@ -920,7 +920,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
   const skydome = buildSkydome({ moonDir: new THREE.Vector3(-0.55, 0.5, -0.45), flat: true });
   group.add(skydome);
   let moonDust = null;
-  // 光路 = 窄高窗 + 皮肤透穿洞（左墙破洞漏月光成柱，用户定）：只取上半墙 breach 洞
+  // 光路 = 窄高窗 + 皮肤透穿洞（左墙破洞漏月光成柱）：只取上半墙 breach 洞
   // （kind=bite 的贴地咬口出的是贴地乱溅光扇，读作地板白斑——用户报障"炸裂"）；
   // skin 洞 rect 是 {u0,u1,y0,y1} 口径，统一转成窗的 {sill,top,u0,u1}
   const beamRects = [
@@ -976,7 +976,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     notifiables,    // 被动响应件（fx/notify 分发目标）：{ name, object, interactions }
     openings: { windows: left.windowRects, door },
     recipe,
-    // 特殊色调（用户定 2026-09）：配方 grading 随契约下发——exposure=渲染曝光倍率；
+    // 特殊色调：配方 grading 随契约下发——exposure=渲染曝光倍率；
     // tint=[r,g,b] 场景调色（composer 路径生效；非 composer 路径渲染层以曝光为准）
     grading: recipe.grading ?? null,
     update,

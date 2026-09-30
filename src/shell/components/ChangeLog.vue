@@ -12,7 +12,7 @@ let loading = null;
 
 // 版本行：v{版本} · {最新版本日期}——两者都在构建期注入（编号 = package.json，
 // 日期 = changelog 顶部条目 `## YYYY.M.D`，见 vite.config.js 的一致性校验）。
-// 旧口径「进页面当天的日期」已废（2026-09-18 用户报：应显示最新版本日期）。
+// 旧口径「进页面当天的日期」已废（应显示最新版本日期）。
 const APP_DATE = typeof __CHANGELOG_DATE__ !== 'undefined' ? __CHANGELOG_DATE__ : '';
 const VERSION_LINE = `v${APP_VERSION}${APP_DATE ? ` · ${APP_DATE}` : ''}`;
 
@@ -49,7 +49,7 @@ function parseMarkdown(md) {
 async function ensureLoaded() {
   loading ??= (async () => {
     try {
-      // 缓存双保险（2026-09 用户报：版本更新后弹层仍显示旧日志——Apache 对 public/ 静态
+      // 缓存双保险（版本更新后弹层曾仍显示旧日志——Apache 对 public/ 静态
       // 文件无 no-cache 头，浏览器启发式缓存会拿旧副本）：
       //   · URL 挂构建版本号——每次发版换新地址，旧缓存自然旁路；
       //   · cache: 'no-store'——同版本内改日志（热修补丁）也不再吃缓存。文件很小，全量下载无负担。

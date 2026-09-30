@@ -1,5 +1,5 @@
 // CardFxLayer：卡牌特效统一宿主 —— 牌面叠加特效的统一管理者（CardObject 组合子）。
-// 对位单位侧 UnitFxLayer（VFX 结构大更新 Phase 3，2026-09-27 收口为固定 C0–C3 层级）。
+// 对位单位侧 UnitFxLayer（VFX 结构大更新 Phase 3，收口为固定 C0–C3 层级）。
 // 全部时间驱动（update(dt) 自算时间线），不依赖 gsap/tween 注入，也没有外部寄生状态。
 // 固定层级（C = Card；z 为牌面局部纵深，牌面 z=0）：
 //   C0 牌面 shader —— face 材质补丁（fx/cardBodyFx.js，构造即挂常驻）：uBurn 焚毁
@@ -26,7 +26,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：veil/ed
 
 const VEIL_LERP = 7;       // 覆盖高度收敛速率（/s——拍数推进时前沿平滑爬行的动画）
 const PULSE_OPACITY = 0.55;
-// 冷却拍数水印：牌面中央低透明度平面白字（用户定 2026-09-13：平面型水印，
+// 冷却拍数水印：牌面中央低透明度平面白字（平面型水印，
 // 驳回大号发光 counter 与色块徽章两版）
 const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
 // 将弃描边：警示红 + 急促呼吸（1.2s——逼近的截止感）；暗化盖纱让牌面"沉"下去
@@ -39,7 +39,7 @@ const LOCK_PERIOD = 2.4;
 const EDGE_MARGIN = 5;
 const EDGE_FADE_IN = 3.5;
 
-// ---- WebGPU 迁移（2026-09-27）：veil / edgeGlow 两件内嵌 shader 平移成 TSL ----
+// ---- WebGPU 迁移：veil / edgeGlow 两件内嵌 shader 平移成 TSL ----
 // 范式与 fx/unitBodyFx.js 同源：uniform = TSL uniform() 节点（`{ uX: { value } }` 推值
 // 口径不变，update 推流点零改动）；着色链 = TSL Fn 组合；材质改 MeshBasicNodeMaterial，
 // colorNode 全量接管输出（vec4 的 a 通道即片元透明度——veil 写 alpha、edgeGlow 恒 1）。
@@ -123,7 +123,7 @@ const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor]) => {
   const energy = rim.mul(breath.mul(0.38).add(0.16))
     .add(trail.mul(rimProx).mul(0.85))
     .add(head.mul(1.9));
-  // 面片边缘衰减窗（2026-09-22 断层修复）：rim 的 exp 外溢渐熄但永不严格到 0，
+  // 面片边缘衰减窗（断层修复）：rim 的 exp 外溢渐熄但永不严格到 0，
   // 面片边界处残余 ~0.01 能量被硬截断 → 淡淡色彩断层。在外扩带的外半段把能量
   // 平滑压到恰 0（margin = 牌面到面片边的外扩距离；d 在边中点恰 = margin，角部更大，
   // 面片边界处窗恒为 0）。光点头在卡边（d≈0）不受窗影响。
@@ -132,7 +132,7 @@ const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor]) => {
   return vec4(uColor.mul(energy).mul(uFade).mul(edgeFade), 1.0);
 });
 
-// 冷却薄纱（原 VEIL_FRAG 逐式平移；2026-09-27 用户定「别弄纯色块覆盖」）：
+// 冷却薄纱（原 VEIL_FRAG 逐式平移；「别弄纯色块覆盖」）：
 // 覆盖区 = 顶部 uFrac 高。
 //   冷却中（uMode 0）：霜冻膜——霜蓝斑驳 + 竖向冷凝垂纹 + 霜晶闪点（缓闪）+ 冰蓝前沿线；
 //   衰败过（uMode 1，冷却被反向推深）：腐蚀膜——暗红血管纹理搏动 + 犬牙侵蚀前沿 + 余烬闪点（急闪）。
@@ -358,7 +358,7 @@ export class CardFxLayer extends THREE.Group {
         this._edgeUniforms.uCard, this._edgeUniforms.uPlane, this._edgeUniforms.uColor);
       this._edgeGlow = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
       // z=0.4：低于手牌扇相邻卡间隔（静息 z=10+n·0.5）——透明队列按中心深度排序，
-      // 凸出 0.6 的旧值让光环排在右侧邻牌（+0.5）之后绘制 = 永远挡住邻牌（2026-09-22
+      // 凸出 0.6 的旧值让光环排在右侧邻牌（+0.5）之后绘制 = 永远挡住邻牌（
       // 用户报修）。0.4 < 0.5 → 邻牌盖住本卡时连同光环外溢一起盖住。同时高于牌面
       // 内层件（veil 0.35），rim 内收带仍可读。
       this._edgeGlow.position.z = 0.4;

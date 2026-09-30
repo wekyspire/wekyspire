@@ -1,4 +1,4 @@
-// 「房间机器流」域（从 runController 抽出的第二个域，用户定 2026-09-12 的原则）：
+// 「房间机器流」域（从 runController 抽出的第二个域，用户定 的原则）：
 // 老虎机 / 银行机 / 古尔帕斯之店 / 售货机收尾 / 吞噬 这几台机器的**交互编排**。
 //
 // 分工：core 结算与各房间 API 在 `core/run/rooms/*`（纯逻辑、可 headless）；这里管
@@ -23,6 +23,7 @@ import {
 } from '../core/run/rooms/slotMachine.js';
 import { takeShopCard, takeShopRelic } from '../core/run/rooms/shop.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
+import { tooltipHide } from './tooltipHub.js';
 
 export function createRunMachines(ctx) {
   const { run, slot, runSequencer, cutscene, showcase } = ctx;
@@ -61,7 +62,7 @@ export function createRunMachines(ctx) {
     try {
       if (kind === 'buy') {
         const res = buyGurpas(run, arg);
-        // 删卡服务（2026-09-22 修 qa 断链）：付完款**当场**开全屏选卡——购买动作此前
+        // 删卡服务（qa 断链）：付完款**当场**开全屏选卡——购买动作此前
         // 只扣钱计次，选卡界面没人打开（来源表/意图都在，唯独缺这一跳）
         if (res?.kind === 'remove') ctx.panelStage()?.openUpgradePicker?.('gurpasRemove');
       }
@@ -146,7 +147,7 @@ export function createRunMachines(ctx) {
 
   // 离房安慰奖（可乐/鸡腿二选一 + 获得演出 + 自动续上离房）在 runShowcase.js（slotTakeGift）。
 
-  // ---- 粉碎物品（老虎机吞噬，用户定 2026-09-11）----
+  // ---- 粉碎物品（老虎机吞噬）----
   // 链条：入口（面板按钮；机身投料口将来走同一意图）→ **dialogue 层**问「粉碎什么？」
   // （选项按可粉碎内容动态隐藏）→ 全屏选卡 / 选遗物 → 提交 core → 金币获得特写。
   // 对话是 Shell 层的东西（CutsceneOverlay），所以这条链只能编排在这里——Stage 只负责
@@ -203,11 +204,13 @@ export function createRunMachines(ctx) {
   function shopTakeCard(defId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
     takeShopCard(run, defId);   // defId = null → 放弃这个卡包（choice 不够好时的出口）
+    tooltipHide();              // 售出商品视图即离场：悬空 tooltip 必清（夜测 r2路3/r3路1 滞留实报）
     ctx.notify();
   }
   function shopTakeRelic(relicId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
     takeShopRelic(run, relicId);   // relicId = null → 放弃这个遗物包（与卡包同口径）
+    tooltipHide();                  // 同上
     ctx.notify();                 // 获得特写由拥有集差分自动兜（runShowcase）
   }
 

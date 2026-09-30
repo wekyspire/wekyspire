@@ -83,12 +83,20 @@ export function createBridgePresenter({
     damage: (p) => {
       anim(EventNames.ANIM_DAMAGE, p);
       syncState();
-      log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 造成 ${p.dealt} 点伤害`, 'combat');
+      // 零伤害不播数字伤害行；护盾全额吸收改播吸收变体（吸收信息有战术价值——
+      // 「为什么没掉血」要能从日志读出，r4路7 pyro 取证结论：盾整吞曾让 Boss 战
+      // 被误读为隐藏减伤）。无敌地板类纯零（无吸收）静默。
+      if ((p.dealt ?? 0) > 0) {
+        log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 造成 ${p.dealt} 点伤害`, 'combat');
+      } else if ((p.shieldAbsorbed ?? 0) > 0) {
+        log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 的攻击被护盾完全吸收（吸收 ${p.shieldAbsorbed}）`, 'combat');
+      }
     },
     heal: (p) => {
       anim(EventNames.ANIM_HEAL, p);
       syncState();
-      log(`${p.target.name} 恢复 ${p.healed} 点生命`, 'combat');
+      // 满血时的治疗（实际恢复 0）不播日志——「岩螺 恢复 0 点生命」纯噪音（夜测 r2路3 实报）
+      if ((p.healed ?? 0) > 0) log(`${p.target.name} 恢复 ${p.healed} 点生命`, 'combat');
     },
     shield: (p) => { anim(EventNames.ANIM_SHIELD, p); syncState(); },
     resource: (p) => { anim(EventNames.ANIM_RESOURCE, p); syncState(); },

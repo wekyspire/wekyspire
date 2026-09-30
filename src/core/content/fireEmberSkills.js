@@ -71,7 +71,6 @@ function totalEnemyBurn(sctx) {
 // 燃元 B/A：1AP（A 级不再消耗 AP），消耗。每有 4 层（敌方）燃烧，魏启上限 +1。
 // 口径：上限抬升「战斗内永久」——写进 battleState.modifiers（本场修正），
 // 随战斗对象一起消失，故**不需要战后回滚**，也不再往 skillRuntime 上挂记账字段。
-// 2026-09-18 设计稿扩 A 阶：效果同构，A 免 AP（高阶把「腾出手」的代价也省了）。
 function emberOriginCard({ id, tier, ap, promotesTo }) {
   registerSkill({
     id, name: '燃元', type: 'fire', tier, series: 'ember',
@@ -115,7 +114,7 @@ registerSkill({
   },
 });
 
-// 激热 C/B/A（2026-09-18 设计稿扩阶）：触发目标一次燃烧结算——完全复刻 burn 效果
+// 激热 C/B/A：触发目标一次燃烧结算——完全复刻 burn 效果
 // 的回合开始行为：无来源固定伤害（tags:['burn']，防火经该标记 veto；烈焰亲和就地
 // 减免）+ 层数 -1。语义：把下一次自然跳伤提前到现在（提前一拍爆发/收尾）。
 // 开销随阶收敛（设计稿口径）：C = 1AP + 消耗（一次性），B = 1AP（回库循环），
@@ -149,13 +148,9 @@ heatSurgeCard({ id: 'heatSurge', tier: 'C', ap: 1, exhaust: true, promotesTo: 'h
 heatSurgeCard({ id: 'heatSurgePlus', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeMaster' });
 heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
 
-// （化焰 C 已于 2026-09-21 删除——用户裁决「机制老旧」：驻手监听溢出魏启为全场
-// 上燃烧的被动，与现行火系语言脱节；设计稿行与进阶种子池同步移除。）
-
 // ==== 控火系列（多功能散牌）===================================================
-// 2026-09-28 用户定：控火术压缩为三张找卡（攻杀/守御/杂技 C/B/A），效果卡改
-// 发现制（不进卡包奖池、不再直接掉落）；效果卡无晋升链（衍生牌不沉淀）。
-// 找卡/无上经 FIRE_CONTROL_IDS 引用池。
+// 控火术 = 三张找卡（攻杀/守御/杂技 C/B/A）+ 发现制效果卡（不进卡包奖池、不直接掉落；
+// 效果卡无晋升链——衍生牌不沉淀）。找卡/无上经 FIRE_CONTROL_IDS 引用池。
 const FIRE_CONTROL_IDS = [];
 
 // 效果卡注册：canSpawnAsReward: false（只被三张找卡与无上发现，不进奖励池）；
@@ -229,13 +224,10 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
   },
 });
 
-// 控火术：灭 已于 2026-09-13 按用户新文档删除（拍板：驱散敌方燃烧与叠炎主轴背道而驰，
-// 清燃烧的正向出口由控火术：收/爆/聚 承担，自身泄压由新卡「灭火」承担）。
-
-// 控火术：灼 B（2026-09 由 C 改 B）—— 下次你发动的攻击：每造成 3 伤害，赋予目标燃烧 1。
+// 控火术：灼 B —— 下次你发动的攻击：每造成 2 伤害，赋予目标燃烧 1。
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
-// floor(dealt/3) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、目标为
-// 敌方的下一次**主级**伤害结算（2026-09-15 拆分：附级被动伤害不算「你发动的攻击」）。
+// floor(dealt/2) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、目标为
+// 敌方的下一次**主级**伤害结算（附级被动伤害不算「你发动的攻击」）。
 registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy', {
   use(sctx) {
     sctx.kernel.addSubscription({
@@ -300,7 +292,7 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy'
   },
 });
 
-// 控火术：扰 C（2026-09 由 B 改 C）—— 消耗自身所有燃烧，每层获得 3 护盾。
+// 控火术：扰 C —— 消耗自身所有燃烧，每层获得 3 护盾。
 registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none', {
   use(sctx) {
     const stacks = sctx.player.getEffectStacks('burn');
@@ -365,7 +357,7 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'C', 3, 'enemy',
   describe: () => '场上所有/effect{燃烧}迁移至目标',
 });
 
-// 控火术：变 A —— 烈焰亲和1，消耗自身所有燃烧，每2层获得烈焰亲和1（2026-09-28 新卡）。
+// 控火术：变 A —— 烈焰亲和1，消耗自身所有燃烧，每2层获得烈焰亲和1。
 registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
   use(sctx) {
     addEffect(sctx, 'flameAffinity', 1);
@@ -385,13 +377,12 @@ registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
 });
 
 // ==== 火墙系列（火盾 C → 火墙 B → 火壁 A：火系的即时格挡补缺）==================
-// 第 8 轮裁决新增（R8-C 与第 7 轮 D 跨轮复现的死因：火系输出碾压、但卡包里**盾牌 0 张**，
-// 所有防御都长在自燃转盾上、需要提前铺，被突袭时一张即时大盾都没有）。
+// 定位：火系输出碾压、但卡包里**盾牌稀缺**，所有防御都长在自燃转盾上、需要提前铺，
+// 被突袭时一张即时大盾都没有——本系列补这个洞。
 // 设计口径：单卡补洞，不动燃烧框架（火系框架冻结铁律）；「有燃烧再加成」奖励铺过自燃的
 // 火系构筑。数值：**基础低、燃烧加成高**——无燃烧只是 6 盾白板，有燃烧才是火系专属大盾；
 // 全阶 1AP + 冷却 1（彻底 0 开销卡必须谨慎：0 费盾不冷却 = 每回合白嫖盾墙）。
-// 2026-09-21 大调（D 阶移除）：火盾 D→C（7/+7 → 6/+7）；火墙 C→B（+11→+10）；
-// 火壁 B→A（费用由 0AP 收回 1AP，+15→+13）。
+// 阶梯：火盾 C 6/+5 → 火墙 B 6/+7 → 火壁 A 6/+9。
 function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireWall',
@@ -404,8 +395,8 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
       return true;
     },
     describe: () => `护盾${shield}；有/effect{燃烧}时再+${bonus}`,
-    // 无 battleDescribe：条件仅「有燃烧」一条，静态描述即机制（2026-09-27 口径：
-    // 判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
+    // 无 battleDescribe：条件仅「有燃烧」一条，静态描述即机制
+    // （判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
   });
 }
 fireWallCard({ id: 'fireWall', name: '火盾', tier: 'C', ap: 1, shield: 6, bonus: 5, promotesTo: 'fireWallPlus' });
@@ -448,7 +439,7 @@ registerSkill({
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  keywords: ['mini'], // 迷你：计 0 张手牌（设计稿 2026-09-28）
+  keywords: ['mini'], // 迷你：计 0 张手牌
   use(sctx, stage) {
     if (stage === 0) {
       sctx.self._find = requestPoolSelection(sctx, {

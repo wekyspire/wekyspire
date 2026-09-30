@@ -1,6 +1,6 @@
-// 雪云体积渲染（towerWilderness 的大气件，2026-09-16 用户定开工）——WebGPU 迁移 TSL 版
-// （2026-09-22，原三段 GLSL（march/blur/composite）逐式平移，.glsl 源文件随之删除）：
-// **三段管线**（用户定正确修法，结构与 GLSL 版一致）：
+// 雪云体积渲染（towerWilderness 的大气件，开工）——WebGPU 迁移 TSL 版
+// （原三段 GLSL（march/blur/composite）逐式平移，.glsl 源文件随之删除）：
+// **三段管线**（正确修法，结构与 GLSL 版一致）：
 //   ① mesh pass：场景（穹顶/雪原/塔/雪粒子）渲进 rtScene——HalfFloat linear 色 + 深度纹理
 //     （进 RT 时渲染器按目标判定不套 tone map/sRGB，整帧只在末段走一次）；
 //   ② 云 raymarch：1/4 分辨率 → rtCloud，**逐像素读场景深度线性化，march 到几何面
@@ -8,7 +8,7 @@
 //   ③ transmittance 合成：col = cloudInscatter + scene * T → 屏幕。
 // 接入 = StageManager 的 composeScene 钩子（MapStage 委托 composeFrame，BattleStage
 // 体积光同范式）；云体 = Worley base + perlin+worley detail 侵蚀 + 独立随风 offset 场。
-// **噪声源 = cloudNoise.js 烘焙的 64³ RGBA8 3D 纹理**（2026-09-27 性能修复：WGSL
+// **噪声源 = cloudNoise.js 烘焙的 64³ RGBA8 3D 纹理**（性能修复：WGSL
 // 程序噪声循环较 GLSL 慢 2-3 倍，1080p march 曾占帧耗 82%、4K 跌破 60fps——
 // 全部噪声改纹理采样后单步 ~110 次 hash → ~10 次采样；观感统计等价，公式未动）。
 // 云板按 y 求交，相机在云下/云内/云上三种相对位置同一路径（TOWER.md 四阶段）。
@@ -22,11 +22,11 @@
 //     viewZ=-far），对 WebGL 窗口深度与 WebGPU 投影 z∈[0,1] 逐项成立（three 的
 //     WebGPU 坐标系投影恰使 ndc z 与旧窗口深度同值）——无 z*2-1 类残留可删；
 //   · march 早退：uMaxSteps 是调参位 uniform（非编译期常量）→ Loop 用固定 64 上界 +
-//     Break()（步数用尽 / 走出板 / 透射率趋零，GLSL break 三条件逐条对应）；
+//     Break（步数用尽 / 走出板 / 透射率趋零，GLSL break 三条件逐条对应）；
 //   · blur 自译而非复用 passes.js 的 tslBlur——后者只糊 rgb 且 alpha 写 1，会毁掉
 //     march 输出的透射率 alpha（composite 的 1-cl.a 依赖它）；本件 rgba 全通道同核；
 //   · **composite 直出线性 HDR**：tone map + sRGB 统一由渲染器帧末输出 blit 施加
-//     （flavor A，passes.js 头注「输出变换铁律」，2026-09-27 用户定）——本件不碰
+//     （flavor A，passes.js 头注「输出变换铁律」）——本件不碰
 //     renderer.toneMapping；曾短暂改回节点内 tone（UI pass 摘除窗口冲掉 blit tone
 //     的病灶，probe-blit 实测），flavor A 统一后病灶根除；
 //   · uniforms 全部 TSL uniform() 节点：key 与 .value 语义逐字不变（towerWilderness/
@@ -45,19 +45,19 @@ import {
   CLOUD_NOISE_CELLS, CLOUD_NOISE_SIZE, getCloudNoiseTexture, getCloudNoiseTextureAsync,
 } from './cloudNoise.js';
 
-const RT_SCALE = 0.25;          // 云 RT 1/4 分辨率（用户定：省性能 + blur 降噪）
+const RT_SCALE = 0.25;          // 云 RT 1/4 分辨率（：省性能 + blur 降噪）
 const CORNER_NDC = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const PI = 3.141592653589793;
 
-// ---- 分章观感预设（TOWER.md 四阶段；全部为用户 cloudGallery 实调值，2026-09-16）----
-// 云板几何对齐塔楼（用户定：11 层 boss 前恰在云外、12-33 层完全在云内、34 层起云上）：
+// ---- 分章观感预设（TOWER.md 四阶段；全部为用户 cloudGallery 实调值）----
+// 云板几何对齐塔楼（：11 层 boss 前恰在云外、12-33 层完全在云内、34 层起云上）：
 // 层 f 相机锚 y = -58.5+(f-0.5)×7 → 11 层 15 / 12 层 22 / 33 层 169 / 34 层 176。
 // base 18 = 11 层上方 3 / 12 层下方 4；top 174 = 33 层上方 5 / 34 层下方 2。
 // ch1 = 一章塔外·云底仰视；ch2 = 二/三章·云中。towerWilderness.setStormLevel 按层
 // 在两套之间插值（爬升跨章连续渐变）；三/四章云观感待美术 pass 后在此追加。
 // haze 语义 = 云雾等效密度（march 侧与场景 FogExp2 同为平方指数 ramp）：ch1 取
 // 0.005 → 云堤在 t0≈350 全融、头顶（t0≈73）仅 ~13% 融——远处云与地面在全雾距离
-// 处同步抹平（2026-09-16 用户定：远云/天暗成雾色消接缝）。
+// 处同步抹平（远云/天暗成雾色消接缝）。
 // underShade = 相机在云板下时的云体压暗系数（一章云底仰视暗一点，云底背光）。
 export const CLOUD_PRESETS = {
   ch1: {
@@ -101,7 +101,7 @@ const tcCloudField = Fn(([u, p]) => {
   return max(w.mul(profile).sub(oneMinus(u.uCoverage)), 0.0);
 });
 
-// 细节侵蚀场：**perlin(B) + worley(G)**（用户定），独立于主场的更快随风 advect——
+// 细节侵蚀场：**perlin(B) + worley(G)**，独立于主场的更快随风 advect——
 // 高频絮条以错速扫过云体 → 云内视角读作薄纱掠面。
 // gust = 云内阵风倍率（GLSL 版的文件级 g_gust 可变全局在 TSL 无对应物，改穿参）。
 const tcDetailField = Fn(([u, p, gust]) => {
@@ -111,7 +111,7 @@ const tcDetailField = Fn(([u, p, gust]) => {
     .add(texG(u, q.add(vec3(11.3, 5.1, 8.7)), float(1.35)).mul(0.38));
 });
 
-// 独立随风 offset 场：**perlin(B) + worley(A)**（用户定）——主场采样点被它水平推着走。
+// 独立随风 offset 场：**perlin(B) + worley(A)**——主场采样点被它水平推着走。
 // 云内视角 gust 加速 → 阵风脉冲 + 薄纱层掠过的大风感；wo y 分量为 0（风是水平的）。
 const tcWarpOffset = Fn(([u, p, gust]) => {
   const q = p.add(vec3(u.uCloudWind.x, 0.0, u.uCloudWind.y)
@@ -215,12 +215,12 @@ const tcMarch = Fn(([u]) => {
     // （云内俯视地面/塔身）→ march 到几何面为止（transmittance 只累积到面前）
     If(tScene.greaterThan(t0v.add(1e-3)), () => {
       t1v.assign(min(t1v, tScene));
-      // 云内阵风：相机在云板内 → detail/warp 场 advect 加速（大风 + 薄纱扫动，用户定）
+      // 云内阵风：相机在云板内 → detail/warp 场 advect 加速（大风 + 薄纱扫动）
       const inside = select(
         u.uCamPos.y.greaterThan(u.uCloudBase).and(u.uCamPos.y.lessThan(u.uCloudTop)),
         1.0, 0.0);
       const gust = mix(1.0, u.uGustBoost, inside);
-      // 云内步长收紧（用户定特调）：近场细节更密；密度积分/抖动/截断同用有效步长
+      // 云内步长收紧（特调）：近场细节更密；密度积分/抖动/截断同用有效步长
       const effStep = u.uStepSize.mul(mix(1.0, u.uInnerStepScale, inside));
       t1v.assign(min(t1v, t0v.add(effStep.mul(40.0 * 8.0)))); // 掠射射线距离截断（步数上限兜底）
       // 抖动起步 + 1/4 分辨率 + 后端 blur → 步进条带不可见
@@ -274,15 +274,15 @@ const tcMarch = Fn(([u]) => {
         });
         t.addAssign(effStep);
       });
-      // 远云融雾（用户定：融进**体积雾色调**，不融进天空盒）——只把颜色 lerp 到雾色，
+      // 远云融雾（：融进**体积雾色调**，不融进天空盒）——只把颜色 lerp 到雾色，
       // 透射率不衰减（alpha 保留 = 远云是雾色云堤，不露出背后的天空渐变）。
       // 公式与场景 FogExp2 同形（平方指数，uHaze 语义 = 云雾等效密度，由
       // towerWilderness 随雾密度同步缩放）：远云堤在与地面全雾**同距离**处同步全融，
-      // 地/云/穹面融成同一条暗雾带（2026-09-16 用户报地平线亮带）。
+      // 地/云/穹面融成同一条暗雾带（地平线亮带）。
       // ⚠ 雾色必须以**预乘**形式进合成（composite = cl.rgb + scene·(1−cl.a)）：acc 本身
       // 预乘，融雾若裸写雾色，「远处没云 alpha≈0」的像素会输出满强度雾色叠在穹顶上
       // = 雾色被记两次（雾+穹底 ≈ 2×亮度）——地平线上方一圈幽灵亮带的真凶
-      // （红色雾探针实测：alpha≈0 行 rgb=满红 + 穹底透出，2026-09-16）。
+      // （红色雾探针实测：alpha≈0 行 rgb=满红 + 穹底透出）。
       const farF = oneMinus(exp(t0v.mul(t0v).mul(u.uHaze).mul(u.uHaze).negate()));
       // 云下仰视压暗：跨云底 smooth 过渡（爬升穿板不瞬跳），只压云体散射、融雾色不动
       const under = mix(u.uUnderShade, 1.0,
@@ -335,7 +335,7 @@ export function buildTowerClouds({
 } = {}) {
   // ---- 调参位（gallery / knob 实时改；运行期直接改 uniforms 的 .value）----
   // 观感初值 = ch1 预设（一章塔外）；游戏内由 towerWilderness.setStormLevel 按层
-  // 在 ch1/ch2 之间插值覆写。测试点光默认熄灭（用户定：正式塔灯由 stage pass-in）。
+  // 在 ch1/ch2 之间插值覆写。测试点光默认熄灭（：正式塔灯由 stage pass-in）。
   const params = {
     ...CLOUD_PRESETS.ch1,
     lanternDist: 24,      // 灯距相机（世界单位，沿视线前方）
@@ -431,12 +431,12 @@ export function buildTowerClouds({
     uCamNear: uniform(0.1),
     uCamFar: uniform(2000),
     uCamWorldInv: uniform(new THREE.Matrix4()), // 相机世界逆矩阵（世界射线 → 视空间射线）
-    // 测试点光（用户定 2026-09-16：云内无光照灰成一坨——先挂相机前方测试灯试渲染
+    // 测试点光（云内无光照灰成一坨——先挂相机前方测试灯试渲染
     // 质量；正式版塔楼挂灯的位置/参数由 stage pass-in 替换这个口子）
     uLanternPos: uniform(new THREE.Vector3()),
     uLanternColor: uniform(new THREE.Color(params.lanternColor)),
     uLanternIntensity: uniform(0), // 0 = 关（云外 JS 侧自动熄灯，光 march 整段跳过）
-    // 近机密度减淡（用户定 2026-09-16：靠近相机的云经验性变薄，露出中距离的
+    // 近机密度减淡（靠近相机的云经验性变薄，露出中距离的
     // detail/erosion 云体形态；t 即样本沿视线到相机的距离，直接做平滑压低）
     uNearFadeStart: uniform(params.nearFadeStart), // 减淡起点（此距离内压到最低）
     uNearFadeEnd: uniform(params.nearFadeEnd),     // 减淡终点（此距离外完全不衰减）

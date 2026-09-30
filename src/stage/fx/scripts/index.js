@@ -1,4 +1,4 @@
-// 剧本注册表（fx 架构「剧本」筐，2026-09-22 Phase 3）：
+// 剧本注册表（fx 架构「剧本」筐，Phase 3）：
 // 一文件一剧本，显式装配（不用 import.meta.glob——与 core 内容注册表同律）。
 //   bosses/     Boss 转阶段/特殊战斗演出（core 经 presenter.playScript 触发）
 //   cutscenes/  幕间/事件编排（cutscene 播放器直调，不经 core）

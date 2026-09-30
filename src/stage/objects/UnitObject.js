@@ -17,7 +17,7 @@
 // 行动姿态（攻击/防御/增强/削弱）走 _pose 通道，每帧与呼吸合成（见 setPose/update）。
 // 文本签名不变不重烘。
 // 状态绘制（hpBar 全家 + 护盾层）一律 depthTest:false + 显式 renderOrder(60+)：
-// 场景可遮蔽立牌（合理）但不可遮蔽状态（用户定）；卡牌 UI 是独立 pass 天然在其上。
+// 场景可遮蔽立牌（合理）但不可遮蔽状态；卡牌 UI 是独立 pass 天然在其上。
 
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
@@ -113,7 +113,7 @@ export class UnitObject extends THREE.Group {
     // 重渲一遍（单位寥寥几个 quad，代价可忽略），偏移量由本体补丁按 uBurn 现算现写
     // （不烧时写 0，等于不在）；主渲染相机不走该层，零影响
     this._body.layers.enable(BLOOM_LAYER);
-    // 立牌投影（用户定）：alphaTest 剪影在月光下拉出单位形地面影；
+    // 立牌投影：alphaTest 剪影在月光下拉出单位形地面影；
     // three 深度材质支持 map+alphaTest，透明区不会投出矩形假影
     this._body.castShadow = true;
     this._bodyColorBase = this._body.material.color.clone(); // 焚毁改色后的恢复基准（restoreBody）
@@ -464,7 +464,7 @@ export class UnitObject extends THREE.Group {
 
   /**
    * 立牌形（圆柱）billboard：只转 yaw 让牌面水平朝向相机，立面保持与地面垂直
-   * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃——用户定）。
+   * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃）。
    * 相机静止时每帧结果相同，代价可忽略；金环贴地不参与。
    * @param {THREE.Vector3|{x,y,z}} camDir 相机方向向量
    */
@@ -634,7 +634,7 @@ function shieldIconTexture() {
 // 削弱（降双箭头，紫）/召唤（四芒星）/晕眩（螺旋，不行动）/未知（?）。
 // 全程序化矢量绘制——emoji 位图字在缩小
 // 采样下发糊且跨平台风格不可控，弃用；数字与 bakeBoldText 同语言（白粗体深描边）。
-const INTENTION_STRIP_H = 6.8;   // 图标条世界高（wu）——放大一倍便于阅读（用户定）
+const INTENTION_STRIP_H = 6.8;   // 图标条世界高（wu）——放大一倍便于阅读
 const INTENTION_GAP = 0.55;      // 图标/数字间距（wu）
 const INTENTION_LIFT = 0.9;      // 图标条底缘离头顶间隙（wu）：中心位 = 头顶 + 间隙 + 半高
 
@@ -643,7 +643,7 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const kinds = (intention?.kinds?.length ? intention.kinds : ['unknown']).slice(0, 2);
   const H = INTENTION_STRIP_H * ppw; // 逻辑像素高
   const gap = INTENTION_GAP * ppw;
-  const fontPx = H * 0.6; // 数字字号 = 图标高的 60%（图标不变，2026-08 用户定缩 25%）
+  const fontPx = H * 0.6; // 数字字号 = 图标高的 60%（图标不变）
   const attackText = kinds.includes('attack') && intention.damage != null
     ? `${intention.hits > 1 ? `${intention.hits}×` : ''}${intention.damage}`
     : null;

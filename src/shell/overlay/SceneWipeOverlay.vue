@@ -1,5 +1,5 @@
 <script setup>
-// 幕间切幕层（独立于 cutscene 内容层，用户 2026-09-12 定的架构修正）：
+// 幕间切幕层（独立于 cutscene 内容层，用户 的架构修正）：
 // 自占一层、z-index 压过内容层（对话/CG）——黑幕盖住时内容可以在它下面就位/换舞台，
 // 揭开时露出的就是目的地本身。状态机见 sceneWipe.js；本组件只负责画。
 import { computed } from 'vue';

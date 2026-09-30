@@ -2,12 +2,12 @@
 // 布局盒固定 200x270（10px = 1 世界单位，对应 20x27 牌面 plane）。
 // 视觉语言：
 //   灵脉（series 归口，见 cardTheme）→ 主题色：底板着色 + 边框 + 斜纹饰面 + 名称分隔线 + 页脚
-//     ——整卡色相只认灵脉，一眼区分系别（用户定）；通用灰卡（pack='common'）例外：
-//     走偏白主题色 COMMON_THEME，靠色相与所有体系卡拉开距离（不加文字角标，用户定）；
+//     ——整卡色相只认灵脉，一眼区分系别；通用灰卡（pack='common'）例外：
+//     走偏白主题色 COMMON_THEME，靠色相与所有体系卡拉开距离（不加文字角标）；
 //   等阶（tier）→ 只有等阶标记（左上菱形徽章）随等阶着色；边框粗细/内描边/箔金是等阶的
 //     「形」，色相仍属灵脉；
 //   特殊词条（固有/消耗/迷你/不朽/短暂）→ 顶部彩条（居中 1/4 卡宽，多词条从上往下
-//     堆叠全数显示，见 KEYWORD_ACCENTS）+ 页脚词条逐词点缀色（2026-09-29 用户定）；
+//     堆叠全数显示，见 KEYWORD_ACCENTS）+ 页脚词条逐词点缀色；
 //   开销徽章（右上，右对齐）：魏启=蓝 + 水晶素材（options.manaCrystal，缺省蓝色圆回落）、
 //     行动点=黄圆；初始为 0 的开销不显示；
 //   卡图（options.art，浏览器端由 CardArtCache 供 canvas）→ 名称下方图区，有图时正文区下移；
@@ -60,7 +60,7 @@ const BODY_TOP_PLAIN = 56;          // 无卡图时正文区顶
 const ART_RECT = { x: 12, y: 46, w: 176, h: 88 };
 const BODY_TOP_WITH_ART = ART_RECT.y + ART_RECT.h + 8; // 142
 
-// 特殊词条点缀色（2026-09-29 用户定）：固有白 / 消耗亮橙 / 迷你淡紫 / 不朽灰白 / 短暂淡蓝。
+// 特殊词条点缀色：固有白 / 消耗亮橙 / 迷你淡紫 / 不朽灰白 / 短暂淡蓝。
 // 键 = 页脚词条标签（KEYWORD_LABELS 翻译后的中文，与 drawFooter 的 bits 同语）；
 // 「不朽」当前无卡在用，先入表待实装。两处消费：顶部彩条（多词条全数堆叠）+ 页脚逐词着色。
 export const KEYWORD_ACCENTS = Object.freeze({
@@ -70,7 +70,7 @@ export const KEYWORD_ACCENTS = Object.freeze({
   '短暂': '#a8cdf2',
   '迷你': '#c7b3f7',
 });
-// 顶部彩条堆叠序（2026-09-29 用户定：多词条卡从上往下全数显示）：消耗（一次性经济）
+// 顶部彩条堆叠序（多词条卡从上往下全数显示）：消耗（一次性经济）
 // > 固有（起手位）> 不朽 > 短暂 > 迷你——排序只为堆叠稳定，不再取舍。
 const ACCENT_PRIORITY = ['消耗', '固有', '不朽', '短暂', '迷你'];
 
@@ -231,7 +231,7 @@ function drawFrame(ctx, card) {
   ctx.fill();
 
   // 边框：灵脉主题色，粗细随等阶；B 及以上加细内描边，描边走主题色箔金渐变
-  // （色相属灵脉，等阶只体现在宽度与是否有内描边——用户定）
+  // （色相属灵脉，等阶只体现在宽度与是否有内描边）
   roundedRect(ctx, 1 + frame.width / 2, 1 + frame.width / 2, W - 2 - frame.width, H - 2 - frame.width, 9);
   ctx.lineWidth = frame.width;
   ctx.strokeStyle = borderStyle(ctx, tier, theme, W, H);
@@ -251,7 +251,7 @@ function drawFrame(ctx, card) {
   ctx.restore();
   // 四边中点饰钉（灵脉色小菱形）
   drawEdgeStuds(ctx, theme);
-  // 特殊词条顶部彩条（2026-09-29 用户定）：居中、长 = 卡宽 1/4、每条厚随边框线、
+  // 特殊词条顶部彩条：居中、长 = 卡宽 1/4、每条厚随边框线、
   // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。多词条**从上往下堆叠全数显示**
   // （首条在框带内，后续依次下探；三词条 S 卡堆高 ~20px，仍在标题带之上）。画在饰钉
   // 之后：顶边中点饰钉与首条同位，彩条盖钉（信号优先）。
@@ -352,7 +352,7 @@ function drawHeader(ctx, card, manaCrystal) {
   ctx.fillRect(12, 40, CARD_FACE_SIZE.width - 24, 1.2);
   drawDiamond(ctx, CARD_FACE_SIZE.width / 2, 40.6, 3, theme);
   // 开销徽章（右上，右对齐向左排）：魏启=蓝/水晶素材，行动点=黄圆；
-  // 初始为 0 的开销不显示（用户定——零开销是常态，摆 0 徽章只有噪音）
+  // 初始为 0 的开销不显示（零开销是常态，摆 0 徽章只有噪音）
   const cost = card.cost ?? {};
   let bx = 186;
   // 'X' 费同样出徽章（徽章内直接写 X）
@@ -366,7 +366,7 @@ function drawHeader(ctx, card, manaCrystal) {
   ctx.textAlign = 'left';
 }
 
-// ---- 费用徽章位置单一事实源（2026-09-28）----
+// ---- 费用徽章位置单一事实源----
 // 绘制规则（上面的代码就是实现）：右上右对齐向左排，魏启先 (186,26)，AP 其左 25px，
 // 半径 12.5；零开销不出徽章（故只耗 AP 的卡 AP 徽章顶到最右）。
 // 消费方：resourceDrainFx（粒子汇聚锚点）、cardBodyFx（徽章辉光 mask）——两边必须
@@ -550,7 +550,7 @@ function drawFooter(ctx, card) {
     }
     const label = bits[i];
     const w = ctx.measureText(label).width;
-    // 特殊词条着点缀色（2026-09-29 用户定）：固有/消耗/迷你/不朽/短暂各自的特征色，
+    // 特殊词条着点缀色：固有/消耗/迷你/不朽/短暂各自的特征色，
     // 其余词条（冷却/充能/刀法等）保持灵脉主题色
     ctx.fillStyle = KEYWORD_ACCENTS[label] ?? cardTheme(card);
     ctx.fillText(label, x, y);

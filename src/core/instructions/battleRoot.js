@@ -47,7 +47,11 @@ export class PreBattleInstruction extends BattleInstruction {
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
       // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1
       player.shield = 0;
+      // debug 无敌是「面板开关」语义（开了就该一直无敌直到手动关）——跨战斗边界
+      // 保活，不随下面的效果清空消失（夜测 r2路2 探针实报：战前开启进战斗即失效）
+      const keepInvuln = player.getEffect?.('invulnerable') != null;
       player.clearEffects();
+      if (keepInvuln) player.addEffect('invulnerable', 1);
       player.actionPoints = player.maxActionPoints;
       player.mana = Math.floor(player.maxMana / 2);
       // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清
@@ -85,7 +89,7 @@ export class PreBattleInstruction extends BattleInstruction {
           ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `relic:${relicId}` });
         }
       }
-      // 防御效果化（2026-09-16 用户定）：defense 不再是角色数值——前端数值面板显示不出，
+      // 防御效果化：defense 不是角色数值——数值面板显示不出，
       // 改走效果轨（EFFECTS.md「防御」词条对齐）。各单位 base 防御在 PreBattle 统一转为
       // 「防御」效果：敌人 createUnit 的 defense、遗物 runModifiers（龙鳞碎片=战斗开始
       // 防御2）**零改动自动入轨可见**；此后对防御的一切增减一律 AddEffect（不再直改字段）。
@@ -97,7 +101,7 @@ export class PreBattleInstruction extends BattleInstruction {
           unit.defense = 0;
         }
       }
-      // 敌人开场效果（2026-09-13：Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
+      // 敌人开场效果（Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
       // def.onBattleStart(ctx, unit)：订阅型效果必须经 AddEffectInstruction 入列（走正常
       // 挂载管线），只有 shield 这类标量才适合直改字段（防御已效果化，同样走 AddEffect）。
       for (const unit of aliveEnemies(battleState)) {
@@ -106,7 +110,7 @@ export class PreBattleInstruction extends BattleInstruction {
 
       // 玩家最后攻击目标追踪（瑞米索敌口径：跟随主角最后攻击过的敌人）。
       // POST = 攻击已结算；直接写 battleState 标量（纯记账，非世界变更）。
-      // 只认主级（2026-09-15 拆分）：附级随机伤（精通）不该指挥瑞米索敌。
+      // 只认主级：附级随机伤（精通）不该指挥瑞米索敌。
       ctx.kernel.addSubscription({
         when: DealDamageInstruction,
         phase: 'post',

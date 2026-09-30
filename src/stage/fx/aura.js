@@ -1,5 +1,5 @@
 // 常驻 FX 附件系统（buff 光环 / 咏唱点亮 / 敌人特殊状态 overlay 的宿主侧管理器，
-// 2026-09-22，fx-architecture-plan 定稿）：常驻 FX = 「在/不在」的状态件，不进节拍队列；
+// fx-architecture-plan 定稿）：常驻 FX = 「在/不在」的状态件，不进节拍队列；
 // 由显示状态 diff 驱动（set 方法），不做一次性编排（那是 script.js 剧本的领域）。
 //
 // 每个 aura 走四态状态机：entering → active → exiting → dead。
@@ -8,7 +8,7 @@
 // - attach 幂等（entering/active 重入 no-op）；exiting 重入 = exit 可打断
 //   （kill 退出剧本直接回 active，不重演 enter，有 def.reenter 才调）。
 // - detach 打断 entering 时若 def.exit 存在则照播 exit（视觉连续），否则瞬收。
-// - dispose()（宿主死亡）全部瞬收：kill 剧本 + def.dispose + 摘 group，
+// - dispose（宿主死亡）全部瞬收：kill 剧本 + def.dispose + 摘 group，
 //   不播 exit（不在尸体上放烟花）。
 // - 过渡剧本内只做演出，kill 钩子不触发自身转态（转态全在本文件的收尾回调里）。
 import * as THREE from 'three';

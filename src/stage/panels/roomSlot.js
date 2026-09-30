@@ -8,7 +8,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   if (snap.bank?.pendingRoll) { demonRollWidgets(w, snap.bank.pendingRoll, sceneChoice); return; }
   const s = snap.slot ?? {};
 
-  // 场景路径（2026-09-28 用户定）：领奖/选奖/放弃全部走获得演出与全屏 overlay，
+  // 场景路径：领奖/选奖/放弃全部走获得演出与全屏 overlay，
   // 指引信息机器身上的计数器已经讲了——面板只留拉杆一枚按钮（价格在按钮上，免费显示免费）。
   if (sceneChoice) {
     w.push({
@@ -100,7 +100,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
       label: '粉碎物品…', action: { action: 'requestDevour' },
     });
   }
-  // 离房安慰奖（同一层拉了 ≥4 次杆一次没中，2026-09-21 D5 收紧）**完全不进 UI**（用户定 2026-09-13）：它既不是进度
+  // 离房安慰奖（同一层拉了 ≥4 次杆一次没中，D5 收紧）**完全不进 UI**：它既不是进度
   // 也不是可领取项——玩家点「继续前进」离房时，机器自己凑上来吐可乐/鸡腿让你二选一
   // （场景演出见 RoomStage._playGift），领完自动续上离房切幕。面板里既不提示也不给按钮，
   // 免得把"离房"这件事拆成"先在面板里领东西、再点一次继续"两步。
@@ -108,7 +108,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
 
 /**
  * 恶魔 roll 进行中（机器已切恶魔形态）：**词条在场景里选**（老虎机上那三张卡片），
- * 悬停转轮出 tooltip。场景路径面板一个字的指引都不留（2026-09-28 用户定：文本膨胀
+ * 悬停转轮出 tooltip。场景路径面板一个字的指引都不留（文本膨胀
  * 全删，规则由首遇/例行对话讲——runController.maybeNarrateDemonRoll）。
  * 无场景的占位路径（gallery/headless 降级）没有转盘可点，才需要这里的按钮兜底，
  * 否则那条路会卡死。
@@ -147,7 +147,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
     demonRollWidgets(w, bk.pendingRoll, sceneChoice);
   } else {
     if (bk.money > 0) {
-      // 存款三档（2026-09-21 用户定：33% / 66% / 全部）——按持有金币取整；钱太少时
+      // 存款三档（33% / 66% / 全部）——按持有金币取整；钱太少时
       // 低档位取整为 0 的按钮直接隐藏（core.bankDeposit 本就收任意金额，缺省=全部）。
       for (const { key, frac, label } of [
         { key: 33, frac: 0.33, label: '存入 33%' },

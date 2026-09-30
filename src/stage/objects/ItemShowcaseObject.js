@@ -1,8 +1,8 @@
-// ItemShowcaseObject：**获得物特写**（通用组件，用户定 2026-09-11）。
+// ItemShowcaseObject：**获得物特写**（通用组件）。
 // 用途：拿到遗物 / 药水 / 奖励之类的东西时，在塔楼层播一次"这个物品到手了"的特写——
 // 玩家才有获得感（否则奖励只是面板上多一行字）。
 //
-// 形态（用户定的分镜）：
+// 形态（的分镜）：
 //   ① 背景压暗 → 物品图在屏幕中央 **fade in + 非线性放大（带弹跳：过冲再回位）**；
 //   ② 背后**上帝光**渐显（放射光束，缓慢旋转）；
 //   ③ 停住 hold，下方依次浮出文本：名称（粗体）/ 斜体描述 / 具体作用；
@@ -12,14 +12,14 @@
 // `assets/relics/<key>.*`——遗物特写的 key 就是遗物名）；**都没有就用色块**
 // （tint 色块 + 描边 + 名称首字），所以内容侧没图也能先用起来。
 //
-// **可跳过奖励**（用户定 2026-09-12）：`show({ …, skippable: true })` 时界面下方多一个
+// **可跳过奖励**：`show({ …, skippable: true })` 时界面下方多一个
 // 「跳过」按钮——"可跳过"的东西是**还没到手**的产出（老虎机奖项、买到即开的卡包…），
 // 点跳过 = 放弃它；点别处 = 收下。两个出口分别回调 `onSkip` / `onDismiss`（同一次 show
 // 内有效，show 时传入；缺省只有"点任意处关闭"的旧语义）。本组件只负责"把出口摆出来"，
 // 放弃/收下的游戏语义由调用方（Shell 编排器）决定。
 //
 // 层次约定：全屏遮罩走 `OVERLAY_Z`（**高于"继续前进"这类常驻按钮**，与 CardScrollPickerObject
-// 同级）——压不住常驻按钮的话，按钮会画在半透明遮罩之上、看起来还能点（用户 2026-09-13 报）；
+// 同级）——压不住常驻按钮的话，按钮会画在半透明遮罩之上、看起来还能点（实报）；
 // 输入走 Picker（自己登记全屏 dismiss 热区 + 跳过按钮热区），宿主只需把指针事件转发进来。
 //
 // 纯 Stage 层：不读 Core/Bridge；数据由调用方以纯对象传入（名称/描述/作用/素材 key/tint）。
@@ -48,7 +48,7 @@ const TEXT = {
   effectY: UI_CAMERA_LOOK_AT_Y - 25.5, flavorY: UI_CAMERA_LOOK_AT_Y - 31,
 };
 
-/** 非线性的"弹出"缓动：过冲再回位（用户要的弹跳感）。k 越大过冲越明显。 */
+/** 非线性的"弹出"缓动：过冲再回位（要的弹跳感）。k 越大过冲越明显。 */
 function easeOutBack(t, k = 1.7) {
   const u = t - 1;
   return 1 + (k + 1) * u * u * u + k * u * u;
@@ -56,17 +56,30 @@ function easeOutBack(t, k = 1.7) {
 
 /**
  * 占位美术（没有素材时的程序化贴图）：
- *   'gold' → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
- *            获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
+ *   'gold'  → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
+ *             获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
+ *   'pack'  → **卡包**（三张错叠卡背 + 束带结；老虎机择卡奖/商店卡包走它）
+ *   'relic' → **遗物**（多面宝石 + 底座；无 3D 模型也无素材的遗物兜底——夜测 r2路5
+ *             拾荒者的口袋纯色方块实报）
  *   其它 key → null（退回 tint 色块）
  * headless（无 document）返回 null。
  */
 function bakePlaceholderArt(key) {
-  if (key !== 'gold' || typeof document === 'undefined') return null;
-  const S = 256;
+  if (typeof document === 'undefined') return null;
+  if (key === 'gold') return bakeGoldPile();
+  if (key === 'pack') return bakePack();
+  if (key === 'relic') return bakeRelicGem();
+  return null;
+}
+
+function canvasOf(S = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = S;
-  const ctx = canvas.getContext('2d');
+  return [canvas, canvas.getContext('2d'), S];
+}
+
+function bakeGoldPile() {
+  const [canvas, ctx, S] = canvasOf();
   const coin = (x, y, r) => {
     // 币身（圆柱侧面）+ 币面 + 高光
     ctx.fillStyle = '#b8862a';
@@ -85,6 +98,109 @@ function bakePlaceholderArt(key) {
   // 前排两枚散币
   coin(S * 0.26, S * 0.76, 40);
   coin(S * 0.75, S * 0.78, 38);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function bakePack() {
+  const [canvas, ctx, S] = canvasOf();
+  const card = (x, y, rot, fill) => {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot);
+    const w = S * 0.3, h = S * 0.42;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(-w / 2 + 5, -h / 2 + 6, w, h);            // 投影
+    ctx.fillStyle = fill;
+    ctx.fillRect(-w / 2, -h / 2, w, h);                    // 卡背
+    ctx.strokeStyle = '#c9b382'; ctx.lineWidth = 5;
+    ctx.strokeRect(-w / 2 + 6, -h / 2 + 6, w - 12, h - 12); // 描边内框
+    ctx.restore();
+  };
+  // 三张错叠（后深前浅，读作"一沓"）
+  card(S * 0.44, S * 0.5, -0.12, '#5d4a6e');
+  card(S * 0.56, S * 0.5, 0.1, '#6e5a80');
+  card(S * 0.5, S * 0.52, -0.02, '#8a6fa0');
+  // 束带 + 结（横跨卡面的封条）
+  ctx.fillStyle = '#c9a84c';
+  ctx.fillRect(S * 0.24, S * 0.44, S * 0.52, S * 0.1);
+  ctx.strokeStyle = '#8a6118'; ctx.lineWidth = 4;
+  ctx.strokeRect(S * 0.24, S * 0.44, S * 0.52, S * 0.1);
+  ctx.fillStyle = '#e8c766';
+  ctx.beginPath(); ctx.arc(S * 0.5, S * 0.49, S * 0.075, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,246,214,0.6)';
+  ctx.beginPath(); ctx.arc(S * 0.48, S * 0.47, S * 0.03, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function bakeRelicGem() {
+  const [canvas, ctx, S] = canvasOf();
+  const cx = S / 2, cy = S * 0.46, r = S * 0.26;
+  // 底座（金属托）
+  ctx.fillStyle = '#8a8f9c';
+  ctx.beginPath(); ctx.ellipse(cx, S * 0.78, S * 0.24, S * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#b8bfcc';
+  ctx.fillRect(cx - S * 0.05, S * 0.66, S * 0.1, S * 0.12);
+  // 宝石（八边形 + 刻面 + 高光）
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const [px, py] = [cx + Math.cos(a) * r, cy + Math.sin(a) * r * 1.12];
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#7fc3e8'; ctx.fill();
+  ctx.strokeStyle = '#3d6d8c'; ctx.lineWidth = 6; ctx.stroke();
+  // 上刻面高光
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const [px, py] = [cx + Math.cos(a) * r * 0.55, cy + Math.sin(a) * r * 0.62 - r * 0.12];
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(224,244,255,0.75)'; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath(); ctx.arc(cx - r * 0.28, cy - r * 0.34, r * 0.1, 0, Math.PI * 2); ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** 通用占位兜底（菱形宝物 + 辉光 + 底影）：专属占位与素材都缺席时顶上，
+ *  保证特写美术区永远有图形（不再是 tint 色块）。 */
+function bakeGenericRelicArt() {
+  const [canvas, ctx, S] = canvasOf();
+  const cx = S / 2, cy = S * 0.48;
+  // 底影
+  const shadow = ctx.createRadialGradient(cx, S * 0.82, 0, cx, S * 0.82, S * 0.3);
+  shadow.addColorStop(0, 'rgba(0,0,0,0.45)');
+  shadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shadow;
+  ctx.fillRect(0, S * 0.52, S, S * 0.48);
+  // 菱形主体（双层描边）
+  const drawDiamond = (rr, fill) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr * 0.72, cy);
+    ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr * 0.72, cy);
+    ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+  };
+  drawDiamond(S * 0.3, '#8f9bb5');
+  drawDiamond(S * 0.24, '#c7d3e8');
+  ctx.strokeStyle = '#5d6a85'; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - S * 0.3); ctx.lineTo(cx + S * 0.216, cy);
+  ctx.lineTo(cx, cy + S * 0.3); ctx.lineTo(cx - S * 0.216, cy);
+  ctx.closePath(); ctx.stroke();
+  // 中心辉光 + 高光点
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.2);
+  glow.addColorStop(0, 'rgba(255,250,230,0.95)');
+  glow.addColorStop(1, 'rgba(255,250,230,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(cx, cy, S * 0.2, 0, Math.PI * 2); ctx.fill();
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -131,7 +247,7 @@ function bakePlaceholderArt(key) {
 /**
  * 托底暗晕贴图（程序化烘焙：中心暗、向边缘柔和化开到全透明）。
  *
- * 为什么需要它（用户 2026-09-13 报「获得演出里图像 alpha=0 的区域仍然把 godlight 盖住了，
+ * 为什么需要它（实报「获得演出里图像 alpha=0 的区域仍然把 godlight 盖住了，
  * 很诡异」）：托底板原先是一块 **0.85 不透明度的深色方板**，尺寸比物品图还大一圈，且画在
  * 加色 godlight **之前**（z 更大）——物品图四周的透明区域于是露出的不是光束，而是一块硬边
  * 深色方块，正正好把放射光挡掉。改成**径向柔和暗晕**后：边缘全透明（光束照常透出），只有
@@ -209,7 +325,7 @@ export class ItemShowcaseObject extends THREE.Group {
 
     // ③ 物品图（含托底暗晕：素材是透明底时也要有"嵌在光里"的边界）
     // 托底 = **径向柔和暗晕**（不是硬边方板）：边缘全透明让 godlight 透出来，只在物品正后方
-    // 渐隐地压一层暗底（用户 2026-09-13 报「alpha=0 区域把 godlight 盖住」的正是这块方板）。
+    // 渐隐地压一层暗底（实报「alpha=0 区域把 godlight 盖住」的正是这块方板）。
     this._vignetteTex = bakeSoftVignette();
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(ART.size + 1.6, ART.size + 1.6),
@@ -233,7 +349,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this.add(this._item);
 
     // ④ 文本四行（名称 / 斜体描述 / 作用 / 斜体铭文——flavor 行是遗物设计稿里的
-    //    斜体文本（RELICS.md `_..._`，2026-09-21 用户定：获得演出下方额外一行斜体），
+    //    斜体文本（RELICS.md `_..._`，获得演出下方额外一行斜体），
     //    非遗物特写不传即隐藏）
     this._lines = [];
     for (const [key, spec] of Object.entries({
@@ -309,13 +425,13 @@ export class ItemShowcaseObject extends THREE.Group {
    *   tint:   色块/托底色（可空 → 金）
    *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
    *   autoDismissMs: >0 时停住这一时长后**自动收下**（售货机购买：出完货即自动收货，
-   *                  不给一套"点击收货"的 UI，用户定 2026-09-13）；缺省 0 = 等点击
+   *                  不给一套"点击收货"的 UI）；缺省 0 = 等点击
    *   onDismiss / onSkip: 两个出口的回调（点任意处 / 点跳过；仅本次 show 有效）
    */
   show(item = {}) {
     // ⚠ 千万别往 Object3D 上塞 `pivot`：three 的 `updateMatrix()` 会把 `this.pivot`
     // 当作**变换枢轴**参与矩阵合成（非 Vector3 会让平移整列变 NaN → 物件凭空消失，
-    // 症状是"光效和文字都在、物品图不见了"）。这条坑 2026-09-11 踩过一次。
+    // 症状是"光效和文字都在、物品图不见了"）。这条坑 踩过一次。
     this._phase = 'in';
     this._t = 0;
     this.visible = true;
@@ -348,10 +464,14 @@ export class ItemShowcaseObject extends THREE.Group {
     return true;
   }
 
-  /** 程序化占位美术（按 key 缓存复用；无占位则 null → 退回 tint 色块）。 */
+  /** 程序化占位美术（按 key 缓存复用；专属占位缺失时回退通用占位——任何 artKey
+   *  都不再落裸 tint 色块。r3路6/路7 实锤：调用点既有传泛型键（pack）也有传
+   *  遗物名/奖励 kind（relic 名失配、special 无映射），逐键打补丁不如兜底）。 */
   _placeholderOf(key) {
     if (!this._placeholders) this._placeholders = new Map();
-    if (!this._placeholders.has(key)) this._placeholders.set(key, bakePlaceholderArt(key));
+    if (!this._placeholders.has(key)) {
+      this._placeholders.set(key, bakePlaceholderArt(key) ?? bakeGenericRelicArt());
+    }
     return this._placeholders.get(key);
   }
 

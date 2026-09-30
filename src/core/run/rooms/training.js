@@ -5,7 +5,7 @@ import { getSkillDefinition } from '../../skills/registry.js';
 import { ascensionReady } from '../ascension.js';
 
 // 训练场（RUN_DESIGN §4.1）：进阶主途径，固定出现在 4N-2 层（2/6/10…42，楼层表见 runFlow）。
-// 2026-09-18 用户定改版：训练 = **必做阶段**且先于篝火（篝火门见 camp.js）。访问节拍：
+// 训练 = **必做阶段**且先于篝火（篝火门见 camp.js）。访问节拍：
 //   1) beginTraining（必做）——记一次训练（升阶）；此刻训练次数达标 → gameStage 当场切
 //      'ascension'，进阶事件**在房内先行播完**（ascension.completeAscension 见 currentRoom
 //      未清会切回 'room'）——保证随后的抓牌池看得到刚点亮的维度（旧版进阶排在离房时，
@@ -13,11 +13,11 @@ import { ascensionReady } from '../ascension.js';
 //   2) 可选段（整段可放弃）：4 选 1 抓一张（trainDrawChoices/trainDraw）→ 抓了卡就欠
 //      一次升级（pendingUpgrade 尾款；抓时无任何可升级卡则免）；
 //   3) 训练收束（trained 且无尾款）后篝火才解锁：回 35% 最大生命（营地升级已随
-//      2026-09-21 D4 移除——升级全部收进本房尾款新制）。
+//      升级全部收进本房尾款新制）。
 // 离房硬门（completeRoom）：未训练不许走；pendingUpgrade 未清不许走。
 // 计次：每次到访恰 +1 trainingCount（beginTraining 统一记，与段内收益结构解耦）。
 //
-// 尾款新制（2026-09-21 D4「训练房新制」）：**升 2 张 C→B，或升 1 张 B→A**——替代原
+// 尾款新制：**升 2 张 C→B，或升 1 张 B→A**——替代原
 // 单卡升一阶。两拍式：先 trainUpgradeStart 选模式（两模式按牌组实况给门禁：2C 模式需
 // 牌组有 ≥2 张可升 C，1B 模式需 ≥1 张可升 B），再逐张 trainUpgrade 晋升（C 模式只收
 // C 阶卡、B 模式只收 B 阶卡，逐张递减剩余次数）。模式在未晋升任何一张前可换

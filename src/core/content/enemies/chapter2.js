@@ -1,4 +1,4 @@
-// 章2 小怪（宫殿，12~22 层普通池）。拆分自原 content/enemies.js（2026-09-24，内容零改动）。
+// 章2 小怪（宫殿，12~22 层普通池）。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy, getEnemyDefinition } from '../../enemies/registry.js';
@@ -9,7 +9,7 @@ import { aliveEnemies } from '../../state/battleState.js';
 
 // ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（**存活敌人数** 未满
 // config.maxEnemies，与前端槽位数对齐——enemies 数组含尸体，直接数 length 会在
-// 有单位死亡后永远「满员」，2026-09-13 Boss 波 2 冒烟抓出并统一改存活口径）、且
+// 有单位死亡后永远「满员」，须统一走存活口径）、且
 // 上一回合没召唤过（lastSummonTurn 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），
 // 满足三条才召唤；否则攻 10 + 盾 5。
 // 召唤出的史莱姆尾插 enemies（本回合行动循环快照已取，下回合起参战）。
@@ -25,7 +25,7 @@ function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
 registerEnemy({
   difficulty: { base: 5, floorMin: 12, floorMax: 30 },
   id: 'bigSlime', name: '大史莱姆',
-  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 34 }), // 2026-09-21 用户定：44→34（二章坦克削血提攻）
+  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 34 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (bigSlimeCanSummon(unit, bs)) {
@@ -36,8 +36,7 @@ registerEnemy({
       }));
       return;
     }
-    // 2026-09-21 用户定（二章坦克削血提攻）：攻击 10→13、自盾 8→4——从「打不动的肉桩」
-    // 改成「打得动但锤人疼」。
+    // 削血提攻后的坦克：攻 13 + 自盾 4——「打得动但锤人疼」。
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: unit, target: actx.player, amount: 13 + unit.getStat('attack'),
     }));
@@ -48,7 +47,7 @@ registerEnemy({
     : { kinds: ['attack', 'defend'], hits: 1, damage: 13 + unit.getStat('attack'), note: '自身护盾+4' }),
 });
 
-// ④ 暗影刺客：蓄势滚雪球——攻 → 蓄势+2（每层攻击+1）→ 突袭（高基数），
+// ④ 暗影刺客：力量滚雪球——攻 → 力量+2 → 突袭（高基数），
 // 拖久了威胁线性上升，逼玩家集火或速杀
 registerEnemy({
   difficulty: { base: 4, floorMin: 12, floorMax: 32 },
@@ -58,7 +57,7 @@ registerEnemy({
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 2,
+        target: actx.unit, effectId: 'strength', stacks: 2,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -69,7 +68,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['buff'], note: '自身蓄势+2（攻击+2）' };
+    if (phase === 1) return { kinds: ['buff'], note: '自身力量+2' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 14) + unit.getStat('attack') };
   },
 });
@@ -99,9 +98,8 @@ registerEnemy({
     : { kinds: ['attack', 'buff'], hits: 1, damage: 8 + unit.getStat('attack'), note: '攻击并自愈3' }),
 });
 
-// ============ 第二~四章补池（2026-09-13 总策划批次，设计稿 tmp/design-monsters-wave1.mjs）============
-// 断档诊断：章2 新敌仅 4 只、章3 仅 2 只、章4 为 0，精英只有章1两只——「粪怪堆积」的
-// 根因是池子厚度而非单怪设计。本波按场景配方主题补池：章2=宫殿 / 章3=衰败庄园 / 章4=大图书馆。
+// ============ 第二~四章补池 ============
+// 按场景配方主题补池：章2=宫殿 / 章3=衰败庄园 / 章4=大图书馆。
 
 // ⑱ 宫廷守卫（章2·阵型谜题：全体友军护盾）——「先杀支援还是顶着群体盾硬打输出手」的
 // 目标优先级考题。与腐苔球（奶轴支援）错开：它是盾轴支援，护盾会被回合清零（T2），
@@ -129,7 +127,7 @@ registerEnemy({
     : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
 });
 
-// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军蓄势2（它自己脆，给玩家一拍反应窗），
+// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军力量2（它自己脆，给玩家一拍反应窗），
 // 此后攻5。杀得快等于白赚，杀不掉全队滚雪球——与雪狼开局虚弱镜像：一个压玩家，一个抬敌人。
 registerEnemy({
   difficulty: { base: 4, floorMin: 12, floorMax: 22 },
@@ -139,7 +137,7 @@ registerEnemy({
     if (actx.unit.actionIndex === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: e, effectId: 'focus', stacks: 2,
+          target: e, effectId: 'strength', stacks: 2,
         }));
       }
       return;
@@ -149,7 +147,7 @@ registerEnemy({
     }));
   },
   getIntention: (unit) => (unit.actionIndex === 0
-    ? { kinds: ['buff'], note: '全体友军蓄势+2（攻击+2）' }
+    ? { kinds: ['buff'], note: '全体友军力量+2' }
     : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') }),
 });
 
@@ -157,7 +155,7 @@ registerEnemy({
 // hp」（_lastHp，每次 act 末尾记账，首拍缺省 = 当前 hp）：受创 ≥ 8 → 龟缩举盾 12 不攻击；
 // 否则攻 9。谜题 = 输出节奏分配：一轮爆发 ≥8 = 用伤害买它一回合沉默（但溢出伤害打在
 // 盾上）；控制每轮 ≤7 = 它一直攻，吃伤害换输出窗口。
-// ※ 为什么不用「有无盾」做分支（2026-09-13 用户指正）：T2 铁律——盾在持有者回合开始
+// ※ 为什么不用「有无盾」做分支：T2 铁律——盾在持有者回合开始
 // 清零，轮到敌方行动的时点盾恒为 0，「有盾→攻/无盾→举盾」会退化成永不攻击的肉桩。
 // hp 差值是唯一无需新引擎/新订阅的可读状态；燃烧·中毒 tick 也计入受创（语义通：
 // 被折磨痛了同样会缩）。
@@ -192,7 +190,7 @@ registerEnemy({
   },
 });
 
-// ============ 体系镜像补池（2026-09-14，木/空卡牌体系落地后的敌方生态）============
+// ============ 体系镜像补池（木/空卡牌体系的敌方生态）============
 // 三只各填一个主题空位：章2 起敌方无毒（叠毒体系无镜像）、章3 起敌方无闪避（御风体系
 // 无镜像）、章4 无针对 DoT 的反制件（终章叠毒/燃烧无考题）。各考一道与玩家体系同源的题。
 

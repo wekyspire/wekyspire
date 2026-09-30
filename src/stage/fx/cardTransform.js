@@ -1,4 +1,4 @@
-// 卡牌变换演出（多模式骨架，2026-09-26 用户设计）：
+// 卡牌变换演出（多模式骨架）：
 // 变换 = 旧脸 → 新脸的过渡。**双脸难题**的解法：预烘焙新脸纹理 + 叠层 shader
 // 双纹理按 wipe 前锋分区同屏渲染，落幕一刻才 `applyBakedFace` 换脸——
 // 叠层全程盖在牌面上（z=3，压过 veil/edge 一切特效层），底层脸不动，零切换跳变。
@@ -9,7 +9,7 @@
 //   pulse（旧版留档）：瞬时换脸 + 金色迸发 + 放缩（调用方自行补放缩/粒子）。
 // 生命周期纪律：演出挂在 view._transformCancel 上——视图销毁/二次变换时先掐死在途
 //  tween（含预烘焙新纹理销毁），不泄漏不悬空；落幕正常换脸后纹理所有权移交牌面。
-// WebGPU 迁移（2026-09-27，原裸 GLSL 内嵌 shader 重写为 TSL）：范式与 fx/unitBodyFx.js
+// WebGPU 迁移（原裸 GLSL 内嵌 shader 重写为 TSL）：范式与 fx/unitBodyFx.js
 // 同源——uniform = TSL uniform() 节点（tween onUpdate 推 `.value` 口径不变）；着色链 =
 // TSL Fn 组合（本式纯算式无控制流，不必进 If）；双纹理采样 texture(map, uv())；
 // 材质改 MeshBasicNodeMaterial，colorNode 全量接管输出（vec4 的 a 通道即片元透明度）。
@@ -53,7 +53,7 @@ const crShade = Fn(([oldC, newC, uProg, uTime]) => {
   // 焦化锋前缘暗红预告线（即将烧到）
   const scorch = exp(abs(dChar).mul(-55.0)).mul(oneMinus(isChar));
   // 新脸区：贴锋一段在白光中浮现（白光强度随距离指数衰减）——白光推到 HDR 2.6+
-  // （bloom 阈 1.45 以上），white-in 区自然起晕（用户 2026-09-27：前沿要吃到辉光）
+  // （bloom 阈 1.45 以上），white-in 区自然起晕（前沿要吃到辉光）
   const whiteK = exp(max(frontShow.sub(y), 0.0).mul(-6.0));
   const newShown = newC.rgb.add(vec3(2.6, 2.7, 3.0).mul(whiteK).mul(whiteK));
   // 合成：旧脸(带焦化预告线) → 焦化区(+火线) → 新脸(+白光)

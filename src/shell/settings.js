@@ -38,7 +38,7 @@ export const settings = reactive({
   // 持久化只是开发期省事（每次手勾很烦）；调试会话**永不写真实存档槽**，
   // 所以「忘关」也不会污染正常局——与旧「无敌模式」不持久化的取舍一致。
   debugMode: IS_DEV && saved.debugMode === true,
-  // 一次性教学（2026-09-28）：生涯首次把老虎机喂到张嘴（吞噬就绪）时弹过指引对话。
+  // 一次性教学：生涯首次把老虎机喂到张嘴（吞噬就绪）时弹过指引对话。
   // 与上面的开关不同，这是"看过就不再弹"的记录位，全构建有效（非 dev 专属）。
   slotDevourTutored: saved.slotDevourTutored === true,
   // 恶魔 roll 解说（同上）：生涯首次挂起恶魔 roll 时讲完整规则，之后每次只一句

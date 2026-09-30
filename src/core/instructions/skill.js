@@ -124,7 +124,7 @@ export class UseSkillInstruction extends BattleInstruction {
 }
 
 // 资源消耗：费用不直接扣，而是提交资源指令——费用修正（PRE 订阅）因此对技能费用生效。
-// 费用取值优先级（2026-09-21 统一覆写通道）：激活态咏唱打出恒免费（关停语义）＞
+// 费用取值优先级（统一覆写通道）：激活态咏唱打出恒免费（关停语义）＞
 // 指令级 costOverride（嵌套出牌豁免：万变拳/铁雨/漂浮）＞ runtime costOverride
 // （随卡旅行的费用覆写：控火术：无上「发现 0 费」等——经 createSkillRuntime/addCard 的
 // overrides 盖章，对本场战斗存活期持续生效）＞ 定义费用 def.cost。
@@ -247,7 +247,7 @@ export class SkillCooldownInstruction extends BattleInstruction {
   }
 }
 
-// 自然冷却扫掠（回合开始，2026-09-13 用户定恢复）：对 cooldownZones（默认 hand/deck）
+// 自然冷却扫掠（回合开始）：对 cooldownZones（默认 hand/deck）
 // 内计时未尽的每张卡，展开一枚定向 SkillCooldownInstruction（delta 1）子节点——
 // 冷却路径与卡牌效果（加速/衰败）完全同源，单卡推进可被 PRE 逐卡 veto/修饰。
 // pending（结算区）不在默认集合：正在结算的卡不推进冷却。
@@ -268,7 +268,7 @@ export class SweepSkillCooldownInstruction extends BattleInstruction {
   }
 }
 
-// 入库冷却钩子——**斩的专属特性**（2026-09-13 用户再裁：入库冷却不再是全局规则，
+// 入库冷却钩子——**斩的专属特性**（入库冷却不是全局规则，
 // 只有带 cooldownOnEnterDeck 词条的卡（斩链）在每次进入牌库时推进 1 拍）。
 // 落点 = 三条入库指令：UseSkill 收尾回库 / DiscardCard / MoveCard（toZone deck）。
 export function tickCooldownOnEnterDeck(ctx, card) {

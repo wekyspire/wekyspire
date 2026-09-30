@@ -18,7 +18,7 @@ export default {
   mount: 'floor',
   tags: ['metal', 'lightSource', 'fire'],
   footprint: { x: 4, z: 4 },
-  // 受击震颤（fx/notify 示范件，2026-09-22）：战场重击落地 → 火盆原地衰减微摆
+  // 受击震颤（fx/notify 示范件）：战场重击落地 → 火盆原地衰减微摆
   // （radius 取模板默认 95 = 房间尺度全覆盖，幅度按距离衰减——近处猛晃、远处涟漪）。
   // 注意：behaviors 只在 guaranteed 定点摆放时生效（composeRoom 不合批才登记 notifiables）。
   behaviors: [B.flutterOnImpact({ tilt: 0.06 })],

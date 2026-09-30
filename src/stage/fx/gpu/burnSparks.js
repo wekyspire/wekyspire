@@ -1,4 +1,4 @@
-// 燃烧火星（粒子池 v2 的首个 custom 类型实例，2026-09-28 自 gpuParticles.js 旧池迁入）——
+// 燃烧火星（粒子池 v2 的首个 custom 类型实例，自 gpuParticles.js 旧池迁入）——
 // spawn 逻辑超 uber 参数化包络（燃烧条目表 rejection 采样），所以走 custom 通道：
 // 独立编译 dispatch 只管自己的段；积分/寿命用与 uber 同式的参数（读类型行，调参仍在
 // desc）；渲染外观走统一 present（ageHeat 复现旧「新鲜火星更亮」）。

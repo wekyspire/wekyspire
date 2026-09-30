@@ -1,7 +1,7 @@
 // 体修·刀组合（BODY_CULTIVATION_CARDS §2：卡序体系）。
 // 体系哲学：全游戏最高单发伤害，代价是手牌与牌库都是棋盘。
 //   斩系列 —— 局内进阶链（打出即转化升阶；只在牌库中冷却；不可被焚毁；链首慢热）；
-//   花刀   —— 弃牌换护盾（选牌弃 / 弃掉所有无法打出的手牌，2026-09 稿改防御）；
+//   花刀   —— 弃牌换护盾（选牌弃 / 弃掉所有无法打出的手牌）；
 //   回旋斩 —— 牌库末抽牌（与牌库顶抽牌形成规划语言）；
 //   横劈   —— 真群伤（刀组的群伤答案：纯伤害无附加，数字带体系溢价）；
 //   飞刀   —— 邻牌献祭（两侧语义统一读「打出那一刻」，helpers.handNeighborsAtPlay）；
@@ -96,9 +96,9 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
 
 // ==== 斩进阶（开刃系列共用）====================================================
 
-// 斩链（局内进阶链，全链同一张卡经转化逐阶生长）：等阶按设计稿标注（2026-09-21
-// 大调：斩 D→C、裂石 C→B；分海/断神取 A/S，Z 是诅咒不作攻击阶）。
-// slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却，2026-09 设计稿）；
+// 斩链（局内进阶链，全链同一张卡经转化逐阶生长）：等阶按设计稿标注
+//（斩 C、裂石 B；分海/断神取 A/S，Z 是诅咒不作攻击阶）。
+// slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却）；
 // 进阶卡只经局内转化获得，转化继承充能状态，无需重复慢热。
 const SLASH_CHAIN = [
   { id: 'slash', name: '斩', tier: 'C', damage: 15, cd: 3 },
@@ -175,7 +175,7 @@ function advanceSlashChain(sctx, parentInstr = null) {
 // 【斩】（NAMED.md）：不可被焚毁（被焚毁时以回牌库取代之）；发动后进阶（转化到链上
 //   下一阶，keepPower 延续强化）。冷却 = 全局回合扫掠（P2 每回合 1 拍）+ **斩专属
 //   词条特效「此卡入库时冷却」**（cooldownOnEnterDeck：打出回牌库底 / 弃回 /
-//   焚毁 veto 回库，每次入库额外推进 1 拍，2026-09-13 用户定）。砺刀/花刀是手中
+//   焚毁 veto 回库，每次入库额外推进 1 拍）。砺刀/花刀是手中
 //   直达加速手段。洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改
 //   伤害/冷却/等阶）。
 const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = null }, nextId) => registerSkill({
@@ -229,12 +229,11 @@ for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
 }
 
-// 碎铁（斩系列衍生牌，等阶记 C——2026-09-21 移除 D 阶，衍生牌等阶只是账务口径，消耗）：
-// 3伤害，**抽1**（2026-09-13 设计稿：斩落下的铁屑不再是纯亏损牌，而是"打出即回本"的
-// 循环料）。——**仍是刀法牌**（用户 2026-09-12
-// 定：它吃关于刀法牌的一切效果与增益，养刀术/锻刀术/练刀/砺刀系都在其上生效）。判据走
-// `series: 'blade'`（cardKit.isBladeCard），故 keywords 不带 'blade'（页脚不多一个词条）。
-// 只经 AddCard 入场，不入奖励池。
+// 碎铁（斩系列衍生牌，等阶记 C——衍生牌等阶只是账务口径，消耗）：
+// 3伤害，**抽1**——斩落下的铁屑不是纯亏损牌，而是"打出即回本"的循环料。
+// ——**仍是刀法牌**（它吃关于刀法牌的一切效果与增益，养刀术/锻刀术/练刀/砺刀系
+// 都在其上生效）。判据走 `series: 'blade'`（cardKit.isBladeCard），故 keywords
+// 不带 'blade'（页脚不多一个词条）。只经 AddCard 入场，不入奖励池。
 registerSkill({
   id: 'ironShard', name: '碎铁', type: 'normal', tier: 'C', series: 'blade',
   keywords: ['exhaust'],
@@ -251,12 +250,12 @@ registerSkill({
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，抽1`,
 });
 
-// ==== 花刀系列（弃牌换护盾，2026-09 设计稿由伤害改防御）======================
+// ==== 花刀系列（弃牌换护盾）====================================================
 
 // 选牌弃：护盾 + 选 K 张手牌丢弃（结算期选牌：段0请求，段1读应答弃牌）。
 // 自身已离手（pending），选牌候选即其余手牌；空手则跳过请求。
 // 仍是刀法牌（blade 关键词）——练刀/培植/砺刀系的作用域不变。
-// 阶梯（2026-09-21 大调收阶）：花刀 C 8选1 → 花刀 B 11选1 → 蔽目花刀 A 14选1；
+// 阶梯：花刀 C 8选1 → 花刀 B 11选1 → 蔽目花刀 A 14选1；
 // 完美花刀（A，11盾选2）是分叉散卡不进链。
 const cleaveCard = (id, name, tier, shield, picks, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
@@ -285,7 +284,7 @@ const cleaveCard = (id, name, tier, shield, picks, promotesTo = null) => registe
   battleDescribe: (sctx) => `${shield}护盾，选${picks}张手牌丢弃`,
 });
 cleaveCard('handCleave', '花刀', 'C', 8, 1, 'doubleCleave');
-cleaveCard('doubleCleave', '花刀', 'B', 11, 1, 'veilCleave');   // id 沿用（大调收阶：原二重花刀位）
+cleaveCard('doubleCleave', '花刀', 'B', 11, 1, 'veilCleave');   // id 沿用原二重花刀位
 cleaveCard('veilCleave', '蔽目花刀', 'A', 14, 1);
 cleaveCard('perfectCleave', '完美花刀', 'A', 11, 2);            // 分叉散卡：选 2 弃
 
@@ -353,16 +352,15 @@ const cycloneCard = (id, name, tier, damage, count, cd, promotesTo = null) => re
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，从牌库末抽${count}牌`,
 });
 cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1, 'cycloneBurst');
-cycloneCard('cycloneBurst', '回旋爆斩', 'B', 12, 1, 1, 'perfectCyclone'); // 2026-09-21 大调：10/抽2 → 12/抽1
+cycloneCard('cycloneBurst', '回旋爆斩', 'B', 12, 1, 1, 'perfectCyclone');
 cycloneCard('perfectCyclone', '完美回斩', 'A', 14, 1, 0);   // 机制跃迁：无冷却
 
 // ==== 横劈系列（真群伤）========================================================
 // 刀组的群伤答案：「命中：洗入碎铁」补碎铁经济（AOE 每命中 1 敌人洗入 1 碎铁——
 // 「每命中1敌人」与扫腿同口径，读 aoeAttack 命中数）。冷却1 是刀组攻击卡的常规节拍，
 // 全链吃养刀/锻刀/练刀/刀圣的刀法加成。
-// 2026-09-21 大调收阶（D 阶移除）：横劈 D→C 6→7 / 强力劈 C→B 9→10 /
-// 裂空劈 B→A 16→13 且补回碎铁联动 / 断岳劈（A）删除。注意 id 不得撞斩链
-// （S「开天斩」skyCleave——旧 C 阶裂空劈曾误用同 id 被静默覆盖，2026-09 修复过一次）。
+// 阶梯：横劈 C 7 / 强力劈 B 10 / 裂空劈 A 13（带碎铁联动）。
+// ⚠ id 不得撞斩链（S「开天斩」skyCleave——裂空劈不得复用该 id，否则静默覆盖）。
 const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
@@ -399,7 +397,6 @@ function bothSidesPresent(sctx) {
 }
 
 // 弃两侧基型（飞刀/强力飞刀/绝灭飞刀）：伤害 + 丢弃两侧牌。
-// 2026-09-21 大调：等阶不动，B/A 伤害收窄（20→17 / 28→21）。
 const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade'],
@@ -521,7 +518,6 @@ registerSkill({
 });
 
 // ==== 藏锋系列（高伤换滞气）====================================================
-// 2026-09-21 大调：潜锋 23→20、藏锋 48→30（原 48 收窄），三阶补上晋升链。
 const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   keywords: ['blade', 'exhaust'],
@@ -542,16 +538,14 @@ sheathCard('hiddenEdge', '潜锋', 'B', 20, 2, 'sheathEdge');
 sheathCard('sheathEdge', '藏锋', 'A', 30, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
-// C/B 纯消耗（整战一次）：打出即焚毁、**焚毁彻底离场不回**（2026-09-13 用户定基本约定，
-// 原「消耗+短暂=回合末从焚毁区回库」形态废除）；A 完美呼吸去消耗（2026-09-21 大调）。
+// C/B 纯消耗（整战一次）：打出即焚毁、**焚毁彻底离场不回**；A 完美呼吸去消耗。
 // 打出即获得同名「呼吸」效果
 // （content/effects.js：弃牌 POST 监听 + 回合末自清，生命周期与效果实例绑定——
 // 被清除时监听器一并拆除）。换牌（R3）内部走弃牌指令，同样计入；
 // 打出自身不是弃牌（pending→burnt 的消耗路径）。
-// 阶梯：C 纯抽 / B 抽+格挡1 / A 抽+格挡1且**去消耗**（2026-09-21 大调：完美呼吸
-// 不再是整战一次——阶差从效果强度移到「消耗词条」这个机制跃迁点）。
-// 2026-09-16 用户裁决（马拉松 r14/r15 数据：武者呼吸+情况不对单回合力量5+格挡5 过强）：
-// ① 全系费用 1AP→2AP；② 武者/完美呼吸移除力量加成（只留格挡）。
+// 阶梯：C 纯抽 / B 抽+格挡1 / A 抽+格挡1且**去消耗**——阶差押在「消耗词条」
+// 这个机制跃迁点上。全系 2AP；武者/完美呼吸只有格挡加成、无力量加成
+// （武者呼吸+情况不对的组合曾经单回合力量5+格挡5 过强，力量面已移除）。
 const breathCard = (id, name, tier, { effectId, block = 0, strength = 0, exhaust = true, promotesTo = null }) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
   ...(exhaust ? { keywords: ['exhaust'] } : {}),
@@ -574,13 +568,12 @@ breathCard('breath', '呼吸', 'C', { effectId: 'breath', promotesTo: 'warriorBr
 breathCard('warriorBreath', '武者呼吸', 'B', { effectId: 'warriorBreath', block: 1, promotesTo: 'perfectBreath' });
 breathCard('perfectBreath', '完美呼吸', 'A', { effectId: 'perfectBreath', block: 1, exhaust: false });
 
-// ==== 培植系列（养刀，C/B/A 三阶——2026-09-20 稿成链）==========================
+// ==== 培植系列（养刀，C/B/A 三阶）==============================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
 // power 随卡流动、转化 keepPower 延续，是养成轴的近似口径。设计稿未写费用 → 0费。
 
-// 养刀术 C/B/A：咏唱1/1/0（2026-09-21 大调：A 档咏唱归零）。咏唱触发（P5）时
-// **所有刀法牌**（手牌+牌库，2026-09-20 稿由「手中」扩到「所有」——与锻刀术同口径）
-// 伤害 +2/+3/+3（A 档加成 4→3，阶差全在咏唱负担）。
+// 养刀术 C/B/A：咏唱1/1/0。咏唱触发（P5）时**所有刀法牌**（手牌+牌库，与锻刀术同口径）
+// 伤害 +2/+3/+3（阶差全在咏唱负担）。
 function honeBladeCard({ id, tier, bonus, chantWeight = 1, promotesTo = null }) {
   registerSkill({
     id, name: '养刀术', type: 'normal', tier, series: 'blade',
@@ -644,9 +637,8 @@ forgingBladeCard({ id: 'forgingBladeMaster', tier: 'A', weight: 0, bonus: 2 });
 
 // 含刃术 C/B/A（0费，咏唱3 全阶同担）：咏唱触发（P5）时若手牌少于 2/3/4（物理张数），
 // 斩进阶，此卡焚毁（焚毁先经离手熄灭，激活订阅随 owner 注销）。
-// 2026-09-21 大调补全三阶链——条件阈值即阶差。历史注：旧单档实现把设计稿的
-// 「少于 2」修为「少于 4」（P5 在回合抽牌**之后**判定，「少于 2」意味着库空抽不上牌、
-// 永不触发）——三阶化后文档口径落成阶梯，C 档恢复字面「少于 2」（空手搏命位）。
+// 条件阈值即阶差；C 档「少于 2」是空手搏命位（P5 在回合抽牌**之后**判定，
+// 库空抽不上牌时才会命中）。
 const edgeBreathCard = ({ id, tier, threshold, promotesTo = null }) => registerSkill({
   id, name: '含刃术', type: 'normal', tier, series: 'blade',
   cost: { mana: 0, actionPoint: 0 },
@@ -675,7 +667,7 @@ edgeBreathCard({ id: 'edgeBreathA', tier: 'A', threshold: 4 });
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
 // （battle.md §12 留白），待设计确认后补回。
 
-// 出鞘（A，2026-09-21 大调 B→A，设计稿未写费用 → 0费，消耗）：斩进阶，
+// 出鞘（A，设计稿未写费用 → 0费，消耗）：斩进阶，
 // /named{抽出}斩（进阶后的斩链卡若在牌库，直接移入手牌——满手按 §7.3 落牌库；
 // 斩已因耗尽在冷却时，抽出的是一张「按新阶冷却中」的刀——它只在牌库冷却，手中只能
 // 靠砺刀/花刀处理，这是出鞘的时机博弈）。无斩可进则无事发生（抽出亦落空）。
@@ -704,8 +696,7 @@ registerSkill({
 // ==== 深入卡（砺刀系：手中刀的冷却管理，需精英能力「刀客」）=====================
 // 手中刀法牌冷却 N：SkillCooldownInstruction 定向直达，不等回合扫掠——刀法体系的
 // 手中加速手段；满充能的刀无处推进、静默落空。
-// 2026-09-21 大调：全系补 deep:'blade'（文档 §2.2 深入卡表门禁）；砺刀冷却 1→2
-// （保留【短暂】：回合结束时仍滞留手牌则回牌库）；磨锋/展锐去【短暂】（B 起可过夜）。
+// 砺刀带【短暂】（回合结束时仍滞留手牌则回牌库）；磨锋/展锐无【短暂】（B 起可过夜）。
 const whetCard = (id, name, tier, delta, { promotesTo = null, transient = false } = {}) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade', deep: 'blade',
   ...(transient ? { keywords: ['transient'] } : {}),
@@ -756,8 +747,7 @@ registerSkill({
   battleDescribe: () => '所有刀法牌即刻冷却',
 });
 
-// 斩灭 A/S（2026-09-20 稿补 S 档：1AP、不消耗）：你的下一次刀法牌伤害变为固定伤害
-// （F2：跳过修正与防御）。
+// 斩灭 A/S（S 档 1AP、不消耗）：你的下一次刀法牌伤害变为固定伤害（F2：跳过修正与防御）。
 // 近似实现（任务口径）：挂 PRE 订阅把「下一次玩家来源的、发生在刀法牌结算内」的
 // 伤害指令直改 instr.fixed = true（fixed 不在 payload 白名单，走指令字段直改；execute
 // 读 this.amount = 构造时的完整值，天然丢弃此前 PRE 修饰——与"跳过修正步"语义一致）。
@@ -793,8 +783,7 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
 annihilatingEdgeCard({ id: 'annihilatingEdge', tier: 'A', ap: 2, exhaust: true, promotesTo: 'annihilatingEdgeS' });
 annihilatingEdgeCard({ id: 'annihilatingEdgeS', tier: 'S', ap: 1, exhaust: false });
 
-// 练刀 C/B/A（2026-09-21 大调收阶：删 D 与旧 A 档）：抽1，**将手中所有刀法牌
-// 洗回牌库底**，并令它们**本战斗中**伤害 +3/+4/+5。费用 1AP（B 起 0AP），
+// 练刀 C/B/A：抽1，**将手中所有刀法牌洗回牌库底**，并令它们**本战斗中**伤害 +3/+4/+5。费用 1AP（B 起 0AP），
 // 冷却1（A 档不需冷却）——每一阶恰好一个跃迁点：C→B = 费用 + 威力，B→A = 去冷却。
 // 「本战斗中」= runtime.power（跨 zone 持续、战斗结束随 runtime 一起丢弃），
 // 洗回走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
@@ -852,10 +841,9 @@ const bladeArtCard = (id, name, tier, n) => registerSkill({
 bladeArtCard('bladeArt', '刀法', 'B', 1);
 bladeArtCard('bladeHeart', '刃心', 'A', 2);
 
-// ==== 散卡（2026-09 设计稿新增）================================================
+// ==== 散卡 =====================================================================
 
-// 快速花刀 C/B/A（1AP/0AP/0AP，2026-09-20 补 A 档）：6护盾，/named{换牌}所有无法
-// 打出的手牌，A 档再抽 1。
+// 快速花刀 C/B/A（1AP/0AP/0AP）：6护盾，/named{换牌}所有无法打出的手牌，A 档再抽 1。
 // 换牌 = 弃牌（手→牌库底）+ 抽 1 补位（走指令，呼吸等弃牌联动照常触发）；
 // 「原地」按原手位把抽到的牌插回（升序插回精确复原原次序）。满手/空库时
 // 抽牌按 DrawCards 管线自然截断，换几张补几张。无卡手牌时护盾照发、换牌空转。
@@ -909,11 +897,9 @@ swapCleaveCard('quickCleave', '快速花刀', 'C', 1, { promotesTo: 'quickCleave
 swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0, { promotesTo: 'quickCleaveA' });
 swapCleaveCard('quickCleaveA', '快速花刀', 'A', 0, { draw: 1 });
 
-// 铁雨 B/A（消耗，B 档；设计稿未写费用 → 0费；深入卡——2026-09-20 稿标注「深入：」，
-// 归刀客门禁；A 档去除消耗词条）：**打出所有碎铁**。
-// 2026-09-14 用户改：手中 → 所有（手牌+牌库）——原「打包手中碎铁」零增量（碎铁 0 费
-// 自带抽 1，手动逐张打毫无成本；试玩 24 局唯一一次入手即当废牌卡手），改成把斩链
-// 洗进牌库的碎铁**全部拉出来打**，才是真正的碎铁爆发件。
+// 铁雨 B/A（消耗，B 档；设计稿未写费用 → 0费；深入卡，归刀客门禁；A 档去除消耗词条）：
+// **打出所有碎铁**（手牌+牌库——只打包手中碎铁零增量，碎铁 0 费自带抽 1；把斩链
+// 洗进牌库的碎铁全部拉出来打，才是真正的碎铁爆发件）。
 // 口径：逐张**嵌套出牌**（UseSkillInstruction —— skill.js 头注声明的能力：技能逻辑直接提交，
 // 不经 playerUseSkill 的可用性检查；碎铁 0 费，无需 costOverride；其 moveCard 不要求来源
 // 是手牌，牌库碎铁直接进结算）。先快照（手牌+牌库）再逐张打：打出的会离手/离库，
@@ -946,8 +932,7 @@ const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => r
 ironRainCard('ironRain', 'B', { promotesTo: 'ironRainA' });
 ironRainCard('ironRainA', 'A', { exhaust: false });
 
-// 快速横刀 C/B/A（消耗，设计稿未写费用 → 0费；2026-09-21 大调：6/9/12 护盾）：
-// /named{抽出}斩。
+// 快速横刀 C/B/A（消耗，设计稿未写费用 → 0费；6/9/12 护盾）：/named{抽出}斩。
 // 斩系列的前排防御位搭档：护盾的同时把牌库里的斩链卡拽上手（无斩则抽不出，
 // 护盾照发——与出鞘的「无斩无事发生」同口径）。
 const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkill({

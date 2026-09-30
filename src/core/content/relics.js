@@ -12,9 +12,9 @@ import { getSkillDefinition } from '../skills/registry.js';
 import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
 import { isBossFloor } from '../run/runFlow.js';
 
-// 遗物内容（RELICS.md 2026-09-10 第一批：只上「不需要新机制」的那些，见 todos/ 记录）。
+// 遗物内容（个体设计见 RELICS.md）。
 //
-// 字段口径（用户 2026-09-10 定，以 RELICS.md 为准）：
+// 字段口径（以 RELICS.md 为准）：
 //   rarity   'C'|'B'|'A'|'S'（抽选权重与定价依据）
 //   cost     槽位权重 0..3（Σ ≤ relicSlots=3）；0 槽 = 能装备但不花槽
 //   nonSlot  true = **非槽位式遗物**：不进装卸界面、拾起即恒生效（走 activeRelics）
@@ -87,7 +87,7 @@ registerRelic({
 
 // ---- 开局默认（每局自动入手并装备；全渠道不可再获得）----
 
-// 大剑（开局遗物，0 槽，2026-09-18 用户定）：战斗开始时，向牌库随机位洗入 1 张「斩」。
+// 大剑（开局遗物，0 槽）：战斗开始时，向牌库随机位洗入 1 张「斩」。
 // 斩已移出初始卡组——带不带斩进战由玩家装卸本遗物自选（0 槽不占激活位，卸下只失去
 // 效果）。acquisition: [] = 不进任何获取渠道（抽取/售货机/古尔帕斯/事件全部排除，
 // 见 draft.js sourcesOf）；一局内唯一由「已拥有即排除」兜底。注入走 AddCardInstruction
@@ -103,7 +103,7 @@ registerRelic({
 
 // ---- 战斗开始时（资源 / 状态）----
 
-// 龙心组织：第一回合开始时获得 3 行动力（2026-09-20 稿 2→3）。
+// 龙心组织：第一回合开始时获得 3 行动力。
 // ⚠ 必须挂 T1 回合开始 POST 而不是 onBattleStart：PlayerTurnInstruction stage 0 会把 AP
 // 无条件设回上限（跨回合不保留超出部分）——战斗开始直发会被 T1 回补瞬间抹掉，
 // 与风铃闪避被 T1 蒸发是同一类问题（该 bug 使本遗物自第一批起一直是无声空转）。
@@ -128,8 +128,8 @@ registerRelic({
   },
 });
 
-// 卡达斯的獠牙（2026-09-20 稿机制更新）：战斗前四个回合，每回合开始时获得 4 魏启
-// （由「战斗开始一次性 +3」改为分期付款——总量 16，节奏红利换整局铺开）。
+// 卡达斯的獠牙：战斗前四个回合，每回合开始时获得 4 魏启
+// （分期付款——总量 16，节奏红利换整局铺开）。
 registerRelic({
   id: 'kadasFang', name: '卡达斯的獠牙', rarity: 'A', cost: 1,
   description: '战斗前四个回合，每回合开始时获得 4 魏启。',
@@ -203,7 +203,7 @@ registerRelic({
   }],
 });
 
-// 木灵脉专属（2026-09-14 随木体系落地补簇；门禁与卡包同一口径）
+// 木灵脉专属（门禁与卡包同一口径）
 registerRelic({
   id: 'poisonIvyVial', name: '毒藤瓶', rarity: 'C', cost: 1, requires: { leino: 'wood', min: 1 },
   description: '战斗开始时，赋予所有敌人中毒 2。',
@@ -349,7 +349,7 @@ registerRelic({
   ],
 });
 
-// 飞镖 / 迷你飞镖 共用：第一回合结束的群伤（2026-09-20 稿：2 → 7）
+// 飞镖 / 迷你飞镖 共用：第一回合结束的群伤
 function dartVolley() {
   return {
     when: PlayerTurnEndInstruction,
@@ -358,7 +358,7 @@ function dartVolley() {
     react: (instr, c) => {
       for (const e of c.battleState.enemies) {
         if (e.isDead()) continue;
-        // 附级：被动群伤（2026-09-15 拆分），不吃加成不触发响应
+        // 附级：被动群伤，不吃加成不触发响应
         c.kernel.submitInstruction(new DealDamageInstruction({
           source: c.player, target: e, amount: 7, tags: ['aoe'], type: 'minor',
         }), instr);
@@ -383,7 +383,7 @@ registerRelic({
 
 // ---- 受击 / 出牌 反应 ----
 
-// 大锤（2026-09-20 稿机制更新：受击转盾 → 回合开始固定盾）。priority -100 同
+// 大锤。priority -100 同
 // 光滑小圆盾：回合开始的「出现类」效果必须排在护盾重置（-50）之后，否则刚发的盾
 // 会被同一拍的清盾抹掉。
 registerRelic({
@@ -495,9 +495,9 @@ registerRelic({
 });
 
 // ---- 塞西莉亚之恩赐（S·事件专属）：致命一击延迟一回合 ----
-// 实现＝「致命拦截 + 奇迹1」；拦截点是**应用原语**的 PRE（2026-09-15 两原语拆分：
-// 免死类拦截挂受击侧、在受击结算前改变结果——它不关心伤害出自什么千奇百怪的原因，
-// 不筛主/附级；改判的补刀伤害是附级系统结算）。语义见 effects.js 的 miracle。
+// 实现＝「致命拦截 + 奇迹1」；拦截点是**应用原语**的 PRE（免死类拦截挂受击侧、
+// 在受击结算前改变结果——它不关心伤害出自什么千奇百怪的原因，不筛主/附级；
+// 改判的补刀伤害是附级系统结算）。语义见 effects.js 的 miracle。
 registerRelic({
   id: 'ceciliaBlessing', name: '塞西莉亚之恩赐', rarity: 'S', cost: 1, acquisition: ['event'],
   description: '每场战斗一次：你将死亡时，改为保留 1 点生命并获得奇迹 1（自己回合结束时奇迹 -1，归零即死亡）。',
@@ -532,14 +532,14 @@ registerRelic({
 });
 
 // ====================================================================
-// 第二批（RELICS.md 2026-09-11）：需要「新机制」的那些。
+// 第二批：需要「新机制」的那些。
 // 数值修正统一走「修正 + 运行时重算」：run 级 = runModifiers，本场 = battleModifiers /
 // applyBattleModifier。两者都随生命周期自然消失，故本批**没有一处回滚代码**。
 // ====================================================================
 
 // ---- 本场资源 / 上限 ----
 
-// 微型AWFD（2026-09-20 稿机制更新：去掉开战 +1 魏，上限增益 1 → 3）
+// 微型AWFD
 registerRelic({
   id: 'microAwfd', name: '微型AWFD', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，本场战斗魏启上限 +3。',
@@ -624,8 +624,8 @@ registerRelic({
         used = true;
         c.kernel.submitInstruction(
           new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
-        applyBattleModifier(c, 'defense', 3); // 防御 3（2026-09-20 稿：本场战斗修正，随战斗消失）
-        // 格挡 3 = block 效果层（旧实现误发护盾池，2026-09-20 对齐文档口径）
+        applyBattleModifier(c, 'defense', 3); // 防御 3（本场战斗修正，随战斗消失）
+        // 格挡 3 = block 效果层（非护盾池）
         c.kernel.submitInstruction(
           new AddEffectInstruction({ target: c.player, effectId: 'block', stacks: 3 }), instr);
       },
@@ -701,8 +701,8 @@ registerRelic({
   },
 });
 
-// 界尘（2026-09-20 稿机制更新：免疫第一次负面 → 纯净 3——「纯净」效果本体
-// （每挡一次负面赋予 -1 层）已有，直接挂层数，多次免疫更直观也更可堆叠）。
+// 界尘：「纯净」效果本体（每挡一次负面赋予 -1 层）直接挂层数 3——多次免疫，
+// 直观且可堆叠。
 registerRelic({
   id: 'realmDust', name: '界尘', rarity: 'A', cost: 1,
   description: '战斗开始时，获得纯净 3。',
@@ -760,7 +760,7 @@ registerRelic({
   },
 });
 
-// ---- 选牌类（2026-09-11：需要「从指定卡牌集里选 M~N 张」的结算期输入）----
+// ---- 选牌类（需要「从指定卡牌集里选 M~N 张」的结算期输入）----
 // 订阅/onBattleStart 里没有技能分段可用，所以用输入指令子类挂后续动作
 // （范式：test/asyncInput.test.js 的 CounterInputInstruction）。
 
@@ -778,7 +778,7 @@ class PickCardsInstruction extends AwaitPlayerInputInstruction {
   }
 }
 
-// 胚胎（S·1槽）：战斗开始时从牌库中寻找 2 张自选入手（2026-09-20 稿：1 → 2）。
+// 胚胎（S·1槽）：战斗开始时从牌库中寻找 2 张自选入手。
 registerRelic({
   id: 'embryo', name: '胚胎', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '战斗开始时，从牌库中寻找 2 张牌，自选加入手牌。',
@@ -802,7 +802,7 @@ registerRelic({
   },
 });
 
-// 原初拟态基质（A·2槽，2026-09-20 稿：3→2 槽）：每场战斗一次，复制手牌中的一张牌。
+// 原初拟态基质（A·2槽）：每场战斗一次，复制手牌中的一张牌。
 // 手牌要等初始抽牌之后才满（onBattleStart 早于 initialDraw）→ 挂首次抽牌的 POST。
 registerRelic({
   id: 'primordialMatrix', name: '原初拟态基质', rarity: 'A', cost: 2, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
@@ -836,11 +836,11 @@ registerRelic({
   },
 });
 
-// ============ 2026-09-13 新体系遗物第一波（总策划批次，设计稿 tmp/design-relics-wave1.mjs）============
-// 轴心：给两级手牌/弃牌/咏唱/超载/自燃博弈这些第 6 轮验证过的新机制各配一件构筑杠杆。
+// ============ 新体系遗物第一波 ============
+// 轴心：给两级手牌/弃牌/咏唱/超载/自燃博弈这些新机制各配一件构筑杠杆。
 // 分布：C·1槽×3 / B·1槽×2 / B·2槽×1 / A·2槽×1 / A·非槽×1。
 
-// 拾荒者的口袋（B·1槽，2026-09-18 与架势镜稀有度互换）——弃牌轴：每回合你第一次弃牌时，抽 1 张牌。
+// 拾荒者的口袋（B·1槽）——弃牌轴：每回合你第一次弃牌时，抽 1 张牌。
 // 软补 dump 不补牌的痛点；限每回合 1 次，不破坏「弃牌=止损」的定位。
 registerRelic({
   id: 'scavengerPouch', name: '拾荒者的口袋', rarity: 'B', cost: 1,
@@ -860,7 +860,7 @@ registerRelic({
   },
 });
 
-// 架势镜（C·1槽，2026-09-20 稿：+8→+10、2→1 槽）——完美轴：你的完美卡伤害 +10。
+// 架势镜（C·1槽）——完美轴：你的完美卡伤害 +10。
 // 完美是战术挑战（条件不动），这件给 payoff 再加一根杠杆。完美卡的伤害指令带
 // tags:['perfect']（blockSkills.js 六个出牌点统一打标）。
 registerRelic({
@@ -877,8 +877,7 @@ registerRelic({
 });
 
 // 胀满的背包（A·1槽）——容量轴：手牌上限 +1。
-// 2026-09-18 用户削：去掉超载上限 +2（回合内爆发空间 +2 过强）。
-// 沿革：原「仅超载 +2」DOA → 加手牌上限 +1 常驻（第 7 轮）→ C 升 A 降频（2026-09-13）。
+// 只给常驻 +1，不给超载上限（回合内爆发空间 +2 过强）。
 registerRelic({
   id: 'bulgingPack', name: '胀满的背包', rarity: 'A', cost: 1,
   description: '手牌上限 +1。',
@@ -886,7 +885,7 @@ registerRelic({
   runModifiers: { maxHandSize: 1 },
 });
 
-// 守夜灯（B·1槽）——尾弃轴：每回合尾弃时，每弃 1 张牌获得 4 护盾（2026-09-20 稿：2→4）。
+// 守夜灯（B·1槽）——尾弃轴：每回合尾弃时，每弃 1 张牌获得 4 护盾。
 // 尾弃从纯损失变对冲收入——与容量博弈的新玩具。
 registerRelic({
   id: 'nightLantern', name: '守夜灯', rarity: 'B', cost: 1,
@@ -901,9 +900,9 @@ registerRelic({
   }],
 });
 
-// 火中取栗（A·1槽，2026-09-20 稿升 A）——自燃博弈轴：每当你获得燃烧时，获得等量的护盾。
+// 火中取栗（A·1槽）——自燃博弈轴：每当你获得燃烧时，获得等量的护盾。
 // 「与燃烧博弈，收益与风险并存」的新玩具——自燃变盾，和亲和/防火形成三角。
-// 第 7 轮裁决：半额转盾 dud（自燃流全是负收益），改全额——自燃变盾才成立。
+// 全额转盾（半额时自燃流全是负收益，全额才成立）。
 registerRelic({
   id: 'chestnutFromFire', name: '火中栗', rarity: 'A', cost: 1,
   description: '每当你获得燃烧时，获得等量的护盾。',
@@ -920,8 +919,7 @@ registerRelic({
   }],
 });
 
-// 共鸣石（S·2槽，2026-09-18 升 S）——咏唱轴：权重高于 1 的激活咏唱卡权重 -1
-// （与旧「-1 最低 1」等价，措辞改写）。咏唱构筑的核心件。
+// 共鸣石（S·2槽）——咏唱轴：权重高于 1 的激活咏唱卡权重 -1。咏唱构筑的核心件。
 registerRelic({
   id: 'resonanceStone', name: '共鸣石', rarity: 'S', cost: 2,
   description: '你权重高于1的激活的咏唱卡权重 -1。',
@@ -931,9 +929,9 @@ registerRelic({
   },
 });
 
-// 囤囤鼠之宝藏（C·1槽，2026-09-18 更名+改口径）——留存轴：回合结束时自由牌 ≤ 2，
-// 下回合抽牌 +1。自由牌 = 未激活咏唱的手牌（激活咏唱不占判定——囤的是「还没打的牌」）。
-// 沿革：松鼠的囤积 加权手牌 ≤3 → 用户 2026-09-18 收紧为自由牌 ≤2（咏唱引擎不吃这件收益）。
+// 囤囤鼠之宝藏（C·1槽）——留存轴：回合结束时自由牌 ≤ 2，
+// 下回合抽牌 +1。自由牌 = 未激活咏唱的手牌（激活咏唱不占判定——囤的是「还没打的牌」，
+// 咏唱引擎不吃这件收益）。
 registerRelic({
   id: 'squirrelHoard', name: '囤囤鼠之宝藏', rarity: 'C', cost: 1,
   description: '你的回合结束时，若自由牌不多于 2 张，下回合多抽 1 张。',

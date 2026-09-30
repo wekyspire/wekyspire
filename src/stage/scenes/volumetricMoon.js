@@ -1,4 +1,4 @@
-// 月光体积光 composer：真 ray marching（非贴面片）+ temporal 累积——TSL 版（W2，2026-09-27）。
+// 月光体积光 composer：真 ray marching（非贴面片）+ temporal 累积——TSL 版（W2）。
 //   pass 1：世界场景渲进带深度纹理的 RT（同时触发 three 渲染 shadow map）；
 //   pass 2（march + EMA）：全屏 quad 重建每像素视线，向场景深度行进 N 步，逐步把采样点
 //           变换进月光 shadow 空间做硬件比较采样，累计"在光中"的散射量；
@@ -41,7 +41,7 @@ const vmHash12 = Fn(([p]) => {
 });
 
 // march + EMA：输出线性光量（不写屏幕，写历史 RT）
-// 体积区域 = 房间 AABB 外扩少许（用户定 2026-09）：view ray 先与盒求交，t start/t end
+// 体积区域 = 房间 AABB 外扩少许：view ray 先与盒求交，t start/t end
 // clamp 在 [tEnter, tExit]——盒外像素（天空盒/远景）零光量直出，天空渲染不被污染；
 // tfar 不再用 nearZ/固定值硬截（相机拉远时截断曾致全场偏暗，干扰视觉判断）。
 const vmMarch = Fn(([u]) => {
@@ -63,7 +63,7 @@ const vmMarch = Fn(([u]) => {
   const tEnter = max(max(tSm.x, tSm.y), max(tSm.z, 0.0));
   const tExit = min(min(tBg.x, tBg.y), tBg.z);
   const current = vec3(0.0).toVar();
-  const trans = float(1.0).toVar(); // 透射率：盒内空气对视线方向的吸收（天空也要乘，用户定）
+  const trans = float(1.0).toVar(); // 透射率：盒内空气对视线方向的吸收（天空也要乘）
   If(tExit.greaterThan(tEnter), () => {
     const t0 = tEnter;
     const maxT = min(min(sceneDist, tExit), u.maxDist);
@@ -114,7 +114,7 @@ const vmComposite = Fn(([tDiffuse, tLight, uTint]) => {
  * @param {object} options
  *   light: THREE.DirectionalLight（castShadow，唯一体积光源）
  *   box: { min:[x,y,z], max:[x,y,z] } 房间体积盒（比房间内稍大；view ray 与之求交框定
- *        march 区间，盒外像素零光量——天空盒/远景正常渲染，用户定 2026-09）
+ *        march 区间，盒外像素零光量——天空盒/远景正常渲染）
  *   maxDist/density/lightBoost: 参数（density 单位：每世界单位散射量；maxDist 仅安全后闸）
  * @returns { render(renderer, scene, camera), resize(w, h), dispose() }
  */
@@ -134,7 +134,7 @@ export function createVolumetricMoonlight({
   });
   // bloom 强度偏移通道（fx/bloomOffset.js）：FX 件在偏移 pass 里重写输出（R = 偏移量），
   // bright 段阈值判定前加和进亮度——起晕强度由绘制方主动声明，颜色本体不必拉爆 HDR。
-  // **独立深度纹理 + depth-only 预填**（WebGPU 铁律，2026-09-27 probe-w2 确诊）：旧 GLSL
+  // **独立深度纹理 + depth-only 预填**（WebGPU 铁律，probe-w2 确诊）：旧 GLSL
   // 版与 rt 共享深度纹理——本后端按 RT 缓存渲染通道描述符、失效判据不含深度纹理身份，
   // 第二个 RT 首用时给共享深度标 needsUpdate → 纹理销毁重建 → 第一个 RT 的缓存描述符
   // 永远引用已销毁纹理（每帧 GPUValidationError）。故两 RT 各持深度，遮挡改由偏移
@@ -172,7 +172,7 @@ export function createVolumetricMoonlight({
   const tDiffuse = texture(rt.texture);
   const tLight = texture(blackTex);
   const uTint = uniform(tint ? new THREE.Color(...tint) : new THREE.Color(1, 1, 1));
-  // ---- bloom（用户定 2026-09-11：给整条渲染管线加 bloom，让彩灯/屏幕真的"发光"）----
+  // ---- bloom（给整条渲染管线加 bloom，让彩灯/屏幕真的"发光"）----
   // 链：线性合成 → 半分辨率 bright（软膝阈值）→ H/V 两次分离高斯 → 终段加算直出线性。
   const bloomParams = { threshold: 1.45, knee: 0.35, strength: 0.42, radius: 1.4 };
   const tFinalColor = texture(blackTex);

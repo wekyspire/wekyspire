@@ -11,8 +11,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   const shop = snap.shop ?? { items: [], pending: null };
   const w = [];
 
-  // 卡包/遗物包三选一（买到即开，金币已扣）：**走全屏选择 overlay**（用户定 2026-09-12：
-  // "不要塞在操纵条里"），操纵条只留一个兜底入口（overlay 已自动打开，这里是安全阀）。
+  // 卡包/遗物包三选一（买到即开，金币已扣）：**走全屏选择 overlay**（// "不要塞在操纵条里"），操纵条只留一个兜底入口（overlay 已自动打开，这里是安全阀）。
   // 三选一**可放弃**：overlay 的「返回」= 放弃这个包（钱已花，选择权在你）。
   if (shop.pending) {
     if (shop.pending.kind === 'relic') {
@@ -24,7 +23,9 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
       });
       return w;
     }
-    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packId}`, align: 'center' });
+    // packName = 快照侧显示名（panelSnapshot 的 PACKS 表，不裸露 id——夜测 r6路8
+    // 实报「卡包 · body」泄漏内部 id；缺字段时退 packId 兜底）
+    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packName ?? shop.pending.packId}`, align: 'center' });
     w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组（不想要就放弃）' });
     w.push({
       kind: 'button', id: 'shop:openPack', width: 300, size: 'main',
@@ -53,7 +54,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     });
   }
   // 商品**已经在 3D 货柜里**（billboard + 价签，可直接点买）——场景版（dock 操纵条）不再把
-  // 货柜内容复述一遍列表（用户 2026-09-13 报："下方UI又把货柜内的物品描述了一遍，很蠢"）。
+  // 货柜内容复述一遍列表（实报："下方UI又把货柜内的物品描述了一遍，很蠢"）。
   // 只有无场景的占位版（standalone，眼前没有 3D 货架）才需要列表 + 购买按钮作为唯一入口。
   if (buttons) {
     for (const it of shop.items) {
@@ -80,6 +81,6 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     w.push({ kind: 'button', id: 'shop:leaveRoom', width: 220, size: 'sub', label: '离开', action: { action: 'leaveRoom' } });
   }
   // 场景版（dock 操纵条）：**不给「离开售货机/返回房间」按钮**——点面板外的房间空白处
-  // 即拉远回全景（与所有机器面板同一套退出口，用户定 2026-09-12）
+  // 即拉远回全景（与所有机器面板同一套退出口）
   return w;
 }

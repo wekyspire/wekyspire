@@ -1,6 +1,6 @@
 // run 状态效果原语：**内容（事件/剧情）改 run 状态的唯一入口**。
 //
-// 为什么要有这一层（用户定 2026-09-13）：事件内容应该"主动施加效果 + 主动要求演出"，
+// 设计：事件内容"主动施加效果 + 主动要求演出"，
 // 而不是返回 `{ money: 15 }` 让 Shell 去解释执行——那样每加一种事件效果都要改 runController，
 // 效果语义被摊在表现层，故事模式无法承载。现在内容这样写：
 //
@@ -126,7 +126,7 @@ export function setFlag(ctx, key, value = true) {
 export const hasFlag = (run, key) => !!(run.eventFlags ?? {})[key];
 
 /**
- * 单位演出指令（2026-09-25）：事件驱动房间单位（骑士/瑞米/未来 NPC）的移动与形态。
+ * 单位演出指令：事件驱动房间单位（骑士/瑞米/未来 NPC）的移动与形态。
  * 指令描述符原样上行（{unit, op:'moveTo'|'pose'|'face'|'wander', ...}，可序列化，
  * 直播回放直接重放）；headless 无表现层时是 noop（null presenter）。
  * @param {object} ctx run 上下文（ctx.presenter.unitCommand）

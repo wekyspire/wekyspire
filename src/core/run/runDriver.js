@@ -40,7 +40,7 @@ export class RunDriver {
     profile = null,
     totalFloors,                 // 覆盖塔高（故事模式/测试；缺省 44）
     deck = [...BODY_STARTER_DECK], // 缺省=现行初始卡组（bodySkills 导出，随平衡改动同步）
-    abilities = [],              // 初始不带能力（战意已从初始配置移除，2026-09）
+    abilities = [],              // 初始不带能力
     player = {},                 // Player 构造参数覆盖
     battlePolicy = null,         // (battle) => skillRuntime | null（缺省=打第一张可出的牌）
     onInput = null,              // (request) => selection（缺省=取候选前 N 个，见 defaultInputAnswer）
@@ -147,7 +147,7 @@ export class RunDriver {
     switch (run.currentRoom) {
       case 'training':
       case 'campTraining':
-        // 2026-09-18 训练改版：必做训练（升阶，达标则本步切 'ascension' 由后续步解掉）→
+        // 必做训练（升阶，达标则本步切 'ascension' 由后续步解掉）→
         // 可选段缺省全做（4 选 1 取首张 + 尾款新制：优先 2C 模式逐张升，其次 1B）→（合并房）篝火。
         // 幂等：房内升阶回房后会再进本分支，已做的部分直接跳过。
         if (!run.roomData?.trained) {
@@ -158,7 +158,7 @@ export class RunDriver {
           trainDrawChoices(run);
           trainDraw(run, run.roomData.drawChoices[0]);
         }
-        // 尾款（2026-09-21 新制）：未选模式先选（能 2C 就 2C，否则 1B），再逐张升该等阶首张
+        // 尾款：未选模式先选（能 2C 就 2C，否则 1B），再逐张升该等阶首张
         // （twoC 要升满 2 张才清尾款——while 循环到清；候选意外耗尽时 break 防死循环）
         while (run.roomData?.pendingUpgrade) {
           const pending = run.roomData.pendingUpgrade;

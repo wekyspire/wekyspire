@@ -1,5 +1,5 @@
 // 粒子池 v2（PARTICLE_SYSTEM_V2 定稿的 P0 落地）——模块化 compute 粒子底座。
-// 2026-09-28：旧池（gpuParticles.js）已随燃烧火星迁入 custom 类型通道（burnSparks.js）
+// 旧池（gpuParticles.js）已随燃烧火星迁入 custom 类型通道（burnSparks.js）
 // 而删除，本池是唯一 GPU 粒子底座。
 //
 // 结构（文档 §一-§六）：
@@ -288,8 +288,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
               If(P1.y.lessThan(0.5), () => {
                 // 汇聚：steerDelay 后 ramp 渐入。arrival 行为——目标速度取
                 // min(steerK, dist×8)：远端恒 steerK 巡航，近端线性减速指数收敛，
-                // 根治「恒定速率冲过目标点再被拉回」的绕目标震荡（2026-09-28 用户
-                // 验收：粒子在卡缘反复抖动——60fps 下 steerK120 一帧 2 单位，
+                // 根治「恒定速率冲过目标点再被拉回」的绕目标震荡（// 验收：粒子在卡缘反复抖动——60fps 下 steerK120 一帧 2 单位，
                 // arriveR 2.4 的死亡球被一步跨过）。gain 8 = 收敛时间常数 ~0.13s。
                 const dirN = toT.div(max(distV, 1e-4));
                 const ageSec = age.mul(ttlA);
@@ -409,7 +408,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
     transparent: true,
     depthWrite: false,
     // UI 池关深度测试：粒子 z 取自卡牌锚点（与卡面同平面），深度相等被卡面
-    // 恰好挡住（2026-09-28 用户验收：汇聚粒子总被压在卡牌下）。uiScene 全是
+    // 恰好挡住（验收：汇聚粒子总被压在卡牌下）。uiScene 全是
     // 屏幕空间件，关深度由 renderOrder 定序即可；世界池保留（要被场景正确遮挡）。
     depthTest: space !== 'ui',
     fog: false,

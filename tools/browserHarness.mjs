@@ -49,12 +49,17 @@ const ANTI_THROTTLE_ARGS = [
  *   viewport  缺省 1280x720
  *   url       缺省 dev server 根
  *   exe       指定浏览器可执行文件（缺省 Playwright 自带的 chromium）
+ *   unlockFps true = 追加帧率解锁 flags（--disable-frame-rate-limit 等，体积云量测
+ *             验证过有效）：rAF 摆脱 60fps vsync 上限。测试加速用（配 ?tickScale=），
+ *             默认关——日常验证要贴近真实游玩帧率。
  */
-export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, url = DEFAULT_URL, exe = null } = {}) {
+export async function launch({ headless = true, viewport = { width: 1280, height: 720 }, url = DEFAULT_URL, exe = null, unlockFps = false } = {}) {
   const exePath = exe ?? process.env.CHROME_EXE ?? join(homedir(),
     'AppData', 'Local', 'ms-playwright', 'chromium-1228', 'chrome-win64', 'chrome.exe');
   const browser = await chromium.launch({
-    executablePath: exePath, headless, args: ANTI_THROTTLE_ARGS,
+    executablePath: exePath, headless,
+    // 帧率解锁只加 flag，不加任何 --use-gl/--use-angle 软渲染开关（那是 1.9fps 病根）
+    args: unlockFps ? [...ANTI_THROTTLE_ARGS, '--disable-frame-rate-limit', '--disable-gpu-vsync'] : ANTI_THROTTLE_ARGS,
   });
   const page = await browser.newPage({ viewport });
   const errors = [];
@@ -118,7 +123,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     sleep,
     waitRoom: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getRoomStage?.()),
     waitBattle: () => helpers.waitFor(() => !!window.__shell.ctrl.value.getBattleStage?.()),
-    waitStage: (stage) => helpers.waitFor((s) => window.__shell.ctrl.value.run.gameStage === s, []),
+    waitStage: (stage) => helpers.waitFor(`window.__shell?.ctrl?.value?.run?.gameStage === ${JSON.stringify(stage)}`),
     /** 等幕间播完（cutscene 回 idle）。 */
     waitCutsceneEnd: () => helpers.waitFor(() => window.__shell.ctrl.value.cutscene.state.mode === 'idle'),
     /** 等全部演出队列排空（sequencer + 舞台动画都停了，画面进入静息）。 */
@@ -163,11 +168,27 @@ export async function launch({ headless = true, viewport = { width: 1280, height
       }, [method, args]);
       return out;
     },
-    /** 调试面板的开关（F9 同义；面板会挡住房间点击，交互前先关掉）。 */
+    /** 调试面板的开关（F9 同义；面板会挡住房间点击，交互前先关掉）。
+     *  ?debug=1 的面板在 App 挂载完成后才自动弹出——goto 后立刻关会被它后手弹开
+     *  吞掉全部真鼠标点击（夜测首晚四路撞到的挂载竞态）：关闭路径先等 .dbg 出现，
+     *  关完再断言不可见（DOM 残留时 offsetParent 判定），失败自动重按 F9。 */
     togglePanel: async (open = null) => {
-      const isOpen = await page.evaluate(() => !!document.querySelector('.dbg'));
-      if (open === null || open !== isOpen) await page.keyboard.press('F9');
-      await sleep(300);
+      const visible = () => page.evaluate(() => {
+        const el = document.querySelector('.dbg');
+        return !!el && el.offsetParent !== null;
+      });
+      if (open === null) { await page.keyboard.press('F9'); await sleep(300); return; }
+      if (!open) {
+        // 等面板自动弹出（最多 8s：素材预载期更晚），等不到说明本局没开 debug 面板
+        await page.waitForSelector('.dbg', { timeout: 8000 }).catch(() => {});
+        for (let i = 0; i < 3 && await visible(); i++) {
+          await page.keyboard.press('F9');
+          await sleep(400);
+        }
+      } else if (await visible()) {
+        await page.keyboard.press('F9');
+        await sleep(300);
+      }
     },
 
     // ---- 点击：屏幕坐标一律由页面内的 worldToScreen 算（用错相机会点空）----
@@ -198,7 +219,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     },
     /** 点房间里的 3D 交互物（按 marker 名）。 */
     clickObject: async (name, dy = 6) => helpers.clickAt(await helpers.screenOfWorld(
-      `(() => { const e = rs._markers.find(m => m.name === '${name}').entry; return new V(e.x, -30 + ${dy}, e.z); })()`,
+      `(() => { const e = rs._markers.find(m => m.name === '${name}')?.entry; if (!e) throw new Error('marker 不存在: ${name}'); return new V(e.x, -30 + ${dy}, e.z); })()`,
     )),
     /** 点塔楼层地图上的东西（同一套 worldToScreen，只是用 MapStage 的 marker）。 */
     clickMapObject: async (name, dy = 6) => helpers.clickAt(await page.evaluate((n) => {

@@ -176,7 +176,7 @@ export function createVendingMachine(ctx) {
       // 出货演出播完 → 回执宿主（宿主再播"物品到手"的获得特写；演出顺序不能被特写盖掉）
       onDispensed: (index) => ctx.intent({ action: 'shopAnimDone', index }),
     }),
-    // 售货机同样怼脸（用户定 2026-09-12：点售货机要看清货架上的商品与价格）：
+    // 售货机同样怼脸（点售货机要看清货架上的商品与价格）：
     // 主体 = **货架区开口**（不含底座/操作列/顶牌），底边抬到操纵条之上（两排货 + 价格全露出来）
     focusOf: () => ({ fracH: 0.62, bottom: 0.36, pad: 0.95, subject: vendingSubject }),
     // 售货机：**只压暗外围、不打正面补光**——柜内商品是 unlit 自发光（补光照不到），
@@ -195,7 +195,7 @@ export function createVendingMachine(ctx) {
     pickerChanged() { goodsPickIds.clear(); },
 
     /**
-     * 售货机同步（**商店房 'shop' = 一整间货房**，用户定 2026-09-12）：
+     * 售货机同步（**商店房 'shop' = 一整间货房**）：
      *   · 主柜来自配方（`guaranteed` + `live`，name='shop'）——定点、被 claim，撒布件不会压到它；
      *   · 货架超过一台的容量（4 件，故事模式瑞米等级高时 5 件）→ 在 `anchors.shop2` 生成**溢出柜**
      *     （只此一路是动态生成：锚点位没有 claim，故生成前先避让已占红线，见 `_freeSpot`）；
@@ -229,7 +229,7 @@ export function createVendingMachine(ctx) {
     },
 
     /** 吞掉型点击：点商品卡 = 买。**但没怼脸时先推近**——远景里机器中央就是货架，第一次点它
-     * 若直接成交，玩家连商品名与价格都没看清（用户定的节奏：先 zoom in 看货，再点选购买）。 */
+     * 若直接成交，玩家连商品名与价格都没看清（的节奏：先 zoom in 看货，再点选购买）。 */
     handleClick(hit) {
       const gi = _goodsIndexOf(hit);
       if (gi == null) return false;

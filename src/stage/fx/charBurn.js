@@ -1,5 +1,5 @@
-// 烧毁/烧黑 modifier——WebGPU 迁移 TSL 版（2026-09-27，原 onBeforeCompile 字符串补丁重写）：
-// 「shader 一旦写好可应用在任何 PCG mesh 上」（用户定）——挂进任意材质
+// 烧毁/烧黑 modifier——WebGPU 迁移 TSL 版（原 onBeforeCompile 字符串补丁重写）：
+// 「shader 一旦写好可应用在任何 PCG mesh 上」——挂进任意材质
 // （主顾 = 族单例 M.wood / M.cloth：木件与布旗全族生效，合批散件与未合批活件一视同仁）。
 // 范式与 unitBodyFx.js 同源（W3 立，细则见该文件头注）。两枚 uniform 节点
 // （剧本经 ctx.tweenRaw 直推 `.value` 标量字段，口径不变）：

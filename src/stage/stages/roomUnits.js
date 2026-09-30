@@ -1,6 +1,6 @@
 // roomUnits：休息房**单位导演**——房间里的活物（骑士 / 瑞米 / 未来店主）都归这里管。
 //
-// 职责（用户 2026-09-25 定）：
+// 职责：
 //   · 进房生成：骑士常驻（固定位，纯立牌无血条）；瑞米 `!drivenOff` 时在场；
 //   · 瑞米游荡：跳跳移动逛房间，随机 POI → 到点驻足 → 换姿势东看西看（好奇/坐/打盹…）；
 //   · **通用单位指令** `command({unit, op, ...})`——后端（core 事件经 presenter →
@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { FLOOR_Y } from '../scenes/dungeon3D.js';
 import { RoomUnitObject } from '../objects/RoomUnitObject.js';
 
-// 瑞米姿势表：idle/back 用既有立牌，其余等用户手绘图集（2026-09-25 定：qwen 一致性
+// 瑞米姿势表：idle/back 用既有立牌，其余等用户手绘图集（qwen 一致性
 // 不达标，用户自绘）。手绘落盘命名 = src/assets/stage/remi_pose_<姿势>.webp（透明底），
 // 缺图自动回落 idle——画几张生效几张，不用改代码。
 // facing = 素材固有的成脸朝向（+1 面右 / -1 面左，缺省 +1）：front 面左、back 面右——

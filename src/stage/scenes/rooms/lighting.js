@@ -11,7 +11,7 @@ import { LEFT_WALL_X } from './walls.js';
 // 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）
 const FIRE_BASE = 1150;
 
-// ---- 灯光去饱和（用户 2026-09-11：tonemap 后场景过饱和且偏蓝）----
+// ---- 灯光去饱和（tonemap 后场景过饱和且偏蓝）----
 // 处方在 kit 的 `desatColor`（保持亮度、压饱和度、冷色额外多去一档）。**每个建灯处都过一遍**：
 // 灯只留轻微色倾向，画面颜色交给材质反照率——原来月光/反光/战场补光全是高饱和蓝
 // （0x9db4ec/0x8298d4/0x93a5d8），叠加 tone mapping 后整场读成"蓝"。
@@ -70,7 +70,7 @@ export const LIGHTING_PRESETS = {
     fire: { base: FIRE_BASE * 0.56, dist: 145, cap: 14 },
     tint: { base: [0.5, 0.53, 0.72], fireGain: [0.18, 0.22, 0.5], radius: 64 },
   },
-  // 赌厅（休息房·老虎机/银行机）：**外围光再压一档、亮度靠中央光撑**（用户定 2026-09-11）。
+  // 赌厅（休息房·老虎机/银行机）：**外围光再压一档、亮度靠中央光撑**。
   // 处方读法：吊灯暖金光池（centerFill）是全场主亮源 → 机器/彩灯灯池（lamp）是第二层 →
   // 环境/月光/地面反弹/中景补光/烛火全部退成"暗底"（对比度来源：华丽聚光 vs 破烂四周）。
   // 暖调=赌厅基调（冷幽底色只留一点点方向感），与要塞/庄园的冷蓝划开。
@@ -85,7 +85,7 @@ export const LIGHTING_PRESETS = {
     // 灯池（机器 + 彩灯串）：机器暖金、彩灯串按后面几位彩灯色（colors 轮转，见 lamp 循环）
     lamp: {
       color: 0xffb45a, base: 4200, dist: 140, cap: 8,
-      // 彩灯串的颜色轮转：**暖金 + 嫣红/紫/白**（用户定：不要绿——赌厅是暖调，
+      // 彩灯串的颜色轮转：**暖金 + 嫣红/紫/白**（：不要绿——赌厅是暖调，
       // 绿光在暖色机器前很突兀）。机器自带显式 lampColor，不占这些轮转位。
       colors: [0xffb45a, 0xff8a6a, 0xc06a8a, 0x9a8ad8, 0xd8d0e8, 0xffd06a],
     },
@@ -95,7 +95,7 @@ export const LIGHTING_PRESETS = {
     focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
     tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
   },
-  // 营地·训练场（休息房 2026-09-11）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
+  // 营地·训练场（休息房 ）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
   // 这里的光源是地上的篝火/火盆（火点光基数更高、罩得更远、盏数更多），环境光压到最低
   // （"暗处围着火"的营地感），再留一道高窗月光做冷暖对比。
   camp: {
@@ -115,7 +115,7 @@ export const LIGHTING_PRESETS = {
     // 单位染色底同样偏暖（火光照人）：base 暖中性、fireGain 暖橙
     tint: { base: [0.64, 0.57, 0.5], fireGain: [0.3, 0.2, 0.12], radius: 66 },
   },
-  // 商店房（休息房 2026-09-12 → 冷白中性改版同日）：**冷白、中性的"机器房"**——用户定
+  // 商店房（休息房 → 冷白中性改版同日）：**冷白、中性的"机器房"**——用户定
   // "自动售货机没有被赋予人格，是个纯中立玩意"，打光要冷白为主题、中性，质量对齐调优过的
   // 赌厅（老虎机/银行机）：环境光压暗做对比度、亮度交给中央冷白光池 + 售货机自己的灯池。
   // 与赌厅的区别只在色温（冷白 vs 暖金）与机器灯色（中性白 vs 暖金），不做"暖店"基调。
@@ -136,7 +136,7 @@ export const LIGHTING_PRESETS = {
     // 暖光会把色相染偏（赌厅的暖金留给赌厅）
     focus: { color: 0xeaf1f8, base: 1150, dist: 76, offset: 15, dim: 0.72, rise: 3.1, lift: 0.07 },
     tint: { base: [0.58, 0.61, 0.66], fireGain: [0.2, 0.19, 0.18], radius: 64 },
-    // 售货机正面主光（用户定 2026-09-13）：机器在 (0, FLOOR_Y, -44.5)、面朝 +z。
+    // 售货机正面主光：机器在 (0, FLOOR_Y, -44.5)、面朝 +z。
     // 为什么必须单配一盏：售货机怼脸走 `setFocus(..., { fill: false })`（柜内货架是 unlit
     // 自发光，正面补光会把柜内背板照爆），于是"怼脸看货"反而比全景更暗——太暗就是这个缺口。
     // 补一盏**大而软、略微偏冷的中性白**宽角聚光，从货架正前方压过去；它**不进外围压暗清单**，
@@ -144,7 +144,7 @@ export const LIGHTING_PRESETS = {
     front: {
       color: 0xe6eefc,        // 略微偏冷的中性白（不是蓝）
       base: 560, dist: 70,    // 实测四轮定档：3400 玻璃门一团白；2050 反光压货；1300 磨砂门
-      // 整片被照亮蒙在货前；720 只剩门窗上部一条亮雾洗顶层货架（2026-09-22 视觉复核）。
+      // 整片被照亮蒙在货前；720 只剩门窗上部一条亮雾洗顶层货架（视觉复核）。
       // 收尾两招：强度再压到 560 + 光心下沉到门窗下缘（target y 2.2）——亮区沉出玻璃
       // 货架区，上半门面落进 penumbra 尾巴。机器轮廓交给中央顶灯光池撑，柜内 unlit
       // 货品自己会亮，这盏只负责"别让机器黑死"
@@ -214,7 +214,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   battleGlow.position.set(-4, FLOOR_Y + 60, -22);
   group.add(battleGlow);
 
-  // 房间中央虚拟光：框住战场中央附近的道具/单位，把玩家注意力收到战区（用户定）
+  // 房间中央虚拟光：框住战场中央附近的道具/单位，把玩家注意力收到战区
   const [cfColor, cfBase, cfDist] = preset.centerFill;
   const centerFill = new THREE.PointLight(desat(cfColor), cfBase, cfDist, 2.0);
   centerFill.position.set(-4, FLOOR_Y + 42, -20);
@@ -269,7 +269,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     });
   }
 
-  // ---- 焦点布光（用户定 2026-09-11：zoomin 时"压暗背景、把机器屏幕照亮"）----
+  // ---- 焦点布光（zoomin 时"压暗背景、把机器屏幕照亮"）----
   // setFocus(target|null) 后 update 在 focusK 上缓动：
   //   · 外围光池（环境/月光/补光/反弹/中央光/灯池/烛火）统一乘 (1 - focusK*dim) → 背景沉下去；
   //   · 另开一盏观众侧补光落在 target↔相机连线上（相机方向 offset 处）——机器朝向观众的那面
@@ -300,7 +300,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   // 强度唯一落笔点是 update——乘子在这里进公式，剧本直推 mood 字段即生效（gsap 可补间）
   const mood = { dim: 1, fireGain: 1 };
 
-  // 灯池染色（用户定 2026-09-11）：恶魔 roll 期间整机光照要偏暗红——灯池是静态建的，
+  // 灯池染色：恶魔 roll 期间整机光照要偏暗红——灯池是静态建的，
   // 运行期改色走这个句柄（k=0 恢复本色，k=1 全量替换）。**只染灯池**（机器/彩灯串），
   // 不动中央光/月光（房间基调仍归预设）。
   const lampTintTarget = new THREE.Color();
@@ -314,7 +314,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
    * 聚焦/取消聚焦：target=null 或 strength=0 时缓动回常规布光。
    * @param opts.fill false = **只压暗外围、不打正面补光**。售货机需要这一档：它柜内是
    *   unlit 自发光（补光照不到商品），而走进敞开玻璃柜的补光会把柜内背板照爆
-   *   （用户报"怼脸时柜子中间一团白光"）；但压暗外围仍要，机器才从背景里跳出来。
+   *   （报"怼脸时柜子中间一团白光"）；但压暗外围仍要，机器才从背景里跳出来。
    */
   function setFocus(target, { strength = 1, fill = true } = {}) {
     if (!target) { focusTarget = null; focusWant = 0; return; }

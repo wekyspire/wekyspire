@@ -154,7 +154,7 @@ export function shade(c, k) {
   return col.getHex();
 }
 
-/** 灯光去饱和处方（用户 2026-09-11）：k = 去饱和比例，cap = 饱和度上限（HSL 口径），
+/** 灯光去饱和处方：k = 去饱和比例，cap = 饱和度上限（HSL 口径），
  *  blueBias = 冷色（青/蓝/紫）额外多去一档——用户点名的"尤其蓝色光源"。 */
 export const LIGHT_DESAT = Object.freeze({ k: 0.5, cap: 0.3, blueBias: 0.22 });
 
@@ -168,7 +168,7 @@ function coolness(h) {
  * **灯光去饱和**（保持亮度的往灰拉）：s' = min(s·(1−k−blueBias·冷色权重), cap)。
  * 返回**新的 THREE.Color**（要 hex 用 `.getHex()`，要浮点三元组用 `.r/.g/.b`）。
  *
- * 起因（用户 2026-09-11）：tone mapping 后场景整体过饱和、明显偏蓝。根因是颜色压在了
+ * 起因：tone mapping 后场景整体过饱和、明显偏蓝。根因是颜色压在了
  * **灯**上（月光 0x9db4ec / 反光 0x8298d4 / 战场补光 0x93a5d8 全是高饱和蓝，单位染色底
  * 也偏蓝）——正确分工是"灯只留轻微色倾向、画面颜色交给材质反照率"。故在**建灯的唯一入口**
  * 统一去饱和（含 PCG 道具的 `lampColor`，见 rooms/lighting.js 的灯池循环）。

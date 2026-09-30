@@ -28,7 +28,7 @@ import { debugUi, toggleDebugPanel } from './debugState.js';
 import { settings } from './settings.js';
 import { preloadAllArt } from '../stage/art/assetManifest.js';
 import { startCloudNoiseBake } from '../stage/scenes/cloudNoise.js';
-import { probeWebGpuAdapter } from '../stage/fx/tslGate.js';
+import { probeWebGpuAdapter } from '../stage/webgpuProbe.js';
 
 const canvas = ref(null);
 const frame = ref(null);
@@ -45,11 +45,11 @@ const stage = computed(() => ctrl.value?.run.gameStage ?? 'prep');
 
 // 全量美术预载：setup 即启动（与 Vue 挂载/舞台初始化并行）。加载界面挡在开始界面之前
 // ——**全部成功才放行**（此后所有舞台首拍同步命中素材缓存，无占位闪变）。
-// ⚠ 失败不放行（用户定 2026-09-12）：终止下载/断网会让 onerror 落定，早期实现照常放行
+// ⚠ 失败不放行：终止下载/断网会让 onerror 落定，早期实现照常放行
 // →"掐掉下载也能带着缺图进游戏"；现在失败计数进 `assetFailed`，界面卡住并给重试键。
 const assetsReady = ref(false);
 const assetFailed = ref(0);
-// WebGPU 兼容门（用户定 2026-09-27）：不支持的设备卡死在加载界面，不做 WebGL 回退。
+// WebGPU 兼容门：不支持的设备卡死在加载界面，不做 WebGL 回退。
 // 检测在预载**之前**——不过门的设备连下载都不开始（gpuUnsupported 恒挡 assetsReady）。
 const gpuUnsupported = ref(false);
 // 非安全上下文（http + 非 localhost）导致的 WebGPU 缺席——失败页据此换引导文案
@@ -63,7 +63,7 @@ function startAssetPreload() {
   preloadAllArt({
     onProgress: (loaded, total) => { assetProgress.value = { ...assetProgress.value, loaded, total }; },
     // stats 的计数字段叫 done——必须映射回 loaded，否则整条替换会把 loaded 抹成 undefined
-    //（进度条 NaN%、计数文本空白，用户 2026-09-13 报的"进度条 broken"）
+    //（进度条 NaN%、计数文本空白，实报的"进度条 broken"）
     onStats: (s) => { assetProgress.value = { ...s, loaded: s.done }; },
   }).then((r) => {
     if (r.failed > 0) { assetFailed.value = r.failed; return; }   // 卡住：只给重试
@@ -74,7 +74,7 @@ function startAssetPreload() {
 (async () => {
   const adapter = await probeWebGpuAdapter();
   if (!adapter) {
-    // 区分「非安全上下文」与「真不支持」（2026-09-28 用户裸 IP 访问踩坑）：http +
+    // 区分「非安全上下文」与「真不支持」（裸 IP 访问踩坑）：http +
     // 非 localhost 下 navigator.gpu 根本不存在，失败页需要给出可操作的引导而非
     // 一句「设备不支持」（浏览器明明支持）。
     gpuInsecure.value = typeof window !== 'undefined' && window.isSecureContext === false;
@@ -177,7 +177,7 @@ function toTitle() {
 // 画在战斗舞台的 uiScene 上，背景保持战斗房间，直到领奖后的切幕中点才换回塔楼）；
 // 休息房 = 场景式 RoomStage（仅赌厅这类有休息房配方的房间才有，占位房间回退 MapStage）；
 // 其余阶段（prep/ascension/end）都是地图舞台上的 Three 面板。
-// ⚠ 房内进阶（2026-09-18 训练改版）期间 gameStage 是 'ascension' 但 RoomStage 仍存活
+// ⚠ 房内进阶（训练改版）期间 gameStage 是 'ascension' 但 RoomStage 仍存活
 // 且仍是**渲染中的舞台**——种子包等阶段模态面板画在它的 uiScene 上。此时指针必须继续
 // 喂 RoomStage，否则会喂给不可见的 MapStage（它也建了同一份面板：tooltip 走全局总线
 // 照常弹、点击却在操作看不见的副本——用户报「种子包 hover/点选失效」的病灶）。
@@ -267,7 +267,7 @@ onBeforeUnmount(() => {
       @wheel="onWheel"
     ></canvas>
     <!-- 菜单层顶层加载门：全量美术预载**全部成功**前挡住一切（最高 z-index）；
-         失败时卡住并给重试（用户定 2026-09-12：不准带缺图进游戏） -->
+         失败时卡住并给重试（不准带缺图进游戏） -->
     <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" :failed="assetFailed"
       :gpu-unsupported="gpuUnsupported" :gpu-insecure="gpuInsecure"
       @retry="startAssetPreload" />
@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
       <GameMenu v-if="menuOpen" :ctrl="ctrl" @close="menuOpen = false" @toTitle="toTitle" />
       <!-- cutscene 内容层：对话/CG/渐变剧本，激活时阻塞一切流程（游戏流程手动驱动） -->
       <CutsceneOverlay v-if="ctrl.cutscene.state.mode !== 'idle'" :player="ctrl.cutscene" />
-      <!-- 幕间切幕层（独立于内容层，用户 2026-09-12）：黑幕的**目的地**可以是 3D 舞台、也可以是
+      <!-- 幕间切幕层（独立于内容层）：黑幕的**目的地**可以是 3D 舞台、也可以是
            一段 cutscene——所以它自占一层、盖在内容之上（切幕开始 → 目的地就位 → 切幕结束） -->
       <SceneWipeOverlay :wipe="ctrl.sceneWipe" />
     </template>

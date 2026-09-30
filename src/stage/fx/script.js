@@ -1,4 +1,4 @@
-// 协程剧本运行器（fx 架构脊柱之一，2026-09-22 定稿，fx-architecture-plan）：
+// 协程剧本运行器（fx 架构脊柱之一，fx-architecture-plan）：
 // 一切「一次性编排演出」（伤害命中、Boss 转阶段、cutscene 走位、运镜）写成扁平
 // async 协程，替代 BattleStage 里四层 onComplete 套娃。选协程不选声明式时间线
 // 的理由：需求里有「等待事件」（PCG notify / 玩家输入 / 节拍边界）与分支

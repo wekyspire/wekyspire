@@ -1,4 +1,4 @@
-// 毒雾萦绕（L1 贴体层，poison 主题件，VFX 结构大更新 Phase 2，2026-09-26）：
+// 毒雾萦绕（L1 贴体层，poison 主题件，VFX 结构大更新 Phase 2）：
 // 青绿雾团沿立绘缓慢升腾——毒是浸润不是烧：低亮（不过 bloom 阈，毒不喧宾夺主）、
 // 低对比、循环上升 + 中途淡入淡出。与叠火的「锚点猛火」读出区分。
 // 颜色参数化：未来水系/酸雾/瘴气类主题可直接换色复用本件。
@@ -45,7 +45,7 @@ export function makeVaporPlumes(layer, { color = 0x7fe06a } = {}) {
     group.visible = level > 0.02 && !unit._dead;
     for (let i = 0; i < plumes.length; i++) {
       const p = plumes[i];
-      // 逐股浮现（赋予/消除过渡，2026-09-26 用户定）：level 斜坡期雾团按序长大淡入
+      // 逐股浮现（赋予/消除过渡）：level 斜坡期雾团按序长大淡入
       // （附带口径：低层毒雾更稀——1 层稳态约一股半，层数越高越浓）
       const pk = Math.max(0, Math.min(1, level * 3.0 - i * 0.7));
       const cycle = (t / p.period + p.ph) % 1;             // 0→1 一轮升腾

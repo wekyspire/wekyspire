@@ -1,4 +1,4 @@
-// 全局风场（GPU 粒子的环境驱动，WebGPU compute 化 2026-09-27，原 GLSL 共享件重写）：
+// 全局风场（GPU 粒子的环境驱动，WebGPU compute 化 原 GLSL 共享件重写）：
 // uniform 单例 + TSL 共享 Fn——所有 GPU 粒子发射器经 windK 系数响应同一阵风。
 // v1 = 常量微风 + 阵风调制 + 位置湍流；后续接房间预设/天气时只改 uniform 值，
 // 粒子 compute pass 与（未来的）旗帜/雪共用同一份风，全场飘动方向天然一致。

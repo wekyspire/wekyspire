@@ -1,4 +1,4 @@
-// 房型配方层 · 命名配方：爬塔四阶段风格流（用户定 2026-09）+ Boss 房 + 隔层特殊房。
+// 房型配方层 · 命名配方：爬塔四阶段风格流 + Boss 房 + 隔层特殊房。
 //   阶段1（1-10 层，boss1 前）fortress：现状风格加强版——年久失修的杂乱要塞，地面起伏更大，
 //     倾斜柱/大块坍塌岩（breaker）多。
 //   阶段2（12-21 层）palace：空间缩小 15%（room.scale 0.85），左墙多扇高长窗，
@@ -24,7 +24,7 @@ const FORTRESS = {
     slits: [{ x: -8, y: 54 }],
     brickChance: 0.4,
   },
-  // 墙体皮肤 PCG：同色平整墙面 + 少量真特征（剥落/龟裂/透穿洞/坍塌咬口；用户定 2026-09）
+  // 墙体皮肤 PCG：同色平整墙面 + 少量真特征（剥落/龟裂/透穿洞/坍塌咬口）
   wallSkin: {
     spalls: 3,
     holes: 1, holeChance: 0.8, backHoleChance: 0.25,
@@ -40,7 +40,7 @@ const FORTRESS = {
   },
   scatter: {
     tags: { generic: 3, barrack: 2, crypt: 1.5, container: 1.2, rubble: 2.4, lightSource: 1, stone: 0.8 },
-    scale: 2.2, // 落地件整体放大（用户定：所有物体至少 2~3 倍；相机机位不动）
+    scale: 2.2, // 落地件整体放大（：所有物体至少 2~3 倍；相机机位不动）
     bands: {
       back: { cell: 15, density: 0.72 },
       left: { cell: 15, density: 0.66 },
@@ -56,7 +56,7 @@ const FORTRESS = {
   ceiling: { chandeliers: 1 },
   bigSilhouettes: ['catapultBroken', 'ballistaRemnant', 'rubblePile', 'columnBasalt'],
   clusters: 3,
-  breakers: 9, // 要塞：断柱/坍塌岩/斜板多（用户定：倾斜的柱子、大块坍塌的岩石等比较多）
+  breakers: 9, // 要塞：断柱/坍塌岩/斜板多（：倾斜的柱子、大块坍塌的岩石等比较多）
   maintenance: 0.35, // 维护度：低=歪挂/蛛网少量
   // 火源向场景中央集中（对照 dungeon：视觉中心在中部，不在墙边）
   fires: [
@@ -66,7 +66,7 @@ const FORTRESS = {
   ],
   compositionDecal: null,
   // 雾处方：远墙距相机 ~315，smoothstep  Ramp 压到 ≤0.1 因子；雾色提向环境霾色——
-  // 远物融向月夜蓝霭而非纯黑（用户反馈：远视角过暗、拉近才亮，雾吃亮度是主因）
+  // 远物融向月夜蓝霭而非纯黑（反馈：远视角过暗、拉近才亮，雾吃亮度是主因）
   fog: { color: 0x0e1626, near: 250, far: 640 },
 };
 
@@ -75,7 +75,7 @@ const PALACE = {
   id: 'palace',
   theme: 'dungeon',
   lighting: 'moon',
-  room: { scale: 0.85 }, // 阶段 2 起空间缩小 15%（用户定）
+  room: { scale: 0.85 }, // 阶段 2 起空间缩小 15%
   wall: {
     // 左墙多扇高长窗（透入月光 + 多道光路）
     windows: [
@@ -94,7 +94,7 @@ const PALACE = {
   // 宫殿地面平整（amp 7），少坑缝
   floor: { slabCount: 13, mossChance: 0.12, patches: 4, terrain: { amp: 7, basins: 1, platforms: 1, fissures: 0, slopes: 0 } },
   facade: {
-    structureProb: 0.78, // 墙上总有精致立柱与横梁装饰（用户定）
+    structureProb: 0.78, // 墙上总有精致立柱与横梁装饰
     structureOverlapProb: 0.5,
     decorProb: { high: 0.3, mid: 0.6, low: 0.5 }, // 大量画作与旗帜
     tags: { chapel: 2.6, quarters: 2, cloth: 2.4, generic: 1.4, arcane: 0.8 },
@@ -136,7 +136,7 @@ const MANOR = {
   lighting: 'moon',
   room: { scale: 0.85 },
   wall: {
-    windows: [{ z0: -6, z1: 6, sill: 16, top: 70 }], // 窗户量开始减少（用户定）
+    windows: [{ z0: -6, z1: 6, sill: 16, top: 70 }], // 窗户量开始减少
     slits: [{ x: -30, y: 56 }, { x: 66, y: 52 }],
     brickChance: 0.4,
   },
@@ -171,14 +171,14 @@ const MANOR = {
   bigSilhouettes: ['bedFourPoster', 'wardrobeTall', 'tableWriting', 'screenFolding'],
   clusters: 3,
   breakers: 4,
-  maintenance: 0.6, // 维护差：歪挂墙饰 + 蛛网 + 碎屑（用户定）
+  maintenance: 0.6, // 维护差：歪挂墙饰 + 蛛网 + 碎屑
   fires: [
     { id: 'torchStanding', x: -58, z: 20 },
     { id: 'brazierFire', x: 28, z: 28 },
     { id: 'candelabraFloor', x: 18, z: 2 },
   ],
   compositionDecal: null,
-  // 渐暗：雾收近、色沉（用户定"房间逐渐变暗"）
+  // 渐暗：雾收近、色沉（"房间逐渐变暗"）
   fog: { color: 0x0d1420, near: 205, far: 540 },
 };
 
@@ -187,9 +187,9 @@ const LIBRARY = {
   id: 'library',
   theme: 'dungeon',
   lighting: 'torch', // 无月光，火烛主导（密室的幽闭）
-  room: { scale: 0.7225 }, // 0.85 × 0.85：空间再次缩小 15%（用户定）
+  room: { scale: 0.7225 }, // 0.85 × 0.85：空间再次缩小 15%
   wall: {
-    windows: [], // 窗户全部消失（用户定）
+    windows: [], // 窗户全部消失
     slits: [],
     brickChance: 0.5,
   },
@@ -198,7 +198,7 @@ const LIBRARY = {
     holes: 0, holeChance: 0, backHoleChance: 0, // 无窗密塔，洞全关
     bites: 1, biteChance: 0.6, backBiteChance: 0.2,
   },
-  // 维护差：地面再次非常不平整（用户定）
+  // 维护差：地面再次非常不平整
   floor: { slabCount: 12, mossChance: 0.25, patches: 7, terrain: { amp: 15, basins: 2, platforms: 2, fissures: 1, slopes: 1 } },
   facade: {
     structureProb: 0.85, // 墙上一排排书柜（bookcaseTall，library tag 主导结构池）
@@ -223,7 +223,7 @@ const LIBRARY = {
   decals: { count: 13, tags: { decal: 2, library: 1, rubble: 1.2 } },
   ceiling: { chandeliers: 2 },
   bigSilhouettes: ['bookStack', 'rubblePile', 'columnBasalt', 'stalagmite'],
-  clusters: 4, // 拥挤感（用户定）
+  clusters: 4, // 拥挤感
   breakers: 5,
   maintenance: 0.7, // 维护差
   fires: [
@@ -298,11 +298,11 @@ const MEZZANINE = {
   theme: 'dungeon',
   lighting: 'moon',
   room: { scale: 1 },
-  // 特殊色调（用户定）：隔层略偏亮、灰白——grading 随场景契约下发，渲染层消费
+  // 特殊色调：隔层略偏亮、灰白——grading 随场景契约下发，渲染层消费
   grading: { exposure: 1.12, tint: [1.06, 1.05, 1.03] },
   wall: {
-    thickness: 6, // 薄墙（用户定）：godlight 透过更足；内侧面/战斗几何不动
-    // 左墙一整排中世纪高**长**窗（用户定：窗本身要高——sill 8 / top 84，h=76 近通顶）
+    thickness: 6, // 薄墙：godlight 透过更足；内侧面/战斗几何不动
+    // 左墙一整排中世纪高**长**窗（：窗本身要高——sill 8 / top 84，h=76 近通顶）
     windows: [
       { z0: -68, z1: -62, sill: 8, top: 84 },
       { z0: -42, z1: -36, sill: 8, top: 84 },
@@ -319,7 +319,7 @@ const MEZZANINE = {
     holes: 0, holeChance: 0, backHoleChance: 0, // 窗已够多，不再破洞
     bites: 0, biteChance: 0, backBiteChance: 0,
   },
-  // 地面平整（用户定）：amp 0 + 全地形特征关；地面装饰减到最少（用户定）
+  // 地面平整：amp 0 + 全地形特征关；地面装饰减到最少
   floor: { slabCount: 5, mossChance: 0.55, patches: 2, terrain: { amp: 0, basins: 0, platforms: 0, fissures: 0, slopes: 0 } },
   facade: {
     structureProb: 0.4,
@@ -342,7 +342,7 @@ const MEZZANINE = {
       front: { cell: 22, density: 0.14 },
     },
   },
-  decals: { count: 5, tags: { decal: 1, moss: 2.4, nature: 1 } }, // 地面撒印减到最少（用户定）
+  decals: { count: 5, tags: { decal: 1, moss: 2.4, nature: 1 } }, // 地面撒印减到最少
   ceiling: { chandeliers: 1 },
   bigSilhouettes: ['fountainDry', 'wellIndoor', 'stumpTree', 'boulderMossy'],
   clusters: 1,
@@ -359,7 +359,7 @@ const MEZZANINE = {
 };
 
 // ============================================================================
-// 休息房配方（用户定 2026-09-11）：**PCG 不只用于战斗，也用于休息阶段房间**
+// 休息房配方：**PCG 不只用于战斗，也用于休息阶段房间**
 // 与战斗房配方的差异（方法层，详见 quest_prompts/SCENE_REST_ROOM.md）：
 //   · 无战斗走廊约束——不追求「中景留空给单位站位」，改为**视觉焦点带**（中景偏上）+
 //     「UI 安全区」（画面下方留给休息面板，密度压到最低、只放压边大件）；
@@ -391,7 +391,7 @@ const CASINO = {
     structureOverlapProb: 0.3,
     decorProb: { high: 0.2, mid: 0.5, low: 0.3 },
     // 居室/室内陈设压过军事与宗教（镜/挂画/帘幕读作赌厅装潢）；
-    // **festoon 高权重**（用户定 2026-09-11：简陋小彩灯是赌厅的"华丽 vs 残破"戏剧对比主笔）
+    // **festoon 高权重**（简陋小彩灯是赌厅的"华丽 vs 残破"戏剧对比主笔）
     tags: { quarters: 2.4, generic: 1.2, chapel: 0.5, crypt: 0.3, festoon: 3.2 },
   },
   scatter: {
@@ -431,7 +431,7 @@ const CASINO = {
   // 机器 1.35 倍放大：它们是交互焦点，体量要压得住场（guaranteed 支持 scale 覆盖）。
   guaranteed: [
     // live: true = **可动组件**（不进静态合批，登记进 room.interactives 由 rig 驱动动画）
-    // 体量（用户定 2026-09-11）：老虎机再放大 1.5×（1.35×1.5≈2.0）、银行机放大一倍（≈2.7）
+    // 体量：老虎机再放大 1.5×（1.35×1.5≈2.0）、银行机放大一倍（≈2.7）
     { id: 'slotMachine', x: -12.5, z: -44, ry: 0.14, scale: 2.0, live: true, name: 'slot' },
     { id: 'bankMachine', x: 12.5, z: -44, ry: -0.14, scale: 2.7, live: true, name: 'bank' },
     { id: 'tableLong', x: 0, z: -47, ry: 0, scale: 1.3 },      // 柜台（两机之间的中轴）
@@ -465,7 +465,7 @@ const CASINO = {
 };
 
 // ============================================================================
-// 营地 · 训练场（休息房 2026-09-11）：**第一间"非机器"场景式休息房**。
+// 营地 · 训练场（休息房 ）：**第一间"非机器"场景式休息房**。
 //   · 两个交互物 = 房间的两个部分：**篝火（营地）** 与 **训练桩（训练场）**——
 //     点谁推近看谁，各自的操纵面板下沿停靠（RoomStage 按 interactives 的 name 分发）。
 //   · 布光走 `camp` 预设：火光主导（火是主角，盏数多/基数高）+ 一道高窗月光做冷暖对比。
@@ -576,7 +576,7 @@ const CAMP = {
 };
 
 // ============================================================================
-// 商店房（休息房 2026-09-12）：**一间比战斗房空旷的补给货房**，瑞米维护的售货机摆在固定位置。
+// 商店房（休息房 ）：**一间比战斗房空旷的补给货房**，瑞米维护的售货机摆在固定位置。
 //   · 用户定的构图口径：「布置上跟普通的战斗房间差别不是很大，但物品少一些、相对空旷一点，
 //     售货机摆在固定的位置」——货架区（售货机 + 柜台 + 补给货架）压成背墙前一簇，
 //     撒布密度全线压低、前景留白给底部操纵条；
@@ -691,7 +691,7 @@ export const RECIPES = Object.freeze({
 });
 
 /**
- * 休息房 → 配方映射（用户定 2026-09-11：休息阶段也用 PCG 房间，不再纯 UI）。
+ * 休息房 → 配方映射（休息阶段也用 PCG 房间，不再纯 UI）。
  */
 export const REST_RECIPES = Object.freeze({
   slot: 'casino',           // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
@@ -712,7 +712,7 @@ export function getRecipe(id) {
 }
 
 /**
- * Boss 房间覆写合并（敌人 def 的 roomOverride，2026-09-23）：深合并进配方——
+ * Boss 房间覆写合并（敌人 def 的 roomOverride）：深合并进配方——
  * 平面对象递归、数组拼接、标量覆盖。用途：Boss 把房间改成自己的主题房
  * （pyro：木质装饰品大增 = 满房燃料 + dim 一阶段压暗，转段「亮起来」才有落差）。
  * 额外消费字段（composeRoom 建灯后落地，不属配方结构）：dim（结构光乘子）/ fireGain（火光乘子）。

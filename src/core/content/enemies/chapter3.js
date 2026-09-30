@@ -1,24 +1,23 @@
-// 章3 小怪（庄园，23~33 层普通池）。拆分自原 content/enemies.js（2026-09-24，内容零改动）。
+// 章3 小怪（庄园，23~33 层普通池）。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy } from '../../enemies/registry.js';
 import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 
-// ⑥ 石像卫士：高防厚血 + 再生续航——再生3 → 攻 → 盾 循环，考验破防与斩杀线
+// ⑥ 石像卫士：高防厚血 + 再生续航——再生 → 攻 10 → 盾 10 循环，考验破防与斩杀线
 registerEnemy({
-  difficulty: { base: 5, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-44→23-32，章4 血牛由禁书守卫/档案巨像承担
+  difficulty: { base: 5, floorMin: 23, floorMax: 32 },
   id: 'gargoyle', name: '石像卫士',
   createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2 }),
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
-      // 再生递减（2026-09-14 马拉松修复）：首次 3 层，此后每次 -1、最低 1——
-      // 原无限「再生3+盾6」循环让输出不足的卡组磨了 26~37 回合（d-free 实测），
-      // 净回复收敛后马拉松自然收束；再生依旧，只是「拖得越久回得越少」。
+      // 再生递减：首次 6 层，此后每次 -1、最低 2——净回复收敛，马拉松自然收束；
+      // 再生依旧，只是「拖得越久回得越少」。
       const times = (actx.unit._regenTimes ?? 0);
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'regen', stacks: Math.max(2, 6 - times), // 数值意识（2026-09-16）：3→6——中期 40-60 输出面前原值是薄纸
+        target: actx.unit, effectId: 'regen', stacks: Math.max(2, 6 - times),
       }));
       actx.unit._regenTimes = times + 1;
     } else if (phase === 1) {
@@ -26,37 +25,36 @@ registerEnemy({
         source: actx.unit, target: actx.player, amount: 10 + actx.unit.getStat('attack'),
       }));
     } else {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 })); // 数值意识（2026-09-16）：6→10
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 }));
     }
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
-      const next = Math.max(1, 3 - (unit._regenTimes ?? 0));
+      const next = Math.max(2, 6 - (unit._regenTimes ?? 0));
       return { kinds: ['buff'], note: `自身再生${next}` };
     }
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
-    return { kinds: ['defend'], note: '自身护盾+6' };
+    return { kinds: ['defend'], note: '自身护盾+10' };
   },
 });
 
-// ⑧ 岩甲龟：龟缩（盾7 + 荆棘1）→ 重击 循环——盾棘一体的防御压迫，
+// ⑧ 岩甲龟：龟缩（盾10 + 荆棘1 + 力量1）→ 重击 循环——盾棘一体的防御压迫，
 // 打盾要吃反伤，绕盾要挨重击
 registerEnemy({
-  difficulty: { base: 4, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-40→23-32
+  difficulty: { base: 4, floorMin: 23, floorMax: 32 },
   id: 'rockshell', name: '岩甲龟',
   createUnit: () => new Enemy({ defId: 'rockshell', name: '岩甲龟', maxHp: 30, defense: 1 }),
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 })); // 数值意识（2026-09-16）：7→10
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'thorns', stacks: 1,
       }));
-      // 缩壳蓄势（2026-09-14 马拉松修复）：双龟阵曾是「无风险马拉松」（32 层两份试玩
-      // 死于 15~20+ 回合龟拳磨血）——每次缩壳 +1 蓄势，攻拍 10+atk 随之线性上涨，
+      // 缩壳蓄力：每次缩壳 +1 力量，攻拍 10+atk 随之线性上涨——
       // 拖得越久龟拳越痛，磨盘战有时间账单。
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 1,
+        target: actx.unit, effectId: 'strength', stacks: 1,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -65,21 +63,21 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '自身护盾7 + 荆棘1 + 蓄势+1' }
+    ? { kinds: ['defend', 'buff'], note: '自身护盾10 + 荆棘1 + 力量+1' }
     : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
-// ㉑ 贪杯鬼（章3·滚雪球）：喝酒（自愈 5 + 力量 1）×2 → 醉拳 12，三拍循环。
-// 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是蓄势，
+// ㉑ 贪杯鬼（章3·滚雪球）：喝酒（自愈 9 + 力量 1）×2 → 醉拳 12，三拍循环。
+// 拖得越久力量越高，但喝酒拍不输出——「趁它喝酒抢血」的窗口题（暗影刺客是纯力量轴，
 // 贪杯鬼是自愈+力量双轴）。
 registerEnemy({
-  difficulty: { base: 6, floorMin: 23, floorMax: 30 }, // 收窄（2026-09-16）：23-36→23-30（醉鬼客厅模板区间）
+  difficulty: { base: 6, floorMin: 23, floorMax: 30 },
   id: 'tippler', name: '贪杯鬼',
   createUnit: () => new Enemy({ defId: 'tippler', name: '贪杯鬼', maxHp: 30 }),
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase < 2) {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 9 })); // 数值意识（2026-09-16）：5→9
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: actx.unit, amount: 9 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: actx.unit, effectId: 'strength', stacks: 1,
       }));
@@ -90,11 +88,11 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 3 < 2
-    ? { kinds: ['buff'], note: '喝酒：自愈5，力量+1' }
+    ? { kinds: ['buff'], note: '喝酒：自愈9，力量+1' }
     : { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack'), note: '醉拳' }),
 });
 
-// ㉒ 筹算灵（章3·反出牌量；2026-09-20 用户设计稿）——「出牌多就挨打」的记账敌人：
+// ㉒ 筹算灵（章3·反出牌量）——「出牌多就挨打」的记账敌人：
 // 每拍固定「记账 → 起盾 → 攻 12」，护盾 = 3 + 你**上一回合**打出的牌数 × 2。
 // 它考的不是数值而是节奏：多段小伤引擎（瞬击/碎铁/多段拳）打出的每一张牌都会变成
 // 它的甲，出牌越多越打不穿、回合拖得越长越难破——破局只有三条路：压缩出牌量、
@@ -135,7 +133,7 @@ registerEnemy({
 // 爆发牌要跟它的起风拍错开；单发重击被闪避白吃（垫一发小的再出大的），中毒/燃烧
 // 绕过闪避（dot 是天然克制）。嗡嗡虫的章3 上位：那边教「先垫一发」，这边教「算风停」。
 registerEnemy({
-  difficulty: { base: 6, floorMin: 23, floorMax: 32 }, // 收窄（2026-09-16）：23-38→23-32
+  difficulty: { base: 6, floorMin: 23, floorMax: 32 },
   id: 'windRaccoon', name: '风狸',
   createUnit: () => new Enemy({ defId: 'windRaccoon', name: '风狸', maxHp: 24 }),
   act(actx) {

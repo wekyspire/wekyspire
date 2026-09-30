@@ -1,4 +1,4 @@
-// 单位本体特效（L0 本体层）——WebGPU 迁移 TSL 版（2026-09-27，原 onBeforeCompile 字符串补丁重写）：
+// 单位本体特效（L0 本体层）——WebGPU 迁移 TSL 版（原 onBeforeCompile 字符串补丁重写）：
 // 挂进单位 _body 的 MeshBasicNodeMaterial。范式（W3 立）：
 //   · uniforms = TSL uniform() 节点——对外仍是 `rec.uBurn.value = x` 的推值口径，
 //     全体调用点（unitFxLayer/剧本）零改动；
@@ -6,7 +6,7 @@
 //     （WebGPURenderer 反正把经典材质内部转节点，显式用节点类零额外代价）；
 //   · colorNode 全量接管 diffuse：base = materialColor（⚠ TSL 的 materialColor
 //     已含 map——MaterialNode.COLOR = color × map，再乘一次 texture(map) = tex²
-//     平方压暗，2026-09-27 实测单位立绘中调崩掉的根因；顶点色由 NodeMaterial
+//     平方压暗，实测单位立绘中调崩掉的根因；顶点色由 NodeMaterial
 //     在 colorNode 之后自动乘入，与旧 color_fragment 注入位序一致）；
 //   · map 后到的材质（立绘异步挂载）：attach 时不建链，setArt 落地后 rec.rebind()
 //     重建 colorNode 并 needsUpdate——与旧 USE_MAP 变体重编的时机/成本一一对应；

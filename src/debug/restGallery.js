@@ -1,4 +1,4 @@
-// 休息房陈列页（用户定 2026-09-11）：**休息阶段场景的视觉门**——与 roomGallery 同范式，
+// 休息房陈列页：**休息阶段场景的视觉门**——与 roomGallery 同范式，
 // 但多两件休息房专属的调试层：
 //   1. **UI 安全区**：休息面板将覆盖画面下方（配方 anchors.uiSafe.bottomRatio，缺省 0.42），
 //      用斜纹带标出——构图不该在这一带放精细件；
@@ -10,7 +10,6 @@
 
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu'; // WebGPU 迁移：画廊页同迁（kit 族单例已是 Node 材质）
-import { TSL_READY } from '../stage/fx/tslGate.js';
 import { composeRoom } from '../stage/scenes/rooms/composeRoom.js';
 import { RECIPES } from '../stage/scenes/rooms/presets.js';
 import { createVolumetricMoonlight } from '../stage/scenes/volumetricMoon.js';
@@ -167,7 +166,7 @@ function focusMachine(name) {
   const rig = rigs.get(name);
   focused = name;
   savedOrbit = { az: orbit.az, el: orbit.el, dist: orbit.dist, target: orbit.target.clone() };
-  // 取景口径（用户定 2026-09-11）：老虎机**贴到屏幕前**（接近怼脸），但**必须留住侧面拉杆**——
+  // 取景口径：老虎机**贴到屏幕前**（接近怼脸），但**必须留住侧面拉杆**——
   // 于是按「屏幕自身尺寸 + 拉杆尖端外扩」算所需半宽/半高，再按相机 fov 反算距离。
   // 银行机没有拉杆这件"侧面极限件"，怼到屏幕上只会剩一块色板 → 改按机身上 2/3 段取景
   // （读作"站在这台机器前"，也留出下方交互 UI 的位置）。
@@ -213,7 +212,7 @@ function focusMachine(name) {
   const dist = Math.max(distV, distH, 9);
   const fwd = new THREE.Vector3(Math.sin(m.entry.ry), 0, Math.cos(m.entry.ry));
   startCamTween(sp.clone().addScaledVector(fwd, dist), sp.clone());
-  // 焦点布光（用户定 2026-09-11）：zoomin 时外围压暗、**正面补光**把机器中央屏幕区打亮。
+  // 焦点布光：zoomin 时外围压暗、**正面补光**把机器中央屏幕区打亮。
   // 光心就落在屏幕中心（不许抬高——抬高会变顶光，正面屏幕反而照不亮，用户报障）。
   room.lighting?.setFocus(sp.clone(), { strength: 1 });
   rig?.setFocus(true);                    // 怼脸时抑制机体抖动（近景里同样位移看起来更剧烈）
@@ -346,7 +345,7 @@ function rebuild() {
   scene.fog = fogDef
     ? new THREE.Fog(fogDef.color, fogDef.near, fogDef.far)
     : new THREE.Fog(0x070a12, 165, 310);
-  if (TSL_READY.volumetricMoon && room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
+  if (room.moonlight && typeof renderer.setRenderTarget === 'function' && !params.has('nocomposer')) {
     composer = createVolumetricMoonlight({ light: room.moonlight, tint: room.grading?.tint });
     composer.resize(window.innerWidth, window.innerHeight);
   }
@@ -383,7 +382,7 @@ function rebuild() {
       ]);
       rig.setDisplay?.('余额 30');
     }
-    // 头顶浮标 = **一枚跳动的发光箭头**（与正式房间同一件对象；用户定 2026-09-12：
+    // 头顶浮标 = **一枚跳动的发光箭头**（与正式房间同一件对象；
     // 去掉地面光环与光柱，只留箭头）——⚠ 底在房间地平（FLOOR_Y），箭尖指着机器顶
     const topY = new THREE.Box3().setFromObject(entry.object).max.y;
     const marker = new MachineMarkerObject({ size: Math.max(1, entry.scale * 0.52) });

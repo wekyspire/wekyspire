@@ -91,7 +91,7 @@ const EDGE_PAD = 0.8; // 贴边留一线缝
 // 悬浮·瞄准牌静息位 +20（liftZBoost）≈ 30.5+ / 瞄准箭头 45 / 牌库查看器 80 / 渐晕·冲击 490+。
 // 状态栏卡在静息手牌与悬浮牌之间：任何非悬浮手牌盖不过面板，而悬浮（提拉
 // z+20）/瞄准中的牌仍在面板之上——「面板在 non-hovered 手牌之上」由 z 层级
-// 差天然实现（用户定）。
+// 差天然实现。
 export const PLAYER_STATUS_POS = Object.freeze({
   x: -(HALF_UI_W - EDGE_PAD - PLAYER_STATUS_LAYOUT.PANEL_W / 2),
   y: UI_BOTTOM + EDGE_PAD + PLAYER_STATUS_LAYOUT.PANEL_H / 2,
@@ -205,7 +205,7 @@ export class PlayerStatusObject extends THREE.Group {
     // 故整组抬 z=0.6（各件面板 z 1.3~1.8）才压得住血环栈；仍低于盾徽 z=2，
     // 全组最高件 1.8 也不破坏面板对外「压静息手牌、让位悬浮牌」的 z 层级契约。
     // 未出战/被打跑整区隐藏（setRemi 驱动）。
-    // 攻/盾横幅已删（2026-09-20 用户定）：瑞米意图显示其行动，数值面板无存在必要。
+    // 攻/盾横幅已删：瑞米意图显示其行动，数值面板无存在必要。
     this._remi = new THREE.Group();
     this._remi.name = 'remi';
     this._remi.position.set(L.REMI_AVATAR_X, L.REMI_AVATAR_Y, 0.6);

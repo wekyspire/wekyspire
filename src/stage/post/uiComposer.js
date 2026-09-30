@@ -1,11 +1,11 @@
-// uiScene 后处理 composer（TSL 版，W2 2026-09-27）：
+// uiScene 后处理 composer（TSL 版，W2 ）：
 // 卡牌/按钮/面板/特写从「直渲屏幕」升级为「RT + bloom 链」——
 //   uiScene → HalfFloat RT（透明底）→ bloom 三段（阈值同世界链 1.45）
 //   → 终段 bloom 加算直出**线性 HDR**，premultiplied 合成进帧缓冲。
 // tone map + sRGB 统一由渲染器帧末输出 blit 施加（flavor A，passes.js 头注
 // 「输出变换铁律」——本 composer 不碰 renderer.toneMapping）；帧末 blit 对
 // 「世界 + UI」的线性叠加结果一次性映射，卡牌叠亮背景处的观感与旧「各自 tone
-// 后混合」略有差别（物理上更正确，2026-09-27 用户定）。
+// 后混合」略有差别（物理上更正确）。
 // 成立前提 = passes.js 头注释的两条铁律（premultiplied 终段 + additiveLight 约定）。
 // 既有受益件：CardFxLayer 咏唱流光的 HDR 输出（峰值 ~1.9）自 09-13 起就在等这条链。
 import * as THREE from 'three';

@@ -32,6 +32,11 @@ export default class AnimationSequencer {
     this._idToTimer = new Map();
     this._bus = bus;
     this._finishedEvent = finishedEvent;
+    /** 保险丝触发计数（reason='timeout' 累计，仅增不清）：fuzz/测试的强断言口径——
+     *  正常局应为 0；>0 即存在动画死锁/丢 finish 链（每条都伴随 console.warn 定位）。 */
+    this.timeoutCount = 0;
+    /** finish 原因计数表（timeout/frontend/manual——测试覆盖率统计用）。 */
+    this.finishReasons = { timeout: 0, frontend: 0, manual: 0 };
     bus.on(finishedEvent, (payload = {}) => {
       if (payload?.id) this.finish(payload.id, 'frontend');
     });
@@ -61,7 +66,9 @@ export default class AnimationSequencer {
     instr.status = 'finished';
     // 保险丝强杀必须可见：静默跳拍会让后续节拍提前衔接，症状是各种"动画 glich"，
     // 无警告则无法定位（本表是节拍卫生的第一绊线）
+    this.finishReasons[reason] = (this.finishReasons[reason] ?? 0) + 1;
     if (reason === 'timeout') {
+      this.timeoutCount += 1;
       console.warn('[sequencer] 节拍超时被保险丝强杀（动画未正常回 finish）：', instr.meta);
     }
     const t = this._idToTimer.get(id);

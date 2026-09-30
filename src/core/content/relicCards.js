@@ -2,8 +2,8 @@ import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies } from '../state/battleState.js';
 import { attackDamage, addCard, drawCards } from './cardKit.js';
 
-// 遗物生成的衍生牌（RELICS.md 2026-09-11 第二批）。
-// 四张牌都 `canSpawnAsReward: false`（等阶记 C——2026-09-21 移除 D 阶，衍生牌等阶只是账务口径）——它们**不进任何卡包/训练抓牌/商店**，
+// 遗物生成的衍生牌（RELICS.md）。
+// 四张牌都 `canSpawnAsReward: false`（等阶记 C——衍生牌等阶只是账务口径）——它们**不进任何卡包/训练抓牌/商店**，
 // 只由对应遗物在战斗开始时生成（与〈碎铁〉同一口径，见 bladeSkills.js 的 ironShard）。
 // 卡面文本只写效果语言，费用/关键词（消耗/短暂/冷却）走徽章与页脚，不复述。
 

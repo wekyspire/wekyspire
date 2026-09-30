@@ -11,7 +11,7 @@ import { getScript } from '../../stage/fx/scripts/index.js';
 // 演出共用 run 级同一时钟——跨层定序（终局动画 → 幕间黑幕 → …）无需额外协调。
 // 由游戏流程手动驱动（runController 在进出战斗等节点显式调用），不自动订阅 run 事件。
 //
-// **切幕器与内容播放器分离**（用户定 2026-09-12 的架构修正）：
+// **切幕器与内容播放器分离**（的架构修正）：
 //   黑幕（wipe）不再画在本播放器的 overlay 里，而是交给独立的 `sceneWipe` 状态机 +
 //   `SceneWipeOverlay.vue`（自占一层，z 压过内容层）。原因：黑幕的**目的地可以是任何东西**
 //   ——3D 舞台，也可以是一段 cutscene 内容；同层时"切到 cutscene"会退化成
@@ -39,7 +39,7 @@ import { getScript } from '../../stage/fx/scripts/index.js';
 //                                      默认阻塞（剧本收尾才推进）；fireAndForget 起播即推进。
 //                                      未知 id / 无活动舞台 → 告警并即收（前向兼容铁律）
 //
-// **带选项的对话**（用户定 2026-09-11：粉碎物品入口首次用上 dialogue 层）：
+// **带选项的对话**（粉碎物品入口首次用上 dialogue 层）：
 //   step = { type:'dialogue', pages:[{ speaker, text, choices }], onChoice?(id) }
 //   · 有 choices 的页：overlay 渲染按钮，点按钮 → player.choose(id)（点背板无效）
 //   · 选完 → 回执开闸（与翻页共用同一道闸门），选择同时写进 state.lastChoice
@@ -93,7 +93,7 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
                            // 指令卡住，mode 永不回 idle 导致 overlay 常驻阻塞交互）
 
   // 最近一次"有画面"的 step（fade/image/dialogue）——**退出切幕**要带着它一起盖：
-  // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（用户 2026-09-13 报：事件结果页播完后
+  // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（实报：事件结果页播完后
   // 先露出背后的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent），
   // 故不会把很久以前的旧内容泄进后来的转场；没有可保留内容（面板路径 / 战斗→塔楼）时为 null，
   // 行为与原来完全一致。`play()` 开头会清掉，保证一部新剧本不会继承上一部的残留。
@@ -136,7 +136,7 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             //   （`sceneTransition` 从刚播完的剧本里取来的）；没有就什么都不显示（面板路径、
             //   战斗→塔楼）。撤内容/换内容的时机在**全黑中点**——玩家看不到这次切换。
             //   此前这里一上来就 beginStep，于是内容先消失、露出背景，黑幕之后才盖上来
-            //   （用户 2026-09-13 报的节拍错位）。
+            //   （实报的节拍错位）。
             if (step.hold) { state.step = step.hold; state.phase = null; }
             wipeCtl.begin({ coverMs, revealMs });   // 黑幕由独立切幕层渲染（不在本 overlay 里）
             await wait(16);         // 让屏外初始 transform 渲染一帧，再起过渡
@@ -146,7 +146,7 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             // ★ 全黑中点：换景/预载/目的地就位。
             //   · atCover 可返回 Promise（战场预载就绪信号）——黑幕保持到兑现才揭幕；
             //   · 下一步的内容在这里**就位**（内容层在黑幕之下渲染），于是揭幕揭开的
-            //     就是目的地本身——"切幕开始 → 目的地就位 → 切幕结束"（用户定 2026-09-12）。
+            //     就是目的地本身——"切幕开始 → 目的地就位 → 切幕结束"。
             //     此前 wipe 与内容同层，切到 cutscene 时只能等黑幕播完内容才蹦出来。
             await step.atCover?.();
             nextBox?.c?.preStage?.();
@@ -321,7 +321,7 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
    * 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
    * 转场重叠时退化为直切（不卡流程、不排二次黑幕）。
    * `hold` = 刚播完的那一拍内容（若本转场是"某段 cutscene 的退出"）：黑幕会**带着它一起盖下来**，
-   * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（用户 2026-09-13 报的节拍错位）。
+   * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（实报的节拍错位）。
    */
   function sceneTransition(swap = null, { coverMs, revealMs, holdMs } = {}) {
     if (transitionBusy) { swap?.(); return Promise.resolve(); }

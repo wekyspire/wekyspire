@@ -2,7 +2,7 @@
 // cutscene **内容层**：按播放器当前 step 渲染 fade / image / dialogue，全屏阻塞。
 // ⚠ 幕间黑幕（wipe）**不在这里**——它是独立的一层（`SceneWipeOverlay.vue` + `sceneWipe.js`），
 // 因为黑幕是"场景切换"的呈现、目的地可以是任何东西（包括本层的内容）；同层会导致
-// "黑幕播完内容才蹦出来"（用户 2026-09-12 报的架构问题）。
+// "黑幕播完内容才蹦出来"（实报的架构问题）。
 // step 词汇表见 cutscenePlayer.js 头注；image 过渡时长由 step 参数驱动（缺省 fadeIn/out 400ms）。
 import { computed } from 'vue';
 
@@ -77,7 +77,7 @@ const cgDur = computed(() => {
 .cg.hold { opacity: 1; }
 .cg.fadeOut { opacity: 0; }
 
-/* 对话框（用户定 2026-09-12：**黑色半透明 flat 框**，除按钮外不滥用圆角） */
+/* 对话框（**黑色半透明 flat 框**，除按钮外不滥用圆角） */
 .dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(4, 6, 14, .55); }
 .dialogue.has-bg { background: rgba(4, 6, 14, .38); }
 .bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
@@ -91,7 +91,7 @@ const cgDur = computed(() => {
 .hint { text-align: right; color: #6a7394; font-size: 12px; margin-top: 10px; }
 
 /* 选项按钮（带 choices 的对话页）：整行按钮 + 右侧小字提示；禁用项置灰不可点。
-   按钮保留圆角（用户定：除按钮外不滥用圆角），走"白字淡蓝"扁平风格 */
+   按钮保留圆角（：除按钮外不滥用圆角），走"白字淡蓝"扁平风格 */
 .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .choices button {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;

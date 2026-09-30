@@ -38,7 +38,7 @@ export const PANEL_ABOVE_Z = Z.PANEL + Z.CONTENT + 10;
  * **全屏模态覆盖层**（获得演出、全屏选卡/选遗物）的 z 基准。
  * 必须高于舞台自身的常驻按钮——「继续前进」挂在 PANEL_ABOVE_Z + 2，随投影机位浮动；
  * 覆盖层若只到 PANEL_ABOVE_Z，那枚按钮就画在遮罩之**上**，看起来"还能点"
- * （用户 2026-09-13 报：获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
+ * （实报：获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
  * < 模态覆盖层；覆盖层内部再各自往上排（背板 → 主体 → 文本 → 按钮）。
  */
 export const OVERLAY_Z = PANEL_ABOVE_Z + 8;
@@ -53,7 +53,7 @@ const FORMS = {
     width: 760, padX: 24, padY: 20,
     rowH: { title: 36, text: 22, sub: 20, button: 34, main: 44, gap: 12, tiles: 104, cards: 300 },
   },
-  // 下沿停靠（场景式休息房的机器操纵条，用户 2026-09-12：**贴到接近屏幕下边沿** +
+  // 下沿停靠（场景式休息房的机器操纵条，用户 **贴到接近屏幕下边沿** +
   // 字号整体调大一档 + 文字统一白字黑边）。`font` = 各行烘焙字号（逻辑像素，10px/wu）。
   dock: {
     width: 580, padX: 24, padY: 14,
@@ -104,7 +104,7 @@ export class PanelObject extends THREE.Group {
 
   get buttons() { return [...this._buttons.values()]; }
   get rowCount() { return this._rows.length; }
-  /** 自定义 widget 的意图上行口（与按钮同一条链，2026-09-24 加）。 */
+  /** 自定义 widget 的意图上行口（与按钮同一条链，加）。 */
   fireIntent(action) { this._onIntent?.(action ?? null); }
   /** 行几何（面板局部坐标系，wu）：供契约测试断言"不重叠且不越界"。 */
   get rows() {
@@ -135,10 +135,12 @@ export class PanelObject extends THREE.Group {
     for (const w of widgets) {
       if (w.kind === 'gap') { y -= this._g.rowH.gap / PX_PER_WU; continue; }
       // ⚠ size 的语义按 kind 分流：**按钮**的 'sub'/'main' 是"小按钮/主按钮"，
-      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——dock 里曾因此把按钮压成 21px 高，
-      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（用户报"字体太小看不清"）。
+      // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——曾因此把按钮压成 21px 高，
+      // 标签字号 = 0.4×高 → 只有 8px，糊成一团（报"字体太小看不清"）。dock 已修；
+      // 非 dock（modal/anchored）同款中招：prep 删卡按钮被压成 ~10px 无字细带
+      // （夜测 r5路5 实报）——按钮行高判定不按 form，一律按 kind。
       const isDock = this.form === 'dock';
-      const h = (isDock && w.kind === 'button')
+      const h = (w.kind === 'button')
         ? this._g.rowH[w.size === 'main' ? 'main' : 'button']
         : (this._g.rowH[w.size] ?? this._g.rowH[w.kind] ?? this._g.rowH.text);
       const hWu = h / PX_PER_WU;
@@ -173,7 +175,7 @@ export class PanelObject extends THREE.Group {
         this._contentBottom = y;
         continue; // 组高已在此推进
       } else if (w.kind === 'custom') {
-        // 通用自定义宿主（2026-09-24）：builder 产出任意 Object3D，面板只负责占位与生命周期
+        // 通用自定义宿主：builder 产出任意 Object3D，面板只负责占位与生命周期
         // （清场时调 dispose）。交互（拾取/拖拽/动画）由对象自理——宿主经 w.build(panel)
         // 拿到面板引用，可用 panel.fireIntent 上行意图。高度由 builder 侧算好（w.height，px）。
         const hWu = (w.height ?? 60) / PX_PER_WU;
@@ -189,7 +191,7 @@ export class PanelObject extends THREE.Group {
       } else {
         // dock（场景式操纵条）：文字**统一白色**（读在 3D 场景上，彩色/灰字对比不够）；
         // 黑边由注入的烘焙（bakeBoldText 的 stroke）负责——见 RoomStage 的 dockBakeText。
-        // 非 dock：标题白字、正文淡蓝灰（用户定 2026-09-12 的扁平风格——金色只留给金额等
+        // 非 dock：标题白字、正文淡蓝灰（的扁平风格——金色只留给金额等
         // 金钱相关内容，由各面板显式给 tint 覆盖）。
         const dock = this.form === 'dock';
         const f = g.font ?? { title: 20, sub: 13, text: 15 };
@@ -422,7 +424,7 @@ export class PanelObject extends THREE.Group {
 
   /**
    * 逐帧驱动卡阵的卡面 fx（hover/勾选高亮是 C0 shader 档，目标值收敛在 update 里——
-   * 没人 tick 就永远停在 0，「面板卡阵 hover 不亮」的病根，2026-09-29）。宿主舞台在
+   * 没人 tick 就永远停在 0，「面板卡阵 hover 不亮」的病根）。宿主舞台在
    * 自己的帧驱动里调（与 stagePickerKit.update 同一节拍）。
    */
   update(dt) {

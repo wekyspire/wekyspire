@@ -30,12 +30,12 @@ export const EventNames = {
   ANIM_CARD_ADDED: 'anim:card-added',
   ANIM_CARD_SHOWCASE: 'anim:card-showcase', // 结算宾语入结算区展示（原位 → 场中央）
   ANIM_CARD_TRANSFORMED: 'anim:card-transformed',
-  ANIM_CARDS_DUMPED: 'anim:cards-dumped', // 弃牌动作（2026-09-13 改制：付一次费弃任意张）的动作级节拍
+  ANIM_CARDS_DUMPED: 'anim:cards-dumped', // 弃牌动作（改制：付一次费弃任意张）的动作级节拍
   // 卡牌威力提升（power 增加）：卡面一次放缩脉冲，表示"这张牌的状态变了"。
   // 公共节拍——养刀术/锻刀术/练刀/火光爆发等任何会改 runtime.power 的效果都走它
   // （presenter.cardPowerUp，见 core/content/cardKit.gainPower）。
   ANIM_CARD_POWER_UP: 'anim:card-power-up',
-  // 通用剧本闸口（2026-09-22 fx 架构，唯一的新增口子）：core 只报「放哪个剧本 + 标量参数」
+  // 通用剧本闸口（fx 架构，唯一的新增口子）：core 只报「放哪个剧本 + 标量参数」
   // （presenter.playScript({ script, ...args })），内容全在 stage 侧 fx/scripts/ 注册表——
   // Boss 转阶段/特殊演出走这里，伤害类特效仍蹲 _damageHit 节拍内（铁律不变）。
   // wire 描述符同源：观战端拿同 id 重放同剧本。

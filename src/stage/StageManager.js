@@ -1,11 +1,10 @@
 // StageManager（§4.1）：单全屏 canvas 的 three.js 舞台总管。
-// 渲染器 = WebGPURenderer（2026-09-27 全量迁移，quest_prompts/WEBGPU_MIGRATION.md）：
-// 默认 WebGPU 后端；`?forceWebGL=1` 强制 WebGL2 后端跑同一套 TSL（迁移期验收对照口，
-// 生产版随 WebGL 兼容逻辑一并撤除）。**不支持 WebGPU 的设备由加载门卡死**（App.vue
-// 预检 probeWebGpuAdapter），本层不做回退。attach 因此是 async（renderer.init 是异步的）。
+// 渲染器 = WebGPURenderer（全量迁移完成，quest_prompts/WEBGPU_MIGRATION.md）。
+// **不支持 WebGPU 的设备由加载门卡死**（App.vue 预检 probeWebGpuAdapter），本层不做回退。
+// attach 因此是 async（renderer.init 是异步的）。
 // 世界坐标约定：z=0 平面上屏幕高度 ≈ 100 世界单位，y 向上，x 向右。
 // 布局一律用世界坐标计算；resize 只改相机视锥，不动任何场景对象。
-// 相机选小 FOV PerspectiveCamera + 斜方向俯视（用户定）：
+// 相机选小 FOV PerspectiveCamera + 斜方向俯视：
 //   眼高高于场景内全部水平面（地板/柱帽），透视方向全场一致——不出现"地板俯视、
 //   柱顶仰视"的矛盾（眼高若夹在场景中部，眼上物露底面、眼下物露顶面，读起来像两个视角）。
 //   azimuth 让相机从右侧斜看向场景（纵深/体积感更强）；
@@ -13,24 +12,24 @@
 // 显示假设：游玩分辨率固定 16:9（1920x1080，z=0 世界宽 ≈177.8），不做其它比例适配。
 
 import * as THREE from 'three';
+import gsap from 'gsap';
 import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
 import { CameraDirector } from './fx/camera.js';
-import { TSL_READY, forceWebGLBackend } from './fx/tslGate.js';
-import { flushDeferredDisposals } from './deferredDispose.js';
+import { flushDeferredDisposals, installBindingBufferGuard } from './deferredDispose.js';
 
 export const WORLD_HEIGHT = 100;
 export const CAMERA_FOV = 24;        // 小视场角（度）：≈正交的稳定比例 + 可感纵深
-export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（用户定，右侧视角）
+export const CAMERA_AZIMUTH = -34;   // 度：斜方向——相机在敌人（+x）一侧斜看向场景（右侧视角）
 export const CAMERA_ELEVATION = 20;  // 度：俯视角（眼高必须高于场内一切水平面，否则水平面露底=仰视矛盾）
 export const CAMERA_LOOK_AT = Object.freeze({ x: 0, y: -15, z: 0 }); // 视轴锚在牌桌上方，底部留给手牌构图
-// 世界相机取景缩放（用户定 2026-09：0.79 ≈ 距离 235→185）。房间 PCG 道具全面 2x+ 放大后，
+// 世界相机取景缩放（0.79 ≈ 距离 235→185）。房间 PCG 道具全面 2x+ 放大后，
 // 原距离下战场空旷感强；拉近让房间/道具铺满画面。只作用于世界相机距离——worldHeight/
 // UI 正交视锥/布局坐标系全部不动（UI 取景、布局、拾取反投影不受影响），代价是 z=0 平面
 // 可视高 ≈79（画面外圈内容出画，由房型配方按新机位校核）。
 export const CAMERA_ZOOM = 0.79;
-// UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角（用户定）。
+// UI 相机（牌桌覆盖层专用）：独立 OrthographicCamera 正视角。
 // 透视 UI 相机让卡牌/UI 吃透视畸变——z 层不同投影缩放/偏移不同（咏唱槽 z=4 vs
 // 手牌 z=20+ 位置错乱、卡牌飞行 z 变化时忽大忽小）；正交下布局坐标↔屏幕线性映射，
 // 拾取/拖拽反投影也线性，一类问题全消。
@@ -51,13 +50,13 @@ export class StageManager {
   /**
    * @param {object} options
    *   worldHeight: number = 100
-   *   createRenderer: ({canvas}) => renderer-like   缺省 WebGPURenderer（后端按
-   *     ?forceWebGL=1 切换）；单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
+   *   createRenderer: ({canvas}) => renderer-like   缺省 WebGPURenderer；
+   *     单测注入假 renderer（{ render(){}, setSize(){}, dispose(){} }）
    */
   constructor(options = {}) {
     this._worldHeight = options.worldHeight || WORLD_HEIGHT;
     this._createRenderer = options.createRenderer || (({ canvas }) =>
-      new WebGPURenderer({ canvas, antialias: true, forceWebGL: forceWebGLBackend() }));
+      new WebGPURenderer({ canvas, antialias: true }));
     this._renderer = null;
     this._camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
     // 相机距离：让 z=0 平面的可视高恰好 = worldHeight（与旧正交约定无缝衔接），
@@ -251,11 +250,24 @@ export class StageManager {
   start() {
     if (this._running || !this._renderer) return;
     this._running = true;
+    installBindingBufferGuard(); // uniform UBO 延迟销毁垫片（WebGPU bindingBuffer 病灶，见 deferredDispose.js 注释）
     this._clock = new THREE.Timer(); // Clock 在 webgpu 包已弃用（Console 刷警告）
+    // 时间流速开关（测试加速用）：`?tickScale=k` 同步缩放 dt 与 gsap 时间轴——
+    // 演出补间/物理一并 k 倍速，协议时序（节拍顺序/finish 链）不变。默认 1 与
+    // 常规游玩逐字节等价。掉帧保护同步放宽（clamp 本义是防偶发掉帧跳变，持续
+    // 放大 dt 属测试预期）。⚠ 持续大 dt 对二阶弹簧/阻力积分是大步长，测试场景
+    // 推荐配帧率解锁（--disable-frame-rate-limit）拉高真帧率、用小倍率（2-4）。
+    const tickScale = (typeof location !== 'undefined'
+      && Number(new URLSearchParams(location.search).get('tickScale')) > 0)
+      ? Number(new URLSearchParams(location.search).get('tickScale')) : 1;
+    if (tickScale !== 1 && typeof gsap !== 'undefined') {
+      gsap.globalTimeline.timeScale(tickScale);
+      gsap.ticker.lagSmoothing(0); // 时间轴拉快后关防跳变补偿（它会按墙钟往回补时间）
+    }
     const tick = () => {
       if (!this._running) return;
       this._clock.update();
-      const dt = Math.min(this._clock.getDelta(), 0.1); // 掉帧保护：单帧最多推进 100ms
+      const dt = Math.min(this._clock.getDelta() * tickScale, 0.1 * tickScale); // 掉帧保护：单帧最多推进 100ms×k
       this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
       // 相机位姿唯一的落笔点：运镜写 pose、震荡等写偏移通道，这里渲染前一次性合成
@@ -273,13 +285,13 @@ export class StageManager {
         // 牌桌 UI 的世界坐标在地板平面之下（y<-30），同 pass 会被地板 z-test 裁掉；
         // UI 本质是前景覆盖层，与 3D 世界不做深度交互。
         // 后处理开：uiScene → RT + bloom 链，premultiplied 盖回屏幕（post/uiComposer）；
-        // 后处理关 / 假 renderer（单测无 setRenderTarget）/ uiPost 未迁完（tslGate）：直渲。
+        // 后处理关 / 假 renderer（单测无 setRenderTarget）：直渲。
         const ui = this._stage.uiScene;
         if (ui) {
           const r = this._renderer;
           const prevAutoClear = r.autoClear;
           r.autoClear = false;
-          if (this._uiPostEnabled && TSL_READY.uiPost && typeof r.setRenderTarget === 'function') {
+          if (this._uiPostEnabled && typeof r.setRenderTarget === 'function') {
             if (!this._uiComposer) {
               this._uiComposer = createUiComposer();
               this._uiComposer.resize(this._viewWidth || 2, this._viewHeight || 2, this._devicePixelRatio());

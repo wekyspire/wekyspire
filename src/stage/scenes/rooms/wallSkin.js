@@ -1,9 +1,9 @@
-// 房型配方层 · 墙体皮肤 PCG（2026-09 用户定）：2D 深度图 + 行 run 贪心合并几何。
+// 房型配方层 · 墙体皮肤 PCG：2D 深度图 + 行 run 贪心合并几何。
 // 墙永远是单侧视角，沿法线剖面压扁成带符号深度图 d(u,y)（+=凸出墙面 / -=凹进墙内），
 // boolean（挖孔/剥落/龟裂）全是 2D mask 运算；透穿破洞 = 真 opening 参与切墙——
 // 墙后就是 PCG 天空：左墙破洞漏月光（shadow map 自动透光成月光柱），背墙破洞露夜空。
 //
-// 美术口径（用户定 2026-09）：墙面**同色无缝**——不要体素间的起伏/变色/灰缝读感，
+// 美术口径：墙面**同色无缝**——不要体素间的起伏/变色/灰缝读感，
 // 大面读作平整墙皮；mesher 对同行同深度格做 run 贪心合并（等效 greedy meshing），
 // 平整面只剩少数几条长方体。小起伏只来自少量真特征：透穿洞/坍塌咬口 + 浅剥落斑 +
 // 龟裂刻线（均为同色斑，只靠几何深浅读形）。
@@ -17,7 +17,7 @@ import { FLOOR_Y } from '../dungeon3D.js';
 import { makeNoise2D } from './terrain.js';
 
 const CELL = 1.6;   // 皮肤格宽：深度图分辨率（特征边缘锯齿/崩边都按此采样）
-export const SKIN_TOP = 120; // 皮肤带高度：视野带内墙面 100% 纯体素（用户定：体素墙不要大长方体），
+export const SKIN_TOP = 120; // 皮肤带高度：视野带内墙面 100% 纯体素（：体素墙不要大长方体），
                             // 上方视野外用简单大盒挡光；120 覆盖相机上仰可见范围
 export const SKIN_CAVITY = 1.6; // 皮肤暗腔深：皮肤带内基底墙完全不砌（体素柱 + 背板挡光）
 const TOP = SKIN_TOP;
@@ -34,7 +34,7 @@ const rectDist = (u, y, r) => {
 
 /**
  * 生成单面墙的皮肤深度图（确定性，rng 由调用方派生）。
- * 基底全平（d=0，用户定：墙面平整、无砌体起伏/变色）；特征 = 剥落斑/龟裂/透穿洞/咬口。
+ * 基底全平（d=0：墙面平整、无砌体起伏/变色）；特征 = 剥落斑/龟裂/透穿洞/咬口。
  * @param rng  本墙的 rng 流
  * @param cfg  配方 wallSkin 段 { spalls, holes, holeChance, backHoleChance, bites, biteChance, backBiteChance }
  * @param spec { u0, u1, side: 'left'|'back', openings: [{u0,u1,sill,top}]（窗/门，y 为地板相对高）,
@@ -68,7 +68,7 @@ export function generateWallSkin(rng, cfg, spec) {
   const openRects = [...openings.map(o => ({ u0: o.u0, u1: o.u1, y0: o.sill, y1: o.top })), ...avoid];
   const nearOpen = (u, y, margin) => openRects.some(r => rectDist(u, y, r) < margin);
 
-  // ---- 1) 剥落斑（spall）：成片抹灰掉落——浅凹同色斑（小起伏很少，用户定）----
+  // ---- 1) 剥落斑（spall）：成片抹灰掉落——浅凹同色斑（小起伏很少）----
   const spalls = [];
   for (let s = 0; s < (cfg.spalls ?? 3); s++) {
     for (let t = 0; t < 16; t++) {
@@ -107,7 +107,7 @@ export function generateWallSkin(rng, cfg, spec) {
   }
 
   // ---- 3) 透穿破洞 + 坍塌咬口：真 opening（切墙露天空），环带锥形崩边收剖面 ----
-  // 左墙破洞 = 月光柱新光源；背墙破洞低频（用户定）且偏右上半墙；咬口底部接地板瓦砾。
+  // 左墙破洞 = 月光柱新光源；背墙破洞低频且偏右上半墙；咬口底部接地板瓦砾。
   const holes = [];      // 真洞口 rect（世界 u/y，含 kind），供切墙 + 立面避让 + 月光柱
   const floorRects = []; // 咬口底部 u 区间（地面瓦砾接续锚点）
   const carveEllipse = (cU, cY, rU, rY, kind) => {
@@ -214,7 +214,7 @@ export function generateWallSkin(rng, cfg, spec) {
   };
 }
 
-// ---- 几何：行 run 贪心合并（等效 greedy meshing，用户定 2026-09）----
+// ---- 几何：行 run 贪心合并（等效 greedy meshing）----
 // 同行相邻同深度格并成一条 box：平整墙面整行只有 1~2 条长方体，体素间无缝无色差；
 // 每格独立柱的时代结束（那代的逐块调色/灰缝/0.18 缩格缝全删——"墙面像马赛克"病灶）。
 // 柱背 1.35 锚进暗腔、腔底暗背板封缝；透穿格断 run（切墙 rect 露天空）；

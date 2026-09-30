@@ -32,7 +32,7 @@ export const ROOM_META = {
 };
 
 /** 营地动作瓦片（休整/找回瑞米）：占位面板与场景式面板共用（模块作用域）。
- *  2026-09-21 D4：营地不再能升级卡（升级全部收进训练房新制）。 */
+ *  D4：营地不再能升级卡（升级全部收进训练房新制）。 */
 export const pushCampGroup = (w, c = { options: [] }) => {
   const tiles = [];
   if (c.options.includes('recoverRemi')) {
@@ -80,7 +80,7 @@ export const getRelicRarity = (id) => getRelicDefinition(id)?.rarity ?? 'C';
  */
 export function roomHeader(w, snap, title = null) {
   const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
-  w.push({ kind: 'title', text: title ?? `${meta.glyph} ${meta.name}`, align: 'center' });
+  w.push({ kind: 'title', text: title ?? meta.name, align: 'center' }); // 不拼 glyph（同形错词，见 runCutsceneFlows 同步修）
   if (snap.shop) {
     w.push({
       kind: 'button', id: 'room:shop', width: 300, size: 'sub',

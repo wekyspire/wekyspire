@@ -1,5 +1,4 @@
 // 章4 小怪（图书馆，34~44 层普通池；含族A 玻璃连炮 / 族B 巨兽渐强 / 族C 机制反制三族）。
-// 拆分自原 content/enemies.js（2026-09-24，内容零改动）。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy } from '../../enemies/registry.js';
@@ -8,6 +7,7 @@ import { AddCardInstruction, MoveCardInstruction } from '../../instructions/card
 import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { aliveEnemies } from '../../state/battleState.js';
+import { handLimitOf } from '../../skills/helpers.js';
 
 // ㉓ 禁书守卫（章4·终章防线锚）——攻10 → 全体友军盾12 → 攻14 三拍循环。
 // 宫廷守卫的终章上位：数值跨档 + 自身 3 防御面板，群体盾更厚。
@@ -19,12 +19,11 @@ registerEnemy({
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：12→16（章4 输出 60-100+）
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 }));
       }
-      // 盾拍蓄势（2026-09-14 马拉松修复）：禁书库防挡 3+全体盾 12 曾把小刀流磨到
-      // 无风险长跑——盾拍自身 +2 蓄势，大攻击（14+atk）随回合线性上涨，拖久必痛。
+      // 盾拍蓄力：盾拍自身 +2 力量，大攻击（14+atk）随回合线性上涨，拖久必痛。
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'focus', stacks: 2,
+        target: actx.unit, effectId: 'strength', stacks: 2,
       }));
       return;
     }
@@ -35,7 +34,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+12，自身蓄势+2' };
+    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+16，自身力量+2' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 10 : 14) + unit.getStat('attack') };
   },
 });
@@ -93,7 +92,7 @@ registerEnemy({
       return;
     }
     if (phase === 2) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 })); // 数值意识（2026-09-16）：8→12
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
       return;
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -107,7 +106,7 @@ registerEnemy({
   },
 });
 
-// ============ 第四章高压敌（2026-09-14 用户设计：特色战斗三族 + 机制四件套）============
+// ============ 第四章高压敌（特色战斗三族 + 机制四件套）============
 // 设计总纲（第四轮设计稿定稿）：每场战斗是一个有「破解方程」的谜题——
 //   族A 玻璃连炮：开局重压（合计 40+ 直伤）+ 持续中压 + 异常轮转；弱点是分体（杀一只
 //     少一份伤害与异常源），破解=以攻为守、爆发削员。血量终值 50+（基准 20-30）。
@@ -259,8 +258,8 @@ registerEnemy({
 });
 
 // ⑤ 噬书巨虫（B2）：啃食（攻9 + **吞掉玩家手牌最右 1 张**——移入焚毁区，战斗结束不
-// 返还：战斗 zones 本就不回写 run 牌组，被吞的卡本场消失）↔ 蜕变（自愈8+蓄势1）↔
-// 喷洒（(8+蓄势)×3）。反「精致留手」：留牌价值排序 + 速杀。
+// 返还：战斗 zones 本就不回写 run 牌组，被吞的卡本场消失）↔ 蜕变（自愈8+力量1）↔
+// 喷洒（(8+力量)×3）。反「精致留手」：留牌价值排序 + 速杀。
 registerEnemy({
   difficulty: { base: 10, floorMin: 36, floorMax: 43 },
   id: 'bookDevourer', name: '噬书巨虫',
@@ -279,9 +278,9 @@ registerEnemy({
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 8 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'focus', stacks: 1 }));
+        target: unit, effectId: 'strength', stacks: 1 }));
     } else {
-      const per = 8 + unit.getStat('attack'); // 蓄势经 statModifiers 已入面板，不重复加
+      const per = 8 + unit.getStat('attack'); // 力量经 statModifiers 已入面板，不重复加
       for (let i = 0; i < 3; i++) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: actx.player, amount: per }));
@@ -291,35 +290,38 @@ registerEnemy({
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
     if (phase === 0) return { kinds: ['attack', 'debuff'], hits: 1, damage: 9 + unit.getStat('attack'), note: '啃食：吞掉你最右 1 张手牌（本场不返还）' };
-    if (phase === 1) return { kinds: ['buff'], note: '蜕变：自愈8，蓄势+1' };
+    if (phase === 1) return { kinds: ['buff'], note: '蜕变：自愈8，力量+1' };
     const per = 8 + unit.getStat('attack');
     return { kinds: ['attack'], hits: 3, damage: per, note: `喷洒（共${per * 3}）` };
   },
 });
 
-// ⑥ 墨海母核（B3 墨海涨潮）：两拍循环「触须横扫 12+atk ↔ 涨墨（玩家手牌上限 -1，
-// 战斗内叠层、保底 4 + 塞 1 墨渍）」。单回合峰值温和，全部压力来自操作空间收缩——
-// 「可打但越来越挤」。手牌上限走 battleState.modifiers（战斗级，战后自动复位）。
+// ⑥ 墨海母核（B3 墨海涨潮）：两拍循环「触须横扫 12+atk ↔ 涨墨（玩家紧勒+1——手牌
+// 上限 -1，走效果轨，至多叠 2 层 = 基准-2 保底 + 塞 1 墨渍）」。单回合峰值温和，全部
+// 压力来自操作空间收缩——「可打但越来越挤」。
 registerEnemy({
   difficulty: { base: 11, floorMin: 36, floorMax: 43 },
   id: 'inkTideCore', name: '墨海母核',
   createUnit: () => new Enemy({ defId: 'inkTideCore', name: '墨海母核', maxHp: 42 }),
   act(actx) {
-    const { unit, battleState: bs } = actx;
+    const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 12 + unit.getStat('attack') }));
+        source: unit, target: player, amount: 12 + unit.getStat('attack') }));
     } else {
-      if ((bs.modifiers.maxHandSize ?? 0) > -2) { // 保底 4（基准 6 - 2）
-        bs.modifiers.maxHandSize -= 1;
+      unit._inked = unit._inked ?? 0;
+      if (unit._inked < 2) { // 保底：涨墨至多 2 层紧勒（基准-2）
+        unit._inked += 1;
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: player, effectId: 'constrict', stacks: 1 }));
       }
       actx.kernel.submitInstruction(new AddCardInstruction({
         defId: 'inkBlot', toZone: 'deck', index: 'random' }));
     }
   },
-  getIntention: (unit, bs) => (unit.actionIndex % 2 === 0
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['attack'], hits: 1, damage: 12 + unit.getStat('attack') }
-    : { kinds: ['debuff'], note: `涨墨：手牌上限-1（当前上限 ${6 + (bs?.modifiers?.maxHandSize ?? 0)}），塞1墨渍` }),
+    : { kinds: ['debuff'], note: `涨墨：紧勒+1（手牌上限-1，已叠 ${unit._inked ?? 0}/2），塞1墨渍` }),
 });
 
 // ---- 族C · 机制反制 ----
@@ -361,8 +363,9 @@ registerEnemy({
   },
 });
 
-// ⑧ 禁阅抄录员（C2）：攻击随玩家累计抽牌数成长（每 3 张 +2，行动时按 floor(drawn/3)
-// 拉齐蓄势层）——抽牌引擎流被点名。焚页拍清空自身蓄势换自愈 6：逼它洗牌再集火的交互窗。
+// ⑧ 禁阅抄录员（C2）：攻击随玩家累计抽牌数成长（每 3 张 +2，行动时按
+// 2×floor(drawn/3) 拉齐力量层）——抽牌引擎流被点名。焚页拍清空自身力量换自愈 6：
+// 逼它洗牌再集火的交互窗。
 registerEnemy({
   difficulty: { base: 7, floorMin: 36, floorMax: 43 },
   id: 'censorScribe', name: '禁阅抄录员',
@@ -371,19 +374,19 @@ registerEnemy({
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 3;
     if (phase === 1) {
-      const known = unit.getEffectStacks('focus');
+      const known = unit.getEffectStacks('strength');
       if (known > 0) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: 'focus', stacks: -known }));
+          target: unit, effectId: 'strength', stacks: -known }));
       }
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 6 }));
       return;
     }
-    const target = Math.floor((bs.history.battle.drawn ?? 0) / 3); // 通晓 = 玩家每抽3张+1层
-    const cur = unit.getEffectStacks('focus');
+    const target = 2 * Math.floor((bs.history.battle.drawn ?? 0) / 3); // 通晓 = 玩家每抽3张+2力量
+    const cur = unit.getEffectStacks('strength');
     if (target > cur) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'focus', stacks: target - cur }));
+        target: unit, effectId: 'strength', stacks: target - cur }));
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: unit, target: actx.player,
@@ -395,13 +398,15 @@ registerEnemy({
     return {
       kinds: ['attack'], hits: 1,
       damage: (phase === 0 ? 9 : 11) + unit.getStat('attack'),
-      note: `你每抽3张牌它攻击+2（当前+${2 * unit.getEffectStacks('focus')}）`,
+      note: `你每抽3张牌它攻击+2（当前+${unit.getEffectStacks('strength')}）`,
     };
   },
 });
 
-// ⑨ 账房墨灵（C3）：收账时若你手牌近乎满（≥ 上限-1），攻击 +6 且蓄势 +2——囤牌课税的
+// ⑨ 账房墨灵（C3）：收账时若你手牌近乎满（≥ 上限-1），攻击 +6 且力量 +2——囤牌课税的
 // 敌人化（读当下手牌数，快打流白嫖记账拍）。超载流/留手流被点名。
+// 容量口径 = handLimitOf（含紧勒/扩容效果折入）；意图侧读上次行动时的见证值
+// （_seenCapacity，意图函数拿不到 player——首拍前回落常量 6）。
 registerEnemy({
   difficulty: { base: 7, floorMin: 36, floorMax: 43 },
   id: 'ledgerImp', name: '账房墨灵',
@@ -412,11 +417,12 @@ registerEnemy({
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
       return;
     }
-    const capacity = 6 + (bs.modifiers.maxHandSize ?? 0);
+    const capacity = handLimitOf(actx);
+    unit._seenCapacity = capacity;
     const hoarding = bs.zones.hand.length >= capacity - 1;
     if (hoarding) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'focus', stacks: 2 }));
+        target: unit, effectId: 'strength', stacks: 2 }));
     }
     actx.kernel.submitInstruction(new DealDamageInstruction({
       source: unit, target: actx.player,
@@ -424,12 +430,12 @@ registerEnemy({
   },
   getIntention: (unit, bs) => {
     if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], note: '记账（自身盾6）' };
-    const capacity = 6 + (bs?.modifiers?.maxHandSize ?? 0);
+    const capacity = unit._seenCapacity ?? 6;
     const hoarding = (bs?.zones?.hand?.length ?? 0) >= capacity - 1;
     return {
       kinds: ['attack'], hits: 1,
       damage: 13 + (hoarding ? 6 : 0) + unit.getStat('attack'),
-      note: hoarding ? '收账：你手牌近乎满——罚息+6且蓄势+2' : '收账',
+      note: hoarding ? '收账：你手牌近乎满——罚息+6且力量+2' : '收账',
     };
   },
 });
@@ -490,7 +496,7 @@ registerEnemy({
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
       for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 })); // 数值意识（2026-09-16）：10→16
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 16 }));
       }
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -498,14 +504,14 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'focus', stacks: 1 }));
+        target: unit, effectId: 'strength', stacks: 1 }));
     }
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['defend', 'buff'], note: '竖盾：全体友军盾+10' };
+    if (phase === 0) return { kinds: ['defend', 'buff'], note: '竖盾：全体友军盾+16' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
-    return { kinds: ['defend', 'buff'], note: '稳固：自身盾12+蓄势1' };
+    return { kinds: ['defend', 'buff'], note: '稳固：自身盾12+力量1' };
   },
 });
 
@@ -521,7 +527,7 @@ registerEnemy({
       for (const e of aliveEnemies(actx.battleState)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: e, effectId: 'strength', stacks: 2 }));
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 })); // 数值意识（2026-09-16）：8→12 / 14→18
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 12 }));
       }
     } else {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 18 }));
@@ -558,8 +564,8 @@ registerEnemy({
     : { kinds: ['attack'], hits: 4, damage: 6 + unit.getStat('attack'), note: `刃舞×4（共${(6 + unit.getStat('attack')) * 4}）` }),
 });
 
-// ⑭ 连环弩台（重装→爆发节律）：三拍循环「装填（盾10+蓄势2）→ 点射（10+蓄势×2）→
-// 齐射（(7+蓄势)×3）」。装填拍是明确预告的「下轮会痛」——读意图后的盾量分配教科书。
+// ⑭ 连环弩台（重装→爆发节律）：三拍循环「装填（盾16+力量2）→ 点射（10+面板）→
+// 齐射（(7+面板)×3）」。装填拍是明确预告的「下轮会痛」——读意图后的盾量分配教科书。
 registerEnemy({
   difficulty: { base: 9, floorMin: 36, floorMax: 43 },
   id: 'repeaterBallista', name: '连环弩台',
@@ -568,14 +574,14 @@ registerEnemy({
     const { unit } = actx;
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 16 })); // 数值意识（2026-09-16）：10→16（章4 输出 60-100+）
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 16 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'focus', stacks: 2 }));
+        target: unit, effectId: 'strength', stacks: 2 }));
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 10 + unit.getStat('attack') })); // 蓄势已入面板
+        source: unit, target: actx.player, amount: 10 + unit.getStat('attack') })); // 力量已入面板
     } else {
-      const per = 7 + unit.getStat('attack'); // 蓄势已入面板，不重复加
+      const per = 7 + unit.getStat('attack'); // 力量已入面板，不重复加
       for (let i = 0; i < 3; i++) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: actx.player, amount: per }));
@@ -584,7 +590,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['defend', 'buff'], note: '装填：盾10+蓄势2' };
+    if (phase === 0) return { kinds: ['defend', 'buff'], note: '装填：盾16+力量2' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
     const per = 7 + unit.getStat('attack');
     return { kinds: ['attack'], hits: 3, damage: per, note: `齐射（共${per * 3}）` };
@@ -610,7 +616,7 @@ registerEnemy({
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: actx.player, amount: 11 + unit.getStat('attack') }));
     } else {
-      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 })); // 数值意识（2026-09-16）：6→10
+      actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 10 }));
     }
   },
   getIntention: (unit) => {

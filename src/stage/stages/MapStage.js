@@ -22,13 +22,12 @@ import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, T
 import { Cast } from '../fx/cast.js';
 import { runScript } from '../fx/script.js';
 
-import { TSL_READY } from '../fx/tslGate.js';
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
-// 战前准备/地图舞台：大雪荒原 + 孤立塔楼（2026-09-15 观感重做，替占位夜空+色块塔）。
+// 战前准备/地图舞台：大雪荒原 + 孤立塔楼（观感重做，替占位夜空+色块塔）。
 // 塔身 = billboard 纸片塔——每层一张模块贴片（assets/tower/，全部楼层同一模块直
 // 到后续章节素材落位）。塔是世界固定的（塔基轻吻雪面，锚 TOWER_BASE_Y）；相机随层沿
-// 塔身爬升表达「到层」（arriveFloor 上升动画，2026-09-16 用户定，替旧「当前层高亮
+// 塔身爬升表达「到层」（arriveFloor 上升动画，替旧「当前层高亮
 // 长出」），爬升时雪盒/填充光同步跟随。贴图缺席（headless/加载中）退化为色块层。
 // 雪原/天空/雾/雪花在 scenes/towerWilderness.js（环境件），本舞台只持塔身
 // （setFloor/arriveFloor 接口不变）。
@@ -37,8 +36,8 @@ const FLOOR_GAP = 7;            // 层间纵向间距（世界单位）= 模块�
 const MODULE_ASPECT = 2048 / 1199;  // 模块素材宽高比（层宽 = FLOOR_GAP × 此值）
 // 塔世界位 TOWER_X/Z/BASE_Y 在 scenes/towerWilderness.js（塔环境共享锚点，本舞台 import 取用）
 const TOWER_MODULE = '第一章_基础';  // 全楼层共用的模块（后续按章换）
-// 鼠标视差（2026-09-16 用户定）：相机随鼠标绝对位置轻微平移——**二阶弹簧阻尼平滑**
-// （用户定：保留动量，一阶指数趋近太"黏"）。刚度/阻尼/幅度都是调参位：塔距相机 30、
+// 鼠标视差：相机随鼠标绝对位置轻微平移——**二阶弹簧阻尼平滑**
+// （：保留动量，一阶指数趋近太"黏"）。刚度/阻尼/幅度都是调参位：塔距相机 30、
 // 画面高 ~25 世界单位，1 单位平移 ≈ 画面 4%。ζ≈0.92 略欠阻尼，带一点惯性尾。
 export const MOUSE_SWAY = { unitsX: 0.8, unitsY: 0.48, stiffness: 5, damping: 4.1, maxDt: 0.1 };
 // 视差落相机的复用临时向量（tick 单协程，无重入）
@@ -77,12 +76,9 @@ export class MapStage {
     // 塔楼层世界 pass 由雪云管线接管（StageManager composeScene 钩子，BattleStage
     // 体积光同范式）：mesh pass → 云 march（读场景深度）→ transmittance 合成。
     // UI pass（uiScene）仍由 StageManager 在其后兜底渲染，不受影响。
-    // tslGate：雪云 march 未迁移前不接管世界 pass（直渲兜底——mesh 全可见，只缺云）
-    if (TSL_READY.towerClouds) {
-      this.composeScene = ({ renderer, scene, camera }) => {
-        this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
-      };
-    }
+    this.composeScene = ({ renderer, scene, camera }) => {
+      this._wilderness?.clouds?.composeFrame({ renderer, scene, camera });
+    };
     // 逻辑机位（视差的基座）：锚点摆位与爬升 tween 只写它，tick 统一把「机位 +
     // 鼠标视差偏移」落到共享相机（onEnter 设/onExit 还协议不变）
     this._basePose = null;
@@ -147,7 +143,7 @@ export class MapStage {
     this.uiScene.add(this._bubbles);
     this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
     this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
-    // fx 门面地基（2026-09-22 Phase 4）：塔楼目前无可寻址道具，cast 留空表——
+    // fx 门面地基（Phase 4）：塔楼目前无可寻址道具，cast 留空表——
     // cutscene 'fx' step 在塔楼层只应做运镜/等待类演出（camera 可用）
     this._cast = new Cast();
     this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
@@ -250,7 +246,7 @@ export class MapStage {
   }
 
   /**
-   * 遗物装卸区接线（prep 面板的 custom widget，2026-09-24）：拾取器 + 屏幕→局部坐标
+   * 遗物装卸区接线（prep 面板的 custom widget）：拾取器 + 屏幕→局部坐标
    * 换算。面板每次重绘都会重建该对象，故每次 _renderPanel 后都要重接。
    */
   _bindLoadout() {
@@ -269,7 +265,7 @@ export class MapStage {
     });
   }
 
-  // ---- 获得物特写（通用组件，用户定 2026-09-11）----
+  // ---- 获得物特写（通用组件）----
   // 拿到遗物/药水/奖励时播一次：中央淡入放大（带弹跳）+ 背后上帝光 + 下方三行文本，
   // 点击任意处退出。**实现已抽到 stagePickerKit**（与房间层/战斗层共用一份），
   // 本舞台只保留同名转发（宿主编排器按"当前舞台"调用，签名不变）。
@@ -283,7 +279,7 @@ export class MapStage {
   /** 套件级模态占用（特写/升级演出/全屏界面开着）——宿主编排器据此避让自动演出。 */
   get uiBusy() { return this._pickerKit.uiBusy; }
 
-  // ---- 角色对话/思索泡泡（通用接口，用户定 2026-09-11）----
+  // ---- 角色对话/思索泡泡（通用接口）----
   // 场景里的角色（商店老板、瑞米、事件 NPC…）异步说话/思索时用：
   //   sayAtWorld('shopkeeper', { x, y, z }, { text, kind, duration })
   // 锚点是**世界坐标**，每帧经 StageManager 重投影到 UI 空间——相机转动/推进镜头时
@@ -368,7 +364,7 @@ export class MapStage {
 
   // ---- 老虎机转轮（演出即闸门）----
   // 快照里出现新的 spinning 就播一次；播完上报 slotAnimDone（runController 据此
-  // 揭示结果并推进 sequencer 队列）。演出态本身不进快照（用户裁决：播放进度留 Stage）。
+  // 揭示结果并推进 sequencer 队列）。演出态本身不进快照（裁决：播放进度留 Stage）。
   _syncSlotRoll() {
     const spinning = this._snap?.slot?.spinning ?? null;
     if (!spinning) { this._slotRoll?.reset(); this._slotRollId = null; return; }
@@ -387,7 +383,7 @@ export class MapStage {
   }
 
   // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅。
-  // 重烘范围含全屏选卡界面（候选卡无战斗预热，首拍常为占位——2026-09-25 空白卡事故同源）
+  // 重烘范围含全屏选卡界面（候选卡无战斗预热，首拍常为占位——空白卡事故同源）
   _syncCardArtSub() {
     const need = !!this._panel?.ownsCardArtWait || !!this._pickerKit?.cardPicker?.opened;
     if (need && !this._unsubCardArt) {
@@ -537,7 +533,7 @@ export class MapStage {
       this._bubbles.update(dt);
       this._applyMouseParallax(dt);      // 鼠标视差：机位+偏移 → 共享相机（每帧唯一落点）
     });
-    // 塔楼层专属机位（用户定：塔楼投影至少占屏 1/3）——世界相机三舞台共享，
+    // 塔楼层专属机位（：塔楼投影至少占屏 1/3）——世界相机三舞台共享，
     // 走借还协议：onEnter 设、onExit restoreBaseCamera（假 manager 无相机则跳过）。
     // 锚在 _cameraFloor（相机所在的层）：战后换台时 setFloor 已摆新层模块，但相机
     // 停在旧层——arriveFloor 的爬升动画由此出发，上升全程可见
@@ -622,7 +618,7 @@ export class MapStage {
   // 重建塔身：全楼层 billboard 贴片（视锥外的自动剔除）。塔是世界固定的——塔组锚
   // TOWER_BASE_Y（塔基轻吻雪面 0.5），层 f 模块中心 = (f-0.5)×层高（层 1 坐在塔基
   // 线上，只埋 0.5——旧 (f-1) 摆法把层 1 压低半层、79% 入土）；Boss 层红 tint、
-  // 其余白（贴图原色）。当前层金 tint 已移除（2026-09-16 用户定：「到层」改由相机
+  // 其余白（贴图原色）。当前层金 tint 已移除（「到层」改由相机
   // 爬升表达，等美术资源到位后再做更多动画）。贴图缺席（headless/首拍加载中）为
   // 纯色块层。受光材质（Lambert）吃荒原灯组，与雪原同一套光照。
   setFloor(floor, totalFloors) {
@@ -671,7 +667,7 @@ export class MapStage {
   /** 爬升收口：停表 + 补回执。gsap kill 不触发 onComplete——待回执的 sequencer
    *  指令（awaitFloorArrive 的 ANIMATION_INSTRUCTION_FINISHED）若不手动补，会卡到
    *  保险丝强杀才出队，堵住排在后面的战斗/剧本节拍（5s 慢爬 + 爬升中可备战进战斗
-   *  的窗口真实存在，2026-09-16）。 */
+   *  的窗口真实存在）。 */
   _settleRise() {
     const tween = this._riseTween;
     this._riseTween = null;
@@ -681,9 +677,9 @@ export class MapStage {
     done?.();
   }
 
-  // 塔楼抵达动画（2026-09-16 用户定重做）：相机从上一层锚点沿塔身上升到当前层，
+  // 塔楼抵达动画（重做）：相机从上一层锚点沿塔身上升到当前层，
   // 替代原「当前层高亮块自下而上长出」。由 run sequencer 指令驱动（onDone = 回执
-  // 句柄）；duration 可缩（测试）。默认 5s 慢爬（用户定：爬升期间玩家已可备战操作，
+  // 句柄）；duration 可缩（测试）。默认 5s 慢爬（：爬升期间玩家已可备战操作，
   // 慢速更有攀爬感）；FLOOR_ARRIVE_MS=6000 的队列兜底宽于默认时长 1s。
   arriveFloor(floor, totalFloors, { onDone = null, duration = 5 } = {}) {
     this.setFloor(floor, totalFloors); // 幂等落位（doSwap 已 setFloor 时等同重放）
@@ -719,7 +715,7 @@ export class MapStage {
     });
   }
 
-  /** 鼠标视差（2026-09-16 用户定）：把逻辑机位加一个随鼠标的小幅平移后落到共享相机。
+  /** 鼠标视差：把逻辑机位加一个随鼠标的小幅平移后落到共享相机。
    *  平滑 = **二阶弹簧阻尼**（保留动量：速度是显式状态，缓起缓收带惯性尾；dt 截断防
    *  切页后大步长炸稳）。平移沿相机右/上轴（取景方向变了偏移方向也不跑偏），position
    *  与 lookAt 加同一偏移 = 整体平移，画面同摆不旋转。与锚点摆位/爬升 tween（只写

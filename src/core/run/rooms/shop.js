@@ -2,7 +2,7 @@
 //
 // 定位：给金币一个稳定的日常出口，用确定性平衡卡包三选一的随机性——想买什么，这里能直接买到。
 // 出没：固定 4/8、15/19、25/29、36/40 层——这些楼层**整层就是商店房**（`roomOfFloor` 直接给
-// `'shop'`，房间场景是一间比战斗房空旷的货房，售货机摆在固定位置；用户定 2026-09-12）。
+// `'shop'`，房间场景是一间比战斗房空旷的货房，售货机摆在固定位置）。
 // 每次遇到刷新货架，买光不补。
 //
 // 与瑞米的联动**仅故事模式**（肉鸽模式：货架恒定满、无折扣、无对话、遗物随机刷新）：
@@ -25,7 +25,7 @@ export const SHOP_FLOORS = Object.freeze([4, 8, 15, 19, 25, 29, 36, 40]);
 export const isShopFloor = (floor) => SHOP_FLOORS.includes(floor);
 
 // 价格（SHOP.md 表；区间内由 rng 定值 → 同种子同价格）
-// 遗物货位 2026-09-13 起改「稀有度遗物包」（买到开三选一，用户定：只卖随机一件选择面太窄，
+// 遗物货位是「稀有度遗物包」（买到开三选一；只卖随机一件选择面太窄，
 // 玩家选不到真正有用的遗物）——三选一严格优于随机一件，价位较旧单件上浮约 25%。
 export const SHOP_PRICE = Object.freeze({
   potion: 20,
@@ -56,7 +56,7 @@ function rollDiscount(run) {
 
 const priceIn = (range, rng) => range[0] + Math.floor(rng.next() * (range[1] - range[0] + 1));
 
-/** 卡包价格（20–25 区间随机）：2026-09-21 大调后开包分布与体系等级脱钩（来源制），
+/** 卡包价格（20–25 区间随机）：开包分布与体系等级脱钩（来源制），
  * 价格不再随门禁上浮。 */
 function packPrice(run, packId, rng) {
   return SHOP_PRICE.packBase + Math.floor(rng.next() * 6);
@@ -125,7 +125,7 @@ function rollStock(run) {
       kinds.splice(kinds.findIndex(([k]) => k === 'apple'), 1); // 只放一件
     } else {
       // 遗物货位 = 「稀有度遗物包」：货架只标档位不标具体件（选择面交给购买后的三选一，
-      // 2026-09-13 用户定）；具体三件在购买那一刻才由抽选 SDK 掷出（门禁/驱重/兜底集中）。
+      // ）；具体三件在购买那一刻才由抽选 SDK 掷出（门禁/驱重/兜底集中）。
       const rarity = kind === 'relicC' ? 'C' : 'B';
       items.push(makeItem('relic', {
         id: `relicPack:${rarity}`, rarity,
@@ -165,7 +165,7 @@ const TIER_ORDER = ['C', 'B', 'A', 'S'];
 
 /**
  * 货品的 hover 说明（纯文本 tooltip 载荷 { title, body }）。
- * 恢复药剂/苹果这类没有卡面的东西 **必须**有说明，否则玩家不知道买了会怎样（用户定 2026-09-12）；
+ * 恢复药剂/苹果这类没有卡面的东西 **必须**有说明，否则玩家不知道买了会怎样；
  * 卡包则给出「随机 3 张 + 概率分布」——商店卡包走 normal 通道分布（REWARD_TIER_TABLE）
  * 在池内实际存在的等阶上归一，与开包时的真实抽取同源，不写死数字。
  */
@@ -207,7 +207,7 @@ export function buyShopItem(run, index) {
   if (it.sold) throw new Error('这件已经卖掉了');
   if (run.player.money < it.price) throw new Error(`金币不足（需要 ${it.price}）`);
   if (it.kind === 'apple' && !run.storyMode) throw new Error('这个货架在肉鸽模式里没有苹果');
-  // 待选是**单槽**：连买第二件包会静默覆盖第一件，先买的钱白花（2026-09-19 试玩实报）。
+  // 待选是**单槽**：连买第二件包会静默覆盖第一件，先买的钱白花。
   // 先领完（act shop claim）再买；非包类货品不占槽，不受影响。
   if (run.shopPending && (it.kind === 'pack' || it.kind === 'relic')) {
     throw new Error('先把待选的卡包/遗物包选完，再买下一件');
@@ -247,7 +247,7 @@ export function buyShopItem(run, index) {
 
 /**
  * 开包三选一的收尾：把选中的卡加入牌组并清挂起。
- * `defId = null` = **放弃这个卡包**（用户定 2026-09-12：三选一必须可以放弃——开出来的三张
+ * `defId = null` = **放弃这个卡包**（三选一必须可以放弃——开出来的三张
  * 都不想要是玩家的正当选择；钱已经花了，放弃只是不要牌，不退款）。
  */
 export function takeShopCard(run, defId = null) {
@@ -260,7 +260,7 @@ export function takeShopCard(run, defId = null) {
 }
 
 /**
- * 遗物包三选一的收尾（2026-09-13 用户定的「稀有度遗物包」）：
+ * 遗物包三选一的收尾：
  * 选中的遗物入包（grantRelic：一局内唯一，重复抛错——候选由抽选 SDK 驱重，正常不会撞）；
  * `relicId = null` = 放弃这个遗物包（与卡包同口径：钱已花，选择权在玩家）。
  */

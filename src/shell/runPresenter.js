@@ -4,7 +4,7 @@
 // runController 在安全时机 `drain()` 出来逐个交给 Stage 的 `showcaseItem`。
 //
 // 为什么要排队而不是立即播：core 结算发生在对话「选中那一拍」，此时 cutscene 还在播、
-// 黑幕还没揭——获得演出必须排在揭幕后（否则被黑幕吞掉半截，用户 2026-09-12 定的节拍）。
+// 黑幕还没揭——获得演出必须排在揭幕后（否则被黑幕吞掉半截，用户 的节拍）。
 // 队列把「事件做了什么」与「什么时候演」解耦：内容只管声明，时序归 Shell。
 //
 // ⚠ 外观策略（artKey/tint/时长）是表现层的事，集中在下面这张表；core 只给语义（kind+文案）。
@@ -23,7 +23,7 @@ export function createRunPresenter() {
   return {
     /** core 声明一次获得物特写意图（排队；不立即播）。 */
     showcase(intent) { if (intent) queue.push(intent); },
-    /** core 声明单位演出指令（2026-09-25：事件驱动房间单位移动/形态；排队同 showcase）。 */
+    /** core 声明单位演出指令（事件驱动房间单位移动/形态；排队同 showcase）。 */
     unitCommand(cmd) { if (cmd) unitQueue.push(cmd); },
     /** 取走全部待播意图（Shell 在揭幕之后调）。 */
     drain() { return queue.splice(0); },

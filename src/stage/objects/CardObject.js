@@ -201,7 +201,7 @@ export class CardObject extends THREE.Group {
     }
   }
 
-  // 余烬粒子池：卡内局部坐标，加色混合下死粒子颜色归零即不可见（同 ParticleSystem 手法）
+  // 余烬粒子池：卡内局部坐标，加色混合下死粒子颜色归零即不可见（同点粒子池手法）
   _ensureEmbers() {
     if (this._embers) return;
     const n = 48;
