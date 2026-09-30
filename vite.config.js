@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { readFileSync, existsSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 
 // 调试存档服务（**dev only**）：把 tmp/saves/*.json 挂在 /debug-saves/ 下，
 // 供调试模式用 `?debug=1&save=<名>` 直接从造好的存档起跑（tools/saveForge.mjs 产出）。
@@ -20,6 +21,50 @@ function debugSavesPlugin(root) {
         res.setHeader('Cache-Control', 'no-store');
         res.end(readFileSync(file, 'utf-8'));
       });
+    },
+  };
+}
+
+
+// 美术资源打包（quest_prompts/ASSET_PACK.md 设计实现）：产物里的全部位图资产
+// 裸拼接成单个 artpack-<md5前8>.bin（webp 已压缩不再 deflate），配一份 ESM
+// manifest（dist 根 artpack-manifest.js：包 URL + 总字节 + {文件名: [offset,len,mime]}）。
+// 运行期 src/stage/art/artpack.js 动态 import manifest → 流式拉包 → slice→blob →
+// resolveArtUrl 换汇；dev / 缺包 / 长度不符一律回退逐张旧路径。产物文件名含内容
+// hash → 包名随内容变化 = 天然 immutable 缓存键（配套 Apache 头见设计文档 §5）。
+const ART_MIME = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+function artPackPlugin() {
+  return {
+    name: 'wekyspire-artpack',
+    generateBundle(_options, bundle) {
+      const files = Object.entries(bundle)
+        .filter(([name, info]) => info.type === 'asset'
+          && /^assets\/[^/]+\.(webp|png|jpe?g)$/i.test(name))
+        .sort(([a], [b]) => (a < b ? -1 : 1));
+      if (!files.length) return;
+      const entries = {};
+      const parts = [];
+      let offset = 0;
+      for (const [name, info] of files) {
+        const src = Buffer.from(info.source);
+        const ext = name.split('.').pop().toLowerCase();
+        entries[name.split('/').pop()] = [offset, src.length, ART_MIME[ext] ?? 'application/octet-stream'];
+        parts.push(src);
+        offset += src.length;
+      }
+      const pack = Buffer.concat(parts);
+      const hash = createHash('md5').update(pack).digest('hex').slice(0, 8);
+      this.emitFile({ type: 'asset', fileName: `assets/artpack-${hash}.bin`, source: pack });
+      const manifest = `// 构建期生成（wekyspire-artpack）：美术包目录。
+`
+        + `export const PACK_URL = 'assets/artpack-${hash}.bin';
+`
+        + `export const PACK_TOTAL = ${pack.length};
+`
+        + `export const ENTRIES = ${JSON.stringify(entries)};
+`;
+      this.emitFile({ type: 'asset', fileName: 'artpack-manifest.js', source: manifest });
+      console.log(`[artpack] ${files.length} 张位图 → artpack-${hash}.bin（${(pack.length / 1048576).toFixed(1)} MB）`);
     },
   };
 }
@@ -59,7 +104,7 @@ export default defineConfig(({mode}) => {
           isCustomElement: (tag) => tag.startsWith('colored-')
         }
       }
-    }), debugSavesPlugin(root)],
+    }), debugSavesPlugin(root), artPackPlugin()],
     resolve: {
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue'],
       alias: {
