@@ -33,6 +33,10 @@ export const settings = reactive({
   // 卡牌/UI 后处理链（辉光 bloom；stage/post/uiComposer）——默认开；
   // 低档设备关掉退回直渲（画面少一层辉光，功能无损）。
   fxPost: saved.fxPost !== false,
+  // 渲染性能档（体积月光链分辨率）：high/mid/low → march 链 1/0.5/0.375 分辨率
+  // （带宽 ÷1/÷4/÷7；档位映射 = volumetricMoon 的 MOON_QUALITY_PRESETS）。
+  // 低档设备（iGPU 共享内存带宽）降档提帧；档位语义只影响月光链，游戏逻辑无关。
+  renderQuality: ['high', 'mid', 'low'].includes(saved.renderQuality) ? saved.renderQuality : 'high',
   menuStoryMode: IS_DEV && saved.menuStoryMode === true, // 开始界面模式选择（默认肉鸽：故事模式未开放），回主菜单后保持
   // 调试模式（仅调试用）：开 = 新开局进调试会话（F9 面板 / 存档写 debug 槽 / 开局发一拳）。
   // 持久化只是开发期省事（每次手勾很烦）；调试会话**永不写真实存档槽**，
@@ -48,7 +52,7 @@ export const settings = reactive({
 
 export function persistSettings() {
   writeJson(KEY, {
-    soundOn: settings.soundOn, fxPost: settings.fxPost,
+    soundOn: settings.soundOn, fxPost: settings.fxPost, renderQuality: settings.renderQuality,
     menuStoryMode: settings.menuStoryMode, debugMode: settings.debugMode,
     slotDevourTutored: settings.slotDevourTutored,
     demonRollTutored: settings.demonRollTutored,
@@ -62,6 +66,13 @@ export function toggleSound() {
 
 export function toggleFxPost() {
   settings.fxPost = !settings.fxPost;
+  persistSettings();
+}
+
+/** 渲染性能档（'high'|'mid'|'low'）；非法值静默忽略。 */
+export function setRenderQuality(tier) {
+  if (!['high', 'mid', 'low'].includes(tier)) return;
+  settings.renderQuality = tier;
   persistSettings();
 }
 

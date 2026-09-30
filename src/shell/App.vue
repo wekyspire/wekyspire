@@ -231,6 +231,12 @@ onMounted(async () => {
   if (new URLSearchParams(location.search).get('uipost') === '0') settings.fxPost = false;
   stageManager.setUiPostProcessing(settings.fxPost);
   watch(() => settings.fxPost, (on) => stageManager?.setUiPostProcessing(on));
+  // 渲染性能档（体积月光链分辨率）：?moonq= 在场优先（排障口径），否则落持久化设置；
+  // 菜单改动经 watch 即时下发（在场舞台带 composer 立刻重收敛，下场进房按新档建）
+  if (!new URLSearchParams(location.search).has('moonq')) {
+    stageManager.setRenderQuality(settings.renderQuality);
+  }
+  watch(() => settings.renderQuality, (q) => stageManager?.setRenderQuality(q));
   fitFrame();
   window.addEventListener('resize', fitFrame);
   stageManager.start();

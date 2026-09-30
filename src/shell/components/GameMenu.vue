@@ -2,7 +2,7 @@
 // 游戏中弹出菜单（Esc 呼出）：继续/查看存档/设置（音效开关）/回到主菜单。
 // 存档为检查点制（层首/终局自动落盘），此处只读展示。
 import { computed, inject } from 'vue';
-import { settings, toggleSound, toggleFxPost } from '../settings.js';
+import { settings, toggleSound, toggleFxPost, setRenderQuality } from '../settings.js';
 import { readSave } from '../saves.js';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
@@ -13,6 +13,11 @@ const showMenuPopup = inject('showMenuPopup', null);
 const save = readSave(props.ctrl.run.storyMode); // 只看当前模式自己的存档槽
 const savedAtText = computed(() => save ? new Date(save.savedAt).toLocaleString() : '');
 const resultText = save?.result === 'victory' ? '登顶成功' : save?.result === 'defeat' ? '倒在塔中' : '';
+const QUALITY_TIERS = [
+  { id: 'high', label: '高' },
+  { id: 'mid', label: '中' },
+  { id: 'low', label: '低' },
+];
 </script>
 
 <template>
@@ -39,6 +44,16 @@ const resultText = save?.result === 'victory' ? '登顶成功' : save?.result ==
           <input type="checkbox" :checked="settings.fxPost" @change="toggleFxPost()" />
           辉光特效（卡牌/UI 发光；低档设备可关）
         </label>
+        <div class="row quality">
+          <span class="qlabel">渲染性能</span>
+          <div class="seg">
+            <button v-for="opt in QUALITY_TIERS" :key="opt.id"
+              :class="{ on: settings.renderQuality === opt.id }" @click="setRenderQuality(opt.id)">
+              {{ opt.label }}
+            </button>
+          </div>
+        </div>
+        <div class="row dim">降低体积光分辨率换取帧率（低档设备建议「低」）</div>
       </div>
 
       <div class="actions">
@@ -69,6 +84,11 @@ h2 { margin: 0 0 14px; font-size: 22px; color: #eef4ff; text-align: center; }
 .row.dim { color: #9aa3c0; font-size: 12px; }
 .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .toggle input { accent-color: #4d78ad; width: 15px; height: 15px; cursor: pointer; }
+.quality { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
+.qlabel { flex: 1; }
+.seg { display: flex; gap: 4px; }
+.seg button { flex: none; width: 42px; padding: 4px 0; font-size: 13px; }
+.seg button.on { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; color: #fff; }
 .actions { display: flex; gap: 10px; margin-top: 18px; }
 button {
   flex: 1; padding: 9px 0; font-size: 15px; cursor: pointer; border-radius: 4px;

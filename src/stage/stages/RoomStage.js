@@ -117,7 +117,7 @@ export class RoomStage {
     }
     const renderer = stageManager?._renderer;
     if (this._room?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
-      this._composer = createVolumetricMoonlight({ light: this._room.moonlight });
+      this._composer = createVolumetricMoonlight({ light: this._room.moonlight, march: stageManager?.getRenderQuality?.() });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
       this.composeResize(stageManager.viewSize.width || 2, stageManager.viewSize.height || 2);
