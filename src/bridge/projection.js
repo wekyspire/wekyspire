@@ -1,7 +1,7 @@
 import { swapCostOf } from '../core/state/battleState.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
-import { makeSkillCtx, canUseSkill, chantActivationLegal, pickOverflowVictims, handLimitOf, chantCapacityOf, handBreakdown } from '../core/skills/helpers.js';
+import { makeSkillCtx, canUseSkill, chantActivationLegal, pickOverflowVictims, handCapacitySlots } from '../core/skills/helpers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
 import { createSkillRuntime } from '../core/state/skillRuntime.js';
 
@@ -164,18 +164,20 @@ export function projectBattle(battle) {
     // BattleStage 在回合结束按钮 hover 时给这些卡打「将弃」标记——算法与核心清理
     // 共用 pickOverflowVictims（helpers.js），两处不得各自实现
     overflowVictims: pickOverflowVictims(battleState.zones.hand, ctx),
-    // 手牌容量分解（批次 13 灯珠指示器与 headless 文本同源）：蓝珠=咏唱容量占用、
-    // 绿珠=普通占用、黄珠=溢出激活咏唱占用、灰=空；超载（合计>max）末尾追加红珠=尾弃张数。
+    // 手牌容量（批次 13 灯珠指示器）：slots = 占用序列（core handCapacitySlots
+    // 唯一事实源：空咏唱容量 | 手牌序占用 | 空手牌容量/超载，迷你 = 幻影竖线）；
+    // 聚合计数字段保留给调试/旧消费者。蓝=咏唱容量占用、绿=普通占用、
+    // 黄=溢出激活咏唱占用、灰=空、红=超载（尾弃预告）。
     handCapacity: (() => {
-      const { normal, chantW, mini } = handBreakdown(battleState);
-      const cap = chantCapacityOf(ctx);
+      const hcs = handCapacitySlots(ctx);
       return {
-        max: handLimitOf(ctx),
-        chantCap: cap,
-        normalUsed: normal,
-        chantCapUsed: Math.min(chantW, cap),
-        chantOverflowUsed: Math.max(0, chantW - cap),
-        miniUsed: mini,   // 迷你张数（计 0 容量）：珠条画幻影槽竖线
+        max: hcs.max,
+        chantCap: hcs.chCap,
+        normalUsed: hcs.normal,
+        chantCapUsed: Math.min(hcs.chantW, hcs.chCap),
+        chantOverflowUsed: Math.max(0, hcs.chantW - hcs.chCap),
+        miniUsed: hcs.mini,
+        slots: hcs.slots,
       };
     })(),
     // 覆盖层（牌库/焚毁区查看器）用完整列表（含牌面烘焙所需的定义数据）；常规 HUD 只读 counts

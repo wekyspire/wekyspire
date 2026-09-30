@@ -352,8 +352,9 @@ export class BattleStage {
       this.animator.register(`pile:${key}`, pile);
     }
 
-    // 手牌容量指示条（批次 13，用户定 ；改版）：手牌扇**上方**居中一排——
-    // 最左咏唱容量珠（蓝），其余手牌珠（绿=普通/黄=溢出咏唱/灰=空）；数据=投影 handCapacity。
+    // 手牌容量指示条（批次 13，用户定；2026-09-30 序列化改版）：手牌扇**上方**一排——
+    // [空咏唱容量]+组隙+[手牌序占用（与手牌卡一一对应）]+组隙+[空手牌容量]；迷你卡 =
+    // 细紫竖线小槽。数据=投影 handCapacity.slots。
     // 摆位铁律：旧版摆在扇内 y=-56.5 被 26×35 的卡面永久盖住（"永远看不见"病灶）——卡顶缘
     // ≈ baseY+半高 = -33.75，取 y=-30 落在扇形上缘与战线（-20）之间的空带；x=9 = 扇形中心
     // （minX/maxX 中点）。z=20：压过静息手牌（10+n·0.5 ≤ 15）、低于悬浮/瞄准牌（30.5+）——
@@ -1101,26 +1102,6 @@ export class BattleStage {
     // 单测注入的 fake bakeLabel 直接透传
     if (typeof document === 'undefined') return this._bakeLabel(data.label);
     return bakeButtonFace(data, { width: BUTTON_SIZE.w * 10, height: BUTTON_SIZE.h * 10, scale: 3 });
-  }
-
-  _capFootprintOf(cardId) {
-    if (cardId == null) return null;
-    const hand = this._snapshot?.hand ?? [];
-    let nIdx = 0, cIdx = 0, mIdx = 0;
-    for (const c of hand) {
-      if (c.isActivated) {
-        const w = c.chantWeight ?? 1;
-        if (c.uniqueID === cardId) return { kind: 'chant', from: cIdx, count: w };
-        cIdx += w;
-      } else if (c.keywords?.includes('迷你')) {
-        if (c.uniqueID === cardId) return { kind: 'mini', index: mIdx };
-        mIdx += 1;
-      } else {
-        if (c.uniqueID === cardId) return { kind: 'hand', index: nIdx };
-        nIdx += 1;
-      }
-    }
-    return null;
   }
 
   // 差分应用：按住 Shift 时指针压着的卡（手牌/咏唱/查看器画廊）切未应用描述渲染，

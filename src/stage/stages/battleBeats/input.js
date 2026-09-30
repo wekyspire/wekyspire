@@ -311,8 +311,8 @@ export const inputBeats = {
     if (this._overCardId === id) return;
     this._overCardId = id;
     this._refreshShiftFace();
-    // 容量珠 hover 联动：指针压着的卡 → 它占用的珠/迷你竖线改 HDR 色
-    this._capacityBeads.setHover(this._capFootprintOf(id));
+    // 容量珠 hover 联动：指针压着的卡 → slot 按 card 主匹配，它占用的珠/迷你竖线改 HDR 色
+    this._capacityBeads.setHover(id);
   }
 
   /**
