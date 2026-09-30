@@ -116,34 +116,46 @@ export function createRunShowcase(ctx) {
     if (!p) return false;
     const stage = ctx.panelStage();
     if (!stage?.showcaseItem) return false;
-    // 拍序列（2026-09-30 用户定）：词条 → 逐张「焚毁」特写（artKey = defId 出卡面场景图）
-    // → 金币 → （有附赠则）自动开选卡界面。逐拍 onDismiss 链播；中途舞台没了直接落 picker。
-    const beats = [{
+    // 拍序列（2026-09-30 用户定）：词条特写 → 逐张**卡牌焚毁演出**（不在场景的
+    // 随机焚毁卡在画面中央亮相后燃尽——cardBurnFlight，与战斗同款 C0 吞蚀视觉；
+    // 舞台没有该能力时退回「焚毁」文字特写）→ 金币 → （有附赠则）自动开选卡界面。
+    const steps = [{ show: {
       title: p.name,
       desc: `恶魔词条 · ${DEMON_TIER_LABEL[p.tier] ?? p.tier}`,
       effect: p.desc,
       tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
       autoDismissMs: 1900,
-    }];
-    for (const b of p.burnt ?? []) {
-      beats.push({
-        title: `焚毁 · ${b.name}`,
-        desc: '忘却的代价——这张卡离开了你的牌库',
-        artKey: b.defId,
-        tint: 0xd96a4a,
-        autoDismissMs: 1600,
-      });
-    }
-    beats.push({
+    } }];
+    for (const b of p.burnt ?? []) steps.push({ burn: b });
+    steps.push({ show: {
       title: `+${p.gold} 金币`,
       desc: '银行机超额取款',
       artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
       tint: 0xffd75e,
       autoDismissMs: 1700,
-    });
+    } });
     const playFrom = (i) => {
-      if (i >= beats.length) { openBankOfferPicker(); return; }   // 链尾：附赠 → 选卡界面
-      const item = { ...beats[i], onDismiss: () => playFrom(i + 1) };
+      if (i >= steps.length) { openBankOfferPicker(); return; }   // 链尾：附赠 → 选卡界面
+      const step = steps[i];
+      if (step.burn) {
+        const played = ctx.panelStage()?.playCardBurn?.({
+          defId: step.burn.defId, view: step.burn.view ?? null,
+          onDone: () => playFrom(i + 1),
+        });
+        if (played) return;
+        // 兜底：舞台无焚毁演出能力 → 文字特写拍
+        const item = {
+          title: `焚毁 · ${step.burn.name}`,
+          desc: '忘却的代价——这张卡离开了你的牌库',
+          artKey: step.burn.defId,
+          tint: 0xd96a4a,
+          autoDismissMs: 1600,
+          onDismiss: () => playFrom(i + 1),
+        };
+        if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
+        return;
+      }
+      const item = { ...step.show, onDismiss: () => playFrom(i + 1) };
       if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
     };
     playFrom(0);

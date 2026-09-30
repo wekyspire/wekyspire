@@ -329,6 +329,8 @@ export class RoomStage {
    * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
    */
   openUpgradePicker(source, opts) { return this._pickerKit.openUpgradePicker(source, this._snap, opts); }
+  /** 卡牌焚毁演出（恶魔词条随机焚毁 / 失去类烧卡的通用转发，见 stagePickerKit.playCardBurn）。 */
+  playCardBurn(payload) { return this._pickerKit.playCardBurn(payload); }
 
   /**
    * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开）。

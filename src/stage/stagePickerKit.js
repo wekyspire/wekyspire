@@ -36,6 +36,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from './objects/cardMetrics.js';
 import { renderRichTextBlock } from './richtext/texture.js';
 import { playCardGrantFlight } from './cardGrantFlight.js';
 import { playCardUpgradeFlight } from './cardUpgradeFlight.js';
+import { playCardBurnFlight } from './cardBurnFlight.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { cardViewFromDef } from '../core/skills/cardView.js';
 import { withLabels } from './panels/shared.js';
@@ -67,7 +68,8 @@ const UPGRADE_SOURCES = {
   },
   bankBurn: {
     cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤；**不看晋升 enabled**——见下方 anyCard）
-    anyCard: true,   // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
+    anyCard: true,
+    burn: true,   // 确认 = 摘下选中卡**原地燃尽**（playCardBurnFlight）再上行意图   // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
                      // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来（2026-09-30 实锤）
     intent: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
     title: '选择要焚毁的卡牌', confirmLabel: '确认焚毁',
@@ -130,6 +132,8 @@ export function createStagePickerKit({
   let grantBusy = false;
   // 「卡牌升级」变身演出进行中（升级选卡确认 / 事件升级排水）：同上吞指针
   let upgradeBusy = false;
+  // 「卡牌焚毁」演出进行中（银行自选焚毁确认 / 恶魔词条随机焚毁拍）：同上吞指针
+  let burnBusy = false;
 
   const pickerNow = () => pickerRef ?? (typeof getPicker === 'function' ? getPicker() : null);
   const busNow = () => {
@@ -232,6 +236,42 @@ export function createStagePickerKit({
     });
   }
 
+  /**
+   * 卡牌焚毁演出（通用入口，cardBurnFlight 的薄封装）：
+   *   card: 选卡界面确认时 takeEntry 摘出的卡对象 = **原地燃尽**；
+   *   defId / view: card 缺席时在亮相位（缺省屏幕中央）新建卡再燃——恶魔词条的
+   *                随机焚毁走这条（被烧的卡不在任何场景里）
+   *   at / onDone: 亮相位覆盖 / 结束回调（恰好一次；受理失败也同步调）
+   */
+  function playCardBurn({ card = null, defId = null, view = null, at = null, onDone = null } = {}) {
+    let obj = card;
+    if (!obj) {
+      const viewOfDef = (id) => {
+        try {
+          const def = getSkillDefinition(id);
+          return def ? withLabels(cardViewFromDef(def)) : null;
+        } catch { return null; }
+      };
+      const data = view ?? viewOfDef(defId) ?? defId;
+      if (!bakeFace || !data) { onDone?.(); return false; }
+      obj = new CardObject({
+        uniqueID: 'burn:flight',
+        cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace,
+      });
+      obj.setCard(data);
+      obj.position.set(at?.x ?? 0, at?.y ?? 0, at?.z ?? 0);
+      obj.scale.set(0.95, 0.95, 1);
+    }
+    scene()?.add(obj);
+    burnBusy = true;
+    return playCardBurnFlight({
+      card: obj,
+      center: at ?? null,
+      sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
+      onDone: () => { burnBusy = false; onDone?.(); },
+    });
+  }
+
   return {
     bakeText,
 
@@ -242,6 +282,8 @@ export function createStagePickerKit({
     get showcasing() { return !!showcase?.busy; },
     /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
     get upgrading() { return upgradeBusy; },
+    /** 卡牌焚毁演出是否在播（宿主据此压暗常驻按钮）。 */
+    get burning() { return burnBusy; },
     /**
      * 卡图异步到图后重烘选卡界面（宿主在 cardArt.addOnLoad 里调；合批由宿主负责）。
      * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
@@ -249,10 +291,13 @@ export function createStagePickerKit({
      */
     rebakeCards() { cardPicker?.rebakeCards?.(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
-    get uiBusy() { return grantBusy || upgradeBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
+    get uiBusy() { return grantBusy || upgradeBusy || burnBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
 
     /** 卡牌升级演出（通用入口）：薄暴露内部 playCardUpgrade（见其注释）。 */
     playCardUpgrade(payload) { return playCardUpgrade(payload); },
+
+    /** 卡牌焚毁演出（通用入口）：薄暴露内部 playCardBurn（见其注释）。 */
+    playCardBurn(payload) { return playCardBurn(payload); },
 
     /**
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
@@ -287,6 +332,20 @@ export function createStagePickerKit({
         return v ? withLabels(v) : null;
       };
       const hookMain = () => {
+        if (def.burn) {
+          // 焚毁源确认钩子：摘下选中卡 → 原地燃尽（卡先烧、状态后变——同升级的节拍哲学）
+          picker.confirmHook = (keys) => {
+            const c = cards.find(x => x.uniqueID === keys[0]) ?? null;
+            const entry = c ? picker.takeEntry(keys[0]) : null;
+            picker.close();
+            playCardBurn({
+              card: entry?.obj ?? null,   // 摘到卡 = 原地燃尽；没摘到 = 中央新建燃（defId/view 兜底）
+              defId: c?.defId ?? null, view: c?.view ?? null,
+              onDone: () => fire(keys[0]),
+            });
+          };
+          return;
+        }
         if (!def.upgrade) { picker.confirmHook = null; return; }
         picker.confirmHook = (keys) => {
           // 多选链（训练尾款 twoC）：摘下全部选中卡 → 逐张「（有分叉先开
