@@ -35,8 +35,27 @@ export function setBloomWriter(obj, on = true) {
   obj.traverse((o) => { if (on) o.layers.enable(BLOOM_LAYER); else o.layers.disable(BLOOM_LAYER); });
 }
 
-/** depth-only 预填的覆写材质（全场共用一件）：不写色只写深度。 */
-const DEPTH_ONLY_MATERIAL = new THREE.MeshBasicMaterial({ colorWrite: false });
+/** depth-only 预填材质：按「是否镂空 + alphaMap」签名缓存，每件只建一次、建后永不改值。
+ *  ⚠ 不用 scene.overrideMaterial 做预填（2026-09-30 探针实锤的每帧资源 churn 根源）：
+ *  渲染器的 override 模拟会把每个对象的 alphaTest 逐个拷到共享 override 材质上，而
+ *  r185 的 alphaTest 是 version++ 的 accessor——共享材质 version/cacheKey 随对象序列
+ *  来回翻转（0↔0.5），RenderObjects 版本比对每渲染遍失配 → renderObject/绑定组/UBO
+ *  每帧销毁重建（bindingBuffer 反复 destroy，纯每帧行为、无任何定时器参与）。
+ *  逐对象替换材质则键全程稳定，首帧建缓存后零 churn；深度语义与旧 override 等价
+ *  （colorWrite:false + 逐对象 alphaTest/alphaMap 镂空；transparent 双面双趟在纯深度
+ *  预填里不改变最终深度，故不复制）。 */
+const DEPTH_MATS = new Map();
+function depthMatFor(src) {
+  const cutout = (src.alphaTest ?? 0) > 0;
+  const key = cutout ? `cut:${src.alphaMap?.uuid ?? '-'}` : 'solid';
+  let m = DEPTH_MATS.get(key);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ colorWrite: false });
+    if (cutout) { m.alphaTest = src.alphaTest; m.alphaMap = src.alphaMap ?? null; }
+    DEPTH_MATS.set(key, m);
+  }
+  return m;
+}
 
 /**
  * 偏移 pass 渲染（两 composer 共用）：相机层切 BLOOM_LAYER、flag 置 1、清黑渲一遍；
@@ -58,15 +77,26 @@ export function renderBloomOffsetPass(renderer, scene, camera, { clearDepth = fa
   renderer.shadowMap.autoUpdate = false;
   scene.background = null;
   if (depthPrepass) {
-    // 全场 depth-only 预填：override 材质不写色，只把几何深度灌进偏移 RT——
-    // 随后的 FX 写入件据此做遮挡深度测试（替代旧「共享场景深度纹理」方案）。
-    // 相机层掩码保持原样（全场参与遮挡，不只是 FX 件）；bloomPassFlag 仍 0。
-    const prevOverride = scene.overrideMaterial;
-    scene.overrideMaterial = DEPTH_ONLY_MATERIAL;
+    // 全场 depth-only 预填（逐对象材质替换，见 DEPTH_MATS 注释）：把几何深度灌进
+    // 偏移 RT——随后的 FX 写入件据此做遮挡深度测试。相机层掩码保持原样（全场参与
+    // 遮挡，不只是 FX 件）；bloomPassFlag 仍 0。
+    const swaps = [];
+    scene.traverseVisible((o) => {
+      const src = o.material;
+      if (!src) return;
+      if (Array.isArray(src)) {
+        let dirty = false;
+        const mats = src.map((s) => { const m = depthMatFor(s); if (m !== s) dirty = true; return m; });
+        if (dirty) { swaps.push([o, src]); o.material = mats; }
+      } else {
+        const m = depthMatFor(src);
+        if (m !== src) { swaps.push([o, src]); o.material = m; }
+      }
+    });
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
-    scene.overrideMaterial = prevOverride;
+    for (const [o, src] of swaps) o.material = src;
   }
   bloomPassFlag.value = 1;
   camera.layers.set(BLOOM_LAYER);
