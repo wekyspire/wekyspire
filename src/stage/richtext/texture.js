@@ -112,10 +112,30 @@ export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawI
   }
 }
 
-// 默认图标：圆形徽章（effect 橙 / skill 蓝），比白框占位耐看
-export function defaultDrawIcon(ctx, { iconType, x, y, size }) {
+// 默认图标：圆形徽章（effect 橙 / skill 蓝 / card = 系列字形徽章），比白框占位耐看。
+// card 徽章按 appearance 契约走 cardLook：卡面主题色圆底 + seriesGlyph 字形
+// （glyph 恒有——series→type→'技' 三级回落）；此前落通用蓝圆，即夜测 ~20 例
+// 「洗入3●碎铁」裸蓝点的根因（layout 产出正确，仅绘制端缺分发）。
+export function defaultDrawIcon(ctx, { iconType, name, x, y, size }) {
   const cx = x + size / 2;
   const cy = y + size / 2;
+  if (iconType === 'card') {
+    const look = cardLook(name ?? '');
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2 - 1, 0, Math.PI * 2);
+    ctx.fillStyle = look.color ?? '#4c8de8';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = `bold ${Math.round(size * 0.62)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(look.glyph ?? '技', cx, cy + size * 0.04);
+    ctx.textAlign = 'left';
+    return;
+  }
   ctx.beginPath();
   ctx.arc(cx, cy, size / 2 - 1, 0, Math.PI * 2);
   ctx.fillStyle = iconType === 'effect' ? '#e8843c' : '#4c8de8';
