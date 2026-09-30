@@ -66,7 +66,9 @@ const UPGRADE_SOURCES = {
     hint: '悬停以查看升级后的卡面',
   },
   bankBurn: {
-    cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤）
+    cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤；**不看晋升 enabled**——见下方 anyCard）
+    anyCard: true,   // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
+                     // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来（2026-09-30 实锤）
     intent: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
     title: '选择要焚毁的卡牌', confirmLabel: '确认焚毁',
     hint: '恶魔令你忘却',
@@ -261,10 +263,12 @@ export function createStagePickerKit({
      * 子面板「返回」= 回上一级重选（不消费升级机会——意图未上行，core 未结算）。
      * @returns 是否真的打开了（无候选 / 未知 source → false，编排器据此跳过）
      */
-    openUpgradePicker(source, snap = null) {
+    openUpgradePicker(source, snap = null, opts = {}) {
       const def = UPGRADE_SOURCES[source];
       if (!def) return false;
-      const cards = (def.cards(snap) ?? []).filter(c => c.enabled !== false);
+      const cards = (def.cards(snap) ?? [])
+        .map(c => (def.anyCard && c.enabled === false) ? { ...c, enabled: true } : c)
+        .filter(c => c.enabled !== false);
       if (!cards.length) return false;
       const picker = ensureCardPicker();
       // 多选（训练尾款 twoC）：来源声明 picks——确认键恰好 picks 张点亮（多选进度见骨架）
@@ -348,7 +352,9 @@ export function createStagePickerKit({
           if (c?.toDefIds?.length > 1) { openBranch(c); return; }
           fire(ids[0]);
         };
-        cancelFn = null;   // 升级/焚毁/删除：返回 = 只收起界面（不做放弃）
+        // 返回 = 只收起界面（不做放弃）；调用方传 opts.onSkip 则接手（银行词条 offer：
+        // 面板按钮已删，返回/关闭 = 放弃这份附赠，由 onSkip 消费掉 offer）
+        cancelFn = opts.onSkip ?? null;
         picker.open({
           title: picks > 1 ? `${def.title}（${picks} 张）` : def.title,
           hint: def.hint,

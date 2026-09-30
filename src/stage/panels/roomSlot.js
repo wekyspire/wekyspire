@@ -183,19 +183,9 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
       // 此时暂时无法继续超额取款
     }
   }
-  for (const offer of bk.offers ?? []) {
-    w.push(offer === 'upgrade'
-      ? {
-        kind: 'button', id: 'bank:offerUpgrade', width: 320, size: 'sub',
-        label: '立即免费升级一张卡',
-        action: { action: 'openUpgradePicker', source: 'bankUpgrade', local: true },
-      }
-      : {
-        kind: 'button', id: 'bank:offerBurn', width: 320, size: 'sub',
-        label: '自选焚毁一张卡',
-        action: { action: 'openUpgradePicker', source: 'bankBurn', local: true },
-      });
-  }
+  // 词条附赠（upgrade/burn offer）**不再摆按钮**：获得演出链尾自动开全屏选卡界面
+  // （返回/关闭 = 放弃，runShowcase.discardBankOffer 消费 offer）——与训练/老虎机
+  // 「面板不留操作按钮、一切 overlay 化」同口径（2026-09-30 用户裁定）。
 }
 
 /** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */

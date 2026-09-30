@@ -328,7 +328,7 @@ export class RoomStage {
    * ⚠ 候选按 source 取对应快照段（kit 的 UPGRADE_SOURCES）——曾经一律读 `snap.slot.upgradeCards`，
    * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
    */
-  openUpgradePicker(source) { return this._pickerKit.openUpgradePicker(source, this._snap); }
+  openUpgradePicker(source, opts) { return this._pickerKit.openUpgradePicker(source, this._snap, opts); }
 
   /**
    * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开）。
