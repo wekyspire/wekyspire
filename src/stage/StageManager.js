@@ -16,6 +16,7 @@ import gsap from 'gsap';
 import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
 import { createUiComposer } from './post/uiComposer.js';
+import { moonQualityFromUrl, MOON_QUALITY_PRESETS } from './scenes/volumetricMoon.js';
 import { CameraDirector } from './fx/camera.js';
 import { flushDeferredDisposals, installBindingBufferGuard } from './deferredDispose.js';
 
@@ -91,6 +92,9 @@ export class StageManager {
     this._fitUiFrustum(16 / 9); // resize 前的合法缺省（16:9 假定）
     this._raycaster = new THREE.Raycaster();
     this._stage = null;         // 当前场景包装：{ name, scene, onEnter?, onExit? }
+    // 世界链（体积月光）渲染质量档：初始取 ?moonq=（排障优先），App 挂载时无 URL 档
+    // 再落持久化设置（settings.renderQuality）；舞台建 composer 时经 getRenderQuality 取。
+    this._marchQuality = moonQualityFromUrl();
     this._running = false;
     this._rafId = null;
     this._viewWidth = 0;
@@ -184,6 +188,18 @@ export class StageManager {
    */
   setUiPostProcessing(on) { this._uiPostEnabled = !!on; }
   get uiPostProcessing() { return this._uiPostEnabled; }
+
+  /** 世界链（体积月光）质量档读取：舞台建 composer 时取当前档（拷贝防外改）。 */
+  getRenderQuality() { return { ...this._marchQuality }; }
+
+  /** 菜单「渲染性能」改档：tier = 'high'|'mid'|'low'。存值供下场进房生效；
+   *  在场舞台带 composer 即时下发（setQuality 内部做 resize 重收敛，无黑闪）。 */
+  setRenderQuality(tier) {
+    const p = MOON_QUALITY_PRESETS[tier];
+    if (!p) return;
+    this._marchQuality = { ...p };
+    this._stage?._composer?.setQuality?.(this._marchQuality);
+  }
 
   /** 世界相机的基准机位（只读快照；相机不在场景图内，直接拷 position/quaternion）。 */
   get cameraBase() { return this._cameraBase; }

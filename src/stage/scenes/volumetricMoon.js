@@ -34,6 +34,29 @@ import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 const EMA_ALPHA = 1 / 30; // temporal EMA 新帧权重（≈1s 收敛 @30fps）
 const STEPS = 26;
 
+export const MOON_QUALITY_PRESETS = Object.freeze({
+  high: { scale: 1, steps: STEPS },
+  mid: { scale: 0.5, steps: STEPS },
+  low: { scale: 0.375, steps: STEPS },
+});
+
+/** 月光链质量档（?moonq=high|mid|half|low，缺省 high）——iGPU 救命档。
+ *  march 每像素 = STEPS 步 × LinearFilter 深度比较采样（自带 4-tap 软化）≈ 百次
+ *  深度纹理采样/像素，在共享内存 iGPU（~34GB/s）上是带宽怪兽（用户笔记本实测只有
+ *  房间层/战斗掉帧——塔楼层 MapStage 无此链，天然对照组）。mid = 0.5 分辨率
+ *  （带宽 ÷4）；low = 0.375（÷7）。**步数不砍**：12 步实测光柱能量腰斩——窗棂
+ *  切碎的窄光带宽小于 2×步长，稀疏采样点跨过光带 = 欠采样丢能量（glm-flash
+ *  三档 A/B 实锤，结构级劣化非柔和度）；分辨率与步数无关，只降分辨率无此风险
+ *  （EMA 本就在抹噪）。菜单「渲染性能」三档同源（settings → StageManager →
+ *  舞台建 composer 时取），URL 档优先（排障口径）。 */
+export function moonQualityFromUrl() {
+  let q = null;
+  if (typeof location !== 'undefined') q = new URLSearchParams(location.search).get('moonq');
+  if (q === 'mid' || q === 'half') return { ...MOON_QUALITY_PRESETS.mid };
+  if (q === 'low') return { ...MOON_QUALITY_PRESETS.low };
+  return { ...MOON_QUALITY_PRESETS.high };
+}
+
 const vmHash12 = Fn(([p]) => {
   const p3 = fract(vec3(p.xyx).mul(0.1031));
   p3.addAssign(dot(p3, p3.yzx.add(33.33)));
@@ -44,7 +67,7 @@ const vmHash12 = Fn(([p]) => {
 // 体积区域 = 房间 AABB 外扩少许：view ray 先与盒求交，t start/t end
 // clamp 在 [tEnter, tExit]——盒外像素（天空盒/远景）零光量直出，天空渲染不被污染；
 // tfar 不再用 nearZ/固定值硬截（相机拉远时截断曾致全场偏暗，干扰视觉判断）。
-const vmMarch = Fn(([u]) => {
+const vmMarch = Fn(([u, steps]) => {
   const depth = texture(u.tDepth, passUV).x; // RT 纹理读 → passUV（V 翻转，passes.js 头注）
   // 重建世界空间视线端点（WebGPU 坐标系：NDC z ∈ [0,1]，depth 直喂——勿乘 2 减 1；
   // NDC 重建用 uv() 本体——它跟随片元 NDC 朝向，与后端无关）
@@ -71,7 +94,7 @@ const vmMarch = Fn(([u]) => {
       const stepLen = maxT.sub(t0).div(float(STEPS));
       const jitter = fract(vmHash12(screenCoordinate.xy).add(u.frame.mul(u.framePct)));
       const acc = float(0.0).toVar();
-      Loop(STEPS, ({ i }) => {
+      Loop(steps, ({ i }) => {
         const t = t0.add(float(i).add(jitter).mul(stepLen));
         const p = u.camPos.add(rd.mul(t));
         const sp = u.shadowMatrix.mul(vec4(p, 1.0));
@@ -125,7 +148,11 @@ export function createVolumetricMoonlight({
   density = 0.01,   // 光束要 prominent（过低只剩"空气感"，调试实录）
   lightBoost = 0.9,
   tint = null,       // 配方场景调色 [r,g,b]（composeRoom grading.tint 下发；缺省白）
+  march = null,      // { scale, steps }（缺省 ?moonq= 档，moonQualityFromUrl）
 } = {}) {
+  const q = march ?? moonQualityFromUrl();
+  let marchScale = Math.min(1, Math.max(0.25, +q.scale || 1));   // march/EMA 链分辨率系数
+  let marchSteps = Math.max(4, Math.min(64, Math.round(+q.steps || STEPS)));
   const rt = new THREE.WebGLRenderTarget(2, 2, {
     type: THREE.HalfFloatType,
     // 无 MSAA：WebGPU 多样本 + 深度纹理不解 resolve，samples>0 触发 depth attachment
@@ -180,17 +207,23 @@ export function createVolumetricMoonlight({
   const uBloomStr = uniform(bloomParams.strength);
   const rtColor = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType });
   const bloom = createBloomChain(bloomParams);
-  const marchScene = makeFullScreenPass(vmMarch(u));
+  let marchScene = makeFullScreenPass(vmMarch(u, marchSteps));
   const compositeScene = makeFullScreenPass(vmComposite(tDiffuse, tLight, uTint));
   const finalScene = makeFullScreenPass(tslFinalWorld(tFinalColor, tFinalBloom, uBloomStr));
+  let lastW = 2, lastH = 2;   // setQuality 重缩放用
 
   function resize(w, h) {
     const rw = Math.max(1, w);
     const rh = Math.max(1, h);
+    lastW = rw; lastH = rh;
     rt.setSize(rw, rh);
     rtBloomOff.setSize(rw, rh);
-    historyRead.setSize(rw, rh);
-    historyWrite.setSize(rw, rh);
+    // march/EMA 链独立分辨率系数：march 是带宽大头（见 moonQualityFromUrl 注释），
+    // 体积光是软的——半分辨率升采样（composite 采样 history 用线性过滤）视觉损失极小
+    const mw = Math.max(1, Math.round(rw * marchScale));
+    const mh = Math.max(1, Math.round(rh * marchScale));
+    historyRead.setSize(mw, mh);
+    historyWrite.setSize(mw, mh);
     rtColor.setSize(rw, rh);
     bloom.resize(rw, rh);
     historyValid = false; // 尺寸变了，历史失效重收敛
@@ -271,8 +304,28 @@ export function createVolumetricMoonlight({
     if (Number.isFinite(strength)) { bloomParams.strength = strength; uBloomStr.value = strength; }
   }
 
+  /** 实时改 march 质量（低性能自动降档的落点）：scale = march/EMA 链分辨率系数
+   *  （0.25~1，改走 resize 重缩放 + 历史重收敛）；steps = 步数（重建 pass，一次性）。 */
+  function setQuality({ scale, steps } = {}) {
+    let resized = false;
+    if (Number.isFinite(scale)) {
+      const s = Math.min(1, Math.max(0.25, scale));
+      if (s !== marchScale) { marchScale = s; resized = true; }
+    }
+    if (Number.isFinite(steps)) {
+      const n = Math.max(4, Math.min(64, Math.round(steps)));
+      if (n !== marchSteps) {
+        marchSteps = n;
+        disposeFullScreenPass(marchScene);
+        marchScene = makeFullScreenPass(vmMarch(u, marchSteps));
+      }
+    }
+    if (resized) resize(lastW, lastH);
+  }
+
   return {
-    render, resize, dispose, setBloom, bloomParams,
+    render, resize, dispose, setBloom, bloomParams, setQuality,
+    get marchQuality() { return { scale: marchScale, steps: marchSteps }; },
     _uniforms: u,                    // 调试/调参口（页面内实时改 density 等；.value 直推）
     _compositeUniforms: { tDiffuse, tLight, uTint },
     /** 调试探针口：RT 现场只读暴露（排障用；别在渲染逻辑里消费）。 */

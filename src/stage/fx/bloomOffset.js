@@ -66,11 +66,32 @@ function depthMatFor(src) {
  *   预填偏移 RT 自有深度（被遮挡的发热体不把晕透到遮挡物上），再渲 FX 写入件。
  *   代价 = 每帧多一遍无色彩的几何提交；立牌透明区会按整quad遮挡（可接受）。
  */
+/** 场景里是否存在可见的偏移写入件（BLOOM_LAYER 层 + 可见链上）。
+ *  灯不算（灯挂层是灯组豁免手段，非写入件——稳态下灯不带本层位）。 */
+function hasVisibleWriter(scene) {
+  const mask = 1 << BLOOM_LAYER;
+  let found = false;
+  scene.traverseVisible((o) => {
+    if (found || o.isLight || (o.layers.mask & mask) === 0) return;
+    found = true;
+  });
+  return found;
+}
+
 export function renderBloomOffsetPass(renderer, scene, camera, { clearDepth = false, depthPrepass = false } = {}) {
   const prevMask = camera.layers.mask;
   const prevBg = scene.background;
   const prevColor = renderer.getClearColor(new THREE.Color());
   const prevAlpha = renderer.getClearAlpha();
+  // 门控（2026-09-30 实测空闲房写入件=0）：没有任何可见写入件 → 整段跳过——
+  // depth 预填全场重渲 + 层重渲 + RT 带宽在无 FX 时序里是纯浪费。调用方已把
+  // 渲染目标切到偏移 RT，这里只清黑保持「无偏移」语义（bloom 链每帧都采样它）。
+  if (!hasVisibleWriter(scene)) {
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear(true, false, false);
+    renderer.setClearColor(prevColor, prevAlpha);
+    return;
+  }
   // 阴影图豁免：autoUpdate 开着的话每次 render() 都会重渲全场阴影——偏移 pass 只是
   // 重画几个 FX quad，阴影在本帧主渲已更新，这里整体跳过（翻倍渲染的冤枉钱不花）
   const prevShadowAuto = renderer.shadowMap.autoUpdate;

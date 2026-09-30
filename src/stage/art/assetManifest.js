@@ -12,6 +12,7 @@ import { sharedCardArtCache } from './cardArtCache.js';
 import { sharedUiArtCache } from './bubbleArt.js';
 import { sharedRelicArtCache } from './relicArt.js';
 import { sharedTowerArtCache } from './towerArt.js';
+import { loadArtPack, resolveArtUrl } from './artpack.js';
 
 // 根级散图（如 remi.webp）与任意深度子目录（cards/decor/ 等）均被 ** 命中；
 // 扩展名过滤天然排除 css/mp3 等非位图（素材经 tools/compress_art.py 转 WebP）
@@ -84,9 +85,47 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
   let failed = 0;
   const stats = () => ({ done, total, loadedBytes, totalBytes, elapsedMs: Date.now() - t0, failed });
   const report = () => { onProgress?.(done, total); onStats?.(stats()); };
+  // 单张 Image 加载落定计数（pack/逐张两条路径共用）：成功 warm 进分区缓存
+  const loadAll = (resolveUrl) => new Promise((resolve) => {
+    for (const { path, url } of ART_MANIFEST) {
+      const img = new Img();
+      const settle = (ok) => {
+        done += 1;
+        settled.add(url);
+        if (!ok) failed += 1;
+        else {
+          warmInto(path, url, img);
+          if (sizes.has(url)) loadedBytes += sizes.get(url);
+        }
+        report();
+        if (done === total) resolve();
+      };
+      img.onload = () => settle(true);
+      img.onerror = () => settle(false);
+      img.src = resolveUrl(url);
+    }
+  });
   return (async () => {
-    // 先探测体积（并行 HEAD）：拿到总大小，进度条才能给出真实百分比/速度/ETA。
-    // 探测本身也把资源预热进缓存；失败/无 fetch/无 document（node 测试）则整段跳过。
+    // 打包路径（quest_prompts/ASSET_PACK.md）：单个 artpack-*.bin 流式拉取——
+    // 进度是**精确字节**（取代 HEAD 逐张探测）；成功后 blob 逐张解码 warm，
+    // 全程零美术网络请求。无包/失败/长度不符整段回退下面的逐张旧路径。
+    if (!imageFactory && typeof document !== 'undefined') {
+      totalBytes = 0; loadedBytes = 0;
+      const packed = await loadArtPack({
+        onProgress: (got, tot, elapsed) => {
+          loadedBytes = got; totalBytes = tot;
+          onStats?.({ done: 0, total, loadedBytes: got, totalBytes: tot, elapsedMs: elapsed, failed: 0 });
+        },
+      }).catch(() => false);
+      if (packed) {
+        t0 = Date.now();
+        await loadAll((url) => resolveArtUrl(url));
+        return { total, failed };
+      }
+    }
+    // 逐张回退：先探测体积（并行 HEAD）——拿到总大小，进度条才能给出真实
+    // 百分比/速度/ETA。探测本身也把资源预热进缓存；失败/无 fetch/无 document
+    // （node 测试）则整段跳过。
     if (!imageFactory && typeof document !== 'undefined') {
       for (const [url, n] of await probeSizes()) {
         sizes.set(url, n);
@@ -97,25 +136,7 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
     }
     // 下载计时从**探测之后**起算（探测阶段只有小 HEAD 响应，算进均速会把 ETA 抬得很难看）
     t0 = Date.now();
-    await new Promise((resolve) => {
-      for (const { path, url } of ART_MANIFEST) {
-        const img = new Img();
-        const settle = (ok) => {
-          done += 1;
-          settled.add(url);
-          if (!ok) failed += 1;
-          else {
-            warmInto(path, url, img);
-            if (sizes.has(url)) loadedBytes += sizes.get(url);
-          }
-          report();
-          if (done === total) resolve();
-        };
-        img.onload = () => settle(true);
-        img.onerror = () => settle(false);
-        img.src = url;
-      }
-    });
+    await loadAll((url) => url);
     return { total, failed };
   })();
 }

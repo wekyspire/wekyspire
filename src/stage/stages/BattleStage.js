@@ -158,7 +158,7 @@ export class BattleStage {
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）
     const renderer = stageManager._renderer;
     if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
-      this._composer = createVolumetricMoonlight({ light: this._scene3D.moonlight });
+      this._composer = createVolumetricMoonlight({ light: this._scene3D.moonlight, march: stageManager.getRenderQuality?.() });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
       this.composeResize(stageManager.viewSize.width || 2, stageManager.viewSize.height || 2);

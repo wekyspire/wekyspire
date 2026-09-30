@@ -4,6 +4,8 @@
 // warm() 供全量预载（assetManifest）把「已解码完成的图」直接注入缓存——
 // 舞台首拍 get() 同步命中，无占位色块→补挂的闪变。
 
+import { resolveArtUrl } from './artpack.js';
+
 // 位图扩展名（glob 与查表共用）：素材落盘格式不限（png/webp/jpg），查表按去扩展名匹配
 export const IMG_EXT_RE = /\.(png|jpe?g|webp)$/i;
 
@@ -92,6 +94,6 @@ export class ArtImageCache {
       this._cache.set(url, 'error');
       this._settle(url);
     };
-    img.src = url;
+    img.src = resolveArtUrl(url);   // 美术包换汇（artpack.js）：包内换 blob URL，未启用透传
   }
 }

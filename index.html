@@ -14,9 +14,128 @@
         window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
       });
     </script>
+    <!-- 静态启动壳：加载门视觉（标题/进度条/失败重试/GPU 门）全内联在此——HTML 解析
+         即上色，**先于一切 JS 下载执行**（白屏根治：旧 AssetLoadingScreen 是 Vue 组件，
+         要等 2.4MB 关键 JS 到齐才第一次上色）。Vue 侧只留 assetsReady 状态机，进度经
+         window.__bootShell 推入；观战页 watch.html 有同款壳（改视觉要两处同步）。 -->
+    <style>
+      #boot-shell {
+        position: fixed; inset: 0; z-index: 100;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: #05070d;
+        font-family: 'Microsoft YaHei', Arial, sans-serif;
+        transition: opacity .3s ease;
+      }
+      #boot-shell.bye { opacity: 0; pointer-events: none; }
+      #boot-title { font-size: 44px; letter-spacing: 10px; color: #eef4ff; }
+      #boot-bar {
+        width: min(380px, 62%); height: 8px; border-radius: 2px;
+        background: #131a29; border: 1px solid #2f3a52; overflow: hidden;
+      }
+      #boot-fill { height: 100%; width: 0%; background: #4d78ad; transition: width .15s ease; }
+      #boot-text { font-size: 13px; color: #c3cee0; letter-spacing: 1px; }
+      #boot-sub { font-size: 12px; color: #7d87a8; min-height: 16px; letter-spacing: .5px; }
+      #boot-fail { display: none; flex-direction: column; align-items: center; gap: 10px; margin-top: 6px; }
+      #boot-fail-text { font-size: 13px; color: #ff8f88; text-align: center; line-height: 1.7; }
+      #boot-retry {
+        padding: 6px 26px; font-size: 14px; cursor: pointer; border-radius: 4px;
+        background: rgba(16, 22, 34, .92); color: #eaf1fb; border: 1px solid #3f5f8c;
+      }
+      #boot-retry:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+    </style>
   </head>
   <body>
+    <div id="boot-shell" role="status" aria-label="资源加载中">
+      <div id="boot-title">魏启尖塔</div>
+      <div id="boot-bar"><div id="boot-fill"></div></div>
+      <div id="boot-text">加载美术资源…</div>
+      <div id="boot-sub"></div>
+      <div id="boot-fail">
+        <div id="boot-fail-text"></div>
+        <button id="boot-retry" type="button">重试</button>
+      </div>
+    </div>
     <div id="app"></div>
+    <script>
+      // 壳控制器：进度字节优先（HEAD 探测缺席退化为按张数）、失败重试、GPU 门、揭幕退场。
+      // 与 App.vue 的契约：__bootShell.progress/failed/fatal/dismiss + __bootRetry 回调位。
+      (function () {
+        var $ = function (id) { return document.getElementById(id); };
+        var shell = $('boot-shell'), fill = $('boot-fill'), text = $('boot-text'),
+            sub = $('boot-sub'), failBox = $('boot-fail'), failText = $('boot-fail-text'),
+            retryBtn = $('boot-retry');
+        var dismissed = false;
+        var fmtB = function (n) {
+          if (!n || n < 0) return '—';
+          if (n < 1024) return n + ' B';
+          if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+          return (n / 1048576).toFixed(1) + ' MB';
+        };
+        // 60s 零进度提示（JS/网络双卡死时壳不至于干等成哑巴；不判死——慢网仍可能活）
+        setTimeout(function () {
+          if (!dismissed && shell.isConnected && fill.style.width === '0%') {
+            sub.textContent = '网络较慢或加载异常——可稍候或刷新重试';
+          }
+        }, 60000);
+        window.__bootShell = {
+          // p = { loaded, total, loadedBytes, totalBytes, elapsedMs }（字节缺席自动退化按张数）
+          progress: function (p) {
+            if (dismissed || !p) return;
+            var loaded = p.loaded || 0, total = p.total || 0;
+            var pct = 0;
+            if (total > 0 && loaded >= total) pct = 100;
+            else if (p.totalBytes > 0) pct = Math.min(100, Math.round((p.loadedBytes || 0) / p.totalBytes * 100));
+            else if (total > 0) pct = Math.round(loaded / total * 100);
+            fill.style.width = pct + '%';
+            var line = '加载美术资源… ' + loaded + ' / ' + total;
+            if (p.totalBytes > 0) line += ' ｜ ' + fmtB(p.loadedBytes) + ' / ' + fmtB(p.totalBytes);
+            text.textContent = line;
+            var bits = [];
+            if (p.loadedBytes > 0 && p.elapsedMs > 300) {
+              var bps = p.loadedBytes / (p.elapsedMs / 1000);
+              bits.push(bps < 1048576 ? (bps / 1024).toFixed(0) + ' KB/s' : (bps / 1048576).toFixed(1) + ' MB/s');
+              var speed = p.loadedBytes / p.elapsedMs;
+              var ms = speed > 0 ? (p.totalBytes - p.loadedBytes) / speed : 0;
+              if (ms > 0) {
+                var s = Math.round(ms / 1000);
+                bits.push('剩余 ' + (s < 60 ? '约 ' + s + ' 秒' : '约 ' + Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒'));
+              }
+            }
+            sub.textContent = bits.join(' ｜ ');
+          },
+          // 资源加载失败 N 项：卡住不放行（带缺图进游戏 = 白屏跑），给重试
+          failed: function (n) {
+            if (dismissed) return;
+            failText.textContent = '资源加载失败 ' + n + ' 项——请检查网络后重试';
+            retryBtn.style.display = '';
+            failBox.style.display = 'flex';
+          },
+          // GPU 门（WebGPU 缺席 = 硬件不支持或非安全上下文）：无重试，卡死给引导
+          fatal: function (html) {
+            if (dismissed) return;
+            $('boot-bar').style.display = 'none';
+            text.style.display = 'none';
+            sub.style.display = 'none';
+            retryBtn.style.display = 'none';
+            failText.innerHTML = html;
+            failText.style.color = '#c3cee0';
+            failBox.style.display = 'flex';
+          },
+          // 揭幕：淡出后摘除（App 的开始界面上位）
+          dismiss: function () {
+            if (dismissed) return;
+            dismissed = true;
+            fill.style.width = '100%';
+            shell.classList.add('bye');
+            setTimeout(function () { shell.parentNode && shell.parentNode.removeChild(shell); }, 350);
+          },
+        };
+        retryBtn.addEventListener('click', function () {
+          failBox.style.display = 'none';
+          if (typeof window.__bootRetry === 'function') window.__bootRetry();
+        });
+      })();
+    </script>
     <script type="module" src="/src/shell/main.js"></script>
   </body>
 </html>

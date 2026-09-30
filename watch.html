@@ -15,6 +15,26 @@
         window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
       });
     </script>
+    <!-- 静态启动壳（与 index.html 同款，改视觉要两处同步）：预载门视觉内联，
+         HTML 解析即上色、先于 JS 下载执行。观战页只推 progress/dismiss（无 GPU 门/重试）。 -->
+    <style>
+      #boot-shell {
+        position: fixed; inset: 0; z-index: 100;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: #05070d;
+        font-family: 'Microsoft YaHei', Arial, sans-serif;
+        transition: opacity .3s ease;
+      }
+      #boot-shell.bye { opacity: 0; pointer-events: none; }
+      #boot-title { font-size: 44px; letter-spacing: 10px; color: #eef4ff; }
+      #boot-bar {
+        width: min(380px, 62%); height: 8px; border-radius: 2px;
+        background: #131a29; border: 1px solid #2f3a52; overflow: hidden;
+      }
+      #boot-fill { height: 100%; width: 0%; background: #4d78ad; transition: width .15s ease; }
+      #boot-text { font-size: 13px; color: #c3cee0; letter-spacing: 1px; }
+      #boot-sub { font-size: 12px; color: #7d87a8; min-height: 16px; letter-spacing: .5px; }
+    </style>
     <style>
       /* 与正式壳同款取景框：16:9 居中，UI 以框为包含块（tooltip/指针坐标依赖它） */
       html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
@@ -23,7 +43,48 @@
     </style>
   </head>
   <body>
+    <div id="boot-shell" role="status" aria-label="资源加载中">
+      <div id="boot-title">魏启尖塔</div>
+      <div id="boot-bar"><div id="boot-fill"></div></div>
+      <div id="boot-text">加载美术资源…</div>
+      <div id="boot-sub"></div>
+    </div>
     <div id="app"></div>
+    <script>
+      // 壳控制器（index.html 同款的观战子集：progress/dismiss）
+      (function () {
+        var $ = function (id) { return document.getElementById(id); };
+        var shell = $('boot-shell'), fill = $('boot-fill'), text = $('boot-text'), sub = $('boot-sub');
+        var dismissed = false;
+        var fmtB = function (n) {
+          if (!n || n < 0) return '—';
+          if (n < 1024) return n + ' B';
+          if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+          return (n / 1048576).toFixed(1) + ' MB';
+        };
+        window.__bootShell = {
+          progress: function (p) {
+            if (dismissed || !p) return;
+            var loaded = p.loaded || 0, total = p.total || 0;
+            var pct = 0;
+            if (total > 0 && loaded >= total) pct = 100;
+            else if (p.totalBytes > 0) pct = Math.min(100, Math.round((p.loadedBytes || 0) / p.totalBytes * 100));
+            else if (total > 0) pct = Math.round(loaded / total * 100);
+            fill.style.width = pct + '%';
+            var line = '加载美术资源… ' + loaded + ' / ' + total;
+            if (p.totalBytes > 0) line += ' ｜ ' + fmtB(p.loadedBytes) + ' / ' + fmtB(p.totalBytes);
+            text.textContent = line;
+          },
+          dismiss: function () {
+            if (dismissed) return;
+            dismissed = true;
+            fill.style.width = '100%';
+            shell.classList.add('bye');
+            setTimeout(function () { shell.parentNode && shell.parentNode.removeChild(shell); }, 350);
+          },
+        };
+      })();
+    </script>
     <script type="module" src="/src/shell/watch/main.js"></script>
   </body>
 </html>

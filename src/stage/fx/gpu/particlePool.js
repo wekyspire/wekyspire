@@ -659,16 +659,26 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   }
 
   let t = 0, frame = 0;
+  let drawAll = true;   // 空转藏绘状态（无注册类型 = 无 FX 可出生 → drawRange 归零）
   function update(dt) {
     t += dt; frame += 1;
+    let anyRows = false;
     for (const r of rows) {
       if (!r.used) continue;
+      anyRows = true;
       // prevCursor = 上次 update 结尾的游标（burst 在两帧之间累加进 cursor，
       // 窗口 [prevCursor, cursor) 天然含 burst——若在此刻同步 prevCursor=cursor
       // 会把 burst 跳变整个吞掉，spike-particles2 实测全灭）
       if (r.spawnActive && r.desc.spawn.rate > 0) {
         r.cursor += r.desc.spawn.rate * r.rateScale * dt;
       }
+    }
+    // 空转藏绘：无任何注册类型时 drawRange 归零——死粒子虽被 shader 挪出视锥且
+    // size=0，主渲/两条偏移链仍各付 16K 顶点的空转着色；compute 模拟与
+    // onBeforeRender 不受影响（drawRange 只裁 draw），类型一注册即恢复。
+    if (anyRows !== drawAll) {
+      drawAll = anyRows;
+      points.geometry.setDrawRange(0, anyRows ? Infinity : 0);
     }
     packTypes();
     packAnchors();

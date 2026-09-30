@@ -6,6 +6,7 @@
 // 一张符合游戏基调（暗底 + 一点主题色光晕 + 废墟剪影）的 SVG data URI，上面写着事件名与
 // "占位美术"字样，一眼能看出该换成真图。
 import { indexArtUrls } from '../../stage/art/imageCache.js';
+import { resolveArtUrl } from '../../stage/art/artpack.js';
 
 const EVENT_ART = indexArtUrls(
   import.meta.glob('../../assets/images/events/*.{png,jpg,jpeg,webp}', { eager: true, query: '?url', import: 'default' }),
@@ -24,7 +25,7 @@ const DEFAULT_HUE = [258, 232];   // 未知事件：偏紫的夜色
  * @param {string} key 事件的 art key（= 事件 id）
  */
 export function eventArtUrl(key) {
-  return EVENT_ART[key] ?? placeholder(key);
+  return resolveArtUrl(EVENT_ART[key] ?? placeholder(key));   // 美术包换汇（占位 data: 自动透传）
 }
 
 function placeholder(key, name = '') {
