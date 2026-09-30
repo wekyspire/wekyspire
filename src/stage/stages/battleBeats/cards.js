@@ -9,6 +9,7 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
+import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
 export const PILE_POSITIONS = {
@@ -38,7 +39,8 @@ export const cardBeats = {
       if (!view.visible && payload?.cardView) {
         view.setCard(payload.cardView);
         view.visible = true;
-        return this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+        const sp = nextCardSpot();   // 中央错位：与停靠中的宾语展示错开（cardSpot.js）
+        return this.animator.animate(id, { x: sp.dx, y: 4 + sp.dy, z: 50, scale: 1.0 }, {
           durationMs: 320,
           onComplete: () => this._burnOut(id, view, finish),
         });
@@ -93,7 +95,8 @@ export const cardBeats = {
     // 高 z 起始（70 > 展示位 60 > 手牌扇 10~40 > 区域图标 5）：生成卡永远盖在
     // 结算中的发动卡（held 于展示位）之上——否则看不到蓄力向牌库加了什么卡；
     // 飞行途中线性降回 40 落位，符合"从高处递进牌库"的空间感
-    object.position.set(0, -12, 70);
+    { const sp = nextCardSpot();   // 中央错位（只取 dx：y=-12 的「自下方递进」带语不动）
+      object.position.set(sp.dx * 0.7, -12, 70); }
     object.scale.set(0.05, 0.05, 1);
     object.faceMesh.material.opacity = 0;
     this.uiScene.add(object);
@@ -271,7 +274,8 @@ export const cardBeats = {
     if (!view) return finish(); // 无载体（异常/未来机制）：直接打节拍
     if (payload?.cardView) view.setCard(payload.cardView);
     view.visible = true;
-    this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+    const sp = nextCardSpot();   // 中央错位：多宾语/与焚毁飞入错开（cardSpot.js）
+    this.animator.animate(id, { x: sp.dx, y: 4 + sp.dy, z: 50, scale: 1.0 }, {
       durationMs: 240,
       onComplete: finish,
     });

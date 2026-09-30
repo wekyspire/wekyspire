@@ -37,6 +37,7 @@ import { renderRichTextBlock } from './richtext/texture.js';
 import { playCardGrantFlight } from './cardGrantFlight.js';
 import { playCardUpgradeFlight } from './cardUpgradeFlight.js';
 import { playCardBurnFlight } from './cardBurnFlight.js';
+import { nextCardSpot } from './cardSpot.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { cardViewFromDef } from '../core/skills/cardView.js';
 import { withLabels } from './panels/shared.js';
@@ -220,7 +221,8 @@ export function createStagePickerKit({
         cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace,
       });
       obj.setCard(fromData);
-      obj.position.set(at?.x ?? 0, at?.y ?? 0, at?.z ?? 0);
+      { const sp = nextCardSpot();   // 中央错位（cardSpot.js）：并发演出各自有位
+        obj.position.set((at?.x ?? 0) + sp.dx, (at?.y ?? 0) + sp.dy, at?.z ?? 0); }
       obj.scale.set(0.95, 0.95, 1);   // 亮相缩放（已在亮相位，gather 拍自动跳过）
     }
     scene()?.add(obj);   // takeEntry 摘出的卡已不在场景；新建的同样要挂
@@ -259,7 +261,8 @@ export function createStagePickerKit({
         cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT, bakeFace,
       });
       obj.setCard(data);
-      obj.position.set(at?.x ?? 0, at?.y ?? 0, at?.z ?? 0);
+      { const sp = nextCardSpot();   // 中央错位（cardSpot.js）：多张连烧/与升级演出错开
+        obj.position.set((at?.x ?? 0) + sp.dx, (at?.y ?? 0) + sp.dy, at?.z ?? 0); }
       obj.scale.set(0.95, 0.95, 1);
     }
     scene()?.add(obj);
