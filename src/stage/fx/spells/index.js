@@ -58,6 +58,41 @@ export function resolveSpellFx(defId) {
   return template ? { template, params: {} } : null;
 }
 
+// ---- 刀光方向语义（2026-09-30 用户定：伤害节拍驱动——伤害量在那里才有真值，
+// 且多段伤害逐拍触发 = 连击的「短促随机斜率连击」白送）----
+// 语义源 = 卡名后缀（设计侧命名即数据）：…斩=竖劈斩、…劈=横扫劈、…刀舞=连击；
+// 缺省斜置。数值为旋向弧度（正=顺时针）。
+const SLASH_VARIANTS = {
+  chop:  { angle: 1.38, ms: 320 },   // 斩：竖置（近垂直，微偏读作「劈落」）
+  sweep: { angle: 0.10, ms: 340 },   // 劈：横置
+  combo: { jitter: 0.85, ms: 210 },  // 刀舞：逐击随机斜率 + 短促
+  diagonal: { angle: -0.30, ms: 300 }, // 缺省
+};
+
+/**
+ * 刀法卡的刀光方向变体：defId → { angle | jitter, ms }。
+ * 返回 null = 非刀法卡（不出刀光）。
+ */
+export function resolveSlashVariant(defId) {
+  let def = null;
+  try { def = getSkillDefinition(defId); } catch { return null; }
+  if (!def || def.series !== 'blade') return null;
+  const name = def.name ?? '';
+  if (name.includes('刀舞')) return { ...SLASH_VARIANTS.combo };
+  if (name.endsWith('劈')) return { ...SLASH_VARIANTS.sweep };
+  if (name.endsWith('斩') || name.endsWith('爆斩')) return { ...SLASH_VARIANTS.chop };
+  return { ...SLASH_VARIANTS.diagonal };
+}
+
+/**
+ * 伤害量 → 刀光尺寸系数（模板参数化的起效案例：伤害越高刀光越大）。
+ * 基准 18 伤害 = 1.0（同阶白板刀伤量级），开方压曲线（大伤害不糊屏）。
+ */
+export function slashScaleFor(dealt) {
+  if (!Number.isFinite(dealt) || dealt <= 0) return 1.0;
+  return Math.min(2.1, Math.max(0.7, Math.sqrt(dealt / 18)));
+}
+
 /**
  * 在 ANIM_SKILL_USED 节拍内跑一次施术演出。
  * @returns {null | { done: Promise }} null = 未命中模板（调用方走 BASE 行为）；

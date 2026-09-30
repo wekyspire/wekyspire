@@ -33,7 +33,7 @@ export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg
   const thin = taper.mul(0.55).add(0.45);   // 宽度系数 0.45..1
   // 截面用**显式宽度**（UV 单位）分层——塞进一条薄带里核/晕/影互相挤压读不出层次：
   //   热核 ~4px 细线（HDR 白）、aura 3 倍宽冷蓝裙（阈下辉光）、画布高 5 世界单位给裙展开空间
-  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.085)));   // 核宽 0.085uv ≈ 4px
+  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.10)));    // 核宽 0.10uv（用户定加宽）
   const core = exp(dyC.mul(dyC).mul(-1.0));
   const dyA = abs(y.sub(yc)).div(thin.mul(float(0.27)));    // 裙宽 3.2×核
   const fringe = exp(dyA.mul(dyA).mul(-1.0));

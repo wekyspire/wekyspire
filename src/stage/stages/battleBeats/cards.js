@@ -271,17 +271,25 @@ export const cardBeats = {
    * 目标解析：载荷 target（玩家指定）优先，缺省按显示态全体存活敌（AOE 语言）。
    * @returns {null | { done: Promise }} null = 未命中模板（_skillDisplay 走 BASE）
    */
-  _runSpellFx(payload, view, notify) {
-    const defId = payload?.def?.id ?? payload?.skill?.defId ?? null;
-    if (!defId) return null;
-    const sm = this._sm;
-    const deps = {
+  /** 施术演出 deps 服务袋的公共段（fx/spells 的舞台能力面）：施术节拍与伤害节拍共用。 */
+  _spellDeps() {
+    return {
       scene: this.scene,
       uiScene: this.uiScene,
       particles: this.particles,
       cast: this._cast,
       shake: this.shake,
       animator: this.animator,
+      unitById: (id) => this._units.get(id) ?? null,
+    };
+  },
+
+  _runSpellFx(payload, view, notify) {
+    const defId = payload?.def?.id ?? payload?.skill?.defId ?? null;
+    if (!defId) return null;
+    const sm = this._sm;
+    const deps = {
+      ...this._spellDeps(),
       cardView: view,
       targets: () => {
         const ids = payload?.target ? [payload.target]

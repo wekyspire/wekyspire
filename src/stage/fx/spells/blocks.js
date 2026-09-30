@@ -180,16 +180,20 @@ export async function impactBurst(ctx, deps, {
 /**
  * 斩痕扫掠块（shader 主笔）：弓形新月带在目标身上扫过——形状/扫掠头/拖尾/渐隐
  * 全在 slashShade 的 fragment 里算（uProgress 推 uniform）；几何辅助 = 斜置角
- * + 命中一拍的 scale punch。短促刀光语言，300ms 级。dir 翻转扫掠方向。
+ * + 命中一拍的 scale punch。短促刀光语言，300ms 级。
+ * 方向语义（伤害节拍驱动，2026-09-30 用户定）：angle 直接给弧度——斩=竖置
+ * （≈±1.4）、劈=横置（≈0.1）、默认斜（-0.3）、连击=逐击随机短促。
+ * scale 乘 width/height（伤害量越大刀光越大——模板参数化的起效案例）。
  */
 export async function slashSweep(ctx, deps, {
   at,
   color = [1.0, 0.98, 0.92], fringe = [0.5, 0.8, 1.6],
-  ms = 300, width = 19.0, height = 5.0, arc = 0.14,
+  ms = 300, width = 19.0, height = 6.2, arc = 0.14, scale = 1.0,
   yOff = 1.1,
   angle = -0.30, dir = 1, z = 2,
 } = {}) {
   if (!at) return;
+  width *= scale; height *= scale;   // 伤害量驱动尺寸（弧度不变——新月形状是身份）
   // ⚠ TSL 实测坑之二：uniform(0) 整型字面量有绑定风险（暗层 α 曾无视强度恒为 1）；
   // 数值 uniform 一律写浮点 0.0，暗层强度烘成 float 常量节点（不走 Fn 末参）
   const uProg = uniform(0.0);
