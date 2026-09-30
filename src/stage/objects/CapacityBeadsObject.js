@@ -146,15 +146,19 @@ export class CapacityBeadsObject extends THREE.Group {
    * 摆位（占用数变化时重排，不重建网格）。行 = [咏唱组 chantCap 颗] + 组间隙 +
    * [手牌组]；幻影槽竖线 j 嵌在「第 normalUsed+j 颗手牌珠之前」的间隙里，该间隙
    * 加宽到 TICK_GAP 容线（相邻两珠被挤开）；normalUsed=0 时首线嵌在组间隙处。
+   * 珠距基准 = BEAD_STEP（循环尾推进一次）；gapBefore 只返回**额外**撑开量——
+   * ⚠ 曾把整颗珠距当额外量返回 + 循环尾又推进，手牌组间距翻倍（4.3 vs 咏唱组
+   * 2.15），2026-09-30 修。
    */
   _layout(normalUsed, miniUsed, chantCap, max) {
     if (!this._beads.length) return;
     const handBeads = this._beads.filter(b => b.slot !== 'chant');
     const handCount = handBeads.length;
     const widen = (idx) => idx >= normalUsed + 1 && idx <= normalUsed + miniUsed;  // 该珠前间隙是幻影槽
+    const EDGE = BEAD_STEP - BEAD_W;  // 默认珠间边距（BEAD_STEP 已含）
     const gapBefore = (idx) => {
-      if (idx <= 0) return chantCap > 0 ? (widen(0) ? TICK_GAP : GROUP_GAP) : 0;
-      return widen(idx) ? TICK_GAP : BEAD_STEP;
+      if (idx <= 0) return chantCap > 0 ? (widen(0) ? TICK_GAP - EDGE : GROUP_GAP) : 0;
+      return widen(idx) ? TICK_GAP - EDGE : 0;
     };
     // 能嵌进珠间间隙的幻影线数（间隙属第 normalUsed+1..normalUsed+miniUsed 颗珠之前，
     // 需该珠存在）；其余（手满 + 迷你，幻影槽已越过末珠）作**行尾追加段**排开——
@@ -178,7 +182,8 @@ export class CapacityBeadsObject extends THREE.Group {
       x += gap;
       handBeads[hIdx].mesh.position.set(x, 0, 0);
       if (widen(hIdx) && tickJ < inlineTicks) {
-        this._ticks[tickJ++].mesh.position.set(x - gap / 2, 0, 0);
+        // 竖线落在前珠与本珠正中（前距 = BEAD_STEP + gap）
+        this._ticks[tickJ++].mesh.position.set(x - (BEAD_STEP + gap) / 2, 0, 0);
       }
       x += BEAD_STEP;
     }
