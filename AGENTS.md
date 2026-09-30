@@ -185,7 +185,7 @@ src/
 - `App.vue` — 三层场景编排 + canvas 生命周期 + 全局 toast（`provide('showMenuPopup')`）+ 指针路由（battle→BattleStage，其余→MapStage）。
 - `runController.js` — run 层唯一编排器：Vue 薄壳与 core run 状态机之间的唯一通道；run 经 `reactive()` 暴露；读档恢复在此（存档语义 = prep 检查点）。**分域拆分**：编排器本体只剩战局装配/舞台生命周期/奖励与房间迁移/存档；交互域抽成同构工厂模块（`create*(ctx)`，ctx 引用晚绑定箭头闭包）——`shell/runShowcase.js` = 到手演出编排；`shell/runMachines.js` = 房间机器流（意图→core 调用→notify→附带演出）；`shell/runCutsceneFlows.js` = 幕间流（随机事件 + 进阶）。**意图上行表驱动**：`dispatchPanelIntent` = 本地表 + 三域 intents 合并，未知 action 静默忽略——加新机器/幕间在对应域模块加方法 + intents 登记，主体不再生长。
 - `saves.js`（两模式隔离）、`settings.js`、`audio.js`、`tooltip.js`。
-- `components/`（剩余 Vue 组件）：菜单层（StartScreen/GameMenu/EndPanel/MenuDialog·MenuPopup/ChangeLog）、`BattleHud`（战斗日志/回合数）、`TooltipOverlay`/`CardFacePreview`、`AssetLoadingScreen`（全量美术预载门：**全部成功前挡住开始界面，失败卡住不放行并给重试**；进度条按下载体积驱动，stats 计数字段是 `done`，App.vue 必须映射回 `loaded`——整条替换会抹掉它）。
+- `components/`（剩余 Vue 组件）：菜单层（StartScreen/GameMenu/EndPanel/MenuDialog·MenuPopup/ChangeLog）、`BattleHud`（战斗日志/回合数）、`TooltipOverlay`/`CardFacePreview`、静态启动壳（**index.html 内联**的加载门：标题/进度条/失败重试/GPU 门在 JS 到达前已上色——白屏根治；进度字节优先、stats 计数字段是 `done` 映射回 `loaded`；Vue 侧只留 assetsReady 状态机，经 `window.__bootShell` 推进度、`__bootRetry` 接重试；watch.html 有同款瘦身壳，改视觉两处同步）。
 - `overlay/`：cutscene 播放器 `cutscenePlayer.js` + 内容层 `CutsceneOverlay.vue` + 切幕层 `sceneWipe.js`/`SceneWipeOverlay.vue` + 剧本 `scripts.js` + 事件图 `eventArt.js`（真素材丢 `src/assets/images/events/<art>.webp` 自动顶替）。
 
 ## 测试

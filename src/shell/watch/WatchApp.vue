@@ -2,8 +2,8 @@
 // 观战页：连 headless 直播中继（SSE），用真 Stage 播 agent 的对局。
 // 渲染层与正式壳**同一批组件**：StageManager + BattleStage（3D 战场/手牌/血环/按钮/
 // 区域查看器）+ BattleHud（回合与战斗日志）+ TooltipOverlay（含悬停整卡预览）+
-// AssetLoadingScreen（全量美术预载门）。差别只在数据来源是「远端 bridge」
-// （src/bridge/remoteBridge.js）而非本地 core——面板读的 ctrl 是个只读假壳。
+// 全量美术预载门（watch.html 静态启动壳，与 index.html 同款）。差别只在数据来源是
+// 「远端 bridge」（src/bridge/remoteBridge.js）而非本地 core——面板读的 ctrl 是个只读假壳。
 import { inject, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import '../../core/content/index.js';
 import { StageManager } from '../../stage/StageManager.js';
@@ -14,7 +14,6 @@ import { EventNames } from '../../bridge/events.js';
 import { fitGameFrame } from '../frame.js';
 import BattleHud from '../components/BattleHud.vue';
 import TooltipOverlay from '../components/TooltipOverlay.vue';
-import AssetLoadingScreen from '../components/AssetLoadingScreen.vue';
 import SpectatorPanel from './SpectatorPanel.vue';
 
 const props = defineProps({
@@ -28,7 +27,6 @@ const relayBase = props.relayBase;
 const canvas = ref(null);
 const frameEl = ref(null);
 const assetsReady = ref(false);
-const assetProgress = ref({ loaded: 0, total: 0 });
 const status = ref(remote ? 'connecting' : 'idle'); // idle = 没给 session（显示会话选择）
 const meta = ref(null);
 const runState = ref(null);
@@ -191,8 +189,8 @@ async function loadSessionList() {
 
 onMounted(async () => {
   preloadAllArt({
-    onProgress: (loaded, total) => { assetProgress.value = { loaded, total }; },
-  }).then(() => { assetsReady.value = true; });
+    onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
+  }).then(() => { assetsReady.value = true; window.__bootShell?.dismiss(); });
 
   stageManager = new StageManager();
   await stageManager.attach(canvas.value); // async：WebGPURenderer.init 异步
@@ -242,8 +240,7 @@ onBeforeUnmount(() => {
       id="stage-canvas" ref="canvas"
       @pointermove="onPointerMove" @pointerdown="onPointerDown" @pointerup="onPointerUp"
     ></canvas>
-    <AssetLoadingScreen v-if="!assetsReady" :progress="assetProgress" />
-    <template v-else>
+    <template v-if="assetsReady">
       <BattleHud v-if="remote && runState?.stage === 'battle'" :ctrl="fakeCtrl" />
       <!-- 过渡时刻卡：塔楼/选卡/进阶这些「没有演出节拍」的阶段，在这里按时长停留，
            让观战者看清选了什么（候选行里 ✓ 标出所选，只服务观战页） -->
