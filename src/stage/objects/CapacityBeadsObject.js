@@ -3,7 +3,9 @@
 // 唯一事实源）**从左到右排成三段**：
 //   [空咏唱容量] + 组间隙 + [手牌序占用] + 组间隙 + [空手牌容量 | 超载红珠]。
 // 手牌序段与手牌内卡牌一一对应（相对顺序 = 手牌从左到右）：普通卡 = 绿珠、
-// 激活咏唱 = 权重颗蓝珠（容量吃满的溢出颗黄）、迷你卡 = 淡紫细竖线。
+// 激活咏唱 = 权重颗蓝珠（容量吃满的溢出颗黄）、迷你卡 = 淡紫细竖线；超载红珠
+// **归属将弃卡本尊的序列位**（hover 超载卡即亮它自己的红珠——无主聚合红珠
+// 曾致「hover 无高亮」报障）。
 // 迷你幻影槽（计 0 容量）：独立的小步进槽（宽度 ≈ 1/3 颗珠，左右空位极少）——
 // 「插在两张卡中间的竖线」，不占手牌容量的形态即由此而来。
 // hover 联动：指针压着的卡 → 它占用的珠/竖线改 HDR 色（基色 ×5，越过 bloom
@@ -90,7 +92,10 @@ export class CapacityBeadsObject extends THREE.Group {
       this._struct = struct;
       this._layout();
     } else {
-      for (let i = 0; i < this._items.length; i++) this._items[i].card = slots[i]?.card ?? null;
+      for (let i = 0; i < this._items.length; i++) {
+        this._items[i].card = slots[i]?.card ?? null;
+        this._items[i].doom = !!slots[i]?.doom;
+      }
     }
     this._paint();
   }
@@ -117,7 +122,7 @@ export class CapacityBeadsObject extends THREE.Group {
         new THREE.MeshBasicMaterial({ color: COLORS.empty, transparent: true, opacity: 0.95 }),
       );
       this.add(mesh);
-      return { mesh, type: s?.type ?? 'empty', card: s?.card ?? null };
+      return { mesh, type: s?.type ?? 'empty', card: s?.card ?? null, doom: !!s?.doom };
     });
   }
 
@@ -149,8 +154,9 @@ export class CapacityBeadsObject extends THREE.Group {
 
   _paint() {
     for (const it of this._items) {
-      setColor(it.mesh.material, SLOT_COLOR[it.type] ?? COLORS.empty,
-        it.card != null && it.card === this._hover);
+      // doom = 将弃标记（超载红珠归属将弃卡本尊；迷你被尾弃时竖线转红）
+      const color = it.doom ? COLORS.overflow : (SLOT_COLOR[it.type] ?? COLORS.empty);
+      setColor(it.mesh.material, color, it.card != null && it.card === this._hover);
     }
   }
 
