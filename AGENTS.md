@@ -104,7 +104,7 @@ node tools/saveForge.mjs --from-session r20-a1-2 --out 现场1
 
 - **上游仓库 = `https://github.com/wekyspire/wekyspire`**（remote 名 `wekyspire`，`master` 为唯一主干）。旧 `Hineven/wekyspire` 只是历史个人仓库（保留为 remote `hineven-origin`），不是交付目标。
 - **多人并行：每人一条自己的长期开发分支 `<名字>-dev`**（如 `hineven-dev`），都推到 `wekyspire`；功能完成后开 PR 合进 `master`（**不要直接推 master**）。开工前先 `git fetch wekyspire && git merge wekyspire/master`（长期分支落后是冲突的主要来源）。合并冲突以**自己 dev 分支的实现为准**（冲突方是别人正在维护的模块时先沟通）。
-- **线上站点由服务器 cron 部署**：`/usr/local/bin/wekyspire-deploy.sh`（每 5 分钟拉 `origin master` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。**要上线的新内容必须先合进 `master`**。国内网络拉不动 GitHub 时，可直接把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
+- **线上站点由服务器 cron 部署**：`/usr/local/bin/wekyspire-deploy.sh`（每 5 分钟拉 `origin master` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。**要上线的新内容必须先合进 `master`**。Apache 性能配置（2026-09-30 加载链批）：HTTP/2 + brotli 文本压缩（webp/美术包**不压**）+ hash 产物 `immutable` 一年 / `index.html`·`artpack-manifest.js` `no-cache`——都在 `/etc/httpd/conf.d/wekyspire.conf`（改动前先 `cp` 备份 `.bak.*`，`apachectl configtest` 过了再 `systemctl reload httpd`）。国内网络拉不动 GitHub 时，可直接把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
 - **GitHub Pages workflow 已在上游删除**——不要再加回；推上去只会触发必然失败的 job。
 - 仓库根 `dist/` 是构建产物（gitignore），不要手改。
 

@@ -95,6 +95,7 @@ export class StageManager {
     // 世界链（体积月光）渲染质量档：初始取 ?moonq=（排障优先），App 挂载时无 URL 档
     // 再落持久化设置（settings.renderQuality）；舞台建 composer 时经 getRenderQuality 取。
     this._marchQuality = moonQualityFromUrl();
+    this._maxRenderHeight = Infinity;   // 最大渲染分辨率帽（菜单设置；Infinity = 原生）
     this._running = false;
     this._rafId = null;
     this._viewWidth = 0;
@@ -149,10 +150,29 @@ export class StageManager {
   // HiDPI：渲染缓冲按设备像素比放大（cap 2 防 4K+ 高倍屏填充率浪费）。
   // 缺了这步，DPR>1 的屏上 canvas 以 CSS 像素渲染再被浏览器拉伸——整屏发糊
   // （烘焙分辨率再高也救不回来）。node 单测无 window → 1。
+  // 叠加「最大渲染分辨率」帽（setMaxRenderHeight，菜单设置）：背板高度超过
+  // 帽值时按比例压 DPR——canvas 以低分辨率渲染、元素仍撑满取景框，由浏览器
+  // 合成器双线性放大到物理分辨率（4K/高倍屏的填充率救命档）。
   _devicePixelRatio() {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-    return Math.min(dpr, 2);
+    let eff = Math.min(dpr, 2);
+    if (Number.isFinite(this._maxRenderHeight) && this._viewHeight > 0) {
+      eff = Math.min(eff, Math.max(0.75, this._maxRenderHeight / this._viewHeight));
+    }
+    return eff;
   }
+
+  /**
+   * 最大渲染分辨率帽（像素高度；Infinity = 原生）。运行时切换即时重挂
+   * （重跑 resize 重建画布背板 / RT 尺寸），返回前保证本帧后续按新尺寸渲染。
+   */
+  setMaxRenderHeight(px) {
+    const v = Number.isFinite(px) ? Math.max(720, Math.round(px)) : Infinity;
+    if (v === this._maxRenderHeight) return;
+    this._maxRenderHeight = v;
+    if (this._renderer && this._viewWidth > 0) this.resize(this._viewWidth, this._viewHeight);
+  }
+  get maxRenderHeight() { return this._maxRenderHeight; }
 
   // UI 正交视锥：z=0 平面可视高恰好 = worldHeight（与世界相机同约定）。
   // 取景中心偏移只由相机位置（0, UI_CAMERA_LOOK_AT_Y）承担——视锥在视图空间
