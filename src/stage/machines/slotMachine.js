@@ -1,7 +1,6 @@
 // 老虎机（slot）：转轮演出 + **恶魔 roll**（银行机超额取款的代价，演在老虎机上）+ **离房安慰奖**。
 // 逻辑自 RoomStage 原样下沉——RoomStage 只做通用舞台机制，本模块不认识任何别的机器。
 import * as THREE from 'three';
-import gsap from 'gsap';
 import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { buildSlotPanel } from '../panels/index.js';
 import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
@@ -10,7 +9,6 @@ import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
 const DEMON_LAMP = 0x9a2432;
 const DEMON_TIER_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
 const DEMON_TIER_NAME = { yellow: '黄色级', red: '红色级', black: '黑色级' };
-const DEMON_GLOW = 0xd94444;   // 词条热区呼吸辉光色（亮恶魔红——黑档词条色近黑不可用）
 
 /**
  * 老虎机的取景主体（**点击后要"屏幕怼脸"**）：只框**三根转轮窗口 + 拉杆**
@@ -198,28 +196,12 @@ export function createSlotMachine(ctx) {
       ctx.room()?.group.add(proxy);
       const id = `room:demon:${i}`;
       ctx.picker().addPickable(id, proxy, { kind: 'demon' });
-      // 可交互暗示（2026-09-30 用户报：轮盘落定后无任何提示，玩家不知道要点）：
-      // 转轮外侧一圈**恶魔红呼吸辉光**（加色透明面片，gsap yoyo 0.15↔0.45）——
-      // 「这三根转轮就是选项」。⚠ 色不能用黑档词条色（0x3a2432 近黑，加色混合
-      // 贡献微乎其微、实测不可见）——统一亮恶魔红，等阶区分交给 tooltip 文字。
-      // gsap 自驱（机器模块无逐帧 tick），摘热区时随 dispose 收 tween。
-      const glow = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.15 * s, 1.55 * s),
-        new THREE.MeshBasicMaterial({
-          color: DEMON_GLOW,
-          transparent: true, opacity: 0.25, depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        }),
-      );
-      glow.name = `demonGlow:${i}`;
-      glow.position.copy(at).addScaledVector(fwd, 0.05);
-      glow.lookAt(at.clone().add(fwd));
-      ctx.room()?.group.add(glow);
-      const glowTl = gsap.timeline({ repeat: -1, yoyo: true })
-        .fromTo(glow.material, { opacity: 0.15 }, { opacity: 0.45, duration: 0.85, ease: 'sine.inOut' })
-        .to(glow.scale, { x: 1.05, y: 1.05, duration: 0.85, ease: 'sine.inOut' }, 0);
-      d.picks.push({ id, optionId: o.id, proxy, glow, glowTl });
+      d.picks.push({ id, optionId: o.id, proxy });
     });
+    // 可交互暗示（2026-09-30 用户定重做）：分格框恶魔红 HDR 呼吸辉光——由 rig 的
+    // demonChoiceGlow 驱动（材质 uniform 直出、峰值过 bloom 阈起晕），不再叠加色
+    // 红面片（首版大红方块视觉验收实毙）。等阶区分交给 tooltip 文字。
+    ctx.rigs().get('slot')?.demonChoiceGlow?.(true);
   }
 
   /** 撤掉转轮热区（含 tooltip token 与隐形拾取面）——选择阶段结束/退场都要走，否则空热区还能点到。 */
@@ -230,12 +212,9 @@ export function createSlotMachine(ctx) {
       p.proxy?.parent?.remove(p.proxy);
       p.proxy?.geometry?.dispose();
       p.proxy?.material?.dispose();
-      p.glowTl?.kill();   // 呼吸辉光收场
-      p.glow?.parent?.remove(p.glow);
-      p.glow?.geometry?.dispose();
-      p.glow?.material?.dispose();
     }
     if (d) d.picks = null;
+    ctx.rigs().get('slot')?.demonChoiceGlow?.(false);   // 分格框辉光收场（rig 内渐出还原金框）
   }
 
   /** 恶魔 roll 未选就想走：钱已经到手，先把词条领了——镜头拉回老虎机 + 泡泡。 */
