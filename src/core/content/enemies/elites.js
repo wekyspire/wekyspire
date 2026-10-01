@@ -148,7 +148,7 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+6' }
     : { kinds: ['attack'], hits: 1,
-        damage: 12 + unit.getStat('attack') + unit.getEffectStacks('momentum'),
+        damage: 12 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
 });
 

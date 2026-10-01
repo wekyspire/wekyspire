@@ -437,7 +437,7 @@ registerEnemy({
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['defend', 'buff'], note: '缩壳：自身护盾+10、回复10、蓄势+3' }
     : { kinds: ['attack'], hits: 4,
-        damage: 1 + unit.getStat('attack') + unit.getEffectStacks('momentum'),
+        damage: 1 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告
         note: `蓄势${unit.getEffectStacks('momentum')}：每段伤害+${unit.getEffectStacks('momentum')}` }),
 });
 
@@ -584,7 +584,7 @@ function staticPuffDef(id, maxHp, startBeat = 0) {
       const friends = battleState
         ? aliveEnemies(battleState).filter(u => u !== unit && !u.isDead()).length : 1;
       return { kinds: ['attack', 'buff'], hits: 1,
-        damage: 4 + atk + unit.getEffectStacks('momentum'),
+        damage: 4 + atk,   // 蓄势由 withMomentumBonus 统一计入预告
         note: `电动（友军${friends}名：攻击+${3 * friends}），友军全员蓄势+1` };
     },
   });
