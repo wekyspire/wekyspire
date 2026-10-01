@@ -18,7 +18,7 @@ registerSkill({
     return true;
   },
   describe: () => '对所有敌人造成999伤害',
-  battleDescribe: (sctx) => `对所有敌人造成${resolvedDamageText(sctx, 999)}伤害`,
+  battleDescribe: (sctx) => `对所有敌人造成${resolvedDamageText(sctx, 999)}`,
 });
 
 // 调试重拳：0 费单体固定 50 伤——一拳（999 群伤）是「秒杀尺」，这把是「血刻度尺」：
