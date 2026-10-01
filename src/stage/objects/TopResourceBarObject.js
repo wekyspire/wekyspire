@@ -30,6 +30,17 @@ export class TopResourceBarObject extends THREE.Group {
     this._slotPickIds = [];
     this._bake = bakeLabel || defaultBake;
     this._ppw = 10; // 烘焙像素 → 世界单位（顶端栏独立于状态栏缩放）
+    this._relics = [];
+    this._relicArtPending = false;
+    // 立绘晚到补烘（PropArtCache 契约）：setRelics 是签名去重的——冷加载首拍若赶在
+    // 立绘解码前，特征字占位会被签名挡住永不重烘（prep 顶栏「黑」字徽章固化的病根，
+    // 夜测 r3路3）。订阅任意加载完成，占位行就绪后整行重建。
+    this._unsubArt = sharedRelicArtCache.addOnLoad(() => {
+      if (!this._relicArtPending) return;
+      const relics = this._relics;
+      this._relicSig = null;   // 作废签名强制重建
+      this.setRelics(relics);
+    });
 
     this._moneyMaterial = new THREE.MeshBasicMaterial({ transparent: true });
     this._moneyLabel = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this._moneyMaterial);
@@ -96,11 +107,13 @@ export class TopResourceBarObject extends THREE.Group {
     const sig = JSON.stringify(items.map(r => [r.id, r.icon, r.usesLeft ?? null]));
     if (sig === this._relicSig) return;
     this._relicSig = sig;
+    this._relics = items;
     for (const id of this._slotPickIds) this._picker?.removePickable(id);
     this._slotPickIds = [];
     for (const child of [...this._relicRow.children]) disposeSubtree(child);
     items.forEach((r, i) => {
       const slot = makeRelicSlot(r);
+      if (!slot.userData.tileMap?.userData?.usedArt) this._relicArtPending = true;
       this._relicRow.add(slot);
       // 槽位可 hover：token 挂在槽（Group）上，Picker 从 pickable 根对象取 token
       if (this._picker) {
@@ -131,6 +144,7 @@ export class TopResourceBarObject extends THREE.Group {
   }
 
   dispose() {
+    this._unsubArt?.();   // 退订加载监听（防幽灵顶栏）
     for (const id of this._slotPickIds) this._picker?.removePickable(id);
     this._slotPickIds = [];
     this._moneyLabel.geometry.dispose();
@@ -159,6 +173,7 @@ function makeRelicSlot(relic) {
   const material = new THREE.MeshBasicMaterial({ transparent: true });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SLOT, SLOT), material);
   mesh.name = 'tile';
+  slot.userData.tileMap = material;   // 供占位判定（材质即 map 载体）
   const baked = typeof document !== 'undefined'
     ? bakeRelicSlot(relic, Math.ceil(SLOT * 10))
     : null;
@@ -216,6 +231,7 @@ function bakeRelicSlot(relic, sizePx) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
+  texture.userData.usedArt = !!art?.width;   // 立绘晚到补烘判据（见构造订阅）
   return texture;
 }
 
