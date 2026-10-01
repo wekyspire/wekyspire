@@ -257,6 +257,11 @@ export class ScrollPickerObject extends THREE.Group {
     if (hit.id === BACK_ID) { this.close(); this._onCancel?.(); return true; }
     if (hit.id === CONFIRM_ID) {
       if (this._selected.size === 0) return false;
+      // 多选下界（与 _applySelection 的按钮压暗同式）：点击路径也要拦——只压暗不拦点击时，
+      // 1/2 部分确认会照发（训练尾款 twoC 断链卡死在 remaining:1 的病根，夜测 1002 路二实锤）
+      if (this._multi && (this._selected.size < this._minPicks || this._selected.size > this._picks)) {
+        return false;
+      }
       const keys = this.selectedKeys;
       // 得卡演出钩子（商店卡包）：钩子接管关闭与确认时机（先播「飞入牌库」再上行）。
       // 一次性：取出即清，防重入（open() 也会重置）
