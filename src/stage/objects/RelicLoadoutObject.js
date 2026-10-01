@@ -101,6 +101,7 @@ function iconTexture(relic) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
+  tex.userData.usedArt = !!art?.width;   // 立绘晚到补烘的判据（见 _refreshArtIcons）
   _iconCache.set(key, tex);
   return tex;
 }
@@ -210,6 +211,27 @@ export class RelicLoadoutObject extends THREE.Group {
     this._previewBad = false;
     this._pop = 0;               // 到位脉冲计时
     this._buildStatic(relics, slots);
+    // 立绘晚到补烘（PropArtCache 契约）：图标首烘若赶上立绘未解码，特征字占位会被
+    // 模块缓存固化——订阅任意加载完成事件，复查占位图标，就绪即作废缓存重烘。
+    this._unsubArt = sharedRelicArtCache.addOnLoad(() => this._refreshArtIcons());
+  }
+
+  /** 立绘解码完成回调：把还在用特征字占位的图标换成真立绘（缓存作废 + 材质重挂）。 */
+  _refreshArtIcons() {
+    for (const [, e] of this._icons) {
+      if (e.mat.map?.userData?.usedArt) continue;
+      if (!sharedRelicArtCache.get(e.relic.name ?? '')?.width) continue;
+      for (const [k, t] of _iconCache) {
+        if (k.startsWith(`${e.relic.id}|`)) { _iconCache.delete(k); t.dispose(); }
+      }
+      const fresh = iconTexture(e.relic);
+      if (fresh) {
+        e.mat.map = fresh;
+        e.mat.color.set(0xffffff);
+        e.mat.opacity = 1;
+        e.mat.needsUpdate = true;
+      }
+    }
   }
 
   get dragging() { return !!this._drag; }
@@ -576,6 +598,7 @@ export class RelicLoadoutObject extends THREE.Group {
   }
 
   dispose() {
+    this._unsubArt?.();   // 退订加载监听（防幽灵面板）
     this.cancelDrag();
     if (this._spring) {
       this.remove(this._spring.ghost);
