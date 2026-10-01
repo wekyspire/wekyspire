@@ -48,6 +48,7 @@ import { createBurnLink } from '../fx/gpu/burnSparks.js';
 import { createResourceDrainFx } from '../fx/gpu/resourceDrainFx.js';
 import { LayoutEngine, HAND_FAN_MECHANICS } from '../layout/LayoutEngine.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
+import { bakeBoldText } from '../objects/textBakers.js';
 import { StageAnimator, gsapTween } from '../animator/StageAnimator.js';
 import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
@@ -74,6 +75,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from '../objects/cardMetrics.js';
 export { CARD_WIDTH, CARD_HEIGHT };
 
 const PICK_SCALE = 0.62; // 选卡覆盖层的卡缩放（比手牌略大，便于点选）
+const PICK_HINT_SCALE = 0.19; // 目标提示行的逻辑像素→世界单位（fontPx 17 ≈ 屏上 24px）
 
 const BUTTON_SIZE = { w: 15, h: 6 };
 // 按钮纵列：主按钮（结束回合/确认）在上，换卡按钮在下（右下自由区，避让人群与手牌扇）
@@ -689,6 +691,20 @@ export class BattleStage {
       this._buttons.main.position.z = 35;
       this._buttons.swap.position.z = 35;
       const anchors = this._pickAnchors(ids.length);
+      // 一句目标提示（2026-10-01 用户定口径：一行道出目标即可，无需更多——无
+      // reason 的请求不渲染）。白字 #e8eefb（UI 风格色），悬在候选阵上方。
+      if (request.reason && typeof document !== 'undefined' && anchors.length) {
+        const t = bakeBoldText(request.reason, { fontPx: 17, tint: '#e8eefb' });
+        const hint = new THREE.Mesh(
+          new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
+          new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, fog: false }),
+        );
+        hint.name = 'pickHint';
+        const top = anchors[0];
+        hint.position.set(0, top.y + CARD_HEIGHT * (top.scale ?? PICK_SCALE) * 0.5 + 6.5, 31);
+        this.uiScene.add(hint);
+        pick.hint = hint;
+      }
       ids.forEach((uid, i) => {
         const cardProj = this._findCardProj(uid);
         if (!cardProj) return;
@@ -706,6 +722,20 @@ export class BattleStage {
         this.picker.addPickable(pickerId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
         pick.temp.set(pickerId, { object: obj, uniqueID: uid, baseY: a.y, baseScale: a.scale ?? PICK_SCALE });
       });
+    } else if (request.reason && typeof document !== 'undefined') {
+      // 手牌多选覆盖层（候选 = 手牌扇自身，无候选阵）：提示悬在手牌扇上方——
+      // z 40 盖过悬浮抬升的手牌（静息 ≤15 / 抬升 ≤36），不与 instantiate 分支共用锚点
+      const t = bakeBoldText(request.reason, { fontPx: 17, tint: '#e8eefb' });
+      const hint = new THREE.Mesh(
+        new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
+        new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, depthTest: false, fog: false }),
+      );
+      hint.name = 'pickHint';
+      // y：候选网格最顶行上缘（yTop≈8 + 半卡高≈7）再留空——低会与卡阵叠字（glm 实测）
+      hint.position.set(0, 30, 40);
+      hint.renderOrder = 50;
+      this.uiScene.add(hint);
+      pick.hint = hint;
     }
     this._layoutAndTrack();
   }
@@ -722,6 +752,12 @@ export class BattleStage {
       this._pick.backdrop.geometry.dispose();
       this._pick.backdrop.material.dispose();
     }
+    if (this._pick.hint) {
+      this.uiScene.remove(this._pick.hint);
+      this._pick.hint.geometry.dispose();
+      this._pick.hint.material.map?.dispose();
+      this._pick.hint.material.dispose();
+    }
     if (this._btnZ) {   // HUD 确认键归位（遮罩期临时抬高）
       this._buttons.main.position.z = this._btnZ.main;
       this._buttons.swap.position.z = this._btnZ.swap;
@@ -731,7 +767,11 @@ export class BattleStage {
   }
 
   /** 覆盖层网格锚点（卡牌空间，整体居中）。列数与缩放随张数自适应：
-   *  张数多时（牌库来源常见 15~30 张）自动变多列、缩得更小，避免超出取景框。 */
+   *  张数多时（牌库来源常见 15~30 张）自动变多列、缩得更小，避免超出取景框。
+   *  ⚠ 锚点必须带 z（=30，候选层深度，在遮罩 28 之上）与 rotation（=0）——手牌模式
+   *  覆盖层的弹簧目标也吃这份锚点，而 HandSprings 驱动 x/y/z/scale/rotation 五通道：
+   *  缺 z 或 rotation 会把 position.z / rotation.z 写成 undefined → 矩阵 NaN →
+   *  射线拾取全灭（万变拳 S 阶实测病根；手牌多选覆盖层的历史潜伏 bug）。 */
   _pickAnchors(count) {
     const scale = count > 18 ? 0.42 : (count > 10 ? 0.52 : PICK_SCALE);
     const cols = Math.min(count > 10 ? 8 : 5, Math.max(1, count));
@@ -743,7 +783,7 @@ export class BattleStage {
       const r = Math.floor(i / cols);
       const c = i % cols;
       const inRow = Math.min(cols, count - r * cols);
-      return { x: (c - (inRow - 1) / 2) * stepX, y: yTop - r * stepY, scale };
+      return { x: (c - (inRow - 1) / 2) * stepX, y: yTop - r * stepY, z: 30, rotation: 0, scale };
     });
   }
 
