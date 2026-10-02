@@ -126,16 +126,16 @@ export function resolveDamageFx(defId) {
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
       return { kind: 'fireburst', proj: 'tracked' };
-    case 'fireRain':       // 火雨/火瀑（群伤落地）
+    case 'fireRainC':       // 火雨/火瀑（群伤落地）
       return { kind: 'fireburst', ground: true };
-    case 'fireWhirl':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
+    case 'fireWhirlC':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
       return { kind: 'fireburst', ground: true };
     case 'spark':          // 火花链（乱射：本拍自持投射物——随机弧快弹，抵达才爆）
       return { kind: 'ignition', proj: 'owned' };
     case 'fireControl': {  // 控火术：按 id 分——燃=单体火爆 / 爆=群伤落地 / 破=小火
       if (def.id === 'fireControlBurn') return { kind: 'fireburst' };
       if (def.id === 'fireControlDetonate') return { kind: 'fireburst', ground: true };
-      if (def.id === 'burnSnap' || def.id === 'burnSnapPlus') return { kind: 'ignition' };
+      if (def.id === 'burnSnapB' || def.id === 'burnSnapA') return { kind: 'ignition' };
       return null;
     }
     case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发；id 供 AOE 多拍去重）

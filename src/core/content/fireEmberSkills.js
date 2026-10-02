@@ -27,11 +27,11 @@ import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, 
 
 // 点火 B：1AP，冷却1，3 伤害，施加燃烧 7。
 registerSkill({
-  id: 'blaze', name: '点火', type: 'fire', tier: 'B', series: 'ignite',
+  id: 'igniteB', name: '点火', type: 'fire', tier: 'B', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'inferno',
+  promotesTo: 'igniteA',
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true; // 无存活敌人：落空（G2 收尾防御）
@@ -45,7 +45,7 @@ registerSkill({
 
 // 点火 A：1AP，冷却1，3 伤害，施加燃烧 10（点火链顶点，无晋升）。
 registerSkill({
-  id: 'inferno', name: '点火', type: 'fire', tier: 'A', series: 'ignite',
+  id: 'igniteA', name: '点火', type: 'fire', tier: 'A', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -91,8 +91,8 @@ function emberOriginCard({ id, tier, ap, promotesTo }) {
     },
   });
 }
-emberOriginCard({ id: 'emberOrigin', tier: 'B', ap: 1, promotesTo: 'emberOriginMaster' });
-emberOriginCard({ id: 'emberOriginMaster', tier: 'A', ap: 0 });
+emberOriginCard({ id: 'emberOriginB', tier: 'B', ap: 1, promotesTo: 'emberOriginA' });
+emberOriginCard({ id: 'emberOriginA', tier: 'A', ap: 0 });
 
 // 炼心 A：1AP。每有 4 层（敌方）燃烧，获得 1 魏启（走上限截断管线）。
 registerSkill({
@@ -144,9 +144,9 @@ function heatSurgeCard({ id, tier, ap, exhaust, promotesTo }) {
     },
   });
 }
-heatSurgeCard({ id: 'heatSurge', tier: 'C', ap: 1, exhaust: true, promotesTo: 'heatSurgePlus' });
-heatSurgeCard({ id: 'heatSurgePlus', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeMaster' });
-heatSurgeCard({ id: 'heatSurgeMaster', tier: 'A', ap: 0, exhaust: false });
+heatSurgeCard({ id: 'heatSurgeC', tier: 'C', ap: 1, exhaust: true, promotesTo: 'heatSurgeB' });
+heatSurgeCard({ id: 'heatSurgeB', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeA' });
+heatSurgeCard({ id: 'heatSurgeA', tier: 'A', ap: 0, exhaust: false });
 
 // ==== 控火系列（多功能散牌）===================================================
 // 控火术 = 三张找卡（攻杀/守御/杂技 C/B/A）+ 发现制效果卡（不进卡包奖池、不直接掉落；
@@ -197,17 +197,17 @@ const FC_POOL_GUARD_A = [...FC_POOL_GUARD_C, 'fireControlShift'];
 const FC_POOL_ACRO_C = ['fireControlGather', 'fireControlSpread'];
 const FC_POOL_ACRO_A = [...FC_POOL_ACRO_C, 'fireControlRefine'];
 
-fireControlFinderCard({ id: 'fireControlFinderAtkC', name: '攻杀控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkB' });
-fireControlFinderCard({ id: 'fireControlFinderAtkB', name: '攻杀控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkA' });
-fireControlFinderCard({ id: 'fireControlFinderAtkA', name: '攻杀控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ATTACK_A });
+fireControlFinderCard({ id: 'fireCtrlAtkC', name: '攻杀控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ATTACK_C, promotesTo: 'fireCtrlAtkB' });
+fireControlFinderCard({ id: 'fireCtrlAtkB', name: '攻杀控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ATTACK_C, promotesTo: 'fireCtrlAtkA' });
+fireControlFinderCard({ id: 'fireCtrlAtkA', name: '攻杀控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ATTACK_A });
 
-fireControlFinderCard({ id: 'fireControlFinderGuardC', name: '守御控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardB' });
-fireControlFinderCard({ id: 'fireControlFinderGuardB', name: '守御控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardA' });
-fireControlFinderCard({ id: 'fireControlFinderGuardA', name: '守御控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_GUARD_A });
+fireControlFinderCard({ id: 'fireCtrlGuardC', name: '守御控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_GUARD_C, promotesTo: 'fireCtrlGuardB' });
+fireControlFinderCard({ id: 'fireCtrlGuardB', name: '守御控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_GUARD_C, promotesTo: 'fireCtrlGuardA' });
+fireControlFinderCard({ id: 'fireCtrlGuardA', name: '守御控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_GUARD_A });
 
-fireControlFinderCard({ id: 'fireControlFinderAcroC', name: '杂技控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroB' });
-fireControlFinderCard({ id: 'fireControlFinderAcroB', name: '杂技控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroA' });
-fireControlFinderCard({ id: 'fireControlFinderAcroA', name: '杂技控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ACRO_A });
+fireControlFinderCard({ id: 'fireCtrlAcroC', name: '杂技控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ACRO_C, promotesTo: 'fireCtrlAcroB' });
+fireControlFinderCard({ id: 'fireCtrlAcroB', name: '杂技控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ACRO_C, promotesTo: 'fireCtrlAcroA' });
+fireControlFinderCard({ id: 'fireCtrlAcroA', name: '杂技控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ACRO_A });
 
 // 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
 registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
@@ -385,7 +385,7 @@ registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
 // 阶梯：6/+5 → 6/+7 → 6/+9。
 function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireWall',
+    id, name, type: 'fire', tier, series: 'fireWallC',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
@@ -399,9 +399,9 @@ function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) 
     // （判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
   });
 }
-fireWallCard({ id: 'fireWall', name: '火墙', tier: 'C', ap: 1, shield: 6, bonus: 5, promotesTo: 'fireWallPlus' });
-fireWallCard({ id: 'fireWallPlus', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallMaster' });
-fireWallCard({ id: 'fireWallMaster', name: '火墙', tier: 'A', ap: 1, shield: 6, bonus: 9 });
+fireWallCard({ id: 'fireWallC', name: '火墙', tier: 'C', ap: 1, shield: 6, bonus: 5, promotesTo: 'fireWallB' });
+fireWallCard({ id: 'fireWallB', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallA' });
+fireWallCard({ id: 'fireWallA', name: '火墙', tier: 'A', ap: 1, shield: 6, bonus: 9 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，

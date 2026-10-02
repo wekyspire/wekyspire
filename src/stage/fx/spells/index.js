@@ -117,8 +117,8 @@ const CARD_SPELLS = {
   trueFist:       { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
   tigerFist:      { template: 'fistCast', params: { mode: 'heavy' } },
   emptyFist:      { template: 'fistCast', params: { mode: 'heavy', gatherMs: 560 } },   // S 空形拳
-  fullCharge:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
-  fullChargePlus: { template: 'fistCast', params: { mode: 'heavy', aoe: true } },
+  fullChargeC:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
+  fullChargeB: { template: 'fistCast', params: { mode: 'heavy', aoe: true } },
   fullSpirit:     { template: 'fistCast', params: { mode: 'heavy', aoe: true, gatherMs: 500 } },  // 全神一击（群）
   // 连击多射：雨拳/乱拳/千手/万手
   rainFist:       { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },
@@ -129,18 +129,18 @@ const CARD_SPELLS = {
   burnBurstStar:  { template: 'burnSurge', params: { scale: 1.25 } },     // 星炎（×3，S）
   nirvana:        { template: 'selfFlame', params: { pillar: true, scale: 1.1,    // 涅槃（S）
                     color: [1.0, 0.72, 0.30], hot: [1.3, 1.1, 0.75], ember: [1.0, 0.42, 0.08], core: 0xffd27a } },
-  bathFlame:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 焰愈（A）
+  flameHealA:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 焰愈（A）
                     color: [1.0, 0.72, 0.30], hot: [1.2, 1.05, 0.70], ember: [1.0, 0.42, 0.08], core: 0xffc27a } },
   // 群燃件（对所有敌人施加燃烧）：逐敌点火种
-  warmUp:         { template: 'igniteCast', params: { all: true } },
-  dazzleEye:      { template: 'igniteCast', params: { all: true } },
-  scorchBody:     { template: 'igniteCast', params: { all: true, selfSparks: true } },  // 取暖（A）：己身也燃
+  warmUpC:         { template: 'igniteCast', params: { all: true } },
+  warmUpB:      { template: 'igniteCast', params: { all: true } },
+  warmUpA:     { template: 'igniteCast', params: { all: true, selfSparks: true } },  // 取暖（A）：己身也燃
   // 焚卡回蓝件的火咏唱变体
-  smeltCard:      { template: 'fuelCast' },
-  smeltCardPlus:  { template: 'fuelCast' },
+  smeltB:      { template: 'fuelCast' },
+  smeltA:  { template: 'fuelCast' },
   // 焚尽牌库/手牌的决绝件（depth）
-  lastStand:      { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
-  lastStandMaster: { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
+  lastStandB:      { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
+  lastStandA: { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
   allIn:          { template: 'fuelCast', params: { motes: 6, core: 0xff5a2a } },
   // 庆典礼花（抽出所有爆裂术）：金焰缠身 + 火柱
   fireworkShow:   { template: 'selfFlame', params: { pillar: true, scale: 1.05,
@@ -151,44 +151,44 @@ const CARD_SPELLS = {
                     sparks: { color: 0xffe08a, count: 30 } } },
   // ---- 刀法逐卡（2026-10-02 二批）----
   // 飞刀链：小刀错峰连投
-  flyingDagger:     { template: 'bladeCast', params: { mode: 'daggers' } },
-  heavyDagger:      { template: 'bladeCast', params: { mode: 'daggers' } },
-  annihilateDagger: { template: 'bladeCast', params: { mode: 'daggers' } },
+  flyingDaggerC:     { template: 'bladeCast', params: { mode: 'daggers' } },
+  flyingDaggerB:      { template: 'bladeCast', params: { mode: 'daggers' } },
+  flyingDaggerA: { template: 'bladeCast', params: { mode: 'daggers' } },
   returningDagger:  { template: 'bladeCast', params: { mode: 'daggers' } },
   fineDagger:       { template: 'bladeCast', params: { mode: 'daggers' } },
   perfectDagger:    { template: 'bladeCast', params: { mode: 'daggers' } },
   // 碎铁雨：天顶泼落
-  ironRain:         { template: 'bladeCast', params: { mode: 'cascade' } },
+  ironRainB:         { template: 'bladeCast', params: { mode: 'cascade' } },
   ironRainA:        { template: 'bladeCast', params: { mode: 'cascade' } },
   // 磨刀链：绕身刀光掺金橙火星
-  honeBlade:        { template: 'bladeCast', params: { grindSparks: true } },
-  honeBladePlus:    { template: 'bladeCast', params: { grindSparks: true } },
-  honeBladeMaster:  { template: 'bladeCast', params: { grindSparks: true } },
-  whetstone:        { template: 'bladeCast', params: { grindSparks: true } },
-  honeEdgeMid:      { template: 'bladeCast', params: { grindSparks: true } },
+  honeBladeC:        { template: 'bladeCast', params: { grindSparks: true } },
+  honeBladeB:    { template: 'bladeCast', params: { grindSparks: true } },
+  honeBladeA:  { template: 'bladeCast', params: { grindSparks: true } },
+  sharpenC:        { template: 'bladeCast', params: { grindSparks: true } },
+  sharpenB:      { template: 'bladeCast', params: { grindSparks: true } },
   honeEdge:         { template: 'bladeCast', params: { grindSparks: true } },
-  razorEdge:        { template: 'bladeCast', params: { grindSparks: true } },
-  forgingBlade:     { template: 'bladeCast', params: { grindSparks: true } },
-  forgingBladePlus: { template: 'bladeCast', params: { grindSparks: true } },
-  forgingBladeMaster: { template: 'bladeCast', params: { grindSparks: true } },
-  practiceBlade:    { template: 'bladeCast', params: { grindSparks: true } },
-  practiceBladePlus: { template: 'bladeCast', params: { grindSparks: true } },
-  practiceBladeMaster: { template: 'bladeCast', params: { grindSparks: true } },
+  sharpenA:        { template: 'bladeCast', params: { grindSparks: true } },
+  forgingBladeC:     { template: 'bladeCast', params: { grindSparks: true } },
+  forgingBladeB: { template: 'bladeCast', params: { grindSparks: true } },
+  forgingBladeA: { template: 'bladeCast', params: { grindSparks: true } },
+  practiceBladeC:    { template: 'bladeCast', params: { grindSparks: true } },
+  practiceBladeB: { template: 'bladeCast', params: { grindSparks: true } },
+  practiceBladeA: { template: 'bladeCast', params: { grindSparks: true } },
   unsheathe:        { template: 'bladeCast', params: { core: 0xeaf2ff } },   // 拔刀术（A）：更亮起手
   // ---- 格挡逐卡（2026-10-02 二批）----
   // 守·加盾链（ward：起手一亮即止，盾的读法归护盾罩 fx/shieldDome.js——随盾量常驻）
-  guard:            { template: 'blockCast', params: { mode: 'ward' } },
-  duckHead:         { template: 'blockCast', params: { mode: 'ward' } },
-  blockGuard:       { template: 'blockCast', params: { mode: 'ward' } },
-  blockGuardA:      { template: 'blockCast', params: { mode: 'ward' } },
+  shieldC:            { template: 'blockCast', params: { mode: 'ward' } },
+  blockC:         { template: 'blockCast', params: { mode: 'ward' } },
+  blockB:       { template: 'blockCast', params: { mode: 'ward' } },
+  blockA:      { template: 'blockCast', params: { mode: 'ward' } },
   perfectBlock:     { template: 'blockCast', params: { mode: 'ward',
                       color: [0.75, 0.88, 1.30], hot: [1.25, 1.35, 1.55] } },   // S 完美格挡：更亮更挺
-  barrier:          { template: 'blockCast', params: { mode: 'ward' } },
-  fortress:         { template: 'blockCast', params: { mode: 'ward' } },
+  fortressC:          { template: 'blockCast', params: { mode: 'ward' } },
+  fortressB:         { template: 'blockCast', params: { mode: 'ward' } },
   bronzeCity:       { template: 'blockCast', params: { mode: 'ward',
                       color: [1.05, 0.80, 0.45], hot: [1.30, 1.10, 0.70], core: 0xd8a860 } },  // 铜城：金铜调
-  solidShield:      { template: 'blockCast', params: { mode: 'ward' } },
-  reinforcedShield: { template: 'blockCast', params: { mode: 'ward' } },
+  shieldB:      { template: 'blockCast', params: { mode: 'ward' } },
+  shieldA: { template: 'blockCast', params: { mode: 'ward' } },
   psiShield:        { template: 'blockCast', params: { mode: 'ward',
                       color: [0.75, 0.60, 1.25], hot: [1.15, 1.00, 1.50], core: 0xb494f0 } },  // 灵能盾：蓝紫
   greaterPsiShield: { template: 'blockCast', params: { mode: 'ward',
@@ -196,34 +196,34 @@ const CARD_SPELLS = {
   // 守·气场主题变体：狂战血红 / 血拳深红 / 集结金
   berserkStance:    { template: 'blockCast', params: { color: [1.10, 0.32, 0.26], hot: [1.35, 0.70, 0.55], core: 0xe05a4a } },
   berserkMastery:   { template: 'blockCast', params: { color: [1.10, 0.32, 0.26], hot: [1.35, 0.70, 0.55], core: 0xe05a4a } },
-  bloodFist:        { template: 'blockCast', params: { color: [0.90, 0.22, 0.18], hot: [1.25, 0.55, 0.45], core: 0xc03830 } },
+  bloodFistB:        { template: 'blockCast', params: { color: [0.90, 0.22, 0.18], hot: [1.25, 0.55, 0.45], core: 0xc03830 } },
   bloodFistA:       { template: 'blockCast', params: { color: [0.90, 0.22, 0.18], hot: [1.25, 0.55, 0.45], core: 0xc03830 } },
-  rally:            { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
-  rallyPlus:        { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
-  rallyMaster:      { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
+  limberUpC:            { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
+  limberUpB:        { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
+  limberUpA:      { template: 'blockCast', params: { color: [1.10, 0.90, 0.40], hot: [1.35, 1.15, 0.70], core: 0xe8cc60 } },
   // 攻·掌腿破架（体修同源——走 fistCast 拳风，命中拍 punch 由 damageFx block 行承担）
-  carefulStrike:    { template: 'fistCast', params: { mode: 'strike' } },
+  preciseStrikeC:    { template: 'fistCast', params: { mode: 'strike' } },
   doubleStrike:     { template: 'fistCast', params: { mode: 'rapid', shots: 2, staggerMs: 110 } },
-  foldWillow:       { template: 'fistCast', params: { mode: 'strike' } },
-  embraceCloud:     { template: 'fistCast', params: { mode: 'strike' } },
+  preciseStrikeB:       { template: 'fistCast', params: { mode: 'strike' } },
+  preciseStrikeA:     { template: 'fistCast', params: { mode: 'strike' } },
   pluckStar:        { template: 'fistCast', params: { mode: 'heavy', gatherMs: 480 } },   // 摘星（S）
-  breakStance:      { template: 'fistCast', params: { mode: 'strike' } },
-  disassemble:      { template: 'fistCast', params: { mode: 'strike' } },
+  dismantleC:      { template: 'fistCast', params: { mode: 'strike' } },
+  dismantleB:      { template: 'fistCast', params: { mode: 'strike' } },
   pierceHeart:      { template: 'fistCast', params: { mode: 'heavy' } },                  // 穿心（A）
-  heavyStomp:       { template: 'fistCast', params: { mode: 'strike' } },      // 重踏
-  sweepKick:        { template: 'fistCast', params: { mode: 'strike' } },
-  sweepHall:        { template: 'fistCast', params: { mode: 'heavy' } },
+  sweepLegC:       { template: 'fistCast', params: { mode: 'strike' } },      // 重踏
+  sweepLegB:        { template: 'fistCast', params: { mode: 'strike' } },
+  sweepLegA:        { template: 'fistCast', params: { mode: 'heavy' } },
   whirlLeg:         { template: 'fistCast', params: { mode: 'heavy' } },       // 旋风腿（S）
-  shatterHit:       { template: 'fistCast', params: { mode: 'strike' } },
-  shatterBone:      { template: 'fistCast', params: { mode: 'strike' } },
+  shatterHitC:       { template: 'fistCast', params: { mode: 'strike' } },
+  shatterHitB:      { template: 'fistCast', params: { mode: 'strike' } },
   shatterHead:      { template: 'fistCast', params: { mode: 'heavy' } },
-  toughItOut:       { template: 'fistCast', params: { mode: 'strike' } },
+  endureB:       { template: 'fistCast', params: { mode: 'strike' } },
   // ---- 经济卡（无 series，逐卡挂 manaCast；魏启蓝 / 行动力黄）----
   extract:          { template: 'manaCast', params: { from: 'enemy' } },
   deepExtract:      { template: 'manaCast', params: { from: 'enemy', streams: 5 } },
   limitExtract:     { template: 'manaCast', params: { from: 'enemy', streams: 6, size: 2.0 } },
-  drawQi:           { template: 'manaCast', params: { from: 'around' } },
-  drawQiPlus:       { template: 'manaCast', params: { from: 'around' } },
+  drawQiC:           { template: 'manaCast', params: { from: 'around' } },
+  drawQiB:       { template: 'manaCast', params: { from: 'around' } },
   squeezeQi:        { template: 'manaCast', params: { from: 'around', streams: 6, projMs: 260 } },
   manaJar:          { template: 'manaCast', params: { from: 'card' } },
   manaJarPlus:      { template: 'manaCast', params: { from: 'card' } },

@@ -15,23 +15,23 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 //     起始组共两张），以及拳/盾填充卡的晋升通道（见 promotion.js 的 FILLER_STARTERS
 //     门禁——体修与法师同为 3 AP。
 
-const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'badOmen']);
+const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC', 'shieldC', 'shieldC', 'badOmen']);
 // 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；各路线填充组各带一张「情况不对」
 // = 迷你保险（四路线起手都恰好一张：体修走起始组自带、
 // 灵脉路线走填充；情况不对带迷你词条计 0 张手牌，抽到不卡手）
-const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'guard', 'guard', 'guard', 'guard', 'guard', 'badOmen']);
+const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'badOmen']);
 
 export const ROUTES = Object.freeze({
   body: Object.freeze({
     id: 'body', name: '体修', leino: null, ability: null, apBonus: 0,
     // 体修基础能力：多获得一张肾上腺素（起始组共两张）
-    deck: Object.freeze([...BODY_STARTER_DECK, 'adrenaline']),
+    deck: Object.freeze([...BODY_STARTER_DECK, 'adrenalineB']),
     blurb: '肉身成圣',
   }),
   fire: Object.freeze({
     id: 'fire', name: '火灵脉', leino: 'fire', ability: 'fireVein', apBonus: 0,
     // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃 C（回蓝）
-    deck: Object.freeze(['inflame', 'fireBolt', 'flashBurn', ...FILLER_FIRE]),
+    deck: Object.freeze(['igniteC', 'fireBolt', 'flashBurnC', ...FILLER_FIRE]),
     blurb: '爆发与燃烧',
   }),
   wood: Object.freeze({

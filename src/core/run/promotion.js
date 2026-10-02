@@ -23,7 +23,7 @@ export function promotionTargets(def) {
 
 // 通用填充卡（拳/盾）：不走体修路线无法升级——填充卡是全体系
 // 起始牌组的凑数位，晋升通道是体修路线的专属甜头（StS Strike/Defend 不可升级的变体口径）。
-const FILLER_STARTERS = new Set(['punch', 'guard']);
+const FILLER_STARTERS = new Set(['punch', 'shieldC']);
 
 // 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
 // S 阶不可经晋升获得：训练场/老虎机升级一律到不了 S——晋升链

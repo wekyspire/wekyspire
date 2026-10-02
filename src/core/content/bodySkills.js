@@ -357,7 +357,7 @@ function elbowMasterCard({ id, tier, weight, promotesTo = null }) {
     battleDescribe: () => '你的肘击卡伤害翻倍',
   });
 }
-elbowMasterCard({ id: 'elbowMaster', tier: 'B', weight: 1, promotesTo: 'elbowMasterA' });
+elbowMasterCard({ id: 'elbowMasterB', tier: 'B', weight: 1, promotesTo: 'elbowMasterA' });
 elbowMasterCard({ id: 'elbowMasterA', tier: 'A', weight: 0 });
 
 // 牢大归来（B/A，1AP）：发现同等阶肘击（B → 猛烈肘击；A → 强大肘击）。
@@ -377,7 +377,7 @@ function elbowReturnCard({ id, tier, targetId, promotesTo = null }) {
     describe: () => `/named{发现}同等阶肘击：/card{${targetId}}`,
   });
 }
-elbowReturnCard({ id: 'elbowReturn', tier: 'B', targetId: 'fierceElbow', promotesTo: 'elbowReturnA' });
+elbowReturnCard({ id: 'elbowReturnB', tier: 'B', targetId: 'fierceElbow', promotesTo: 'elbowReturnA' });
 elbowReturnCard({ id: 'elbowReturnA', tier: 'A', targetId: 'strongElbow' });
 
 // 坠机（A，消耗，费用栏留空 → 0 费）：你的全部激活的肘击卡变为随机高一阶的体修卡
@@ -450,9 +450,9 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, pro
   });
 }
 
-registerPlayCountChant({ id: 'leverage', name: '借力', tier: 'C', every: 5, promotesTo: 'redirect' });
-registerPlayCountChant({ id: 'redirect', name: '借力', tier: 'B', every: 5, ap: 0, promotesTo: 'taiji' });
-registerPlayCountChant({ id: 'taiji', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'taijiS' });
+registerPlayCountChant({ id: 'leverageC', name: '借力', tier: 'C', every: 5, promotesTo: 'leverageB' });
+registerPlayCountChant({ id: 'leverageB', name: '借力', tier: 'B', every: 5, ap: 0, promotesTo: 'leverageA' });
+registerPlayCountChant({ id: 'leverageA', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'taijiS' });
 registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 4, ap: 0, weight: 0 });
 
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
@@ -486,9 +486,9 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, p
   });
 }
 
-registerDrawDamageChant({ id: 'novice', name: '精通', tier: 'C', damage: 2, promotesTo: 'adept' });
-registerDrawDamageChant({ id: 'adept', name: '精通', tier: 'B', damage: 2, ap: 0, promotesTo: 'peerless' });
-registerDrawDamageChant({ id: 'peerless', name: '精通', tier: 'A', damage: 3, ap: 0, promotesTo: 'peerlessS' });
+registerDrawDamageChant({ id: 'masteryC', name: '精通', tier: 'C', damage: 2, promotesTo: 'masteryB' });
+registerDrawDamageChant({ id: 'masteryB', name: '精通', tier: 'B', damage: 2, ap: 0, promotesTo: 'masteryA' });
+registerDrawDamageChant({ id: 'masteryA', name: '精通', tier: 'A', damage: 3, ap: 0, promotesTo: 'peerlessS' });
 registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 3, ap: 0, weight: 0 });
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
@@ -530,8 +530,8 @@ function wildFistCard({ id, tier, count, promotesTo = null }) {
     battleDescribe: () => `选${count === 1 ? '一' : '两'}张手牌免费发动`,
   });
 }
-wildFistCard({ id: 'wildFist', tier: 'A', count: 1, promotesTo: 'wildFistA' });
-wildFistCard({ id: 'wildFistA', tier: 'S', count: 2 });
+wildFistCard({ id: 'wildFistA', tier: 'A', count: 1, promotesTo: 'wildFistS' });
+wildFistCard({ id: 'wildFistS', tier: 'S', count: 2 });
 
 // 假动作系列（C→B→A）：抽 2 牌，洗入 2 「虚无」。
 // 升阶：B 不消耗；A 抽 3。过牌换稀释：短期手牌质量提升，牌库被虚无污染
@@ -550,9 +550,9 @@ const feintCard = ({ id, tier, draw, exhaust = true, promotesTo = null }) => reg
   },
   describe: () => `抽${draw}牌，/named{洗入}2/card{voidCard}`,
 });
-feintCard({ id: 'feint', tier: 'C', draw: 2, promotesTo: 'feintPlus' });
-feintCard({ id: 'feintPlus', tier: 'B', draw: 2, exhaust: false, promotesTo: 'feintMaster' });
-feintCard({ id: 'feintMaster', tier: 'A', draw: 3 });
+feintCard({ id: 'feintC', tier: 'C', draw: 2, promotesTo: 'feintB' });
+feintCard({ id: 'feintB', tier: 'B', draw: 2, exhaust: false, promotesTo: 'feintA' });
+feintCard({ id: 'feintA', tier: 'A', draw: 3 });
 
 // 虚无（假动作衍生牌）：0 费无效果消耗牌——纯粹的牌库噪音，只经造牌入场。
 // 等阶记 C（衍生牌的等阶只是账务口径）。
@@ -603,9 +603,9 @@ function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，失去${lifeLoss}生命${ap > 0 ? `，获得${ap}行动点` : ''}`,
   });
 }
-wildPunchCard({ id: 'wildPunch', tier: 'C', damage: 9, lifeLoss: 2, ap: 1, promotesTo: 'bloodRage' });
-wildPunchCard({ id: 'bloodRage', tier: 'B', damage: 13, lifeLoss: 2, ap: 1, promotesTo: 'lastGasp' });
-wildPunchCard({ id: 'lastGasp', tier: 'A', damage: 13, lifeLoss: 2, ap: 2 });
+wildPunchCard({ id: 'wildPunchC', tier: 'C', damage: 9, lifeLoss: 2, ap: 1, promotesTo: 'wildPunchB' });
+wildPunchCard({ id: 'wildPunchB', tier: 'B', damage: 13, lifeLoss: 2, ap: 1, promotesTo: 'wildPunchA' });
+wildPunchCard({ id: 'wildPunchA', tier: 'A', damage: 13, lifeLoss: 2, ap: 2 });
 
 // 乱拳 C → 雨拳 B → 千手 A → 万手 S（多段链：每段独立结算、独立吃减伤门与触发面。
 // 总伤 9/12/16/30）
@@ -646,8 +646,8 @@ const fistPressCard = ({ id, tier, per, promotesTo = null }) => registerSkill({
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6 + instantStrikesThisTurn(sctx) * per)}`
     + `（6+${instantStrikesThisTurn(sctx) * per}）`,
 });
-fistPressCard({ id: 'fistPress', tier: 'C', per: 3, promotesTo: 'fistPressPlus' });
-fistPressCard({ id: 'fistPressPlus', tier: 'B', per: 4, promotesTo: 'fistPressA' });
+fistPressCard({ id: 'fistPressC', tier: 'C', per: 3, promotesTo: 'fistPressB' });
+fistPressCard({ id: 'fistPressB', tier: 'B', per: 4, promotesTo: 'fistPressA' });
 fistPressCard({ id: 'fistPressA', tier: 'A', per: 5 });
 function instantStrikesThisTurn(sctx) {
   return sctx.battleState.history.turn.playedCards.filter(id => id === 'instantStrike').length;
@@ -673,9 +673,9 @@ function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
     // 无 battleDescribe：阈值条件比读数更要紧。
   });
 }
-counterDrawCard({ id: 'counterDraw', tier: 'C', threshold: 2, extra: 1, promotesTo: 'counterDrawPlus' });
-counterDrawCard({ id: 'counterDrawPlus', tier: 'B', threshold: 3, extra: 1, promotesTo: 'counterDrawMaster' });
-counterDrawCard({ id: 'counterDrawMaster', tier: 'A', threshold: 4, extra: 1 });
+counterDrawCard({ id: 'counterDrawC', tier: 'C', threshold: 2, extra: 1, promotesTo: 'counterDrawB' });
+counterDrawCard({ id: 'counterDrawB', tier: 'B', threshold: 3, extra: 1, promotesTo: 'counterDrawA' });
+counterDrawCard({ id: 'counterDrawA', tier: 'A', threshold: 4, extra: 1 });
 
 // 满拳系列 C→B→A（全神一击从「每张手牌+3」收回阈值加成——手牌加成与阈值红利是
 // 同一个身份，双轨叠乘会让 A 档失控）：C/B 蓄满一击：6 群伤，手牌不少于 4 张时
@@ -698,8 +698,8 @@ function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = n
     // 无 battleDescribe：阈值条件简单，静态描述即机制。
   });
 }
-fullChargeCard({ id: 'fullCharge', name: '蓄满一击', tier: 'C', base: 6, bonus: 7, threshold: 4, promotesTo: 'fullChargePlus' });
-fullChargeCard({ id: 'fullChargePlus', name: '蓄满一击', tier: 'B', base: 6, bonus: 10, threshold: 4, promotesTo: 'fullSpirit' });
+fullChargeCard({ id: 'fullChargeC', name: '蓄满一击', tier: 'C', base: 6, bonus: 7, threshold: 4, promotesTo: 'fullChargeB' });
+fullChargeCard({ id: 'fullChargeB', name: '蓄满一击', tier: 'B', base: 6, bonus: 10, threshold: 4, promotesTo: 'fullSpirit' });
 fullChargeCard({ id: 'fullSpirit', name: '全神一击', tier: 'A', base: 8, bonus: 13, threshold: 4 });
 
 // 变招/混元 B/A/S（弃牌引擎）：咏唱2/2/1——每弃 3/2/2 张牌，抽 1（太极「每打 N 抽 1」
@@ -728,8 +728,8 @@ function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = nu
     battleDescribe: (sctx) => `每弃${every}张牌，抽1牌（已弃${sctx.self.discardCount ?? 0}）`,
   });
 }
-discardEngineChant({ id: 'hunYuanPlus', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'hunYuanMaster' });
-discardEngineChant({ id: 'hunYuanMaster', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
+discardEngineChant({ id: 'shiftMoveB', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'shiftMoveA' });
+discardEngineChant({ id: 'shiftMoveA', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
 discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 1, every: 2 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
@@ -753,7 +753,7 @@ function adrenalineCard({ id, tier, draw, promotesTo = null }) {
     describe: () => `获得1行动点，抽${draw}牌`,
   });
 }
-adrenalineCard({ id: 'adrenaline', tier: 'B', draw: 2, promotesTo: 'adrenalineA' });
+adrenalineCard({ id: 'adrenalineB', tier: 'B', draw: 2, promotesTo: 'adrenalineA' });
 adrenalineCard({ id: 'adrenalineA', tier: 'A', draw: 3 });
 
 // 情况不对（起始套牌泛用保险，等阶记 C）：固有消耗卡——弃全手牌抽等量，
@@ -791,8 +791,8 @@ registerSkill({
 // ——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([
   'punch', 'punch', 'punch', 'punch', 'punch',
-  'guard', 'guard', 'guard', 'guard',
-  'duckHead',
-  'adrenaline',
+  'shieldC', 'shieldC', 'shieldC', 'shieldC',
+  'blockC',
+  'adrenalineB',
   'badOmen',
 ]);

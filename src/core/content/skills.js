@@ -52,12 +52,12 @@ export function enemyTarget(sctx) {
 // ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
 // 无冷却（冷却1 在 B 盾——升阶的阶差）。
 registerSkill({
-  id: 'guard', name: '盾', type: 'normal', tier: 'C', series: 'block',
+  id: 'shieldC', name: '盾', type: 'normal', tier: 'C', series: 'block',
   canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  promotesTo: 'solidShield',
+  promotesTo: 'shieldB',
   use(sctx) {
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 5 }));
     return true;
@@ -69,12 +69,12 @@ registerSkill({
 // 点火是火体系的燃烧入口——由首次点亮火灵脉时进阶获赠直发
 // （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
-  id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
+  id: 'igniteC', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   targetMode: 'enemy',
-  promotesTo: 'blaze',
+  promotesTo: 'igniteB',
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({

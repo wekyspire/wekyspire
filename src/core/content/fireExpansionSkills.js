@@ -39,10 +39,10 @@ function sparkCard({ id, name = '火花', tier, damage, hits, promotesTo = null 
     battleDescribe: (sctx) => `随机${resolvedDamageText(sctx, damage)}×${hits}`,
   });
 }
-sparkCard({ id: 'fireSpark', tier: 'C', damage: 3, hits: 4, promotesTo: 'blazingStream' });
-sparkCard({ id: 'blazingStream', tier: 'B', damage: 4, hits: 4, promotesTo: 'sparkStorm' });
-sparkCard({ id: 'sparkStorm', tier: 'A', damage: 5, hits: 4 });
-sparkCard({ id: 'sparkStormS', name: '终极火花', tier: 'S', damage: 5, hits: 7 });
+sparkCard({ id: 'fireSparkC', tier: 'C', damage: 3, hits: 4, promotesTo: 'fireSparkB' });
+sparkCard({ id: 'fireSparkB', tier: 'B', damage: 4, hits: 4, promotesTo: 'fireSparkA' });
+sparkCard({ id: 'fireSparkA', tier: 'A', damage: 5, hits: 4 });
+sparkCard({ id: 'ultimateSpark', name: '终极火花', tier: 'S', damage: 5, hits: 7 });
 
 // ==== 余烬链：火种 C + 两张 B 分岔 + A 不灭 + 衍生牌余烬 ====
 // 余烬 = 火系的造牌语言：0 费即抛的燃烧施加。造出来的牌吃焚烧翻倍、鬼火传播、
@@ -51,11 +51,11 @@ sparkCard({ id: 'sparkStormS', name: '终极火花', tier: 'S', damage: 5, hits:
 // 火种 C：1魏 冷却1——向牌库随机位洗入 3 张「余烬」，抽2（升级：抽3——升级收益
 // = 抽牌加一，不增加洗入余烬数量）。
 registerSkill({
-  id: 'sparkSeed', name: '火种', type: 'fire', tier: 'C', series: 'ember',
+  id: 'sparkSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'latentSpark',
+  promotesTo: 'sparkSeedB',
   use(sctx) {
     for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { index: 'random' });
     drawCards(sctx, sctx.self.promoted ? 3 : 2);
@@ -68,7 +68,7 @@ registerSkill({
 // 火种 B：1魏 冷却1——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
 // 加抽牌不洗更多余烬）。
 registerSkill({
-  id: 'latentSpark', name: '火种', type: 'fire', tier: 'B', series: 'ember',
+  id: 'sparkSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -142,8 +142,8 @@ function burnSnapCard({ id, tier, exhaust, promotesTo }) {
     },
   });
 }
-burnSnapCard({ id: 'burnSnap', tier: 'B', exhaust: true, promotesTo: 'burnSnapPlus' });
-burnSnapCard({ id: 'burnSnapPlus', tier: 'A', exhaust: false });
+burnSnapCard({ id: 'burnSnapB', tier: 'B', exhaust: true, promotesTo: 'burnSnapA' });
+burnSnapCard({ id: 'burnSnapA', tier: 'A', exhaust: false });
 
 // ==== 敌方 debuff 链（爆裂冲击 C/B → 轰灭 A）：伤残放大一切后续伤害 ====
 // 全阶消耗（伤残是延时价值，消耗防长局无限复用同一份伤残）。
@@ -167,8 +167,8 @@ function blastShockCard({ id, tier, damage, maim, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，赋予/effect{伤残}${maim}`,
   });
 }
-blastShockCard({ id: 'blastShock', tier: 'C', damage: 10, maim: 3, promotesTo: 'blastShockPlus' });
-blastShockCard({ id: 'blastShockPlus', tier: 'B', damage: 13, maim: 3, promotesTo: 'doomBlast' });
+blastShockCard({ id: 'blastShockC', tier: 'C', damage: 10, maim: 3, promotesTo: 'blastShockB' });
+blastShockCard({ id: 'blastShockB', tier: 'B', damage: 13, maim: 3, promotesTo: 'doomBlast' });
 
 // 轰灭 A：2魏 13伤 + 伤残4（与 B 同伤，伤残 +1 是 A 位溢价——延时价值型斩杀铺垫）。
 registerSkill({
@@ -209,9 +209,9 @@ function flashBurnCard({ id, tier, mana, promotesTo }) {
     battleDescribe: () => `获得${mana}魏启，/effect{燃烧}4`,
   });
 }
-flashBurnCard({ id: 'flashBurn', tier: 'C', mana: 2, promotesTo: 'flashBurnPlus' });
-flashBurnCard({ id: 'flashBurnPlus', tier: 'B', mana: 3, promotesTo: 'flashBurnGrand' });
-flashBurnCard({ id: 'flashBurnGrand', tier: 'A', mana: 4 });
+flashBurnCard({ id: 'flashBurnC', tier: 'C', mana: 2, promotesTo: 'flashBurnB' });
+flashBurnCard({ id: 'flashBurnB', tier: 'B', mana: 3, promotesTo: 'flashBurnA' });
+flashBurnCard({ id: 'flashBurnA', tier: 'A', mana: 4 });
 
 // 焰刃链 C/B/A：1AP 7 伤；你正在燃烧时 +7/+11/+15
 // （自焚流的条件件——基础伤恒 7，档位差全在燃烧加成斜率）。
@@ -260,9 +260,9 @@ function heatWaveCard({ id, tier, bonus, promotesTo }) {
     },
   });
 }
-heatWaveCard({ id: 'heatWave', tier: 'C', bonus: 8, promotesTo: 'heatWavePlus' });
-heatWaveCard({ id: 'heatWavePlus', tier: 'B', bonus: 12, promotesTo: 'heatWaveMaster' });
-heatWaveCard({ id: 'heatWaveMaster', tier: 'A', bonus: 16 });
+heatWaveCard({ id: 'heatWaveC', tier: 'C', bonus: 8, promotesTo: 'heatWaveB' });
+heatWaveCard({ id: 'heatWaveB', tier: 'B', bonus: 12, promotesTo: 'heatWaveA' });
+heatWaveCard({ id: 'heatWaveA', tier: 'A', bonus: 16 });
 
 // 铲灰链 C/B/A（0费 冷却1）：抽 1 牌；坟墓里有至少 3/2/2 张牌时
 // 再抽 1/1/2（回响烈焰 B 的低阶教学：火系的坟场语言从前期就有踪迹）。
@@ -282,9 +282,9 @@ function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
     battleDescribe: (sctx) => `抽1（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
-ashRakeCard({ id: 'ashRake', tier: 'C', threshold: 3, extraDraw: 1, promotesTo: 'ashRakePlus' });
-ashRakeCard({ id: 'ashRakePlus', tier: 'B', threshold: 2, extraDraw: 1, promotesTo: 'ashRakeMaster' });
-ashRakeCard({ id: 'ashRakeMaster', tier: 'A', threshold: 2, extraDraw: 2 });
+ashRakeCard({ id: 'ashRakeC', tier: 'C', threshold: 3, extraDraw: 1, promotesTo: 'ashRakeB' });
+ashRakeCard({ id: 'ashRakeB', tier: 'B', threshold: 2, extraDraw: 1, promotesTo: 'ashRakeA' });
+ashRakeCard({ id: 'ashRakeA', tier: 'A', threshold: 2, extraDraw: 2 });
 
 // ==== 咏唱反甲（熔岩铠甲 B/A）：受攻击给攻击方上燃烧 ====
 // 不再是一次性买盾，点亮期间**每次**被攻击都灼烧攻击者
@@ -293,7 +293,7 @@ ashRakeCard({ id: 'ashRakeMaster', tier: 'A', threshold: 2, extraDraw: 2 });
 // 不触发；订阅挂卡牌 owner，熄灭自动注销，无回合窗自清（咏唱常驻即反甲常驻）。
 function magmaArmorCard({ id, tier, burn, promotesTo }) {
   registerSkill({
-    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmor',
+    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmorB',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -316,5 +316,5 @@ function magmaArmorCard({ id, tier, burn, promotesTo }) {
     battleDescribe: () => `受攻击时，赋予攻击方/effect{燃烧}${burn}`,
   });
 }
-magmaArmorCard({ id: 'magmaArmor', tier: 'B', burn: 2, promotesTo: 'magmaArmorMaster' });
-magmaArmorCard({ id: 'magmaArmorMaster', tier: 'A', burn: 3 });
+magmaArmorCard({ id: 'magmaArmorB', tier: 'B', burn: 2, promotesTo: 'magmaArmorA' });
+magmaArmorCard({ id: 'magmaArmorA', tier: 'A', burn: 3 });

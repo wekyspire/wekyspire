@@ -27,7 +27,7 @@ export const ASCENSION_PLACEHOLDER = {
 // 首次进入体系的获赠表（FIRE_VEIN_CARDS §0）：基石卡直入牌组 + 体系能力自动授予，
 // 即首次进阶的全部卡牌收益。
 export const FIRST_ASCENSION_GRANT = Object.freeze({
-  fire: Object.freeze({ cards: ['inflame', 'fireBolt'], ability: 'fireVein' }),
+  fire: Object.freeze({ cards: ['igniteC', 'fireBolt'], ability: 'fireVein' }),
   wood: Object.freeze({ cards: ['poisonSting', 'breathOfLife'], ability: 'woodVein' }),
   air: Object.freeze({ cards: ['windBlade', 'atEase'], ability: 'airVein' }),
 });

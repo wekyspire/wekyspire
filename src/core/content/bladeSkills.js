@@ -286,8 +286,8 @@ const cleaveCard = (id, name, tier, shield, picks, promotesTo = null) => registe
   describe: () => `${shield}护盾，选${picks}张手牌丢弃`,
   battleDescribe: (sctx) => `${shield}护盾，选${picks}张手牌丢弃`,
 });
-cleaveCard('handCleave', '花刀', 'C', 8, 1, 'doubleCleave');
-cleaveCard('doubleCleave', '花刀', 'B', 11, 1, 'veilCleave');   // id 沿用原二重花刀位
+cleaveCard('flourishC', '花刀', 'C', 8, 1, 'flourishB');
+cleaveCard('flourishB', '花刀', 'B', 11, 1, 'veilCleave');   // id 沿用原二重花刀位
 cleaveCard('veilCleave', '蔽目花刀', 'A', 14, 1);
 cleaveCard('perfectCleave', '完美花刀', 'A', 11, 2);            // 分叉散卡：选 2 弃
 
@@ -313,9 +313,9 @@ const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
     return `丢弃所有手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
   },
 });
-danceCard('silverDance', '刀舞', 'C', 5, 'stormDance');
-danceCard('stormDance', '刀舞', 'B', 7, 'tempestDance');
-danceCard('tempestDance', '刀舞', 'A', 9);
+danceCard('bladeDanceC', '刀舞', 'C', 5, 'bladeDanceB');
+danceCard('bladeDanceB', '刀舞', 'B', 7, 'bladeDanceA');
+danceCard('bladeDanceA', '刀舞', 'A', 9);
 
 // 优雅刀舞（分支 A）：只弃「无法打出的」手牌，每张 10 护盾。
 registerSkill({
@@ -355,9 +355,9 @@ const cycloneCard = (id, name, tier, damage, count, cd, promotesTo = null) => re
   describe: () => `${damage}伤害，从牌库末抽${count}牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，从牌库末抽${count}牌`,
 });
-cycloneCard('cycloneSlash', '回旋斩', 'C', 10, 1, 1, 'cycloneBurst');
-cycloneCard('cycloneBurst', '回旋斩', 'B', 12, 1, 1, 'perfectCyclone');
-cycloneCard('perfectCyclone', '回旋斩', 'A', 14, 1, 0);   // 机制跃迁：无冷却
+cycloneCard('cycloneSlashC', '回旋斩', 'C', 10, 1, 1, 'cycloneSlashB');
+cycloneCard('cycloneSlashB', '回旋斩', 'B', 12, 1, 1, 'cycloneSlashA');
+cycloneCard('cycloneSlashA', '回旋斩', 'A', 14, 1, 0);   // 机制跃迁：无冷却
 
 // ==== 横劈系列（真群伤）========================================================
 // 刀组的群伤答案：「命中：洗入碎铁」补碎铁经济（AOE 每命中 1 敌人洗入 1 碎铁——
@@ -419,9 +419,9 @@ const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSk
   describe: () => `${damage}伤害，弃两侧牌；/named{顽固}：两侧有牌`,
   battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，弃两侧牌；/named{顽固}：两侧有牌`,
 });
-sideDaggerCard('flyingDagger', '飞刀', 'C', 13, 'heavyDagger');
-sideDaggerCard('heavyDagger', '飞刀', 'B', 17, 'annihilateDagger');
-sideDaggerCard('annihilateDagger', '飞刀', 'A', 21);
+sideDaggerCard('flyingDaggerC', '飞刀', 'C', 13, 'flyingDaggerB');
+sideDaggerCard('flyingDaggerB', '飞刀', 'B', 17, 'flyingDaggerA');
+sideDaggerCard('flyingDaggerA', '飞刀', 'A', 21);
 
 // 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：13伤害，弃两侧牌，抽2牌插回两侧原位。
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
@@ -538,10 +538,10 @@ const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registe
   describe: () => `/effect{滞气}${stall}，${damage}伤害`,
   battleDescribe: (sctx) => `/effect{滞气}${stall}，${resolvedDamageText(sctx, damage)}`,
 });
-sheathCard('storeEdge', '收刃', 'C', 11, 2, 'hiddenEdge');
-sheathCard('hiddenEdge', '收刃', 'B', 14, 2, 'sheathEdge');
-sheathCard('sheathEdge', '收刃', 'A', 17, 2, 'sheathEdgeS');
-sheathCard('sheathEdgeS', '藏锋', 'S', 27, 2);
+sheathCard('sheatheC', '收刃', 'C', 11, 2, 'sheatheB');
+sheathCard('sheatheB', '收刃', 'B', 14, 2, 'sheatheA');
+sheathCard('sheatheA', '收刃', 'A', 17, 2, 'concealEdge');
+sheathCard('concealEdge', '藏锋', 'S', 27, 2);
 
 // ==== 呼吸系列（弃牌回补）======================================================
 // B 消耗 / A 去消耗。打出即获得「呼吸」效果（content/effects.js：弃牌 POST 监听 +
@@ -561,8 +561,8 @@ const breathCard = (id, name, tier, { exhaust = true, promotesTo = null } = {}) 
   describe: () => '本回合每弃1牌：抽1牌',
   battleDescribe: () => '本回合每弃1牌：抽1牌',
 });
-breathCard('breath', '呼吸', 'B', { promotesTo: 'perfectBreath' });
-breathCard('perfectBreath', '呼吸', 'A', { exhaust: false });
+breathCard('breathB', '呼吸', 'B', { promotesTo: 'breathA' });
+breathCard('breathA', '呼吸', 'A', { exhaust: false });
 
 // ==== 归来系列（速冷）==========================================================
 // 护盾 + 所有自由手牌（未激活咏唱，背水一战/情况不对同口径）冷却 N。
@@ -588,8 +588,8 @@ const reminiscenceCard = (id, name, tier, shield, cd, { promotesTo = null, mini 
     return `${shield}护盾，所有自由手牌冷却${cd}${n > 0 ? `（冷却中${n}张）` : ''}`;
   },
 });
-reminiscenceCard('reminiscence', '怀念', 'C', 10, 2, { promotesTo: 'reminiscencePlus' });
-reminiscenceCard('reminiscencePlus', '怀念', 'B', 13, 2, { promotesTo: 'reminiscenceA' });
+reminiscenceCard('reminiscenceC', '怀念', 'C', 10, 2, { promotesTo: 'reminiscenceB' });
+reminiscenceCard('reminiscenceB', '怀念', 'B', 13, 2, { promotesTo: 'reminiscenceA' });
 reminiscenceCard('reminiscenceA', '怀念', 'A', 16, 3, { promotesTo: 'homecoming' });
 reminiscenceCard('homecoming', '归来', 'S', 16, 4, { mini: true });
 
@@ -623,9 +623,9 @@ function honeBladeCard({ id, tier, bonus, chantWeight = 1, promotesTo = null }) 
     battleDescribe: () => `触发时所有刀法牌伤害+${bonus}`,
   });
 }
-honeBladeCard({ id: 'honeBlade', tier: 'C', bonus: 2, promotesTo: 'honeBladePlus' });
-honeBladeCard({ id: 'honeBladePlus', tier: 'B', bonus: 3, promotesTo: 'honeBladeMaster' });
-honeBladeCard({ id: 'honeBladeMaster', tier: 'A', bonus: 3, chantWeight: 0 });
+honeBladeCard({ id: 'honeBladeC', tier: 'C', bonus: 2, promotesTo: 'honeBladeB' });
+honeBladeCard({ id: 'honeBladeB', tier: 'B', bonus: 3, promotesTo: 'honeBladeA' });
+honeBladeCard({ id: 'honeBladeA', tier: 'A', bonus: 3, chantWeight: 0 });
 
 // 锻刀术 C/B/A：咏唱1（C）/ 咏唱0（B 起）。你打出刀法牌时，**所有刀法牌**伤害
 // +1/+1/+2（手牌与牌库一起加——口径同开刃；打出的那张已离手不在区内）。
@@ -654,9 +654,9 @@ function forgingBladeCard({ id, tier, weight, bonus, promotesTo = null }) {
     battleDescribe: () => `你打出刀法牌时，所有刀法牌伤害+${bonus}`,
   });
 }
-forgingBladeCard({ id: 'forgingBlade', tier: 'C', weight: 1, bonus: 1, promotesTo: 'forgingBladePlus' });
-forgingBladeCard({ id: 'forgingBladePlus', tier: 'B', weight: 0, bonus: 1, promotesTo: 'forgingBladeMaster' });
-forgingBladeCard({ id: 'forgingBladeMaster', tier: 'A', weight: 0, bonus: 2 });
+forgingBladeCard({ id: 'forgingBladeC', tier: 'C', weight: 1, bonus: 1, promotesTo: 'forgingBladeB' });
+forgingBladeCard({ id: 'forgingBladeB', tier: 'B', weight: 0, bonus: 1, promotesTo: 'forgingBladeA' });
+forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 2 });
 
 // ==== 开刃系列（斩进阶）========================================================
 
@@ -685,8 +685,8 @@ const edgeBreathCard = ({ id, tier, threshold, promotesTo = null }) => registerS
   describe: () => `手牌少于${threshold}时斩进阶，此卡/named{焚毁}`,
   battleDescribe: () => `手牌少于${threshold}时斩进阶，此卡/named{焚毁}`,
 });
-edgeBreathCard({ id: 'edgeBreath', tier: 'C', threshold: 2, promotesTo: 'edgeBreathPlus' });
-edgeBreathCard({ id: 'edgeBreathPlus', tier: 'B', threshold: 3, promotesTo: 'edgeBreathA' });
+edgeBreathCard({ id: 'edgeBreathC', tier: 'C', threshold: 2, promotesTo: 'edgeBreathB' });
+edgeBreathCard({ id: 'edgeBreathB', tier: 'B', threshold: 3, promotesTo: 'edgeBreathA' });
 edgeBreathCard({ id: 'edgeBreathA', tier: 'A', threshold: 4 });
 
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
@@ -745,9 +745,9 @@ const whetCard = (id, name, tier, delta, { promotesTo = null, transient = false 
     return `手中刀法牌冷却${delta}${cooling.length > 0 ? `（冷却中${cooling.length}张）` : ''}`;
   },
 });
-whetCard('whetstone', '磨刀', 'C', 2, { promotesTo: 'honeEdgeMid', transient: true });
-whetCard('honeEdgeMid', '磨刀', 'B', 2, { promotesTo: 'razorEdge' });
-whetCard('razorEdge', '磨刀', 'A', 3);
+whetCard('sharpenC', '磨刀', 'C', 2, { promotesTo: 'sharpenB', transient: true });
+whetCard('sharpenB', '磨刀', 'B', 2, { promotesTo: 'sharpenA' });
+whetCard('sharpenA', '磨刀', 'A', 3);
 
 // 开刃（A，设计稿未写费用 → 0费，消耗）：所有刀法牌即刻冷却——手牌与牌库中
 // 的刀充能回满、计时清零（焚毁区的刀已离场不在范围）。deckCraft.test.js 的原型
@@ -804,7 +804,7 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
     battleDescribe: () => '你的下一次刀法牌伤害翻倍，不可叠加',
   });
 }
-annihilatingEdgeCard({ id: 'annihilatingEdge', tier: 'A', ap: 1, exhaust: true, promotesTo: 'annihilatingEdgeS' });
+annihilatingEdgeCard({ id: 'annihilatingEdgeA', tier: 'A', ap: 1, exhaust: true, promotesTo: 'annihilatingEdgeS' });
 annihilatingEdgeCard({ id: 'annihilatingEdgeS', tier: 'S', ap: 1, exhaust: false });
 
 // 练刀 C/B/A：抽2/2/3，**将手中所有刀法牌洗回牌库底**，并令它们**本战斗中**伤害 +3/+4/+5。费用 1AP（B 起 0AP），无冷却。
@@ -837,9 +837,9 @@ const practiceBladeCard = (id, tier, ap, power, draw, { promotesTo = null } = {}
   describe: () => `抽${draw}，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
   battleDescribe: () => `抽${draw}，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
 });
-practiceBladeCard('practiceBlade', 'C', 1, 3, 2, { promotesTo: 'practiceBladePlus' });
-practiceBladeCard('practiceBladePlus', 'B', 0, 4, 2, { promotesTo: 'practiceBladeMaster' });
-practiceBladeCard('practiceBladeMaster', 'A', 0, 5, 3);
+practiceBladeCard('practiceBladeC', 'C', 1, 3, 2, { promotesTo: 'practiceBladeB' });
+practiceBladeCard('practiceBladeB', 'B', 0, 4, 2, { promotesTo: 'practiceBladeA' });
+practiceBladeCard('practiceBladeA', 'A', 0, 5, 3);
 
 // ==== 咏唱（刀法/刃心：抽弃循环引擎）===========================================
 // 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
@@ -916,8 +916,8 @@ const swapCleaveCard = (id, name, tier, ap, { promotesTo = null, draw = 0 } = {}
     return `6护盾，/named{换牌}所有无法打出的手牌${n > 0 ? `（当前${n}张）` : ''}${draw > 0 ? '，抽1' : ''}`;
   },
 });
-swapCleaveCard('quickCleave', '快速花刀', 'C', 1, { promotesTo: 'quickCleavePlus' });
-swapCleaveCard('quickCleavePlus', '快速花刀', 'B', 0, { promotesTo: 'quickCleaveA' });
+swapCleaveCard('quickCleaveC', '快速花刀', 'C', 1, { promotesTo: 'quickCleaveB' });
+swapCleaveCard('quickCleaveB', '快速花刀', 'B', 0, { promotesTo: 'quickCleaveA' });
 swapCleaveCard('quickCleaveA', '快速花刀', 'A', 0, { draw: 1 });
 
 // 铁雨 B/A（消耗，B 档；设计稿未写费用 → 0费；深入卡，归刀客门禁；A 档去除消耗词条）：
@@ -952,7 +952,7 @@ const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => r
     return `打出所有/card{ironShard}（含牌库，共${n}张）`;
   },
 });
-ironRainCard('ironRain', 'B', { promotesTo: 'ironRainA' });
+ironRainCard('ironRainB', 'B', { promotesTo: 'ironRainA' });
 ironRainCard('ironRainA', 'A', { exhaust: false });
 
 // 快速横刀 C/B/A（消耗，设计稿未写费用 → 0费；6/9/12 护盾）：/named{抽出}斩。
@@ -976,6 +976,6 @@ const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkil
   describe: () => `${shield}护盾，/named{抽出}/card{slash}`,
   battleDescribe: (sctx) => `${shield}护盾，/named{抽出}/card{slash}（牌库中${findSlashCard(sctx) ? '有' : '无'}）`,
 });
-quickDrawShieldCard('quickDrawShield', '快速横刀', 'C', 6, 'quickDrawShieldPlus');
-quickDrawShieldCard('quickDrawShieldPlus', '快速横刀', 'B', 9, 'quickDrawShieldA');
-quickDrawShieldCard('quickDrawShieldA', '快速横刀', 'A', 12);
+quickDrawShieldCard('quickCrossC', '快速横刀', 'C', 6, 'quickCrossB');
+quickDrawShieldCard('quickCrossB', '快速横刀', 'B', 9, 'quickCrossA');
+quickDrawShieldCard('quickCrossA', '快速横刀', 'A', 12);

@@ -29,11 +29,11 @@ import {
 // 格挡（格挡系列 C）：+1 层格挡 + 4 护盾。
 // 不是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
 registerSkill({
-  id: 'duckHead', name: '格挡', type: 'normal', tier: 'C', series: 'block',
+  id: 'blockC', name: '格挡', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'blockGuard',
+  promotesTo: 'blockB',
   use(sctx) {
     gainBlock(sctx, 1);
     gainShield(sctx, 4);
@@ -44,11 +44,11 @@ registerSkill({
 
 // 格挡（格挡系列 B）：+1 层格挡 + 4 护盾，**无冷却**（升阶 = 去冷却）。
 registerSkill({
-  id: 'blockGuard', name: '格挡', type: 'normal', tier: 'B', series: 'block',
+  id: 'blockB', name: '格挡', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  promotesTo: 'blockGuardA',
+  promotesTo: 'blockA',
   use(sctx) {
     gainBlock(sctx, 1);
     gainShield(sctx, 4);
@@ -59,7 +59,7 @@ registerSkill({
 
 // 格挡（格挡系列 A）：+2 层格挡 + 4 护盾，无冷却。
 registerSkill({
-  id: 'blockGuardA', name: '格挡', type: 'normal', tier: 'A', series: 'block',
+  id: 'blockA', name: '格挡', type: 'normal', tier: 'A', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -135,10 +135,10 @@ const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, block = 1, pr
     battleDescribe: (sctx) => `/named{完美}。${dmgText((d) => resolvedDamageText(sctx, d))}，/named{命中}：/effect{格挡}${block}`,
   });
 };
-perfectSeries('carefulStrike', '精准一击', 'C', 10, { ap: 1, promotesTo: 'foldWillow' }); // 10/1AP，对标快拳
+perfectSeries('preciseStrikeC', '精准一击', 'C', 10, { ap: 1, promotesTo: 'preciseStrikeB' }); // 10/1AP，对标快拳
 perfectSeries('doubleStrike', '精准二击', 'B', 10, { hits: 2 }); // 延伸卡：2AP 2×10，命中两段各喂格挡
-perfectSeries('foldWillow', '精准一击', 'B', 20, { block: 2, promotesTo: 'embraceCloud' });
-perfectSeries('embraceCloud', '精准一击', 'A', 24, { block: 2 }); // S 直出不作晋升目标（S 只走事件，D4-c）
+perfectSeries('preciseStrikeB', '精准一击', 'B', 20, { block: 2, promotesTo: 'preciseStrikeA' });
+perfectSeries('preciseStrikeA', '精准一击', 'A', 24, { block: 2 }); // S 直出不作晋升目标（S 只走事件，D4-c）
 perfectSeries('pluckStar', '摘星手', 'S', 30, { block: 4 });
 
 // ==== 破势系列（格挡转资源）====================================================
@@ -168,8 +168,8 @@ const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSk
     return `${resolvedDamageText(sctx, base)}，/named{破}：${per}伤害${bonus}`;
   },
 });
-breakAttack('breakStance', '解体', 'C', 9, 6, 'disassemble');
-breakAttack('disassemble', '解体', 'B', 9, 7, 'pierceHeart');
+breakAttack('dismantleC', '解体', 'C', 9, 6, 'dismantleB');
+breakAttack('dismantleB', '解体', 'B', 9, 7, 'pierceHeart');
 breakAttack('pierceHeart', '贯心', 'A', 9, 8, null);
 
 // 堡垒/铜城（破势系列护盾链 C/B/A）：基础护盾 + 破：N 护盾（三阶皆消耗）。
@@ -194,8 +194,8 @@ const breakShield = (id, name, tier, base, per, { promotesTo = null } = {}) => r
     return `${base}护盾，/named{破}：${per}护盾${bonus}`;
   },
 });
-breakShield('barrier', '堡垒', 'C', 10, 6, { promotesTo: 'fortress' });
-breakShield('fortress', '堡垒', 'B', 12, 7, { promotesTo: 'bronzeCity' });
+breakShield('fortressC', '堡垒', 'C', 10, 6, { promotesTo: 'fortressB' });
+breakShield('fortressB', '堡垒', 'B', 12, 7, { promotesTo: 'bronzeCity' });
 breakShield('bronzeCity', '铜城', 'A', 14, 8, {});
 
 // 武魂（破势系列 A）：消耗。破：1 行动点（每层独立一枚 AP 指令，可各自被修饰）。
@@ -224,11 +224,11 @@ registerSkill({
 
 // 盾（盾系列 B）：8 护盾，冷却1。
 registerSkill({
-  id: 'solidShield', name: '盾', type: 'normal', tier: 'B', series: 'block',
+  id: 'shieldB', name: '盾', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'reinforcedShield',
+  promotesTo: 'shieldA',
   use(sctx) {
     gainShield(sctx, 8);
     return true;
@@ -238,7 +238,7 @@ registerSkill({
 
 // 盾（盾系列 A，链顶）：8 护盾 + 1 层格挡。
 registerSkill({
-  id: 'reinforcedShield', name: '盾', type: 'normal', tier: 'A', series: 'block',
+  id: 'shieldA', name: '盾', type: 'normal', tier: 'A', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -274,9 +274,9 @@ const sweepCard = ({ id, name, tier, damage, block, promotesTo = null }) => regi
   describe: () => `群伤${damage}，每命中1敌人/effect{格挡}${block}`,
   battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage).replace('伤害', '')}，每命中1敌人/effect{格挡}${block}`,
 });
-sweepCard({ id: 'heavyStomp', name: '扫堂腿', tier: 'C', damage: 5, block: 1, promotesTo: 'sweepKick' });
-sweepCard({ id: 'sweepKick', name: '扫堂腿', tier: 'B', damage: 8, block: 1, promotesTo: 'sweepHall' });
-sweepCard({ id: 'sweepHall', name: '扫堂腿', tier: 'A', damage: 11, block: 1, promotesTo: 'whirlLeg' });
+sweepCard({ id: 'sweepLegC', name: '扫堂腿', tier: 'C', damage: 5, block: 1, promotesTo: 'sweepLegB' });
+sweepCard({ id: 'sweepLegB', name: '扫堂腿', tier: 'B', damage: 8, block: 1, promotesTo: 'sweepLegA' });
+sweepCard({ id: 'sweepLegA', name: '扫堂腿', tier: 'A', damage: 11, block: 1, promotesTo: 'whirlLeg' });
 sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'S', damage: 15, block: 2 });
 
 // ==== 忍耐系列（受击转格挡）====================================================
@@ -284,11 +284,11 @@ sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'S', damage: 15, block: 2 }
 
 // 忍耐 C：忍耐1。
 registerSkill({
-  id: 'endure', name: '忍耐', type: 'normal', tier: 'C', series: 'block',
+  id: 'endureC', name: '忍耐', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'toughItOut',
+  promotesTo: 'endureB',
   use(sctx) {
     addEffect(sctx, 'endure', 1);
     return true;
@@ -298,7 +298,7 @@ registerSkill({
 
 // 忍耐 B：忍耐1，自身和目标虚弱3（自弱换敌弱）。
 registerSkill({
-  id: 'toughItOut', name: '忍耐', type: 'normal', tier: 'B', series: 'block',
+  id: 'endureB', name: '忍耐', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -381,8 +381,8 @@ const martialStanceCard = (id, name, tier, ap, per, weight, promotesTo) => regis
   describe: () => `每层/effect{格挡}，伤害+${per}`,
   battleDescribe: (sctx) => `每层/effect{格挡}令你的伤害+${per}`,
 });
-martialStanceCard('martialStance', '武术姿态', 'C', 1, 2, 2, 'masterStance');
-martialStanceCard('masterStance', '武术姿态', 'B', 0, 2, 2, 'heavenStance');
+martialStanceCard('martialStanceC', '武术姿态', 'C', 1, 2, 2, 'martialStanceB');
+martialStanceCard('martialStanceB', '武术姿态', 'B', 0, 2, 2, 'heavenStance');
 martialStanceCard('heavenStance', '大师姿态', 'A', 0, 2, 1, null);
 
 // 狂战链（格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
@@ -435,7 +435,7 @@ const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3,
 // （A 档 0AP——升阶 = 免费化）。「自由手牌」= 未激活咏唱（canDumpCards 同口径）。
 const noFreeHand = (sctx, battleState) =>
   battleState.zones.hand.every(c => c.isActivated);
-handGateChant('winWithout', '以无胜有', 'B', '若你没有自由手牌',
+handGateChant('winWithoutB', '以无胜有', 'B', '若你没有自由手牌',
   noFreeHand,
   { promotesTo: 'winWithoutA' });
 handGateChant('winWithoutA', '以无胜有', 'A', '若你没有自由手牌',
@@ -444,7 +444,7 @@ handGateChant('winWithoutA', '以无胜有', 'A', '若你没有自由手牌',
 
 // 以有胜无（B→A）：手牌不少于 4/3 张（囤手）→ 3 层格挡。
 // 触发时激活的自身也在手、算 1 张。
-handGateChant('haveWithout', '以有胜无', 'B', '若你手牌不少于4张',
+handGateChant('haveWithoutB', '以有胜无', 'B', '若你手牌不少于4张',
   (sctx, battleState) => battleState.zones.hand.length >= 4,
   { promotesTo: 'haveWithoutA' });
 handGateChant('haveWithoutA', '以有胜无', 'A', '若你手牌不少于3张',
@@ -471,19 +471,19 @@ const rallyCard = (id, name, tier, ap, scaled, promotesTo = null) => registerSki
     ? `/effect{力量}${1 + (sctx.self.rallyCount ?? 0)}`
     : '/effect{力量}1'),
 });
-rallyCard('rally', '活动筋骨', 'C', 1, false, 'rallyPlus');
-rallyCard('rallyPlus', '活动筋骨', 'B', 1, true, 'rallyMaster');
-rallyCard('rallyMaster', '活动筋骨', 'A', 0, true);
+rallyCard('limberUpC', '活动筋骨', 'C', 1, false, 'limberUpB');
+rallyCard('limberUpB', '活动筋骨', 'B', 1, true, 'limberUpA');
+rallyCard('limberUpA', '活动筋骨', 'A', 0, true);
 
 // ==== 碎击系列（格挡转负面效果）=================================================
 // 【破】在此是固定触发（不按层）：消耗全部格挡，换目标/全体的虚弱。
 // 碎击 C：1AP 9伤；破：目标虚弱2。
 registerSkill({
-  id: 'shatterHit', name: '碎击', type: 'normal', tier: 'C', series: 'block',
+  id: 'shatterHitC', name: '碎击', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
-  promotesTo: 'shatterBone',
+  promotesTo: 'shatterHitB',
   use(sctx) {
     attackDamage(sctx, 9);
     const target = enemyTarget(sctx);
@@ -499,7 +499,7 @@ registerSkill({
 
 // 碎击 B：1AP 9伤；破：目标虚弱3。
 registerSkill({
-  id: 'shatterBone', name: '碎击', type: 'normal', tier: 'B', series: 'block',
+  id: 'shatterHitB', name: '碎击', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -560,8 +560,8 @@ const rapidBlockCard = (id, name, tier, ap, per, promotesTo = null) => registerS
     return `本回合已打出${played}牌（/effect{格挡}${Math.floor(played / per)}）`;
   },
 });
-rapidBlockCard('fastRain', '快如雨', 'C', 1, 4, 'fastWind');
-rapidBlockCard('fastWind', '疾如风', 'B', 1, 3, 'fastWindA');
+rapidBlockCard('fastRain', '快如雨', 'C', 1, 4, 'fastWindB');
+rapidBlockCard('fastWindB', '疾如风', 'B', 1, 3, 'fastWindA');
 rapidBlockCard('fastWindA', '疾如风', 'A', 0, 3);
 
 // 准备出招（C/B/A）：1AP/0AP/0AP 冷却1——打出后到**下回合开始前**若未受到生命值伤害，
@@ -594,9 +594,9 @@ const prepareCard = (id, name, tier, ap, block, promotesTo = null) => registerSk
   describe: () => `下回合开始前未受伤则/effect{格挡}${block}`,
   battleDescribe: () => `下回合开始前未受伤则/effect{格挡}${block}`,
 });
-prepareCard('prepareMove', '准备出招', 'C', 1, 2, 'prepareMovePlus');
-prepareCard('prepareMovePlus', '准备出招', 'B', 0, 2, 'prepareMoveMaster');
-prepareCard('prepareMoveMaster', '准备出招', 'A', 0, 3);
+prepareCard('prepareMoveC', '准备出招', 'C', 1, 2, 'prepareMoveB');
+prepareCard('prepareMoveB', '准备出招', 'B', 0, 2, 'prepareMoveA');
+prepareCard('prepareMoveA', '准备出招', 'A', 0, 3);
 
 // 血拳 B/A（1AP，消耗）：打出后，本回合每打 1 卡恢复 1/2 生命。
 // 订阅挂 'turn' 窗口——回合结束自动清扫，「本回合」的时限由窗口语义承载；
@@ -621,7 +621,7 @@ const bloodFistCard = (id, name, tier, heal, promotesTo = null) => registerSkill
   describe: () => `打出后，本回合每打1卡，恢复${heal}生命`,
   battleDescribe: () => `打出后，本回合每打1卡，恢复${heal}生命`,
 });
-bloodFistCard('bloodFist', '血拳', 'B', 1, 'bloodFistA');
+bloodFistCard('bloodFistB', '血拳', 'B', 1, 'bloodFistA');
 bloodFistCard('bloodFistA', '血拳', 'A', 2);
 
 // ==== 深入卡（§3.3：需拆组合精英能力「武者」——rewards.js DEEP_GATES）====
@@ -645,5 +645,5 @@ const powerStanceCard = (id, tier, ap, promotesTo = null) => registerSkill({
     return `翻倍你的/effect{格挡}${layers > 0 ? `（当前${layers}层 → +${layers}）` : ''}`;
   },
 });
-powerStanceCard('powerStance', 'B', 1, 'powerStanceA');
+powerStanceCard('powerStanceB', 'B', 1, 'powerStanceA');
 powerStanceCard('powerStanceA', 'A', 0);

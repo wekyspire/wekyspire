@@ -18,8 +18,8 @@ const runState = createRunState({
   player: new Player({ maxHp: 40, maxMana: 3, maxActionPoints: PLAYER_BASE_AP }),
 });
 runState.player.deck = [
-  'punch', 'punch', 'punch', 'punch', 'duckHead', 'duckHead', 'guard', 'guard',
-  'slash', 'flyingDagger', 'agileCombo', 'breakStance',
+  'punch', 'punch', 'punch', 'punch', 'blockC', 'blockC', 'shieldC', 'shieldC',
+  'slash', 'flyingDaggerC', 'agileCombo', 'dismantleC',
 ].map(id => createSkillRuntime(id));
 
 const bridge = createBridge({
