@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import { defineParticleType } from './particleTypes.js';
 import { createFloatFx } from '../floatFx.js';
 
+const BURST_TYPE_CACHE = new Map();   // 参数组合 → 类型 id（模块级跨局共享）
+
 /**
  * 组合门面：spawn 走 GPU 池 burst；spawnText/spawnSprite/spawnEmitter/update 与
  * points/sprites/spritesUI 容器、activeCount 读数转接 floatFx——调用点零改动。
@@ -18,7 +20,6 @@ import { createFloatFx } from '../floatFx.js';
  */
 export function createBurstFacade(worldPool) {
   const floatFx = createFloatFx();
-  const typeCache = new Map();
 
   function spawn(x, y, o = {}) {
     if (!worldPool) return;
@@ -28,17 +29,20 @@ export function createBurstFacade(worldPool) {
     const size = o.size ?? 1.2;
     const colorHex = o.color ?? 0xff5533;
     const key = `${colorHex}|${speed}|${ttl}|${gravity}|${size}`;
-    let typeId = typeCache.get(key);
+    let typeId = BURST_TYPE_CACHE.get(key);
     if (typeId == null) {
       const c = new THREE.Color(colorHex);
       typeId = defineParticleType({
-        name: `burst${typeCache.size}`,
+        name: `burst${BURST_TYPE_CACHE.size}`,
         space: 'world',
         cap: 128,
         spawn: { rate: 0, ttl, ttlJit: 0.3, vel: [0, 0, 0], radial: speed * 0.9, gravity },
         render: { size, sizeEndK: 0.4, color: [c.r, c.g, c.b], ageHeat: 0.35 },
       });
-      typeCache.set(key, typeId);
+      // 模块级共享（夜测 1002 [r2路8] 根因）：缓存原是每战斗实例一份，同组合每局重复
+      // 登记新类型——全局注册表跨局只增不减，单局 >32 种组合即打满池类型行、之后爆发
+      // 全部静默丢失。共享后一组合一类型，跨局复用。
+      BURST_TYPE_CACHE.set(key, typeId);
     }
     worldPool.burst(typeId, o.count ?? 14, { at: [x, y, o.z ?? 70] });
   }

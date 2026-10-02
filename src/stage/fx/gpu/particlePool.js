@@ -41,7 +41,7 @@ import { bloomPassFlag, setBloomWriter } from '../bloomOffset.js';
 import { getParticleType } from './particleTypes.js';
 
 const POOL_N = 16384; // 粒子上限（Σ 类型 cap 超此值 = 分配时报错，容量账摆明处）
-const MAX_T = 32;     // 类型表行数 / alive 计数槽数
+const MAX_T = 64;     // 类型表行数 / alive 计数槽数（2026-10-02 32→64：Boss 长战多种爆发组合打满过，夜测 1002 [r2路8]）
 const MAX_ANCHOR = 32; // 锚点槽数
 const T_STRIDE = 12;  // 每类型行 12 vec4：
 //  r0: start, cap, kind(0 uber/1 custom), used（shader 归属判据；spawnActive 纯 CPU 侧）
