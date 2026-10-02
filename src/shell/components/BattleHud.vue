@@ -42,7 +42,9 @@ onBeforeUnmount(() => {
   <div class="hud">
     <div class="turn">{{ turnText }}</div>
     <div class="log">
-      <div v-for="l in ctrl.log" :key="l.id" :class="`log-${l.kind}`">{{ l.text }}</div>
+      <!-- 显示时尾弃：数据层留 30 条（runController pushLog 封顶），画面只画最新 8 条
+           ——长战 30 条全画会溢出左下角压到头像环/灵脉徽章（夜测 1002 [r2路8]，用户定口径） -->
+      <div v-for="l in ctrl.log.slice(0, 8)" :key="l.id" :class="`log-${l.kind}`">{{ l.text }}</div>
     </div>
   </div>
 </template>
