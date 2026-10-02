@@ -554,6 +554,8 @@ export class BattleStage {
 
   /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
+  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
+  dismissModals() { this._pickerKit?.dismissModals(); }
 
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，

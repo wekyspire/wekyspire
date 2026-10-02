@@ -305,6 +305,18 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     wipe: sceneWipe,
     getFxServices: () => (battleStage ?? roomStage ?? mapStage)?.fxServices?.() ?? null,
   });
+  // 切幕统一清算（夜测 1002 [路4]/[r4路8]/[r6路6] 特写跨幕滞留族的根治，用户批准）：
+  // 每次幕间转场在全黑中点、换台 swap 之前，先把**所有舞台**的全屏模态（获得特写/
+  // 选卡/选遗物）一键收起——目的地无论是什么，切幕那一刻还挂在任何舞台上的模态
+  // 都是残影（战斗舞台的会被随后 dispose 带走；塔楼是常驻舞台，不清算就会跨进章/
+  // 跨房压在新画面上）。包装在 player 实例上，三条域（controller/machines/cutsceneFlows）
+  // 的 sceneTransition 调用全部走这一份。
+  const rawSceneTransition = cutscene.sceneTransition.bind(cutscene);
+  cutscene.sceneTransition = (swap = null, opts = undefined) =>
+    rawSceneTransition(() => {
+      for (const st of [battleStage, roomStage, mapStage]) st?.dismissModals?.();
+      swap?.();
+    }, opts);
   // 按当前 run 状态查触发规则并逐条播放（幂等；阻塞靠流程侧 await）。返回实际播放条数——
   // 调用方据此决定要不要补一道"退出切幕"（没播剧本就别多等一次黑幕）。
   const playPendingCutscenes = async () => {

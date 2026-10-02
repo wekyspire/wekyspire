@@ -746,6 +746,18 @@ export function createStagePickerKit({
         ?? null;
     },
 
+    /**
+     * 切幕清算（wipe preStage 钩子调）：一键收起本舞台的全屏模态——获得特写淡出 +
+     * 选卡/选遗物界面收起。只做视觉与输入面回收：picker.close 不触发 onCancel/onSkip
+     * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 dismiss
+     * （收下语义，奖励已落账）。夜测 1002 特写跨幕滞留族（[路4]/[r4路8]/[r6路6]）的根治位。
+     */
+    dismissModals() {
+      if (showcase?.busy) showcase.dismiss('dismiss');
+      if (cardPicker?.opened) cardPicker.close();
+      if (relicPicker?.opened) relicPicker.close();
+    },
+
     /** 释放已创建的实例（宿主 dispose 时调用；未创建的无事发生）。 */
     dispose() {
       for (const inst of [cardPicker, relicPicker, showcase]) {

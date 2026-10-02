@@ -352,6 +352,8 @@ export class RoomStage {
 
   /** 获得物特写（通用组件：有素材用素材，没有就拿色块代替）。 */
   showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
+  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
+  dismissModals() { this._pickerKit?.dismissModals(); }
 
   /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
