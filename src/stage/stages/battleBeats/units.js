@@ -7,6 +7,7 @@ import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat } from '../../fx/spells/index.js';
+import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
 
 export const unitBeats = {
@@ -63,12 +64,21 @@ export const unitBeats = {
       // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送。fire-and-forget
       // （_fxRunScript 舞台寿命锚）：不占本节拍时序，受击既有演出（突进/击退/闪光）照常。
       const dmgFx = dealt > 0 ? resolveDamageFx(payload?.skillDefId) : null;
+      // 投射物抵达门（CPU 权威，projectileTrack.js）：tracked = 施术拍发射的飞行
+      // （火球/点火链）等真实抵达；owned = 本拍自持发射（火花乱射——runDamageBeat
+      // 弹出后落定回报）。主受击拍与命中爆点共用同一承诺（双 await 同一 p，
+      // 不双消费 FIFO）——「受伤」与「火花炸裂」由抵达同刻触发。
+      let projSync = null;
+      if (dmgFx?.proj === 'tracked') projSync = trackedGate(this._projectiles, unit);
+      else if (dmgFx?.proj === 'owned') projSync = ownedGate();
       if (dmgFx) {
         this._fxRunScript((c) => runDamageBeat(c, this._spellDeps(), {
           fx: dmgFx, unit, dealt,
           fromX: src?.position.x ?? null,   // 拳面镜像：攻击来向
+          projSync,
         }));
       }
+      if (projSync) await projSync.gate();   // 投射物卡：受击演出自抵达帧起
       if (lunging && remiCharge) {
         // 冲撞四拍：蹲伏蓄势 → 全距离冲刺（小跳弧+前扑）→ 撞击 → 高弹后跳+二跳回家。
         // 被打断（收拍/拆台）经 onKill 归位归零，不晾在半路上（正常结束也过这，幂等）。

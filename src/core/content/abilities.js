@@ -1,13 +1,13 @@
 import { registerAbility } from '../abilities/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction } from '../instructions/cards.js';
+import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction, ConsumeActionPointsInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { aliveEnemies } from '../state/battleState.js';
 import { getSkillDefinition } from '../skills/registry.js';
-import { isBladeCard } from './cardKit.js';
+import { isBladeCard, gainPower } from './cardKit.js';
 import { poisonAmpSubscription } from './woodSkills.js';
 import { applyBattleModifier } from '../run/prep.js';
 
@@ -37,28 +37,36 @@ registerAbility({
 });
 
 // ---- 刀法体系能力（BODY_CULTIVATION_CARDS §2.5）----
-// 获取途径（进阶事件内择精英/大师能力）仍是占位（TODO「精英/大师能力系统实装」）；
-// 这里先把**效果本体**按设计稿落地——机制都是现成的：
-//   刀客 = 换牌费用上限（battleState.swapCostCap，见 state/battleState.swapCostOf）；
-//   刀圣 = 战斗窗口订阅，打出刀法牌（isBladeCard 判据，含碎铁/斩链衍生牌）就抽 1。
 registerAbility({
   id: 'bladeMaster', name: '刀客', grade: 'elite',
-  description: '弃卡开销不超过 1。',
-  onBattleStart(ctx) {
-    // 取更严者：将来若有多条能力同时封顶，低的那个生效（null = 无上限）
-    ctx.battleState.swapCostCap = Math.min(ctx.battleState.swapCostCap ?? Infinity, 1);
-  },
+  description: '你每弃 1 张牌，获得 1 护盾。',
+  subscriptions: () => [{
+    when: DiscardCardInstruction, phase: 'post',
+    filter: (instr) => Boolean(instr.result.card),
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
+  }],
 });
 
 registerAbility({
   id: 'bladeSaint', requires: 'bladeMaster', name: '刀圣', grade: 'master',
-  description: '每打出一张刀法牌，抽 1 张牌。',
-  subscriptions: () => [{
-    when: UseSkillInstruction, phase: 'post',
-    filter: (instr) => isBladeCard(instr.skill),
-    react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new DrawCardsInstruction({ count: 1, reason: '刀圣' }), instr),
-  }],
+  description: '你每弃 2 张牌，所有刀法牌伤害+1。',
+  subscriptions: () => {
+    let count = 0;
+    return [{
+      when: DiscardCardInstruction, phase: 'post',
+      filter: (instr) => Boolean(instr.result.card),
+      react: (instr, ctx) => {
+        count += 1;
+        if (count % 2 !== 0) return;
+        for (const zone of ['hand', 'deck']) {
+          for (const card of ctx.battleState.zones[zone]) {
+            if (isBladeCard(card)) gainPower(ctx, card, 1);
+          }
+        }
+      },
+    }];
+  },
 });
 
 // ============================================================================
@@ -90,19 +98,23 @@ registerAbility({
   }],
 });
 
-// 大师 **起手式**：战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。
-// 判据 = 伤害指令携带的 skill 反查 def.type === 'fire'（dealDamage 透传 sctx.self）。
+// 大师 **起手式**：战斗中，你打出的第一张攻击牌让你回复 3 魏启。
+// 「攻击牌」= 该次出牌的指令子树含对敌伤害（风怒同口径）。
 registerAbility({
   id: 'openerGambit', requires: 'pyroBlast', name: '起手式', grade: 'master',
-  description: '战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。',
+  description: '战斗中，你打出的第一张攻击牌让你回复 3 魏启。',
   subscriptions: () => {
     let used = false; // 战斗窗口闭包：每场重置（订阅随战斗销毁）
     return [{
-      when: DealDamageInstruction, phase: 'pre',
-      filter: (instr, ctx) => !used && instr.source === ctx.player && !instr.fixed
-        && instr.type === 'major'
-        && instr.skill && getSkillDefinition(instr.skill.defId)?.type === 'fire',
-      react: (instr) => { used = true; instr.setPayload('damage', instr.payload.damage * 2); },
+      when: UseSkillInstruction, phase: 'post',
+      filter: () => !used,
+      react: (instr, ctx) => {
+        const dealtToEnemy = (node) => node.children?.some(c =>
+          (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
+        if (!dealtToEnemy(instr)) return;
+        used = true;
+        ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr);
+      },
     }];
   },
 });

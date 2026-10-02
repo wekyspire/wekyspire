@@ -376,12 +376,9 @@ registerEffect({
 });
 
 // ==== 呼吸系列（刀系·弃牌回补）==================================================
-// 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层
-// （武者/完美另加格挡，每层各 block 层）。
-// 正面增益：监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销），敌方清除增益时
-// 随层数一并拆除；回合末自行消散（提交 -全部层数 → 过零自动注销订阅）。
-// 换牌（R3）内部走弃牌指令，同样触发。全系效果同强度（格挡1）；阶梯差在卡牌侧：
-// C/B 纯消耗整战一次、A 完美呼吸去消耗。
+// 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层。
+// 监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销）；回合末自行消散
+// （提交 -全部层数 → 过零自动注销订阅）。换牌（R3）内部走弃牌指令，同样触发。
 
 // 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
 const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
@@ -393,12 +390,10 @@ const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
   }), instr),
 });
 
-function registerBreathEffect({ id, name, block = 0 }) {
+function registerBreathEffect({ id, name }) {
   registerEffect({
     id, type: 'buff', stacking: 'count', name,
-    description: block > 0
-      ? `本回合内每弃 1 张牌：抽 1 张牌、获得格挡 ${block} 层。回合结束时消散。`
-      : '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
+    description: '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
     icon: '🌬️',
     color: 'green',
     subscriptions: (unit) => [{
@@ -409,18 +404,11 @@ function registerBreathEffect({ id, name, block = 0 }) {
         const stacks = unit.getEffectStacks(id);
         if (stacks <= 0) return;
         ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: stacks }), instr);
-        if (block > 0) {
-          ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: unit, effectId: 'block', stacks: stacks * block,
-          }), instr);
-        }
       },
     }, clearsAtPlayerTurnEnd(id)(unit)],
   });
 }
 registerBreathEffect({ id: 'breath', name: '呼吸' });
-registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', block: 1 });
-registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', block: 1 });
 
 // 治疗（EFFECTS.md）：回合开始时恢复层数点生命，失去所有层数——与再生的区别是
 // 整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。

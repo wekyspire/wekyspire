@@ -6,7 +6,7 @@
 // kind → 基础块映射在 runDamageBeat。语义源：体系 series（主）+ 卡名（方向变体）。
 // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送（每拍独立缩放伤害量）。
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { slashSweep, punchImpact, fireBurst, screenFlash } from './blocks.js';
+import { slashSweep, punchImpact, fireBurst, screenFlash, arcProjectile } from './blocks.js';
 import { cartoonNova } from './cartoonNova.js';
 
 // 爆裂术大爆炸的去重表（defId → 上次爆心演出的 performance.now()）
@@ -118,30 +118,30 @@ export function resolveDamageFx(defId) {
     }
     case 'block': {        // 格挡系攻击链（掌/腿/破架——体修同源，施术拍已逐卡走 fistCast）
       const name = def.name ?? '';
-      const heavy = /摘星|贯心|旋风腿|碎头|扫堂/.test(name);
+      const heavy = /摘星|贯心|旋风腿|碎骨|扫堂/.test(name);
       const rapid = /二击|双击/.test(name);
       return { kind: 'punch', heavy, rapid };
     }
-    case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点）
+    case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
-      return { kind: 'fireburst', impactDelayMs: 80 };
+      return { kind: 'fireburst', proj: 'tracked' };
     case 'fireRain':       // 火雨/火瀑（群伤落地）
       return { kind: 'fireburst', ground: true };
     case 'fireWhirl':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
       return { kind: 'fireburst', ground: true };
-    case 'spark':          // 火花链（多段小伤——逐发小火）
-      return { kind: 'ignition', impactDelayMs: 60 };
+    case 'spark':          // 火花链（乱射：本拍自持投射物——随机弧快弹，抵达才爆）
+      return { kind: 'ignition', proj: 'owned' };
     case 'fireControl': {  // 控火术：按 id 分——燃=单体火爆 / 爆=群伤落地 / 破=小火
-      if (def.id === 'fireControlBurn') return { kind: 'fireburst', impactDelayMs: 60 };
+      if (def.id === 'fireControlBurn') return { kind: 'fireburst' };
       if (def.id === 'fireControlDetonate') return { kind: 'fireburst', ground: true };
       if (def.id === 'burnSnap' || def.id === 'burnSnapPlus') return { kind: 'ignition' };
       return null;
     }
     case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发；id 供 AOE 多拍去重）
       return { kind: 'nova', id: def.id };
-    case 'ignite':         // 点火/烈焰/炙焰/热浪（小伤 + 燃烧赋予）
-      return { kind: 'ignition' };
+    case 'ignite':         // 点火/热浪（小伤 + 燃烧赋予；施术拍点种投射物，本拍等抵达）
+      return { kind: 'ignition', proj: 'tracked' };
     default:
       return null;
   }
@@ -151,8 +151,11 @@ export function resolveDamageFx(defId) {
  * 在伤害节拍跑一次命中演出（units.js _damageHit 经 _fxRunScript 调用，
  * fire-and-forget 不占节拍时序）。锚点口径：胸口锚 = 立绘中心（血条同款
  * 3.4×scale），脚边锚 = 落地爆心（火向上烧）。fromX = 攻击来向（拳面镜像）。
+ * projSync（投射物抵达门，projectileTrack.js）：tracked = 施术拍发射的飞行
+ * （await gate() 等真实抵达）；owned = 本拍自持发射（火花乱射——发完 arcProjectile
+ * 落定即 arrived() 回报，主受击拍同源等待）。
  */
-export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }) {
+export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, projSync = null }) {
   if (!fx || !unit) return;
   const s = unit._baseScale ?? 1;
   const chest = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
@@ -204,7 +207,7 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       return;
     }
     case 'fireburst': {
-      if (fx.impactDelayMs) await ctx.wait(fx.impactDelayMs);   // 等投射物落定再爆（施术拍已放行）
+      if (fx.proj === 'tracked') await projSync?.gate();   // 等投射物真实抵达再爆
       await fireBurst(ctx, deps, {
         at: feet,
         scale: fireScaleFor(dealt) * (fx.ground ? 0.9 : 1.0),
@@ -244,7 +247,20 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       return;
     }
     case 'ignition': {
-      if (fx.impactDelayMs) await ctx.wait(fx.impactDelayMs);   // 等投射物落定（火花连珠）
+      if (fx.proj === 'owned') {
+        // 火花乱射：本拍自持投射物（随机弧+随机时效），从主角手上弹出，抵达才爆；
+        // 落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发
+        await arcProjectile(ctx, deps, {
+          from: deps.playerAnchor?.() ?? { x: 0, y: 5, z: 0 },
+          to: chest,
+          color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55], size: 2.0,
+          ms: 170, arcH: 2.5, arcJitter: 1.2, stretch: 2.0, lampIntensity: 0,
+          trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.6 },
+        });
+        projSync?.arrived?.();
+      } else if (fx.proj === 'tracked') {
+        await projSync?.gate();   // 点火链：施术拍点种的投射物落定再引燃
+      }
       await fireBurst(ctx, deps, {
         at: feet,
         scale: Math.max(1.0, fireScaleFor(dealt) * 0.9),

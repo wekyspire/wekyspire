@@ -187,7 +187,7 @@ export function breakAllBlock(sctx, target = sctx.player) {
 }
 
 // 【短暂】：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，抽到不打出也不许
-// "攥着过夜"）。砺刀系与遗物生成的〈压制射击〉用这一形态。
+// "攥着过夜"）。磨刀系与遗物生成的〈压制射击〉用这一形态。
 // ⚠ 短暂只有「在手」这一种形态——焚毁即彻底离场，无例外。
 export function leaveHandAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
@@ -286,9 +286,9 @@ export function selected(instr) {
   return instr?.result?.selection ?? [];
 }
 
-// 是否刀法牌（培植/开刃/砺刀系列的作用域判定）。
+// 是否刀法牌（培植/开刃/磨刀系列的作用域判定）。
 // 判据 = 「blade 系列」而非「keywords 含 blade」：碎铁/出鞘等**斩的衍生与处理牌**是
-// 刀法牌（吃到关于刀法牌的一切效果与增益——养刀术/锻刀术/练刀/砺刀系），
+// 刀法牌（吃到关于刀法牌的一切效果与增益——养刀术/锻刀术/练刀/磨刀系），
 // 但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）。
 export function isBladeCard(card) {
   const def = getSkillDefinition(card.defId);

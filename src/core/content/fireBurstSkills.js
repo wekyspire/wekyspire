@@ -260,16 +260,17 @@ explosiveArtCard({ id: 'explosiveArt', tier: 'C', promotesTo: 'explosiveArtPlus'
 explosiveArtCard({ id: 'explosiveArtPlus', tier: 'B', promotesTo: 'explosiveArtMaster' });
 explosiveArtCard({ id: 'explosiveArtMaster', tier: 'A' });
 
-// 火焰旋风 C/B/A（0费，咏唱1）：激活期间
+// 火焰旋风 C/B/A + 焰流飓风 S（0费，咏唱1）：激活期间
 // **每消耗 2 魏启**，立刻造成一次
-// **次级（附级）群伤**（3/4/5——消耗计数挂 skillRuntime，跨次累计、余数保留
-// ——与血焰同口径，奇数零头不白烧）。
+// **次级（附级）群伤**（基础 3/4/5/5——消耗计数挂 skillRuntime，跨次累计、余数保留
+// ——与血焰同口径，奇数零头不白烧），你每 4 层燃烧令伤害 +1（S 每 3 层 +1）。
 // 次级 = 不吃攻击加成、不触发任何响应（炎魔附燃/控火灼/伤残/格挡都不连锁）——旋风是消耗的
 // 回声，不是攻击；与爆裂术同亮时同一笔消耗吃双份回报（蓄能 + 即时群伤）仍成立，
 // 但不再与炎魔互喂滚雪球。即时+可叠加是溢价，每点数值压在爆裂 deferred 系数之下。
-function fireWhirlCard({ id, tier, dmg, promotesTo }) {
+function fireWhirlCard({ id, name = '火焰旋风', tier, dmg, burnPer = 4, promotesTo = null }) {
+  const dmgOf = (sctx) => dmg + Math.floor(sctx.player.getEffectStacks('burn') / burnPer);
   registerSkill({
-    id, name: '火焰旋风', type: 'fire', tier, series: 'fireWhirl',
+    id, name, type: 'fire', tier, series: 'fireWhirl',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -288,19 +289,20 @@ function fireWhirlCard({ id, tier, dmg, promotesTo }) {
           self.whirlPool -= procs * 2;
           while (procs-- > 0) {
             for (const e of aliveEnemies(sctx.battleState)) {
-              if (!e.isDead()) dealDamage(sctx, dmg, { target: e, type: 'minor', tags: ['aoe'] });
+              if (!e.isDead()) dealDamage(sctx, dmgOf(sctx), { target: e, type: 'minor', tags: ['aoe'] });
             }
           }
         },
       }],
     },
-    describe: () => `每消耗2魏启，${dmg}次级群伤`,
-    battleDescribe: () => `每消耗2魏启，${dmg}次级群伤`,
+    describe: () => `每消耗2魏启，${dmg}次级群伤，你每${burnPer}层/effect{燃烧}伤害+1`,
+    battleDescribe: (sctx) => `每消耗2魏启，${dmgOf(sctx)}次级群伤`,
   });
 }
 fireWhirlCard({ id: 'fireWhirl', tier: 'C', dmg: 3, promotesTo: 'fireWhirlPlus' });
 fireWhirlCard({ id: 'fireWhirlPlus', tier: 'B', dmg: 4, promotesTo: 'fireWhirlMaster' });
 fireWhirlCard({ id: 'fireWhirlMaster', tier: 'A', dmg: 5 });
+fireWhirlCard({ id: 'fireWhirlS', name: '焰流飓风', tier: 'S', dmg: 5, burnPer: 3 });
 
 // 余热 B/A + 重燃 S（0费，消耗）：本回合每消耗过 3 魏启回复 2/3/4 蓝。
 // 读 history.turn.manaConsumed
@@ -333,10 +335,10 @@ residualHeatCard({ id: 'residualHeatMaster', tier: 'A', name: '余热', per: 3, 
 // S 位名「重燃」（与低阶同系列但有自己的名字）
 residualHeatCard({ id: 'residualHeatStar', tier: 'S', name: '重燃', per: 3, back: 4 });
 
-// 火焰淬炼 C/B/A（2魏，冷却1）：立刻回复 3 魏启，
+// 淬炼 C/B/A（2魏，冷却1）：立刻回复 3 魏启，
 // 并获得 4/6/8 护盾——萃取系列的火系镜像，换「不延迟一回合」（萃取走纳气 =
 // 下回合开闸）。净蓝量为正（2 换 3）：在爆裂体系里「消耗 2」本身也是燃料——
-// 喂蓄能/旋风/余热台账，一次过蓝多份回报。B 档与 C 同名（火焰淬炼），A 档烈炎淬炼。
+// 喂蓄能/旋风/余热台账，一次过蓝多份回报。
 function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireTemper',
@@ -353,9 +355,9 @@ function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
     battleDescribe: () => `回复${mana}魏启，${shield}护盾`,
   });
 }
-fireTemperCard({ id: 'fireTemper', name: '火焰淬炼', tier: 'C', mana: 3, shield: 4, promotesTo: 'fireTemperPlus' });
-fireTemperCard({ id: 'fireTemperPlus', name: '火焰淬炼', tier: 'B', mana: 3, shield: 6, promotesTo: 'fireTemperMaster' });
-fireTemperCard({ id: 'fireTemperMaster', name: '烈炎淬炼', tier: 'A', mana: 3, shield: 8 });
+fireTemperCard({ id: 'fireTemper', name: '淬炼', tier: 'C', mana: 3, shield: 4, promotesTo: 'fireTemperPlus' });
+fireTemperCard({ id: 'fireTemperPlus', name: '淬炼', tier: 'B', mana: 3, shield: 6, promotesTo: 'fireTemperMaster' });
+fireTemperCard({ id: 'fireTemperMaster', name: '淬炼', tier: 'A', mana: 3, shield: 8 });
 
 // 烫手 C/B/A（冷却1）：抽 3/4/4，A 档费用 2魏→1魏（阶差 = 「C→B 抽数、B→A 费用」）。
 // 冷却限频保住「烫手山芋扔了又回来」的循环意象——爆裂体系的过牌引擎。
@@ -450,7 +452,7 @@ reliefValveCard({ id: 'reliefValveMaster', tier: 'A', base: 7, perMana: 5 });
 // 凝焰工厂。X = 打出时点的全部现有魏启——**走费用系统**（cost.mana = 'X'，卡面只出
 // X 徽章，文本不再解释）；实付量由费用指令记在 runtime.xCost 上供效果读取。
 // 燃烧施加给**目标敌人**。X=0 时只给纳气与平底。
-// 纳气全档统一 2；B/A 补平底燃烧（3X+2 / 3X+4）；S 档焰形（4X+4）。
+// 纳气全档统一 2；焰涌 C/B/A = 2X+1/2X+3/2X+5；S 档焰凝 = 3X+5。
 function condenseFlameCard({ id, name, tier, naqi, burnPerX, burnFlat = 0, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'condense',
@@ -472,10 +474,10 @@ function condenseFlameCard({ id, name, tier, naqi, burnPerX, burnFlat = 0, promo
     },
   });
 }
-condenseFlameCard({ id: 'flameBirth', name: '焰生', tier: 'C', naqi: 2, burnPerX: 3, promotesTo: 'flameSurge' });
-condenseFlameCard({ id: 'flameSurge', name: '焰涌', tier: 'B', naqi: 2, burnPerX: 3, burnFlat: 2, promotesTo: 'flameCondense' });
-condenseFlameCard({ id: 'flameCondense', name: '焰凝', tier: 'A', naqi: 2, burnPerX: 3, burnFlat: 4 });
-condenseFlameCard({ id: 'flameForm', name: '焰形', tier: 'S', naqi: 2, burnPerX: 4, burnFlat: 4 });
+condenseFlameCard({ id: 'flameBirth', name: '焰涌', tier: 'C', naqi: 2, burnPerX: 2, burnFlat: 1, promotesTo: 'flameSurge' });
+condenseFlameCard({ id: 'flameSurge', name: '焰涌', tier: 'B', naqi: 2, burnPerX: 2, burnFlat: 3, promotesTo: 'flameCondense' });
+condenseFlameCard({ id: 'flameCondense', name: '焰涌', tier: 'A', naqi: 2, burnPerX: 2, burnFlat: 5 });
+condenseFlameCard({ id: 'flameForm', name: '焰凝', tier: 'S', naqi: 2, burnPerX: 3, burnFlat: 5 });
 
 // ====================================================================
 // §1.1 高热系列（回蓝：每回合咏唱触发 纳气 + 自施燃烧；消耗咏唱）
@@ -575,8 +577,8 @@ fireRainCard({ id: 'fireStream', name: '火瀑', tier: 'A', damage: 16 });
 // §1.1 添柴系列（焚卡换魏启）
 // ====================================================================
 
-// 添柴/旺火：1AP，选 1 手牌焚毁 → 获得魏启（旺火 B 不消耗——焚牌引擎的可循环位；
-// 添柴 C 仍是消耗）。
+// 添柴 C/B：1AP，选 1 手牌焚毁 → 获得魏启（B 起不消耗——焚牌引擎的可循环位；
+// C 仍是消耗）。
 // 可打出条件：手上有「其他卡」可焚（结算中自身已离手进 pending，canUse 在
 // 预览态读手牌需排除自身）。
 function fuelCard({ id, name, tier, mana, exhaust = true, promotesTo }) {
@@ -607,14 +609,14 @@ function fuelCard({ id, name, tier, mana, exhaust = true, promotesTo }) {
     describe: () => `选1手牌焚毁，获得${mana}魏启`,
   });
 }
-// 添柴链：添柴 C 消耗 2魏 / 旺火 B 不消耗 2魏 / 烧却 A 不消耗 3魏。
-// 晋升为单链（添柴→旺火→烧却）；焚抽需求由独立的焚风链承担（见下）。
+// 添柴链：C 消耗 2魏 / B 不消耗 2魏 / A 不消耗 3魏。
+// 晋升为单链（C→B→A）；焚抽需求由独立的浇油链承担（见下）。
 fuelCard({ id: 'fuelTheFire', name: '添柴', tier: 'C', mana: 2, promotesTo: ['roaringFire'] });
-fuelCard({ id: 'roaringFire', name: '旺火', tier: 'B', mana: 2, exhaust: false, promotesTo: 'blazeUp' });
+fuelCard({ id: 'roaringFire', name: '添柴', tier: 'B', mana: 2, exhaust: false, promotesTo: 'blazeUp' });
 
-// 烧却（A，不消耗）：选 1 手牌焚毁 → 获得 3 魏启。
+// 添柴（A，不消耗）：选 1 手牌焚毁 → 获得 3 魏启。
 registerSkill({
-  id: 'blazeUp', name: '烧却', type: 'fire', tier: 'A', series: 'fuel',
+  id: 'blazeUp', name: '添柴', type: 'fire', tier: 'A', series: 'fuel',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -637,11 +639,11 @@ registerSkill({
   describe: () => '选1手牌焚毁，获得3魏启',
 });
 
-// 燎原（A，不消耗）：抽 2 牌焚毁（不可控）→ 获得 6 魏启。
+// 添柴（A 不可控分叉，不消耗）：抽 2 牌焚毁 → 获得 6 魏启。
 // 「抽2牌焚毁」分两个 stage：先抽（持有 DrawCardsInstruction 引用读 result.drawn），
 // 次段焚毁刚抽到的牌——满手/空库时抽牌落空，焚毁随之落空，魏启照发。
 registerSkill({
-  id: 'wildfire', name: '燎原', type: 'fire', tier: 'A', series: 'fuel',
+  id: 'wildfire', name: '添柴', type: 'fire', tier: 'A', series: 'fuel',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -661,12 +663,12 @@ registerSkill({
 });
 
 
-// 焚风 C/B/A（独立焚抽链，全员冷却1）：选 1 手牌焚毁，抽 2/3/3；
+// 浇油 C/B/A（独立焚抽链，全员冷却1）：选 1 手牌焚毁，抽 2/3/3；
 // C 1AP → B 1AP 加抽 → A 去行动点。全员冷却1 = 每回合限一次的烧牌过牌，节奏同烫手。
 // 空手也可打出：无牌可焚时退化为纯抽牌（不焚毁直接抽）。
 function burnWindCard({ id, tier, actionPoint, draw, promotesTo = null }) {
   registerSkill({
-    id, name: '焚风', type: 'fire', tier, series: 'burnWind',
+    id, name: '浇油', type: 'fire', tier, series: 'burnWind',
     cost: { mana: 0, actionPoint },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',

@@ -1,39 +1,17 @@
-// 火花连珠模板（spark：火花/终极火花——多段小伤）：N 发亮黄小快弹从主角指尖
-// 连珠弹出（小 size + 快飞 + 低弧 + 大拉伸 = 「撒」出去的火花雨）。命中在伤害
-// 节拍逐发小火（damageFx spark → ignition）。
-import { cardFlare, arcProjectile } from './blocks.js';
+// 火花起手模板（spark 乱射链：火花 C/B/A + 终极火花 S——多段随机小伤）：
+// 施术拍只有卡面起手脉冲——投射物归伤害拍自持（damageFx ignition owned：
+// 每拍从主角手上弹一发随机弧快弹，落定才爆 + 触发受击）。core 侧逐段随机
+// 索敌，投射物因此不能在施术拍预洒（目标真值只在伤害节拍有）。
+import { cardFlare } from './blocks.js';
 
 export const sparkCast = {
   defaults: {
-    color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55],   // 饱和亮黄（白核吃色相——热核也要带黄，否则读成蓝白）
-    core: 0xffd97a,
-    shots: 4, size: 2.0, projMs: 170, arcH: 2.5, staggerMs: 100,
-    notifyAfterMs: 100,
+    core: 0xffd97a,   // 卡面起手脉冲（饱和亮黄）
   },
   build(p) {
     const prm = { ...this.defaults, ...p };
     return async (ctx, deps, notify) => {
-      const targets = deps.targets();
-      if (!targets.length) { notify(); return; }
-      const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 200, scale: 1.25 });
-      let lastLaunch = null;
-      for (let s = 0; s < prm.shots; s++) {
-        for (const unit of targets) {
-          lastLaunch = ctx.spawn(async (c) => {
-            await c.wait(s * prm.staggerMs);
-            await arcProjectile(c, deps, {
-              from: deps.playerAnchor?.() ?? deps.cardTipWorld(),
-              to: deps.unitAnchor(unit),
-              color: prm.color, hot: prm.hot, size: prm.size,
-              ms: prm.projMs, arcH: prm.arcH, stretch: 2.0, lampIntensity: 0,
-              trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.6 },
-            });
-          });
-        }
-      }
-      await flareJob;
-      if (lastLaunch) await lastLaunch.promise;
-      await ctx.wait(prm.notifyAfterMs);
+      await cardFlare(ctx, deps, { color: prm.core, ms: 200, scale: 1.25 });
       notify();
     };
   },

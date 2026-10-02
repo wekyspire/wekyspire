@@ -33,8 +33,10 @@ export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) 
     // 本场战斗的恶魔词条标量（银行机超额取款；PreBattle 从 run.pendingDebuffs 折入）：
     // { blind, drawPenaltyTurns, noManaRegenTurns, deathAtTurnEnd, dotFromTurn }
     debuffs: { blind: false, drawPenaltyTurns: 0, noManaRegenTurns: 0, deathAtTurnEnd: 0, dotFromTurn: null },
-    swapCount: 0,       // 本场换牌次数（换牌费用 = swapBaseCost + swapCount，刀客/刀圣用 cap 封顶）
-    swapCostCap: null,  // 换牌费用上限（能力在 onBattleStart 设置；null = 无上限）
+    swapCount: 0,       // 本场换牌次数（换牌费用 = swapBaseCost + swapCount）
+    swapCostCap: null,  // 换牌费用上限（保留给未来的能力/效果设置；null = 无上限）
+    bladeDoubleArmed: false, // 斩灭的「下一次刀法牌伤害翻倍」挂起标记（不可叠加的载体）
+    selfImmolateDouble: false, // 自焚：本场战斗中玩火卡牌效果翻倍
     history: freshHistory(),
     rng: createRng(seed),
   };

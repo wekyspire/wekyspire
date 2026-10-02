@@ -53,6 +53,9 @@ export function spellQuad({ shade, width, height, name }) {
 /**
  * 投射物块：能量核（shader：宽晕+热核 HDR+闪烁）沿抛物弧线从 from 飞到 to。
  * 几何辅助 = mesh 朝速度方向自旋 + 前向拉伸（能量拖长读感）。可选灯拖尾与微粒尾迹。
+ * track = 目标单位：向 deps.projectiles 登记抵达承诺（CPU 权威——伤害拍 await
+ * 真实抵达，落定/被杀/正常结束三路径都解决承诺，节拍链不挂）。
+ * arcJitter > 0 = 乱射档：弧高与飞行时长逐发随机（arcH × (1±jitter/2)、ms ±12%）。
  */
 export async function arcProjectile(ctx, deps, {
   from, to,
@@ -61,8 +64,18 @@ export async function arcProjectile(ctx, deps, {
   stretch = 1.35,   // 前向拉伸比（拳风/箭矢类快件拉大读「破空」）
   lampName = 'light:fx0', lampIntensity = 700,
   trail = null,   // { color, speed?, size?, ttl? }：沿途微粒尾迹（每 ~70ms 两颗）
+  track = null,   // 目标单位（登记抵达承诺；缺省不登记）
+  arcJitter = 0,
 } = {}) {
-  if (!from || !to) return;
+  let arrive = null;
+  if (track) {
+    deps.projectiles?.track(track, new Promise((r) => { arrive = r; }));
+  }
+  if (!from || !to) { arrive?.(); return; }
+  if (arcJitter > 0) {
+    arcH = arcH * (1 - arcJitter / 2 + Math.random() * arcJitter);
+    ms = Math.round(ms * (0.88 + Math.random() * 0.24));
+  }
   const uPhase = uniform(0.0);
   const uColor = linearColor(color);
   const uHot = linearColor(hot);
@@ -77,6 +90,7 @@ export async function arcProjectile(ctx, deps, {
   ctx.onKill(() => {
     deps.scene.remove(quad); geo.dispose(); mat.dispose();
     if (lamp) lamp.intensity = 0;
+    arrive?.();
   });
   if (trail) {
     ctx.spawn(async (c) => {   // 尾迹随父本被杀
@@ -106,6 +120,7 @@ export async function arcProjectile(ctx, deps, {
     await ctx.wait(3000);
     deps.scene.remove(quad); geo.dispose(); mat.dispose();
     if (lamp) lamp.intensity = 0;
+    arrive?.();   // hold 是排障画布：立即放行节拍，不悬停等待方
     return;
   }
   const st = { t: 0 };
@@ -132,6 +147,7 @@ export async function arcProjectile(ctx, deps, {
     onComplete: () => {
       deps.scene.remove(quad); geo.dispose(); mat.dispose();
       if (lamp) lamp.intensity = 0;
+      arrive?.();
     },
   });
 }

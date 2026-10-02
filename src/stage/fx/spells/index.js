@@ -64,18 +64,18 @@ const SERIES_SPELLS = {
   fireBall:      { id: 'fireballCast' },                                 // 火球链+蓄热火球
   firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
   fireRain:      { id: 'fireRainCast' },                                 // 火雨/火瀑
-  ignite:        { id: 'igniteCast' },                                   // 点火/烈焰/炙焰/热浪
+  ignite:        { id: 'igniteCast' },                                   // 点火/热浪
   burst:         { id: 'castFlare', params: { flareColor: 0xff9a3d } },  // 爆裂咏唱（新星在伤害拍）
   selfImmolate:  { id: 'castFlare', params: { flareColor: 0xffb066 } },  // 焰刃/玩火（火刀）
   // ---- 2026-10-02 火系铺量 ----
-  burnDoubler:   { id: 'burnSurge' },                                    // 焚烧/焚天/星炎：燃烧翻倍
+  burnDoubler:   { id: 'burnSurge' },                                    // 焚烧/星炎：燃烧翻倍
   spark:         { id: 'sparkCast' },                                    // 火花链（多段小伤连珠）
   fireWhirl:     { id: 'fireWhirlCast' },                                // 火焰旋风：主角火环外推
-  flameHeal:     { id: 'selfFlame', params: {                            // 焰愈/浴火：金焰缠身
+  flameHeal:     { id: 'selfFlame', params: {                            // 焰愈：金焰缠身
                      color: [1.0, 0.72, 0.30], hot: [1.2, 1.05, 0.70], ember: [1.0, 0.42, 0.08], core: 0xffc27a } },
   kindling:      { id: 'selfFlame', params: { scale: 0.7 } },            // 可燃血液（小）
   fever:         { id: 'selfFlame' },                                    // 急燃/高热/白炽
-  fireWall:      { id: 'selfFlame', params: { scale: 0.7 } },            // 火盾/火墙/火壁
+  fireWall:      { id: 'selfFlame', params: { scale: 0.7 } },            // 火墙
   magmaArmor:    { id: 'selfFlame', params: {                            // 熔岩铠甲：深红岩浆调
                      color: [0.9, 0.30, 0.10], hot: [1.1, 0.75, 0.40], ember: [0.8, 0.12, 0.02], core: 0xff5a2a } },
   patience:      { id: 'selfFlame', params: {                            // 血焰：深红
@@ -85,9 +85,9 @@ const SERIES_SPELLS = {
                      sparks: { color: 0x8affd0 } } },
   mirrorBurn:    { id: 'selfFlame' },                                    // 镜燃
   fireChant:     { id: 'selfFlame' },                                    // 燃心决/绝炎/火焰披风（自燃件）
-  fuel:          { id: 'fuelCast' },                                     // 添柴/烧却/燎原：焚卡回蓝
-  burnWind:      { id: 'fuelCast' },                                     // 焚风（焚牌抽牌）
-  condense:      { id: 'igniteCast', params: { selfSparks: true } },     // 焰生链：点火+纳气
+  fuel:          { id: 'fuelCast' },                                     // 添柴：焚卡回蓝
+  burnWind:      { id: 'fuelCast' },                                     // 浇油（焚牌抽牌）
+  condense:      { id: 'igniteCast', params: { selfSparks: true } },     // 焰涌链：点火+纳气
   shock:         { id: 'fireballCast', params: {                         // 爆裂冲击/轰灭：重弹平射
                      size: 6.0, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
   fireControl:   { id: 'castFlare', params: { flareColor: 0xff8a4d } },  // 控火术（0 费快件——短起手）
@@ -127,17 +127,14 @@ const CARD_SPELLS = {
   myriadHands:    { template: 'fistCast', params: { mode: 'rapid', shots: 6, staggerMs: 65 } },   // S 万手
   // ---- 火系逐卡（2026-10-02）----
   burnBurstStar:  { template: 'burnSurge', params: { scale: 1.25 } },     // 星炎（×3，S）
-  fireSpark:      { template: 'sparkCast', params: { shots: 4 } },        // 火花 C（3伤×4）
-  blazingStream:  { template: 'sparkCast', params: { shots: 4 } },        // 火花 B（4伤×4）
-  sparkStorm:     { template: 'sparkCast', params: { shots: 5, staggerMs: 85 } },  // 终极火花（×5）
   nirvana:        { template: 'selfFlame', params: { pillar: true, scale: 1.1,    // 涅槃（S）
                     color: [1.0, 0.72, 0.30], hot: [1.3, 1.1, 0.75], ember: [1.0, 0.42, 0.08], core: 0xffd27a } },
-  bathFlame:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 浴火（A）
+  bathFlame:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 焰愈（A）
                     color: [1.0, 0.72, 0.30], hot: [1.2, 1.05, 0.70], ember: [1.0, 0.42, 0.08], core: 0xffc27a } },
   // 群燃件（对所有敌人施加燃烧）：逐敌点火种
   warmUp:         { template: 'igniteCast', params: { all: true } },
   dazzleEye:      { template: 'igniteCast', params: { all: true } },
-  scorchBody:     { template: 'igniteCast', params: { all: true, selfSparks: true } },  // 灼身：己身也燃
+  scorchBody:     { template: 'igniteCast', params: { all: true, selfSparks: true } },  // 取暖（A）：己身也燃
   // 焚卡回蓝件的火咏唱变体
   smeltCard:      { template: 'fuelCast' },
   smeltCardPlus:  { template: 'fuelCast' },
@@ -273,6 +270,7 @@ export function resolveSpellFx(defId) {
 export function runSpellFx({ defId, deps, notify }) {
   const hit = resolveSpellFx(defId);
   if (!hit) return null;
+  deps.projectiles?.reset?.();   // 新一次施术拍：清掉上一张卡无人消费的抵达登记
   let notified = false;
   const notifySafe = () => { if (!notified) { notified = true; try { notify?.(); } catch (_) {} } };
   const fn = hit.template.build({ ...hit.params, _defId: defId });   // _defId：模板内反查 def（目标口径等）

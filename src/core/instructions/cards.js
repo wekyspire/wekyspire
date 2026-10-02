@@ -128,7 +128,7 @@ export class DiscardOverflowInstruction extends BattleInstruction {
   }
 }
 
-// 移牌：任意 zone → 任意 zone（可选落点 index）。牌库检索抽取（完美飞刀）、
+// 移牌：任意 zone → 任意 zone（可选落点 index）。牌库检索抽取（绝灭飞刀）、
 // 回合结束自动回库（开刃/斩灭）、手牌自由换序（刃心）等统一走这里，保证有 PRE/POST 与播报。
 export class MoveCardInstruction extends BattleInstruction {
   constructor({ uniqueID, toZone, index = null }, opts = {}) {

@@ -50,7 +50,7 @@ export function enemyTarget(sctx) {
 }
 
 // ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
-// 无冷却（冷却1 在 B 坚固盾——升阶的阶差）。
+// 无冷却（冷却1 在 B 盾——升阶的阶差）。
 registerSkill({
   id: 'guard', name: '盾', type: 'normal', tier: 'C', series: 'block',
   canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
@@ -65,13 +65,13 @@ registerSkill({
   describe: () => '5护盾',
 });
 
-// ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
+// ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位；1AP 冷却1，伤害走 F1 攻击面板轨）
 // 点火是火体系的燃烧入口——由首次点亮火灵脉时进阶获赠直发
 // （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
   id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   targetMode: 'enemy',
   promotesTo: 'blaze',

@@ -26,10 +26,10 @@ import {
   breakAllBlock,
 } from './cardKit.js';
 
-// 抱头（格挡系列 C）：+1 层格挡 + 4 护盾。
+// 格挡（格挡系列 C）：+1 层格挡 + 4 护盾。
 // 不是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
 registerSkill({
-  id: 'duckHead', name: '抱头', type: 'normal', tier: 'C', series: 'block',
+  id: 'duckHead', name: '格挡', type: 'normal', tier: 'C', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -108,7 +108,7 @@ perfectReady.isPerfectCondition = true;
 // 数字阶梯：10 / 20格挡2 / 2×10 / 24格挡2 / S 30格挡4。完美条件为战术挑战保留。
 // 【命中】口径（与 NAMED 词条一致）：**造成伤害即可触发**——不要求生命值伤害
 // （打在护盾上也算命中），被闪避/被 veto/目标已死才算未命中；
-// 多段伤害能触发多次（精心二击两段都命中 → 格挡×2）。
+// 多段伤害能触发多次（精准二击两段都命中 → 格挡×2）。
 const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, block = 1, promotesTo = null } = {}) => {
   const dmgText = (fn) => `${fn(damage)}${hits > 1 ? `×${hits}` : ''}`;
   return registerSkill({
@@ -136,9 +136,9 @@ const perfectSeries = (id, name, tier, damage, { ap = 2, hits = 1, block = 1, pr
   });
 };
 perfectSeries('carefulStrike', '精准一击', 'C', 10, { ap: 1, promotesTo: 'foldWillow' }); // 10/1AP，对标快拳
-perfectSeries('doubleStrike', '精心二击', 'B', 10, { hits: 2 }); // 延伸卡：2AP 2×10，命中两段各喂格挡
-perfectSeries('foldWillow', '折杨手', 'B', 20, { block: 2, promotesTo: 'embraceCloud' });
-perfectSeries('embraceCloud', '揽云手', 'A', 24, { block: 2 }); // S 直出不作晋升目标（S 只走事件，D4-c）
+perfectSeries('doubleStrike', '精准二击', 'B', 10, { hits: 2 }); // 延伸卡：2AP 2×10，命中两段各喂格挡
+perfectSeries('foldWillow', '精准一击', 'B', 20, { block: 2, promotesTo: 'embraceCloud' });
+perfectSeries('embraceCloud', '精准一击', 'A', 24, { block: 2 }); // S 直出不作晋升目标（S 只走事件，D4-c）
 perfectSeries('pluckStar', '摘星手', 'S', 30, { block: 4 });
 
 // ==== 破势系列（格挡转资源）====================================================
@@ -147,7 +147,7 @@ perfectSeries('pluckStar', '摘星手', 'S', 30, { block: 4 });
 // 独立的转化指令。转化数值取设计稿字面值（不吃攻击面板/power——面板已计入基础
 // 一击，逐层叠加面板会指数化膨胀）。基础伤害仍是标准攻击算式（基数+面板+power）。
 
-// 破势/解体/贯心（破势系列 C/B/A）：基础伤害统一 9；破：每层 6/7/8 伤害
+// 解体/贯心（破势系列攻击链 C/B/A）：基础伤害统一 9；破：每层 6/7/8 伤害
 //（破势的爆发全押在格挡层数上，低层数时也不纯亏）。
 const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
@@ -168,11 +168,11 @@ const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSk
     return `${resolvedDamageText(sctx, base)}，/named{破}：${per}伤害${bonus}`;
   },
 });
-breakAttack('breakStance', '破势', 'C', 9, 6, 'disassemble');
+breakAttack('breakStance', '解体', 'C', 9, 6, 'disassemble');
 breakAttack('disassemble', '解体', 'B', 9, 7, 'pierceHeart');
 breakAttack('pierceHeart', '贯心', 'A', 9, 8, null);
 
-// 壁垒/堡垒/铜城（破势系列 C/B/A）：基础护盾 + 破：N 护盾（三阶皆消耗）。
+// 堡垒/铜城（破势系列护盾链 C/B/A）：基础护盾 + 破：N 护盾（三阶皆消耗）。
 // 设计稿未写费用 → 0 费。先给基础护盾，再清空格挡逐层转化。
 const breakShield = (id, name, tier, base, per, { promotesTo = null } = {}) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
@@ -194,7 +194,7 @@ const breakShield = (id, name, tier, base, per, { promotesTo = null } = {}) => r
     return `${base}护盾，/named{破}：${per}护盾${bonus}`;
   },
 });
-breakShield('barrier', '壁垒', 'C', 10, 6, { promotesTo: 'fortress' });
+breakShield('barrier', '堡垒', 'C', 10, 6, { promotesTo: 'fortress' });
 breakShield('fortress', '堡垒', 'B', 12, 7, { promotesTo: 'bronzeCity' });
 breakShield('bronzeCity', '铜城', 'A', 14, 8, {});
 
@@ -222,9 +222,9 @@ registerSkill({
 // ==== 盾系列（自保补全）========================================================
 // 盾（C）已在 skills.js（guard）；promotesTo 链 guard→solidShield 由 skills.js 侧接线。
 
-// 坚固盾（盾系列 B）：8 护盾，冷却1。
+// 盾（盾系列 B）：8 护盾，冷却1。
 registerSkill({
-  id: 'solidShield', name: '坚固盾', type: 'normal', tier: 'B', series: 'block',
+  id: 'solidShield', name: '盾', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -236,18 +236,18 @@ registerSkill({
   describe: () => '8护盾',
 });
 
-// 强化盾（盾系列 A，链顶）：11 护盾 + 1 层格挡。
+// 盾（盾系列 A，链顶）：8 护盾 + 1 层格挡。
 registerSkill({
-  id: 'reinforcedShield', name: '强化盾', type: 'normal', tier: 'A', series: 'block',
+  id: 'reinforcedShield', name: '盾', type: 'normal', tier: 'A', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    gainShield(sctx, 11);
+    gainShield(sctx, 8);
     gainBlock(sctx, 1);
     return true;
   },
-  describe: () => '11护盾，/effect{格挡}1',
+  describe: () => '8护盾，/effect{格挡}1',
 });
 
 // ==== 扫腿系列（多敌防卡）======================================================
@@ -280,7 +280,7 @@ sweepCard({ id: 'sweepHall', name: '扫堂腿', tier: 'A', damage: 11, block: 1,
 sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'S', damage: 15, block: 2 });
 
 // ==== 忍耐系列（受击转格挡）====================================================
-// 忍耐效果为常驻受击引擎（见 content/effects.js）；强撑 = 忍耐1 + 自身和目标虚弱3。
+// 忍耐效果为常驻受击引擎（见 content/effects.js）；B 档另加自身和目标虚弱3。
 
 // 忍耐 C：忍耐1。
 registerSkill({
@@ -296,9 +296,9 @@ registerSkill({
   describe: () => '/effect{忍耐}1',
 });
 
-// 强撑 B：忍耐1，自身和目标虚弱3（自弱换敌弱——忍耐姿态的代价面）。
+// 忍耐 B：忍耐1，自身和目标虚弱3（自弱换敌弱）。
 registerSkill({
-  id: 'toughItOut', name: '强撑', type: 'normal', tier: 'B', series: 'block',
+  id: 'toughItOut', name: '忍耐', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -353,11 +353,10 @@ turtleStanceCard('divineTurtle', '神龟姿态', 'S', 1, 2, 0, null, 0);
 
 // 武术链（格挡转攻击）：激活期间，玩家为来源的每一条**主级**伤害指令 PRE 加
 // 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。
-// C 1AP / B 0AP / A 0AP，咏唱 C/B=2、天一 A=1；数值全链统一 +2（等阶差距全押在
+// C 1AP / B 0AP / A 0AP，咏唱 C/B=2、A=1；数值全链统一 +2（等阶差距全押在
 // 费用与咏唱值上，每层加成不涨）。
 // 主级过滤是精通病灶的修复本体：精通/无双每抽一张牌发一条附级伤害，若不滤掉、
 // 每条都吃「格挡×N」加成——一回合几十上百的爆炸伤害即由此来。
-// 与贯心的逐层破伤天然咬合（§3「天一+贯心」斩杀线的引擎件）。
 const martialStanceCard = (id, name, tier, ap, per, weight, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'block',
   cost: { mana: 0, actionPoint: ap },
@@ -380,8 +379,8 @@ const martialStanceCard = (id, name, tier, ap, per, weight, promotesTo) => regis
   battleDescribe: (sctx) => `每层/effect{格挡}令你的伤害+${per}`,
 });
 martialStanceCard('martialStance', '武术姿态', 'C', 1, 2, 2, 'masterStance');
-martialStanceCard('masterStance', '大师姿态', 'B', 0, 2, 2, 'heavenStance');
-martialStanceCard('heavenStance', '天一姿态', 'A', 0, 2, 1, null);
+martialStanceCard('masterStance', '武术姿态', 'B', 0, 2, 2, 'heavenStance');
+martialStanceCard('heavenStance', '大师姿态', 'A', 0, 2, 1, null);
 
 // 狂战链（格挡转力量）：获得格挡时（一次正向获得事件，非逐层）也获得
 // 1 层力量；失去格挡（破的负层数 AddEffect）不触发。咏唱 1。
@@ -495,9 +494,9 @@ registerSkill({
   },
 });
 
-// 碎骨 B：1AP 9伤；破：目标虚弱3。
+// 碎击 B：1AP 9伤；破：目标虚弱3。
 registerSkill({
-  id: 'shatterBone', name: '碎骨', type: 'normal', tier: 'B', series: 'block',
+  id: 'shatterBone', name: '碎击', type: 'normal', tier: 'B', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -515,9 +514,9 @@ registerSkill({
   },
 });
 
-// 碎头 A：1AP 9伤；破：全体敌人虚弱3（AoE 化是碎头的阶差）。
+// 碎骨 A：1AP 9伤；破：全体敌人虚弱3（AoE 化是 A 档的阶差）。
 registerSkill({
-  id: 'shatterHead', name: '碎头', type: 'normal', tier: 'A', series: 'block',
+  id: 'shatterHead', name: '碎骨', type: 'normal', tier: 'A', series: 'block',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',

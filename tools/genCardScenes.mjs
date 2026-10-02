@@ -227,9 +227,8 @@ const SCENES = [
   { id: 'fireControlRefine', prompt: `a bright orange flame and a black smog mass colliding mid-frame and annihilating each other in white sparks, paired cancellation, a steel-gray gauntlet directing the clash from the bottom edge` },
   { id: 'fireControlScorch', prompt: `extreme close-up of a steel-gray gauntlet fist being dipped and coated in thick clinging flame, fire wrapping the knuckles like fuel, loaded for the next strike, dark background` },
   { id: 'fireControlSupreme', prompt: `an open steel-gray gauntlet palm-up with a whole court of tiny shaped flames hovering above it — a ring, a serpent, a blade, a bird — every flame bending to one will, supreme mastery, dark background` },
-  // 自焚/焰愈/焚天/镜燃/燃心
+  // 自焚/焰愈/焚烧/镜燃/燃心
   { id: 'redHotBlade', prompt: `a greatsword blade glowing red-hot from within filling the frame diagonally, heat shimmer rising off the steel, embers dripping from the edge` },
-  { id: 'immolateGrand', prompt: `everything in the frame consumed by white-hot incinerating fire, a knight silhouette at the center walking forward out of the inferno unburned, total annihilation blaze, the white fire dominant` },
   { id: 'nirvana', prompt: `a steel-gray knight kneeling inside a blooming lotus of fire, new bright armor gleaming through the burning old shell, rebirth from the flames, rising fire petals filling the frame` },
   { id: 'burnBurstStar', prompt: `a star-shaped flame erupting in three blinding points, the triple-pronged star fire huge in frame, radiating triple heat waves, only a steel-gray gauntlet at the bottom edge presenting it` },
   { id: 'karmaFire', prompt: `a small dark silhouette as a conduit: fire streaming onto one shoulder and pouring out the other arm toward the left, twin fire streams crossing at the tiny figure, the fire dominant` },
@@ -422,7 +421,7 @@ const ESCALATION_CUSTOM = {
     2: ', the same flat arc, a wider thicker brighter blade-trail, the air visibly splitting with a rip of light behind the edge',
     3: ', the same arc, a huge splitting arc tearing the whole frame open along its path, debris flung',
   },
-  cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
+  cycloneSlash: { // 回旋斩(C/B/A)：环爆、双环
     2: ', the same spinning armored knight inside the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
     3: ', the same spinning knight, feet planted wide in a low balanced stance, torso upright and controlled, a blazing double circle of blade-light sweeping around the knight at arms length outside the body, nothing passing through the knight, the greatsword gripped firmly in one gauntlet, clear depth between the light ring and the armor, sparks storming outward',
   },
@@ -449,7 +448,7 @@ const ESCALATION_CUSTOM = {
     2: ', the same two silhouettes, the ghost double now clearly more solid, motion-split streaks stretching between the two bodies, harder to tell apart',
     3: ', the same pair, the ghost double fully materialized with its own red scarf line, two indistinguishable silhouettes',
   },
-  flyingDagger: { // 飞刀(C)→强力飞刀(B)→绝灭飞刀(A)：刀尾光轨
+  flyingDagger: { // 飞刀(C/B)→绝灭飞刀(A)：刀尾光轨
     2: ', the same throwing knife, a long bright speed trail now stretching across the whole frame, the knife blurred with speed',
     3: ', the same knife, a screaming triple-bright trail with a spark wake, the tip glowing white-hot, annihilating momentum',
   },

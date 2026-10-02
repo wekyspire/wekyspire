@@ -420,13 +420,13 @@ function randomBodyCardAbove(sctx, tier) {
 // 计数器放 skillRuntime（chantCount，plain data 可序列化），跨回合累积不清零；
 // 自身发动/解除不计入（filter 按 uniqueID 排除）。
 
-// 频次阶梯 5/5/4；B/A 档费用栏留空 → 0 费。
-function registerPlayCountChant({ id, name, tier, every, ap = 1, promotesTo = null }) {
+// 频次阶梯 5/5/4/4；B 档起费用栏留空 → 0 费；S 档咏唱0。
+function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 1,
+    cardMode: 'chant', chantWeight: weight,
     promotesTo,
     use() { return true; },
     activated: {
@@ -446,23 +446,21 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, promotesTo = nu
   });
 }
 
-// 借力（C）：1AP，每 5 张抽 1。
 registerPlayCountChant({ id: 'leverage', name: '借力', tier: 'C', every: 5, promotesTo: 'redirect' });
-// 化劲（B）：0 费，每 5 张抽 1（升阶 = 免费化）。
-registerPlayCountChant({ id: 'redirect', name: '化劲', tier: 'B', every: 5, ap: 0, promotesTo: 'taiji' });
-// 太极（A）：0 费，每 4 张抽 1。
-registerPlayCountChant({ id: 'taiji', name: '太极', tier: 'A', every: 4, ap: 0 });
+registerPlayCountChant({ id: 'redirect', name: '借力', tier: 'B', every: 5, ap: 0, promotesTo: 'taiji' });
+registerPlayCountChant({ id: 'taiji', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'taijiS' });
+registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 4, ap: 0, weight: 0 });
 
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage 伤，
 // 每张独立随机选靶（多敌时伤害散步）；无存活敌人（战斗收尾）静默落空。
 
-function registerDrawDamageChant({ id, name, tier, damage, ap = 1, promotesTo = null }) {
+function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, promotesTo = null }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 1,
+    cardMode: 'chant', chantWeight: weight,
     promotesTo,
     use() { return true; },
     activated: {
@@ -484,12 +482,10 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, promotesTo = 
   });
 }
 
-// 入门（C）：1AP，2 伤。
-registerDrawDamageChant({ id: 'novice', name: '入门', tier: 'C', damage: 2, promotesTo: 'adept' });
-// 精通（B）：0 费，2 伤（升阶 = 免费化）
+registerDrawDamageChant({ id: 'novice', name: '精通', tier: 'C', damage: 2, promotesTo: 'adept' });
 registerDrawDamageChant({ id: 'adept', name: '精通', tier: 'B', damage: 2, ap: 0, promotesTo: 'peerless' });
-// 无双（A）：0 费，3 伤
-registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 3, ap: 0 });
+registerDrawDamageChant({ id: 'peerless', name: '精通', tier: 'A', damage: 3, ap: 0, promotesTo: 'peerlessS' });
+registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 3, ap: 0, weight: 0 });
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 
@@ -729,7 +725,7 @@ function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = nu
   });
 }
 discardEngineChant({ id: 'hunYuanPlus', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'hunYuanMaster' });
-discardEngineChant({ id: 'hunYuanMaster', name: '混元', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
+discardEngineChant({ id: 'hunYuanMaster', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
 discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 1, every: 2 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
@@ -783,7 +779,7 @@ registerSkill({
 });
 
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
-// 拳（C）×5 + 盾（C）×4 + 抱头（C）×1 + 肾上腺素 ×1 + 情况不对 ×1（情况不对仅一张，
+// 拳（C）×5 + 盾（C）×4 + 格挡（C）×1 + 肾上腺素 ×1 + 情况不对 ×1（情况不对仅一张，
 // 双份组合逆天；迷你词条保留——计 0 张手牌，抽到不卡手）
 //（肾上腺素 ×2 ——第二张由体修基础能力追加，见 routes.js）
 // 肾上腺素做节奏阀、情况不对做鬼抽保险。

@@ -359,7 +359,7 @@ function execBattle(S, cmd, t) {
         ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
       // 指定目标已死：引擎会回落到首个存活敌人（cardKit.enemyTarget）——静默改打很坑，明确告知
       const deadTargetNote = target?.isDead() ? `（指定目标「${target.name}」已死，实际打向首个存活敌人）` : '';
-      // 离手副作用回执（V5/D 实报：强力飞刀弃两侧牌在 headless 里静默——误弃主力件
+      // 离手副作用回执（V5/D 实报：飞刀弃两侧牌在 headless 里静默——误弃主力件
       // 直到下个状态渲染才发现）：打出前快照手牌，结算后 diff 出「被打出的卡顺带
       // 弄丢的牌」并点名去向（牌库底/焚毁）。GUI 有动画可见，文本界面必须给回执。
       const handBefore = new Map(hand.map(s => [s.uniqueID, defOf(s).name]));

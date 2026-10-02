@@ -11,9 +11,9 @@
 import { cardFlare, slashSweep, lightPillar, fireBurst, dreadVeil, screenFlash } from './blocks.js';
 
 const GRADES = {
-  A: { dreadMs: 340, fov: 7,  tremble: 0.13, veil: 0.58, slashScale: 1.9, slashMs: 380, gapMs: 130, pillarMs: 750,  pillarH: 26, flash: 0.5,  burst: 1.3 },
-  S: { dreadMs: 560, fov: 11, tremble: 0.20, veil: 0.74, slashScale: 2.5, slashMs: 420, gapMs: 170, pillarMs: 1000, pillarH: 34, flash: 0.75, burst: 1.55 },
-  X: { dreadMs: 850, fov: 16, tremble: 0.30, veil: 0.87, slashScale: 3.2, slashMs: 460, gapMs: 200, pillarMs: 1450, pillarH: 46, flash: 0.95, burst: 1.9 },
+  A: { dreadMs: 340, fov: 2,  tremble: 0.13, veil: 0.58, slashScale: 1.1, slashMs: 380, gapMs: 130, pillarMs: 750,  pillarH: 26, flash: 0.5,  burst: 1.3 },
+  S: { dreadMs: 560, fov: 2, tremble: 0.20, veil: 0.74, slashScale: 1.3, slashMs: 420, gapMs: 170, pillarMs: 1050, pillarH: 34, flash: 0.75, burst: 1.55 },
+  X: { dreadMs: 850, fov: 3, tremble: 0.30, veil: 0.87, slashScale: 1.5, slashMs: 460, gapMs: 200, pillarMs: 1350, pillarH: 46, flash: 0.95, burst: 1.9 },
 };
 
 export const heavenCleave = {
@@ -40,10 +40,10 @@ export const heavenCleave = {
       const ramp = veil.set(g.veil, g.dreadMs);
       const base = cam?.basePose ?? null;
       if (cam && base) cam.flyTo({ ...base, fov: base.fov + g.fov }, { durationMs: g.dreadMs + 160, ease: 'power2.in' });
-      if (feet) ctx.spawn((c) => lightPillar(c, deps, {
-        at: feet, color: [0.08, 0.10, 0.14], hot: [0.10, 0.12, 0.16],
-        width: X ? 6 : 4, height: g.pillarH, ms: g.dreadMs + 320,
-      }));
+      // if (feet) ctx.spawn((c) => lightPillar(c, deps, {
+      //   at: feet, color: [0.08, 0.10, 0.14], hot: [0.10, 0.12, 0.16],
+      //   width: X ? 2 : 1, height: g.pillarH, ms: g.dreadMs + 320,
+      // }));
       if (deps.shake?.sustain) {
         deps.shake.sustain(g.tremble * 0.3);
         await ctx.wait(Math.round(g.dreadMs * 0.4));
@@ -67,13 +67,13 @@ export const heavenCleave = {
           fringe: X ? [1.8, 2.0, 2.6] : [1.4, 1.6, 2.2],
         });
       }
-      // ③ 顿一拍 → 白金迸裂 + 冲天光柱 + 复原（相机/幕并行收回）
+      // ③ 顿一拍 → 白金迸裂 + 复原（相机/幕并行收回）
       await ctx.wait(g.gapMs);
       if (feet) {
-        ctx.spawn((c) => lightPillar(c, deps, {
-          at: feet, color: X ? [1.15, 1.05, 0.72] : [0.95, 0.95, 1.1], hot: [2.2, 2.1, 1.7],
-          width: X ? 7 : 5, height: g.pillarH, ms: g.pillarMs,
-        }));
+        // ctx.spawn((c) => lightPillar(c, deps, {
+        //   at: feet, color: X ? [1.15, 1.05, 0.72] : [0.95, 0.95, 1.1], hot: [2.2, 2.1, 1.7],
+        //   width: X ? 7 : 5, height: g.pillarH, ms: g.pillarMs,
+        // }));
         ctx.spawn((c) => fireBurst(c, deps, {
           at: feet, scale: g.burst,
           color: [1.0, 0.82, 0.42], hot: [1.8, 1.7, 1.4], ember: [1.2, 0.55, 0.14],

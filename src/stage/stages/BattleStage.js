@@ -66,6 +66,7 @@ import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
 import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
+import { createProjectileTracker } from '../fx/spells/projectileTrack.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { warmCharBurn } from '../fx/charBurn.js';
@@ -270,6 +271,9 @@ export class BattleStage {
     // 命名寻址注册表（fx/cast.js）：剧本/相机经名字拿句柄。战斗内登记
     // unit:<uniqueID> 与 role:player；anchor/light 由场景层登记（Phase 3+）
     this._cast = new Cast();
+    // 投射物抵达追踪（fx/spells/projectileTrack.js）：施术拍登记、伤害拍 await
+    // 真实抵达（CPU 权威，取代 impactDelayMs 猜测）
+    this._projectiles = createProjectileTracker();
     // PCG 道具被动响应（fx/notify.js）：带 behaviors 的场景件登记为 prop:<name>，
     // 重击等事件经 notify 单向分发（fire-and-forget，不进节拍、不读回值）
     this._notifyHub = createNotifyHub({ cast: this._cast });
