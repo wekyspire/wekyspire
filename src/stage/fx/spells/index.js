@@ -89,7 +89,7 @@ const SERIES_SPELLS = {
   burnWind:      { id: 'fuelCast' },                                     // 焚风（焚牌抽牌）
   condense:      { id: 'igniteCast', params: { selfSparks: true } },     // 焰生链：点火+纳气
   shock:         { id: 'fireballCast', params: {                         // 爆裂冲击/轰灭：重弹平射
-                     size: 2.8, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
+                     size: 6.0, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
   fireControl:   { id: 'castFlare', params: { flareColor: 0xff8a4d } },  // 控火术（0 费快件——短起手）
   fireControlFinder: { id: 'castFlare', params: { flareColor: 0xff8a4d } },
 };

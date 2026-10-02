@@ -7,7 +7,7 @@ export const sparkCast = {
   defaults: {
     color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55],   // 饱和亮黄（白核吃色相——热核也要带黄，否则读成蓝白）
     core: 0xffd97a,
-    shots: 4, size: 1.3, projMs: 170, arcH: 2.5, staggerMs: 100,
+    shots: 4, size: 2.0, projMs: 170, arcH: 2.5, staggerMs: 100,
     notifyAfterMs: 100,
   },
   build(p) {
@@ -26,7 +26,7 @@ export const sparkCast = {
               to: deps.unitAnchor(unit),
               color: prm.color, hot: prm.hot, size: prm.size,
               ms: prm.projMs, arcH: prm.arcH, stretch: 2.0, lampIntensity: 0,
-              trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.45 },
+              trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.6 },
             });
           });
         }

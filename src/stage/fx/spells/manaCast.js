@@ -12,7 +12,7 @@ export const manaCast = {
     color: [0.42, 0.68, 1.20],     // 魏启蓝
     hot: [0.75, 0.95, 1.35],
     core: 0x6fa8ff,
-    streams: 4, size: 3.0, projMs: 300, staggerMs: 65,
+    streams: 4, size: 4.2, projMs: 300, staggerMs: 65,
   },
   build(p) {
     const prm = { ...this.defaults, ...p };
@@ -54,7 +54,7 @@ export const manaCast = {
             from, to,
             color: prm.color, hot: prm.hot, size: prm.size,
             ms: prm.projMs, arcH: 3.2, stretch: 2.2, lampIntensity: 0,
-            trail: { color: prm.core, count: 1, ttl: 0.3, speed: 3, size: 0.5 },
+            trail: { color: prm.core, count: 1, ttl: 0.3, speed: 3, size: 0.65 },
           });
         });
       }

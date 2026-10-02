@@ -9,7 +9,7 @@ export const fireballCast = {
     color: [1.0, 0.42, 0.14],   // 火弹晕环色（线性）
     hot: [1.0, 0.86, 0.62],     // 热核色（暖白）
     core: 0xffb066,             // 卡面起手脉冲（hex）
-    size: 2.4, projMs: 300, arcH: 6,
+    size: 5.2, projMs: 300, arcH: 6,   // 战场 1 单位≈7.4px：5.2≈38px 球体（原 2.4≈18px 只有几像素亮核）
     shots: 1, staggerMs: 120,   // 连发：同目标错峰多发（伤害节拍逐发爆炸白送）
     notifyAfterMs: 220,         // 末发离手后的停顿（notify 前让弹道读出来）
   },
@@ -29,7 +29,7 @@ export const fireballCast = {
               to: deps.unitAnchor(unit),
               color: prm.color, hot: prm.hot, size: prm.size,
               ms: prm.projMs, arcH: prm.arcH,
-              trail: { color: 0xff7a2d },
+              trail: { color: 0xff7a2d, size: 1.0, ttl: 0.45 },
             });
           });
           lastLaunch = launch;   // 循环序 = 时间序，末发即最后一枚
