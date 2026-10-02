@@ -20,11 +20,11 @@ import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
-import { slashShade, darkSlashShade, coreShade, punchShade, fireBurstShade, beamShade } from './shaders.js';
+import { slashShade, darkSlashShade, projectileShade, ringFlashShade, punchShade, fireBurstShade, beamShade } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
-const linearColor = (rgb) => vec3(rgb[0], rgb[1], rgb[2]);
+export const linearColor = (rgb) => vec3(rgb[0], rgb[1], rgb[2]);
 
 /** 卡面起手：HDR 色脉冲过卡面（CardFxLayer.pulse 公共节拍，块只做参数化包装）。 */
 export async function cardFlare(ctx, deps, {
@@ -36,8 +36,9 @@ export async function cardFlare(ctx, deps, {
   await ctx.wait(Math.round(ms * 0.6));   // 起手不必等脉冲收尾——亮起来就够了
 }
 
-/** 施术面片（shader 主笔件的公共装配）：Node 材质 + colorNode + 层级纪律一把装好。 */
-function spellQuad({ shade, width, height, name }) {
+/** 施术面片（shader 主笔件的公共装配）：Node 材质 + colorNode + 层级纪律一把装好。
+ *  导出供模板层拼自定义件（火环/蓄力核等非块级造型）——装配纪律只有这一份。 */
+export function spellQuad({ shade, width, height, name }) {
   const geo = new THREE.PlaneGeometry(width, height);
   const mat = additiveLight(new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false }));
   const dbg = new URLSearchParams(location.search).get('spelldebug');
@@ -57,6 +58,7 @@ export async function arcProjectile(ctx, deps, {
   from, to,
   color = [1.0, 0.45, 0.18], hot = [1.0, 0.85, 0.63],
   size = 2.4, ms = 320, arcH = 7,
+  stretch = 1.35,   // 前向拉伸比（拳风/箭矢类快件拉大读「破空」）
   lampName = 'light:fx0', lampIntensity = 700,
   trail = null,   // { color, speed?, size?, ttl? }：沿途微粒尾迹（每 ~70ms 两颗）
 } = {}) {
@@ -64,9 +66,8 @@ export async function arcProjectile(ctx, deps, {
   const uPhase = uniform(0.0);
   const uColor = linearColor(color);
   const uHot = linearColor(hot);
-  const uRing = uniform(0.0);   // 投射物无冲击环
   const { quad, geo, mat } = spellQuad({
-    shade: coreShade(uv(), uPhase, uColor, uHot, uRing),
+    shade: projectileShade(uv(), uPhase, uColor, uHot),
     width: size, height: size, name: 'spellFx:projectile',
   });
   quad.position.set(from.x, from.y, from.z ?? 0);
@@ -90,7 +91,8 @@ export async function arcProjectile(ctx, deps, {
       }
     });
   }
-  // hold：定格 t=0.5 弧中点——投射物轨迹/形状的稳定画布（截图不赌时序）
+  // hold：定格 t=0.5 弧中点——投射物轨迹/形状的稳定画布（截图不赌时序）。
+  // 拉伸与切线自旋也要落（定格帧须与实况同形，否则取证读感失真）
   if (new URLSearchParams(location.search).get('spelldebug') === 'hold') {
     const t = 0.5;
     quad.position.set(
@@ -98,6 +100,8 @@ export async function arcProjectile(ctx, deps, {
       0.5 * (from.y + to.y) + Math.sin(Math.PI * t) * arcH,
       0.5 * ((from.z ?? 0) + (to.z ?? 0)),
     );
+    quad.rotation.z = Math.atan2(to.y - from.y, to.x - from.x);
+    quad.scale.set(stretch, 1.0, 1);
     uPhase.value = 10;
     await ctx.wait(3000);
     deps.scene.remove(quad); geo.dispose(); mat.dispose();
@@ -118,7 +122,7 @@ export async function arcProjectile(ctx, deps, {
       const vx = to.x - from.x;
       const vy = (to.y - from.y) + arcH * Math.PI * Math.cos(Math.PI * t);
       quad.rotation.z = Math.atan2(vy, vx);
-      quad.scale.set(1.35, 1.0, 1);
+      quad.scale.set(stretch, 1.0, 1);
       uPhase.value = t * 20;   // shader 闪烁相位（单调即可）
       if (lamp) {
         lamp.position.copy(quad.position);
@@ -158,9 +162,8 @@ export async function impactBurst(ctx, deps, {
   const uProg = uniform(0.0);
   const uColor = linearColor(color);
   const uHot = linearColor(hot);
-  const uRing = uniform(1.0);
   const { quad, geo, mat } = spellQuad({
-    shade: coreShade(uv(), uProg, uColor, uHot, uRing),
+    shade: ringFlashShade(uv(), uProg, uColor, uHot),
     width: flashSize, height: flashSize, name: 'spellFx:flash',
   });
   quad.position.set(at.x, at.y, (at.z ?? 0) + 2);

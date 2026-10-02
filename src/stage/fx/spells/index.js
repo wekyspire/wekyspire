@@ -34,12 +34,19 @@ import { fireballCast } from './fireballCast.js';
 import { fireRainCast } from './fireRainCast.js';
 import { igniteCast } from './igniteCast.js';
 import { heavenCleave } from './heavenCleave.js';
+import { fistCast } from './fistCast.js';
+import { burnSurge } from './burnSurge.js';
+import { sparkCast } from './sparkCast.js';
+import { selfFlame } from './selfFlame.js';
+import { fuelCast } from './fuelCast.js';
+import { fireWhirlCast } from './fireWhirlCast.js';
 
 export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
 
 // 模板注册表（一文件一模板，id 即登记键）
 const TEMPLATES = {
   emberBurst, castFlare, fireballCast, fireRainCast, igniteCast, heavenCleave,
+  fistCast, burnSurge, sparkCast, selfFlame, fuelCast, fireWhirlCast,
 };
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
@@ -47,14 +54,39 @@ const TEMPLATES = {
 const SERIES_SPELLS = {
   ember:         { id: 'emberBurst' },                                   // 余烬系（旧先锋模板整链）
   blade:         { id: 'castFlare', params: { flareColor: 0xcfd8ea } },  // 刀法：冷白起手
-  fist:          { id: 'castFlare', params: { flareColor: 0xf2e7d2 } },  // 拳系：暖白起手
-  punch:         { id: 'castFlare', params: { flareColor: 0xf2e7d2 } },  // 基石拳
+  fist:          { id: 'fistCast' },                                     // 体修：拳风破空（四模式）
+  punch:         { id: 'fistCast' },                                     // 基石拳同体修
   fireBall:      { id: 'fireballCast' },                                 // 火球链+蓄热火球
   firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
   fireRain:      { id: 'fireRainCast' },                                 // 火雨/火瀑
   ignite:        { id: 'igniteCast' },                                   // 点火/烈焰/炙焰/热浪
   burst:         { id: 'castFlare', params: { flareColor: 0xff9a3d } },  // 爆裂咏唱（新星在伤害拍）
   selfImmolate:  { id: 'castFlare', params: { flareColor: 0xffb066 } },  // 焰刃/玩火（火刀）
+  // ---- 2026-10-02 火系铺量 ----
+  burnDoubler:   { id: 'burnSurge' },                                    // 焚烧/焚天/星炎：燃烧翻倍
+  spark:         { id: 'sparkCast' },                                    // 火花链（多段小伤连珠）
+  fireWhirl:     { id: 'fireWhirlCast' },                                // 火焰旋风：主角火环外推
+  flameHeal:     { id: 'selfFlame', params: {                            // 焰愈/浴火：金焰缠身
+                     color: [1.0, 0.72, 0.30], hot: [1.2, 1.05, 0.70], ember: [1.0, 0.42, 0.08], core: 0xffc27a } },
+  kindling:      { id: 'selfFlame', params: { scale: 0.7 } },            // 可燃血液（小）
+  fever:         { id: 'selfFlame' },                                    // 急燃/高热/白炽
+  fireWall:      { id: 'selfFlame', params: { scale: 0.7 } },            // 火盾/火墙/火壁
+  magmaArmor:    { id: 'selfFlame', params: {                            // 熔岩铠甲：深红岩浆调
+                     color: [0.9, 0.30, 0.10], hot: [1.1, 0.75, 0.40], ember: [0.8, 0.12, 0.02], core: 0xff5a2a } },
+  patience:      { id: 'selfFlame', params: {                            // 血焰：深红
+                     color: [0.95, 0.25, 0.12], hot: [1.1, 0.65, 0.45], ember: [0.75, 0.08, 0.05], core: 0xff4a3a } },
+  willOWisp:     { id: 'selfFlame', params: {                            // 鬼火：青白冷焰
+                     color: [0.45, 0.95, 0.70], hot: [0.80, 1.10, 0.95], ember: [0.15, 0.55, 0.35], core: 0x7affc8,
+                     sparks: { color: 0x8affd0 } } },
+  mirrorBurn:    { id: 'selfFlame' },                                    // 镜燃
+  fireChant:     { id: 'selfFlame' },                                    // 燃心决/绝炎/火焰披风（自燃件）
+  fuel:          { id: 'fuelCast' },                                     // 添柴/烧却/燎原：焚卡回蓝
+  burnWind:      { id: 'fuelCast' },                                     // 焚风（焚牌抽牌）
+  condense:      { id: 'igniteCast', params: { selfSparks: true } },     // 焰生链：点火+纳气
+  shock:         { id: 'fireballCast', params: {                         // 爆裂冲击/轰灭：重弹平射
+                     size: 2.8, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
+  fireControl:   { id: 'castFlare', params: { flareColor: 0xff8a4d } },  // 控火术（0 费快件——短起手）
+  fireControlFinder: { id: 'castFlare', params: { flareColor: 0xff8a4d } },
 };
 
 // 逐卡覆写（defId → { template, params }）：换模板或微调参数（同体系内单卡变体）。
@@ -71,6 +103,50 @@ const CARD_SPELLS = {
   mountainCleave:  { template: 'heavenCleave', params: { grade: 'A' } },
   skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
   godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
+  // ---- 体修逐卡（2026-10-02）----
+  // 重拳蓄力：崩/轰/炮/猛/真/虎/空形
+  boomFist:       { template: 'fistCast', params: { mode: 'heavy' } },
+  collapseFist:   { template: 'fistCast', params: { mode: 'heavy' } },
+  cannonFist:     { template: 'fistCast', params: { mode: 'heavy' } },
+  fierceFist:     { template: 'fistCast', params: { mode: 'heavy' } },
+  trueFist:       { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
+  tigerFist:      { template: 'fistCast', params: { mode: 'heavy' } },
+  emptyFist:      { template: 'fistCast', params: { mode: 'heavy', gatherMs: 560 } },   // S 空形拳
+  fullCharge:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
+  fullChargePlus: { template: 'fistCast', params: { mode: 'heavy', aoe: true } },
+  fullSpirit:     { template: 'fistCast', params: { mode: 'heavy', aoe: true, gatherMs: 500 } },  // 全神一击（群）
+  // 连击多射：雨拳/乱拳/千手/万手
+  rainFist:       { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },
+  wildFlurry:     { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },
+  thousandHands:  { template: 'fistCast', params: { mode: 'rapid', shots: 4, staggerMs: 80 } },
+  myriadHands:    { template: 'fistCast', params: { mode: 'rapid', shots: 6, staggerMs: 65 } },   // S 万手
+  // ---- 火系逐卡（2026-10-02）----
+  burnBurstStar:  { template: 'burnSurge', params: { scale: 1.25 } },     // 星炎（×3，S）
+  fireSpark:      { template: 'sparkCast', params: { shots: 4 } },        // 火花 C（3伤×4）
+  blazingStream:  { template: 'sparkCast', params: { shots: 4 } },        // 火花 B（4伤×4）
+  sparkStorm:     { template: 'sparkCast', params: { shots: 5, staggerMs: 85 } },  // 终极火花（×5）
+  nirvana:        { template: 'selfFlame', params: { pillar: true, scale: 1.1,    // 涅槃（S）
+                    color: [1.0, 0.72, 0.30], hot: [1.3, 1.1, 0.75], ember: [1.0, 0.42, 0.08], core: 0xffd27a } },
+  bathFlame:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 浴火（A）
+                    color: [1.0, 0.72, 0.30], hot: [1.2, 1.05, 0.70], ember: [1.0, 0.42, 0.08], core: 0xffc27a } },
+  // 群燃件（对所有敌人施加燃烧）：逐敌点火种
+  warmUp:         { template: 'igniteCast', params: { all: true } },
+  dazzleEye:      { template: 'igniteCast', params: { all: true } },
+  scorchBody:     { template: 'igniteCast', params: { all: true, selfSparks: true } },  // 灼身：己身也燃
+  // 焚卡回蓝件的火咏唱变体
+  smeltCard:      { template: 'fuelCast' },
+  smeltCardPlus:  { template: 'fuelCast' },
+  // 焚尽牌库/手牌的决绝件（depth）
+  lastStand:      { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
+  lastStandMaster: { template: 'fuelCast', params: { motes: 5, core: 0xff5a2a } },
+  allIn:          { template: 'fuelCast', params: { motes: 6, core: 0xff5a2a } },
+  // 庆典礼花（抽出所有爆裂术）：金焰缠身 + 火柱
+  fireworkShow:   { template: 'selfFlame', params: { pillar: true, scale: 1.05,
+                    color: [1.0, 0.75, 0.30], hot: [1.25, 1.1, 0.75], ember: [1.0, 0.45, 0.10], core: 0xffd27a,
+                    sparks: { color: 0xffd27a, count: 24 } } },
+  grandNewYear:   { template: 'selfFlame', params: { pillar: true, scale: 1.2,
+                    color: [1.0, 0.70, 0.25], hot: [1.35, 1.15, 0.80], ember: [1.0, 0.40, 0.08], core: 0xffe08a,
+                    sparks: { color: 0xffe08a, count: 30 } } },
 };
 
 /**
@@ -99,7 +175,7 @@ export function runSpellFx({ defId, deps, notify }) {
   if (!hit) return null;
   let notified = false;
   const notifySafe = () => { if (!notified) { notified = true; try { notify?.(); } catch (_) {} } };
-  const fn = hit.template.build(hit.params);
+  const fn = hit.template.build({ ...hit.params, _defId: defId });   // _defId：模板内反查 def（目标口径等）
   const h = runScript(async (ctx) => {
     try {
       await fn(ctx, deps, notifySafe);

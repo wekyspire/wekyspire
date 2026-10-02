@@ -91,25 +91,39 @@ export const darkSlashShade = Fn(([vUv, uProgress, uArc, uDir]) => {
 });
 
 /**
- * 能量核（投射物头 / 落点闪光共用）：径向双层（宽晕 + 热核 HDR）+ 可选扩张冲击环。
- *  · uRing = 0 时是投射物头（flicker 由 uProgress 高频项给出闪烁）；
- *  · uRing = 1 时是落点闪光（uProgress = 爆发进度 0..1，环随进度扩张读「冲击波」）。
+ * 投射物能量核：径向双层（宽晕 + 热核 HDR 闪烁）。
+ * （2026-10-02 拆分：原 coreShade 的第 5 参 uRing 是绑定雷区——uRing=0 时整个
+ * colorNode 输出全灭（投射物从未真正渲染，「火球」一直是尾迹粒子+灯在撑场）；
+ * 按「Fn ≤4 参」纪律拆成投射物/闪光两个 4 参版本。）
  * @param vUv quad uv
- * @param uProgress 头：任意单调时间量（供闪烁）；闪光：0..1 爆发进度
- * @param uColor vec3 晕/环色（线性）
+ * @param uProgress 任意单调时间量（供闪烁）
+ * @param uColor vec3 晕色（线性）
  * @param uHot vec3 热核色（峰值 ~2.4×HDR 过 bloom 阈）
- * @param uRing float 冲击环强度（0 关闭）
  */
-export const coreShade = Fn(([vUv, uProgress, uColor, uHot, uRing]) => {
+export const projectileShade = Fn(([vUv, uProgress, uColor, uHot]) => {
   const p = vUv.sub(vec2(0.5));
   const r = length(p).mul(2.0);
   const halo = exp(r.mul(r).mul(-4.5));
   const core = exp(r.mul(r).mul(-16.0));
   const flick = sin(uProgress.mul(43.0)).mul(0.08).add(0.92);
+  const rgb = uColor.mul(halo).add(uHot.mul(core.mul(flick).mul(2.4)));
+  return vec4(rgb, float(1.0));
+});
+
+/**
+ * 落点冲击闪光：宽晕 + 热核 + 扩张冲击环（uProgress = 爆发进度 0..1，环随进度
+ * 扩张读「冲击波」）。4 参纪律（见 projectileShade 头注）。
+ */
+export const ringFlashShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const halo = exp(r.mul(r).mul(-4.5));
+  const core = exp(r.mul(r).mul(-16.0));
   const ringR = uProgress.mul(1.15);
-  const ring = exp(pow(abs(r.sub(ringR)), float(2.0)).mul(-90.0)).mul(uRing);
-  const rgb = uColor.mul(halo)
-    .add(uHot.mul(core.mul(flick).mul(2.4)))
+  const ring = exp(pow(abs(r.sub(ringR)), float(2.0)).mul(-90.0));
+  const fade = oneMinus(uProgress.mul(uProgress));
+  const rgb = uColor.mul(halo.mul(fade))
+    .add(uHot.mul(core.mul(fade).mul(2.4)))
     .add(uColor.mul(ring.mul(1.6)));
   return vec4(rgb, float(1.0));
 });

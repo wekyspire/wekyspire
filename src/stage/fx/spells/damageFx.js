@@ -83,6 +83,16 @@ export function resolveDamageFx(defId) {
       return { kind: 'fireburst', impactDelayMs: 80 };
     case 'fireRain':       // 火雨/火瀑（群伤落地）
       return { kind: 'fireburst', ground: true };
+    case 'fireWhirl':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
+      return { kind: 'fireburst', ground: true };
+    case 'spark':          // 火花链（多段小伤——逐发小火）
+      return { kind: 'ignition', impactDelayMs: 60 };
+    case 'fireControl': {  // 控火术：按 id 分——燃=单体火爆 / 爆=群伤落地 / 破=小火
+      if (def.id === 'fireControlBurn') return { kind: 'fireburst', impactDelayMs: 60 };
+      if (def.id === 'fireControlDetonate') return { kind: 'fireburst', ground: true };
+      if (def.id === 'burnSnap' || def.id === 'burnSnapPlus') return { kind: 'ignition' };
+      return null;
+    }
     case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发）
       return { kind: 'nova' };
     case 'ignite':         // 点火/烈焰/炙焰/热浪（小伤 + 燃烧赋予）
@@ -177,6 +187,7 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       return;
     }
     case 'ignition': {
+      if (fx.impactDelayMs) await ctx.wait(fx.impactDelayMs);   // 等投射物落定（火花连珠）
       await fireBurst(ctx, deps, {
         at: feet,
         scale: Math.max(1.0, fireScaleFor(dealt) * 0.9),

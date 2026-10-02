@@ -281,6 +281,19 @@ export const cardBeats = {
       shake: this.shake,
       animator: this.animator,
       unitById: (id) => this._units.get(id) ?? null,
+      // 主角单位视图（自燃/浴火类施术的身体锚——配合 unitAnchor/unitFeet 使用）
+      playerUnit: () => {
+        const id = this._snapshot?.player?.uniqueID;
+        return id != null ? (this._units.get(id) ?? null) : null;
+      },
+      // 效果层数读取（条件造型：burnSurge 只点燃烧中的单位——快照口径，演出不读真值）
+      effectStacksOf: (unit, effectId) => {
+        const id = unit?.uniqueID;
+        if (id == null) return 0;
+        const u = (this._snapshot?.enemies ?? []).find(x => x.uniqueID === id)
+          ?? (this._snapshot?.player?.uniqueID === id ? this._snapshot.player : null);
+        return u?.effects?.find(e => e.effectId === effectId)?.stacks ?? 0;
+      },
       camera: this._sm.cameraDirector,   // 场景参数演出（天斩 fov 压迫/复原）
       markCleaveSplit: (units) => {   // 天斩断裂标记（死亡节拍消费）
         for (const u of units ?? []) this._cleaveSplit?.add(u.uniqueID);
