@@ -170,6 +170,7 @@ export default {
     const winH = bodyH * 0.19;
     const cellW = winW / reelCount;   // 单格宽（分格框/转轮鼓/锁定指示灯共用口径）
     const drumR = 0.9;
+    let cellFrameMesh = null;   // 窗口分格框（导出给 rig：恶魔选择的「框发热」辉光宿主）
 
     // ================= 柜体（带**真实开窗**）=================
     // 病灶备忘：早期版本柜体是一整块箱子，窗口只是正面上的暗色矩形 + 从箱面探出的鼓顶——
@@ -272,6 +273,7 @@ export default {
       const fmesh = new THREE.Mesh(fgeo, M.unlit);          // kit 共享族（资产禁自建材质）
       fmesh.userData.animRole = 'cellFrame';
       g.add(fmesh);
+      cellFrameMesh = fmesh;   // rig 接管：恶魔选择阶段的「框发热」呼吸辉光（换独立材质实例）
     }
 
     // ================= 窗口闸口（恶魔 roll 用）=================
@@ -533,6 +535,7 @@ export default {
 
     g.userData.parts = {
       body: g, leverPivot, reels, bulbs, reelLamps, needle: needlePivot, gate,
+      cellFrame: cellFrameMesh,           // 恶魔选择辉光宿主（rig 换独立材质实例驱动）
       gateOpenY: openTop + winH * 0.72,    // rig 用：开门位
       gateClosedY: winY,                   // rig 用：关门位（盖住开口）
       demonTint: shade(P.potionRed, -0.2), // 恶魔态占位色（偏暗红；素材到位后换贴图）

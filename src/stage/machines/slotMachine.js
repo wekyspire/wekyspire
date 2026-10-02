@@ -189,7 +189,7 @@ export function createSlotMachine(ctx) {
         type: 'item',
         payload: {
           title: o.name,
-          body: `${o.desc}（恶魔词条 · ${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
+          body: `${o.desc}（恶魔词条，${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
           tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
         },
       };
@@ -198,6 +198,10 @@ export function createSlotMachine(ctx) {
       ctx.picker().addPickable(id, proxy, { kind: 'demon' });
       d.picks.push({ id, optionId: o.id, proxy });
     });
+    // 可交互暗示（2026-09-30 用户定重做）：分格框恶魔红 HDR 呼吸辉光——由 rig 的
+    // demonChoiceGlow 驱动（材质 uniform 直出、峰值过 bloom 阈起晕），不再叠加色
+    // 红面片（首版大红方块视觉验收实毙）。等阶区分交给 tooltip 文字。
+    ctx.rigs().get('slot')?.demonChoiceGlow?.(true);
   }
 
   /** 撤掉转轮热区（含 tooltip token 与隐形拾取面）——选择阶段结束/退场都要走，否则空热区还能点到。 */
@@ -210,6 +214,7 @@ export function createSlotMachine(ctx) {
       p.proxy?.material?.dispose();
     }
     if (d) d.picks = null;
+    ctx.rigs().get('slot')?.demonChoiceGlow?.(false);   // 分格框辉光收场（rig 内渐出还原金框）
   }
 
   /** 恶魔 roll 未选就想走：钱已经到手，先把词条领了——镜头拉回老虎机 + 泡泡。 */

@@ -55,7 +55,8 @@ export function burnRandomDeckCards(run, count, { rng = run.rng } = {}) {
     const idx = run.player.deck.findIndex(rt => rt.uniqueID === pick.uniqueID);
     if (idx < 0) break;
     run.player.deck.splice(idx, 1);
-    burned.push(getSkillDefinition(pick.defId)?.name ?? pick.defId);
+    // 返回 {defId, name}：壳层拿它播「焚毁」获得演出（artKey = defId 取卡面场景图）
+    burned.push({ defId: pick.defId, name: getSkillDefinition(pick.defId)?.name ?? pick.defId });
   }
   return burned;
 }
@@ -89,12 +90,12 @@ export const DEMON_DEBUFFS = Object.freeze({
     immediate: (run) => loser(run, 0.65), permanent: { maxHp: 3 },
   },
   oblivion: {
-    tier: 'black', name: '忘却', desc: '随机焚毁你牌库中 2 张卡牌（不会焚 S 级卡），然后你可选一张卡焚毁。',
+    tier: 'black', name: '忘却', desc: '随机焚毁你牌库中 2 张卡牌（不会焚 S 级卡牌），然后你可选一张卡牌焚毁。',
     immediate: (run) => burnRandomDeckCards(run, 2), offer: 'burn',
   },
   daze: {
     tier: 'black', name: '浑浑噩噩',
-    desc: '下一场战斗中，初始抽牌数 -1、回合开始时抽牌数 -1，但你可立马选一张卡升级。',
+    desc: '下一场战斗中，初始抽牌数 -1、回合开始时抽牌数 -1，但你可立马选一张卡牌升级。',
     battle: { battles: 1, initialDrawPenalty: 1, drawPenaltyTurns: 99 }, offer: 'upgrade',
   },
   fragileFive: {
@@ -328,7 +329,7 @@ export function chooseDemonDebuff(run, id) {
   const def = DEMON_DEBUFFS[id];
   const out = { id, name: def.name, tier: def.tier, immediate: null, battle: null };
 
-  def.immediate?.(run);
+  out.immediate = def.immediate?.(run) ?? null;   // 忘却/忘记 = 被焚卡 [{defId,name}]（壳层演出用）
   if (def.permanent) applyPermanent(run, def.permanent);
   if (def.offer) b.offers.push(def.offer);
   if (def.battle) {

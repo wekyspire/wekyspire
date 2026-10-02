@@ -55,9 +55,12 @@ export class ScreenShake {
     this._amp = 0;   // 当前幅度（世界单位）
     this._dur = 0;   // 本次震荡总时长（秒）
     this._t = 0;     // 包络时间
+    this._clock = 0; // 连续时钟（sustain 阶段也要走相位——静止偏移不是抖动）
     this._phX = 0;
     this._phY = 0;
     this._active = false;
+    this._sustain = 0; // 持续微震幅度（天斩压迫期；0 = 无）
+    this._hadOffset = false; // 本轮是否写过通道（收口撤除的判据）
   }
 
   /** 触发一次震荡。strength = damageSeverity 口径的烈度值（饱和曲线映射）。 */
@@ -77,25 +80,40 @@ export class ScreenShake {
     this._active = true;
   }
 
-  /** 当前显示幅度（世界单位，含包络衰减；测试断言口）。 */
+  /**
+   * 持续微震（施术压迫期——天斩 dread 段）：level = 世界单位幅度，0 = 停。
+   * 与 impulse 的包络互不干预——帧偏移取两者较大者；**忘了清零会把相机永久
+   * 推歪**，调用方（模板协程）必须在收尾/onKill 归零。
+   */
+  sustain(level) {
+    this._sustain = Math.max(0, level ?? 0);
+  }
+
+  /** 当前显示幅度（世界单位，含包络衰减与持续档；测试断言口）。 */
   get currentAmplitude() {
-    return this._active ? this._amp * (1 - this._t / this._dur) : 0;
+    const env = this._active ? this._amp * (1 - this._t / this._dur) : 0;
+    return Math.max(env, this._sustain);
   }
 
   /** 帧推进：算偏移并登记到导演的本路通道（tick 里调用；落笔由导演 commit 统一做）。 */
   update(dt) {
-    if (!this._active) return;
-    this._t += dt;
-    if (this._t >= this._dur) {
-      this._active = false;
-      this._dir.clearOffset(this._id); // 包络走完必须撤通道：残留会把相机永久推歪
+    this._clock += dt;
+    if (this._active) {
+      this._t += dt;
+      if (this._t >= this._dur) this._active = false;
+    }
+    const env = this._active ? this._amp * (1 - this._t / this._dur) : 0;
+    const k = Math.max(env, this._sustain);
+    if (k <= 0) {
+      // 包络走完且无持续档：撤通道（残留会把相机永久推歪）；幂等
+      if (this._hadOffset) { this._dir.clearOffset(this._id); this._hadOffset = false; }
       return;
     }
-    const k = this._amp * (1 - this._t / this._dur); // 线性包络
+    this._hadOffset = true;
     this._dir.setOffset(
       this._id,
-      k * Math.sin(this._t * SHAKE_FREQ_X + this._phX),
-      k * SHAKE_AXIS_RATIO * Math.sin(this._t * SHAKE_FREQ_Y + this._phY),
+      k * Math.sin(this._clock * SHAKE_FREQ_X + this._phX),
+      k * SHAKE_AXIS_RATIO * Math.sin(this._clock * SHAKE_FREQ_Y + this._phY),
       0, // z 不震：沿视向推拉会被透视放大成缩放感
     );
   }
@@ -103,6 +121,7 @@ export class ScreenShake {
   /** 退场复位：撤掉自己那路通道（相机已归下一舞台所有，别的什么都不碰）。 */
   dispose() {
     this._active = false;
+    this._sustain = 0;
     this._dir.clearOffset(this._id);
   }
 }

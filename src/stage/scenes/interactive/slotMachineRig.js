@@ -103,6 +103,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const body = parts?.body ?? object;
   const lever = parts?.leverPivot ?? null;
   const reels = parts?.reels ?? [];
+  const cellFrame = parts?.cellFrame ?? null;   // 窗口分格框（恶魔选择辉光宿主）
   // 彩灯/锁定指示灯 = InstancedMesh（{ mesh, tints }）：颜色走 instanceColor，rig 逐帧 setColorAt
   // （资产侧不再逐灯建网格/材质，见 props/slotMachine.js 的预算回本注释）。
   const bulbRing = parts?.bulbs ?? null;
@@ -377,8 +378,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     needleTilt: 0,       // 拨针摆角（弹簧积分）
     needleVel: 0,
     demonK: 0,           // 0..1 恶魔态风格权重（灯效/彩灯偏暗红）
-    gateK: 0,            // 0 = 开门（闸口收起），1 = 关门（盖住开口）
+    gateK: 0,            // 0 = 开门（闸口收起），1 = 关门（闸口覆盖开口）
     reelsDemon: false,   // 转盘是否已换成恶魔盘
+    choiceGlow: 0,       // 0..1 恶魔选择辉光当前值（向 choiceGlowTarget 收敛）
+    choiceGlowTarget: 0,
     seq: null,           // 闸口/换盘的时序脚本（见 runSeq）
     win: null,           // { tier, t, fx }
     shake: 0,            // 剩余抖动时间
@@ -493,6 +496,40 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     if (q.t >= step.dur) { q.i += 1; q.t = 0; if (q.i >= q.steps.length) st.seq = null; }
   }
 
+  // ---- 恶魔选择辉光：转轮窗分格框「框发热」呼吸 ----
+  // 选择阶段「轮盘即选项」的可交互暗示。旧版在转轮前叠一张加色大红面片（逆天的
+  // 红方块，视觉验收实毙）；现在框本身就是光源：换**独立材质实例**（族单例禁改——
+  // 染红的是全场 unlit 件），vertexColors 关掉脱开金框顶点色，material.color 直出
+  // 恶魔红 HDR——呼吸只推这一个 uniform（振幅正弦），峰值推过 bloom 阈 1.45 起晕、
+  // 谷值压回阈下（明灭），线性色不经过任何叠加面片。「框发光、图案不发光」是道具
+  // 层钦定语言（props/slotMachine.js 分格框注释）。收尽后还回族单例金框，惰性实例
+  // 随手释放。
+  let frameBaseMat = null;    // 分格框的原族单例材质（收场还原用）
+  let frameGlowMat = null;    // 惰性独立实例（choiceGlow > 0 期间持有）
+  const FRAME_TINT = [1.0, 0.2, 0.15];   // 恶魔红（线性，乘振幅直出）
+  const FRAME_A_LOW = 2.1;   // 呼吸谷振幅（阈下：红热但不晕）
+  const FRAME_A_HIGH = 5.4;  // 呼吸峰振幅（过 1.45 阈：起一层红晕）
+  function stepFrameGlow() {
+    if (!cellFrame) return;
+    if (st.choiceGlow < 0.005) {
+      if (frameGlowMat) {
+        cellFrame.material = frameBaseMat;
+        frameGlowMat.dispose();
+        frameGlowMat = null;
+        frameBaseMat = null;
+      }
+      return;
+    }
+    if (!frameGlowMat) {
+      frameBaseMat = cellFrame.material;
+      frameGlowMat = familyMaterial('unlit', { color: 0xffffff });   // 独立实例 + vertexColors=false
+      cellFrame.material = frameGlowMat;
+    }
+    const breath = 0.5 + 0.5 * Math.sin(st.t * 5.5);   // ~1.15s 明灭一拍
+    const a = st.choiceGlow * (FRAME_A_LOW + (FRAME_A_HIGH - FRAME_A_LOW) * breath);
+    frameGlowMat.color.setRGB(FRAME_TINT[0] * a, FRAME_TINT[1] * a, FRAME_TINT[2] * a);
+  }
+
   // ---- 拉杆 ----
   function pull({ tier = 'minor', symbols = null } = {}) {
     if (st.spin) return false;                      // 转轮中不能再拉（调用方另有防抖）
@@ -530,6 +567,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     st.t += dt;
     stepSeq(dt);                                   // 闸口/换盘时序
     st.demonK += ((st.demonWant ?? 0) - st.demonK) * Math.min(1, dt * 3.5);
+    st.choiceGlow += (st.choiceGlowTarget - st.choiceGlow) * Math.min(1, dt * 6);
+    stepFrameGlow();                                 // 分格框恶魔红 HDR 呼吸（见其注释）
     if (gate) gate.position.y = gateOpenY + (gateClosedY - gateOpenY) * st.gateK;
     applyArtPanels();   // 画牌贴图：图刚解码完的那一帧贴上（之后就空转）
     applyReelArt();     // 轮盘图案同理
@@ -717,6 +756,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     demonEnter, demonExit,
     isDemon: () => !!st.reelsDemon || (st.demonWant ?? 0) > 0,
     setDemonStyle: (k) => { st.demonWant = Math.max(0, Math.min(1, k)); },
+    /** 恶魔选择辉光开关（choose 阶段宿主调）：分格框恶魔红 HDR 呼吸，收场自动还原金框。 */
+    demonChoiceGlow: (on) => { st.choiceGlowTarget = on ? 1 : 0; },
     isBusy: () => !!st.spin || !!st.seq || !!st.crushFx,
     // 粉碎入口（吞噬）：计数器下行 + 粉碎演出
     setDevour,

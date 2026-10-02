@@ -53,7 +53,9 @@ export class PreBattleInstruction extends BattleInstruction {
       player.clearEffects();
       if (keepInvuln) player.addEffect('invulnerable', 1);
       player.actionPoints = player.maxActionPoints;
-      player.mana = Math.floor(player.maxMana / 2);
+      // 入战魏启固定 1（2026-09-30 用户定：不再按上限一半——上限抬高不该免费换成开局爆发，
+      // 回蓝节奏完全交给回合开始 +1 与回蓝件）。可乐等「入战额外恢复」叠加其上。
+      player.mana = 1;
       // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清
       const manaGift = runState.pendingManaBonus ?? 0;
       if (manaGift > 0) {

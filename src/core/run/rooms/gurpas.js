@@ -53,7 +53,7 @@ export function ensureGurpasStock(run) {
       if (has.has(def.id) || out.some(x => x.relicId === def.id)) continue;
       out.push({
         id: `relic:${def.id}`, kind: 'relic', relicId: def.id, rarity: def.rarity,
-        label: `${def.rarity} 级遗物 · ${def.name}`,
+        label: `${def.name}（${def.rarity}）`,   // 具体名在前、档位括注（2026-10-02 用户定格式）
         sub: def.description ?? '',
         price: intIn(GURPAS.prices[priceKey], run.rng),
         sold: false,
@@ -74,7 +74,7 @@ export function ensureGurpasStock(run) {
   // A / B 级卡包（开出全 A / 全 B 的三选一）
   for (const [packId, tier, key, label] of [['gurpasA', 'A', 'packA', 'A 级卡包'], ['gurpasB', 'B', 'packB', 'B 级卡包']]) {
     items.push({
-      id: packId, kind: 'pack', tier, label, sub: `开出全 ${tier} 级卡的三选一`,
+      id: packId, kind: 'pack', tier, label, sub: `开出全 ${tier} 级卡牌，买到即开`,
       price: intIn(GURPAS.prices[key], run.rng), sold: false,
     });
   }

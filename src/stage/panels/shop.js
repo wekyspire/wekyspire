@@ -15,8 +15,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
   // 三选一**可放弃**：overlay 的「返回」= 放弃这个包（钱已花，选择权在你）。
   if (shop.pending) {
     if (shop.pending.kind === 'relic') {
-      w.push({ kind: 'title', text: `遗物包 · ${shop.pending.rarity} 级`, align: 'center' });
-      w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '三件遗物中挑一件（不想要就放弃）' });
+      w.push({ kind: 'title', text: `${shop.pending.rarity} 级遗物包`, align: 'center' });
       w.push({
         kind: 'button', id: 'shop:openRelicPack', width: 300, size: 'main',
         label: '打开遗物包选择', action: { action: 'openShopRelicPack', local: true },
@@ -25,8 +24,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     }
     // packName = 快照侧显示名（panelSnapshot 的 PACKS 表，不裸露 id——夜测 r6路8
     // 实报「卡包 · body」泄漏内部 id；缺字段时退 packId 兜底）
-    w.push({ kind: 'title', text: `卡包 · ${shop.pending.packName ?? shop.pending.packId}`, align: 'center' });
-    w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '包内三选一——择一张加入牌组（不想要就放弃）' });
+    w.push({ kind: 'title', text: `${shop.pending.packName ?? shop.pending.packId}卡包`, align: 'center' });
     w.push({
       kind: 'button', id: 'shop:openPack', width: 300, size: 'main',
       label: '打开卡包选择', action: { action: 'openShopPack', local: true },
@@ -62,14 +60,14 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
       w.push({
         kind: 'text', align: 'center',
         tint: it.sold ? '#5d6584' : (it.affordable ? undefined : '#8a6a6a'),
-        text: `${tag} ${it.label} ｜ ${it.price} 金` + (it.sold ? '（已售出）' : ''),
+        text: `${tag} ${it.label}，${it.price} 金币` + (it.sold ? '（已售出）' : ''),
         // 遗物货 hover 出效果预览（买之前能看清是什么）
         ...(it.relicId ? { token: { type: 'relic', payload: { relicId: it.relicId } } } : {}),
       });
       if (!it.sold) {
         w.push({
           kind: 'button', id: `shop:buy:${it.index}`, width: 240, size: 'sub',
-          label: it.affordable ? `购买（${it.price} 金）` : '金币不足',
+          label: it.affordable ? `购买（${it.price} 金币）` : '金币不足',
           enabled: it.affordable,
           action: { action: 'buyShopItem', index: it.index },
         });

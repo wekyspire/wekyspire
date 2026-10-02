@@ -29,6 +29,8 @@ import { additiveLight } from '../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { OVERLAY_Z } from './PanelObject.js';
 import { bakeBoldText, bakeAutoLine } from './textBakers.js';
+import { sharedCardArtCache } from '../art/cardArtCache.js';
+import { getSkillDefinition, hasSkill } from '../../core/skills/registry.js';
 import { sharedPropArtCache } from '../art/propArt.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 
@@ -272,6 +274,26 @@ function bakeSoftVignette(size = 256) {
   return tex;
 }
 
+// defId → 卡面场景图纹理（焚毁/失去类特写用；Image → CanvasTexture，按 defId 缓存）。
+// 走 sharedCardArtCache（全量预载已 warm，同步命中）；未命中返回 null 由占位兜底。
+const _cardTexCache = new Map();
+function cardArtTextureOf(defId) {
+  if (_cardTexCache.has(defId)) return _cardTexCache.get(defId);
+  // ⚠ 注册表 get 对未知 id 抛异常——非卡 id 的 artKey（gold/pack/词条名…）会撞进来，
+  // 必须 has 预检（appearance.cardLook 同款坑）。漏检的后果实锤：金币拍炸死 show()
+  // 中途，特写冻在 in 相位、链尾回调永不触发（恶魔 offer 永不开 picker 的病根）。
+  const def = hasSkill(defId) ? getSkillDefinition(defId) : null;
+  const img = def ? sharedCardArtCache.get({ image: def.image, series: def.series, type: def.type, tier: def.tier }) : null;
+  if (!img || !img.naturalWidth) { _cardTexCache.set(defId, null); return null; }
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _cardTexCache.set(defId, tex);
+  return tex;
+}
+
 export class ItemShowcaseObject extends THREE.Group {
   /**
    * @param {object} options
@@ -286,7 +308,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._onDismiss = onDismiss;
     // 缺省取图：道具图（items/props）→ 遗物立绘（relics）——遗物特写的 key 就是遗物名，
     // 所以两个舞台的宿主都不必为遗物另传 art 函数。
-    this._artOf = art ?? ((key) => sharedPropArtCache.getTexture(key) ?? sharedRelicArtCache.getTexture(key));
+    this._artOf = art ?? ((key) => sharedPropArtCache.getTexture(key) ?? sharedRelicArtCache.getTexture(key) ?? cardArtTextureOf(key));
     this._picker = null;
     this._phase = 'idle';   // idle | in | hold | out
     this._t = 0;

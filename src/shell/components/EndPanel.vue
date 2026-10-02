@@ -12,7 +12,7 @@ const IS_PROD = import.meta.env.PROD;
     <h2 :class="run.result">{{
       run.result === 'victory' ? (IS_PROD ? '第一章·完' : '登顶成功') : '倒在了塔中'
     }}</h2>
-    <p>抵达 {{ run.floor }} / {{ run.totalFloors }} 层 ｜ 金币 {{ run.player.money }} ｜ 卡组 {{ run.player.deck.length }}</p>
+    <p>抵达 {{ run.floor }} / {{ run.totalFloors }} 层，金币 {{ run.player.money }}，牌库 {{ run.player.deck.length }} 张</p>
     <button @click="emit('restart')">再来一局</button>
   </div>
 </template>

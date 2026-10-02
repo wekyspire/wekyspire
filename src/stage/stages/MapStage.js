@@ -270,6 +270,8 @@ export class MapStage {
   // 点击任意处退出。**实现已抽到 stagePickerKit**（与房间层/战斗层共用一份），
   // 本舞台只保留同名转发（宿主编排器按"当前舞台"调用，签名不变）。
   showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
+  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
+  dismissModals() { this._pickerKit?.dismissModals(); }
 
   /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }

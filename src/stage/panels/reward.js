@@ -24,7 +24,7 @@ export function buildRewardPanel(snap) {
   }
 
   if (!snap.packId) {
-    w.push({ kind: 'sub', text: '选择一个卡包（按该体系灵脉等级出卡）：', tint: '#9aa3b8', align: 'center' });
+    w.push({ kind: 'sub', text: '按灵脉等级出卡', tint: '#9aa3b8', align: 'center' });
     w.push({
       kind: 'tiles', idPrefix: 'pack', tileHeight: 96,
       items: (snap.packs ?? []).map(p => ({
@@ -37,7 +37,7 @@ export function buildRewardPanel(snap) {
 
   w.push({
     kind: 'sub',
-    text: `${snap.packName ?? ''} · 择一张技能卡加入牌组`,
+    text: `${snap.packName ?? ''}卡包`,
     tint: '#9aa3b8', align: 'center',
   });
   w.push({

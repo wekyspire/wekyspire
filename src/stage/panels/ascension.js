@@ -9,7 +9,6 @@ import { DIM_META } from './shared.js';
 export function buildAscensionPanel(snap) {
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '进阶事件', align: 'center' });
-  w.push({ kind: 'sub', text: '灵力涌动——择一条主维度突破：', tint: '#9aa3b8', align: 'center' });
   w.push({
     kind: 'tiles', idPrefix: 'dim', tileHeight: 104, gapY: 14,
     items: (snap.dims ?? []).map((d) => {
@@ -29,7 +28,7 @@ export function buildAscensionPanel(snap) {
   w.push({
     kind: 'sub', align: 'center', tint: '#77809a',
     text: `总进阶 ${snap.ascensionCount}/${snap.maxAscensions}`
-      + ` ｜ 突破后恢复 ${snap.healAmount} 点生命、魏启上限 +${snap.manaGain}`,
+      + `，突破后恢复 ${snap.healAmount} 点生命，魏启上限 +${snap.manaGain}`,
   });
   return w;
 }

@@ -14,7 +14,7 @@ import { withLabels } from '../stage/panels/shared.js';
 import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
 import { slotPrizeText } from '../stage/panels/index.js';
 import { showcaseItemOf } from './runPresenter.js';
-import { chooseDemonDebuff, DEMON_DEBUFFS } from '../core/run/rooms/bank.js';
+import { chooseDemonDebuff, DEMON_DEBUFFS , takeBankOffer } from '../core/run/rooms/bank.js';
 import { buyShopItem } from '../core/run/rooms/shop.js';
 import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 import { tooltipHide } from './tooltipHub.js';
@@ -77,7 +77,10 @@ export function createRunShowcase(ctx) {
     // 所以词条描述要从定义表取，不能从 pr.options 里找对象
     const def = DEMON_DEBUFFS[id] ?? null;
     const res = chooseDemonDebuff(run, id);
-    demonRewardShow = { gold, tier: res.tier, name: res.name, desc: def?.desc ?? '' };
+    // 被焚卡（忘却/忘记的 immediate）：逐张接「焚毁」特写拍（2026-09-30 用户裁定——
+    // 之前随机焚卡零演出，玩家看不见损失了什么）
+    const burnt = Array.isArray(res.immediate) ? res.immediate : [];
+    demonRewardShow = { gold, tier: res.tier, name: res.name, desc: def?.desc ?? '', burnt };
     const inScene = !!ctx.roomStage() && run.currentRoom === 'slot';
     if (!inScene) { showDemonReward(); return res; }
     clearTimeout(demonFuse);
@@ -91,8 +94,17 @@ export function createRunShowcase(ctx) {
    */
   function openBankOfferPicker() {
     const offer = run.bank?.offers?.[0] ?? null;
-    if (offer === 'upgrade') ctx.panelStage()?.openUpgradePicker?.('bankUpgrade');
-    else if (offer === 'burn') ctx.panelStage()?.openUpgradePicker?.('bankBurn');
+    // 返回/关闭 = 放弃这份附赠（面板按钮已删，offer 不再有无入口的死状态）
+    const onSkip = () => {
+      if (run.bank?.offers?.length) { takeBankOffer(run); ctx.notify?.(); }
+    };
+    const opened
+      = offer === 'upgrade' ? !!ctx.panelStage()?.openUpgradePicker?.('bankUpgrade', { onSkip })
+        : offer === 'burn' ? !!ctx.panelStage()?.openUpgradePicker?.('bankBurn', { onSkip })
+          : false;
+    // 无候选（如升级 offer 但全牌组无过门晋升目标）：这份附赠无处兑现——弃置，
+    // 别留一个没有任何入口的死 offer（面板按钮已删）。
+    if (!opened && offer) { takeBankOffer(run); ctx.notify?.(); }
   }
   /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
    *  金币那拍**不再写"代价：xxx"**（上一拍刚演过，纯冗余）。 */
@@ -104,22 +116,50 @@ export function createRunShowcase(ctx) {
     if (!p) return false;
     const stage = ctx.panelStage();
     if (!stage?.showcaseItem) return false;
-    return !!stage.showcaseItem({
+    // 拍序列（2026-09-30 用户定）：词条特写 → 逐张**卡牌焚毁演出**（不在场景的
+    // 随机焚毁卡在画面中央亮相后燃尽——cardBurnFlight，与战斗同款 C0 吞蚀视觉；
+    // 舞台没有该能力时退回「焚毁」文字特写）→ 金币 → （有附赠则）自动开选卡界面。
+    const steps = [{ show: {
       title: p.name,
-      desc: `恶魔词条 · ${DEMON_TIER_LABEL[p.tier] ?? p.tier}`,
+      desc: `恶魔词条（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
       effect: p.desc,
       tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
       autoDismissMs: 1900,
-      onDismiss: () => ctx.panelStage()?.showcaseItem?.({
-        title: `+${p.gold} 金币`,
-        desc: '银行机超额取款',
-        artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
-        tint: 0xffd75e,
-        autoDismissMs: 1700,
-        // 两拍都演完 → 有"立马做一件事"的附赠就直接开选卡界面
-        onDismiss: openBankOfferPicker,
-      }),
-    });
+    } }];
+    for (const b of p.burnt ?? []) steps.push({ burn: b });
+    steps.push({ show: {
+      title: `+${p.gold} 金币`,
+      desc: '银行机超额取款',
+      artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
+      tint: 0xffd75e,
+      autoDismissMs: 1700,
+    } });
+    const playFrom = (i) => {
+      if (i >= steps.length) { openBankOfferPicker(); return; }   // 链尾：附赠 → 选卡界面
+      const step = steps[i];
+      if (step.burn) {
+        const played = ctx.panelStage()?.playCardBurn?.({
+          defId: step.burn.defId, view: step.burn.view ?? null,
+          onDone: () => playFrom(i + 1),
+        });
+        if (played) return;
+        // 兜底：舞台无焚毁演出能力 → 文字特写拍
+        const item = {
+          title: `焚毁 ${step.burn.name}`,
+          desc: '忘却的代价，这张卡牌离开了你的牌库',
+          artKey: step.burn.defId,
+          tint: 0xd96a4a,
+          autoDismissMs: 1600,
+          onDismiss: () => playFrom(i + 1),
+        };
+        if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
+        return;
+      }
+      const item = { ...step.show, onDismiss: () => playFrom(i + 1) };
+      if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
+    };
+    playFrom(0);
+    return true;
   }
 
   /**
@@ -148,10 +188,10 @@ export function createRunShowcase(ctx) {
     const major = p.tier === 'major';
     const shown = stage.showcaseItem({
       title: slotPrizeText(p),
-      desc: `老虎机 · ${major ? '★ 大奖' : '小奖'}`,
-      effect: needsPick ? '收下之后，在候选里选一张带走'
-        : freeUpgrade ? '收下之后，选择要免费升级的卡'
-          : '点任意处收下 ｜ 点「跳过」放弃这份产出',
+      desc: major ? '老虎机（大奖）' : '老虎机（小奖）',
+      effect: needsPick ? '收下之后挑一件带走'
+        : freeUpgrade ? '收下之后，选一张卡牌免费升级'
+          : null,
       // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
       // ＝特写美术区一块空白灰——夜测路7b 实报）
       artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
@@ -247,7 +287,7 @@ export function createRunShowcase(ctx) {
     const relicPack = p.kind === 'relic';
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: pack ? '售货机 · 卡包' : relicPack ? '售货机 · 遗物包' : '售货机',
+      desc: pack ? '卡包（售货机）' : relicPack ? '遗物包（售货机）' : '售货机',
       effect: p.effect ?? '',
       artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,

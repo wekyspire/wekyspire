@@ -12,7 +12,7 @@
 import { registerSkill, getSkillDefinition, allSkills } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { UseSkillInstruction, SkillCooldownInstruction } from '../instructions/skill.js';
-import { ConsumeActionPointsInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
+import { GainActionPointsInstruction } from '../instructions/resources.js';
 import { DrawCardsInstruction, DiscardCardInstruction, TransformCardInstruction } from '../instructions/cards.js';
 import { DealDamageInstruction, previewDamage } from '../instructions/combat.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
@@ -21,6 +21,7 @@ import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
   dealDamage, drawCards, addCard, randomAliveEnemy,
   isLastHandCardAtPlay, isFirstPlayThisTurn, aoeAttack, gainShield,
+  requestHandSelection, selected,
 } from './cardKit.js';
 
 // ==== 1. 真拳系列（基石：纯伤害直线升级，S 阶跃迁为无任何资源消耗）====
@@ -492,38 +493,45 @@ registerDrawDamageChant({ id: 'peerless', name: '无双', tier: 'A', damage: 3, 
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 
-// 万变拳（A/S）：1AP 冷却2——下 1/2 张打出的牌 AP 费用为 0（升阶 S：下两张）。
-// 实现：打出时挂 PRE 计数订阅，把之后 N 次「卡牌打出树内」的 AP 消耗指令 payload 置 0。
-// filter 校验结算栈中存在 UseSkillInstruction：只对打出的卡生效，弃牌动作
-// （DumpCardsInstruction 树）不吃这份免费；打出 0AP 卡不产生消耗指令，免费保留至
-// 下一张有费用的卡（宽容口径）。同一张卡只吃一份额度（计数递减）。
-function wildFistCard({ id, tier, freeCount, promotesTo = null }) {
+// 万变拳（A/S）：1AP 冷却2——**选择 1/2 张手牌免费发动**（2026-10-01 用户定改版：
+// 原「下N张打出 AP 费用为 0」的 PRE 计数豁免弃用——可用性判定不认豁免导致灰卡
+// 打不出（1001 夜测中危）。现行 = 结算期手牌选卡（overlay 覆盖层）→ 逐张嵌套
+// 强发（costOverride 0/0，随机敌目标——与漂浮系 freePlayCard 同范式）；手牌不足
+// 张数时按余量截断（buildCardSelectionRequest 的 min/max 收口），空手静默落空。
+function wildFistCard({ id, tier, count, promotesTo = null }) {
   registerSkill({
     id, name: '万变拳', type: 'normal', tier, series: 'fist', deep: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 2 },
     cardMode: 'normal',
     promotesTo,
-    use(sctx) {
-      let left = freeCount;
-      const owner = `wildFist:${sctx.self.uniqueID}`;
-      sctx.kernel.addSubscription({
-        when: ConsumeActionPointsInstruction, phase: 'pre', owner,
-        filter: (_instr, ctx) => left > 0
-          && ctx.kernel.stack.some(i => i instanceof UseSkillInstruction),
-        react: (instr, ctx) => {
-          instr.setPayload('amount', 0);
-          left -= 1;
-          if (left <= 0) ctx.kernel.removeSubscriptionsByOwner(owner);
-        },
-      });
+    use(sctx, stage) {
+      if (stage === 0) {
+        sctx.self._fistPick = requestHandSelection(sctx, {
+          count,
+          reason: `万变拳：选${count === 1 ? '一' : '两'}张手牌免费发动`,
+        });
+        return sctx.self._fistPick ? false : true;   // 空手守卫：静默落空
+      }
+      const ids = selected(sctx.self._fistPick);
+      sctx.self._fistPick = null;
+      for (const uid of ids) {
+        const card = sctx.battleState.zones.hand.find(c => c.uniqueID === uid) ?? null;
+        if (!card) continue;   // 结算中途被挪走：静默落空（DiscardCard 范式）
+        sctx.kernel.submitInstruction(new UseSkillInstruction({
+          skill: card,
+          costOverride: { mana: 0, actionPoint: 0 },
+          targetUniqueID: randomAliveEnemy(sctx)?.uniqueID ?? null,
+        }));
+      }
       return true;
     },
-    describe: () => `下${freeCount === 1 ? '张' : `${freeCount}张`}打出的牌AP费用为0`,
+    describe: () => `选${count === 1 ? '一' : '两'}张手牌免费发动`,
+    battleDescribe: () => `选${count === 1 ? '一' : '两'}张手牌免费发动`,
   });
 }
-wildFistCard({ id: 'wildFist', tier: 'A', freeCount: 1, promotesTo: 'wildFistA' });
-wildFistCard({ id: 'wildFistA', tier: 'S', freeCount: 2 });
+wildFistCard({ id: 'wildFist', tier: 'A', count: 1, promotesTo: 'wildFistA' });
+wildFistCard({ id: 'wildFistA', tier: 'S', count: 2 });
 
 // 假动作系列（C→B→A）：抽 2 牌，洗入 2 「虚无」。
 // 升阶：B 不消耗；A 抽 3。过牌换稀释：短期手牌质量提升，牌库被虚无污染

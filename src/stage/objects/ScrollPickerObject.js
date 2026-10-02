@@ -1,4 +1,4 @@
-// ScrollPickerObject：全屏「滚动 + 滚动条 + 返回/确认」选择界面的**共用骨架**。
+// ScrollPickerObject：全屏「滚动 + 滚动条 + 取消/确认」选择界面的**共用骨架**。
 //
 // 派生：
 //   · CardScrollPickerObject —— 卡牌（营地/训练场升级、银行焚毁、Boss/古尔帕斯删卡、粉碎）
@@ -159,8 +159,9 @@ export class ScrollPickerObject extends THREE.Group {
       this._picker?.addPickable(entry.id, built.obj, { kind: 'button', space: 'ui' });
     });
 
-    // ---- 底部：返回 / 确认 ----
-    this._addButton(BACK_ID, '返回', { x: -34, y: LAYOUT.footerY, width: 200, size: 'sub' }, { action: 'cancel' });
+    // ---- 底部：取消 / 确认 ----
+    // 「返回」改名「取消」（2026-10-02 用户定）：按钮自述语义，各处不再需要「返回=放弃」的提示句
+    this._addButton(BACK_ID, '取消', { x: -34, y: LAYOUT.footerY, width: 200, size: 'sub' }, { action: 'cancel' });
     this._addButton(CONFIRM_ID, confirmLabel, { x: 34, y: LAYOUT.footerY, width: 200, size: 'main' }, { action: 'confirm' });
 
     this._addScrollbar(bandH);
@@ -257,6 +258,11 @@ export class ScrollPickerObject extends THREE.Group {
     if (hit.id === BACK_ID) { this.close(); this._onCancel?.(); return true; }
     if (hit.id === CONFIRM_ID) {
       if (this._selected.size === 0) return false;
+      // 多选下界（与 _applySelection 的按钮压暗同式）：点击路径也要拦——只压暗不拦点击时，
+      // 1/2 部分确认会照发（训练尾款 twoC 断链卡死在 remaining:1 的病根，夜测 1002 路二实锤）
+      if (this._multi && (this._selected.size < this._minPicks || this._selected.size > this._picks)) {
+        return false;
+      }
       const keys = this.selectedKeys;
       // 得卡演出钩子（商店卡包）：钩子接管关闭与确认时机（先播「飞入牌库」再上行）。
       // 一次性：取出即清，防重入（open() 也会重置）

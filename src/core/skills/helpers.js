@@ -122,6 +122,52 @@ function chantWeightOf(card, battleState) {
   return discount > 0 ? Math.max(1, w - discount) : w;
 }
 
+// 手牌容量占用序列（容量 point bar 的显示口径，2026-09-30 用户定：占用点的相对
+// 顺序贴手牌从左到右）：三段 = [空咏唱容量] + [手牌序占用] + [空手牌容量/超载]。
+// 手牌序里每张卡按类型展开——普通卡 1 颗（type 'hand'）、迷你卡 1 条幻影竖线
+// （type 'mini'，计 0 容量）、激活咏唱按折扣后权重逐颗展开（先吃咏唱容量
+// 'chant'，容量吃满的溢出颗 'chantOverflow'）。超载红珠（'overflow'）**归属
+// 将弃卡本尊**（pickOverflowVictims 同一算法——hover 超载卡即亮它自己的红珠，
+// 报障「超载卡 hover 无高亮」的根因是旧红珠为无主聚合计数）；理论余量（无卡
+// 可弃的纯咏唱压力极端）才落尾段聚合。slot 带 card（uniqueID）供 hover 联动
+// 定位；填充行无主。聚合计数字段与 handBreakdown 同源兼容。
+export function handCapacitySlots(ctx) {
+  const bs = ctx.battleState;
+  const chCap = chantCapacityOf(ctx);
+  const max = handLimitOf(ctx);
+  let chantLeft = chCap, normal = 0, chantW = 0, mini = 0, doomedN = 0;
+  const victims = new Set(pickOverflowVictims(bs.zones.hand, ctx));
+  const seq = [];
+  for (const c of bs.zones.hand) {
+    if (c.isActivated) {
+      const w = chantWeightOf(c, bs);
+      chantW += w;
+      const inCap = Math.min(w, chantLeft);
+      chantLeft -= inCap;
+      for (let k = 0; k < inCap; k++) seq.push({ type: 'chant', card: c.uniqueID });
+      for (let k = inCap; k < w; k++) seq.push({ type: 'chantOverflow', card: c.uniqueID });
+    } else if (getSkillDefinition(c.defId)?.keywords?.includes('mini')) {
+      mini += 1;
+      const doom = victims.has(c.uniqueID);   // 迷你也会被尾弃（core 口径）：红竖线
+      if (doom) doomedN += 1;
+      seq.push(doom ? { type: 'mini', card: c.uniqueID, doom: true } : { type: 'mini', card: c.uniqueID });
+    } else {
+      normal += 1;
+      const doomed = victims.has(c.uniqueID);
+      if (doomed) doomedN += 1;
+      seq.push({ type: doomed ? 'overflow' : 'hand', card: c.uniqueID });
+    }
+  }
+  const overflowUsed = Math.max(0, chantW - chCap); // 吃手牌容量的咏唱部分
+  const overload = Math.max(0, normal + overflowUsed - max);
+  const slots = [];
+  for (let k = 0; k < chantLeft; k++) slots.push({ type: 'chantIdle' });
+  slots.push(...seq);
+  for (let k = 0; k < Math.max(0, max - normal - overflowUsed); k++) slots.push({ type: 'empty' });
+  for (let k = 0; k < Math.max(0, overload - doomedN); k++) slots.push({ type: 'overflow' });
+  return { slots, normal, chantW, mini, chCap, max };
+}
+
 // 加权手牌数（抽牌满手判定 / 咏唱发动合法性共用口径）：
 // = 普通张数 + max(0, 激活咏唱权重和 − 咏唱容量)——容量内的咏唱不占手牌。
 // 收 ctx 而非 battleState：容量是 run 级参数，收 battleState 会让调用点漏传 cap 静默回退。

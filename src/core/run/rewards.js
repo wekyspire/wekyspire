@@ -41,11 +41,11 @@ export function rewardTierCap(channel = 'normal') {
 
 // ---- 卡包（维度）定义：id 与 player.leino 的键同名 ----
 export const PACKS = Object.freeze({
-  body: Object.freeze({ id: 'body', name: '基础', desc: '体修卡与通用卡的混合池（通用浓度高），恒可用' }),
+  body: Object.freeze({ id: 'body', name: '基础', desc: '体修与通用混合池' }),   // desc 会烘上奖励瓦片（~10 汉字宽），长句硬裁（夜测 r3路8）
   fire: Object.freeze({ id: 'fire', name: '火灵脉', desc: '爆发与燃烧' }),
   wood: Object.freeze({ id: 'wood', name: '木灵脉', desc: '恢复与中毒' }),
   air: Object.freeze({ id: 'air', name: '空灵脉', desc: '闪避与咏唱' }),
-  common: Object.freeze({ id: 'common', name: '通用', desc: '跨体系资源与功能卡（随机混入各卡包）' }),
+  common: Object.freeze({ id: 'common', name: '通用', desc: '跨体系功能卡' }),
 });
 
 // 通用卡注入：概率 + 保底计数（run.commonPity 累计未注入次数，达 pity 必注入）

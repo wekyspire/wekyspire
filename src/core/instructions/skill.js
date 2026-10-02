@@ -42,7 +42,9 @@ export class UseSkillInstruction extends BattleInstruction {
       case 0:
         // 咏唱双态意图（费用豁免与收尾分流都读它；费用指令在其子节点执行时卡未离手）
         this._chantOff = sctx.def.cardMode === 'chant' && this.skill.isActivated;
-        ctx.presenter?.skillUsed?.({ skill: this.skill, def: sctx.def });
+        // target = 玩家指定的目标单位 id（免目标卡为 null）——施术演出（stage spellFx）
+        // 的世界向落点依据；纯标量，可过 wire（观战端同口径）
+        ctx.presenter?.skillUsed?.({ skill: this.skill, def: sctx.def, target: this.targetUniqueID });
         ctx.kernel.submitInstruction(
           new ConsumeSkillResourcesInstruction({ skill: this.skill, costOverride: this.costOverride }), this);
         return false;

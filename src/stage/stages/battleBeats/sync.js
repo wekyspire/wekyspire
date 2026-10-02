@@ -74,7 +74,7 @@ export const syncBeats = {
     this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
     this._capacityBeads.setValue(proj.handCapacity); // 灯珠（批次 13）：与投影同口径，旧快照无此字段时静默跳过
-    this._capacityBeads.setHover(this._capFootprintOf(this._overCardId)); // 手牌变动后 hover 足迹重算（珠位随占用重排）
+    this._capacityBeads.setHover(this._overCardId); // 手牌变动后 hover 重匹配（slot 序列随占用重排）
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）

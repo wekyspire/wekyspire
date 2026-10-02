@@ -328,7 +328,9 @@ export class RoomStage {
    * ⚠ 候选按 source 取对应快照段（kit 的 UPGRADE_SOURCES）——曾经一律读 `snap.slot.upgradeCards`，
    * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
    */
-  openUpgradePicker(source) { return this._pickerKit.openUpgradePicker(source, this._snap); }
+  openUpgradePicker(source, opts) { return this._pickerKit.openUpgradePicker(source, this._snap, opts); }
+  /** 卡牌焚毁演出（恶魔词条随机焚毁 / 失去类烧卡的通用转发，见 stagePickerKit.playCardBurn）。 */
+  playCardBurn(payload) { return this._pickerKit.playCardBurn(payload); }
 
   /**
    * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开）。
@@ -350,6 +352,8 @@ export class RoomStage {
 
   /** 获得物特写（通用组件：有素材用素材，没有就拿色块代替）。 */
   showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
+  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
+  dismissModals() { this._pickerKit?.dismissModals(); }
 
   /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
@@ -657,6 +661,11 @@ export class RoomStage {
     if (this._focused === name) return;
     this._focused = name;
     for (const [n, rig] of this._rigs) rig.setFocus?.(n === name);
+    // 聚焦时隐藏全部机器浮标（2026-10-02，夜测 1002 [路4] 根治）：箭头是「这台能点」
+    // 的全景指引，聚焦特写里职责已完成；且特写机位把它顶到画面上沿，发光体经
+    // bloom 链与顶栏文本发生层序穿插（金币数字被盖、遗物徽章又压其上）。聚焦时
+    // hover 本就不响应（AGENTS 语义），浮标一并退场。
+    for (const m of this._markers) m.marker.visible = this._focused == null;
     const entry = this._markers.find(m => m.name === name)?.entry ?? null;
     if (!entry) {
       this._panelKind = null;

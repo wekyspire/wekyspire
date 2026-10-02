@@ -9,6 +9,8 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
+import { runSpellFx } from '../../fx/spells/index.js';
+import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
 export const PILE_POSITIONS = {
@@ -38,7 +40,8 @@ export const cardBeats = {
       if (!view.visible && payload?.cardView) {
         view.setCard(payload.cardView);
         view.visible = true;
-        return this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+        const sp = nextCardSpot();   // 中央错位：与停靠中的宾语展示错开（cardSpot.js）
+        return this.animator.animate(id, { x: sp.dx, y: 4 + sp.dy, z: 50, scale: 1.0 }, {
           durationMs: 320,
           onComplete: () => this._burnOut(id, view, finish),
         });
@@ -93,7 +96,8 @@ export const cardBeats = {
     // 高 z 起始（70 > 展示位 60 > 手牌扇 10~40 > 区域图标 5）：生成卡永远盖在
     // 结算中的发动卡（held 于展示位）之上——否则看不到蓄力向牌库加了什么卡；
     // 飞行途中线性降回 40 落位，符合"从高处递进牌库"的空间感
-    object.position.set(0, -12, 70);
+    { const sp = nextCardSpot();   // 中央错位（只取 dx：y=-12 的「自下方递进」带语不动）
+      object.position.set(sp.dx * 0.7, -12, 70); }
     object.scale.set(0.05, 0.05, 1);
     object.faceMesh.material.opacity = 0;
     this.uiScene.add(object);
@@ -236,25 +240,102 @@ export const cardBeats = {
       durationMs: 70,
       delayMs: drainDelay,
       onComplete: () => {
-        this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
-          delayMs: 100,
-          onComplete: () => {
-            this._displayCard = null;
-            finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
-            if (this._views.has(id)) {
-              if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
-                this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
-                this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
-              }
-              // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+        // 卡面收尾（节拍完成时刻执行——held 分流/弹簧收养都以 notify 时点为准）
+        const settle = () => {
+          this._displayCard = null;
+          finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
+          if (this._views.has(id)) {
+            if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
+              this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
+              this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
             }
-          },
-        });
+            // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+          }
+        };
+        // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
+        // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
+        // 全程 hold）。未命中 = BASE 现行为（100ms 停留窗），零回归。
+        const spell = this._runSpellFx(payload, view, settle);
+        if (!spell) {
+          this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
+            delayMs: 100,
+            onComplete: settle,
+          });
+        }
       },
     });
   },
-  // 资源消耗/获取节拍：数字跳动由 syncState 承担；消耗粒子是纯装饰并行拍，
-  // 立即 finish 不占队列。卡费消耗（带 skillUniqueID 归属）的爆散+汇聚已在
+  /**
+   * 施术演出发起（fx/spells 模板系统的舞台接线）：装 deps 服务袋（世界场景/
+   * 粒子门面/灯池/震屏/单位锚/卡面世界点），交 runSpellFx 查决议链跑协程。
+   * 目标解析：载荷 target（玩家指定）优先，缺省按显示态全体存活敌（AOE 语言）。
+   * @returns {null | { done: Promise }} null = 未命中模板（_skillDisplay 走 BASE）
+   */
+  /** 施术演出 deps 服务袋的公共段（fx/spells 的舞台能力面）：施术节拍与伤害节拍共用。 */
+  _spellDeps() {
+    return {
+      scene: this.scene,
+      uiScene: this.uiScene,
+      particles: this.particles,
+      cast: this._cast,
+      shake: this.shake,
+      animator: this.animator,
+      unitById: (id) => this._units.get(id) ?? null,
+      camera: this._sm.cameraDirector,   // 场景参数演出（天斩 fov 压迫/复原）
+      markCleaveSplit: (units) => {   // 天斩断裂标记（死亡节拍消费）
+        for (const u of units ?? []) this._cleaveSplit?.add(u.uniqueID);
+      },
+    };
+  },
+
+  _runSpellFx(payload, view, notify) {
+    const defId = payload?.def?.id ?? payload?.skill?.defId ?? null;
+    if (!defId) return null;
+    const sm = this._sm;
+    const deps = {
+      ...this._spellDeps(),
+      cardView: view,
+      targets: () => {
+        const ids = payload?.target ? [payload.target]
+          : this._targetPool('enemy').map(u => u.uniqueID);   // 缺省全体存活敌（显示态口径）
+        return ids.map(id2 => this._units.get(id2)).filter(Boolean);
+      },
+      // 单位锚 = 立绘中心（血条同款高度基准 3.4×scale，z 随单位真实深度）
+      unitAnchor: (unit) => {
+        const s = unit._baseScale ?? 1;
+        return { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
+      },
+      // 单位脚锚 = 落地爆心（火向上烧的爆发/光柱底部坐这里）
+      unitFeet: (unit) => {
+        const s = unit._baseScale ?? 1;
+        return { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
+      },
+      // 主角施术锚 = 抬手高度（2026-10-01 用户定：火弹等投掷物从**主角这儿**飞出来，
+      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者）。缺玩家视图时兜底卡尖。
+      playerAnchor: () => {
+        const id = this._snapshot?.player?.uniqueID;
+        const v = id != null ? (this._units.get(id) ?? null) : null;
+        if (!v) return null;
+        const s = v._baseScale ?? 1;
+        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
+      },
+      // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
+      // 火弹/投射物从这里起飞
+      cardTipWorld: () => {
+        const p = view.position;
+        const px = sm.worldToScreen(p.x, p.y, p.z, sm.uiCamera);
+        return sm.screenToWorld(px.x, px.y, 24, sm.camera);
+      },
+    };
+    try {
+      return runSpellFx({ defId, deps, notify });
+    } catch (err) {
+      console.warn('[spellFx] 施术演出发起异常（回落 BASE）：', err);
+      return null;
+    }
+  },
+
+  // 资源消耗/获取节拍：数字跳动由 syncState 承担；消耗粒子是纯装饰并行拍，  // 立即 finish 不占队列。卡费消耗（带 skillUniqueID 归属）的爆散+汇聚已在
   // _skillDisplay 编排（先汇聚后发动），此处只补非卡来源消耗的纯爆散
   _resourceBeat(payload, finish) {
     finish();
@@ -271,7 +352,8 @@ export const cardBeats = {
     if (!view) return finish(); // 无载体（异常/未来机制）：直接打节拍
     if (payload?.cardView) view.setCard(payload.cardView);
     view.visible = true;
-    this.animator.animate(id, { x: 0, y: 4, z: 50, scale: 1.0 }, {
+    const sp = nextCardSpot();   // 中央错位：多宾语/与焚毁飞入错开（cardSpot.js）
+    this.animator.animate(id, { x: sp.dx, y: 4 + sp.dy, z: 50, scale: 1.0 }, {
       durationMs: 240,
       onComplete: finish,
     });

@@ -14,7 +14,7 @@ let loading = null;
 // 日期 = changelog 顶部条目 `## YYYY.M.D`，见 vite.config.js 的一致性校验）。
 // 旧口径「进页面当天的日期」已废（应显示最新版本日期）。
 const APP_DATE = typeof __CHANGELOG_DATE__ !== 'undefined' ? __CHANGELOG_DATE__ : '';
-const VERSION_LINE = `v${APP_VERSION}${APP_DATE ? ` · ${APP_DATE}` : ''}`;
+const VERSION_LINE = `v${APP_VERSION}${APP_DATE ? `（${APP_DATE}）` : ''}`;
 
 function escapeHtml(s) {
   return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
