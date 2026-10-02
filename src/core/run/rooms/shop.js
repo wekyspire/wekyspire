@@ -181,8 +181,8 @@ export function shopItemTip(run, it) {
       .join(' ｜ ');
     return {
       title: it.name ?? '卡包',
-      body: `包含随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡牌`
-        + (dist ? `。概率分布：${dist}。` : '。') + '买到即开，可三选一（也可以放弃）。',
+      body: `随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡`
+        + (dist ? ` ｜ ${dist}` : '') + ' ｜ 买到即开',
     };
   }
   if (it.kind === 'relic' && it.rarity) {
