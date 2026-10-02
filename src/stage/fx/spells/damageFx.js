@@ -6,7 +6,46 @@
 // kind → 基础块映射在 runDamageBeat。语义源：体系 series（主）+ 卡名（方向变体）。
 // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送（每拍独立缩放伤害量）。
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { slashSweep, punchImpact, fireBurst } from './blocks.js';
+import { slashSweep, punchImpact, fireBurst, screenFlash } from './blocks.js';
+import { cartoonNova } from './cartoonNova.js';
+
+// 爆裂术大爆炸的去重表（defId → 上次爆心演出的 performance.now()）
+const _novaRecent = new Map();
+
+/**
+ * 爆裂术终止大爆（2026-10-02 用户定艺术方向）：敌方阵型中心一场**卡通烟云**
+ * 大爆炸——黑烟云朵为主体（cartoonNova：法线混合暗色 puff + 描边 + 变色），
+ * 配全屏暖白闪一瞬 + 灯池爆闪 + 重震屏。火球面片不上（写实湍流与卡通烟云
+ * 风格打架）。粒子对象 fire-and-forget，本协程只管编排时序。
+ */
+async function novaBlast(ctx, deps, { at, scale = 1, spread = 0 }) {
+  if (!at) return;
+  // 要吞没的阵型横展（世界单位；单敌 = 14 保底宽度）——烟云横向散布的依据
+  const width = Math.max(14, spread * 2 + 12);
+  // 烟云协程直接挂本协程（ctx.spawn 会随父本收尾连杀——爆炸要比震屏活得久，
+  // 收尾时 await 它）
+  const novaP = cartoonNova(ctx, deps, {
+    at: { x: at.x, y: at.y + 1.0, z: at.z }, scale, width,
+  });
+  // 白闪（一瞬）+ 灯爆 + 震屏（重击 + 短促持续微震）
+  ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.5, ms: 240, color: 0xffe0b0 }));
+  const lamp = deps.cast?.get?.('light:fx0') ?? null;
+  if (lamp) {
+    lamp.color.setRGB(1.0, 0.62, 0.25);
+    lamp.position.set(at.x, at.y, (at.z ?? 0) + 4);
+    ctx.spawn(async (c) => {
+      await c.tweenRaw(lamp, { intensity: 2600 * scale }, { durationMs: 90, ease: 'power2.out' });
+      await c.tweenRaw(lamp, { intensity: 0 }, { durationMs: 620, ease: 'power2.in' });
+    });
+    ctx.onKill(() => { lamp.intensity = 0; });
+  }
+  deps.shake?.impulse?.(2.4 * scale);
+  deps.shake?.sustain?.(0.8);
+  ctx.onKill(() => deps.shake?.sustain?.(0));
+  await ctx.wait(520);
+  deps.shake?.sustain?.(0);
+  await novaP;   // 烟云散净才收本协程
+}
 
 // ---- 刀光方向语义（卡名后缀 = 数据）：…斩=竖劈斩、…劈=横扫劈、…刀舞=连击；缺省斜 ----
 const SLASH_VARIANTS = {
@@ -99,8 +138,8 @@ export function resolveDamageFx(defId) {
       if (def.id === 'burnSnap' || def.id === 'burnSnapPlus') return { kind: 'ignition' };
       return null;
     }
-    case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发）
-      return { kind: 'nova' };
+    case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发；id 供 AOE 多拍去重）
+      return { kind: 'nova', id: def.id };
     case 'ignite':         // 点火/烈焰/炙焰/热浪（小伤 + 燃烧赋予）
       return { kind: 'ignition' };
     default:
@@ -180,16 +219,28 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       return;
     }
     case 'nova': {
-      await fireBurst(ctx, deps, {
-        at: feet,
-        scale: Math.min(2.2, Math.max(1.2, fireScaleFor(dealt) * 1.4)),
-        ms: 560,
-        // 新星：重火花 + 长寿余烬双组（比火球更厚的「烧不尽」余韵）
-        sparkCount: 36, sparkSpeed: 30,
-        linger: { count: 24, speed: 9, ttl: 2.6, size: 0.95, gravity: -4 },
-        lampIntensity: 1300,
-        shakeSeverity: 1.2,
-      });
+      // 爆裂术终止 = 敌方阵型中心**一场**巨大的爆炸。AOE 是 N 拍伤害（每敌一拍），
+      // 同 defId 900ms 时间窗去重——首拍跑大爆炸（阵心），同窗内的其余拍只给
+      // 落敌脚边小火反馈（每敌仍有命中读感，但爆心只有一个）。
+      const now = performance.now();
+      const last = _novaRecent.get(fx.id) ?? -1e9;
+      const form = deps.enemyFormation?.() ?? null;
+      if (now - last > 900) {
+        _novaRecent.set(fx.id, now);
+        await novaBlast(ctx, deps, {
+          at: form?.center ?? chest,
+          spread: form?.spread ?? 0,
+          // 伤害量主缩放 + 阵型散布加成（炸的阵型越宽场面越大）
+          scale: Math.min(1.6, Math.max(0.9, fireScaleFor(dealt) * 0.8
+            + Math.min(0.4, (form?.spread ?? 0) * 0.03))),
+        });
+      } else {
+        // 同窗跟随拍：脚边一小团卡通烟云（同款语言，量级区分）
+        await cartoonNova(ctx, deps, {
+          at: { x: chest.x, y: chest.y - 1.2, z: chest.z }, scale: 0.9, mini: true,
+        });
+        return;
+      }
       return;
     }
     case 'ignition': {

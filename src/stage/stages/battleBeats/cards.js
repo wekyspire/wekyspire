@@ -287,6 +287,26 @@ export const cardBeats = {
       scene: this.scene,
       uiScene: this.uiScene,
       particles: this.particles,
+      // 世界粒子池本体（专用类型组直发 burst——爆裂术爆炸云等「一次性大场面」
+      // 不走 particles 门面的参数哈希路径）
+      worldPool: this.particles2World ?? null,
+      // 敌方阵型（显示态口径）：存活敌视图的质心 + 散布半径——AOE 大场面
+      // （爆裂术爆炸云）的锚点，单敌时退化为该敌胸口
+      enemyFormation: () => {
+        const list = (this._snapshot?.enemies ?? [])
+          .map(e => this._units.get(e.uniqueID))
+          .filter(v => v && !v._dead);
+        if (!list.length) return null;
+        let cx = 0, cy = 0, cz = 0;
+        for (const v of list) {
+          const s = v._baseScale ?? 1;
+          cx += v.position.x; cy += v.position.y + 3.4 * s; cz += v.position.z;
+        }
+        cx /= list.length; cy /= list.length; cz /= list.length;
+        let spread = 0;
+        for (const v of list) spread = Math.max(spread, Math.hypot(v.position.x - cx, v.position.z - cz));
+        return { center: { x: cx, y: cy, z: cz }, spread };
+      },
       cast: this._cast,
       shake: this.shake,
       animator: this.animator,

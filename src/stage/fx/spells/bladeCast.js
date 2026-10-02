@@ -43,9 +43,11 @@ export const bladeCast = {
         for (const u of targets) {
           for (let s = 0; s < 3; s++) {
             jobs.push((async () => {
-              await ctx.wait(s * 80);
+              await ctx.wait(s * 90);
               await blade(ctx, origin, deps.unitAnchor(u), {
-                size: 1.5, ms: 140, stretch: 3.2, arcH: 1.2, yOff: offs[s % offs.length],
+                // 体量/拖尾双抬（三轮验收「找不到飞刀」整改）：小刀也要读出破空
+                size: 2.6, ms: 170, stretch: 3.6, arcH: 1.2, yOff: offs[s % offs.length],
+                lamp: 120,
               });
             })());
           }
