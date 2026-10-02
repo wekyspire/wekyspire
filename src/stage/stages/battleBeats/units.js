@@ -488,10 +488,11 @@ export const unitBeats = {
   // 天斩击杀专属（断裂标记消费方）：立牌沿竖直斩缝**裂成两半**——本体隐藏，取其
   // 几何参数与立绘贴图做两张「半幅 UV」快照面（普通材质——本体是带 L0 补丁的
   // node 材质，克隆补丁不可靠，尸体将焦化无需补丁），挂 billboard（继承逐帧 yaw，
-  // 不吃 standee 呼吸/姿态）。四拍：裂缝迸开 + 剖面白热闪光（钉住「被劈开」读感）
-  // → 悬停对峙（两半直立留缝——分离姿态的峰值帧，glm-flash 实测：倒伏起手会把
-  // 读感打成「融化」）→ 倒伏（加速分离/外旋/下坠 + 断口火花落尘）→ 焦黑侵蚀淡出
-  // （焚毁同语言）。节拍阻塞至收殓（同死亡链）。
+  // 不吃 standee 呼吸/姿态）。快照面几何 y 平移 +h/2、网格贴地——rotation.x 以
+  // **各自脚底**为轴，与正常死亡同一「栽倒」语言。四拍：裂缝迸开（只稍稍错开一
+  // 道缝）+ 剖面白热**瞬闪**（随缝收尽，不驻留——拖长会在原地留下一道悬空「刀痕」，
+  // 与倒下的裂半脱节）→ 微缝悬停（分离姿态峰值帧）→ 两半错峰绕脚栽倒（落地扬尘
+  // + 回弹，同 _unitDeathBeat）→ 焦黑侵蚀淡出（焚毁同语言）。节拍阻塞至收殓（同死亡链）。
   _unitCleaveSplitBeat(unit, finish) {
     const body = unit.body;
     unit.hideIntention();
@@ -501,8 +502,10 @@ export const unitBeats = {
     const startColor = body.material?.color?.clone() ?? new THREE.Color(0xffffff);
     const halves = [0, 1].map((i) => {
       // 半宽几何 + 半幅 UV（各占原位一半，两片拼回原图）：⚠ 不能用全宽几何裁 UV——
-      // 那会把半张脸横向拉伸 2 倍且两片重叠成糊（glm-flash 两轮「融化/灰斑」病根）
+      // 那会把半张脸横向拉伸 2 倍且两片重叠成糊（glm-flash 两轮「融化/灰斑」病根）。
+      // 几何 y 平移 +h/2：原点挪到半片脚底——rotation.x 即绕脚栽倒（死亡节拍同构）
       const geo = new THREE.PlaneGeometry(width / 2, height);
+      geo.translate(0, height / 2, 0);
       const uvAttr = geo.attributes.uv;
       for (let k = 0; k < uvAttr.count; k++) uvAttr.setX(k, i * 0.5 + uvAttr.getX(k) * 0.5);
       const mat = new THREE.MeshBasicMaterial({
@@ -510,12 +513,13 @@ export const unitBeats = {
       });
       const m = new THREE.Mesh(geo, mat);
       m.name = 'cleaveHalf';
-      m.position.set((i === 0 ? -1 : 1) * width * 0.25, body.position.y, 0.15);
+      m.position.set((i === 0 ? -1 : 1) * width * 0.25, 0, 0.15);
       m.castShadow = false;   // 快照面不投影：影子随本体隐去，淡出期不赖地
       unit.billboard.add(m);
       return m;
     });
-    // 剖面闪光：切缝处一线白热（HDR 直推过 bloom 阈——「切面在烧」的读感锚点）
+    // 剖面闪光：切缝处一线白热（HDR 直推过 bloom 阈）——只在迸开/悬停两拍驻留，
+    // 栽倒前收尽：缝是「被劈开」的瞬间证据，不是留在原地的疤
     const seam = new THREE.Mesh(
       new THREE.PlaneGeometry(width * 0.05, height * 1.02),
       new THREE.MeshBasicMaterial({
@@ -528,64 +532,86 @@ export const unitBeats = {
     seam.renderOrder = 50;
     unit.billboard.add(seam);
     body.visible = false;
-    const py0 = body.position.y;
     const { x: px, y: py, z: pz } = unit.position;
     const id = unit.uniqueID;
     const cleanHalves = () => {
       for (const m of halves) { unit.billboard.remove(m); m.geometry.dispose(); m.material.dispose(); }
       unit.billboard.remove(seam); seam.geometry.dispose(); seam.material.dispose();
     };
-    const setSep = (sep, tiltL, tiltR, dropL, dropR) => {
+    // 分离量全程很小（峰值 0.16w）——「裂开」靠缝与错缝读，不靠飞开
+    const setSep = (sep) => {
       halves[0].position.x = -width * 0.25 - sep;
       halves[1].position.x = width * 0.25 + sep * 0.85;
-      halves[0].rotation.z = tiltL;
-      halves[1].rotation.z = tiltR;
-      halves[0].position.y = py0 - dropL;
-      halves[1].position.y = py0 - dropR;
     };
-    // ①a 裂缝迸开（~0.18s）：弹开一道缝 + 剖面闪光最亮（分离量给足——团状立绘
-    // 要明显大于人形立绘的缝才读得出「两片」，glm-flash 实测口径）
+    const TIP = THREE.MathUtils.degToRad(82);   // 与死亡节拍同口径（90° 透视成线）
+    // ①a 裂缝迸开（~0.18s）：弹开一道小缝 + 剖面闪光最亮
     this.animator.animateCustom(id, {
       durationMs: 180, ease: 'power3.out',
-      onUpdate: (t) => setSep(t * width * 0.16, -0.06 * t, 0.05 * t, 0, 0),
+      onUpdate: (t) => {
+        setSep(t * width * 0.10);
+        halves[0].rotation.z = -0.05 * t;
+        halves[1].rotation.z = 0.04 * t;
+      },
       onComplete: () => {
-        // ①b 悬停对峙（~0.3s）：缝缓慢加宽 + 微外倾——两半立牌姿态的峰值帧
+        // ①b 微缝悬停（~0.26s）：缝缓慢加宽到峰值、微外倾；剖面闪光在此拍收尽
         this.animator.animateCustom(id, {
-          durationMs: 300, ease: 'power1.inOut',
+          durationMs: 260, ease: 'power1.inOut',
           onUpdate: (t) => {
-            setSep(width * 0.16 + t * width * 0.18, -0.06 - 0.08 * t, 0.05 + 0.07 * t, 0.1 * t, 0.14 * t);
-            seam.material.opacity = 1 - t * 0.8;
+            setSep(width * (0.10 + 0.06 * t));
+            halves[0].rotation.z = -0.05 - 0.01 * t;
+            halves[1].rotation.z = 0.04 + 0.01 * t;
+            seam.material.opacity = 1 - t;
           },
           onComplete: () => {
-            // ② 倒伏（~0.45s）：加速分离 + 外旋 + 不对称下坠
-            this.particles.spawn(px, py + height * 0.3, { count: 16, color: 0xffe2a8, speed: 15, ttl: 0.5, gravity: -12, size: 1.2, z: pz });
-            this.particles.spawn(px, py + 0.8, { count: 16, color: 0xb59a72, speed: 9, ttl: 0.7, gravity: -6, size: 2.0, z: pz });
-            this.particles.spawn(px, py + 0.5, { count: 10, color: 0x857358, speed: 16, ttl: 0.45, gravity: -12, size: 1.4, z: pz });
+            seam.visible = false;
+            // ② 各自栽倒（~0.56s 主轴线性，半片各自 power2.in + 右半错峰 16%）：
+            // 两半像正常敌人一样绕脚向后倒，落地各扬尘一记
+            this.particles.spawn(px, py + height * 0.3, { count: 14, color: 0xffe2a8, speed: 13, ttl: 0.45, gravity: -12, size: 1.1, z: pz });
+            let dustL = false, dustR = false;
             this.animator.animateCustom(id, {
-              durationMs: 450, ease: 'power2.in',
+              durationMs: 560,
               onUpdate: (t) => {
-                setSep(
-                  width * 0.34 + t * width * 0.5,
-                  -0.14 - 0.36 * t, 0.12 + 0.26 * t,
-                  0.1 + 1.0 * t * t, 0.14 + 1.55 * t * t,
-                );
-                seam.material.opacity = Math.max(0, 0.2 - t * 0.25);
+                const pL = Math.min(1, t / 0.84);
+                const pR = Math.min(1, Math.max(0, (t - 0.16) / 0.84));
+                halves[0].rotation.x = -TIP * pL * pL;
+                halves[1].rotation.x = -TIP * pR * pR;
+                if (!dustL && pL >= 1) {
+                  dustL = true;
+                  this.particles.spawn(px - width * 0.33, py + 0.6, { count: 10, color: 0xb59a72, speed: 8, ttl: 0.6, gravity: -6, size: 1.8, z: pz });
+                }
+                if (!dustR && pR >= 1) {
+                  dustR = true;
+                  this.particles.spawn(px + width * 0.3, py + 0.6, { count: 10, color: 0x857358, speed: 8, ttl: 0.6, gravity: -6, size: 1.8, z: pz });
+                }
               },
               onComplete: () => {
-                // ③ 焦黑侵蚀淡出（焚毁同语言：先焦后散，alphaTest 阈值侵蚀出烧蚀边）
-                const charColor = new THREE.Color(0x1a0f0a);
+                // ③ 回弹（~0.2s，同死亡节拍阻尼单次反弹）
                 this.animator.animateCustom(id, {
-                  durationMs: 520, ease: 'power1.in',
+                  durationMs: 200,
                   onUpdate: (t) => {
-                    for (const m of halves) {
-                      m.material.opacity = 1 - t;
-                      m.material.color.copy(startColor).lerp(charColor, Math.min(1, t * 1.3));
-                    }
+                    const lift = THREE.MathUtils.degToRad(4) * Math.sin(Math.PI * t) * (1 - t);
+                    halves[0].rotation.x = -(TIP - lift);
+                    halves[1].rotation.x = -(TIP - lift);
                   },
                   onComplete: () => {
-                    cleanHalves();
-                    unit.visible = false;
-                    finish();
+                    // ④ 焦黑侵蚀淡出（焚毁同语言：先焦后散，alphaTest 阈值侵蚀出烧蚀边）
+                    const charColor = new THREE.Color(0x1a0f0a);
+                    this.particles.spawn(px, py + 0.8, { count: 18, color: 0xffa040, speed: 7, ttl: 0.55, gravity: 12, size: 1.0, z: pz - 1 });
+                    this.particles.spawn(px, py + 0.8, { count: 10, color: 0x6b655e, speed: 4, ttl: 0.8, gravity: 6, size: 1.9, z: pz - 1 });
+                    this.animator.animateCustom(id, {
+                      durationMs: 430, ease: 'power1.in',
+                      onUpdate: (t) => {
+                        for (const m of halves) {
+                          m.material.opacity = 1 - t;
+                          m.material.color.copy(startColor).lerp(charColor, Math.min(1, t * 1.3));
+                        }
+                      },
+                      onComplete: () => {
+                        cleanHalves();
+                        unit.visible = false;
+                        finish();
+                      },
+                    });
                   },
                 });
               },

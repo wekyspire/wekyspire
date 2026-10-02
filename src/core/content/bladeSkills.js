@@ -105,7 +105,7 @@ const SLASH_CHAIN = [
   { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 6 },
   { id: 'seaCleave', name: '分海斩', tier: 'A', damage: 205, cd: 7 },
   { id: 'skyCleave', name: '开天斩', tier: 'S', damage: 390, cd: 8 },
-  { id: 'godCleave', name: '断神斩', tier: 'X', damage: 9999, cd: 9, overwriteDesc: '\italic{斩}'},
+  { id: 'godCleave', name: '断神斩', tier: 'X', damage: 9999, cd: 9, overwriteDesc: '斩' },
 ];
 const SLASH_IDS = new Set(SLASH_CHAIN.map(x => x.id));
 

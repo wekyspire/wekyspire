@@ -496,11 +496,11 @@ export function dreadVeil(ctx, deps) {
 }
 
 /**
- * 全屏白闪（斩落一瞬的曝光读感）：uiScene 纯色覆盖面，intensity 起、指数落。
- * 自包含块（await 即全程），借 ctx.wait 保险。
+ * 全屏白闪（斩落一瞬的曝光读感）：uiScene 纯色覆盖面，attackMs 内爬到峰值、指数落。
+ * attackMs=0 = 瞬亮（旧口径）；>0 给一条短攻击沿（高级斩的爆发 smooth in）。
  */
 export async function screenFlash(ctx, deps, {
-  intensity = 0.9, ms = 220, color = 0xffffff,
+  intensity = 0.9, ms = 220, color = 0xffffff, attackMs = 0,
 } = {}) {
   const mat = new THREE.MeshBasicMaterial({
     transparent: true, opacity: 0, depthTest: false, depthWrite: false, color, fog: false,
@@ -513,10 +513,15 @@ export async function screenFlash(ctx, deps, {
   quad.renderOrder = 999;
   deps.uiScene?.add(quad);
   ctx.onKill(() => { deps.uiScene?.remove(quad); quad.geometry.dispose(); mat.dispose(); });
-  const state = { v: intensity };
+  const state = { v: 0 };
+  const apply = () => { mat.opacity = state.v; quad.visible = state.v > 0.005; };
+  if (attackMs > 0) {
+    await ctx.tweenRaw(state, { v: intensity }, { durationMs: attackMs, ease: 'power1.in', onUpdate: apply });
+  } else {
+    state.v = intensity; apply();
+  }
   await ctx.tweenRaw(state, { v: 0 }, {
-    durationMs: ms, ease: 'power2.out',
-    onUpdate: () => { mat.opacity = state.v; quad.visible = state.v > 0.005; },
+    durationMs: ms, ease: 'power2.out', onUpdate: apply,
   });
   deps.uiScene?.remove(quad); quad.geometry.dispose(); mat.dispose();
 }

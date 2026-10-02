@@ -29,37 +29,42 @@ export const heavenCleave = {
       const feet = t0 ? deps.unitFeet(t0) : null;
       // 断裂标记：这些目标若死于此伤，死亡节拍走「裂成两半」（无死亡则标记随舞台清理）
       deps.markCleaveSplit?.(targets);
-      // 复原保险：协程被杀（保险丝/拆台）也必须还相机、停微震
+      // 复原保险：协程被杀（保险丝/拆台）也必须还相机、停微震、熄卡面蓄势
       const cam = deps.camera ?? null;
       ctx.onKill(() => {
         deps.shake?.sustain?.(0);
         cam?.flyHome?.({ durationMs: 300, ease: 'power2.out' });
+        deps.cardView?.setVisualState?.('normal');
       });
-      // ① 压迫段：幕起 + fov 拉大 + 微震渐强 + 暗柱预兆 + 卡面双脉冲蓄势
+      // ① 压迫段：幕起 + fov 拉大 + 微震连续爬升 + 卡面蓄势——全部走**连续缓入**
+      //    （微震阶梯步进与卡面双脉冲的离眨眼读感已废弃）：卡面高亮态与幕同一条
+      //    渐入曲线爬满，斩落一瞬才转成一记白热脉冲
       const veil = dreadVeil(ctx, deps);
-      const ramp = veil.set(g.veil, g.dreadMs);
+      const ramp = veil.set(g.veil, g.dreadMs, 'sine.in');
       const base = cam?.basePose ?? null;
-      if (cam && base) cam.flyTo({ ...base, fov: base.fov + g.fov }, { durationMs: g.dreadMs + 160, ease: 'power2.in' });
+      if (cam && base) cam.flyTo({ ...base, fov: base.fov + g.fov }, { durationMs: g.dreadMs + 160, ease: 'sine.in' });
       // if (feet) ctx.spawn((c) => lightPillar(c, deps, {
       //   at: feet, color: [0.08, 0.10, 0.14], hot: [0.10, 0.12, 0.16],
       //   width: X ? 2 : 1, height: g.pillarH, ms: g.dreadMs + 320,
       // }));
       if (deps.shake?.sustain) {
-        deps.shake.sustain(g.tremble * 0.3);
-        await ctx.wait(Math.round(g.dreadMs * 0.4));
-        deps.shake.sustain(g.tremble * 0.65);
-        await ctx.wait(Math.round(g.dreadMs * 0.6));
-        deps.shake.sustain(g.tremble);
-      } else {
-        await ctx.wait(g.dreadMs);
+        const st = { v: 0 };
+        ctx.spawn(async (c) => {
+          await c.tweenRaw(st, { v: g.tremble }, {
+            durationMs: g.dreadMs, ease: 'sine.in',
+            onUpdate: () => deps.shake.sustain(st.v),
+          });
+        });
       }
-      await cardFlare(ctx, deps, { color: 0xffffff, ms: Math.round(g.dreadMs * 0.5), scale: X ? 2.4 : 1.8 });
-      await cardFlare(ctx, deps, { color: 0xffffff, ms: Math.round(g.dreadMs * 0.4), scale: X ? 3.2 : 2.2 });
+      const view = deps.cardView;
+      view?.setVisualState?.('highlighted');   // C0 收敛通道：高亮随压迫段平滑爬满
       await ramp;
-      // ② 斩落：白刃一闪 + 全屏白闪 + 大震一记（微震就此收口）
+      // ② 斩落：蓄势转白热脉冲 + 白刃一闪 + 全屏白闪（带短攻击沿）+ 大震一记（微震就此收口）
+      view?.setVisualState?.('normal');
       deps.shake?.sustain?.(0);
       deps.shake?.impulse?.(X ? 6 : 3.5);
-      ctx.spawn((c) => screenFlash(c, deps, { intensity: g.flash, ms: 240 }));
+      ctx.spawn((c) => cardFlare(c, deps, { color: 0xffffff, ms: 200, scale: X ? 2.4 : 1.8 }));
+      ctx.spawn((c) => screenFlash(c, deps, { intensity: g.flash, ms: 240, attackMs: 70 }));
       if (at) {
         await slashSweep(ctx, deps, {
           at, angle: X ? 1.52 : 1.45, ms: g.slashMs,
