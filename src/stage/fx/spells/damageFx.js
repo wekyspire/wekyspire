@@ -77,6 +77,12 @@ export function resolveDamageFx(defId) {
       const rapid = /连击|乱拳|雨拳|千手|万手|瞬击|快拳/.test(name);
       return { kind: 'punch', heavy, rapid };
     }
+    case 'block': {        // 格挡系攻击链（掌/腿/破架——体修同源，施术拍已逐卡走 fistCast）
+      const name = def.name ?? '';
+      const heavy = /摘星|贯心|旋风腿|碎头|扫堂/.test(name);
+      const rapid = /二击|双击/.test(name);
+      return { kind: 'punch', heavy, rapid };
+    }
     case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点）
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）

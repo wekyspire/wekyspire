@@ -9,7 +9,7 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
-import { runSpellFx } from '../../fx/spells/index.js';
+import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -252,6 +252,16 @@ export const cardBeats = {
             // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
           }
         };
+        // 施术演出模板接管停留窗期间，卡必须停在展示位：held 分流与 springs.release
+        // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
+        // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
+        // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
+        // 根治：命中模板即刻摘弹簧目标 + 预置 held——布局/状态语义本就允许展示期持 held
+        // （_setCardZone 的 held 守卫只挡「解除停留」，不挡提前进入），settle 幂等收尾。
+        if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
+          this.model.setZone(id, 'held');
+          this.springs.release(id);
+        }
         // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
         // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
         // 全程 hold）。未命中 = BASE 现行为（100ms 停留窗），零回归。
