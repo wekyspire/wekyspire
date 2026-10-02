@@ -260,6 +260,7 @@ export class CardFxLayer extends THREE.Group {
       this.add(this._pulse);
     }
     this._pulse.material.color.set(color);
+    this._pulse.material.opacity = PULSE_OPACITY; // 重触发重置（update 里会随时间衰减）
     this._pulseTl = { elapsed: 0, duration: Math.max(0.001, durationMs / 1000), scale };
     this._pulse.scale.set(scale, scale, 1);
     this._pulse.visible = true;
@@ -512,6 +513,9 @@ export class CardFxLayer extends THREE.Group {
       const k = Math.min(this._pulseTl.elapsed / this._pulseTl.duration, 1);
       const s = this._pulseTl.scale + (1 - this._pulseTl.scale) * k; // scale→1 回程
       this._pulse.scale.set(s, s, 1);
+      // 不透明度随时间衰减（(1-k)^1.6）：闪光应「一闪即灭」。不衰减会在咏唱激活的
+      // 放缩段把整卡洗白（亮面卡 + 0.55 恒亮加色 + bloom = 牌面短暂消失）
+      this._pulse.material.opacity = PULSE_OPACITY * (1 - k) ** 1.6;
       if (k >= 1) {
         this._pulse.visible = false;
         this._pulseTl = null;
