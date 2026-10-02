@@ -661,6 +661,11 @@ export class RoomStage {
     if (this._focused === name) return;
     this._focused = name;
     for (const [n, rig] of this._rigs) rig.setFocus?.(n === name);
+    // 聚焦时隐藏全部机器浮标（2026-10-02，夜测 1002 [路4] 根治）：箭头是「这台能点」
+    // 的全景指引，聚焦特写里职责已完成；且特写机位把它顶到画面上沿，发光体经
+    // bloom 链与顶栏文本发生层序穿插（金币数字被盖、遗物徽章又压其上）。聚焦时
+    // hover 本就不响应（AGENTS 语义），浮标一并退场。
+    for (const m of this._markers) m.marker.visible = this._focused == null;
     const entry = this._markers.find(m => m.name === name)?.entry ?? null;
     if (!entry) {
       this._panelKind = null;
