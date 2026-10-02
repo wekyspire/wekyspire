@@ -200,6 +200,7 @@ src/
 - 编辑前先读文件，不破坏无关逻辑；重构时删除废弃旧代码（含 CSS、未用函数）。
 - 可抽离的共用逻辑尽量抽离，避免重复。
 - Core 状态只放 id/slug + 标量（可序列化），定义引用一律经注册表反查。
+- **卡牌 id 命名口径（2026-10-02 大改名定）**：同名晋升链共用同一语义前缀 + 等阶尾缀（`xxxC/xxxB/xxxA(/xxxS)`，如 `igniteC/igniteB/igniteA`）；链内异名卡（多为 S）用独立语义 id（如 `ultimateSpark`）。美术键（`artKeys.js` 的值、`genCardScenes/genCardArt` 的键）与卡 id 是**两个命名空间**——卡 id 改名不动美术键。注意撞名：效果 `endure`/`breath`、能力 `fireWard` 与卡牌同名不同物；敌人招式 id（floorEnemyGenerator）与房型预设 id（rooms/presets）也是独立命名空间。
 - 牌库顶 = 数组 index 0（FIFO：顶抽底还，**无弃牌堆、无重洗**；弃牌/打出/换牌等非消耗离手卡一律回牌库底 = 数组尾）；牌的 zone 不显式存储，用 `zoneOf/moveCard` 反查，数组是唯一事实源。
 - **pending 结算区惯例**：结算中的卡（主语或宾语）在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手（hand→pending，静默裸 moveCard），收尾落位；对发动卡的引用以 `sctx.self` + 出牌时点捕获（`sctx.handIndexAtPlay`，经 `helpers.handIndexAtPlay/handNeighborsAtPlay` 读）为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来「离场→跨节拍处理→落位」机制按同一惯例书写：先入 pending、末段 `zoneOf` 校验后落位，落地指令对「目标不在预期区」静默落空（`DiscardCardInstruction` 为范式）。
 - **PRE/POST 反应纪律**：PRE 只做 payload 修饰（`setPayload`）或 veto，世界变更（改 zone/资源/生命）一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（替代效应，每事件至多一次），其次 POST 追加。PRE 内提交「自身资源记账」类子指令合法；PRE 禁的是与被观察指令操作同一 zone/资源的变更指令。
