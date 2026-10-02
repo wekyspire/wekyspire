@@ -67,6 +67,7 @@ import { runScript } from '../fx/script.js';
 import { AuraHost } from '../fx/aura.js';
 import { Cast } from '../fx/cast.js';
 import { createProjectileTracker } from '../fx/spells/projectileTrack.js';
+import { cardReactMode } from '../fx/cardBodyFx.js';
 import { getScript } from '../fx/scripts/index.js';
 import { createNotifyHub } from '../fx/notify.js';
 import { warmCharBurn } from '../fx/charBurn.js';
@@ -1087,22 +1088,24 @@ export class BattleStage {
   }
 
   /**
-   * 卡牌**威力提升**节拍（公共动画：任何改 runtime.power 的效果都走它）：
-   * 卡面放缩脉冲（放大 1.22 → 回程）+ 金色加色闪光，表示"这张牌的状态变了"。
+   * 卡牌**反应**节拍（公共动画：受益/副作用发动，core 原语 cardKit.reactFx）：
+   * C0 体系 shader 配方（火脉/锻打淬火/气血/加固……，mode 由卡投影的体系×极性解析）
+   * + 小放缩脉冲。shader 包络在 fx 层自续衰减，本节拍攻击+保持段落定即放行。
    * 手牌的缩放归弹簧层所有：先让 animator 接管放大（弹簧让位），播完交还弹簧
    * ——从放大位平滑弹回锚点，天然带一点回弹；展示/结算位的卡自己补间回原位。
    */
-  _cardPowerBeat(payload, finish) {
+  _cardReactBeat(payload, finish) {
     const id = payload?.card?.uniqueID ?? payload?.uniqueID ?? null;
     const view = id != null ? this._views.get(id) : null;
     if (!view) return finish();
-    this._pulseCard(id, 0xffd34c);
+    const mode = cardReactMode(view._cardData, payload?.kind);
+    view.fx.react({ mode, intensity: Math.min(1.4, 0.75 + (payload?.magnitude ?? 1) * 0.12) });
     const s0 = view.scale.x || 1;
-    this.animator.animate(id, { scale: s0 * 1.22 }, {
-      durationMs: 130,
+    this.animator.animate(id, { scale: s0 * 1.12 }, {
+      durationMs: 110,
       onComplete: () => {
         if (this.model.getZone(id) === 'hand') { finish(); return; } // 交还弹簧层（自动弹回）
-        this.animator.animate(id, { scale: s0 }, { durationMs: 120, onComplete: finish });
+        this.animator.animate(id, { scale: s0 }, { durationMs: 110, onComplete: finish });
       },
     });
   }
@@ -1113,7 +1116,7 @@ export class BattleStage {
    * def.activated.anim 缺省时给 { kind: 'pulse' }——"一般会实现为放缩"），数值
    * 缺省由本层补全（演出参数是表现层调参位，卡只声明它想覆盖的部分）。
    * 播完交回调用方放行回手（回扇形的位移与缩放回稳由入场跟踪/弹簧完成，
-   * 同 _cardPowerBeat 的交还惯例）。
+   * 同 _cardReactBeat 的交还惯例）。
    */
   _chantActivateBeat(id, anim, done) {
     const view = id != null ? this._views.get(id) : null;

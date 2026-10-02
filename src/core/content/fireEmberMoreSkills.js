@@ -20,7 +20,7 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import { BurnCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
-import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest } from './cardKit.js';
+import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest, reactFx } from './cardKit.js';
 
 // ==== 自焚系列（§2.1：自伤换高伤）==============================================
 // 玩火 C/B/A：0 费攻击，冷却 1；伤害 11/14/17，自燃烧全阶统一 4。
@@ -36,6 +36,7 @@ function selfImmolate({ id, name, tier, base, promotesTo = null }) {
       const mult = sctx.battleState.selfImmolateDouble ? 2 : 1;
       attackDamage(sctx, base * mult);
       addEffect(sctx, 'burn', 4 * mult); // 默认 target = sctx.player：代价给自己
+      reactFx(sctx, sctx.self, 'backfire');
       return true;
     },
     describe: () => `${base}伤害，/effect{燃烧}4`,
@@ -241,13 +242,14 @@ registerSkill({
   keywords: ['exhaust', 'anchored'],
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
       react: (instr, ctx) => {
         ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr);
         ctx.kernel.submitInstruction(new AddEffectInstruction({
           target: ctx.player, effectId: 'burn', stacks: 7,
         }), instr);
+        reactFx(sctx, sctx.self, 'backfire');
       },
     }],
   },
@@ -267,13 +269,14 @@ const scorchChantCard = ({ id, name, tier, ap, stacks, promotesTo }) => register
   promotesTo,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
       react: (instr, ctx) => {
         for (const e of aliveEnemies(ctx.battleState)) {
           ctx.kernel.submitInstruction(
             new AddEffectInstruction({ target: e, effectId: 'burn', stacks }), instr);
         }
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
   },
@@ -300,6 +303,7 @@ const flameCloakCard = ({ id, tier, shield, promotesTo = null }) => registerSkil
         if (sctx.player.getEffectStacks('burn') > 0) {
           ctx.kernel.submitInstruction(
             new GainShieldInstruction({ target: sctx.player, amount: shield }), instr);
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
         }
       },
     }],
@@ -356,11 +360,14 @@ const smeltChantCard = ({ id, name, tier, mana, chantWeight, ap, promotesTo }) =
   promotesTo,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      react: (instr, ctx) => ctx.kernel.submitInstruction(
-        new BurnHandForManaInstruction({ mana, reason: `${name}：选1张手牌焚毁，获得${mana}魏启` }),
-        instr),
+      react: (instr, ctx) => {
+        ctx.kernel.submitInstruction(
+          new BurnHandForManaInstruction({ mana, reason: `${name}：选1张手牌焚毁，获得${mana}魏启` }),
+          instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+      },
     }],
   },
   describe: () => `选1手牌焚毁，获得${mana}魏启`,

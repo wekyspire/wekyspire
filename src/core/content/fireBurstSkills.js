@@ -20,7 +20,7 @@ import { deactivateChant } from '../skills/helpers.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
-  drawCards, burnCard, discardCard, requestHandSelection, selected, gainPower, addCard,
+  drawCards, burnCard, discardCard, requestHandSelection, selected, gainPower, addCard, reactFx,
 } from './cardKit.js';
 
 // ====================================================================
@@ -146,7 +146,10 @@ function burstChantCard({ id, name, tier, base, perMana, innate = true, promotes
         when: ConsumeManaInstruction,
         phase: 'post',
         filter: (instr) => (instr.result?.consumed ?? 0) > 0,
-        react: (instr) => { sctx.self.burstPool += instr.result.consumed * perMana; },
+        react: (instr) => {
+          sctx.self.burstPool += instr.result.consumed * perMana;
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'charge', magnitude: instr.result.consumed });
+        },
       }],
       onDisable: (sctx) => {
         const total = base + (sctx.self.burstPool ?? 0);
@@ -287,6 +290,7 @@ function fireWhirlCard({ id, name = '火焰旋风', tier, dmg, burnPer = 4, prom
           self.whirlPool = (self.whirlPool ?? 0) + instr.result.consumed;
           let procs = Math.floor(self.whirlPool / 2);
           self.whirlPool -= procs * 2;
+          if (procs > 0) reactFx(sctx, self, 'benefit', { variant: 'proc', magnitude: procs });
           while (procs-- > 0) {
             for (const e of aliveEnemies(sctx.battleState)) {
               if (!e.isDead()) dealDamage(sctx, dmgOf(sctx), { target: e, type: 'minor', tags: ['aoe'] });
@@ -504,6 +508,7 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
         react: () => {
           addEffect(sctx, 'naqi', naqi);
           addEffect(sctx, 'burn', 4); // 自施燃烧（代价语言）
+          reactFx(sctx, sctx.self, 'backfire');
         },
       }],
     },
@@ -539,6 +544,7 @@ function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
         react: () => {
           gainShield(sctx, shield);
           addEffect(sctx, 'burn', 4); // 自燃 4
+          reactFx(sctx, sctx.self, 'backfire');
         },
       }],
     },
@@ -1091,6 +1097,7 @@ registerSkill({
         ctx.kernel.submitInstruction(
           new GainShieldInstruction({ target: sctx.player, amount: 3 * instr.result.consumed }),
           instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'charge', magnitude: instr.result.consumed });
       },
     }],
   },

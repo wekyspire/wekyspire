@@ -21,7 +21,7 @@ import {
   attackAmount, attackDamage, resolvedDamageText, enemyTarget,
   dealDamage, drawCards, addCard, randomAliveEnemy,
   isLastHandCardAtPlay, isFirstPlayThisTurn, aoeAttack, gainShield,
-  requestHandSelection, selected,
+  requestHandSelection, selected, reactFx,
 } from './cardKit.js';
 
 // ==== 1. 真拳系列（基石：纯伤害直线升级，S 阶跃迁为无任何资源消耗）====
@@ -81,8 +81,11 @@ function registerCollapseFist({ id, name, tier, damage, promotesTo = null }) {
     subscriptions: (sctx) => [{
       when: UseSkillInstruction, phase: 'post',
       filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
-      react: (instr, ctx) => ctx.kernel.submitInstruction(
-        new SkillCooldownInstruction({ skill: sctx.self, delta: 1 }), instr),
+      react: (instr, ctx) => {
+        ctx.kernel.submitInstruction(
+          new SkillCooldownInstruction({ skill: sctx.self, delta: 1 }), instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+      },
     }],
     describe: () => `${damage}伤害；在手时每打出1牌冷却1`,
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}；在手时每打出1牌冷却1`,
@@ -228,6 +231,7 @@ registerSkill({
       when: ChantTriggerInstruction, phase: 'post',
       react: () => {
         for (let i = 0; i < 3; i++) addCard(sctx, 'instantStrike', { index: 'random' });
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
   },

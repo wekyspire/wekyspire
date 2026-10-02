@@ -23,7 +23,7 @@ import { canUseSkill } from '../skills/helpers.js';
 import {
   attackDamage, dealDamage, resolvedDamageText, enemyTarget, aoeAttackProbes,
   damageLandedCount, gainShield, gainBlock, addEffect,
-  breakAllBlock,
+  breakAllBlock, reactFx,
 } from './cardKit.js';
 
 // 格挡（格挡系列 C）：+1 层格挡 + 4 护盾。
@@ -331,7 +331,10 @@ const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesT
     },
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      react: (instr, ctx) => gainBlock(sctx, blockPerTrigger, ctx.player),
+      react: (instr, ctx) => {
+        gainBlock(sctx, blockPerTrigger, ctx.player);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+      },
     }],
   },
   describe: () => `/effect{格挡}${blockPerTrigger}`

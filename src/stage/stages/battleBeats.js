@@ -163,9 +163,9 @@ export const ANIM_BEATS = {
   [EventNames.ANIM_RESOURCE]: (stage, payload, finish) => stage._resourceBeat(payload, finish),
   [EventNames.ANIM_CHANT_TOGGLED]: chantToggledBeat,
   [EventNames.ANIM_COOLDOWN_TICK]: cooldownTickBeat,
-  // 卡牌威力提升（公共节拍）：卡面放缩脉冲 —— 手牌里由弹簧层收养后自然弹回锚点，
-  // 展示/结算位的卡自己补间回原位。同时叠一层金色加色闪光（fx 层）。
-  [EventNames.ANIM_CARD_POWER_UP]: (stage, payload, finish) => stage._cardPowerBeat(payload, finish),
+  // 卡面反应（公共节拍）：受益/副作用发动播体系专属 shader 演出（C0 配方，
+  // 见 cardBodyFx.cbfReact）+ 小放缩 —— 手牌由弹簧层收养弹回，展示位卡自己补回。
+  [EventNames.ANIM_CARD_REACT]: (stage, payload, finish) => stage._cardReactBeat(payload, finish),
   // 通用剧本闸口（fx 架构）：剧本自寻址（cast/unitById），不走 target 投影
   [EventNames.ANIM_SCRIPT]: (stage, payload, finish) => stage._scriptBeat(payload, finish),
   [EventNames.ANIM_DAMAGE]: (stage, payload, finish) => {

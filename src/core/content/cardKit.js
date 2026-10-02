@@ -122,14 +122,24 @@ export function damageLandedCount(probes) {
 }
 
 /**
+ * 卡面反应演出原语：卡牌因其它操作受益/副作用发动时调用（爆裂蓄能/锻打/咏唱触发/
+ * 自燃代价……），presenter → ANIM_CARD_REACT → BattleStage 反应节拍（C0 体系 shader，
+ * 受益/副作用两类配方）。kind: 'benefit' | 'backfire'；extra 可带 variant/magnitude。
+ */
+export function reactFx(sctx, card, kind, extra = null) {
+  if (!card || !kind) return;
+  sctx.presenter?.cardReact?.({ card, kind, ...extra });
+}
+
+/**
  * 卡牌威力提升（runtime.power 增加）——**唯一入口**：改数值 + 通知 presenter 播
- * 「牌状态改变」的放缩节拍（公共动画：bridge 的 cardPowerUp → ANIM_CARD_POWER_UP）。
+ * 卡面反应节拍（benefit/power，公共动画：bridge 的 cardReact → ANIM_CARD_REACT）。
  * 内容侧任何改 power 的地方都该走它，别裸改 `card.power += n`（那样只有数字变、没有演出）。
  */
 export function gainPower(sctx, card, delta) {
   if (!card || !delta) return card;
   card.power += delta;
-  sctx.presenter?.cardPowerUp?.({ card, delta });
+  reactFx(sctx, card, 'benefit', { variant: 'power', magnitude: delta });
   return card;
 }
 
