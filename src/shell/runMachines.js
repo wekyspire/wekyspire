@@ -191,7 +191,7 @@ export function createRunMachines(ctx) {
         // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
         ctx.panelStage()?.showcaseItem({
           title: `+${res.gold} 金币`,
-          desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡' : '老虎机满意地嚼碎了那件遗物',
+          desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡牌' : '老虎机满意地嚼碎了那件遗物',
           effect: res.freeRoll ? '它还额外吐了一次免费拉杆' : '金币已经落进你的钱袋',
           artKey: 'gold',
           tint: 0xffd75e,

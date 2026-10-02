@@ -90,7 +90,7 @@ export function createVendingMachine(ctx) {
         : ctx.uiAnchorOf(ctx.entryOf('shop') ?? {}, 4);
       ctx.bubbles().say('room:money', {
         x: at.x, y: at.y,
-        text: `还差 ${Math.max(0, it.price - (ctx.snap().money ?? 0))} 金……`,
+        text: `还差 ${Math.max(0, it.price - (ctx.snap().money ?? 0))} 金币……`,
         kind: 'thought',
         duration: 2.2,
         tint: 0xff9a9a,

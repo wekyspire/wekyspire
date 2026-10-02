@@ -25,13 +25,13 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   const pct = (v) => `${Math.round((v ?? 0) * 100)}%`;
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
-    text: `持有 ${s.money} 金`
-      + (s.freeRolls ? ` ｜ 免费 ${s.freeRolls} 次` : '')
-      + ` ｜ 已拉 ${s.pulls ?? s.rolls ?? 0} 次`,
+    text: `持有 ${s.money} 金币`
+      + (s.freeRolls ? `，免费 ${s.freeRolls} 次` : '')
+      + `，已拉 ${s.pulls ?? s.rolls ?? 0} 次`,
   });
   w.push({
     kind: 'sub', align: 'center', tint: '#77809a',
-    text: `小奖 ${pct(s.minorChance)} / 大奖 ${pct(s.majorChance)}（未中累加）`,
+    text: `小奖 ${pct(s.minorChance)}，大奖 ${pct(s.majorChance)}，未中累加`,
   });
 
   // 产出：不能连抽，先处理这一件（文档：产出总是可以放弃不要的）
@@ -49,7 +49,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
     } else if (pd.upgrade?.kind === 'free') {
       w.push({
         kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
-        label: '选择要免费升级的卡',
+        label: '选一张卡牌升级',
         action: { action: 'openUpgradePicker', source: 'slot', local: true },
       });
     }
@@ -63,10 +63,9 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
 
   if (s.needsCardPick) {
     w.push({ kind: 'gap' });
-    w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: '免费升级 · 择一张卡' });
     w.push({
       kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
-      label: '选择要免费升级的卡',
+      label: '选一张卡牌升级',
       action: { action: 'openUpgradePicker', source: 'slot', local: true },
     });
     return w;
@@ -79,7 +78,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   }
   w.push({
     kind: 'button', id: 'slot:spin', width: 260, size: 'main',
-    label: s.spinning ? '转动中…' : `拉杆！（${s.cost} 金）`,
+    label: s.spinning ? '转动中…' : `拉杆！（${s.cost} 金币）`,
     enabled: !!s.canSpin && !s.spinning,
     action: { action: 'spin' },
   });
@@ -91,8 +90,8 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   w.push({
     kind: 'sub', align: 'center', tint: dv.ready ? '#a8c6a0' : '#77809a',
     text: dv.ready
-      ? '老虎机张开了嘴——可以粉碎一件遗物或一张卡换金币：'
-      : `吞噬进度 ${dv.progress ?? 0}/${dv.every ?? 7}（每拉一次杆累积 1）`,
+      ? '老虎机张开了嘴，可以粉碎一件遗物或一张卡牌换金币：'
+      : `吞噬进度 ${dv.progress ?? 0}/${dv.every ?? 7}`,
   });
   if (dv.ready) {
     w.push({
@@ -119,7 +118,7 @@ export function demonRollWidgets(w, pr, sceneChoice) {
   w.push({ kind: 'title', text: '😈 恶魔 roll', align: 'center' });
   w.push({
     kind: 'sub', align: 'center', tint: '#cfe0f5',
-    text: `超额取款已入账 ${pr.gold} 金——选一个词条承受：`,
+    text: `超额取款已入账 ${pr.gold} 金币，选一个词条承受：`,
   });
   for (const o of pr.options) {
     w.push({
@@ -138,7 +137,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   w.push({ kind: 'gap' });
   w.push({
     kind: 'sub', align: 'center', tint: '#9aa3b8',
-    text: `每 ${bk.ratePer} 金币生产 ${bk.rateYield} 金币！（连续${bk.combo}层未存取款）`,
+    text: `每 ${bk.ratePer} 金币生产 ${bk.rateYield} 金币，连续 ${bk.combo} 层未存取款`,
   });
   if (bk.deposit > 0) {
     w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: `再攒一层可多拿 +${bk.nextInterest} 金币` });
@@ -171,7 +170,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
       });
     }
     if (bk.canOverdraft) {
-      w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '承受诅咒并获取更多金钱！' });
+      w.push({ kind: 'sub', align: 'center', tint: '#ff8a80', text: '承受诅咒，获取更多金币！' });
       for (const t of bk.tiers) {
         w.push({
           kind: 'button', id: `bank:overdraft:${t.id}`, width: 240, size: 'sub',

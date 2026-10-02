@@ -8,10 +8,10 @@ import { withLabels } from './shared.js';
  */
 export function gurpasWidgets(w, snap) {
   const g = snap.gurpas ?? { items: [], sellable: [] };
-  w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: `持有 ${g.money} 金币 ｜ 她只收 A/S 级遗物` });
+  w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '她只收 A/S 级遗物' });
   // 买到即开的卡包：优先占屏（三选一）
   if (g.pendingPackCards?.length) {
-    w.push({ kind: 'sub', align: 'center', tint: '#cfe0f5', text: `卡包 ${g.pendingPack.packId === 'gurpasA' ? '（全 A 级）' : '（全 B 级）'}：择一张加入牌组` });
+    w.push({ kind: 'sub', align: 'center', tint: '#cfe0f5', text: `全 ${g.pendingPack.packId === 'gurpasA' ? 'A' : 'B'} 级卡牌，择一张加入牌组` });
     w.push({
       kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
       items: g.pendingPackCards.map(c => ({
@@ -27,7 +27,7 @@ export function gurpasWidgets(w, snap) {
     const used = it.kind === 'remove' ? `（已用 ${it.used ?? 0}/${2}）` : '';
     w.push({
       kind: 'button', id: `gurpas:buy:${i}`, width: 460, size: 'sub',
-      label: `${it.label} — ${it.price} 金${sold}${used}`,
+      label: `${it.label}，${it.price} 金币${sold}${used}`,
       enabled: !it.sold && (it.kind !== 'remove' || (it.used ?? 0) < 2) && g.money >= it.price,
       action: { action: 'gurpasBuy', index: i },
     });
@@ -35,11 +35,11 @@ export function gurpasWidgets(w, snap) {
   });
   w.push({ kind: 'gap' });
   if (g.sellable?.length) {
-    w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '收购（A/S 级）：' });
+    w.push({ kind: 'sub', align: 'center', tint: '#a8c6a0', text: '收购：' });
     for (const s of g.sellable) {
       w.push({
         kind: 'button', id: `gurpas:sell:${s.relicId}`, width: 400, size: 'sub',
-        label: `卖出 ${s.name}（${s.rarity}）→ +${s.price} 金`,
+        label: `卖出 ${s.name}（${s.rarity}），+${s.price} 金币`,
         action: { action: 'gurpasSell', relicId: s.relicId },
       });
     }

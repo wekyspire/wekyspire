@@ -1,4 +1,4 @@
-// ScrollPickerObject：全屏「滚动 + 滚动条 + 返回/确认」选择界面的**共用骨架**。
+// ScrollPickerObject：全屏「滚动 + 滚动条 + 取消/确认」选择界面的**共用骨架**。
 //
 // 派生：
 //   · CardScrollPickerObject —— 卡牌（营地/训练场升级、银行焚毁、Boss/古尔帕斯删卡、粉碎）
@@ -159,8 +159,9 @@ export class ScrollPickerObject extends THREE.Group {
       this._picker?.addPickable(entry.id, built.obj, { kind: 'button', space: 'ui' });
     });
 
-    // ---- 底部：返回 / 确认 ----
-    this._addButton(BACK_ID, '返回', { x: -34, y: LAYOUT.footerY, width: 200, size: 'sub' }, { action: 'cancel' });
+    // ---- 底部：取消 / 确认 ----
+    // 「返回」改名「取消」（2026-10-02 用户定）：按钮自述语义，各处不再需要「返回=放弃」的提示句
+    this._addButton(BACK_ID, '取消', { x: -34, y: LAYOUT.footerY, width: 200, size: 'sub' }, { action: 'cancel' });
     this._addButton(CONFIRM_ID, confirmLabel, { x: 34, y: LAYOUT.footerY, width: 200, size: 'main' }, { action: 'confirm' });
 
     this._addScrollbar(bandH);

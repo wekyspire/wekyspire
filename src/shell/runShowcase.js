@@ -121,7 +121,7 @@ export function createRunShowcase(ctx) {
     // 舞台没有该能力时退回「焚毁」文字特写）→ 金币 → （有附赠则）自动开选卡界面。
     const steps = [{ show: {
       title: p.name,
-      desc: `恶魔词条 · ${DEMON_TIER_LABEL[p.tier] ?? p.tier}`,
+      desc: `恶魔词条（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
       effect: p.desc,
       tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
       autoDismissMs: 1900,
@@ -145,8 +145,8 @@ export function createRunShowcase(ctx) {
         if (played) return;
         // 兜底：舞台无焚毁演出能力 → 文字特写拍
         const item = {
-          title: `焚毁 · ${step.burn.name}`,
-          desc: '忘却的代价——这张卡离开了你的牌库',
+          title: `焚毁 ${step.burn.name}`,
+          desc: '忘却的代价，这张卡牌离开了你的牌库',
           artKey: step.burn.defId,
           tint: 0xd96a4a,
           autoDismissMs: 1600,
@@ -188,10 +188,10 @@ export function createRunShowcase(ctx) {
     const major = p.tier === 'major';
     const shown = stage.showcaseItem({
       title: slotPrizeText(p),
-      desc: `老虎机 · ${major ? '★ 大奖' : '小奖'}`,
-      effect: needsPick ? '收下之后，在候选里选一张带走'
-        : freeUpgrade ? '收下之后，选择要免费升级的卡'
-          : '点任意处收下 ｜ 点「跳过」放弃这份产出',
+      desc: major ? '老虎机（大奖）' : '老虎机（小奖）',
+      effect: needsPick ? '收下之后挑一件带走'
+        : freeUpgrade ? '收下之后，选一张卡牌免费升级'
+          : null,
       // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
       // ＝特写美术区一块空白灰——夜测路7b 实报）
       artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
@@ -287,7 +287,7 @@ export function createRunShowcase(ctx) {
     const relicPack = p.kind === 'relic';
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: pack ? '售货机 · 卡包' : relicPack ? '售货机 · 遗物包' : '售货机',
+      desc: pack ? '卡包（售货机）' : relicPack ? '遗物包（售货机）' : '售货机',
       effect: p.effect ?? '',
       artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,

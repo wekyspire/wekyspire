@@ -281,7 +281,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         type: 'dialogue',
         pages: [{
           speaker: '老虎机',
-          text: '「咯啦……咯啦……」\n老虎机嚼够了硬币，满意地张开了嘴。\n点它的投料口，可以粉碎一张卡或一件遗物换金币。',
+          text: '「咯啦……咯啦……」\n老虎机嚼够了硬币，满意地张开了嘴。\n点它的投料口，可以粉碎一张卡牌或一件遗物换金币。',
         }],
       }],
     });
@@ -674,10 +674,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
             type: 'dialogue',
             pages: [{
               speaker: '训练桩',
-              text: '抓到的卡要配一次修行。选一种修行方式：',
+              text: '抓到的卡牌要配一次修行。选一种修行方式：',
               choices: [
-                { id: 'twoC', label: '夯实基础', hint: '升 2 张 C 阶卡' },
-                { id: 'oneB', label: '精益求精', hint: '升 1 张 B 阶卡' },
+                { id: 'twoC', label: '夯实基础', hint: '升 2 张 C 阶卡牌' },
+                { id: 'oneB', label: '精益求精', hint: '升 1 张 B 阶卡牌' },
               ],
             }],
             onChoice: (id) => { mode = id; },

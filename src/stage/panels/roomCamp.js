@@ -23,7 +23,9 @@ export function trainingWidgets(w, snap) {
     // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底
     w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '挑选抓牌候选…', action: { action: 'trainingDrawPick' } });
   } else if (!t.optionalDone) {
-    w.push({ kind: 'button', id: 'train:roll', width: 300, size: 'main', label: '继续训练 · 得卡与升级', action: { action: 'trainingDrawRoll' } });
+    // 可选段入口：按钮只写动作，代价与收益走下方说明小字（用户定两层结构）
+    w.push({ kind: 'button', id: 'train:roll', width: 260, size: 'main', label: '继续训练', action: { action: 'trainingDrawRoll' } });
+    w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '获得一张新卡牌，并升级现有卡牌' });
   } else {
     w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练完成' });
   }
@@ -72,11 +74,11 @@ export function buildTrainingPartPanel(snap) {
 export function buildCampTrainingPanel(snap) {
   const w = [];
   const t = snap.training ?? {};
-  roomHeader(w, snap, '🔥 营地 · ⚔ 训练场');
+  roomHeader(w, snap, '🔥 营地与 ⚔ 训练场');
   if (t.pendingUpgrade || t.choices?.length) { trainingWidgets(w, snap); return w; }
   campWidgets(w, snap);
   w.push({ kind: 'gap' });
-  w.push({ kind: 'sub', align: 'center', tint: t.started ? '#6f7a92' : '#9aa3b8', text: '⚔ 训练部分（本房一次）：' });
+  w.push({ kind: 'sub', align: 'center', tint: t.started ? '#6f7a92' : '#9aa3b8', text: '⚔ 训练' });
   trainingWidgets(w, snap);
   return w;
 }

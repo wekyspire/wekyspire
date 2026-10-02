@@ -20,15 +20,16 @@ export const DIM_META = {
   body: { label: '体修', glyph: '武', color: '#b8894a' },
 };
 
-// 房间标题/图标/提示：表现文案（core 只给 currentRoom 这个 id）
+// 房间标题（表现文案；core 只给 currentRoom 这个 id）。
+// 房间里的机器/篝火自己长什么样、能做什么，进场点一次就知道——不再配 hint 说明句。
 export const ROOM_META = {
-  training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——达标进阶' },
-  camp: { name: '营地', glyph: '⛺', hint: '暂作休整，选择一件好事发生' },
-  campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
-  gurpas: { name: '古尔帕斯之店', glyph: '🏪', hint: '旧魏启大陆的物件——她只收 A/S 级遗物' },
-  slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
-  shop: { name: '商店房', glyph: '🧃', hint: '售货机 · 点货架购买' },
-  event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
+  training: { name: '训练场' },
+  camp: { name: '营地' },
+  campTraining: { name: '营地训练场' },
+  gurpas: { name: '古尔帕斯之店' },
+  slot: { name: '老虎机' },
+  shop: { name: '商店房' },
+  event: { name: '事件房' },
 };
 
 /** 营地动作瓦片（休整/找回瑞米）：占位面板与场景式面板共用（模块作用域）。
@@ -43,8 +44,7 @@ export const pushCampGroup = (w, c = { options: [] }) => {
     // 超出瓦片宽度会被**画布裁掉**（症状：两头的字没了只剩中间）。故 desc 压到 ~6 个汉字，
     // 完整口径放到下面的说明行（sub 行会换行/缩放，放得下）
     tiles.push({ id: 'rest', name: '🔥 休整', desc: '恢复35%生命值', action: { action: 'campChoose', option: 'rest' } });
-  }
-  if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
+  }  if (tiles.length) w.push({ kind: 'tiles', idPrefix: 'camp', tileHeight: 96, gapY: 14, items: tiles });
   // if (c.options.includes('rest')) {
   //   w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '休整 = 回复 35% 最大生命，并把魏启全部回满' });
   // }
@@ -55,18 +55,18 @@ export function slotPrizeText(p) {
   if (!p) return '';
   if (p.kind === 'nothing') return '什么也没发生……';
   if (p.money != null) return `金币 +${p.money}`;
-  if (p.healPct != null) return `恢复 ${Math.round(p.healPct * 100)}% 生命`;
-  if (p.fullRestore) return '全状态恢复（生命与魏启回满，负面效果清除）';
-  if (p.special === 'apple') return '瑞米最爱的苹果（喂给瑞米）';
-  if (p.special === 'goldApple') return '金苹果（喂给瑞米）';
-  if (p.special === 'fruit') return '特殊物品：瑞米升级果';
-  if (p.special === 'training') return '特殊物品：训练次数 +1';
+  if (p.healPct != null) return `恢复 ${Math.round(p.healPct * 100)}% 生命值`;
+  if (p.fullRestore) return '全状态恢复：生命与魏启回满，负面效果清除';
+  if (p.special === 'apple') return '瑞米最爱的苹果';
+  if (p.special === 'goldApple') return '金苹果';
+  if (p.special === 'fruit') return '瑞米升级果';
+  if (p.special === 'training') return '训练次数 +1';
   if (p.upgradeCopyId) return `获得「升级后的复制品」：${defName(p.upgradeCopyId)}`;
-  if (p.upgrade?.kind === 'random') return `随机升级 ${p.upgrade.count} 张可升级卡`;
-  if (p.upgrade?.kind === 'free') return '免费指定升级一张卡';
-  if (p.relicChoices?.length) return '三选一 A 级遗物——择一件：';
+  if (p.upgrade?.kind === 'random') return `随机升级 ${p.upgrade.count} 张卡牌`;
+  if (p.upgrade?.kind === 'free') return '免费升级一张卡牌';
+  if (p.relicChoices?.length) return '择一件 A 级遗物';
   if (p.relicId) return `获得遗物：${relicName(p.relicId)}`;
-  if (p.choices?.length) return `择一张卡加入牌组（共 ${p.choices.length} 张）：`;
+  if (p.choices?.length) return '择一张卡牌加入牌组';
   return p.kind ?? '';
 }
 
@@ -79,12 +79,12 @@ export const getRelicRarity = (id) => getRelicDefinition(id)?.rarity ?? 'C';
  * 场景式休息房把机器面板拆开单开（点哪台开哪台），所以表头要能被两个面板各自复用。
  */
 export function roomHeader(w, snap, title = null) {
-  const meta = ROOM_META[snap.room] ?? { name: snap.room, glyph: '？', hint: '' };
-  w.push({ kind: 'title', text: title ?? meta.name, align: 'center' }); // 不拼 glyph（同形错词，见 runCutsceneFlows 同步修）
+  const meta = ROOM_META[snap.room] ?? { name: snap.room };
+  w.push({ kind: 'title', text: title ?? meta.name, align: 'center' });
   if (snap.shop) {
     w.push({
       kind: 'button', id: 'room:shop', width: 300, size: 'sub',
-      label: `售货机（持有 ${snap.money} 金币）`,
+      label: '售货机',   // 持有金币顶栏常驻可见，不在这里复述
       action: { action: 'openShop', local: true },
     });
   }

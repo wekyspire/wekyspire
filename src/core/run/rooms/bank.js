@@ -90,12 +90,12 @@ export const DEMON_DEBUFFS = Object.freeze({
     immediate: (run) => loser(run, 0.65), permanent: { maxHp: 3 },
   },
   oblivion: {
-    tier: 'black', name: '忘却', desc: '随机焚毁你牌库中 2 张卡牌（不会焚 S 级卡），然后你可选一张卡焚毁。',
+    tier: 'black', name: '忘却', desc: '随机焚毁你牌库中 2 张卡牌（不会焚 S 级卡牌），然后你可选一张卡牌焚毁。',
     immediate: (run) => burnRandomDeckCards(run, 2), offer: 'burn',
   },
   daze: {
     tier: 'black', name: '浑浑噩噩',
-    desc: '下一场战斗中，初始抽牌数 -1、回合开始时抽牌数 -1，但你可立马选一张卡升级。',
+    desc: '下一场战斗中，初始抽牌数 -1、回合开始时抽牌数 -1，但你可立马选一张卡牌升级。',
     battle: { battles: 1, initialDrawPenalty: 1, drawPenaltyTurns: 99 }, offer: 'upgrade',
   },
   fragileFive: {

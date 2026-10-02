@@ -58,14 +58,12 @@ const UPGRADE_SOURCES = {
     picks: (s) => Math.max(1, s?.training?.upgradeRemaining ?? 1),
     intent: (uniqueID, targetId = null) => ({ action: 'trainingUpgrade', uniqueID, targetId }),
     title: '选择要升级的卡牌', confirmLabel: '确认升级',
-    hint: '悬停以查看升级后的卡面',
   },
   bankUpgrade: {
     upgrade: true,
     cards: (s) => s?.bank?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'bankUpgradeOffer', uniqueID, targetId }),
     title: '选择要升级的卡牌', confirmLabel: '确认升级',
-    hint: '悬停以查看升级后的卡面',
   },
   bankBurn: {
     cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤；**不看晋升 enabled**——见下方 anyCard）
@@ -80,30 +78,26 @@ const UPGRADE_SOURCES = {
     upgrade: true,
     cards: (s) => s?.slot?.upgradeCards,
     intent: (uniqueID, targetId = null) => ({ action: 'slotPickUpgrade', uniqueID, targetId }),
-    title: '删除一张卡牌', confirmLabel: '确认升级',
-    hint: '悬停以查看升级后的卡面',
+    title: '选择要升级的卡牌', confirmLabel: '确认升级',
   },
   gurpasRemove: {
     cards: (s) => s?.gurpas?.removeCards,   // 删卡服务：整副牌组（不限等阶）
     intent: (uniqueID) => ({ action: 'gurpasRemove', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
-    hint: '这张牌将从牌库中彻底消失',
     tips: false,   // 删卡界面不弹卡牌 tooltip——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
     cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
-    hint: '这张牌将从牌库中彻底消失',
     tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
   ascensionRemove: {
     // 跳过进阶的删卡反哺：与 Boss 奖励同一计数器/同一结算，
-    // 仅文案不同——title 用户钦定「删一张卡」；「返回」只收起界面（不删也行）。
+    // 仅文案不同——title 用户钦定「删一张卡」；「取消」只收起界面（不删也行）。
     cards: (s) => s?.cardRemoval?.removeCards,
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
-    hint: '这张卡牌将从牌库中彻底消失',
     tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
   },
 };
@@ -384,7 +378,6 @@ export function createStagePickerKit({
                 cancelFn = () => disposeRest(i);   // 中止链：余下摘下件释放，尾款挂起等重入
                 picker.open({
                   title: `选择晋升方向（${i + 1}/${taken.length}）`,
-                  hint: '悬停查看卡面 ｜ 「返回」中止升级',
                   cards: (c.toViews ?? []).map(t => ({
                     uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
                   })),
@@ -429,10 +422,9 @@ export function createStagePickerKit({
       };
       const openBranch = (c) => {
         confirmFn = (ids) => fire(c.uniqueID, ids[0]);  // 子面板候选 key = 目标 defId
-        cancelFn = () => openMain();                    // 返回 = 回上一级重选
+        cancelFn = () => openMain();                    // 取消 = 回上一级重选
         picker.open({
           title: '选择晋升方向',
-          hint: '悬停查看卡面 ｜ 「返回」重新选卡',
           cards: (c.toViews ?? []).map(t => ({
             uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
           })),
@@ -471,8 +463,7 @@ export function createStagePickerKit({
       cancelFn = () => { onIntent?.({ action: 'trainingDraw', defId: null }); };
       picker.attachPicker(pickerNow());
       picker.open({
-        title: '训练抓牌 · 四选一',
-        hint: '择一张加入牌组（抓了欠一次升级）｜ 「返回」放弃',
+        title: '训练抓牌',
         cards: choices.map(c => ({
           uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
         })),
@@ -509,8 +500,7 @@ export function createStagePickerKit({
       cancelFn = () => { onIntent?.({ action: 'takeShopCard', defId: null }); };
       picker.attachPicker(pickerNow());
       picker.open({
-        title: `${pend.packName ?? pend.packId} · 卡包`,
-        hint: '择一张加入牌组 ｜ 「返回」放弃这个卡包',
+        title: `${pend.packName ?? pend.packId}卡包`,
         cards: pend.cards.map(c => ({
           uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
         })),
@@ -550,9 +540,8 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: `${pend.rarity} 级遗物包`,
-        hint: '挑一件收入囊中 ｜ 悬停查看效果 ｜ 「返回」放弃（钱已花）',
         relics: pend.relics,
-        confirmLabel: '拿下这件',
+        confirmLabel: '收下这件',
       });
       return true;
     },
@@ -573,8 +562,7 @@ export function createStagePickerKit({
         cancelFn = () => { onIntent?.({ action: 'slotDecline' }); };
         picker.attachPicker(pickerNow());
         picker.open({
-          title: pd.tier === 'major' ? '★ 大奖 · 挑一件遗物' : '小奖 · 挑一件遗物',
-          hint: '悬停查看效果 ｜ 「返回」放弃',
+          title: pd.tier === 'major' ? '挑一件遗物（大奖）' : '挑一件遗物（小奖）',
           relics: pd.relicChoices,
           confirmLabel: '收下这件',
         });
@@ -586,8 +574,7 @@ export function createStagePickerKit({
         cancelFn = () => { onIntent?.({ action: 'slotDecline' }); };
         picker.attachPicker(pickerNow());
         picker.open({
-          title: pd.tier === 'major' ? '★ 大奖 · 择一张带走' : '小奖 · 择一张带走',
-          hint: '「返回」放弃',
+          title: pd.tier === 'major' ? '选一张卡牌（大奖）' : '选一张卡牌（小奖）',
           cards: pd.choices.map(c => ({
             uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
           })),
@@ -630,8 +617,7 @@ export function createStagePickerKit({
         cancelFn = null;   // 粉碎没有"放弃"出口（返回 = 收起界面）
         picker.attachPicker(pickerNow());
         picker.open({
-          title: '粉碎哪件遗物？',
-          hint: '悬停查看效果 ｜ S 级嚼不动',
+          title: '粉碎哪件遗物？',   // S 级不在候选里（抽选侧已排除），界面无需再讲
           relics,
           confirmLabel: '确认粉碎',
         });
@@ -643,8 +629,8 @@ export function createStagePickerKit({
       cancelFn = null;
       picker.attachPicker(pickerNow());
       picker.open({
-        title: '粉碎哪张卡？',
-        hint: '诅咒卡另有奖赏',
+        title: '粉碎哪张卡牌？',
+        hint: '粉碎诅咒卡牌另有奖赏',
         cards: cards.map((c) => {
           let view = c.view ?? null;
           if (!view) {

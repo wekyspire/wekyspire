@@ -189,7 +189,7 @@ export function createSlotMachine(ctx) {
         type: 'item',
         payload: {
           title: o.name,
-          body: `${o.desc}（恶魔词条 · ${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
+          body: `${o.desc}（恶魔词条，${DEMON_TIER_NAME[o.tier] ?? o.tier}）`,
           tint: DEMON_TIER_TINT[o.tier] ?? DEMON_TIER_TINT.black,
         },
       };

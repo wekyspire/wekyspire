@@ -112,8 +112,8 @@ function rollStock(run) {
       const packName = PACKS[packId]?.name ?? packId;
       items.push(makeItem('pack', {
         id: `pack:${packId}`, packId,
-        name: `${packName}卡包`, label: `卡包 · ${packName}`,
-        sub: '买到即开，包内三选一', effect: '买到即开，包内三选一',
+        name: `${packName}卡包`, label: `${packName}卡包`,
+        sub: '买到即开', effect: '买到即开',
         price: packPrice(run, packId, rng),
       }));
     } else if (kind === 'apple') {
@@ -129,8 +129,8 @@ function rollStock(run) {
       const rarity = kind === 'relicC' ? 'C' : 'B';
       items.push(makeItem('relic', {
         id: `relicPack:${rarity}`, rarity,
-        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包`,   // 标签不加「三选一」后缀——定宽文本面超宽即硬裁（夜测 r4路6），选择方式由 sub 行说明
-        sub: '买到即开，三件中挑一件（可放弃）', effect: '买到即开，三件中挑一件（可放弃）',
+        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包`,   // 标签不加「三选一」后缀——定宽文本面超宽即硬裁（夜测 r4路6），选择方式开包即知
+        sub: '买到即开', effect: '买到即开',
         price: priceIn(rarity === 'C' ? SHOP_PRICE.relicC : SHOP_PRICE.relicB, rng),
       }));
       kinds.splice(kinds.findIndex(([k]) => k === kind), 1); // 同一档一柜只放一个
@@ -178,20 +178,19 @@ export function shopItemTip(run, it) {
     const total = tiers.reduce((s, t) => s + table[t], 0);
     const dist = tiers
       .map(t => `${t} 级 ${Math.round((table[t] / total) * 100)}%`)
-      .join(' ｜ ');
+      .join('，');
     return {
       title: it.name ?? '卡包',
-      body: `随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡`
-        + (dist ? ` ｜ ${dist}` : '') + ' ｜ 买到即开',
+      body: `随机 3 张${PACKS[it.packId]?.name ?? it.packId}卡牌`
+        + (dist ? `，${dist}` : '') + '，买到即开',
     };
   }
   if (it.kind === 'relic' && it.rarity) {
-    // 遗物包 hover：告知档位数与「三选一可放弃」——具体三件在买的那一刻才掷（门禁/驱重），
-    // 这里只承诺口径不列名单（名单会随你背包里的拥有集变化）。
+    // 遗物包 hover：只承诺口径不列名单（具体三件在买的那一刻才掷——门禁/驱重，
+    // 名单会随你背包里的拥有集变化）。
     return {
       title: it.name ?? `${it.rarity} 级遗物包`,
-      body: `买到即开：随机摆 3 件 ${it.rarity} 级遗物，挑 1 件`
-        + '（都不想要可以放弃，钱不退）。已拥有的遗物不会再出现。',
+      body: `随机 3 件 ${it.rarity} 级遗物里挑 1 件，已拥有的不会再出现，放弃不退款`,
     };
   }
   return { title: it.name ?? it.label ?? '', body: it.effect ?? it.sub ?? '' };

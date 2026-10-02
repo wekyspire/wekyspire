@@ -74,7 +74,7 @@ export function ensureGurpasStock(run) {
   // A / B 级卡包（开出全 A / 全 B 的三选一）
   for (const [packId, tier, key, label] of [['gurpasA', 'A', 'packA', 'A 级卡包'], ['gurpasB', 'B', 'packB', 'B 级卡包']]) {
     items.push({
-      id: packId, kind: 'pack', tier, label, sub: `开出全 ${tier} 级卡的三选一`,
+      id: packId, kind: 'pack', tier, label, sub: `开出全 ${tier} 级卡牌，买到即开`,
       price: intIn(GURPAS.prices[key], run.rng), sold: false,
     });
   }
