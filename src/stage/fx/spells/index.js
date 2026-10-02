@@ -179,22 +179,22 @@ const CARD_SPELLS = {
   practiceBladeMaster: { template: 'bladeCast', params: { grindSparks: true } },
   unsheathe:        { template: 'bladeCast', params: { core: 0xeaf2ff } },   // 拔刀术（A）：更亮起手
   // ---- 格挡逐卡（2026-10-02 二批）----
-  // 守·光壁：格挡/盾链
-  guard:            { template: 'blockCast', params: { mode: 'wall' } },
-  duckHead:         { template: 'blockCast', params: { mode: 'wall', wallMs: 380 } },
-  blockGuard:       { template: 'blockCast', params: { mode: 'wall' } },
-  blockGuardA:      { template: 'blockCast', params: { mode: 'wall' } },
-  perfectBlock:     { template: 'blockCast', params: { mode: 'wall', wallMs: 700,
+  // 守·加盾链（ward：起手一亮即止，盾的读法归护盾罩 fx/shieldDome.js——随盾量常驻）
+  guard:            { template: 'blockCast', params: { mode: 'ward' } },
+  duckHead:         { template: 'blockCast', params: { mode: 'ward' } },
+  blockGuard:       { template: 'blockCast', params: { mode: 'ward' } },
+  blockGuardA:      { template: 'blockCast', params: { mode: 'ward' } },
+  perfectBlock:     { template: 'blockCast', params: { mode: 'ward',
                       color: [0.75, 0.88, 1.30], hot: [1.25, 1.35, 1.55] } },   // S 完美格挡：更亮更挺
-  barrier:          { template: 'blockCast', params: { mode: 'wall' } },
-  fortress:         { template: 'blockCast', params: { mode: 'wall' } },
-  bronzeCity:       { template: 'blockCast', params: { mode: 'wall',
+  barrier:          { template: 'blockCast', params: { mode: 'ward' } },
+  fortress:         { template: 'blockCast', params: { mode: 'ward' } },
+  bronzeCity:       { template: 'blockCast', params: { mode: 'ward',
                       color: [1.05, 0.80, 0.45], hot: [1.30, 1.10, 0.70], core: 0xd8a860 } },  // 铜城：金铜调
-  solidShield:      { template: 'blockCast', params: { mode: 'wall' } },
-  reinforcedShield: { template: 'blockCast', params: { mode: 'wall' } },
-  psiShield:        { template: 'blockCast', params: { mode: 'wall',
+  solidShield:      { template: 'blockCast', params: { mode: 'ward' } },
+  reinforcedShield: { template: 'blockCast', params: { mode: 'ward' } },
+  psiShield:        { template: 'blockCast', params: { mode: 'ward',
                       color: [0.75, 0.60, 1.25], hot: [1.15, 1.00, 1.50], core: 0xb494f0 } },  // 灵能盾：蓝紫
-  greaterPsiShield: { template: 'blockCast', params: { mode: 'wall',
+  greaterPsiShield: { template: 'blockCast', params: { mode: 'ward',
                       color: [0.75, 0.60, 1.25], hot: [1.15, 1.00, 1.50], core: 0xb494f0 } },
   // 守·气场主题变体：狂战血红 / 血拳深红 / 集结金
   berserkStance:    { template: 'blockCast', params: { color: [1.10, 0.32, 0.26], hot: [1.35, 0.70, 0.55], core: 0xe05a4a } },

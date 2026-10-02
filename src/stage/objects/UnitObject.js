@@ -11,8 +11,8 @@
 //   │   │      buff 层数绿 / debuff 层数红；行网格带 userData.token
 //   │   │      （{ type:'effect', payload:{ effectId, name } }，与卡面热区同构），
 //   │   │      Picker 二级查询返回 token 命中 → tooltip 协议与卡面热区同构）
-//   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
-//   └─ ring:    目标标注金环（平贴地板）
+//   │   ├─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
+//   │   └─ ring:    目标标注金环（水平贴地，随 billboard yaw 对准——假透视椭圆纪律）
 // 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动；
 // 行动姿态（攻击/防御/增强/削弱）走 _pose 通道，每帧与呼吸合成（见 setPose/update）。
 // 文本签名不变不重烘。
@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
+import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
 
@@ -90,7 +91,9 @@ export class UnitObject extends THREE.Group {
 
     // billboard 子组：standee/hpBar/fxAnchor 全部挂进来，faceCamera 逐帧水平转向相机
     // （立牌形/圆柱 billboard，只 yaw——斜视下立牌不转正会被透视压斜；
-    // 立面保持垂直地面，球面 pitch 后仰已弃；金环贴地不参与）
+    // 立面保持垂直地面，球面 pitch 后仰已弃。脚下的假透视水平件（金环/护盾地环等）
+    // 也挂这里：它们只有 yaw 对准相机后椭圆长轴才与立牌底边平行——贴地不参与是
+    // 旧错误约定，2026-10-02 用户指正后统一收口）
     this._billboard = new THREE.Group();
     this._billboard.name = 'billboard';
     this._billboard.rotation.order = 'YXZ';
@@ -328,6 +331,23 @@ export class UnitObject extends THREE.Group {
       this._shieldBaked = sh; // 值不变不重烘（hp 变化也会过签名）
     }
 
+    // 护盾罩（L2 笼罩层，fx/shieldDome.js）：盾量在则罩在、厚度驱动边缘凝实度。
+    // 生命周期分派——获得/加厚：增量>0 → pulse 扫光；受击未破/被打破：由伤害节拍
+    // （units.js）先行触发 hit/shatter（先演后变，此处 sync 只推 level）；
+    // 自然消失（回合清零）：此处触发 vanish 蒸发。消亡演出播完由罩件 onGone 自清槽位。
+    if (sh > 0 && !projection.isDead) {
+      const dome = this._fxLayer.overlay('shieldDome', 2,
+        (layer) => makeShieldDome(layer, { onGone: () => layer.clear('shieldDome') }));
+      if (dome) {
+        dome.setLevel(shieldDomeLevel(sh));
+        if (prev !== undefined && sh > prev) dome.pulse();
+      }
+    } else {
+      const dome = this._fxLayer.get('shieldDome');
+      if (dome) { if (!dome.dying) dome.vanish(); }
+      else this._fxLayer.clear('shieldDome'); // headless 句柄 null：槽位直接清
+    }
+
     // 效果行（血条上方左对齐纵列）：签名驱动整列重建
     this._syncEffectRows(projection.effects ?? []);
 
@@ -465,7 +485,8 @@ export class UnitObject extends THREE.Group {
   /**
    * 立牌形（圆柱）billboard：只转 yaw 让牌面水平朝向相机，立面保持与地面垂直
    * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃）。
-   * 相机静止时每帧结果相同，代价可忽略；金环贴地不参与。
+   * 相机静止时每帧结果相同，代价可忽略；脚下水平假透视件（金环/地环）挂在
+   * 组内随 yaw 对准（仍贴地——组只有 yaw 没有 pitch）。
    * @param {THREE.Vector3|{x,y,z}} camDir 相机方向向量
    */
   faceCamera(camDir) {
@@ -525,7 +546,10 @@ export class UnitObject extends THREE.Group {
     else this._body.material.color.set(SIDE_COLORS[this.side] ?? 0x888888);
   }
 
-  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板）。 */
+  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板但**挂 billboard**——
+   *  椭圆环是「假透视圆」（长轴压扁比模拟俯视），必须随立牌 yaw 对准相机，
+   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜（2026-10-02 用户指正）。
+   *  billboard 只 yaw 不 pitch，水平环 yaw 后仍贴地）。 */
   setHighlight(on) {
     if (on === !!this._ring) return;
     if (on) {
@@ -540,9 +564,9 @@ export class UnitObject extends THREE.Group {
       this._ring.rotation.x = -Math.PI / 2;
       this._ring.position.y = 0.25;
       this._ring.scale.set(rx * 1.3, this._standeeHeight * 0.14, 1);
-      this.add(this._ring);
+      this._billboard.add(this._ring);
     } else {
-      this.remove(this._ring);
+      this._ring.parent?.remove(this._ring);
       this._ring.geometry.dispose();
       this._ring.material.dispose();
       this._ring = null;

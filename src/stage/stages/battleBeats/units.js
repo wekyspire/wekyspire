@@ -190,6 +190,14 @@ export const unitBeats = {
           gravity: -50, ttl: 0.85, scalePop: 0.3,
           space: 'ui',
         });
+        // 护盾罩受击/破碎演出（先演后变：此处 display 盾量还是扣前值）——
+        // 未破打着弹点涟漪，打破打爆闪溃散；罩件随 sync 的 setUnit 推 level/自清
+        const dome = unit._fxLayer?.get?.('shieldDome');
+        if (dome && !dome.dying) {
+          const fromRight = src ? src.position.x > unit.position.x : true;
+          if (this._displayShieldOf(unit.uniqueID) - absorbed > 0) dome.hit(fromRight);
+          else dome.shatter();
+        }
         if (this._displayShieldOf(unit.uniqueID) - absorbed <= 0) this._shieldBreakFx(unit);
       }
 

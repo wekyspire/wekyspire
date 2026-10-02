@@ -679,8 +679,8 @@ export class BattleStage {
     if (pick.mode === 'instantiate') {
       // 模态遮罩（池/牌库来源的发现类选卡）：压暗战场与手牌、只留候选阵与确认键——
       // 没有它时「候选直铺战场 + 打出的卡悬在中央发灰」读作界面坏了（2026-10-01 实报）。
-      // 深度分层：手牌(~15)/按钮(0) 在遮罩(28) 之下被压暗；候选(30) 与 HUD 确认键
-      // （_openPick 临时抬到 35）在其上；held 展示卡(60) 保持亮着（正在结算的卡）。
+      // 深度分层：手牌(~15)/按钮(0)/held 展示卡(60→临时压到 26) 在遮罩(28) 之下被压暗；
+      // 候选(30) 与 HUD 确认键（_openPick 临时抬到 35）在其上。
       const bd = new THREE.Mesh(
         new THREE.PlaneGeometry(WORLD_HEIGHT * 1.2 * (16 / 9), WORLD_HEIGHT * 1.2),
         new THREE.MeshBasicMaterial({ color: 0x05070d, transparent: true, opacity: 0.55, depthWrite: false, fog: false }),
@@ -689,14 +689,27 @@ export class BattleStage {
       bd.position.set(0, UI_CAMERA_LOOK_AT_Y, 28);
       this.uiScene.add(bd);
       pick.backdrop = bd;
+      // 结算中的发动卡停在 held 展示位（z=60，盖过候选阵 z=30）——压到遮罩下
+      // 同暗，关层时还原（用户 2026-10-02：「打出的卡牌在选卡发现层次上」）。
+      // 此时到位于静息（到达补间已完、弹簧已 release），直写 z 无驱动方争抢。
+      pick.lowered = [];
+      for (const [cid, view] of this._views) {
+        if (this.model.getZone(cid) === 'held' && view?.position) {
+          pick.lowered.push([view, view.position.z]);
+          view.position.z = 26;
+        }
+      }
       this._btnZ = { main: this._buttons.main.position.z, swap: this._buttons.swap.position.z };
       this._buttons.main.position.z = 35;
       this._buttons.swap.position.z = 35;
       const anchors = this._pickAnchors(ids.length);
-      // 一句目标提示（2026-10-01 用户定口径：一行道出目标即可，无需更多——无
-      // reason 的请求不渲染）。白字 #e8eefb（UI 风格色），悬在候选阵上方。
-      if (request.reason && typeof document !== 'undefined' && anchors.length) {
-        const t = bakeBoldText(request.reason, { fontPx: 17, tint: '#e8eefb' });
+      // 标题口径（2026-10-02 用户定：去冗余——不再写卡名+效果复述，一行道出数量）：
+      // 「选择 N 张卡牌」（min=max）/「选择 N 到 M 张卡牌」（区间）。request.reason 被
+      // 此口径取代——逐卡手写文案（「攻杀控火术：发现一张控火术」）是 UI 文字冗余。
+      if (typeof document !== 'undefined' && anchors.length) {
+        const lo = pick.min, hi = pick.max;
+        const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
+        const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
         const hint = new THREE.Mesh(
           new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
           new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, fog: false }),
@@ -724,10 +737,12 @@ export class BattleStage {
         this.picker.addPickable(pickerId, obj, { kind: 'card', cardObject: obj, space: 'ui' });
         pick.temp.set(pickerId, { object: obj, uniqueID: uid, baseY: a.y, baseScale: a.scale ?? PICK_SCALE });
       });
-    } else if (request.reason && typeof document !== 'undefined') {
+    } else if (typeof document !== 'undefined') {
       // 手牌多选覆盖层（候选 = 手牌扇自身，无候选阵）：提示悬在手牌扇上方——
       // z 40 盖过悬浮抬升的手牌（静息 ≤15 / 抬升 ≤36），不与 instantiate 分支共用锚点
-      const t = bakeBoldText(request.reason, { fontPx: 17, tint: '#e8eefb' });
+      const lo = pick.min, hi = pick.max;
+      const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
+      const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
       const hint = new THREE.Mesh(
         new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
         new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, depthTest: false, fog: false }),
@@ -764,6 +779,9 @@ export class BattleStage {
       this._buttons.main.position.z = this._btnZ.main;
       this._buttons.swap.position.z = this._btnZ.swap;
       this._btnZ = null;
+    }
+    if (this._pick.lowered) {   // held 展示卡归位（遮罩期临时压下）
+      for (const [view, z] of this._pick.lowered) view.position.z = z;
     }
     this._pick = null;
   }

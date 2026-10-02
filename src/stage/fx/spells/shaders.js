@@ -39,9 +39,9 @@ export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg
   const thin = taper.mul(0.55).add(0.45);   // 宽度系数 0.45..1
   // 截面用**显式宽度**（UV 单位）分层——塞进一条薄带里核/晕/影互相挤压读不出层次：
   //   热核 ~4px 细线（HDR 白）、aura 3 倍宽冷蓝裙（阈下辉光）、画布高 5 世界单位给裙展开空间
-  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.10)));    // 核宽 0.10uv（用户定加宽）
+  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.16)));    // 核宽 0.16uv（质量整改加宽）
   const core = exp(dyC.mul(dyC).mul(-1.0));
-  const dyA = abs(y.sub(yc)).div(thin.mul(float(0.27)));    // 裙宽 3.2×核
+  const dyA = abs(y.sub(yc)).div(thin.mul(float(0.42)));    // 裙宽 2.6×核
   const fringe = exp(dyA.mul(dyA).mul(-1.0));
   // 纵向扫掠包络：头部推进（-0.75 → 0.95，越过带端读「斩出」）
   const head = uProgress.mul(1.7).sub(0.75);
@@ -58,7 +58,7 @@ export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg
   // ⚠ TSL 实测坑：中间量（const 节点）被最终表达式**二次引用**会输出全黑
   // （spike 曾同时进 energy 与 rgb 第三项，画面即黑；d 的双引用子树反而无事）。
   // 头部热度已由包络里的 spike 系数承担，rgb 不再单独引用 spike。
-  const rgb = uFringe.mul(fringe.mul(1.6)).add(uColor.mul(core.mul(stri).mul(10.0)));
+  const rgb = uFringe.mul(fringe.mul(1.6)).add(uColor.mul(core.mul(stri).mul(6.5)));
   const out = vec4(rgb.mul(energy), float(1.0));
   // 排障可视化（spelldebug=shape/energy）：分段输出中间量定位黑屏项
   return select(uDbg.greaterThan(float(2.5)), vec4(uColor, float(1.0)),   // 排障：颜色 uniform 直读
@@ -227,31 +227,6 @@ export const beamShade = Fn(([vUv, uProgress, uColor, uHot]) => {
   const fade = pow(oneMinus(uProgress), float(0.7));
   const rgb = uColor.mul(edge.mul(vgrad).mul(flow).mul(2.0)).add(uHot.mul(edge2.mul(vgrad).mul(2.5)));
   return vec4(rgb.mul(fade), float(1.0));
-});
-
-/**
- * 格挡光壁（blockCast 墙）：竖直光幕在防御者身前立起——底边先亮、一道热前锋
- * 自下而上扫到顶（「墙立起来」的读感），恒亮一拍后整体渐隐。横向高斯成带 +
- * 上下端帽衰减防直边穿帮。4 参纪律（见 projectileShade 头注）。
- * @param vUv       quad uv（block 侧把 quad 底边坐在地面）
- * @param uProgress 0..1 立墙进度
- * @param uColor    vec3 墙体色（线性，灵能蓝白）
- * @param uHot      vec3 前锋亮线色（HDR）
- */
-export const wallShade = Fn(([vUv, uProgress, uColor, uHot]) => {
-  const p = vUv.sub(vec2(0.5));
-  const band = exp(p.x.mul(p.x).mul(-9.0));                    // 竖向光带（中亮边淡）
-  const cap = oneMinus(smoothstep(float(0.78), float(1.0), abs(p.y).mul(2.0)));   // 上下端帽
-  // ⚠ TSL 拓扑纪律（实测踩实）：表达式链交汇处（h/front 这类被多条项引用的中间量）
-  // 整体猝死黑屏——所有项只允许引用**叶子**（p / uProgress / 字面量），复合表达式
-  // 在每个使用点重写一份。uProgress 作 smoothstep 动态边无恙（below 项实测）。
-  const below = oneMinus(smoothstep(uProgress.mul(2.6).sub(0.30), uProgress.mul(2.6), p.y.add(0.5)));   // 前锋以下恒亮
-  const base = exp(p.y.add(0.5).mul(p.y.add(0.5)).mul(-30.0));        // 底部热源亮线（静态锚——能量自地面拔起）
-  const fade = oneMinus(smoothstep(float(0.55), float(1.0), uProgress));
-  const rgb = uColor.mul(band.mul(cap).mul(below).mul(0.9))
-    .add(uHot.mul(band.mul(cap).mul(base).mul(2.2)))
-    .mul(fade);
-  return vec4(rgb, float(1.0));
 });
 
 // 色参约定：调用侧 `vec3(r, g, b)` 常量节点（线性分量，HDR 值直接写 >1），由

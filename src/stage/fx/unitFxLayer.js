@@ -58,6 +58,11 @@ export class UnitFxLayer {
     this._slots.get(key)?.handle?.setLevel?.(l);
   }
 
+  /** 取槽位句柄（不建件；无槽位/headless 句柄为 null 时返回 null）。 */
+  get(key) {
+    return this._slots.get(key)?.handle ?? null;
+  }
+
   /** 槽位收件（dispose 句柄并摘槽）。 */
   clear(key) {
     const slot = this._slots.get(key);

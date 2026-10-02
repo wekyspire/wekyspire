@@ -13,8 +13,8 @@ import { cardFlare, arcProjectile, slashSweep } from './blocks.js';
 export const bladeCast = {
   defaults: {
     mode: 'auto',
-    color: [0.80, 0.88, 1.15],     // 刀光晕色（冷白蓝——钢铁寒光）
-    hot: [1.20, 1.25, 1.35],       // 热核色（过 bloom 阈起晕）
+    color: [0.88, 0.93, 1.18],     // 刀光晕色（冷白蓝——钢铁寒光；提亮过晕阈）
+    hot: [1.30, 1.35, 1.50],       // 热核色（更亮——小尺寸件的亮度要补尺寸）
     core: 0xcfd8ea,                // 卡面起手脉冲
     arcH: 0.5,
     grindSparks: false,            // 磨刀链：冷白里掺金橙火星（「打磨」读感）
@@ -33,7 +33,7 @@ export const bladeCast = {
           from: { x: from.x, y: from.y + yOff, z: from.z }, to,
           color: prm.color, hot: prm.hot, size, ms, arcH,
           stretch, lampIntensity: lamp,
-          trail: { color: 0xaec4e8, count: 1, ttl: 0.22, speed: 3, size: 0.45 },
+          trail: { color: 0xaec4e8, count: 1, ttl: 0.4, speed: 3, size: 0.6 },   // 拖尾拉长——刀光拖出「经过的痕迹」
         });
 
       if (mode === 'daggers') {
@@ -65,7 +65,7 @@ export const bladeCast = {
               await ctx.wait(s * 60);
               const xJit = ((s * 37) % 5 - 2) * 1.6;   // 确定性散布（-3.2..3.2）
               await blade(ctx, { x: feet.x + xJit, y: feet.y + 24, z: feet.z }, feet, {
-                size: 1.4, ms: 230, stretch: 2.6, arcH: 0.5,
+                size: 1.7, ms: 260, stretch: 3.0, arcH: 0.3,
               });
             })());
           }
@@ -77,12 +77,21 @@ export const bladeCast = {
 
       if (mode === 'slash') {
         const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 190, scale: 1.3 });
+        // 斩的双重读感：冷白核疾射（快到认不出形状）+ 目标身上一记亮斩痕
+        // （slashSweep——刀光的「命中」交代；伤害拍还有 slash 变体细痕，两层不重复）
         await Promise.all([
           flareJob,
           ...targets.map((u, i) => blade(ctx, origin, deps.unitAnchor(u), {
-            size: 2.6, ms: 150, stretch: 4.5, arcH: prm.arcH, lamp: i === 0 ? 300 : 0,
+            size: 3.2, ms: 130, stretch: 4.0, arcH: prm.arcH, lamp: i === 0 ? 300 : 0,
           })),
         ]);
+        for (const u of targets) {
+          slashSweep(ctx, deps, {
+            at: deps.unitAnchor(u), angle: -0.5 + Math.random() * 0.4,
+            ms: 260, scale: 0.8,
+            color: [0.95, 0.99, 1.15], fringe: [0.5, 0.7, 1.6], yOff: 0.9,
+          });
+        }
         notify();
         return;
       }
