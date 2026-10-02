@@ -384,7 +384,7 @@ export function createStagePickerKit({
                 cancelFn = () => disposeRest(i);   // 中止链：余下摘下件释放，尾款挂起等重入
                 picker.open({
                   title: `选择晋升方向（${i + 1}/${taken.length}）`,
-                  hint: '这张卡可以晋升为以下形态之一 ｜ 悬停查看卡面 ｜ 「返回」中止本次升级',
+                  hint: '悬停查看卡面 ｜ 「返回」中止升级',
                   cards: (c.toViews ?? []).map(t => ({
                     uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
                   })),
@@ -432,7 +432,7 @@ export function createStagePickerKit({
         cancelFn = () => openMain();                    // 返回 = 回上一级重选
         picker.open({
           title: '选择晋升方向',
-          hint: '这张卡可以晋升为以下形态之一 ｜ 悬停查看卡面 ｜ 「返回」重新选卡',
+          hint: '悬停查看卡面 ｜ 「返回」重新选卡',
           cards: (c.toViews ?? []).map(t => ({
             uniqueID: t.defId, defId: t.defId, view: t.view, enabled: true, tipDefId: t.defId,
           })),
@@ -472,7 +472,7 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: '训练抓牌 · 四选一',
-        hint: '择一张加入牌组（抓了欠一次升级）｜ 不想要就点「返回」放弃 ｜ 滚轮翻页',
+        hint: '择一张加入牌组（抓了欠一次升级）｜ 「返回」放弃',
         cards: choices.map(c => ({
           uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
         })),
@@ -510,7 +510,7 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: `${pend.packName ?? pend.packId} · 卡包`,
-        hint: '择一张加入牌组 ｜ 不想要就点「返回」放弃这个卡包 ｜ 滚轮翻页',
+        hint: '择一张加入牌组 ｜ 「返回」放弃这个卡包',
         cards: pend.cards.map(c => ({
           uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
         })),
@@ -550,7 +550,7 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: `${pend.rarity} 级遗物包`,
-        hint: '挑一件收入囊中 ｜ 悬停查看效果 ｜ 不想要就点「返回」放弃（钱已花）｜ 滚轮翻页',
+        hint: '挑一件收入囊中 ｜ 悬停查看效果 ｜ 「返回」放弃（钱已花）',
         relics: pend.relics,
         confirmLabel: '拿下这件',
       });
@@ -574,7 +574,7 @@ export function createStagePickerKit({
         picker.attachPicker(pickerNow());
         picker.open({
           title: pd.tier === 'major' ? '★ 大奖 · 挑一件遗物' : '小奖 · 挑一件遗物',
-          hint: '悬停查看效果 ｜ 「返回」= 放弃这份产出',
+          hint: '悬停查看效果 ｜ 「返回」放弃',
           relics: pd.relicChoices,
           confirmLabel: '收下这件',
         });
@@ -587,7 +587,7 @@ export function createStagePickerKit({
         picker.attachPicker(pickerNow());
         picker.open({
           title: pd.tier === 'major' ? '★ 大奖 · 择一张带走' : '小奖 · 择一张带走',
-          hint: '不想要就点「返回」放弃 ｜ 滚轮翻页',
+          hint: '「返回」放弃',
           cards: pd.choices.map(c => ({
             uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
           })),
@@ -631,7 +631,7 @@ export function createStagePickerKit({
         picker.attachPicker(pickerNow());
         picker.open({
           title: '粉碎哪件遗物？',
-          hint: '喂给老虎机换金币 ｜ 悬停查看效果 ｜ 滚轮翻页（S 级嚼不动）',
+          hint: '悬停查看效果 ｜ S 级嚼不动',
           relics,
           confirmLabel: '确认粉碎',
         });
@@ -644,7 +644,7 @@ export function createStagePickerKit({
       picker.attachPicker(pickerNow());
       picker.open({
         title: '粉碎哪张卡？',
-        hint: '喂给老虎机换金币 ｜ 滚轮翻页（诅咒卡另有奖赏）',
+        hint: '诅咒卡另有奖赏',
         cards: cards.map((c) => {
           let view = c.view ?? null;
           if (!view) {

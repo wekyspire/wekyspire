@@ -22,12 +22,12 @@ export const DIM_META = {
 
 // 房间标题/图标/提示：表现文案（core 只给 currentRoom 这个 id）
 export const ROOM_META = {
-  training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——每层训练记录在案，达标即可进阶' },
+  training: { name: '训练场', glyph: '🏋️', hint: '磨砺技艺——达标进阶' },
   camp: { name: '营地', glyph: '⛺', hint: '暂作休整，选择一件好事发生' },
   campTraining: { name: '营地 · 训练场', glyph: '⛺', hint: '休整与磨砺同处一室——两边各可做一次' },
   gurpas: { name: '古尔帕斯之店', glyph: '🏪', hint: '旧魏启大陆的物件——她只收 A/S 级遗物' },
   slot: { name: '老虎机', glyph: '🎰', hint: '命运转轮，愿者上钩' },
-  shop: { name: '商店房', glyph: '🧃', hint: '售货机——点击货架上的商品直接购买' },
+  shop: { name: '商店房', glyph: '🧃', hint: '售货机 · 点货架购买' },
   event: { name: '事件房', glyph: '❓', hint: '一间弥漫着迷雾的房间……' },
 };
 

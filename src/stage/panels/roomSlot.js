@@ -63,7 +63,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
 
   if (s.needsCardPick) {
     w.push({ kind: 'gap' });
-    w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: '免费指定升级：请选择一张卡' });
+    w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: '免费升级 · 择一张卡' });
     w.push({
       kind: 'button', id: 'slot:pickUpgrade', width: 300, size: 'sub',
       label: '选择要免费升级的卡',

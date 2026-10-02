@@ -23,7 +23,7 @@ export function trainingWidgets(w, snap) {
     // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底
     w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '挑选抓牌候选…', action: { action: 'trainingDrawPick' } });
   } else if (!t.optionalDone) {
-    w.push({ kind: 'button', id: 'train:roll', width: 300, size: 'main', label: '继续训练：获得新卡牌并升级现有卡', action: { action: 'trainingDrawRoll' } });
+    w.push({ kind: 'button', id: 'train:roll', width: 300, size: 'main', label: '继续训练 · 得卡与升级', action: { action: 'trainingDrawRoll' } });
   } else {
     w.push({ kind: 'sub', align: 'center', tint: '#6f7a92', text: '训练完成' });
   }

@@ -190,7 +190,7 @@ export function shopItemTip(run, it) {
     // 这里只承诺口径不列名单（名单会随你背包里的拥有集变化）。
     return {
       title: it.name ?? `${it.rarity} 级遗物包`,
-      body: `买到即开：从全部可获得的 ${it.rarity} 级遗物中随机摆出 3 件，挑 1 件收入囊中`
+      body: `买到即开：随机摆 3 件 ${it.rarity} 级遗物，挑 1 件`
         + '（都不想要可以放弃，钱不退）。已拥有的遗物不会再出现。',
     };
   }

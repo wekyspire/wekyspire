@@ -11,7 +11,7 @@
 
 /** showcase 意图 kind → 演出外观。card 的图按 defId 查（没素材由组件退化成色块）。 */
 const VISUALS = {
-  gold: { artKey: 'gold', tint: 0xffd75e, effect: '金币已经落进你的钱袋（关闭后继续行程）' },
+  gold: { artKey: 'gold', tint: 0xffd75e, effect: '' },   // 标题已是「+N 金币」，不再复述落袋
   pack: { artKey: 'pack', tint: 0xffe6ad },
   potion: { artKey: 'potion', tint: 0xd8e2f4 },
   card: { tint: 0xd8e2f4 },
