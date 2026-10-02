@@ -129,7 +129,7 @@ function rollStock(run) {
       const rarity = kind === 'relicC' ? 'C' : 'B';
       items.push(makeItem('relic', {
         id: `relicPack:${rarity}`, rarity,
-        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包 · 三选一`,
+        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包`,   // 标签不加「三选一」后缀——定宽文本面超宽即硬裁（夜测 r4路6），选择方式由 sub 行说明
         sub: '买到即开，三件中挑一件（可放弃）', effect: '买到即开，三件中挑一件（可放弃）',
         price: priceIn(rarity === 'C' ? SHOP_PRICE.relicC : SHOP_PRICE.relicB, rng),
       }));
