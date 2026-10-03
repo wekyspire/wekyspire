@@ -43,6 +43,8 @@ import { fireWhirlCast } from './fireWhirlCast.js';
 import { bladeCast } from './bladeCast.js';
 import { blockCast } from './blockCast.js';
 import { manaCast } from './manaCast.js';
+import { silenceCast } from './silenceCast.js';
+import { chargeUpCast } from './chargeUpCast.js';
 
 export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
 
@@ -50,7 +52,7 @@ export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScale
 const TEMPLATES = {
   emberBurst, castFlare, fireballCast, fireRainCast, igniteCast, heavenCleave,
   fistCast, burnSurge, sparkCast, selfFlame, fuelCast, fireWhirlCast,
-  bladeCast, blockCast, manaCast,
+  bladeCast, blockCast, manaCast, silenceCast, chargeUpCast,
 };
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
@@ -92,6 +94,12 @@ const SERIES_SPELLS = {
                      size: 6.0, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
   fireControl:   { id: 'castFlare', params: { flareColor: 0xff8a4d } },  // 控火术（0 费快件——短起手）
   fireControlFinder: { id: 'castFlare', params: { flareColor: 0xff8a4d } },
+  // ---- 2026-10-02 核心卡批 ----
+  fireTemper:    { id: 'manaCast', params: { from: 'card',               // 淬炼：魏启回流（萃取火系镜像），
+                     color: [0.52, 0.74, 1.22], hot: [1.30, 1.16, 0.80], core: 0x8ab4ff } }, // 热核金白淬闪
+  relief:        { id: 'blockCast', params: { mode: 'ward',              // 泄压阀：魏启蓝转盾（泄压成墙）
+                     color: [0.45, 0.70, 1.25], hot: [0.90, 1.08, 1.45], core: 0x6fa8ff } },
+  silence:       { id: 'silenceCast' },                                  // 沉默：骤冷压暗（逐张熄光在 CHANT_TOGGLED 拍）
 };
 
 // 逐卡覆写（defId → { template, params }）：换模板或微调参数（同体系内单卡变体）。
@@ -218,6 +226,30 @@ const CARD_SPELLS = {
   shatterHitB:      { template: 'fistCast', params: { mode: 'strike' } },
   shatterHead:      { template: 'fistCast', params: { mode: 'heavy' } },
   endureB:       { template: 'fistCast', params: { mode: 'strike' } },
+  // ---- 体修·非拳件（2026-10-02 核心卡批：series 'fist' 的兜底拳风对这些卡是语义错配）----
+  // 蓄力链（洗入瞬击）：气团数 = 洗入数；一瞬千击 toHand（发现 5 张直接进手）
+  chargeUp:         { template: 'chargeUpCast', params: { count: 2 } },
+  comboStrike:      { template: 'chargeUpCast', params: { count: 3 } },
+  quadrupleHit:     { template: 'chargeUpCast', params: { count: 4 } },
+  instantThousand:  { template: 'chargeUpCast', params: { count: 5, toHand: true } },
+  // 引擎咏唱激活（借力/太极/无限连击/变招/混元）：脚下气场环 = 「进架」语言，
+  // 体修白气（守势灵蓝的低饱和近亲——环语相同、色相分家）；太极（S）热核更亮
+  leverageC:        { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  leverageB:        { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  leverageA:        { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  taijiS:           { template: 'blockCast', params: {
+                        color: [0.90, 0.92, 1.02], hot: [1.25, 1.25, 1.30], core: 0xe8ecf4 } },
+  endlessCombo:     { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  shiftMoveB:       { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  shiftMoveA:       { template: 'blockCast', params: {
+                        color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
+  hunYuanS:         { template: 'blockCast', params: {
+                        color: [0.90, 0.92, 1.02], hot: [1.25, 1.25, 1.30], core: 0xe8ecf4 } },
   // ---- 经济卡（无 series，逐卡挂 manaCast；魏启蓝 / 行动力黄）----
   extract:          { template: 'manaCast', params: { from: 'enemy' } },
   deepExtract:      { template: 'manaCast', params: { from: 'enemy', streams: 5 } },

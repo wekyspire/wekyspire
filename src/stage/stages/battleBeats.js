@@ -6,6 +6,9 @@
 // 抛异常由 _direct 兜底强制 finish（节拍卫生，坏节拍不得冻结显示链）。
 
 import { EventNames } from '../../bridge/events.js';
+import { getSkillDefinition } from '../../core/skills/registry.js';
+import { cardTheme } from '../richtext/appearance.js';
+import { glowTexture } from '../fx/orbs.js';
 
 /** 单位行动姿态配方（_poseBeat 用）：squash/widen 绕脚底压扁撑宽（乘数）、lean 绕脚
  *  前倾（符号在节拍内按朝向算）、flash 为立牌染色（restoreColor 复原）、in/hold/out 三段时长。
@@ -107,6 +110,27 @@ function chantToggledBeat(stage, payload, finish) {
   // 发动点亮且卡带激活能力（载荷 anim 描述符，core 按 def.activated 判定）时，
   // 先在展示位播激活演出再放行——「这张卡被点亮了」要看得见。
   const id = payload?.skill?.uniqueID ?? null;
+  // 沉默熄灭（'silenced'）：被摁灭的咏唱从卡面升起一缕体系色残光，沿屏幕拉向
+  // 主角（拖拽减速 + 淡出 = 被吸走收进盾里）——每张独立成拍，sequencer 串行
+  // 天然排队；打出侧的骤冷起手在 silenceCast（施术拍），盾落点归 ANIM_SHIELD。
+  if (!payload?.on && payload?.reason === 'silenced' && id != null) {
+    const view = stage._views.get(id);
+    const playerId = stage._snapshot?.player?.uniqueID;
+    const player = playerId != null ? stage._units.get(playerId) : null;
+    if (view?.visible && player) {
+      const to = stage._unitToUI(player, 0, 2);
+      const dx = to.x - view.position.x;
+      const dy = to.y - view.position.y;
+      const d = Math.hypot(dx, dy) || 1;
+      let color = '#c3cee0';   // 淡蓝灰兜底（def 反查失败时残光仍读得出）
+      try { color = cardTheme(getSkillDefinition(payload.skill?.defId)); } catch (_) { /* 兜底 */ }
+      stage.particles.spawnSprite(view.position.x, view.position.y, {
+        texture: glowTexture(color), width: 5, height: 5,
+        vx: (dx / d) * 210, vy: (dy / d) * 210,
+        gravity: 0, drag: 0.45, ttl: 0.6, fadeIn: true, space: 'ui',
+      });
+    }
+  }
   const release = () => {
     if (id != null && stage.model.getZone(id) === 'held' && stage._views.has(id)) {
       stage.model.setZone(id, 'hand');
