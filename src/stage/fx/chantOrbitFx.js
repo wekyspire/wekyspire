@@ -1,38 +1,65 @@
-// 骑士火流环绕件（咏唱场景演出的单位侧成员）：N 道完整火环带绕宿主单位螺旋排布——
-// 每道 = 竖直圆环带（开口圆柱侧壁）+ 沿环滚动的火焰纹理（纹理滚动即火流），
-// 「他在操控这团火」的读感锚点。
+// 咏唱环绕件（咏唱场景演出的单位侧成员）：N 道完整环带绕宿主单位螺旋排布——
+// 每道 = 竖直圆环带（开口圆柱侧壁）+ 沿环滚动的带面纹理（纹理滚动即流动），
+// 「他在操控这股力量」的读感锚点。variant 双形态：flame = 火舌流（火系）、
+// qi = 气流带（体修，绵长哑光）；色与亮度走 cfg.color×heat（材质 HDR 染色）。
 // 注意：sprite 火舌方案已废弃——条带绕到正前/正后时速度扎进屏幕、透视缩成正点
 // （验收「条带塌缩成短划痕/孤立点」的病根）；完整环带没有端点、任何角度连续，
 // 且后壁被立牌裁、前壁盖上（depthTest 保留），天然读出「环绕」而非「贴图」。
 // 包络驱动：setLevel(k) 推 0..1（透明度/半径/滚动转速同随），管理器每帧 update(dt)。
 import * as THREE from 'three';
 
-// 沿环无缝拼接的火焰舌纹理：横向数朵斜向火舌（倾向 = 流向，静态帧也读得出旋转
-// 方向）；每朵 wrap 三份绘制保左右缘无缝（RepeatWrapping 滚动）；纵向中心旺、
+// 沿环无缝拼接的带面纹理（逐 variant 一份缓存）：
+//   flame = 横向数朵斜向火舌（倾向 = 流向，静态帧也读得出旋转方向）
+//   qi    = 体修「气」流带：柔滑长条流光（无火舌的尖峰——气是连绵不是窜跳），
+//           色接近白（HDR 染色在材质 color 上统一做，纹理只管形状/明暗分布）
+// 共性纪律：每朵 wrap 三份绘制保左右缘无缝（RepeatWrapping 滚动）；纵向中心旺、
 // 上下缘渐隐（发光面片边缘熄灭 mask 铁律——直边会穿帮成硬切条）
-let _ringTex = null;
-function ringTexture() {
-  if (_ringTex) return _ringTex;
+const _ringTexCache = new Map();
+function ringTexture(variant = 'flame') {
+  const cached = _ringTexCache.get(variant);
+  if (cached) return cached;
   const W = 512, H = 96;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const g = c.getContext('2d');
-  const tongues = 6;
-  for (let i = 0; i < tongues; i++) {
-    const x0 = (i / tongues) * W + Math.random() * 30;
-    const len = 90 + Math.random() * 80;
-    const lean = 14 + Math.random() * 10;                      // 斜向 = 流向可读
-    const hgt = 0.5 + Math.random() * 0.4;                     // 纵向占比
-    for (const ox of [x0 - W, x0, x0 + W]) {
-      const grad = g.createLinearGradient(ox, 0, ox + len, -lean);
-      grad.addColorStop(0, 'rgba(255,90,20,0)');
-      grad.addColorStop(0.45, 'rgba(255,140,50,0.55)');
-      grad.addColorStop(0.8, 'rgba(255,215,150,0.95)');
-      grad.addColorStop(1, 'rgba(255,250,235,0)');
-      g.fillStyle = grad;
-      g.beginPath();
-      g.ellipse(ox + len / 2, H / 2, len / 2, H * 0.5 * hgt, -lean / 120, 0, Math.PI * 2);
-      g.fill();
+  if (variant === 'qi') {
+    // 气流：4 条长而柔的流光，纵向正弦轻摆（连绵）；白灰渐变、亮段占比低（哑光）
+    const wisps = 4;
+    for (let i = 0; i < wisps; i++) {
+      const x0 = (i / wisps) * W + Math.random() * 40;
+      const len = 150 + Math.random() * 90;                  // 比火舌长得多——连绵
+      const sway = 6 + Math.random() * 5;                    // 纵向轻摆幅
+      const hgt = 0.30 + Math.random() * 0.16;               // 纵向占比低（薄带）
+      for (const ox of [x0 - W, x0, x0 + W]) {
+        const grad = g.createLinearGradient(ox, 0, ox + len, 0);
+        grad.addColorStop(0, 'rgba(235,242,255,0)');
+        grad.addColorStop(0.35, 'rgba(235,242,255,0.34)');
+        grad.addColorStop(0.62, 'rgba(255,255,255,0.72)');
+        grad.addColorStop(1, 'rgba(235,242,255,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.ellipse(ox + len / 2, H / 2 + (Math.random() - 0.5) * 2 * sway, len / 2, H * 0.5 * hgt, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  } else {
+    const tongues = 6;
+    for (let i = 0; i < tongues; i++) {
+      const x0 = (i / tongues) * W + Math.random() * 30;
+      const len = 90 + Math.random() * 80;
+      const lean = 14 + Math.random() * 10;                      // 斜向 = 流向可读
+      const hgt = 0.5 + Math.random() * 0.4;                     // 纵向占比
+      for (const ox of [x0 - W, x0, x0 + W]) {
+        const grad = g.createLinearGradient(ox, 0, ox + len, -lean);
+        grad.addColorStop(0, 'rgba(255,90,20,0)');
+        grad.addColorStop(0.45, 'rgba(255,140,50,0.55)');
+        grad.addColorStop(0.8, 'rgba(255,215,150,0.95)');
+        grad.addColorStop(1, 'rgba(255,250,235,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.ellipse(ox + len / 2, H / 2, len / 2, H * 0.5 * hgt, -lean / 120, 0, Math.PI * 2);
+        g.fill();
+      }
     }
   }
   // 纵向边缘熄灭（上/下 22% 渐隐）
@@ -45,10 +72,11 @@ function ringTexture() {
   g.fillStyle = mask;
   g.fillRect(0, 0, W, H);
   g.globalCompositeOperation = 'source-over';
-  _ringTex = new THREE.CanvasTexture(c);
-  _ringTex.colorSpace = THREE.SRGBColorSpace;
-  _ringTex.wrapS = THREE.RepeatWrapping;
-  return _ringTex;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  _ringTexCache.set(variant, tex);
+  return tex;
 }
 
 /**
@@ -66,7 +94,10 @@ export function createChantOrbit({ scene, anchor }) {
   const rings = [];   // { mesh, mat, tex, yFrac, wob, phase, scroll }
   let level = 0;
   let t = 0;
-  let cfg = { count: 3, radius: 5.8, speed: 2.9, size: 6.4, heat: 1 };
+  // variant = 纹理变体（flame 火舌 / qi 气流）；color = HDR 基色（乘 heat 得最终
+  // 染色——火系 [2.2,0.95,0.38] 推过 bloom 阈起晕，气 [1.0,1.08,1.25]×0.85 留阈下哑光）
+  let cfg = { count: 3, radius: 5.8, speed: 2.9, size: 6.4, heat: 1,
+    variant: 'flame', color: [2.2, 0.95, 0.38] };
 
   function rebuild() {
     for (const rg of rings) {
@@ -78,7 +109,7 @@ export function createChantOrbit({ scene, anchor }) {
     rings.length = 0;
     for (let i = 0; i < cfg.count; i++) {
       // 每环克隆纹理 = 独立滚动相位（共享画布，显存只一份图）
-      const tex = ringTexture().clone();
+      const tex = ringTexture(cfg.variant).clone();
       tex.needsUpdate = true;
       tex.repeat.x = 2;
       const r = cfg.radius * (0.9 + (i % 2) * 0.14 + Math.random() * 0.08);
@@ -88,8 +119,9 @@ export function createChantOrbit({ scene, anchor }) {
         map: tex, transparent: true, depthWrite: false, fog: false,
         blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       });
-      // HDR 染色：火焰舌亮部乘算推过 bloom 阈（内容色 ≤1、发光件乘算过阈的约定）
-      mat.color.setRGB(2.2 * cfg.heat, 0.95 * cfg.heat, 0.38 * cfg.heat);
+      // HDR 染色：基色 × heat（火系乘算推过 bloom 阈；气系阈下哑光——内容色 ≤1、
+      // 发光件乘算过阈的约定不变，只是气选择不过阈）
+      mat.color.setRGB(cfg.color[0] * cfg.heat, cfg.color[1] * cfg.heat, cfg.color[2] * cfg.heat);
       mat.opacity = 0;
       const mesh = new THREE.Mesh(geo, mat);
       // 微倾角破同心规整（全同轴的圆环叠起来读作「弹簧线圈/泳圈」——验收打磨项）
@@ -109,17 +141,19 @@ export function createChantOrbit({ scene, anchor }) {
     }
   }
 
-  /** 形态参数（环数/半径/流速/厚度/温度色），等阶包络的静态半（点火时设一次）。 */
+  /** 形态参数（环数/半径/流速/厚度/温度色/纹理变体），等阶包络的静态半（点火时设一次）。 */
   function setParams(p) {
     const next = { ...cfg, ...p };
-    const shapeChanged = next.count !== cfg.count || next.size !== cfg.size;
+    // 变体切换 = 换纹理，必须重建（在线换 map 会闪没整组环，且旧环克隆纹理口径不一）
+    const shapeChanged = next.count !== cfg.count || next.size !== cfg.size
+      || next.variant !== cfg.variant;
     cfg = next;
     if (shapeChanged || rings.length === 0) rebuild();
     else {
       // 非形态变化：半径/流速/色在线推（不重建——重建会闪没整组环）
       for (const rg of rings) {
         rg.scroll = cfg.speed * (0.26 + Math.random() * 0.12);
-        rg.mat.color.setRGB(2.2 * cfg.heat, 0.95 * cfg.heat, 0.38 * cfg.heat);
+        rg.mat.color.setRGB(cfg.color[0] * cfg.heat, cfg.color[1] * cfg.heat, cfg.color[2] * cfg.heat);
       }
     }
   }

@@ -100,6 +100,9 @@ export function resolveDamageFx(defId) {
   // 天斩链（A/S/X）：heavenCleave 在施术拍已实体锁演完整场（压迫+巨刃+光柱+
   // 断裂），伤害拍不再补刀光——避免双斩读感
   if (def.id === 'godCleave' || def.id === 'skyCleave' || def.id === 'mountainCleave') return null;
+  // 空形拳（S）：命中兑付归 voidStrike（施术拍只有静场蓄意，命中才炸——
+  // 后手不成立则本拍根本不存在，静场收于「空」，whiff 即语义）
+  if (def.id === 'emptyFist') return { kind: 'voidStrike' };
   switch (def.series) {
     case 'blade':
       return { kind: 'slash', variant: slashVariantOf(def) };
@@ -204,6 +207,27 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
         });
         deps.shake?.impulse?.(1.6);
       }
+      return;
+    }
+    case 'voidStrike': {
+      // 空形拳兑付：施术拍的静场在此炸开（静极而动）——全白重击 + 白闪 + 大震
+      // + 冷白落地尘。量级顶格（55 真伤是 S 签名的全部赌注）
+      const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
+      const s = unit._baseScale ?? 1;
+      const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
+      ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.5, ms: 200, attackMs: 40 }));
+      deps.shake?.impulse?.(3.2);
+      await punchImpact(ctx, deps, {
+        at, dir,
+        scale: Math.min(2.6, Math.max(punchScaleFor(dealt, true), 1.2) * 1.15),
+        ms: 380,
+        color: [1.0, 1.0, 1.0], hot: [1.7, 1.7, 1.8], rim: [1.2, 1.3, 1.6],
+        sparkColor: 0xffffff, sparkCount: 34, sparkSpeed: 26, lampIntensity: 1250,
+      });
+      deps.particles?.spawn?.(feet.x, feet.y, {
+        color: 0xe8ecf4, count: 18, speed: 12, size: 1.1, ttl: 1.0,
+        gravity: -10, z: feet.z,
+      });
       return;
     }
     case 'fireburst': {

@@ -45,6 +45,8 @@ import { blockCast } from './blockCast.js';
 import { manaCast } from './manaCast.js';
 import { silenceCast } from './silenceCast.js';
 import { chargeUpCast } from './chargeUpCast.js';
+import { emptyFistCast } from './emptyFistCast.js';
+import { voidFistCast } from './voidFistCast.js';
 
 export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
 
@@ -53,6 +55,7 @@ const TEMPLATES = {
   emberBurst, castFlare, fireballCast, fireRainCast, igniteCast, heavenCleave,
   fistCast, burnSurge, sparkCast, selfFlame, fuelCast, fireWhirlCast,
   bladeCast, blockCast, manaCast, silenceCast, chargeUpCast,
+  emptyFistCast, voidFistCast,
 };
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
@@ -117,17 +120,21 @@ const CARD_SPELLS = {
   skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
   godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
   // ---- 体修逐卡（2026-10-02）----
-  // 重拳蓄力：崩/轰/炮/猛/真/虎/空形
+  // 重拳蓄力：崩/轰/炮/猛/真/虎（空形拳已迁 S 签名档）
   boomFist:       { template: 'fistCast', params: { mode: 'heavy' } },
   collapseFist:   { template: 'fistCast', params: { mode: 'heavy' } },
   cannonFist:     { template: 'fistCast', params: { mode: 'heavy' } },
   fierceFist:     { template: 'fistCast', params: { mode: 'heavy' } },
   trueFist:       { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
   tigerFist:      { template: 'fistCast', params: { mode: 'heavy' } },
-  emptyFist:      { template: 'fistCast', params: { mode: 'heavy', gatherMs: 560 } },   // S 空形拳
   fullChargeC:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
   fullChargeB: { template: 'fistCast', params: { mode: 'heavy', aoe: true } },
   fullSpirit:     { template: 'fistCast', params: { mode: 'heavy', aoe: true, gatherMs: 500 } },  // 全神一击（群）
+  // S 签名（2026-10-02 批次3）：空形 = 静场蓄意（兑付在伤害拍 voidStrike——
+  // 后手不成立则没有伤害拍，「打空就是空」）；虚形 = 七道虚影细流汇聚入体
+  // （暧昧语言：不预判后手，成立则随后七牌入手兑现，不成立散作虚无）
+  emptyFist:      { template: 'emptyFistCast' },   // S 空形拳
+  voidFist:       { template: 'voidFistCast' },    // S 虚形拳
   // 连击多射：雨拳/乱拳/千手/万手
   rainFist:       { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },
   wildFlurry:     { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },

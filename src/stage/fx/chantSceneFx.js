@@ -41,6 +41,27 @@ const THEMES = {
       { at: 'self', dz: -6, dy: 1.45, rate: 14, size: 2.4, color: 0xffe0b0, speed: 3.5, ttl: 4.2, gravity: 3, vby: 10 },
       { at: 'foeAir', dz: 0, dy: 1.2, rate: 8, size: 2.2, color: 0xffd0a0, speed: 3.5, ttl: 3.6, gravity: 3, vby: 9 },  // 右半区高空（撒布不偏左）
     ],
+    // 热浪环（≥ringAt 才发）：环周上升热气——参数随主题走（qiFlow = 地气环）
+    ring: { color: 0xffa050, speed: 6, size: 1.5, ttl: 1.6, gravity: 5, vby: 8, rate: 30 },
+  },
+  // qiFlow（体修「气」场）：**贴身主题，不染全场**（2026-10-02 用户定——体修咏唱
+  // 作用于自身，非火焰旋风的战场级现象）：tint/mood/染灯三个全场输出一律关掉
+  // （null/0 = 主题声明「我没有全场输出」，update 按字段存在性门控）；表现全在
+  // 贴身件——环绕气流带 + 自体锚淡雾微点 + 高档（太极 k1.0）地气环。
+  qiFlow: {
+    tint: null, dimDrop: 0, fireGainUp: 0,
+    lightWarm: null, lightWarmK: 0,
+    orbit: { count: 3, radius: 5.6, speed: 1.7, size: 6.2, heat: 0.85,
+      variant: 'qi', color: [1.0, 1.08, 1.25] },
+    ringAt: 0.9,
+    drift: [
+      // 淡雾微点：大而软、慢而低（贴身气场，只锚自身）
+      { at: 'self', dz: 0, dy: 0.35, rate: 16, size: 3.2, color: 0xdde8f8, speed: 1.8, ttl: 4.6, gravity: 1.0, vby: 1.6 },
+      { at: 'self', dz: -10, dy: 0.6, rate: 12, size: 2.6, color: 0xcfdcf2, speed: 2.0, ttl: 4.2, gravity: 1.2, vby: 2.0 },
+      { at: 'self', dz: 8, dy: 0.2, rate: 12, size: 3.6, color: 0xe6eefb, speed: 1.4, ttl: 5.0, gravity: 0.8, vby: 1.2 },
+    ],
+    // 地气环（太极档）：淡白慢速环周流转——「气沉丹田，周流不息」
+    ring: { color: 0xd8e4f8, speed: 3.2, size: 2.0, ttl: 2.4, gravity: 1.2, vby: 2.0, rate: 18 },
   },
 };
 
@@ -52,6 +73,16 @@ const SERIES_ROW = {
 };
 const CARD_ROW = {
   // 例：flameHurricane: { theme: 'fireHeat', k: { S: 1.0 } },
+  // 体修引擎咏唱（全 series=fist，族行被 fistCast 占用 → 必须逐卡登记）：
+  // 借力链 / 变招链 / 无限连击 / 混元 / 太极。肘击系（牢大）不在此列——另立语言。
+  leverageC:    { theme: 'qiFlow', k: { C: 0.45 } },
+  leverageB:    { theme: 'qiFlow', k: { B: 0.55 } },
+  leverageA:    { theme: 'qiFlow', k: { A: 0.65 } },
+  taijiS:       { theme: 'qiFlow', k: { S: 1.0 } },
+  shiftMoveB:   { theme: 'qiFlow', k: { B: 0.5 } },
+  shiftMoveA:   { theme: 'qiFlow', k: { A: 0.6 } },
+  endlessCombo: { theme: 'qiFlow', k: { A: 0.7 } },
+  hunYuanS:     { theme: 'qiFlow', k: { S: 0.85 } },
 };
 
 /**
@@ -128,12 +159,15 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
     const mood = cast?.get?.('light:mood') ?? null;
     moodBase = mood ? { dim: mood.dim, fireGain: mood.fireGain } : null;
     // 冷结构灯色快照（染暖还原用；灯色不被 lighting.update 重写，可直推——
-    // pyro 同口径。fx 池灯跳过：演出借用中，色随剧本走）
+    // pyro 同口径。fx 池灯跳过：演出借用中，色随剧本走）。主题不染灯则连
+    // 快照都不捕（qiFlow——捕了也不用，quench 还原写同值纯属空转）
     lightSnaps = [];
-    for (const { handle } of cast?.query?.('light:') ?? []) {
-      if (!handle?.isLight || handle.name?.startsWith('fxPool')) continue;
-      const c = handle.color;
-      if (c && c.b > c.r) lightSnaps.push({ light: handle, r: c.r, g: c.g, b: c.b });
+    if (theme.lightWarm) {
+      for (const { handle } of cast?.query?.('light:') ?? []) {
+        if (!handle?.isLight || handle.name?.startsWith('fxPool')) continue;
+        const c = handle.color;
+        if (c && c.b > c.r) lightSnaps.push({ light: handle, r: c.r, g: c.g, b: c.b });
+      }
     }
     const A = anchors();
     if (A.self || A.mid) {
@@ -179,36 +213,43 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
     }
     if (!theme) return;
     // mood：结构光压暗 + 火光反抬（只在做主期间逐帧落笔——pyro 等剧本同写时
-    // 后到的一方覆盖，同 pvp 调光冲突量级可接受）
+    // 后到的一方覆盖，同 pvp 调光冲突量级可接受）。dimDrop/fireGainUp 全 0 的
+    // 主题（qiFlow 贴身场）不碰 mood——也不与任何调光剧本争写
     const mood = cast?.get?.('light:mood') ?? null;
-    if (mood && moodBase) {
+    if (mood && moodBase && (theme.dimDrop || theme.fireGainUp)) {
       mood.dim = moodBase.dim * (1 - theme.dimDrop * k);
       mood.fireGain = moodBase.fireGain * (1 + theme.fireGainUp * k);
     }
-    // 冷结构灯染暖（按 k 插值快照色 → 主题暖色；亮度不动、只移色相）
-    const wk = (theme.lightWarmK ?? 0.5) * k;
-    for (const s of lightSnaps) {
-      s.light.color.setRGB(
-        s.r + (theme.lightWarm[0] - s.r) * wk,
-        s.g + (theme.lightWarm[1] - s.g) * wk,
-        s.b + (theme.lightWarm[2] - s.b) * wk,
-      );
+    // 冷结构灯染色（按 k 插值快照色 → 主题目标色；亮度不动、只移色相）。
+    // lightWarm null = 主题不染灯（qiFlow）
+    if (theme.lightWarm) {
+      const wk = (theme.lightWarmK ?? 0.5) * k;
+      for (const s of lightSnaps) {
+        s.light.color.setRGB(
+          s.r + (theme.lightWarm[0] - s.r) * wk,
+          s.g + (theme.lightWarm[1] - s.g) * wk,
+          s.b + (theme.lightWarm[2] - s.b) * wk,
+        );
+      }
     }
-    // 后处理暖调：uTint 白→主题色按 k 插值（composer 缺位静默跳过）
-    scratch.setRGB(theme.tint[0], theme.tint[1], theme.tint[2]);
-    scratch.lerpColors(WHITE, scratch, k);
-    composer?.setSceneTint?.([scratch.r, scratch.g, scratch.b]);
+    // 后处理调色：uTint 白→主题色按 k 插值（tint null = 主题不调全场色，qiFlow）
+    if (theme.tint) {
+      scratch.setRGB(theme.tint[0], theme.tint[1], theme.tint[2]);
+      scratch.lerpColors(WHITE, scratch, k);
+      composer?.setSceneTint?.([scratch.r, scratch.g, scratch.b]);
+    }
     // 发射器 rate 随包络（点火渐密、熄灭渐稀）
     for (const e of emitters) e.handle.rate = e.baseRate * k;
-    // 热浪环：达到 ringAt 才起（高级咏唱的「火气蒸腾」），环周上升热气
-    if (k >= (theme.ringAt ?? 1) && !ring) {
+    // 热浪环/地气环：达到 ringAt 才起（高级咏唱的「气蒸腾」档），参数随主题
+    if (k >= (theme.ringAt ?? 1) && !ring && theme.ring) {
       const a = unitAnchor(playerId(), 0);
       if (a) {
+        const R = theme.ring;
         const handle = particles?.spawnEmitter?.(a.x, a.y + a.H * 0.15, {
-          rate: 0, radius: a.H * 0.42, outward: true, vby: 8, zJitter: a.H * 0.4,
-          color: 0xffa050, speed: 6, ttl: 1.6, size: 1.5, gravity: 5, z: a.z,
+          rate: 0, radius: a.H * 0.42, outward: true, vby: R.vby ?? 8, zJitter: a.H * 0.4,
+          color: R.color, speed: R.speed, ttl: R.ttl, size: R.size, gravity: R.gravity, z: a.z,
         });
-        if (handle) ring = { handle, baseRate: 30 };
+        if (handle) ring = { handle, baseRate: R.rate ?? 30 };
       }
     }
     if (ring) ring.handle.rate = ring.baseRate * k;
