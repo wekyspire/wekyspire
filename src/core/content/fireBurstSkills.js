@@ -245,7 +245,7 @@ const BURST_TIER_TWIN = { C: 'fireworksUnbound', B: 'smallBurstUnbound', A: 'kar
 function explosiveArtCard({ id, tier, promotesTo }) {
   const twin = BURST_TIER_TWIN[tier];
   registerSkill({
-    id, name: '爆炸艺术', type: 'fire', tier, series: 'explosiveArtC',
+    id, name: '爆炸艺术', type: 'fire', tier, series: 'explosiveArt',
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -273,7 +273,7 @@ explosiveArtCard({ id: 'explosiveArtA', tier: 'A' });
 function fireWhirlCard({ id, name = '火焰旋风', tier, dmg, burnPer = 4, promotesTo = null }) {
   const dmgOf = (sctx) => dmg + Math.floor(sctx.player.getEffectStacks('burn') / burnPer);
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireWhirlC',
+    id, name, type: 'fire', tier, series: 'fireWhirl',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -345,7 +345,7 @@ residualHeatCard({ id: 'reignite', tier: 'S', name: '重燃', per: 3, back: 4 })
 // 喂蓄能/旋风/余热台账，一次过蓝多份回报。
 function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireTemperC',
+    id, name, type: 'fire', tier, series: 'fireTemper',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
@@ -368,7 +368,7 @@ fireTemperCard({ id: 'fireTemperA', name: '淬炼', tier: 'A', mana: 3, shield: 
 // 刻意的高斜率：抽到的牌仍要付蓝/AP 才变现，手牌上限是天然刹车。
 function hotHandsCard({ id, tier, mana, draw, promotesTo }) {
   registerSkill({
-    id, name: '烫手', type: 'fire', tier, series: 'hotHandsC',
+    id, name: '烫手', type: 'fire', tier, series: 'hotHands',
     cost: { mana, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
@@ -397,7 +397,7 @@ hotHandsCard({ id: 'hotHandsA', tier: 'A', mana: 1, draw: 4 });
 // 引擎重启成本即其 balancing）。
 function silenceCard({ id, tier, shield, promotesTo }) {
   registerSkill({
-    id, name: '沉默', type: 'fire', tier, series: 'silenceC',
+    id, name: '沉默', type: 'fire', tier, series: 'silence',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -563,7 +563,7 @@ kindlingBloodCard({ id: 'kindlingBloodA', name: '可燃血液', tier: 'A', shiel
 // 火雨 C/B/A（3魏）：对所有敌人 12/14/16 伤害（每敌一枚 aoe 标记指令）。A 档名「火瀑」。
 function fireRainCard({ id, name = '火雨', tier, damage, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireRainC',
+    id, name, type: 'fire', tier, series: 'fireRain',
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -674,7 +674,7 @@ registerSkill({
 // 空手也可打出：无牌可焚时退化为纯抽牌（不焚毁直接抽）。
 function burnWindCard({ id, tier, actionPoint, draw, promotesTo = null }) {
   registerSkill({
-    id, name: '浇油', type: 'fire', tier, series: 'pourOilC',
+    id, name: '浇油', type: 'fire', tier, series: 'pourOil',
     cost: { mana: 0, actionPoint },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
@@ -712,7 +712,7 @@ burnWindCard({ id: 'pourOilA', tier: 'A', actionPoint: 0, draw: 3 });
 // 全员不消耗；C 冷却1（0 开销纪律），B 去冷却，A 提为抽3（同 1AP）——升级链逐档严格超集。
 function airBlastCard({ id, tier, actionPoint, draw, cooldownTurns = 0, promotesTo = null }) {
   registerSkill({
-    id, name: '鼓风', type: 'fire', tier, series: 'airBlastC',
+    id, name: '鼓风', type: 'fire', tier, series: 'airBlast',
     cost: { mana: 0, actionPoint },
     charges: { max: Infinity, cooldownTurns },
     cardMode: 'normal', targetMode: 'none',
@@ -749,7 +749,7 @@ airBlastCard({ id: 'airBlastA', tier: 'A', actionPoint: 1, draw: 3 });
 // 下回合照常抽回，还喂「每弃N张」类触发；魏启只是添头）。
 function stackFirewoodCard({ id, tier, actionPoint, mana, promotesTo = null }) {
   registerSkill({
-    id, name: '积薪', type: 'fire', tier, series: 'stackFirewoodC',
+    id, name: '积薪', type: 'fire', tier, series: 'stackFirewood',
     cost: { mana: 0, actionPoint },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -812,7 +812,7 @@ firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'A', damage: 
 // 咏唱 0——纯被动不占容量。
 function bloodFlameCard({ id, tier, per, promotesTo }) {
   registerSkill({
-    id, name: '血焰', type: 'fire', tier, series: 'bloodFlameC',
+    id, name: '血焰', type: 'fire', tier, series: 'bloodFlame',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 0,

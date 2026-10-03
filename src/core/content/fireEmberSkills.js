@@ -385,7 +385,7 @@ registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
 // 阶梯：6/+5 → 6/+7 → 6/+9。
 function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireWallC',
+    id, name, type: 'fire', tier, series: 'fireWall',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',

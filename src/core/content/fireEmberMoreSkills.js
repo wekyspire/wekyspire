@@ -80,7 +80,7 @@ selfImmolateRite({ id: 'selfImmolateA', tier: 'A', exhaust: false });
 function flameHealSkill({ id, name, tier, base, per, promotesTo = null }) {
   const amountOf = (sctx) => base + sctx.player.getEffectStacks('burn') * per;
   registerSkill({
-    id, name, type: 'fire', tier, series: 'flameHealC',
+    id, name, type: 'fire', tier, series: 'flameHeal',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -145,7 +145,7 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, mi
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => registerSkill({
-  id, name: '鬼火', type: 'fire', tier, series: 'willOWispB',
+  id, name: '鬼火', type: 'fire', tier, series: 'willOWisp',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight,

@@ -126,9 +126,9 @@ export function resolveDamageFx(defId) {
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
       return { kind: 'fireburst', proj: 'tracked' };
-    case 'fireRainC':       // 火雨/火瀑（群伤落地）
+    case 'fireRain':       // 火雨/火瀑（群伤落地）
       return { kind: 'fireburst', ground: true };
-    case 'fireWhirlC':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
+    case 'fireWhirl':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
       return { kind: 'fireburst', ground: true };
     case 'spark':          // 火花链（乱射：本拍自持投射物——随机弧快弹，抵达才爆）
       return { kind: 'ignition', proj: 'owned' };

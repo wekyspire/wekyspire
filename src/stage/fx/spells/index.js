@@ -78,7 +78,7 @@ const SERIES_SPELLS = {
   fireWall:      { id: 'selfFlame', params: { scale: 0.7 } },            // 火墙
   magmaArmor:    { id: 'selfFlame', params: {                            // 熔岩铠甲：深红岩浆调
                      color: [0.9, 0.30, 0.10], hot: [1.1, 0.75, 0.40], ember: [0.8, 0.12, 0.02], core: 0xff5a2a } },
-  patience:      { id: 'selfFlame', params: {                            // 血焰：深红
+  bloodFlame:    { id: 'selfFlame', params: {                            // 血焰：深红
                      color: [0.95, 0.25, 0.12], hot: [1.1, 0.65, 0.45], ember: [0.75, 0.08, 0.05], core: 0xff4a3a } },
   willOWisp:     { id: 'selfFlame', params: {                            // 鬼火：青白冷焰
                      color: [0.45, 0.95, 0.70], hot: [0.80, 1.10, 0.95], ember: [0.15, 0.55, 0.35], core: 0x7affc8,
@@ -86,7 +86,7 @@ const SERIES_SPELLS = {
   mirrorBurn:    { id: 'selfFlame' },                                    // 镜燃
   fireChant:     { id: 'selfFlame' },                                    // 燃心决/绝炎/火焰披风（自燃件）
   fuel:          { id: 'fuelCast' },                                     // 添柴：焚卡回蓝
-  burnWind:      { id: 'fuelCast' },                                     // 浇油（焚牌抽牌）
+  pourOil:       { id: 'fuelCast' },                                     // 浇油（焚牌抽牌）
   condense:      { id: 'igniteCast', params: { selfSparks: true } },     // 焰涌链：点火+纳气
   shock:         { id: 'fireballCast', params: {                         // 爆裂冲击/轰灭：重弹平射
                      size: 6.0, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },

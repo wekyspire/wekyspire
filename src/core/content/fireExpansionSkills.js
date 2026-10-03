@@ -293,7 +293,7 @@ ashRakeCard({ id: 'ashRakeA', tier: 'A', threshold: 2, extraDraw: 2 });
 // 不触发；订阅挂卡牌 owner，熄灭自动注销，无回合窗自清（咏唱常驻即反甲常驻）。
 function magmaArmorCard({ id, tier, burn, promotesTo }) {
   registerSkill({
-    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmorB',
+    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmor',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,

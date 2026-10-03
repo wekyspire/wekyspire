@@ -47,8 +47,8 @@ const THEMES = {
 // 主题注册表：series 族行（k 按等阶取值，缺档回落 0.5）+ defId 逐卡覆写位。
 // 加新体系咏唱 = 在此登记一行（其它族主题件待各自视觉语言定稿后补）。
 const SERIES_ROW = {
-  fireWhirlC: { theme: 'fireHeat', k: { C: 0.5, B: 0.65, A: 0.8, S: 1.0 } },
-  magmaArmorB: { theme: 'fireHeat', k: { B: 0.5, A: 0.62 } },
+  fireWhirl: { theme: 'fireHeat', k: { C: 0.5, B: 0.65, A: 0.8, S: 1.0 } },
+  magmaArmor: { theme: 'fireHeat', k: { B: 0.5, A: 0.62 } },
 };
 const CARD_ROW = {
   // 例：flameHurricane: { theme: 'fireHeat', k: { S: 1.0 } },
