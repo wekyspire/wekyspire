@@ -44,6 +44,9 @@ export const syncBeats = {
       for (const id of [...this._dumpSel]) if (!freeIds.has(id)) this._dumpSel.delete(id);
     }
     this.reconcile();
+    // 咏唱场景演出对账（激活咏唱集合 → 场景氛围包络；与 aura 同律走状态 diff，
+    // 不依赖 ANIM 事件——读档/观战重连自然一致）
+    this._chantSceneFx?.reconcile(snapshot);
   }
 
   /** 直接应用投影快照（不经动画队列）：幕间黑幕预载用——黑幕后即建好单位/卡牌

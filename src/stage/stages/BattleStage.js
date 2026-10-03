@@ -65,6 +65,7 @@ import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
 import { runScript } from '../fx/script.js';
 import { AuraHost } from '../fx/aura.js';
+import { createChantSceneFx } from '../fx/chantSceneFx.js';
 import { Cast } from '../fx/cast.js';
 import { createProjectileTracker } from '../fx/spells/projectileTrack.js';
 import { cardReactMode } from '../fx/cardBodyFx.js';
@@ -272,6 +273,17 @@ export class BattleStage {
     // 命名寻址注册表（fx/cast.js）：剧本/相机经名字拿句柄。战斗内登记
     // unit:<uniqueID> 与 role:player；anchor/light 由场景层登记（Phase 3+）
     this._cast = new Cast();
+    // 咏唱场景演出（fx/chantSceneFx.js）：激活咏唱把战场推向体系氛围（火系 =
+    // 暖调+余烬+骑士火流环绕）。快照对账驱动（isActivated），观战端同源一致
+    this._chantSceneFx = createChantSceneFx({
+      scene: this.scene,
+      particles: this.particles,
+      cast: this._cast,
+      composer: this._composer ?? null,
+      units: this._units,
+      playerId: () => this._snapshot?.player?.uniqueID ?? null,
+      enemyIds: () => (this._snapshot?.enemies ?? []).map((e) => e.uniqueID),
+    });
     // 投射物抵达追踪（fx/spells/projectileTrack.js）：施术拍登记、伤害拍 await
     // 真实抵达（CPU 权威，取代 impactDelayMs 猜测）
     this._projectiles = createProjectileTracker();
@@ -336,6 +348,7 @@ export class BattleStage {
       // _dimT=1 而 _dim=0、updateFx 每秒被泵 0 次——r2 的奖励侧"压暗"实为全屏背板读数）
       for (const btn of Object.values(this._buttons)) btn?.updateFx?.(dt);
       this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
+      this._chantSceneFx.update(dt); // 咏唱场景演出包络（暖调/余烬/火流环绕逐帧派生）
       this._panel?.update(dt);       // 模态面板卡阵的 fx（奖励三选一 hover 高亮收敛）
       for (const unit of this._units.values()) {
         unit.update(dt);
@@ -1281,6 +1294,7 @@ export class BattleStage {
     for (const fn of this._fxDisposeHooks) { try { fn(); } catch (_) {} } // 剧本常驻效果收尾
     this._fxDisposeHooks.clear();
     this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
+    this._chantSceneFx.dispose();  // 咏唱场景演出收尾（mood/uTint 还原，发射器/环绕件收）
     this._cast.clear(); // 命名寻址随舞台销毁（下一场 beginBattle 重建）
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', this._onShiftKeyDown);
