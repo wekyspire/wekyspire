@@ -5,6 +5,7 @@
 // 布光：无光源件（纯载具），不涉 PointLight。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 长矛（剪影级）：木杆 + 铁喉箍 + 提亮压扁锥矛头，原点=矛根（y=0），全长约 3.2
@@ -37,7 +38,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'metal', 'barrack'],
   footprint: { x: 8, z: 3.6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ spears = 5, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('weaponCart');

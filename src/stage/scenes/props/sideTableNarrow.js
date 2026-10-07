@@ -4,6 +4,7 @@
 // 原点=底面中心（y=0 落地），几面高约 2.4。变体走 build(opts)：腿外撇角/托盘有无。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture', 'quarters'],
   footprint: { x: 3.4, z: 3.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ splay = 0.22, tier = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('sideTableNarrow');

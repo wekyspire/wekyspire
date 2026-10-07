@@ -29,6 +29,7 @@ export const igniteCast = {
           track: unit,   // 抵达登记：伤害拍（ignition tracked）await 真实落定
           color: prm.color, hot: prm.hot, size: prm.size,
           ms: prm.projMs, arcH: prm.arcH,
+          fire: true,
           trail: { color: 0xff8c3a, count: 2, ttl: 0.3 },
         });
       }).promise);

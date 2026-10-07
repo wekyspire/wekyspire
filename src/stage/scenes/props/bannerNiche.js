@@ -4,6 +4,7 @@
 // 类挂旗资产另行挂入，本件只出「位」）。变体走 build(opts)：龛深/龛高/基座缺角。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   place: 'wallStructure',
   bayWidth: 1,
   tags: ['stone'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ depth = 1.3, nichH = 10.0, hooks = 2, chipped = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bannerNiche');

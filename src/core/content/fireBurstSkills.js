@@ -105,7 +105,7 @@ function heatBallCard({ id, name, tier, damage, ramp, promotesTo }) {
     describe: () => `${damage}伤害，/named{蓄热}${ramp}`,
     battleDescribe: (sctx) => {
       const n = sctx.self.heatRamp ?? 0;
-      return `${resolvedDamageText(sctx, damage)}（+${n * ramp}）`;
+      return `${resolvedDamageText(sctx, damage)}，/named{蓄热}${ramp}（已蓄${n} → +${n * ramp}）`;
     },
   });
 }
@@ -134,7 +134,7 @@ function burstChantCard({ id, name, tier, base, perMana, innate = true, promotes
   const def = {
     name, type: 'fire', tier, series: 'burst',
     cost: { mana: 1, actionPoint: 0 },
-    charges: { max: Infinity, cooldownTurns: 0 },
+    charges: { max: Infinity, cooldownTurns: 4 },
     cardMode: 'chant', chantWeight: 2,
     keywords: innate ? ['innate'] : [],
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable
@@ -330,7 +330,7 @@ function residualHeatCard({ id, name = '余热', tier, per, back, promotesTo }) 
     describe: () => `本回合每消耗过${per}魏启，回复${back}魏启`,
     battleDescribe: (sctx) => {
       const consumed = sctx.battleState.history.turn.manaConsumed ?? 0;
-      return `本回合已消耗${consumed}魏启：回复${Math.floor(consumed / per) * back}魏启`;
+      return `本回合每消耗过${per}魏启，回复${back}魏启（已消耗${consumed} → 回复${Math.floor(consumed / per) * back}）`;
     },
   });
 }
@@ -830,6 +830,7 @@ function bloodFlameCard({ id, tier, per, promotesTo }) {
           if (refunds > 0) {
             self.patiencePool -= refunds * per; // 余数保留，跨结算继续累计
             ctx.kernel.submitInstruction(new GainManaInstruction({ amount: refunds }), instr);
+            reactFx(sctx, sctx.self, 'benefit', { variant: 'charge', magnitude: refunds });
           }
         },
       }],
@@ -968,20 +969,22 @@ function fireworkShowCard({ id, name, tier, manaBack = 0 }) {
     cardMode: 'normal', targetMode: 'none',
     keywords: ['exhaust'],
     use(sctx) {
-      // 提交不即执行（子节点在收尾后跑），快照仅为防御性写法
+      // 提交不即执行（子节点在收尾后跑），快照仅为防御性写法。
+      // 抽出即完成冷却（爆裂咏唱 cd4 的通配钥匙——全部到手全部即刻可发动）
       for (const c of [...sctx.battleState.zones.deck]) {
         if (getSkillDefinition(c.defId)?.series === 'burst') {
+          c.currentCooldown = 0;
           sctx.kernel.submitInstruction(new MoveCardInstruction({ uniqueID: c.uniqueID, toZone: 'hand' }));
         }
       }
       if (manaBack > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: manaBack }));
       return true;
     },
-    describe: () => `/named{抽出}所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`,
+    describe: () => `/named{抽出}所有爆裂术并完成其冷却${manaBack ? `，回复${manaBack}魏启` : ''}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.deck
         .filter(c => getSkillDefinition(c.defId)?.series === 'burst').length;
-      return `/named{抽出}所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`;
+      return `/named{抽出}所有爆裂术并完成其冷却（牌库${n}张）${manaBack ? `，回复${manaBack}魏启` : ''}`;
     },
   });
 }

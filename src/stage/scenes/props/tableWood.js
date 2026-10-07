@@ -3,6 +3,7 @@
 // 桌面宽深 / 桌角磨圆量 / 腿外撇角（rng 在场时逐腿微抖出旧木手工感）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture'],
   footprint: { x: 4, z: 2.8 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ w = 3.8, d = 2.6, h = 4.2, round = 0.18, splay = 0.05, rng } = {}) {
     const g = new THREE.Group();
     // 桌面：厚板四角磨圆（chip 逐角内拉，flatShading 下读作圆角倒边，角顶微沉更旧）

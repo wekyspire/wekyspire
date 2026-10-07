@@ -28,6 +28,7 @@ export const fireRainCast = {
             from, to,
             color: prm.color, hot: prm.hot, size: prm.size,
             ms: prm.projMs, arcH: prm.arcH,
+            fire: true,
             trail: { color: 0xff7a2d },
           });
         });

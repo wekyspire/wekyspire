@@ -24,6 +24,7 @@ export const fuelCast = {
           await arcProjectile(c, deps, {
             from, to, color: prm.color, hot: prm.hot, size: prm.size,
             ms: prm.projMs, arcH: prm.arcH, stretch: 1.8, lampIntensity: 0,
+            fire: true,
             trail: { color: 0xffa04a, count: 1, ttl: 0.3, speed: 3, size: 0.5 },
           });
         });

@@ -21,9 +21,14 @@ export function canUseSkill(ctx, self) {
   if (self.remainingUses <= 0) return false;
   if (def.cardMode === 'chant') {
     if (self.isActivated) {
-      if (def.keywords?.includes('anchored')) return false; // 锁定：不可主动解除
-    } else if (!chantActivationLegal(ctx, self, def)) {
-      return false; // 激活后手牌压力超限：发动无效果，可用性直接拒绝
+      if (def.keywords?.includes('anchored')) return false; // 封咏：不可主动解除
+      // 终止打出恒放行（激活态的解除是结算出口，冷却不许锁死咏唱循环）；
+      // 冷却门只管**未激活**的再发动（爆裂咏唱 cd4：两次爆发的节奏间距）
+    } else {
+      if (self.currentCooldown > 0) return false; // 冷却中：不可再发动
+      if (!chantActivationLegal(ctx, self, def)) {
+        return false; // 激活后手牌压力超限：发动无效果，可用性直接拒绝
+      }
     }
   }
   if (def.canUse && !def.canUse(makeSkillCtx(ctx, self))) return false;
@@ -39,7 +44,10 @@ export function canUseSkill(ctx, self) {
     ? (def.manaCostDelta?.(makeSkillCtx(ctx, self)) ?? 0)
     : 0;
   const manaCost = baseMana === 'X' ? 'X' : baseMana + manaDelta;
-  const apCost = ov?.actionPoint ?? def.cost?.actionPoint ?? 0;
+  // 幻象的 AP 扰动（抽牌时掷出的 runtime 字段）：同 manaDelta 的门——覆写命中不叠加；
+  // 负值让费用检查天然放行（结算侧按 0 付）
+  const baseAp = ov?.actionPoint ?? def.cost?.actionPoint ?? 0;
+  const apCost = (!ov && typeof baseAp === 'number') ? baseAp + (self.apCostShift ?? 0) : baseAp;
   // 免费窗口豁免：battleState.freePlays > 0 时费用检查放行——逍遥游「下 N 张打出的牌
   // 无开销」挂在出牌侧 PRE 置 0，但若玩家资源低于牌面费用，canUse 会在结算前就拒绝
   // 出牌，免费窗口对贵牌失效。计数器放 battleState（turnDrawBonus 同通道先例，
@@ -215,10 +223,12 @@ export function freeChantToggle(def, self) {
 }
 
 /**
- * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 按 owner 注销订阅 → 播报。
+ * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 冷却锚定 → 按 owner 注销订阅 → 播报。
  * 调用方：打出已激活咏唱（免费解除，随后按卡牌特性离场）、离手不变量
- * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）。
- * 幂等：未激活静默落空。anchored 不设防——离手熄灭是物理事实，锁定只挡主动解除。
+ * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）、沉默等远程熄灭。
+ * 咏唱冷却自**终止**起算（激活/持续激活不计时）：一切终止路径统一在此锚定，
+ * 冷却门只挡未激活的再发动（canUseSkill）。
+ * 幂等：未激活静默落空。anchored 不设防——离手熄灭是物理事实，封咏只挡主动解除。
  */
 export function deactivateChant(ctx, skill, reason, target = null) {
   if (!skill?.isActivated) return false;
@@ -226,6 +236,8 @@ export function deactivateChant(ctx, skill, reason, target = null) {
   if (target) sctx.target = target; // 解除路径的出牌目标（终止类群伤的软指定用）
   sctx.def.activated?.onDisable?.(sctx, reason);
   skill.isActivated = false;
+  const cd = sctx.def.charges?.cooldownTurns ?? 0;
+  if (cd > 0) skill.currentCooldown = cd;
   ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);
   ctx.presenter?.chantToggled?.({ skill, on: false, reason });
   return true;
@@ -252,7 +264,9 @@ export function enterBattle(ctx, self) {
   const slow = def.keywords?.includes('slowStart');
   const max = def.charges?.max ?? Infinity;
   self.remainingUses = slow ? 0 : max;
-  self.currentCooldown = def.charges?.cooldownTurns ?? 0;
+  // 咏唱开局即绪（冷却只管「两次爆发的间距」，不管开局——cd4 咏唱若按定义值
+  // 起跳，首个激活要等到第 4 回合，节奏语义错）；普通卡的「入场充能冷却」照旧
+  self.currentCooldown = def.cardMode === 'chant' ? 0 : (def.charges?.cooldownTurns ?? 0);
   self.isActivated = false;
   registerSkillSubscriptions(ctx, self);
   return self;

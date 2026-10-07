@@ -15,10 +15,8 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 //     起始组共两张），以及拳/盾填充卡的晋升通道（见 promotion.js 的 FILLER_STARTERS
 //     门禁——体修与法师同为 3 AP。
 
-const FILLER = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC', 'shieldC', 'shieldC', 'badOmen']);
-// 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；各路线填充组各带一张「情况不对」
-// = 迷你保险（四路线起手都恰好一张：体修走起始组自带、
-// 灵脉路线走填充；情况不对带迷你词条计 0 张手牌，抽到不卡手）
+// 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；填充组带一张「情况不对」
+// = 迷你保险（体修走起始组自带；情况不对带迷你词条计 0 张手牌，抽到不卡手）
 const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'badOmen']);
 
 export const ROUTES = Object.freeze({
@@ -33,16 +31,6 @@ export const ROUTES = Object.freeze({
     // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃 C（回蓝）
     deck: Object.freeze(['igniteC', 'fireBolt', 'flashBurnC', ...FILLER_FIRE]),
     blurb: '爆发与燃烧',
-  }),
-  wood: Object.freeze({
-    id: 'wood', name: '木灵脉', leino: 'wood', ability: 'woodVein', apBonus: 0,
-    deck: Object.freeze(['poisonSting', 'breathOfLife', ...FILLER]),
-    blurb: '尚未完善，请勿游玩',
-  }),
-  air: Object.freeze({
-    id: 'air', name: '空灵脉', leino: 'air', ability: 'airVein', apBonus: 0,
-    deck: Object.freeze(['windBlade', 'atEase', ...FILLER]),
-    blurb: '尚未完善，请勿游玩',
   }),
 });
 

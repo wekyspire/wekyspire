@@ -11,7 +11,7 @@ import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { playCardGrantFlight } from '../cardGrantFlight.js';
+import { grantCardFlight } from '../cardGrantFlight.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
@@ -205,7 +205,8 @@ export class MapStage {
     if (action.local) {
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShop') { this._panelUi.shopOpen = true; this._renderPanel(); return; }
-      if (action.action === 'closeShop') { this._panelUi.shopOpen = false; this._renderPanel(); return; }
+      if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
+      if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
       return;
     }
     // 得卡标记（古尔帕斯卡包三选一）：摘下被点的卡 → 解除 overlay → 播「择卡得卡」
@@ -215,12 +216,11 @@ export class MapStage {
     if (action.grantCard && info?.pickId && this._panel) {
       const entry = this._panel.takeCard(info.pickId);
       if (entry) {
-        this._grantBusy = true;
-        this.uiScene.add(entry.object);      // 面板组在原点：局部坐标即世界坐标
-        this._removePanel();
-        playCardGrantFlight({
-          card: entry.object, target: this._deckAnchor(), sequencer: this._runSequencer,
-          onDone: () => { this._grantBusy = false; this._onIntent?.(action); },
+        grantCardFlight({
+          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
+          target: this._deckAnchor(), sequencer: this._runSequencer,
+          onBusy: (b) => { this._grantBusy = b; },
+          onDone: () => this._onIntent?.(action),
         });
         return;
       }

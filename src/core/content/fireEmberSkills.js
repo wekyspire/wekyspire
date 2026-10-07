@@ -220,7 +220,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
   describe: () => '12伤害；目标每层/effect{燃烧}，+1',
   battleDescribe: (sctx) => {
     const bonus = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-    return `${12 + bonus}伤害（12+目标/effect{燃烧}${bonus}）`;
+    return `${resolvedDamageText(sctx, 12 + bonus)}；目标每层/effect{燃烧}，+1（当前${bonus}层）`;
   },
 });
 
@@ -334,7 +334,7 @@ registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 4, 'enemy
   describe: () => '消耗所有敌人的全部/effect{燃烧}，每层群伤1',
   battleDescribe: (sctx) => {
     const total = totalEnemyBurn(sctx);
-    return `消耗所有敌人的全部/effect{燃烧}（共${total}层），群伤${total}`;
+    return `消耗所有敌人的全部/effect{燃烧}，每层群伤1（共${total}层 → 群伤${total}）`;
   },
 });
 
@@ -372,7 +372,8 @@ registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
   describe: () => '/effect{烈焰亲和}1，消耗自身所有/effect{燃烧}，每2层获得/effect{烈焰亲和}1',
   battleDescribe: (sctx) => {
     const stacks = sctx.player.getEffectStacks('burn');
-    return `/effect{烈焰亲和}${1 + Math.floor(stacks / 2)}（消耗燃烧${stacks}）`;
+    return `/effect{烈焰亲和}1，消耗自身所有/effect{燃烧}，每2层获得/effect{烈焰亲和}1`
+      + `（燃烧${stacks} → 共${1 + Math.floor(stacks / 2)}）`;
   },
 });
 

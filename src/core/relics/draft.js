@@ -45,7 +45,7 @@ export function meetsRequires(def, run) {
 }
 
 // 灵脉维度（门禁判定用；内容侧维度表在 ascension.js，这里只取"有哪些维度"这一事实）
-export const RARITY_DIMS = Object.freeze(['fire', 'wood', 'air']);
+export const RARITY_DIMS = Object.freeze(['fire']);
 
 /**
  * 该遗物此刻是否**可被抽到**：来源匹配 + 门禁达标 + 剧情限定 + 未被拥有 + 非兜底件。

@@ -58,7 +58,7 @@ export const KEYWORD_LABELS = Object.freeze({
   innate: '固有',
   transient: '短暂',
   slowStart: '慢热',
-  anchored: '锁定',
+  anchored: '封咏', // 咏唱不可主动解除；旧名「锁定」让位给无人战体的锁牌机制
   blood: '卖血',
   mini: '迷你', // 计为 0 张手牌（不占手牌计数，；只管计数，与弃牌无关）
   blade: '刀法', // 系列标签（此前裸透传英文 blade 到卡面页脚）
@@ -84,7 +84,12 @@ export function projectCardFull(battle, rt) {
       if (ov) return { mana: ov.mana ?? c.mana, actionPoint: ov.actionPoint ?? c.actionPoint };
       if (typeof c.mana !== 'number') return c;
       const d = def.manaCostDelta?.(sctx) ?? 0;
-      return d ? { ...c, mana: c.mana + d } : c;
+      // 幻象的 AP 扰动（rt.apCostShift，抽牌时掷出）：徽章钳 0 下限（−1 显示为 0 费，
+      // 结算侧同口径免付）；sig 含 cost，掷值变化自动触发卡面重烘
+      const apD = rt.apCostShift ?? 0;
+      return (d || apD)
+        ? { ...c, mana: c.mana + d, actionPoint: Math.max(0, (c.actionPoint ?? 0) + apD) }
+        : c;
     })(),
     // keywords = 展示用中文标签（KEYWORD_LABELS 翻译后，如 'mini' → '迷你'）——判英文
     // 词条键永不命中，别拿它做逻辑判断（弃牌坏态根因）；逻辑判定读 core 侧 def

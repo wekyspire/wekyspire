@@ -4,6 +4,7 @@
 // （P.herb）。变体走 build(opts)：面包数 breads / 罐数 jars。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 陶罐轮廓（lathe 基准，供缩放复用）：腹径约 0.9、高约 1.22
@@ -29,7 +30,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'kitchen'],
   footprint: { x: 4.8, z: 1.9 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ breads = 3, jars = 2, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('pantryShelf');

@@ -15,8 +15,6 @@ export const withLabels = (view) => (view
 // 导出：进阶幕间（runController.playAscensionScene）的对话选项也用这份文案，两处不漂移。
 export const DIM_META = {
   fire: { label: '火灵脉', glyph: '炎', color: '#e85a5a' },
-  wood: { label: '木灵脉', glyph: '木', color: '#4aa56e' },
-  air: { label: '空灵脉', glyph: '风', color: '#5aa2e8' },
   body: { label: '体修', glyph: '武', color: '#b8894a' },
 };
 

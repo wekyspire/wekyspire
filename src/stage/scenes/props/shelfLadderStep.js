@@ -5,6 +5,7 @@
 // 三级总高约 7。变体走 build(opts)：级数（2~4）/每格杂物件数（1~2）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 const RISE = 2.2;   // 每级升高
@@ -17,7 +18,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container', 'quarters'],
   footprint: { x: 6.3, z: 7.5 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ tiers = 3, items = 2, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('shelfLadderStep');

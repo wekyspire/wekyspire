@@ -287,9 +287,8 @@ export const cardBeats = {
       scene: this.scene,
       uiScene: this.uiScene,
       particles: this.particles,
-      // 世界粒子池本体（专用类型组直发 burst——爆裂术爆炸云等「一次性大场面」
-      // 不走 particles 门面的参数哈希路径）
-      worldPool: this.particles2World ?? null,
+      // PCG 道具单向事件口（场景交互：冲击/高温）——blocks 基础块按需广播
+      notify: this.notify,
       // 敌方阵型（显示态口径）：存活敌视图的质心 + 散布半径——AOE 大场面
       // （爆裂术爆炸云）的锚点，单敌时退化为该敌胸口
       enemyFormation: () => {
@@ -374,7 +373,7 @@ export const cardBeats = {
       },
     };
     try {
-      return runSpellFx({ defId, deps, notify });
+      return runSpellFx({ defId, deps, notify, chantOff: !!payload?.chantOff });
     } catch (err) {
       console.warn('[spellFx] 施术演出发起异常（回落 BASE）：', err);
       return null;

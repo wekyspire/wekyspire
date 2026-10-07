@@ -28,7 +28,7 @@ import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusOb
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { playCardGrantFlight } from '../cardGrantFlight.js';
+import { grantCardFlight } from '../cardGrantFlight.js';
 import { MACHINE_FACTORIES } from '../machines/index.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
@@ -839,7 +839,6 @@ export class RoomStage {
     if (!action || this._grantBusy) return;
     if (action.local) {
       if (action.action === 'openShop') { this.openShop(); return; }
-      if (action.action === 'closeShop') { this._openPanel(this._focused); return; }
       if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
       if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
       if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
@@ -853,12 +852,11 @@ export class RoomStage {
     if (action.grantCard && info?.pickId && this._panel) {
       const entry = this._panel.takeCard(info.pickId);
       if (entry) {
-        this._grantBusy = true;
-        this.uiScene.add(entry.object);      // 面板组在原点：局部坐标即世界坐标
-        this._removePanel();
-        playCardGrantFlight({
-          card: entry.object, target: this._deckAnchor(), sequencer: this._runSequencer,
-          onDone: () => { this._grantBusy = false; this._onIntent?.(action); },
+        grantCardFlight({
+          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
+          target: this._deckAnchor(), sequencer: this._runSequencer,
+          onBusy: (b) => { this._grantBusy = b; },
+          onDone: () => this._onIntent?.(action),
         });
         return;
       }

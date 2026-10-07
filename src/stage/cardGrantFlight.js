@@ -105,3 +105,24 @@ export function playCardGrantFlight({ card, target, sequencer = null, onDone = n
   });
   return true;
 }
+
+/**
+ * 「择卡得卡」惯用法（2026-10-07 收敛：kit 三个 confirmHook + 三舞台 grantCard 分支
+ * 原各抄一份，仅上行出口不同）：忙标记置位 → 卡挂进场景 → 播得卡飞行 → 落袋清忙并
+ * 上行意图。空摘（entry 缺失，双击竞态）不播演出、同步清忙上行——与各原实现一致。
+ * @param {object} o
+ *   entry:  摘出的条目（PanelObject.takeCard = { object }；ScrollPickerObject.takeEntry
+ *           = { obj }；或直接传 CardObject）
+ *   add:    把卡挂进场景的函数（面板/picker 组在原点：局部坐标即世界坐标）
+ *   target / sequencer / onDone: 同 playCardGrantFlight
+ *   onBusy: (on) => {} 忙标记（kit grantBusy / 舞台 _grantBusy——演出期间吞指针/面板动作）
+ * @returns 是否受理（空 entry = false，onDone 已同步回调，调用方直接续走）
+ */
+export function grantCardFlight({ entry = null, add = null, target = null, sequencer = null, onBusy = null, onDone = null }) {
+  onBusy?.(true);
+  const done = () => { onBusy?.(false); onDone?.(); };
+  const card = entry?.object ?? entry?.obj ?? entry ?? null;
+  if (!card) { done(); return false; }
+  add?.(card);
+  return playCardGrantFlight({ card, target, sequencer, onDone: done });
+}

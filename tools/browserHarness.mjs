@@ -67,6 +67,7 @@ export async function launch({ headless = true, viewport = { width: 1280, height
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
   page.on('console', (m) => {
     if (m.type() === 'error' && !m.text().includes('404')) consoleErrors.push(m.text().slice(0, 200));
+    if (m.type() === 'warning' && m.text().includes('道具响应异常')) consoleErrors.push(m.text().slice(0, 400));
   });
 
   /** 相对路径/查询串 → 完整 URL（`goto('?debug=1&save=t2')` 这种写法最常用）。 */

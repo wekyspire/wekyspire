@@ -4,6 +4,7 @@ import { DealDamageInstruction, GainShieldInstruction, previewDamage } from '../
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction } from '../instructions/turn.js';
+import { reactFx } from './cardKit.js';
 
 // 应用后伤害文本（content 攻击卡通用）：基数 + 攻击面板 + power，再经
 // previewDamage 干跑吃 PRE 修正（下次伤害翻倍、目标格挡免伤等）。
@@ -102,11 +103,12 @@ registerSkill({
   chantWeight: 1,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: PlayerTurnStartInstruction,
       phase: 'post',
       react: (instr, ctx) => {
         ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
   },

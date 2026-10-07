@@ -4,7 +4,8 @@
 //   enemy  萃取链（从敌方向抽出——「取」）
 //   around 纳气链（从战场两侧汇聚——「纳」）
 //   card   蓝瓶/兴奋剂链（从卡面升起——「饮」）
-import { cardFlare, arcProjectile, impactBurst } from './blocks.js';
+// params.pillar = true：落体改短光柱封顶（S 级回蓝件——重燃的「余烬复燃」排面）。
+import { cardFlare, arcProjectile, impactBurst, lightPillar } from './blocks.js';
 
 export const manaCast = {
   defaults: {
@@ -13,6 +14,8 @@ export const manaCast = {
     hot: [0.75, 0.95, 1.35],
     core: 0x6fa8ff,
     streams: 4, size: 4.2, projMs: 300, staggerMs: 65,
+    pillar: false,
+    fire: false,             // 火调行（重燃/余热/回响烈焰）：流股走 fireOrbShade 火面核
   },
   build(p) {
     const prm = { ...this.defaults, ...p };
@@ -52,7 +55,7 @@ export const manaCast = {
           await c.wait(i * prm.staggerMs);
           await arcProjectile(c, deps, {
             from, to,
-            color: prm.color, hot: prm.hot, size: prm.size,
+            color: prm.color, hot: prm.hot, size: prm.size, fire: prm.fire,
             ms: prm.projMs, arcH: 3.2, stretch: 2.2, lampIntensity: 0,
             trail: { color: prm.core, count: 1, ttl: 0.3, speed: 3, size: 0.65 },
           });
@@ -61,7 +64,13 @@ export const manaCast = {
       await flareJob;
       if (last) {
         await last.promise;
-        // 能量落体：胸口蓝色小爆（轻反馈不震屏）。等完再 notify——模板结束会结构化
+        if (prm.pillar) {
+          ctx.spawn((c) => lightPillar(c, deps, {
+            at: { x: to.x, y: to.y - 2, z: to.z }, color: prm.color, hot: prm.hot,
+            width: 3.0, height: 15, ms: 620,
+          }));
+        }
+        // 能量落体：胸口小爆（轻反馈不震屏）。等完再 notify——模板结束会结构化
         // 杀掉子协程，半途放行的闪光会被硬切
         await ctx.spawn((c) => impactBurst(c, deps, {
           at: to, color: prm.color, hot: prm.hot, burstColor: prm.core,

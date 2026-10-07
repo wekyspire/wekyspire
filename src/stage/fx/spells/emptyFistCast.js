@@ -48,19 +48,19 @@ export const emptyFistCast = {
       if (origin) {
         coreJob = ctx.spawn(async (c) => {
           const uProg = uniform(0.0);
-          const { quad, geo, mat } = spellQuad({
+          const { quad, release } = spellQuad({
             shade: projectileShade(uv(), uProg, linearColor([0.94, 0.96, 1.02]), linearColor([1.45, 1.48, 1.55])),
             width: 4.2, height: 4.2, name: 'spellFx:voidGather',
           });
           quad.position.set(origin.x, origin.y, (origin.z ?? 0) + 1);
           deps.scene.add(quad);
-          c.onKill(() => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); });
+          c.onKill(release);
           const st = { t: 0 };
           await c.tweenRaw(st, { t: 1 }, {
             durationMs: prm.inMs + prm.holdMs, ease: 'power2.in',
             onUpdate: () => { uProg.value = st.t * 10; const s = 1.3 - 0.85 * st.t; quad.scale.set(s, s, 1); },
           });
-          deps.scene.remove(quad); geo.dispose(); mat.dispose();   // 收进身体——无形
+          release();   // 收进身体——无形
         });
       }
 

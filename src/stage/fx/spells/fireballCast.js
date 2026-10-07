@@ -30,6 +30,7 @@ export const fireballCast = {
               track: unit,   // 抵达登记：伤害拍（fireburst tracked）await 真实落定
               color: prm.color, hot: prm.hot, size: prm.size,
               ms: prm.projMs, arcH: prm.arcH,
+              fire: true,
               trail: { color: 0xff7a2d, size: 1.0, ttl: 0.45 },
             });
           });

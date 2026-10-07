@@ -8,8 +8,8 @@
 //   rapid   连击（雨拳/乱拳/千手/万手）：目标身上 N 记小冲击环错峰连闪（贴身快打读感）
 //   utility 无打击对象时自动退化（肘击咏唱/抽牌引擎/发现类）——flare + 主角周身气浪
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { cardFlare, punchImpact, spellQuad, linearColor } from './blocks.js';
-import { projectileShade } from './shaders.js';
+import { cardFlare, punchImpact, spellQuad, linearColor, SPELL_DEBUG } from './blocks.js';
+import { qiGatherShade } from './shaders.js';
 import { uniform, uv } from 'three/tsl';
 
 export const fistCast = {
@@ -34,25 +34,29 @@ export const fistCast = {
 
       // 拳面气劲核（起手读感：聚气于拳）：原位膨胀 + 闪烁相位推进，收手自收
       const fistGlow = async (c, { size = 3.4, ms = 200, holdOk = false } = {}) => {
-        const uProg = uniform(0.0);
-        const { quad, geo, mat } = spellQuad({
-          shade: projectileShade(uv(), uProg, linearColor(prm.color), linearColor(prm.hot)),
+        const uPhase = uniform(0.0);
+        const uGather = uniform(0.0);
+        const { quad, release } = spellQuad({
+          shade: qiGatherShade(uv(), uPhase, uGather, linearColor(prm.color), linearColor(prm.hot)),
           width: size, height: size, name: 'spellFx:fistGather',
         });
         quad.position.set(origin.x, origin.y, (origin.z ?? 0) + 1);
         deps.scene.add(quad);
-        c.onKill(() => { deps.scene.remove(quad); geo.dispose(); mat.dispose(); });
-        if (holdOk && new URLSearchParams(location.search).get('spelldebug') === 'hold') {
-          uProg.value = 10; quad.scale.set(0.9, 0.9, 1);
+        c.onKill(release);
+        if (holdOk && SPELL_DEBUG === 'hold') {
+          uPhase.value = 6; uGather.value = 0.8; quad.scale.set(0.9, 0.9, 1);
           await c.wait(3000);
         } else {
           const st = { t: 0 };
           await c.tweenRaw(st, { t: 1 }, {
             durationMs: ms, ease: 'power2.in',
-            onUpdate: () => { uProg.value = st.t * 10; const s = 0.4 + 0.6 * st.t; quad.scale.set(s, s, 1); },
+            onUpdate: () => {
+              uPhase.value = st.t * 14; uGather.value = st.t;
+              const s = 0.4 + 0.6 * st.t; quad.scale.set(s, s, 1);
+            },
           });
         }
-        deps.scene.remove(quad); geo.dispose(); mat.dispose();
+        release();
       };
 
       // 目标冲击环（贴身命中的「拳到」读感）——伤害拍还有一记 punchImpact，
@@ -84,12 +88,10 @@ export const fistCast = {
       if (mode === 'rapid') {
         const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 200, scale: 1.3 });
         await fistGlow(ctx, { size: 2.8, ms: 150 });
-        const jobs = [];
-        for (const u of targets) {
-          for (let s = 0; s < prm.shots; s++) {
-            jobs.push(hitFlash(ctx, u, { scale: 0.55, ms: 140, delay: s * prm.staggerMs }));
-          }
-        }
+        // 连击预告只打首记（伤害拍逐段 punchImpact 才是连击主体——起手侧逐 shot
+        // 再闪一轮 = 双闪频闪噪音）
+        const jobs = targets.slice(0, 1).map((u) =>
+          hitFlash(ctx, u, { scale: 0.55, ms: 140 }));
         await Promise.all([flareJob, ...jobs]);
         notify();
         return;

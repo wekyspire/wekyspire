@@ -6,7 +6,7 @@
 // kind → 基础块映射在 runDamageBeat。语义源：体系 series（主）+ 卡名（方向变体）。
 // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送（每拍独立缩放伤害量）。
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { slashSweep, punchImpact, fireBurst, screenFlash, arcProjectile } from './blocks.js';
+import { slashSweep, punchImpact, fireBurst, screenFlash, arcProjectile, lampPulse } from './blocks.js';
 import { cartoonNova } from './cartoonNova.js';
 
 // 爆裂术大爆炸的去重表（defId → 上次爆心演出的 performance.now()）
@@ -29,16 +29,12 @@ async function novaBlast(ctx, deps, { at, scale = 1, spread = 0 }) {
   });
   // 白闪（一瞬）+ 灯爆 + 震屏（重击 + 短促持续微震）
   ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.5, ms: 240, color: 0xffe0b0 }));
-  const lamp = deps.cast?.get?.('light:fx0') ?? null;
-  if (lamp) {
-    lamp.color.setRGB(1.0, 0.62, 0.25);
-    lamp.position.set(at.x, at.y, (at.z ?? 0) + 4);
-    ctx.spawn(async (c) => {
-      await c.tweenRaw(lamp, { intensity: 2600 * scale }, { durationMs: 90, ease: 'power2.out' });
-      await c.tweenRaw(lamp, { intensity: 0 }, { durationMs: 620, ease: 'power2.in' });
+  ctx.spawn(async (c) => {
+    await lampPulse(c, deps, {
+      name: 'light:fx0', at: { x: at.x, y: at.y, z: (at.z ?? 0) + 4 },
+      color: [1.0, 0.62, 0.25], peak: 2600 * scale, attackMs: 90, decayMs: 620,
     });
-    ctx.onKill(() => { lamp.intensity = 0; });
-  }
+  });
   deps.shake?.impulse?.(2.4 * scale);
   deps.shake?.sustain?.(0.8);
   ctx.onKill(() => deps.shake?.sustain?.(0));
@@ -272,13 +268,13 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
     }
     case 'ignition': {
       if (fx.proj === 'owned') {
-        // 火花乱射：本拍自持投射物（随机弧+随机时效），从主角手上弹出，抵达才爆；
-        // 落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发
+        // 火花乱射：本拍自持投射物（窜天猴——飞行中随机甩尾，从主角手上弹出，
+        // 抵达才爆）；落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发
         await arcProjectile(ctx, deps, {
           from: deps.playerAnchor?.() ?? { x: 0, y: 5, z: 0 },
           to: chest,
           color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55], size: 2.0,
-          ms: 170, arcH: 2.5, arcJitter: 1.2, stretch: 2.0, lampIntensity: 0,
+          ms: 200, arcH: 2.5, arcJitter: 1.2, stretch: 2.0, lampIntensity: 0, darting: 0.9, fire: true,
           trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.6 },
         });
         projSync?.arrived?.();
@@ -287,11 +283,12 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
       }
       await fireBurst(ctx, deps, {
         at: feet,
-        scale: Math.max(1.0, fireScaleFor(dealt) * 0.9),
+        // 引燃是「点」不是「爆」：下限 0.72（旧 1.0 会让 0 伤点种也烧出火球级）
+        scale: Math.max(0.72, fireScaleFor(dealt) * 0.9),
         ms: 420,
         // 引燃走橙金调（深红会与受击红闪同色系，火属辨识度被稀释——glm-flash 第七轮）
         color: [1.0, 0.55, 0.20], ember: [1.0, 0.25, 0.06],
-        sparkCount: 12, sparkSpeed: 13,
+        sparkCount: 10, sparkSpeed: 13,
         linger: { count: 8, speed: 4, ttl: 1.6, size: 0.6, gravity: -3 },
         lampIntensity: 550,
       });

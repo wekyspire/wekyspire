@@ -305,6 +305,7 @@ function pufferToadDef(id, ramped) {
       const amount = i >= rampEnd ? 18 : (i === rampEnd - 1 ? 10 : 7);
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: amount + unit.getStat('attack'),
+        tags: i >= rampEnd ? ['heavy'] : [],   // 重击档：敌方命中演出（enemyHitFx）
       }));
     },
     getIntention: (unit) => {
@@ -392,6 +393,7 @@ registerEnemy({
     if (unit.actionIndex === 1) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 13 + unit.getStat('attack'),
+        tags: ['heavy'],   // 破茧重击：敌方命中演出（enemyHitFx）
       }));
       return;
     }
@@ -534,6 +536,7 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 16 + unit.getStat('attack'),
+        tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
       }));
     }
   },

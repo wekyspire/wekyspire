@@ -4,6 +4,7 @@
 // 床尾两片短幔、两侧束垂片微外斜。变体走 build(opts)：幔垂度 drape（0.3 提起 ~ 0.95 长垂）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'cloth', 'quarters'],
   footprint: { x: 12, z: 6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ drape = 0.65, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bedFourPoster');

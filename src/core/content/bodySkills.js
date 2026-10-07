@@ -313,6 +313,7 @@ function registerElbow({ id, name, tier, damage, shield = 0, promotesTo = null, 
           const target = randomAliveEnemy(sctx);
           if (target) dealDamage(sctx, attackAmount(sctx, damage), { target, tags: ['elbow'] });
           if (shield > 0) gainShield(sctx, shield);
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
         },
       }],
     },
@@ -441,6 +442,7 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, pro
           sctx.self.chantCount = (sctx.self.chantCount ?? 0) + 1;
           if (sctx.self.chantCount % every === 0) {
             ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
+            reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
           }
         },
       }],
@@ -471,13 +473,15 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, p
       subscriptions: (sctx) => [{
         when: DrawCardsInstruction, phase: 'post',
         react: (instr) => {
-          for (let i = 0; i < (instr.result?.drawn?.length ?? 0); i++) {
+          const drawn = instr.result?.drawn?.length ?? 0;
+          for (let i = 0; i < drawn; i++) {
             const target = randomAliveEnemy(sctx);
             if (!target) break; // 敌已死光（收尾期）：伤害落空
             // 附级伤害：被动触发的抽卡伤害不是攻击——不吃任何加成（武术姿态×精通
             // =一回合上百爆炸伤的病灶）、不上燃、不触发受击响应。
             dealDamage(sctx, attackAmount(sctx, damage), { target, type: 'minor' });
           }
+          if (drawn > 0) reactFx(sctx, sctx.self, 'benefit', { variant: 'proc', magnitude: drawn });
         },
       }],
     },
@@ -643,8 +647,10 @@ const fistPressCard = ({ id, tier, per, promotesTo = null }) => registerSkill({
     return true;
   },
   describe: () => `6伤害；本回合每打出过1/card{instantStrike}，+${per}`,
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 6 + instantStrikesThisTurn(sctx) * per)}`
-    + `（6+${instantStrikesThisTurn(sctx) * per}）`,
+  battleDescribe: (sctx) => {
+    const n = instantStrikesThisTurn(sctx);
+    return `${resolvedDamageText(sctx, 6 + n * per)}；本回合每打出过1/card{instantStrike}，+${per}（已打出${n}）`;
+  },
 });
 fistPressCard({ id: 'fistPressC', tier: 'C', per: 3, promotesTo: 'fistPressB' });
 fistPressCard({ id: 'fistPressB', tier: 'B', per: 4, promotesTo: 'fistPressA' });
@@ -720,6 +726,7 @@ function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = nu
           sctx.self.discardCount = (sctx.self.discardCount ?? 0) + 1;
           if (sctx.self.discardCount % every === 0) {
             ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1 }), instr);
+            reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
           }
         },
       }],

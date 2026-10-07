@@ -22,6 +22,8 @@ import { buildFloor } from './floor.js';
 import { generateTerrain, buildTerrain } from './terrain.js';
 import { createLighting } from './lighting.js';
 import { getRecipe, mergeRecipeOverride } from './presets.js';
+import { createPropPhysics } from '../../fx/phys/propPhysics.js';
+import { createCombustion } from '../../fx/phys/combustion.js';
 
 // ---- L0 功能分区（地块红线法的带状分区；密度/格宽由配方 bandDensities 供给）----
 const BANDS = {
@@ -397,6 +399,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
 
   // ---- L1 地块红线：边缘带/中景/前景逐格撒布 ----
   const plotRng = createRng(`${seed}:${recipeId}:plot`);
+  let scatterNotifBudget = 3;   // 撒布件交互激活预算（见撒布段注释）
   const normalPool = poolByPlace('prop', recipe.scatter.tags)
     .concat(poolByPlace('smallWall', recipe.scatter.tags));
   const bigPool = (recipe.bigSilhouettes || []).map(id => getProp(id));
@@ -529,7 +532,18 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
         // 面向战场中轴（+z 为资产观众侧）；斜坡带 tilt（垂直坡面法线躺贴）
         const ry = Math.atan2(0 - px, -10 - pz);
         const tilt = terra.tiltAt(px, pz) || {};
-        track(def, obj, { x: px, y: ty(px, pz), z: pz, ry, scale: isc, ...tilt });
+        // 撒布件限流激活（2026-10-06 场景交互）：带 behaviors 的撒布件按预算随机
+        // 抽签退出静态合批、登记 notifiable（冲击物理/燃烧才生效）。预算 = 每房 3 件
+        // ——合批代价可控，且每间房的「可炸之物」位置随种子漂移（布景不能全是炸药）
+        const scatNotif = (def.behaviors?.length ?? 0) > 0
+          && scatterNotifBudget > 0 && plotRng() < 0.4;
+        if (scatNotif) {
+          scatterNotifBudget -= 1;
+          track(def, obj, { x: px, y: ty(px, pz), z: pz, ry, scale: isc, ...tilt, root: liveRoot });
+          pushNotifiable(def.id, obj, def.behaviors);
+        } else {
+          track(def, obj, { x: px, y: ty(px, pz), z: pz, ry, scale: isc, ...tilt });
+        }
         claim(px, pz, hx, hz);
         collectAuxAnchors();
         // 堆积感：边缘带主物旁补一个小件货堆（桶挨着箱、筐挨着架）；坡/缝不补
@@ -948,6 +962,10 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     lighting.update(dt, particles, camPos);
     if (camPos) skydome.updateSkydome(camPos);
     if (moonDust) moonDust.update(dt, lighting.moonlight);
+    // 场景交互世界步进（物理刚体 + 燃烧状态机/材质 uniform）
+    propPhys.step(dt);
+    physT += dt;
+    combust.step(dt, physT);
   }
 
   function sampleStandeeTint(pos, out = scratch) {
@@ -968,8 +986,19 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     return out;
   }
 
+  // ---- 场景交互世界（冲击物理 + 燃烧，2026-10-06）：挂 group.userData 供
+  // behaviors（B.physBody/B.combustible）上溯寻址；update 每帧驱动。粒子池由
+  // 舞台装配后 bindPool 注入（场景层不知道舞台） ----
+  const propPhys = createPropPhysics({ heightAt: (x, z) => terra.heightAt(x, z) }).bind(group);
+  const combust = createCombustion();
+  group.userData.propPhys = propPhys;
+  group.userData.combust = combust;
+  let physT = 0;
+
   return {
     group,
+    propPhys,       // 物理世界（dispose 用）
+    combust,        // 燃烧世界（bindPool/dispose 用）
     torches: lighting.torches,
     placements,
     interactives,   // 可动组件登记（休息房的机器等）：{ object, parts, kind, x/z/ry }

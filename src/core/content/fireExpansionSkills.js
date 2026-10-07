@@ -14,7 +14,7 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import {
   enemyTarget, dealDamage, attackDamage, addEffect, addCard, drawCards, resolvedDamageText,
-  randomAliveEnemy,
+  randomAliveEnemy, reactFx,
 } from './cardKit.js';
 
 // ==== 多段链（火花 C/B/A + 终极火花 S）：每段独立结算，随机目标 ====
@@ -228,8 +228,10 @@ function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
       return true;
     },
     describe: () => `7伤害；正在/effect{燃烧}，+${bonus}`,
-    battleDescribe: (sctx) => resolvedDamageText(sctx,
-      sctx.player.getEffectStacks('burn') > 0 ? 7 + bonus : 7),
+    battleDescribe: (sctx) => {
+      const burning = sctx.player.getEffectStacks('burn') > 0;
+      return `${resolvedDamageText(sctx, burning ? 7 + bonus : 7)}；正在/effect{燃烧}，+${bonus}${burning ? '（燃烧中）' : ''}`;
+    },
   });
 }
 flameEdgeCard({ id: 'redHotBlade', name: '红热焰刃', tier: 'C', bonus: 7, promotesTo: 'goldHotBlade' });
@@ -254,9 +256,9 @@ function heatWaveCard({ id, tier, bonus, promotesTo }) {
     describe: () => `8伤害；目标/effect{燃烧}不少于5层时，+${bonus}`,
     battleDescribe: (sctx) => {
       const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-      return stacks >= 5
-        ? resolvedDamageText(sctx, 8 + bonus)
-        : `${resolvedDamageText(sctx, 8)}（燃${stacks}/5）`;
+      const hot = stacks >= 5;
+      return `${resolvedDamageText(sctx, hot ? 8 + bonus : 8)}`
+        + `；目标/effect{燃烧}不少于5层时，+${bonus}（燃${stacks}/5${hot ? '，已生效' : ''}）`;
     },
   });
 }
@@ -279,7 +281,7 @@ function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
       return true;
     },
     describe: () => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
-    battleDescribe: (sctx) => `抽1（坟墓${sctx.battleState.zones.burnt.length}张）`,
+    battleDescribe: (sctx) => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
 ashRakeCard({ id: 'ashRakeC', tier: 'C', threshold: 3, extraDraw: 1, promotesTo: 'ashRakeB' });
@@ -309,6 +311,7 @@ function magmaArmorCard({ id, tier, burn, promotesTo }) {
           ctx.kernel.submitInstruction(new AddEffectInstruction({
             target: instr.source, effectId: 'burn', stacks: burn,
           }), instr);
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
         },
       }],
     },

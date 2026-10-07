@@ -488,8 +488,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   // ---- 场景式休息房（第一间 = 赌厅 casino）----
   // 全屏选卡/选遗物/获得物特写都画在**当前活动舞台**的 uiScene 上（只有活动舞台会被渲染）：
-  // 房间场景打开时归 RoomStage，否则归塔楼层 MapStage。两个舞台同名同义的接口即此契约。
-  const panelStage = () => roomStage ?? mapStage;
+  // 战斗/战后奖励期归 BattleStage，房间场景打开时归 RoomStage，否则归塔楼层 MapStage
+  // （与 getFxServices 同序）。⚠ 不含 battle 曾是 bug：Boss 遗物在 finishBattle 即入账
+  // （gameStage 已是 'reward'），特写差分播到未渲染的 mapStage 上被无声吞掉。
+  const panelStage = () => battleStage ?? roomStage ?? mapStage;
   // gameStage 落到 'room' 且该房类型有配方（restRecipeFor）时，用**幕间黑幕**切到房间场景
   // （RoomStage）；没有配方的房间类型继续走塔楼层 + 占位面板，不切场景。
   // 离开由玩家**主动**发起（房间右下角「继续前进」箭头）→ 同样走黑幕回塔楼。

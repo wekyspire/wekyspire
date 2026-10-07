@@ -79,12 +79,10 @@ const IS_DEV = import.meta.env.DEV; // 构建期常量：故事/调试两开关�
 
 // 模式选择持久化：回主菜单后复选框保持上次选择；默认肉鸽（故事模式未开放）
 const isStory = ref(settings.menuStoryMode === true);
-// 开局路线（D2）：持久化到 settings，默认体修。
-// 木/空灵脉尚未开发完成，部署版屏蔽（IS_DEV 构建期常量）；持久化里残留的旧选择落回体修
-const VISIBLE_ROUTE_IDS = IS_DEV ? ROUTE_IDS : ROUTE_IDS.filter(id => id !== 'wood' && id !== 'air');
-const route = ref(VISIBLE_ROUTE_IDS.includes(settings.menuRoute) ? settings.menuRoute : 'body');
-const ROUTE_COLORS = { body: '#b8894a', fire: '#e85a5a', wood: '#4aa56e', air: '#5aa2e8' };
-const routeList = VISIBLE_ROUTE_IDS.map(id => ({ id, name: ROUTES[id].name, color: ROUTE_COLORS[id] }));
+// 开局路线（D2）：持久化到 settings，默认体修。持久化里残留的旧选择（如已移除的路线）落回体修
+const route = ref(ROUTE_IDS.includes(settings.menuRoute) ? settings.menuRoute : 'body');
+const ROUTE_COLORS = { body: '#b8894a', fire: '#e85a5a' };
+const routeList = ROUTE_IDS.map(id => ({ id, name: ROUTES[id].name, color: ROUTE_COLORS[id] }));
 const routeBlurb = computed(() => ROUTES[route.value]?.blurb ?? '');
 watch(route, (v) => { settings.menuRoute = v; persistSettings(); });
 // 「继续」的优先来源：调试模式开着就先看 debug 槽（各槽互不覆盖，见 saves.modeOf）

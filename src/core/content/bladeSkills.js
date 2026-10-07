@@ -37,7 +37,7 @@ import {
   damageLandedCount,
   drawCards, addCard, discardCard, burnCard, moveCardTo,
   leaveHandAtTurnEnd, requestHandSelection, requestDeckSelection,
-  buildCardSelectionRequest, selected, isBladeCard,
+  buildCardSelectionRequest, selected, isBladeCard, reactFx,
 } from './cardKit.js';
 
 // ==== 共享小工具 ===============================================================
@@ -475,7 +475,7 @@ registerSkill({
     return true;
   },
   describe: () => '15伤害，弃左侧牌',
-  battleDescribe: (sctx) => resolvedDamageText(sctx, 15),
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 15)}，弃左侧牌`,
 });
 
 // 绝灭飞刀（A，设计稿未写费用/冷却 → 0费无冷却）：17伤害，焚毁两侧牌，
@@ -616,6 +616,7 @@ function honeBladeCard({ id, tier, bonus, chantWeight = 1, promotesTo = null }) 
               if (card.uniqueID !== sctx.self.uniqueID && isBladeCard(card)) gainPower(sctx, card, bonus);
             }
           }
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
         },
       }],
     },
@@ -642,6 +643,7 @@ function forgingBladeCard({ id, tier, weight, bonus, promotesTo = null }) {
         when: UseSkillInstruction, phase: 'post',
         filter: (instr) => instr.skill.uniqueID !== sctx.self.uniqueID && isBladeCard(instr.skill),
         react: () => {
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
           for (const zone of ['hand', 'deck']) {
             for (const card of sctx.battleState.zones[zone]) {
               if (isBladeCard(card)) gainPower(sctx, card, bonus);
@@ -852,10 +854,13 @@ const bladeArtCard = (id, name, tier, n) => registerSkill({
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      react: (instr, ctx) => ctx.kernel.submitInstruction(
-        new ChantDrawDiscardInstruction({ count: n, reason: `${name}：选${n}张手牌丢弃` }), instr),
+      react: (instr, ctx) => {
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+        ctx.kernel.submitInstruction(
+          new ChantDrawDiscardInstruction({ count: n, reason: `${name}：选${n}张手牌丢弃` }), instr);
+      },
     }],
   },
   describe: () => `抽${n}牌，选${n}张手牌丢弃`,

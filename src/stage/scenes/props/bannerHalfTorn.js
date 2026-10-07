@@ -6,6 +6,7 @@
 // 每幅撕裂数 strips（2~4）/ 缺角侧 chipSide（right/left/none）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 单幅残旗：旗身+压暗饰带+菱形徽+底缘撕裂窄片（局部原点=旗身中心）
@@ -45,7 +46,7 @@ export default {
   place: 'wallDecor',
   band: 'mid',
   tags: ['cloth', 'barrack'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ hue = 'red', strips = 3, chipSide = 'right', rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bannerHalfTorn');

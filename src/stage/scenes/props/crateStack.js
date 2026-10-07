@@ -3,6 +3,7 @@
 // 原点=底面中心（y=0 落地）；变体走 build(opts)：上箱歪斜角/转向角/大小箱比例。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K } from '../kit/index.js';
 
 // 单只箱（简板箱体 + 出檐盖板 + 板缝 + 四角包铁；大小两箱共用）
@@ -29,7 +30,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container'],
   footprint: { x: 3.6, z: 3.6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ tilt = 0.1, yaw = 0.42, ratio = 0.72, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('crateStack');

@@ -9,6 +9,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveUnitAuras } from '../../fx/recipes.js';
 import { AuraHost } from '../../fx/aura.js';
+import { warmSpellFx } from '../../fx/spells/index.js';
 import { attachOrbs } from '../../fx/orbs.js';
 import { getEnemyDefinition } from '../../../core/enemies/registry.js';
 import { unitHeightFactor, STANDEE_BASE_HEIGHT } from '../../art/unitArt.js';
@@ -156,6 +157,14 @@ export const syncBeats = {
       const r = this._sm?._renderer;
       const warm = r?.compileAsync?.(this.scene, this._sm.camera);
       if (!warm) r?.compile?.(this.scene, this._sm.camera);
+      // 施术面片预热（2026-10-06）：按卡组 defId 建代表性 shade 变体并编译——
+      // WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法面片黑一拍（charBurn 同款）
+      try {
+        warmSpellFx((proj.zones?.deck ?? []).map(c => c.defId).filter(Boolean),
+          { renderer: r, camera: this._sm.camera });
+      } catch (err) {
+        console.warn('[spellFx] 开场预热异常（忽略）：', err);
+      }
     }
     for (const [id, obj] of this._units) {
       if (!seen.has(id)) {

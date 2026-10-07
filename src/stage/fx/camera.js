@@ -32,6 +32,7 @@ export class CameraDirector {
     // 权威取景：commit() 按「pose + Σ 偏移」落笔，外部写入者移动相机时收回同步
     this._pose = { position: cam.position.clone(), fov: cam.fov };
     this._offsets = new Map();   // id -> Vector3 叠加偏移通道
+    this._fovOffsets = new Map(); // id -> 度（FOV 偏移通道，见 setFovOffset）
     this._sum = new THREE.Vector3();   // 本帧合成后的偏移（commit 写相机用）
     this._applied = new THREE.Vector3(); // 上一帧写到相机上的偏移（跟随相机按增量还原）
     this._scratch = new THREE.Vector3(); // commit/_syncFrom 的临时量（免每帧分配）
@@ -151,6 +152,18 @@ export class CameraDirector {
   /** 本帧合成偏移（commit 求和后缓存；只读语义，别改）。 */
   get offsetSum() { return this._sum; }
 
+  /**
+   * FOV 偏移通道（2026-10-06 与 setOffset 对称）：渲染期 fov = 权威取景 fov +
+   * Σ 各通道（度）。场景级缓变（sceneMood.fovAdd）走这里——不碰 _pose.fov，
+   * 运镜/flyHome 照旧拥有权威值，多路写入者可加和。
+   */
+  setFovOffset(id, deg = 0) {
+    if (deg === 0) { this._fovOffsets.delete(id); return; }
+    this._fovOffsets.set(id, deg);
+  }
+
+  clearFovOffset(id) { return this._fovOffsets.delete(id); }
+
   /** 直接改权威注视点（override 控制器要做「镜头自己晃一下视线」时用）。
    *  只在导演接管期间有意义：无人运镜/无偏移时下一帧就被相机现状收回。 */
   setLookAt(x, y, z) {
@@ -206,7 +219,7 @@ export class CameraDirector {
     const cam = this._sm.camera;
     const sum = this._sum.set(0, 0, 0);
     for (const v of this._offsets.values()) sum.add(v);
-    const engaged = !!this._flight || !!this.current || sum.lengthSq() > 0;
+    const engaged = !!this._flight || !!this.current || sum.lengthSq() > 0 || this._fovOffsets.size > 0;
     if (!engaged && !this._engaged) { this._syncFrom(cam); return; }
     // UI 正交相机 = 跟随者：导演不管它的取景，只把偏移**增量**转嫁过去
     // （双 pass 同步位移才是真·全屏震；退场/收尾时 sum=0，增量正好把它抹平）
@@ -216,8 +229,12 @@ export class CameraDirector {
     cam.position.copy(this._pose.position).add(sum);
     if (this._lookDirty || this._flight) cam.lookAt(this._lookAt);
     this._lookDirty = false;
-    if (cam.fov !== this._pose.fov) {
-      cam.fov = this._pose.fov;
+    // fov = 权威取景 + Σ FOV 偏移通道（sceneMood 等场景级缓变）
+    let fovAdd = 0;
+    for (const v of this._fovOffsets.values()) fovAdd += v;
+    const fov = this._pose.fov + fovAdd;
+    if (cam.fov !== fov) {
+      cam.fov = fov;
       cam.updateProjectionMatrix();
     }
     this._engaged = engaged;
@@ -228,6 +245,7 @@ export class CameraDirector {
     const ui = this._sm.uiCamera;
     if (ui && this._applied.lengthSq() > 0) ui.position.sub(this._applied);
     this._offsets.clear();
+    this._fovOffsets.clear();
     this._sum.set(0, 0, 0);
     this._applied.set(0, 0, 0);
     this._engaged = false;

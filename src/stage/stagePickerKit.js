@@ -34,7 +34,7 @@ import { ItemShowcaseObject } from './objects/ItemShowcaseObject.js';
 import { CardObject } from './objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from './objects/cardMetrics.js';
 import { renderRichTextBlock } from './richtext/texture.js';
-import { playCardGrantFlight } from './cardGrantFlight.js';
+import { grantCardFlight } from './cardGrantFlight.js';
 import { playCardUpgradeFlight } from './cardUpgradeFlight.js';
 import { playCardBurnFlight } from './cardBurnFlight.js';
 import { nextCardSpot } from './cardSpot.js';
@@ -473,15 +473,12 @@ export function createStagePickerKit({
       picker.confirmHook = (keys) => {
         const entry = picker.takeEntry(keys[0]);
         picker.close();
-        grantBusy = true;
-        const done = () => { grantBusy = false; confirmFn?.(keys); };
-        if (!entry) { done(); return; }
-        scene()?.add(entry.obj);
-        playCardGrantFlight({
-          card: entry.obj,
+        grantCardFlight({
+          entry, add: (c) => scene()?.add(c),
           target: typeof getAnchor === 'function' ? getAnchor() : null,
           sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
-          onDone: done,
+          onBusy: (b) => { grantBusy = b; },
+          onDone: () => confirmFn?.(keys),
         });
       };
       return true;
@@ -512,15 +509,12 @@ export function createStagePickerKit({
       picker.confirmHook = (keys) => {
         const entry = picker.takeEntry(keys[0]);   // 摘下被选中的那张（不随 close 释放）
         picker.close();
-        grantBusy = true;
-        const done = () => { grantBusy = false; confirmFn?.(keys); };
-        if (!entry) { done(); return; }
-        scene()?.add(entry.obj);   // picker 组在原点：局部坐标即世界坐标
-        playCardGrantFlight({
-          card: entry.obj,
+        grantCardFlight({
+          entry, add: (c) => scene()?.add(c),   // picker 组在原点：局部坐标即世界坐标
           target: typeof getAnchor === 'function' ? getAnchor() : null,
           sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
-          onDone: done,
+          onBusy: (b) => { grantBusy = b; },
+          onDone: () => confirmFn?.(keys),
         });
       };
       return true;
@@ -584,15 +578,12 @@ export function createStagePickerKit({
         picker.confirmHook = (keys) => {
           const entry = picker.takeEntry(keys[0]);
           picker.close();
-          grantBusy = true;
-          const done = () => { grantBusy = false; confirmFn?.(keys); };
-          if (!entry) { done(); return; }
-          scene()?.add(entry.obj);
-          playCardGrantFlight({
-            card: entry.obj,
+          grantCardFlight({
+            entry, add: (c) => scene()?.add(c),
             target: typeof getAnchor === 'function' ? getAnchor() : null,
             sequencer: typeof getSequencer === 'function' ? getSequencer() : null,
-            onDone: done,
+            onBusy: (b) => { grantBusy = b; },
+            onDone: () => confirmFn?.(keys),
           });
         };
         return true;
@@ -740,6 +731,7 @@ export function createStagePickerKit({
      */
     dismissModals() {
       if (showcase?.busy) showcase.dismiss('dismiss');
+      showcase?.clearPending?.();   // 挂起件随切幕弃掉（舞台将死，不得重放）
       if (cardPicker?.opened) cardPicker.close();
       if (relicPicker?.opened) relicPicker.close();
     },

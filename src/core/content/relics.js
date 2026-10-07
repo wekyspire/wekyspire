@@ -24,8 +24,8 @@ import { isBossFloor } from '../run/runFlow.js';
 //   onAcquire(run)  拾起时（一次性）；gainMaxHp 同时抬基础值与当前生命
 //   runModifiers(p) 或 {字段: 增量}：run 级数值修正——**从 baseStats 重算**，不增量累加
 //   battleModifiers(p) 或 {字段: 增量}：**本场战斗**修正（生命周期 = 一场战斗；由 PreBattle
-//     折入同一次重算，随 battleState 消失，故不需要任何回滚）。战中会变的修正（海神戟第 4
-//     回合撤销）用 prep.applyBattleModifier(ctx, 字段, 增量) 改。
+//     折入同一次重算，随 battleState 消失，故不需要任何回滚）。战中会变的修正（霜雪胸针
+//     触发时防御 +3）用 prep.applyBattleModifier(ctx, 字段, 增量) 改。
 //   onBattleVictory(run, battle)：战斗**胜利**后的 run 层结算（run 级资源只在这里改——
 //     战斗内订阅不得直写 run 状态）。
 //   onCampRest(run) 营地休整时（非槽位式的常驻钩子）
@@ -200,61 +200,6 @@ registerRelic({
         c.kernel.submitInstruction(new AddEffectInstruction({ target: u, effectId: 'burn', stacks: 5 }), instr);
       }
     },
-  }],
-});
-
-// 木灵脉专属（门禁与卡包同一口径）
-registerRelic({
-  id: 'poisonIvyVial', name: '毒藤瓶', rarity: 'C', cost: 1, requires: { leino: 'wood', min: 1 },
-  description: '战斗开始时，赋予所有敌人中毒 2。',
-  flavor: '它记得每一只碰过它的手',
-  // 对标埃文石（A·群敌虚弱1）：群毒2 = 每敌 3 点延迟伤害，C 档一口闷
-  onBattleStart(ctx) {
-    for (const e of ctx.battleState.enemies) {
-      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: e, effectId: 'poison', stacks: 2 }));
-    }
-  },
-});
-
-registerRelic({
-  id: 'hardwoodBadge', name: '硬木盾徽', rarity: 'B', cost: 1, requires: { leino: 'wood', min: 1 },
-  description: '战斗开始时，获得荆棘 2。',
-  flavor: '别用拳头打招呼',
-  // 对标针鼠荆棘3（一次性）：常驻荆棘2，反伤随受击次数兑现
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'thorns', stacks: 2,
-    }));
-  },
-});
-
-// 空灵脉专属（闪避类效果必须挂 T1 回合开始 POST——战斗开始直接上会被蒸发，见 abilities.js airVein）
-registerRelic({
-  id: 'windChime', name: '风铃', rarity: 'A', cost: 1, requires: { leino: 'air', min: 1 },
-  description: '第一回合开始时，获得闪避 1。',
-  flavor: '如果没有风，它还会响吗？',
-  subscriptions: () => [{
-    when: TurnStartInstruction,
-    phase: 'post',
-    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
-    react: (instr, c) => {
-      c.kernel.submitInstruction(new AddEffectInstruction({
-        target: c.player, effectId: 'dodge', stacks: 1,
-      }), instr);
-    },
-  }],
-});
-
-registerRelic({
-  id: 'willowFluff', name: '柳絮', rarity: 'C', cost: 1, requires: { leino: 'air', min: 1 },
-  description: '第一回合开始时，抽 1 张牌。',
-  flavor: '轻若无物',
-  subscriptions: () => [{
-    when: TurnStartInstruction,
-    phase: 'post',
-    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 1,
-    react: (instr, c) => c.kernel.submitInstruction(
-      new DrawCardsInstruction({ count: 1, reason: '柳絮' }), instr),
   }],
 });
 
@@ -481,13 +426,6 @@ registerRelic({
 });
 
 registerRelic({
-  id: 'tianqingStone', name: '天青石', rarity: 'A', cost: 2, requires: { leino: 'air', min: 2 },
-  description: '行动力上限 +1。',
-  flavor: '每个空系灵御的梦中宝石',
-  runModifiers: { maxActionPoints: 1 },
-});
-
-registerRelic({
   id: 'implantJar', name: '植入式魏启罐', rarity: 'C', cost: 1, requires: { anyLeino: 1 },
   description: '战斗开始时，获得 1 魏启上限（但不恢复魏启）。',
   flavor: '禁忌的人体实验，而且还没开发完全',
@@ -555,25 +493,6 @@ registerRelic({
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 2, reason: 'relic' }));
   },
-});
-
-registerRelic({
-  id: 'seaGodTrident', name: '海神戟', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗的前 3 个回合，你的手牌上限 -1；第 4 回合开始时，获得力量 7。',
-  flavor: '没人抡得动它',
-  onBattleStart(ctx) {
-    applyBattleModifier(ctx, 'maxHandSize', -1);
-  },
-  subscriptions: () => [{
-    when: TurnStartInstruction,
-    phase: 'post',
-    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 4,
-    react: (instr, c) => {
-      applyBattleModifier(c, 'maxHandSize', 1); // 撤销 -1：第 4 回合起手牌上限回归
-      c.kernel.submitInstruction(
-        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 7 }), instr);
-    },
-  }],
 });
 
 // ---- 回合节奏 / 资源钩子 ----
@@ -722,7 +641,7 @@ registerRelic({
   onBattleVictory: (run) => { run.player.money += 4; },
 });
 
-// ---- 生成衍生牌（RELICS.md 第二批；四张牌只由遗物生成，不进任何卡包）----
+// ---- 生成衍生牌（RELICS.md；六张牌只由遗物生成，不进任何卡包）----
 
 registerRelic({
   id: 'aronaIII', name: '阿罗那 III', rarity: 'C', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
@@ -757,6 +676,27 @@ registerRelic({
   flavor: '名字很不错，威力很可观',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));
+  },
+});
+
+// 戟：稿未标稀有度，按同槽位旧件（海神戟）记 A。〈挥舞〉：S 级 4AP，101伤害，纯净1。
+registerRelic({
+  id: 'halberd', name: '戟', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
+  description: '战斗开始时，将 1 张/card{greatSweep}洗入牌库。',
+  flavor: '应该没人抡得动它',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'greatSweep', index: 'random' }));
+  },
+});
+
+// 鸟羽：无稀有度（特殊遗物），仅事件获得（授予事件未实装）。
+// 〈盗取时间〉：S 级 3AP，结束回合并立刻开始你的新一回合（跳过一次敌方回合）。
+registerRelic({
+  id: 'birdFeather', name: '鸟羽', cost: 1, acquisition: ['event'],
+  description: '战斗开始时，将 1 张/card{stealTime}插入牌库底。',
+  flavor: '神鸟穿梭于光阴之间',
+  onBattleStart(ctx) {
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'stealTime' }));
   },
 });
 

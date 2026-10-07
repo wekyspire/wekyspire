@@ -3,6 +3,7 @@
 // 变体走 build(opts)：匣长 len / 封条数 battens / 火漆印 seal。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container', 'barrack'],
   footprint: { x: 7.5, z: 2.3 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ len = 7, battens = 3, seal = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('crateLong');

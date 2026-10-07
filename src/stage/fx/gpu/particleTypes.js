@@ -46,6 +46,7 @@ export function defineParticleType(desc = {}) {
   const render = {
     size: 0.5, sizeEndK: 0.4, color: [1, 1, 1], colorEnd: null, alpha: 1, heat: 1,
     ageHeat: 0, // 随年龄衰减的亮度增益（燃烧火星类「新鲜更亮」用；0 = 关）
+    softness: 1, // sprite 径向衰减指数（1 = 池缺省平底+边沿衰减；>1 = 中心亮缘更虚）
     ...(desc.render || {}),
   };
   if (!render.colorEnd) render.colorEnd = [...render.color];

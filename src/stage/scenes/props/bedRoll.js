@@ -4,6 +4,7 @@
 // 变体走 build(opts)：unroll 卷开度（0.5 收拢 ~ 1.3 摊开）；rng 驱动确定性。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   mount: 'floor',
   tags: ['cloth', 'quarters'],
   footprint: { x: 3.6, z: 2.0 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ unroll = 1, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bedRoll');

@@ -4,6 +4,7 @@
 // 变体走 build(opts)：len 凳长（7~9）/strut 有无中撑；rng 驱动确定性。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture', 'generic'],
   footprint: { x: 8.4, z: 2.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ len = 8, strut = 1, rng } = {}) {
     const g = new THREE.Group();
     const L = Math.min(Math.max(len, 7), 9);

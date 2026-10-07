@@ -93,7 +93,10 @@ function flameHealSkill({ id, name, tier, base, per, promotesTo = null }) {
       return true;
     },
     describe: () => `回复${base}生命；每层/effect{燃烧}，+${per}`,
-    battleDescribe: (sctx) => `回复${amountOf(sctx)}生命`,
+    battleDescribe: (sctx) => {
+      const burn = sctx.player.getEffectStacks('burn');
+      return `回复${amountOf(sctx)}生命；每层/effect{燃烧}，+${per}（燃烧${burn}）`;
+    },
   });
 }
 
@@ -152,7 +155,7 @@ const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => regi
   promotesTo,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: ApplyDamageInstruction, phase: 'post',
       filter: (instr) => instr.target.side === 'enemy'
         && instr.result?.targetDead === true
@@ -160,10 +163,12 @@ const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => regi
         && instr.target.getEffectStacks('burn') > 0,
       react: (instr, ctx) => {
         const stacks = instr.target.getEffectStacks('burn');
-        for (const e of aliveEnemies(ctx.battleState)) {
+        const receivers = aliveEnemies(ctx.battleState);
+        for (const e of receivers) {
           ctx.kernel.submitInstruction(
             new AddEffectInstruction({ target: e, effectId: 'burn', stacks }), instr);
         }
+        if (receivers.length) reactFx(sctx, sctx.self, 'benefit', { variant: 'proc', magnitude: stacks });
       },
     }],
   },
@@ -200,6 +205,7 @@ function burnMirror({ id, name, tier, spread }) {
             ctx.kernel.submitInstruction(
               new AddEffectInstruction({ target, effectId: 'burn', stacks: instr.payload.stacks }),
               instr));
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc', magnitude: instr.payload.stacks });
         },
       }],
     },
@@ -230,7 +236,7 @@ burnMirror({
 
 // ==== 咏唱（§2.2）=============================================================
 
-// 燃心决 A｜消耗 + 锁定，每回合 P5 咏唱节拍获得 3 魏启 + 自身燃烧 7。
+// 燃心决 A｜消耗 + 封咏，每回合 P5 咏唱节拍获得 3 魏启 + 自身燃烧 7。
 // chantWeight 0：激活后不占手牌容量；anchored：激活后不可主动打出解除（也不可换下），
 // 与 exhaust 一起表达「激活即钉死在手」——唯一出口是被焚/弃等离手路径。
 // 触发挂点 = ChantTriggerInstruction POST（「快速咏唱」提前触发复用同一挂载点）。
@@ -389,7 +395,7 @@ registerSkill({
   cardMode: 'chant', chantWeight: 1,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: AddEffectInstruction, phase: 'pre',
       filter: (instr) => instr.effectId === 'burn'
         && (instr.payload.stacks ?? 0) < 0,

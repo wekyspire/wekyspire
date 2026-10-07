@@ -1,220 +1,708 @@
-// 章2 小怪（宫殿，12~22 层普通池）。
+// 章2 小怪（南孚宫，12~21 层普通池）。
+// 设计卡 = battle_gameplay/ENEMIES_2.md；数值 = v2 固定面板；主题战编成见
+// floorEnemyGenerator.js；效果定义一律以 battle_gameplay/skills/EFFECTS.md 为准。
+// 阵营三线：公司系（刺客/保安/间谍/杀手/新兵）× 宫廷系（护卫/铁卫/灵御/士兵/见习/机器人）
+// × 妖蝶系（妖蝶/巨型妖蝶）+ 军队系（大队战士/狙击手/军号手）。
+// 血量"X-Y 随机"的单位：createUnit 取中值，生成器后处理按 rng 定档落描述符 maxHp。
 
 import Enemy from '../../state/enemy.js';
 import { registerEnemy, getEnemyDefinition } from '../../enemies/registry.js';
-import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
-import { aliveEnemies } from '../../state/battleState.js';
+import { AddCardInstruction, BurnCardInstruction, LockCardsInstruction } from '../../instructions/cards.js';
+import { PlayerTurnEndInstruction } from '../../instructions/turn.js';
+import { aliveEnemies, zoneOf } from '../../state/battleState.js';
 
-// ①' 大史莱姆：条件召唤者——场上无存活史莱姆、敌排有空位（**存活敌人数** 未满
-// config.maxEnemies，与前端槽位数对齐——enemies 数组含尸体，直接数 length 会在
-// 有单位死亡后永远「满员」，须统一走存活口径）、且
-// 上一回合没召唤过（lastSummonTurn 冷却一整轮：召唤 → 打一轮 → 视局面再召唤），
-// 满足三条才召唤；否则攻 10 + 盾 5。
-// 召唤出的史莱姆尾插 enemies（本回合行动循环快照已取，下回合起参战）。
+// ---- 手牌锁定（间谍/狙击手；无人战体同款口径：锁定不影响打出，玩家回合结束仍在手则焚毁，
+// 离手即免除。结算逻辑抄自 bosses.js 的通用段——标记只落手牌（随抽随清），无牌库标记）----
+function attachHandLockSettle(ctx, unit) {
+  ctx.kernel.addSubscription({
+    when: PlayerTurnEndInstruction,
+    phase: 'post',
+    owner: `enemy:${unit.uniqueID}:handLock`,
+    filter: () => !unit.isDead(),
+    react: (instr, c) => {
+      for (const card of [...c.battleState.zones.hand]) {
+        if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
+          c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
+        }
+      }
+      for (const zone of ['hand', 'burnt', 'pending']) {
+        for (const card of c.battleState.zones[zone]) card.locked = false;
+      }
+    },
+  });
+}
+
+// 锁定 N 张随机手牌（已锁定的跳过；手牌不足则全锁）。
+function lockRandomHandCards(actx, n) {
+  const hand = actx.battleState.zones.hand.filter(c => !c.locked);
+  const picked = actx.battleState.rng.shuffle([...hand]).slice(0, n);
+  if (picked.length > 0) {
+    actx.kernel.submitInstruction(new LockCardsInstruction({ uniqueIDs: picked.map(c => c.uniqueID) }));
+  }
+}
+
+// 流弹误伤（新兵枪手）：对随机友军打 N 次次级伤害（不触发任何受击响应）。
+function strayFire(actx, times) {
+  const others = aliveEnemies(actx.battleState).filter(e => e !== actx.unit);
+  for (let i = 0; i < times; i++) {
+    const t = actx.battleState.rng.pick(others);
+    if (!t) break;
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: t, amount: 4, type: 'minor', tags: ['strayFire'],
+    }));
+  }
+}
+
+// ---- 大史莱姆：条件召唤者，坦克 ----
+// 场上无存活小史莱姆、敌排有空位（存活口径，含尸体陷阱见 aiAct 装配）、上一回合未召唤
+// （lastSummonTurn 冷却一整轮）三条齐备则召唤 1 只小史莱姆（尾插，下回合起参战）；否则
+// 两拍循环：攻 16 → 攻 5 + 洗 2 粘液。
 function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
-  const noSlime = !aliveEnemies(battleState).some(e => e.defId === 'slime');
+  const noSlimelet = !aliveEnemies(battleState).some(e => e.defId === 'slimeletA' || e.defId === 'slimeletB');
   const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
-  // atTurn：行动侧传缺省（当前回合）；意图预告传 turn.count+1（预告发生在敌方回合末，
-  // 为下一回合预告——冷却闸门按行动时点的回合计算，否则系统性差一拍「预告攻击、
-  // 实际召唤」）。noSlime/hasSlot 仍可能被玩家回合行动改变，属预告的天然残差）
   const notSummonedLastTurn = unit.lastSummonTurn !== atTurn - 1;
-  return noSlime && hasSlot && notSummonedLastTurn;
+  return noSlimelet && hasSlot && notSummonedLastTurn;
 }
 registerEnemy({
-  difficulty: { base: 5, floorMin: 12, floorMax: 30 },
+  difficulty: { base: 5, floorMin: 12, floorMax: 21 },
   id: 'bigSlime', name: '大史莱姆',
-  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 34 }),
+  createUnit: () => new Enemy({ defId: 'bigSlime', name: '大史莱姆', maxHp: 99 }),
   act(actx) {
     const { unit, battleState: bs } = actx;
     if (bigSlimeCanSummon(unit, bs)) {
       unit.lastSummonTurn = bs.turn.count;
       actx.kernel.submitInstruction(new UnitSpawnInstruction({
-        unit: getEnemyDefinition('slime').createUnit(),
+        unit: getEnemyDefinition('slimeletA').createUnit(),
         source: unit,
       }));
       return;
     }
-    // 削血提攻后的坦克：攻 13 + 自盾 4——「打得动但锤人疼」。
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: actx.player, amount: 13 + unit.getStat('attack'),
-    }));
-    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 4 }));
-  },
-  getIntention: (unit, battleState) => (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)
-    ? { kinds: ['summon'], note: '召唤史莱姆' }
-    : { kinds: ['attack', 'defend'], hits: 1, damage: 13 + unit.getStat('attack'), note: '自身护盾+4' }),
-});
-
-// ④ 暗影刺客：力量滚雪球——攻 → 力量+2 → 突袭（高基数），
-// 拖久了威胁线性上升，逼玩家集火或速杀
-registerEnemy({
-  difficulty: { base: 4, floorMin: 12, floorMax: 32 },
-  id: 'shadowblade', name: '暗影刺客',
-  createUnit: () => new Enemy({ defId: 'shadowblade', name: '暗影刺客', maxHp: 26 }),
-  act(actx) {
-    const phase = actx.unit.actionIndex % 3;
-    if (phase === 1) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.unit, effectId: 'strength', stacks: 2,
+    const phase = unit.actionIndex % 2;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 16 + unit.getStat('attack'),
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player,
-        amount: (phase === 0 ? 6 : 14) + actx.unit.getStat('attack'),
+        source: unit, target: actx.player, amount: 5 + unit.getStat('attack'),
+      }));
+      for (let i = 0; i < 2; i++) {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'gooCard', toZone: 'deck', index: 'random',
+        }));
+      }
+    }
+  },
+  getIntention: (unit, battleState) => {
+    if (bigSlimeCanSummon(unit, battleState, battleState.turn.count + 1)) {
+      return { kinds: ['summon'], note: '召唤 1 只小史莱姆' };
+    }
+    const atk = unit.getStat('attack');
+    return unit.actionIndex % 2 === 0
+      ? { kinds: ['attack'], hits: 1, damage: 16 + atk }
+      : { kinds: ['attack', 'debuff'], hits: 1, damage: 5 + atk, note: '洗入 2 张「粘液」' };
+  },
+});
+
+// ---- 公司刺客（脆皮干扰）：出场灵体 1（首段伤害置 1）----
+// 三拍循环：攻 6 → 力量 +3 → 攻 2×3。B：从第 2 拍开始（首行动为力量拍）。
+function corpAssassinDef(id, startBeat) {
+  registerEnemy({
+    difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+    id, name: id === 'corpAssassin' ? '公司刺客' : '公司刺客B',
+    createUnit: () => new Enemy({ defId: id, name: id === 'corpAssassin' ? '公司刺客' : '公司刺客B', maxHp: 38 }),
+    onBattleStart(ctx, unit) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'phantom', stacks: 1 }));
+    },
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 1) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 3,
+        }));
+      } else if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 6 + unit.getStat('attack'),
+        }));
+      } else {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: actx.player, amount: 2 + unit.getStat('attack'),
+          }));
+        }
+      }
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 1) return { kinds: ['buff'], note: '自身力量+3' };
+      if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 6 + atk };
+      return { kinds: ['attack'], hits: 3, damage: 2 + atk };
+    },
+  });
+}
+corpAssassinDef('corpAssassin', 0);
+corpAssassinDef('corpAssassinB', 1);
+
+// ---- 公司保安（肉）：两拍循环 攻 4 → 盾 12 + 力量 3。B：从第 2 拍开始。血量 42-48 随机。----
+function corpGuardDef(id, startBeat) {
+  const name = id === 'corpGuard' ? '公司保安' : '公司保安B';
+  registerEnemy({
+    difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 45 }),
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 2;
+      if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 4 + unit.getStat('attack'),
+        }));
+      } else {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 3,
+        }));
+      }
+    },
+    getIntention: (unit) => {
+      const phase = (unit.actionIndex + startBeat) % 2;
+      return phase === 0
+        ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
+        : { kinds: ['defend', 'buff'], note: '护盾+12，自身力量+3' };
+    },
+  });
+}
+corpGuardDef('corpGuard', 0);
+corpGuardDef('corpGuardB', 1);
+
+// ---- 间谍（强力干扰：锁定 = 无人战体同款，回合末仍在手则焚毁）----
+// 拍 1 锁 1 + 攻 10 → 拍 2 锁 4 → 拍 3 锁 1 + 力量 2 → 第 4 拍起攻 3×3 永续。
+// B：只以 3-1-2 拍循环（锁 1+力 2 → 锁 1+攻 10 → 锁 4），不进入永续攻击。
+function spyLockNote(n) { return `锁定${n}：回合结束时仍在手则焚毁`; }
+function spyDef(id, looping) {
+  const name = id === 'spy' ? '间谍' : '间谍B';
+  registerEnemy({
+    difficulty: { base: 4, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 72 }),
+    onBattleStart: attachHandLockSettle,
+    act(actx) {
+      const { unit } = actx;
+      // beat：0=锁1+攻10，1=锁4，2=锁1+力2，3+=攻3×3。B 按 [2,0,1] 循环取拍。
+      const beat = looping
+        ? [2, 0, 1][unit.actionIndex % 3]
+        : Math.min(unit.actionIndex, 3);
+      if (beat === 0) {
+        lockRandomHandCards(actx, 1);
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 10 + unit.getStat('attack'),
+        }));
+      } else if (beat === 1) {
+        lockRandomHandCards(actx, 4);
+      } else if (beat === 2) {
+        lockRandomHandCards(actx, 1);
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 2,
+        }));
+      } else {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: actx.player, amount: 3 + unit.getStat('attack'),
+          }));
+        }
+      }
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const beat = looping
+        ? [2, 0, 1][unit.actionIndex % 3]
+        : Math.min(unit.actionIndex, 3);
+      if (beat === 0) return { kinds: ['debuff', 'attack'], hits: 1, damage: 10 + atk, note: spyLockNote(1) };
+      if (beat === 1) return { kinds: ['debuff'], note: spyLockNote(4) };
+      if (beat === 2) return { kinds: ['debuff', 'buff'], note: `${spyLockNote(1)}；自身力量+2` };
+      return { kinds: ['attack'], hits: 3, damage: 3 + atk };
+    },
+  });
+}
+spyDef('spy', false);
+spyDef('spyB', true);
+
+// ---- 杀手（协作压制）：开局杀手 1（每有一张牌被打出，蓄势 +1——出牌量税）。攻 7 走天下，
+// 拖久了威胁随玩家的节奏自我放大。
+registerEnemy({
+  difficulty: { base: 5, floorMin: 12, floorMax: 21 },
+  id: 'killer', name: '杀手',
+  createUnit: () => new Enemy({ defId: 'killer', name: '杀手', maxHp: 79 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'killer', stacks: 1 }));
+  },
+  act(actx) {
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: actx.unit, target: actx.player, amount: 7 + actx.unit.getStat('attack'),
+    }));
+  },
+  getIntention: (unit) => ({ kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
+});
+
+// ---- 新兵枪手（攻击压力，误伤友军）：三拍循环 攻 8+流弹误伤 4 → 装填（盾 5）→
+// 攻 12 + 流弹误伤两名各 4。B/C：从第 2/3 拍开始。血量 42-48 随机。----
+function recruitGunnerDef(id, startBeat) {
+  const name = { recruitGunner: '新兵枪手', recruitGunnerB: '新兵枪手B', recruitGunnerC: '新兵枪手C' }[id];
+  registerEnemy({
+    difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 45 }),
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 8 + unit.getStat('attack'),
+        }));
+        strayFire(actx, 1);
+      } else if (phase === 1) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 5 }));
+      } else {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 12 + unit.getStat('attack'),
+        }));
+        strayFire(actx, 2);
+      }
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 8 + atk, note: '流弹误伤随机友军 4' };
+      if (phase === 1) return { kinds: ['defend'], note: '慌张装填：护盾+5' };
+      return { kinds: ['attack'], hits: 1, damage: 12 + atk, note: '流弹误伤两名随机友军各 4' };
+    },
+  });
+}
+recruitGunnerDef('recruitGunner', 0);
+recruitGunnerDef('recruitGunnerB', 1);
+recruitGunnerDef('recruitGunnerC', 2);
+
+// ---- 南孚妖蝶（节奏骚扰）：出场闪避 2。三拍循环 洗 2 虚无 → 盾 10 → 滞气 1。
+// B：第一拍改为攻 3×3；C：第三拍改为攻 12；D：仅以 1-2 两拍循环。血量 21-29 随机。----
+const NYMPH_FAMILY = new Set(['nymph', 'nymphB', 'nymphC', 'nymphD']);
+function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = {}) {
+  const name = { nymph: '南孚妖蝶', nymphB: '南孚妖蝶B', nymphC: '南孚妖蝶C', nymphD: '南孚妖蝶D' }[id];
+  const cycle = twoBeat ? 2 : 3;
+  registerEnemy({
+    difficulty: { base: 2, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 25 }),
+    onBattleStart(ctx, unit) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: 2 }));
+    },
+    act(actx) {
+      const { unit } = actx;
+      const phase = unit.actionIndex % cycle;
+      if (phase === 0 && b1Attack) {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: actx.player, amount: 3 + unit.getStat('attack'),
+          }));
+        }
+      } else if (phase === 0) {
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new AddCardInstruction({
+            defId: 'voidCard', toZone: 'deck', index: 'random',
+          }));
+        }
+      } else if (phase === 1) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+      } else if (b3Attack) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 12 + unit.getStat('attack'),
+        }));
+      } else {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'stall', stacks: 1,
+        }));
+      }
+    },
+    getIntention: (unit) => {
+      const atk = unit.getStat('attack');
+      const phase = unit.actionIndex % cycle;
+      if (phase === 0) return b1Attack
+        ? { kinds: ['attack'], hits: 3, damage: 3 + atk }
+        : { kinds: ['debuff'], note: '将 2 张「虚无」洗入你的牌库' };
+      if (phase === 1) return { kinds: ['defend'], note: '护盾+10' };
+      return b3Attack
+        ? { kinds: ['attack'], hits: 1, damage: 12 + atk }
+        : { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' };
+    },
+  });
+}
+nymphDef('nymph');
+nymphDef('nymphB', { b1Attack: true });
+nymphDef('nymphC', { b3Attack: true });
+nymphDef('nymphD', { twoBeat: true });
+
+// ---- 南孚宫护卫（支援）：两拍循环 全体友军护盾 6 → 攻 7。----
+registerEnemy({
+  difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+  id: 'palaceGuard', name: '南孚宫护卫',
+  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '南孚宫护卫', maxHp: 55 }),
+  act(actx) {
+    const { unit } = actx;
+    if (unit.actionIndex % 2 === 0) {
+      for (const e of aliveEnemies(actx.battleState)) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 6 }));
+      }
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 7 + unit.getStat('attack'),
+      }));
+    }
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6' }
+    : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
+});
+
+// ---- 仪仗铁卫（以盾代攻）：出场护盾 15 + 如山 1（盾不清空）+ 冲撞 1（攻击伤害
+// + 当前护盾一半——由 ram 效果供能，act 只提交基础值）。三拍循环 盾 15 → 攻 5 → 攻 7。----
+registerEnemy({
+  difficulty: { base: 4, floorMin: 12, floorMax: 21 },
+  id: 'ironGuard', name: '仪仗铁卫',
+  createUnit: () => new Enemy({ defId: 'ironGuard', name: '仪仗铁卫', maxHp: 66 }),
+  onBattleStart(ctx, unit) {
+    unit.shield += 15;
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'ram', stacks: 1 }));
+  },
+  act(actx) {
+    const { unit } = actx;
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player,
+        amount: (phase === 1 ? 5 : 7) + unit.getStat('attack'),
       }));
     }
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['buff'], note: '自身力量+2' };
-    return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 6 : 14) + unit.getStat('attack') };
+    if (phase === 0) return { kinds: ['defend'], note: '列盾：护盾+15' };
+    // 预告与 ram 效果同源（+盾一半）；玩家破盾后读数实时回落
+    const atk = unit.getStat('attack') + Math.floor(unit.shield / 2);
+    return { kinds: ['attack'], hits: 1, damage: (phase === 1 ? 5 : 7) + atk };
   },
 });
 
-// ⑦ 夜蝠：汲血（攻击并自愈）×2 → 尖啸（滞气1：玩家下回合无法抽牌）
-// 滞气尖啸是节奏型威胁——被叫到的回合要么硬打要么吃伤害
+// ---- 南孚宫灵御（支援）：两拍循环 攻 9 → 盾 10 + 全体友军蓄势 3。血量 53-58 随机。----
 registerEnemy({
-  difficulty: { base: 3, floorMin: 12, floorMax: 34 },
-  id: 'nightbat', name: '夜蝠',
-  createUnit: () => new Enemy({ defId: 'nightbat', name: '夜蝠', maxHp: 24 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 3 === 2) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'stall', stacks: 1,
-      }));
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 8 + actx.unit.getStat('attack'),
-      }));
-      actx.kernel.submitInstruction(new ApplyHealInstruction({
-        target: actx.unit, amount: 3,
-      }));
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 3 === 2
-    ? { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' }
-    : { kinds: ['attack', 'buff'], hits: 1, damage: 8 + unit.getStat('attack'), note: '攻击并自愈3' }),
-});
-
-// ============ 第二~四章补池 ============
-// 按场景配方主题补池：章2=宫殿 / 章3=衰败庄园 / 章4=大图书馆。
-
-// ⑱ 宫廷守卫（章2·阵型谜题：全体友军护盾）——「先杀支援还是顶着群体盾硬打输出手」的
-// 目标优先级考题。与腐苔球（奶轴支援）错开：它是盾轴支援，护盾会被回合清零（T2），
-// 所以必须每两拍重新举盾——它的存活本身就是对面防线的续航。
-registerEnemy({
-  difficulty: { base: 5, floorMin: 12, floorMax: 24 },
-  id: 'palaceGuard', name: '宫廷守卫',
-  createUnit: () => new Enemy({ defId: 'palaceGuard', name: '宫廷守卫', maxHp: 22 }),
-  act(actx) {
-    if (actx.unit.actionIndex % 2 === 0) {
-      for (const e of aliveEnemies(actx.battleState)) {
-        // 互盾拆除（第 7 轮裁决）：守卫的光环不罩其他守卫——双守卫互相举盾叠出的
-        // 防雪球让「先杀支援」的考题失效（支援比输出手还硬）；自己仍吃自己的盾。
-        if (e !== actx.unit && e.defId === 'palaceGuard') continue;
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: e, amount: 6 }));
-      }
-    } else {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 7 + actx.unit.getStat('attack'),
-      }));
-    }
-  },
-  getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6（不罩其他守卫）' }
-    : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
-});
-
-// ⑲ 传令官（章2·击杀优先级谜题）：首拍全体友军力量2（它自己脆，给玩家一拍反应窗），
-// 此后攻5。杀得快等于白赚，杀不掉全队滚雪球——与雪狼开局虚弱镜像：一个压玩家，一个抬敌人。
-registerEnemy({
-  difficulty: { base: 4, floorMin: 12, floorMax: 22 },
-  id: 'herald', name: '传令官',
-  createUnit: () => new Enemy({ defId: 'herald', name: '传令官', maxHp: 16 }),
-  act(actx) {
-    if (actx.unit.actionIndex === 0) {
-      for (const e of aliveEnemies(actx.battleState)) {
-        actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: e, effectId: 'strength', stacks: 2,
-        }));
-      }
-      return;
-    }
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: actx.unit, target: actx.player, amount: 5 + actx.unit.getStat('attack'),
-    }));
-  },
-  getIntention: (unit) => (unit.actionIndex === 0
-    ? { kinds: ['buff'], note: '全体友军力量+2' }
-    : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') }),
-});
-
-// ⑳ 大理石哨兵（章2·防线锚：受创龟缩）——行动时比较当前 hp 与「自己上次行动结束时的
-// hp」（_lastHp，每次 act 末尾记账，首拍缺省 = 当前 hp）：受创 ≥ 8 → 龟缩举盾 12 不攻击；
-// 否则攻 9。谜题 = 输出节奏分配：一轮爆发 ≥8 = 用伤害买它一回合沉默（但溢出伤害打在
-// 盾上）；控制每轮 ≤7 = 它一直攻，吃伤害换输出窗口。
-// ※ 为什么不用「有无盾」做分支：T2 铁律——盾在持有者回合开始
-// 清零，轮到敌方行动的时点盾恒为 0，「有盾→攻/无盾→举盾」会退化成永不攻击的肉桩。
-// hp 差值是唯一无需新引擎/新订阅的可读状态；燃烧·中毒 tick 也计入受创（语义通：
-// 被折磨痛了同样会缩）。
-registerEnemy({
-  difficulty: { base: 5, floorMin: 14, floorMax: 26 },
-  id: 'marbleSentinel', name: '大理石哨兵',
-  createUnit: () => new Enemy({ defId: 'marbleSentinel', name: '大理石哨兵', maxHp: 26, defense: 2 }),
+  difficulty: { base: 4, floorMin: 12, floorMax: 21 },
+  id: 'channeler', name: '南孚宫灵御',
+  createUnit: () => new Enemy({ defId: 'channeler', name: '南孚宫灵御', maxHp: 55 }),
   act(actx) {
     const { unit } = actx;
-    const lost = (unit._lastHp ?? unit.hp) - unit.hp;   // 自上次行动以来的受创
-    if (lost >= 8) {
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
-    } else {
+    if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: actx.player, amount: 9 + unit.getStat('attack'),
       }));
+    } else {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+      for (const e of aliveEnemies(actx.battleState)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: e, effectId: 'momentum', stacks: 3,
+        }));
+      }
     }
-    unit._lastHp = unit.hp;   // 行动末尾记账（含本回合举盾/受击后的最新值）
+  },
+  getIntention: (unit) => (unit.actionIndex % 2 === 0
+    ? { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') }
+    : { kinds: ['defend', 'buff'], note: '护盾+10，全体友军蓄势+3' }),
+});
+
+// ---- 见习灵御（持续成长的攻击压力）：拍 1 力量 +3；此后每拍 攻 3 + 力量 +2（无上限）。
+// B/C：从第 2/3 拍开始（跳过力量开局，直接进攻击节拍）。血量 38-45 随机。----
+function apprenticeDef(id, startBeat) {
+  const name = { apprentice: '见习灵御', apprenticeB: '见习灵御B', apprenticeC: '见习灵御C' }[id];
+  registerEnemy({
+    difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 41 }),
+    act(actx) {
+      const { unit } = actx;
+      const beat = unit.actionIndex + startBeat;
+      if (beat === 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'strength', stacks: 3,
+        }));
+        return;
+      }
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 3 + unit.getStat('attack'),
+      }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'strength', stacks: 2,
+      }));
+    },
+    getIntention: (unit) => {
+      const beat = unit.actionIndex + startBeat;
+      if (beat === 0) return { kinds: ['buff'], note: '自身力量+3' };
+      return { kinds: ['attack', 'buff'], hits: 1, damage: 3 + unit.getStat('attack'), note: '自身力量+2' };
+    },
+  });
+}
+apprenticeDef('apprentice', 0);
+apprenticeDef('apprenticeB', 1);
+apprenticeDef('apprenticeC', 2);
+
+// ---- 南孚宫士兵（DPS 补全）：三拍循环 攻 6 → 盾 10 → 攻 4×3。----
+registerEnemy({
+  difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+  id: 'soldier', name: '南孚宫士兵',
+  createUnit: () => new Enemy({ defId: 'soldier', name: '南孚宫士兵', maxHp: 45 }),
+  act(actx) {
+    const { unit } = actx;
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 6 + unit.getStat('attack'),
+      }));
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+    } else {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 4 + unit.getStat('attack'),
+        }));
+      }
+    }
   },
   getIntention: (unit) => {
-    // 预告计入自身回合开始的燃烧 tick（行动前结算）：燃烧锁死下它必然龟缩，
-    // 不预告龟缩会让玩家白留防御牌/错估输出窗（第 7 轮 B 报告的信息缺失）。
-    // act 时 tick 已落进 hp，无需此项；这只是「预告时点」的口径补正。
-    // ⚠ tick 先被站立盾吸收（ClearShield 晚于回合开始结算，combat.js 顺序铁律）——
-    // 预告必须按「穿盾部分」预估，否则举着 12 盾时预告龟缩、实际照攻（R8-E 实报：
-    // 预告龟缩 → 吃攻 9）。口径与 act 严格同源：hp 差值 + max(0, 燃烧 − 当前盾)。
-    const burnThrough = Math.max(0, unit.getEffectStacks('burn') - unit.shield);
-    const lost = (unit._lastHp ?? unit.hp) - unit.hp + burnThrough;
-    return lost >= 8
-      ? { kinds: ['defend'], note: '受创≥8：龟缩，自身护盾+12' }
-      : { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack'), note: '受创≥8 时改为龟缩举盾' };
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 6 + atk };
+    if (phase === 1) return { kinds: ['defend'], note: '护盾+10' };
+    return { kinds: ['attack'], hits: 3, damage: 4 + atk };
   },
 });
 
-// ============ 体系镜像补池（木/空卡牌体系的敌方生态）============
-// 三只各填一个主题空位：章2 起敌方无毒（叠毒体系无镜像）、章3 起敌方无闪避（御风体系
-// 无镜像）、章4 无针对 DoT 的反制件（终章叠毒/燃烧无考题）。各考一道与玩家体系同源的题。
-
-// ㉕ 瘴气菇（章2·叠毒镜像：渐浓毒雾）——孢子云（中毒，每次更浓：2,3,4…）→ 攻6 → 攻6
-// 三拍循环。玩家的叠毒是平方收束，它的毒雾也是：拖得越久，每次喷毒越重——把「毒叠起来
-// 有多可怕」先在玩家身上演一遍。本身零防脆菇，速杀即无毒；与宫廷守卫同场时「先杀谁」
-// 是真问题（盾轴保毒轴）。对标：沼泽伏击者（精英）一口毒5，它常规杂兵 2 起步渐浓。
-registerEnemy({
-  difficulty: { base: 4, floorMin: 12, floorMax: 26 },
-  id: 'miasmaShroom', name: '瘴气菇',
-  createUnit: () => new Enemy({ defId: 'miasmaShroom', name: '瘴气菇', maxHp: 24 }),
-  act(actx) {
-    const { unit } = actx;
-    if (unit.actionIndex % 3 === 0) {
-      // 孢子云：_spore 从 1 起每次喷吐 +1（首口毒2）
-      unit._spore = (unit._spore ?? 1) + 1;
+// ---- 燃烧机器人（燃烧磨蚀）：出场炎魔 1（造成生命伤害附带燃烧 1）；报废亡语 燃烧 2。
+// 三拍循环 攻 7 → 燃烧 3 → 掷射废弃弹壳（洗 2 灼伤）。B：血量减半（22）+ 从第 2 拍开始；
+// C：从第 3 拍开始。----
+function burnBotDef(id, startBeat, maxHp) {
+  const name = { burnBot: '燃烧机器人', burnBotB: '燃烧机器人B', burnBotC: '燃烧机器人C' }[id];
+  registerEnemy({
+    difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp }),
+    onBattleStart(ctx, unit) {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'flameDemon', stacks: 1,
+      }));
+    },
+    onDeath(actx) {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'poison', stacks: unit._spore }));
+        target: actx.player, effectId: 'burn', stacks: 2,
+      }));
+    },
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 7 + unit.getStat('attack'),
+        }));
+      } else if (phase === 1) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'burn', stacks: 3,
+        }));
+      } else {
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new AddCardInstruction({
+            defId: 'burnWound', toZone: 'deck', index: 'random',
+          }));
+        }
+      }
+    },
+    getIntention: (unit) => {
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') };
+      if (phase === 1) return { kinds: ['debuff'], note: '火花泄漏：赋予玩家燃烧3' };
+      return { kinds: ['debuff'], note: '掷射废弃弹壳：2 张「灼伤」洗入你的牌库' };
+    },
+  });
+}
+burnBotDef('burnBot', 0, 44);
+burnBotDef('burnBotB', 1, 22);
+burnBotDef('burnBotC', 2, 44);
+
+// ---- 南孚大队战士（法术反制）：两拍循环 攻 6 + 漏气 2 → 攻 6×2。B：从第 2 拍开始。
+// 血量 55-64 随机。----
+function legionnaireDef(id, startBeat) {
+  const name = id === 'legionnaire' ? '南孚大队战士' : '南孚大队战士B';
+  registerEnemy({
+    difficulty: { base: 4, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 60 }),
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 2;
+      if (phase === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 6 + unit.getStat('attack'),
+        }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.player, effectId: 'leak', stacks: 2,
+        }));
+      } else {
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: actx.player, amount: 6 + unit.getStat('attack'),
+          }));
+        }
+      }
+    },
+    getIntention: (unit) => {
+      const phase = (unit.actionIndex + startBeat) % 2;
+      return phase === 0
+        ? { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + unit.getStat('attack'), note: '漏气2：下回合开始失去 2 魏启' }
+        : { kinds: ['attack'], hits: 2, damage: 6 + unit.getStat('attack') };
+    },
+  });
+}
+legionnaireDef('legionnaire', 0);
+legionnaireDef('legionnaireB', 1);
+
+// ---- 南孚大队狙击手（回合压力）：三拍循环 锁定 2 → 装填（空拍蓄力）→ 射击 21。
+// B：从第 2 拍开始（装填 → 射击 → 锁定，错半拍轮射）。----
+function sniperDef(id, startBeat) {
+  const name = id === 'sniper' ? '南孚大队狙击手' : '南孚大队狙击手B';
+  registerEnemy({
+    difficulty: { base: 4, floorMin: 12, floorMax: 21 },
+    id, name,
+    createUnit: () => new Enemy({ defId: id, name, maxHp: 40 }),
+    onBattleStart: attachHandLockSettle,
+    act(actx) {
+      const { unit } = actx;
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) {
+        lockRandomHandCards(actx, 2);
+      } else if (phase === 2) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 21 + unit.getStat('attack'),
+        }));
+      }
+      // phase === 1：装填空拍
+    },
+    getIntention: (unit) => {
+      const phase = (unit.actionIndex + startBeat) % 3;
+      if (phase === 0) return { kinds: ['debuff'], note: spyLockNote(2) };
+      if (phase === 1) return { kinds: ['unknown'], note: '装填（下拍：射击）' };
+      return { kinds: ['attack'], hits: 1, damage: 21 + unit.getStat('attack'), note: '射击' };
+    },
+  });
+}
+sniperDef('sniper', 0);
+sniperDef('sniperB', 1);
+
+// ---- 南孚大队军号手（齐射指挥）：出场齐射 1（攻击分段，段数=存活友军数含自身——
+// 行为在 act 侧实现）。三拍循环 全体蓄势 2 → 齐射 4×N → 齐射 6×N。----
+registerEnemy({
+  difficulty: { base: 3, floorMin: 12, floorMax: 21 },
+  id: 'bugler', name: '南孚大队军号手',
+  createUnit: () => new Enemy({ defId: 'bugler', name: '南孚大队军号手', maxHp: 38 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'volley', stacks: 1 }));
+  },
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) {
+      for (const e of aliveEnemies(bs)) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: e, effectId: 'momentum', stacks: 2,
+        }));
+      }
+    } else {
+      const hits = aliveEnemies(bs).length; // 含自身——落单号手也有一声单响
+      const per = (phase === 1 ? 4 : 6) + unit.getStat('attack');
+      for (let i = 0; i < hits; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: per,
+        }));
+      }
+    }
+  },
+  getIntention: (unit, battleState) => {
+    const phase = unit.actionIndex % 3;
+    if (phase === 0) return { kinds: ['buff'], note: '全体友军蓄势+2' };
+    const hits = aliveEnemies(battleState).length;
+    const per = (phase === 1 ? 4 : 6) + unit.getStat('attack');
+    return { kinds: ['attack'], hits, damage: per, note: '齐射' };
+  },
+});
+
+// ---- 巨型妖蝶（母体）：出场闪避 1。首拍 幻象 1；此后三拍循环 洗 2 虚无 → 攻 10 → 滞气 1。
+// 任何时候（场上无南孚妖蝶族 + 上回合未召唤 + 有空位）随机召唤一只妖蝶变体。----
+function motherNymphCanSummon(unit, battleState, atTurn = battleState.turn.count) {
+  const noNymph = !aliveEnemies(battleState).some(e => NYMPH_FAMILY.has(e.defId));
+  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+  const notSummonedLastTurn = unit.lastSummonTurn !== atTurn - 1;
+  return noNymph && hasSlot && notSummonedLastTurn;
+}
+registerEnemy({
+  difficulty: { base: 5, floorMin: 12, floorMax: 21 },
+  id: 'motherNymph', name: '巨型妖蝶',
+  createUnit: () => new Enemy({ defId: 'motherNymph', name: '巨型妖蝶', maxHp: 71 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'dodge', stacks: 1 }));
+  },
+  act(actx) {
+    const { unit, battleState: bs } = actx;
+    if (unit.actionIndex > 0 && motherNymphCanSummon(unit, bs)) {
+      unit.lastSummonTurn = bs.turn.count;
+      actx.kernel.submitInstruction(new UnitSpawnInstruction({
+        unit: getEnemyDefinition(bs.rng.pick(['nymph', 'nymphB', 'nymphC', 'nymphD'])).createUnit(),
+        source: unit,
+      }));
       return;
     }
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: actx.player, amount: 6 + unit.getStat('attack') }));
+    if (unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'illusion', stacks: 1,
+      }));
+      return;
+    }
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) {
+      for (let i = 0; i < 2; i++) {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'voidCard', toZone: 'deck', index: 'random',
+        }));
+      }
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 10 + unit.getStat('attack'),
+      }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'stall', stacks: 1,
+      }));
+    }
   },
-  getIntention: (unit) => (unit.actionIndex % 3 === 0
-    ? { kinds: ['debuff'], note: `孢子云：赋予玩家中毒${(unit._spore ?? 1) + 1}（每次更浓）` }
-    : { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack') }),
+  getIntention: (unit, battleState) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex > 0 && motherNymphCanSummon(unit, battleState, battleState.turn.count + 1)) {
+      return { kinds: ['summon'], note: '随机召唤一只南孚妖蝶' };
+    }
+    if (unit.actionIndex === 0) return { kinds: ['debuff'], note: '鳞粉幻象：赋予玩家幻象1（抽到的卡 AP 开销随机增减）' };
+    const phase = (unit.actionIndex - 1) % 3;
+    if (phase === 0) return { kinds: ['debuff'], note: '将 2 张「虚无」洗入你的牌库' };
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
+    return { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' };
+  },
 });

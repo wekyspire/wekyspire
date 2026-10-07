@@ -23,11 +23,10 @@ const ART_URLS = indexArtUrls(
 );
 
 // defId → 立牌文件名；玩家（side==='player'）无 defId，固定 unit_player.png
-// bigSlime 复用史莱姆立绘：同种不同体型（身高系数放大），暂无专属素材
+// slimeB 复用史莱姆立绘：防攻变体，同种个体（史莱姆爆发压场位）
 const UNIT_ART_FILES = Object.freeze({
   remi: 'unit_remi.png',
   slime: 'unit_slime.png',
-  bigSlime: 'unit_slime.png',
   // slimeB 同理复用：防攻变体，同种个体（史莱姆爆发压场位）
   slimeB: 'unit_slime.png',
   slimelet: 'unit_slimelet.png',
@@ -63,6 +62,42 @@ const UNIT_ART_FILES = Object.freeze({
   snowwolf: 'unit_snowwolf.png',
   rockPangolin: 'unit_rockPangolin.png',
   pyro: 'unit_pyro.png',
+  // ==== 第二章（南孚宫）：族底图一张，行为变体复用 ====
+  // bigSlime 专属图三轮生成未过验收（构图满幅出画+无白眼），暂复用史莱姆立绘放大——
+  // 专属图待重制（ENEMY_ART_LIST 待办）
+  bigSlime: 'unit_slime.png',
+  corpAssassin: 'unit_corpAssassin.png',
+  corpAssassinB: 'unit_corpAssassin.png',
+  corpGuard: 'unit_corpGuard.png',
+  corpGuardB: 'unit_corpGuard.png',
+  spy: 'unit_spy.png',
+  spyB: 'unit_spy.png',
+  killer: 'unit_killer.png',
+  recruitGunner: 'unit_recruitGunner.png',
+  recruitGunnerB: 'unit_recruitGunner.png',
+  recruitGunnerC: 'unit_recruitGunner.png',
+  nymph: 'unit_nymph.png',
+  nymphB: 'unit_nymph.png',
+  nymphC: 'unit_nymph.png',
+  nymphD: 'unit_nymph.png',
+  palaceGuard: 'unit_palaceGuard.png',
+  ironGuard: 'unit_ironGuard.png',
+  channeler: 'unit_channeler.png',
+  apprentice: 'unit_apprentice.png',
+  apprenticeB: 'unit_apprentice.png',
+  apprenticeC: 'unit_apprentice.png',
+  soldier: 'unit_soldier.png',
+  burnBot: 'unit_burnBot.png',
+  burnBotB: 'unit_burnBot.png',
+  burnBotC: 'unit_burnBot.png',
+  legionnaire: 'unit_legionnaire.png',
+  legionnaireB: 'unit_legionnaire.png',
+  sniper: 'unit_sniper.png',
+  sniperB: 'unit_sniper.png',
+  bugler: 'unit_bugler.png',
+  motherNymph: 'unit_motherNymph.png',
+  demolitions: 'unit_demolitions.png',
+  hunter: 'unit_hunter.png',
 });
 
 // 形态变体（`${defId}:${variant}` → 立牌文件）：Boss 转阶段换立绘（剧本 setArtVariant 触发）。
@@ -117,6 +152,25 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   snowwolf: 0.95,
   rockPangolin: 1.0,
   pyro: 1.02,
+  // 第二章（南孚宫）：人形按体格，虫形/机器人压档
+  corpAssassin: 0.88,
+  corpGuard: 0.85,
+  spy: 0.9,
+  killer: 0.98,
+  recruitGunner: 0.8,
+  nymph: 0.5,
+  palaceGuard: 0.9,
+  ironGuard: 0.95,
+  channeler: 0.92,
+  apprentice: 0.7,
+  soldier: 0.9,
+  burnBot: 0.65,
+  legionnaire: 0.9,
+  sniper: 0.9,
+  bugler: 0.88,
+  motherNymph: 0.9,
+  demolitions: 0.98,
+  hunter: 1.0,
 });
 
 export const STANDEE_BASE_HEIGHT = 26; // 世界单位（scale=1 时）

@@ -3,6 +3,7 @@
 // 三腿 120° 均布外撇。变体走 build(opts)：龟裂强度 / 腿外撇角。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture'],
   footprint: { x: 2, z: 2 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ cracked = 0.14, splay = 0.16, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('stoolThree');

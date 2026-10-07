@@ -28,6 +28,7 @@ import {
   tslFinalWorld, passUV,
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from '../post/passes.js';
+import { uSceneGrade } from '../fx/sceneMood.js';
 import { createBloomChain } from '../post/bloomChain.js';
 import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 
@@ -209,7 +210,7 @@ export function createVolumetricMoonlight({
   const bloom = createBloomChain(bloomParams);
   let marchScene = makeFullScreenPass(vmMarch(u, marchSteps));
   const compositeScene = makeFullScreenPass(vmComposite(tDiffuse, tLight, uTint));
-  const finalScene = makeFullScreenPass(tslFinalWorld(tFinalColor, tFinalBloom, uBloomStr));
+  const finalScene = makeFullScreenPass(tslFinalWorld(tFinalColor, tFinalBloom, uBloomStr, uSceneGrade));
   let lastW = 2, lastH = 2;   // setQuality 重缩放用
 
   function resize(w, h) {

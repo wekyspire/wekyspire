@@ -54,7 +54,7 @@ import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { playCardGrantFlight } from '../cardGrantFlight.js';
+import { grantCardFlight } from '../cardGrantFlight.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
@@ -219,7 +219,7 @@ export class BattleStage {
     this._hoveredCardId = null;
     this._overCardId = null;    // 指针当前压着的卡（整卡或卡面 token 皆算；Shift 详情触发面）
     this._altObj = null;        // 当前处于 Shift 详情态的卡视图（至多一张）
-    this._shiftDown = false;    // Shift 键盘态（window 监听驱动；单测直接调 setShiftDown）
+    this._shiftDown = false;    // Shift 键盘态镜像（生效走 CardObject 通用件；单测直调 setShiftDown）
     this._dragging = null;     // 免目标卡（targetMode 'none'）旧式拖拽 { id }
     this._aiming = null;       // 选目标卡（targetMode 'enemy'/'ally'）瞄准中 { id, mode }：卡留手牌，箭头指指针
     this._dragTargetId = null; // 拖牌/瞄准指定的高亮目标（存活敌人）
@@ -274,10 +274,12 @@ export class BattleStage {
     // unit:<uniqueID> 与 role:player；anchor/light 由场景层登记（Phase 3+）
     this._cast = new Cast();
     // 咏唱场景演出（fx/chantSceneFx.js）：激活咏唱把战场推向体系氛围（火系 =
-    // 暖调+余烬+骑士火流环绕）。快照对账驱动（isActivated），观战端同源一致
+    // 暖调+余烬+息旋涡壳；体修 = 贴身气流粒子环绕）。快照对账驱动（isActivated），
+    // 观战端同源一致
     this._chantSceneFx = createChantSceneFx({
       scene: this.scene,
       particles: this.particles,
+      worldPool: this.particles2World,
       cast: this._cast,
       composer: this._composer ?? null,
       units: this._units,
@@ -294,6 +296,8 @@ export class BattleStage {
     for (const n of this._scene3D?.notifiables ?? []) {
       this._cast.register(`prop:${n.name}`, n);
     }
+    // 场景交互世界接线：燃烧世界接世界粒子池（sceneFire 类型 + 提案清零尾钩子）
+    if (this._scene3D?.combust) this._scene3D.combust.bindPool(this.particles2World);
     // 场景布光登记（Boss 剧本光照覆写寻址用）：light:hemi / light:dir<i> / light:point<i>
     // + light:root（lighting 门面本体）+ light:mood（氛围乘子句柄——强度唯一落笔点是
     // lighting.update，剧本调光强必须推 mood，直推 light.intensity 会被每帧覆盖）。
@@ -419,7 +423,8 @@ export class BattleStage {
     this._runSequencer = null;  // run 级动画队列（runController 后置注入：得卡演出指令化）
     this._grantBusy = false;    // 「择卡得卡」演出进行中：吞掉面板动作（见 _onPanelAction）
     // 全屏选卡界面（战后奖励的 Boss 删卡机会入口）：三舞台共用套件 stagePickerKit.js。
-    // 战斗层只用得到选卡那一件（特写/选遗物不走这里——战斗内的获得演出由 bridge 节拍驱动）。
+    // 战斗内的获得演出由 bridge 节拍驱动；**战后奖励期**的 run 级入账（Boss 掉落遗物）
+    // 特写也走这里——reward 阶段活动舞台是战斗舞台（见 runController 的 panelStage 路由）。
     // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙是按值传的；旧实现漏传它 → 候选卡面隐身）。
     this._pickerKit = createStagePickerKit({
       uiScene: this.uiScene,
@@ -480,15 +485,6 @@ export class BattleStage {
       }),
     ];
 
-    // Shift 键盘态（详情卡面切换）：window 级监听，dispose 摘除；node 无 window 由单测直调
-    if (typeof window !== 'undefined') {
-      this._onShiftKeyDown = (e) => { if (e.key === 'Shift') this.setShiftDown(true); };
-      this._onShiftKeyUp = (e) => { if (e.key === 'Shift') this.setShiftDown(false); };
-      this._onWinBlur = () => this.setShiftDown(false); // 失焦复位（防 Shift 卡在按下态）
-      window.addEventListener('keydown', this._onShiftKeyDown);
-      window.addEventListener('keyup', this._onShiftKeyUp);
-      window.addEventListener('blur', this._onWinBlur);
-    }
   }
 
   // ========== reconcile：显示状态快照 → 场景对象 ==========
@@ -546,12 +542,11 @@ export class BattleStage {
     if (action.grantCard && info?.pickId && this._panel) {
       const entry = this._panel.takeCard(info.pickId);
       if (entry) {
-        this._grantBusy = true;
-        this.uiScene.add(entry.object);      // 面板组在原点：局部坐标即世界坐标
-        this._removePanel();
-        playCardGrantFlight({
-          card: entry.object, target: this._deckAnchor(), sequencer: this._runSequencer,
-          onDone: () => { this._grantBusy = false; this._onPanelIntent?.(action); },
+        grantCardFlight({
+          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
+          target: this._deckAnchor(), sequencer: this._runSequencer,
+          onBusy: (b) => { this._grantBusy = b; },
+          onDone: () => this._onPanelIntent?.(action),
         });
         return;
       }
@@ -574,6 +569,12 @@ export class BattleStage {
   playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
   /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
   dismissModals() { this._pickerKit?.dismissModals(); }
+  /** 获得物特写（与 Map/Room 同契约的一行转发）：战后奖励期活动舞台是战斗舞台，
+   *  run 级入账（Boss 掉落遗物）的特写要播在玩家看得见、点得到的地方。 */
+  showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
+  /** 特写/全屏界面占用（同契约：flushRelicShowcase 的让位判据、runController 读 uiBusy）。 */
+  get showcasing() { return this._pickerKit.showcasing; }
+  get uiBusy() { return this._pickerKit.uiBusy; }
 
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
@@ -875,7 +876,9 @@ export class BattleStage {
         this._entering.delete(id);
         const anchor = this.layout.getAnchor(id);
         if (anchor) {
-          const idx = orderedHand.includes(id) ? orderedHand.indexOf(id) : orderedChant.indexOf(id);
+          // 守卫（onStage.has）已保证 id ∈ orderedHand（onStage 由它构建且不再变更）——
+          // 旧三元式的 orderedChant 支不可达（且该名全库无定义，可达即抛错），已删。
+          const idx = orderedHand.indexOf(id);
           this._cardFlight(id, anchor, {
             fade: 'in',
             tilt: (idx % 2 === 0 ? 1 : -1) * 0.12,
@@ -989,16 +992,8 @@ export class BattleStage {
       await fn({
         ctx,
         args: payload ?? {},
-        cast: this._cast,
-        particles: this.particles,
-        shake: this.shake,
-        vignette: this._vignette,
-        camera: this._sm.cameraDirector, // 与 fxServices() 同袋：运镜剧本在节拍里也能飞相机
-        notify: this.notify,
-        onStageDispose: (fn) => this.onFxDispose(fn), // 常驻效果锚舞台寿命（onKill 会误收）
-        runScript: (body) => this._fxRunScript(body), // 常驻渐升的独立剧本锚（节拍收尾不杀）
-        unitById: (id) => this._units.get(id) ?? null,
-        setArtVariant: (unit, v) => this.setUnitArtVariant(unit, v),
+        ...this.fxServices(),
+        scene: this.scene, uiScene: this.uiScene, // blocks.js 基础块组 deps 袋用
       });
     }, { animator: this.animator });
     this._fxScripts.add(h);
@@ -1008,8 +1003,10 @@ export class BattleStage {
     });
   }
 
-  // fx 服务门面（cutscene 'fx' step / 房间机器 / 未来事件 SDK 的统一入口）：
-  // 暴露当前舞台可供剧本使用的全部能力。stage 不共存，runController 按活舞台取。
+  // fx 服务门面：本舞台剧本 deps 袋的单一事实源——cutscene 'fx' step / 房间机器 /
+  // _scriptBeat（展开补 ctx/args/scene/uiScene）共用同一袋。stage 不共存，
+  // runController 按活舞台取。onStageDispose/runScript：常驻效果锚舞台寿命
+  // （onKill 会误收；节拍收尾不杀）。
   fxServices() {
     return {
       cast: this._cast,
@@ -1231,19 +1228,20 @@ export class BattleStage {
     return bakeButtonFace(data, { width: BUTTON_SIZE.w * 10, height: BUTTON_SIZE.h * 10, scale: 3 });
   }
 
-  // 差分应用：按住 Shift 时指针压着的卡（手牌/咏唱/查看器画廊）切未应用描述渲染，
-  // 松开或移开即还原。至多一张卡处于详情态，切换即差分（无全量重烘）。
+  // 悬停差分：指针压着的卡（手牌/咏唱/查看器画廊）喂通用 Shift 详情（setShiftHover，
+  // 卡内与全局键态合成——2026-10-07 起详情面是 CardObject 级通用件，picker 等所有
+  // owner 同款）。切换即差分（无全量重烘）。
   _refreshShiftFace() {
-    let obj = null;
-    if (this._shiftDown && this._overCardId != null) {
-      obj = this._views.get(this._overCardId)
+    const obj = this._overCardId != null
+      ? (this._views.get(this._overCardId)
+        ?? this._pick?.temp?.get(this._overCardId)?.object   // 选卡覆盖层候选（发现/万变拳——不在 _views）
         ?? (this._viewer.opened ? this._viewer.cardObj(this._overCardId) : null)
-        ?? null;
-    }
+        ?? null)
+      : null;
     if (this._altObj === obj) return;
-    this._altObj?.setAltMode(false);
+    this._altObj?.setShiftHover(false);
     this._altObj = obj;
-    this._altObj?.setAltMode(true);
+    this._altObj?.setShiftHover(true);
   }
 
   // 悬浮/瞄准手牌 → 按其 cost 驱动资源徽章交互态：可负担 = highlighted
@@ -1296,11 +1294,6 @@ export class BattleStage {
     this._notifyHub.dispose();     // 道具在途行为补间收尾（先于 cast 清空）
     this._chantSceneFx.dispose();  // 咏唱场景演出收尾（mood/uTint 还原，发射器/环绕件收）
     this._cast.clear(); // 命名寻址随舞台销毁（下一场 beginBattle 重建）
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', this._onShiftKeyDown);
-      window.removeEventListener('keyup', this._onShiftKeyUp);
-      window.removeEventListener('blur', this._onWinBlur);
-    }
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;

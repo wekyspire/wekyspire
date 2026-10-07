@@ -399,7 +399,10 @@ const berserkStanceCard = (id, name, tier, ap, promotesTo) => registerSkill({
       when: AddEffectInstruction, phase: 'post',
       filter: (instr) => instr.target === sctx.player && instr.effectId === 'block'
         && instr.payload.stacks > 0,
-      react: (instr, ctx) => addEffect(sctx, 'strength', 1, ctx.player),
+      react: (instr, ctx) => {
+        addEffect(sctx, 'strength', 1, ctx.player);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+      },
     }],
   },
   describe: () => '获得/effect{格挡}时，/effect{力量}1',
@@ -423,7 +426,10 @@ const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3,
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
       react: (instr, ctx) => {
-        if (gate(sctx, ctx.battleState)) gainBlock(sctx, block, ctx.player);
+        if (gate(sctx, ctx.battleState)) {
+          gainBlock(sctx, block, ctx.player);
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+        }
       },
     }],
   },

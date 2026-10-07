@@ -14,11 +14,13 @@
 //              挂这里；ctx.onKill 在剧本正常收尾也会触发，挂它会误收常驻演出
 //   unitById(uniqueID) → UnitObject|null（多部件寻址：unit.parts.get(key) ?? unit，
 //              或 unit.partOrRoot(key) 回落根）
+//   scene / uiScene   世界/ UI 场景根（blocks.js 基础块组 deps 袋用）
 // }
 // 节拍语义：ANIM_SCRIPT 是阻塞节拍——剧本跑完才 finish；未知 id 静默回落收拍（不炸队列）。
 import { registerPyroScripts } from './bosses/pyro.js';
 import { registerKardasScripts } from './bosses/kardas.js';
 import { registerMefm1Scripts } from './bosses/mefm1.js';
+import { registerEnemyActScript } from './enemyAct.js';
 
 const REG = new Map();
 
@@ -35,3 +37,4 @@ export function hasScript(id) { return REG.has(id); }
 registerPyroScripts(registerScript);
 registerKardasScripts(registerScript);
 registerMefm1Scripts(registerScript);
+registerEnemyActScript(registerScript);

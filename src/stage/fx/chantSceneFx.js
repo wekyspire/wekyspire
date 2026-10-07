@@ -1,6 +1,6 @@
 // 咏唱场景演出管理器（呈现层主题，不动 core）：咏唱激活期间把战场推向体系氛围——
 // 火焰旋风 = 环境余烬/火屑飘荡 + 场景暖调（后处理 uTint）+ 结构光压暗火光反抬
-// （lighting.mood 口径）+ 骑士周身火流环绕（chantOrbitFx）。
+// （lighting.mood 口径）+ 息旋涡壳；贴身气流粒子环绕（qiOrbit，GPU 池 custom 类型）仅 qiFlow 使用。
 // 驱动 = **快照对账**（不依赖 ANIM 事件）：hand 里 isActivated 的卡经主题注册表
 // 解析出 (主题, 强度k)，激活集合变化即重定包络目标——读档恢复/观战重连/任何
 // 离手熄灭路径天然一致（状态是唯一事实源）。
@@ -8,21 +8,24 @@
 // 强度变化全程连续，无阶梯。注册新体系 = 加一行主题表（defId 逐卡覆写 → series
 // 族行 → null 无演出，与 spells 决议链同构）。
 import * as THREE from 'three';
-import { createChantOrbit } from './chantOrbitFx.js';
+import { createQiOrbitLink } from './gpu/qiOrbit.js';
+import { makeWhirlMesh } from './spells/whirlMesh.js';
 
 // ---- 主题表 ----------------------------------------------------------------
 // fireHeat（火系炙热场）：tint = 后处理暖调峰值色（uTint 白→此色按 k 插值）；
 // dimDrop/fireGainUp = mood 压结构光/抬火光幅度（×k）；lightWarm = 冷结构灯染色
 // 目标（只染 b>r 的冷灯，按 k 插值、熄灭还原——pyro 染灯配方的可逆版，火把本暖
-// 不碰）；orbit = 骑士火流环绕参数；drift = 环境余烬/火屑发射器布局（rate ×k）；
+// 不碰）；drift = 环境余烬/火屑发射器布局（rate ×k）；
 // ringAt = 玩家热浪环出现阈值（高级才有的「火气蒸腾」）。
 const THEMES = {
   fireHeat: {
     tint: [1.22, 0.9, 0.68],
     dimDrop: 0.24, fireGainUp: 1.6,
     lightWarm: [1.0, 0.48, 0.16], lightWarmK: 0.8,
-    orbit: { count: 4, radius: 5.8, speed: 2.9, size: 6.4, heat: 1.0 },
     ringAt: 0.7,
+    // 持续段「息旋涡」：低亮度旋涡壳常驻缓旋（与激活演出的涡同语言——
+    // 2026-10-06 用户指出持续段粗糙与激活不符；色用暗档，亮度靠色不做 level）
+    shell: { radius: 5.0, height: 15, color: [0.66, 0.26, 0.08], hot: [1.0, 0.60, 0.28] },
     // 高撒布布局：出生中心 dy（立牌高分数）× 2D 圆盘半径 0.45H → 垂直覆盖
     // dy±0.45H，0.2H~1.3H 从脚底撒到头顶上空（「空中飞荡」）；vby 续升偏置。
     // z 一律贴机位可见带（dz 相对锚偏移）——敌锚纵深 z≈-56，那边的粒子缩成
@@ -47,12 +50,12 @@ const THEMES = {
   // qiFlow（体修「气」场）：**贴身主题，不染全场**（2026-10-02 用户定——体修咏唱
   // 作用于自身，非火焰旋风的战场级现象）：tint/mood/染灯三个全场输出一律关掉
   // （null/0 = 主题声明「我没有全场输出」，update 按字段存在性门控）；表现全在
-  // 贴身件——环绕气流带 + 自体锚淡雾微点 + 高档（太极 k1.0）地气环。
+  // 贴身件——环绕气流粒子（orbit，本表唯一使用者）+ 自体锚淡雾微点 + 高档（太极
+  // k1.0）地气环。
   qiFlow: {
     tint: null, dimDrop: 0, fireGainUp: 0,
     lightWarm: null, lightWarmK: 0,
-    orbit: { count: 3, radius: 5.6, speed: 1.7, size: 6.2, heat: 0.85,
-      variant: 'qi', color: [1.0, 1.08, 1.25] },
+    orbit: { radiusK: 0.45 },   // 环绕半径 = 立牌高 × radiusK；三族流形/密度/亮暗在 qiOrbit.js
     ringAt: 0.9,
     drift: [
       // 淡雾微点：大而软、慢而低（贴身气场，只锚自身）
@@ -87,12 +90,12 @@ const CARD_ROW = {
 
 /**
  * @param {object} deps
- *   scene: 世界场景；particles: 组合粒子门面（spawnEmitter）；
+ *   scene: 世界场景；particles: 组合粒子门面（spawnEmitter）；worldPool: 世界 GPU 池（qiOrbit 用，可空）；
  *   cast: 命名寻址（light:mood）；composer: 体积月光 composer（setSceneTint，可空）；
  *   units: 单位视图 Map；playerId: () => 玩家 uniqueID；
  *   enemyIds: () => 敌 uniqueID 列表（快照口径）
  */
-export function createChantSceneFx({ scene, particles, cast, composer, units, playerId, enemyIds }) {
+export function createChantSceneFx({ scene, particles, worldPool = null, cast, composer, units, playerId, enemyIds }) {
   const active = new Map();        // uniqueID → { defId, theme, k }
   let k = 0;                       // 包络（逐帧缓动向 target）
   let target = 0;
@@ -102,6 +105,8 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
   let emitters = [];               // { handle, baseRate }
   let ring = null;                 // 玩家热浪环（≥ringAt 才发）
   let orbit = null;
+  let shell = null;                // 息旋涡壳（fireHeat 持续段）
+  let shellWaning = null;          // 收场中的壳（quench 后走 wane 段淡出再 dispose）
   const WHITE = new THREE.Color(1, 1, 1);
   const scratch = new THREE.Color();
 
@@ -181,8 +186,22 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
         });
         if (handle) emitters.push({ handle, baseRate: d.rate });
       }
-      if (!orbit) orbit = createChantOrbit({ scene, anchor: () => unitAnchor(playerId(), 0) });
-      orbit.setParams({ ...theme.orbit, count: Math.max(2, Math.round(theme.orbit.count * target)) });
+      if (theme.orbit) {
+        if (!orbit) orbit = createQiOrbitLink(worldPool, theme.orbit);
+        orbit?.start();
+      }
+    }
+    if (theme.shell && !shell) {
+      const a = anchors().self;
+      if (a) {
+        const sh = theme.shell;
+        shell = makeWhirlMesh({ radius: sh.radius, height: sh.height, color: sh.color, hot: sh.hot,
+          seed: Math.random() * 6.28 + 0.01 });
+        shell.mesh.position.set(a.x, a.y + sh.height * 0.5 + 0.2, a.z + 1);
+        shell.mesh.scale.set(0.86, 0.86, 1);
+        shell.uProg.value = 0.30;   // 起手越过 rise 段（life 平台）
+        scene.add(shell.mesh);
+      }
     }
   }
 
@@ -199,10 +218,17 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
     if (ring) { try { ring.handle.stop(); } catch (_) {} ring = null; }
     orbit?.dispose();
     orbit = null;
+    if (shell) { shellWaning = shell; shell = null; }   // 转入 wane 段（update 继续推）
   }
 
   // ---- 帧泵：包络推进 + 全输出派生 ----
   function update(dt) {
+    // 收场壳：uProg 走 wane 段（0.75~1 淡出上飘），走完自 dispose
+    if (shellWaning) {
+      shellWaning.uPhase.value += dt * 1.4;
+      shellWaning.uProg.value += dt * 2.4;
+      if (shellWaning.uProg.value >= 1) { shellWaning.dispose(); shellWaning = null; }
+    }
     if (k === target && k === 0) return;
     const rate = target > k ? 2.2 : 3.0;   // 起 ~0.7s 爬满 / 收 ~0.5s 退尽
     k += (target - k) * (1 - Math.exp(-rate * dt));
@@ -212,6 +238,14 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
       return;
     }
     if (!theme) return;
+    // 环绕件随主题对齐：包络未过零而主题已换（更强咏唱易主）时补建/撤除
+    if (theme.orbit && !orbit) {
+      orbit = createQiOrbitLink(worldPool, theme.orbit);
+      orbit?.start();
+    } else if (orbit && !theme.orbit) {
+      orbit.dispose();
+      orbit = null;
+    }
     // mood：结构光压暗 + 火光反抬（只在做主期间逐帧落笔——pyro 等剧本同写时
     // 后到的一方覆盖，同 pvp 调光冲突量级可接受）。dimDrop/fireGainUp 全 0 的
     // 主题（qiFlow 贴身场）不碰 mood——也不与任何调光剧本争写
@@ -238,6 +272,13 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
       scratch.lerpColors(WHITE, scratch, k);
       composer?.setSceneTint?.([scratch.r, scratch.g, scratch.b]);
     }
+    // 息旋涡：缓旋（包络越满旋越快）+ 微幅呼吸缩放
+    if (shell) {
+      shell.uPhase.value += dt * (0.9 + 2.4 * k);
+      shell.uProg.value = Math.min(0.45, shell.uProg.value + dt * 1.6);
+      const sc = 0.82 + 0.14 * k;
+      shell.mesh.scale.set(sc, sc, 1);
+    }
     // 发射器 rate 随包络（点火渐密、熄灭渐稀）
     for (const e of emitters) e.handle.rate = e.baseRate * k;
     // 热浪环/地气环：达到 ringAt 才起（高级咏唱的「气蒸腾」档），参数随主题
@@ -254,7 +295,7 @@ export function createChantSceneFx({ scene, particles, cast, composer, units, pl
     }
     if (ring) ring.handle.rate = ring.baseRate * k;
     orbit?.setLevel(k);
-    orbit?.update(dt);
+    orbit?.setAnchor(unitAnchor(playerId(), 0));
   }
 
   function dispose() { quench(); k = 0; target = 0; active.clear(); }

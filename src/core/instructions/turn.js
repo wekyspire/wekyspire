@@ -203,6 +203,13 @@ export class EnemyTurnInstruction extends BattleInstruction {
 // ---- 回合循环：交替提交玩家/敌方回合，直到内核终局 abort（战斗结束的唯一出口） ----
 export class TurnLoopInstruction extends BattleInstruction {
   execute(ctx) {
+    // 额外回合（〈盗取时间〉）：本拍轮到敌方回合时消费跳过标记，不提交任何回合指令，
+    // 下一次执行落在偶数位 = 立刻开始玩家的下一个回合（敌方回合整段不发生，
+    // 含其回合开始效果 tick 与意图刷新）
+    if (this._stage % 2 === 1 && (ctx.battleState.skipEnemyTurns ?? 0) > 0) {
+      ctx.battleState.skipEnemyTurns -= 1;
+      return false;
+    }
     if (this._stage % 2 === 0) {
       ctx.kernel.submitInstruction(new PlayerTurnInstruction(), this);
     } else {

@@ -7,7 +7,7 @@
 //   ring  架势/气场链（龟守/武者/天一/狂战/聚力/集结…）：脚下气场环扩散 + 主色
 //         灯——读「进架」。主题色经 params 换（狂战红/集结金/默认灵蓝）
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { cardFlare, impactBurst } from './blocks.js';
+import { cardFlare, groundRing, lampPulse } from './blocks.js';
 
 export const blockCast = {
   defaults: {
@@ -47,17 +47,24 @@ export const blockCast = {
         return;
       }
 
-      // ring：脚下气场环（纯环闪光，粒子压低——架势是「沉」不是「爆」）
-      // flashSize 要大到环探出主角轮廓（站姿 5.6 宽 × 立绘高 ~7）——环半径撑满也
-      // 出不了本体 footprint 的话永远藏在身体后面（punchShade 同款实测病根）
-      const burstJob = impactBurst(ctx, deps, {
-        at: deps.unitFeet(player),
-        color: prm.color, hot: prm.hot, burstColor: prm.core,
-        count: 8, speed: 9, size: 0.7, ttl: 0.7, gravity: 2,
-        flashSize: 14.0, flashMs: 460,
-        lampIntensity: 500, lampMs: 380,
+      // ring：脚下气场环——**真贴地**（quad 平躺 + 环流纹 + 破边，2026-10-06 审计
+      // 重制：竖直 billboard 假压扁环读「光滩/门环」）。粒子压低（架势是「沉」不是
+      // 「爆」）；尺寸要大到环探出主角轮廓（站姿 5.6 宽 × 立绘高 ~7）
+      const feet = deps.unitFeet(player);
+      const ringJob = groundRing(ctx, deps, {
+        at: feet, size: 15.0, ms: 560, spin: 2.2,
+        color: prm.color, hot: prm.hot,
       });
-      await Promise.all([flareJob, burstJob]);
+      deps.particles?.spawn?.(feet.x, feet.y + 0.5, {
+        color: prm.core, count: 8, speed: 8, size: 0.7, ttl: 0.8, gravity: 3, z: feet.z,
+      });
+      ctx.spawn(async (c) => {
+        await lampPulse(c, deps, {
+          name: 'light:fx0', at: { x: feet.x, y: feet.y + 6, z: (feet.z ?? 0) + 2 },
+          color: prm.color, peak: 460, attackMs: 180, decayMs: 380,
+        });
+      });
+      await Promise.all([flareJob, ringJob]);
       notify();
     };
   },

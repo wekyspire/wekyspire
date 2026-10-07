@@ -35,6 +35,11 @@ export async function cartoonNova(ctx, deps, {
   at, scale = 1, width = 14, mini = false,
 } = {}) {
   if (!at || !deps?.scene) return;
+  // 场景交互广播（单向，大爆炸双事件）：冲击 + 高温 → PCG 道具物理响应与燃烧
+  if (!mini) {
+    deps.notify?.('impact', { at: { x: at.x, z: at.z ?? 0 }, power: 1.6 * scale });
+    deps.notify?.('heat', { at: { x: at.x, z: at.z ?? 0 }, temp: 1.5 * scale });
+  }
   const sK = (mini ? 0.34 : 1.0) * Math.min(1.5, Math.max(0.75, scale));
   const wK = Math.min(1.7, Math.max(0.75, width / 22));
   const cK = mini ? 0.25 : 1.0;   // 密度系数

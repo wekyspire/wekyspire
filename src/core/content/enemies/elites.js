@@ -7,7 +7,8 @@ import { AddCardInstruction } from '../../instructions/cards.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
-import { aliveEnemies } from '../../state/battleState.js';
+import { PlayerTurnEndInstruction } from '../../instructions/turn.js';
+import { aliveEnemies, zoneOf } from '../../state/battleState.js';
 
 // ==== 精英怪：机制更强 / 基准数值更高 / 战力≈两个普通敌人 ====
 // 精英只经「精英怪房」模板出场（difficulty.elite: true 同时把它挡在普通通配池外）。
@@ -220,5 +221,149 @@ registerEnemy({
     return (unit.actionIndex % 2 === 0 && master)
       ? { kinds: ['defend', 'buff'], note: '护主：主君护盾+5' }
       : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') };
+  },
+});
+
+// ==== 章2 精英（南孚宫 17/20 层；ENEMIES_2.md 精英节）====
+
+// 四色炸弹（爆破专家衍生塞牌，Z_CARDS.md 口径）：红/蓝 = 定时炸弹（可打出消耗，
+// 回合末仍在手受 15——处理出口是花代价打出或弃掉）；白/黑 = 即爆雷（打出当拍自伤，
+// 白色带消耗、黑色是回库的滞留税）。均不入奖励池。
+function timedBombCard({ id, name, cost, note }) {
+  registerSkill({
+    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk',
+    cost,
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    canSpawnAsReward: false,
+    use() { return true; },
+    subscriptions: (sctx) => [{
+      when: PlayerTurnEndInstruction, phase: 'post',
+      filter: (instr, ctx) => zoneOf(ctx.battleState, sctx.self.uniqueID) === 'hand',
+      react: (instr, ctx) => ctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: null, target: ctx.player, amount: 15, fixed: true, tags: [id],
+      }), instr),
+    }],
+    describe: () => note,
+  });
+}
+timedBombCard({ id: 'redBomb', name: '红色炸弹', cost: { mana: 0, actionPoint: 2 },
+  note: '消耗。回合结束时，若此卡在手牌中，受到15点伤害' });
+timedBombCard({ id: 'blueBomb', name: '蓝色炸弹', cost: { mana: 3, actionPoint: 0 },
+  note: '消耗。回合结束时，若此卡在手牌中，受到15点伤害' });
+
+function instantBombCard({ id, name, amount, exhaust }) {
+  registerSkill({
+    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    ...(exhaust ? { keywords: ['exhaust'] } : {}),
+    canSpawnAsReward: false,
+    use(sctx) {
+      sctx.kernel.submitInstruction(new DealDamageInstruction({
+        source: null, target: sctx.player, amount, fixed: true, type: 'minor', tags: ['selfcost'],
+      }));
+      return true;
+    },
+    describe: () => `打出时受到${amount}点伤害${exhaust ? '。消耗' : ''}`,
+  });
+}
+instantBombCard({ id: 'blackBomb', name: '黑色炸弹', amount: 9, exhaust: false });
+instantBombCard({ id: 'whiteBomb', name: '白色炸弹', amount: 14, exhaust: true });
+
+// 爆破专家（章2 精英·炸弹工厂）：四拍循环——洗红+蓝炸弹入牌库 → 攻10 →
+// 攻7 + 塞白+黑炸弹进手牌 → 重击21。定时与即爆两档拆弹账：红蓝可花代价排掉，
+// 白黑当拍就疼。
+registerEnemy({
+  difficulty: { base: 12, floorMin: 17, floorMax: 20, elite: true },
+  id: 'demolitions', name: '爆破专家',
+  createUnit: () => new Enemy({ defId: 'demolitions', name: '爆破专家', maxHp: 120 }),
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 4;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new AddCardInstruction({ defId: 'redBomb', toZone: 'deck', index: 'random' }));
+      actx.kernel.submitInstruction(new AddCardInstruction({ defId: 'blueBomb', toZone: 'deck', index: 'random' }));
+    } else if (phase === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 10 + atk,
+      }));
+    } else if (phase === 2) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 7 + atk,
+      }));
+      actx.kernel.submitInstruction(new AddCardInstruction({ defId: 'whiteBomb', toZone: 'hand', index: 'random' }));
+      actx.kernel.submitInstruction(new AddCardInstruction({ defId: 'blackBomb', toZone: 'hand', index: 'random' }));
+    } else {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 21 + atk,
+        tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
+      }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const phase = unit.actionIndex % 4;
+    if (phase === 0) return { kinds: ['debuff'], note: '将「红色炸弹」「蓝色炸弹」洗入你的牌库' };
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
+    if (phase === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 7 + atk, note: '向你的手牌塞入「白色炸弹」「黑色炸弹」' };
+    return { kinds: ['attack'], hits: 1, damage: 21 + atk, note: '重击' };
+  },
+});
+
+// 灵御猎手（章2 精英·资源对冲）：首拍 干扰1（每回 1 魏启洗 1 虚无——回蓝体系的天敌，
+// 当前回蓝手段少时近似空转、回蓝卡补齐后是主要压力源）。四拍循环：攻15 →
+// 攻3×5 → 重击24 → 干扰1 + 洗 4 虚无。
+registerEnemy({
+  difficulty: { base: 12, floorMin: 17, floorMax: 20, elite: true },
+  id: 'hunter', name: '灵御猎手',
+  createUnit: () => new Enemy({ defId: 'hunter', name: '灵御猎手', maxHp: 126 }),
+  act(actx) {
+    const { unit } = actx;
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'interfere', stacks: 1,
+      }));
+      return;
+    }
+    const phase = (unit.actionIndex - 1) % 4;
+    if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 15 + atk,
+      }));
+    } else if (phase === 1) {
+      for (let i = 0; i < 5; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: actx.player, amount: 3 + atk,
+        }));
+      }
+    } else if (phase === 2) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 24 + atk,
+        tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
+      }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: actx.player, effectId: 'interfere', stacks: 1,
+      }));
+      for (let i = 0; i < 4; i++) {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'voidCard', toZone: 'deck', index: 'random',
+        }));
+      }
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (unit.actionIndex === 0) return { kinds: ['debuff'], note: '赋予玩家干扰1（每回复1魏启，牌库洗入1虚无）' };
+    const phase = (unit.actionIndex - 1) % 4;
+    if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 15 + atk };
+    if (phase === 1) return { kinds: ['attack'], hits: 5, damage: 3 + atk };
+    if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
+    return { kinds: ['debuff'], note: '赋予玩家干扰1；将 4 张「虚无」洗入你的牌库' };
   },
 });

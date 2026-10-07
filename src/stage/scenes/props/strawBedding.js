@@ -4,6 +4,7 @@
 // 变体：草蓬数/铺开规模。rng 驱动确定性变体。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   place: 'floorDecal',
   tags: ['decal'],
   footprint: { x: 6, z: 4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ tufts = 7, spread = 1.0, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('strawBedding');

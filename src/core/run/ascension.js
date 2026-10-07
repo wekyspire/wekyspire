@@ -11,10 +11,10 @@ import { gainMaxMana, gainMaxHp } from './prep.js';
 // 进阶只保留获赠直发，不再开包挑选。
 // 门槛数值全部占位（§9 留坑），能力授予池当前最小化为空。
 
-// 可升级维度：火/木/空三维度全开放（WOOD/AIR_VEIN_CARDS）。
+// 可升级维度：当前仅火（木/空两系卡牌已移除，待重做后再开）。
 // 体修不再是灵脉维度——它走隐藏的 player.bodyLevel（进阶事件「跳过」时 +1）。
 // player.leino 仍保留四键（旧档兼容），totalLeino 照旧求和（body 恒 0）。
-export const LEINO_DIMENSIONS = ['fire', 'wood', 'air'];
+export const LEINO_DIMENSIONS = ['fire'];
 
 export const ASCENSION_PLACEHOLDER = {
   firstTrainings: 1,    // 首进阶门槛：第 2 层训练房即触发（快速特化）
@@ -28,8 +28,6 @@ export const ASCENSION_PLACEHOLDER = {
 // 即首次进阶的全部卡牌收益。
 export const FIRST_ASCENSION_GRANT = Object.freeze({
   fire: Object.freeze({ cards: ['igniteC', 'fireBolt'], ability: 'fireVein' }),
-  wood: Object.freeze({ cards: ['poisonSting', 'breathOfLife'], ability: 'woodVein' }),
-  air: Object.freeze({ cards: ['windBlade', 'atEase'], ability: 'airVein' }),
 });
 
 export function totalLeino(run) {
@@ -57,14 +55,6 @@ const ABILITY_POOLS = Object.freeze({
   fire: Object.freeze({
     elite: Object.freeze(['pyroBlast', 'fireWard', 'scorchVein', 'fireBlower']),
     master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
-  }),
-  wood: Object.freeze({
-    elite: Object.freeze(['renew', 'blightLord']),
-    master: Object.freeze(['forestHeart', 'plagueSource']),
-  }),
-  air: Object.freeze({
-    elite: Object.freeze(['galeFury', 'wanderClouds']),
-    master: Object.freeze(['windLord', 'voidness']),
   }),
   body: Object.freeze({
     elite: Object.freeze(['boxer', 'bladeMaster', 'warrior', 'parryFist', 'bladeUnity']),

@@ -13,7 +13,7 @@ import { createSkillRuntime } from '../state/skillRuntime.js';
 //   · **S 永不入包**（只走事件投放）；D 阶已移除（TIER_RANK 无 D）。
 //   · 通用包注入池构成与非常规卡同口径（跟随同一通道上限，不再按门禁剔除）。
 // Z（诅咒）恒不入池；canSpawnAsReward=false 的衍生牌不入池。
-// 木/空灵脉内容待实装：其卡包在池子为空时自动隐藏（见 availablePacks）。
+// 卡包维度表里没有的维度在池子为空时自动隐藏（见 availablePacks）。
 
 export const REWARDS_PLACEHOLDER = {
   moneyPerBattle: 10,
@@ -43,8 +43,6 @@ export function rewardTierCap(channel = 'normal') {
 export const PACKS = Object.freeze({
   body: Object.freeze({ id: 'body', name: '基础', desc: '体修与通用混合池' }),   // desc 会烘上奖励瓦片（~10 汉字宽），长句硬裁（夜测 r3路8）
   fire: Object.freeze({ id: 'fire', name: '火灵脉', desc: '爆发与燃烧' }),
-  wood: Object.freeze({ id: 'wood', name: '木灵脉', desc: '恢复与中毒' }),
-  air: Object.freeze({ id: 'air', name: '空灵脉', desc: '闪避与咏唱' }),
   common: Object.freeze({ id: 'common', name: '通用', desc: '跨体系功能卡' }),
 });
 
@@ -63,8 +61,6 @@ export const BODY_PACK_INJECT = Object.freeze({ chance: 0.9, pity: 2, secondChan
 export function packOf(def) {
   if (def?.pack) return def.pack;
   if (def?.type === 'fire') return 'fire';
-  if (def?.type === 'wood') return 'wood';
-  if (def?.type === 'air') return 'air';
   return 'body';
 }
 
@@ -267,13 +263,13 @@ export function seriesAffinityWeight(run, def, counts = null) {
   return 1 + SERIES_AFFINITY.perCard * Math.min(c.get(series) ?? 0, SERIES_AFFINITY.maxCount);
 }
 
-// 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（木/空待实装自动隐藏）。
+// 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（维度表里没有的自动隐藏）。
 // **本局路线（run.route）对应的灵脉包不受等级门禁**——灵脉开局
 // 等级 0 起步，第一场战斗起就必须能开本体系卡包，否则前两场战斗只剩体修包可开。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
   const out = [PACKS.body];
-  for (const id of ['fire', 'wood', 'air']) {
+  for (const id of ['fire']) {
     const unlocked = (run?.player?.leino?.[id] ?? 0) >= 1 || run?.route === id;
     if (unlocked && packCardPool(run, id).length > 0) out.push(PACKS[id]);
   }

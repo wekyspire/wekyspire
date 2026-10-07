@@ -32,7 +32,7 @@ import { StorageBufferAttribute, PointsNodeMaterial } from 'three/webgpu';
 import {
   Fn, If, Loop, uniform, storage, select, uv,
   float, int, uint, vec3, vec4,
-  floor, fract, sin, cos, clamp, exp, smoothstep, oneMinus, length, max, min, mix, sqrt,
+  floor, fract, sin, cos, clamp, exp, smoothstep, oneMinus, length, max, min, mix, sqrt, pow,
   instanceIndex, instancedBufferAttribute, atomicAdd, atomicSub,
 } from 'three/tsl';
 import { additiveLight } from '../../post/passes.js';
@@ -55,7 +55,7 @@ const T_STRIDE = 12;  // 每类型行 12 vec4：
 //  r8: color.rgb, alpha
 //  r9: colorEnd.rgb, heat
 //  r10: radial（径向爆散初速）, ageHeat（随年龄衰减的亮度增益）, —, —
-//  r11: 预留（只许尾部追加——L1 分块纪律）
+//  r11: softness（sprite 径向衰减指数）, —, —（只许尾部追加——L1 分块纪律）
 const A_STRIDE = 2;   // 每锚点 2 vec4：
 //  a0: type(0 线段/1 矩形/2 圆), alive, p0.x, p0.y
 //  a1: p0.z, p1.x, p1.y, p1.z
@@ -376,11 +376,12 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       const prog = clamp(payloadS.element(idx.mul(int(2)).add(int(1))).x, 0.0, 1.0);
       const ageP = clamp(age, 0.0, 1.0);
       const sz = r7.z.mul(mix(float(1.0), r7.w, prog));
+      const soft = tS.element(base.add(int(11))).x;
       // ageHeat：随年龄衰减的亮度增益（燃烧火星「新鲜更亮」口径 = heat×(1+ageHeat×(1-age))）
       const rgb = mix(r8.rgb, r9.rgb, prog)
         .mul(r9.w.mul(float(1.0).add(r10.y.mul(oneMinus(ageP)))));
       col.assign(vec4(rgb, r8.w.mul(oneMinus(ageP))));
-      misc.assign(vec4(sz, prog, 0.0, 0.0));
+      misc.assign(vec4(sz, prog, soft, 0.0));
     });
     renderColorS.element(idx).assign(col);
     renderMiscS.element(idx).assign(misc);
@@ -416,7 +417,8 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   pointsMat.positionNode = select(aliveV, pA.xyz, vec3(0.0, -100000.0, 0.0));
   pointsMat.sizeNode = select(aliveV, aMiscV.x.mul(uProj11), float(0.0));
   const d = length(uv().sub(0.5));
-  const m = oneMinus(smoothstep(0.10, 0.5, d));
+  // 径向衰减指数逐类型（misc.z，缺省 1 = 平底+边沿衰减；>1 = 中心亮缘虚的软光点）
+  const m = pow(oneMinus(smoothstep(0.10, 0.5, d)), aMiscV.z);
   const aColor = instancedBufferAttribute(geo.attributes.aColor, 'vec4');
   pointsMat.colorNode = select(
     bloomPassFlag.greaterThan(0.5),
@@ -641,7 +643,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       put(8, rd.color[0], rd.color[1], rd.color[2], rd.alpha);
       put(9, rd.colorEnd[0], rd.colorEnd[1], rd.colorEnd[2], rd.heat);
       put(10, s.radial, rd.ageHeat ?? 0, 0, 0);
-      put(11, 0, 0, 0, 0);
+      put(11, rd.softness ?? 1, 0, 0, 0);
     }
     tAttr.needsUpdate = true;
   }
@@ -685,7 +687,8 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
     for (const r of rows) { if (r.used) r.prevCursor = r.cursor; }
     uDt.value = dt; uTime.value = t; uFrame.value = frame;
     // 单次提交保序：复杂类型前置（如燃烧条目压缩）→ uber update → 复杂类型
-    // 各自 dispatch → present（读本帧终态）
+    // 各自 dispatch → present（读本帧终态）→ 尾钩子（场景火焰提案清零——
+    // 读后清，渲染期物体材质再写新提案，下帧 spawn 读到的是本帧写入）
     const pre = [];
     for (const r of rows) {
       if (r.used && r.kind === 1 && r.customTick) {
@@ -693,9 +696,15 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
         if (ns?.length) pre.push(...ns);
       }
     }
-    renderer.compute([...pre, updateNode, ...customPasses, presentNode]);
+    const tails = [];
+    for (const fn of tailNodes) { const n = fn(); if (n) tails.push(n); }
+    renderer.compute([...pre, updateNode, ...customPasses, presentNode, ...tails]);
     pollDrained(dt);
   }
+
+  // 尾节点注册（fn → compute node | null，每帧求值）：场景火焰提案清零用
+  const tailNodes = [];
+  function registerTail(fn) { tailNodes.push(fn); }
 
   /** 场景切换清预算：段全释放、游标/锚点/计数归零、粒子全灭（类型登记不受影响）。 */
   function reset() {
@@ -755,7 +764,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   return {
     points, update, dispose, reset,
     burst, setTypeActive, setTypeRateScale, setTypeSpawnPos, setTypeSpawnAnchor, setTypeDestination,
-    useType, typeApi, addAnchor, moveAnchor, removeAnchor, onDrained,
+    useType, typeApi, addAnchor, moveAnchor, removeAnchor, onDrained, registerTail,
     debugReadCounts, debugReadState,
     get allocatedSlots() { return nextSlot; },
     space,

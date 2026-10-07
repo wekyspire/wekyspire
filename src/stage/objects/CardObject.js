@@ -27,6 +27,38 @@ const EMBER_COLORS = [
   [1.0, 0.95, 0.60],
 ];
 
+// ---- Shift 详情态（全局通用，2026-10-07 用户定：到处生效）----------------------
+// 曾是 BattleStage 私有差分（只接手牌/查看器画廊），picker/发现界面的候选卡全漏。
+// 下沉为卡对象级行为：模块级全局 shift 态 + 活卡注册表；任何 owner（手牌路由/
+// picker/_setHovered/画廊……）只喂 setShiftHover(进/出)，卡对象自己合成
+// shift×hover×textAlt → setAltMode。键监听随首张活卡惰性安装（浏览器环境）。
+const _liveCards = new Set();
+let _cardShiftDown = false;
+let _shiftListenerInstalled = false;
+function _installShiftListener() {
+  if (_shiftListenerInstalled || typeof window === 'undefined') return;
+  _shiftListenerInstalled = true;
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift' && !_cardShiftDown) { _cardShiftDown = true; _broadcastCardShift(); }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift' && _cardShiftDown) { _cardShiftDown = false; _broadcastCardShift(); }
+  });
+  window.addEventListener('blur', () => {
+    if (_cardShiftDown) { _cardShiftDown = false; _broadcastCardShift(); }   // 失焦必还原
+  });
+}
+function _broadcastCardShift() {
+  for (const c of _liveCards) c._applyShiftFace();
+}
+/** 测试/宿主直调：全局 Shift 态入口（window 监听之外的可控通道）。 */
+export function setCardShiftDown(on) {
+  on = !!on;
+  if (on === _cardShiftDown) return;
+  _cardShiftDown = on;
+  _broadcastCardShift();
+}
+
 export class CardObject extends THREE.Group {
   /**
    * @param {object} options
@@ -56,6 +88,9 @@ export class CardObject extends THREE.Group {
     this._layoutSize = { width: cardWidth, height: cardHeight };
     this._visualState = 'normal';
     this._altOn = false;     // Shift 详情态：以未应用描述（textAlt）渲染
+    this._shiftHovered = false;   // owner 喂的悬停态（与全局 shift 合成）
+    _installShiftListener();
+    _liveCards.add(this);
   }
 
   /** 牌面内容更新：重烘纹理 + 成对替换 hit map（详情态保持，按新数据重出）。 */
@@ -77,6 +112,22 @@ export class CardObject extends THREE.Group {
   }
 
   get altMode() { return this._altOn; }
+
+  /**
+   * 悬停喂入口（通用 Shift 详情的 owner 侧 API）：指针压上/离开本卡时调用，
+   * 与全局 Shift 键态在卡内合成——按住 Shift + 悬停 → 未应用描述渲染。
+   * 手牌路由、picker 候选、查看器画廊等一切持卡 owner 都走这一个口。
+   */
+  setShiftHover(on) {
+    const next = !!on;
+    if (next === this._shiftHovered) return;
+    this._shiftHovered = next;
+    this._applyShiftFace();
+  }
+
+  _applyShiftFace() {
+    this.setAltMode(_cardShiftDown && this._shiftHovered);
+  }
 
   // 烘焙当前牌面：详情态用 {...数据, text: textAlt, altFace: true} 派生视图
   _applyFace() {
@@ -280,6 +331,7 @@ export class CardObject extends THREE.Group {
   }
 
   dispose() {
+    _liveCards.delete(this);
     this._cancelTransform(); // 在途变换演出掐死（叠层/补间/预烘焙纹理一并收）
     this.fx.dispose();
     if (this._embers) {

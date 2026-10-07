@@ -4,6 +4,7 @@
 // 变体走 build(opts)：pillows 垫数（2~4）；rng 驱动确定性。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   mount: 'floor',
   tags: ['cloth', 'quarters'],
   footprint: { x: 2.8, z: 2.6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ pillows = 3, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('pillowPile');

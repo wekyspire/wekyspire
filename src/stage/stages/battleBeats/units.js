@@ -7,6 +7,7 @@ import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat } from '../../fx/spells/index.js';
+import { resolveEnemyHitFx, runEnemyHitBeat } from '../../fx/spells/enemyHitFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
 
@@ -64,6 +65,16 @@ export const unitBeats = {
       // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送。fire-and-forget
       // （_fxRunScript 舞台寿命锚）：不占本节拍时序，受击既有演出（突进/击退/闪光）照常。
       const dmgFx = dealt > 0 ? resolveDamageFx(payload?.skillDefId) : null;
+      // 敌方来源回落（五模板通配）：玩家技能表查不到的 major 伤害交给敌方三式
+      // （普攻撞击/连击小快/重击大冲击）——判据与配方在 enemyHitFx.js。
+      // 意图 = 本次行动预告（伤害拍时点尚未刷新）：重击/连击按怪的出力口径判
+      let enemyFx = null;
+      if (dealt > 0 && !dmgFx) {
+        const srcIntention = srcId != null
+          ? (this._snapshot?.enemies ?? []).find(e => e.uniqueID === srcId)?.intention ?? null
+          : null;
+        enemyFx = resolveEnemyHitFx(this, payload, dealt, srcIntention);
+      }
       // 投射物抵达门（CPU 权威，projectileTrack.js）：tracked = 施术拍发射的飞行
       // （火球/点火链）等真实抵达；owned = 本拍自持发射（火花乱射——runDamageBeat
       // 弹出后落定回报）。主受击拍与命中爆点共用同一承诺（双 await 同一 p，
@@ -76,6 +87,11 @@ export const unitBeats = {
           fx: dmgFx, unit, dealt,
           fromX: src?.position.x ?? null,   // 拳面镜像：攻击来向
           projSync,
+        }));
+      } else if (enemyFx) {
+        this._fxRunScript((c) => runEnemyHitBeat(c, this._spellDeps(), {
+          fx: enemyFx, unit, dealt,
+          fromX: src?.position.x ?? null,
         }));
       }
       if (projSync) await projSync.gate();   // 投射物卡：受击演出自抵达帧起

@@ -4,6 +4,7 @@
 // 变体走 build(opts)：册数 count（4~9）/斜倚 lean 有无。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 皮面色轮换（同族深浅差读作不同皮面）
@@ -27,7 +28,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'library'],
   footprint: { x: 2.6, z: 1.6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ count = 7, lean = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bookStack');
