@@ -76,12 +76,6 @@ export const inputBeats = {
     this._setButtonState(key);   // 用缓存的上一次数据重烘（hover 已进签名）
     if (key === 'main') this._updateDoomMarks();
   },
-  // 滚轮：转发给选卡套件（全屏选卡界面的滚动）。战斗舞台此前漏了这一手（Map/Room 都有）
-  // ——战后删卡界面画在战斗舞台 uiScene 上，App 的 activeStage() 会把滚轮喂到这里，
-  // 缺这个方法时静默落空（实报「删卡界面滚轮无响应」的病灶）。
-  handleWheel(deltaY) {
-    return this._pickerKit.handleWheel(deltaY);
-  },
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）

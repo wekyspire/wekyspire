@@ -287,6 +287,7 @@ export const cardBeats = {
       scene: this.scene,
       uiScene: this.uiScene,
       particles: this.particles,
+      worldPool: this.particles2World ?? null,   // 世界 GPU 池（粒子火旋风等 custom 类型用，可空）
       // PCG 道具单向事件口（场景交互：冲击/高温）——blocks 基础块按需广播
       notify: this.notify,
       // 敌方阵型（显示态口径）：存活敌视图的质心 + 散布半径——AOE 大场面
@@ -306,6 +307,11 @@ export const cardBeats = {
         for (const v of list) spread = Math.max(spread, Math.hypot(v.position.x - cx, v.position.z - cz));
         return { center: { x: cx, y: cy, z: cz }, spread };
       },
+      // 全体存活敌视图（显示态口径）——群伤施术拍的真目标集：targets() 按
+      // payload.target 只给选中敌，AOE 卡（裂空劈/火瀑）要的是敌阵全员
+      allEnemies: () => (this._snapshot?.enemies ?? [])
+        .map(e => this._units.get(e.uniqueID))
+        .filter(v => v && !v._dead),
       cast: this._cast,
       shake: this.shake,
       animator: this.animator,

@@ -23,7 +23,7 @@ import { canUseSkill } from '../skills/helpers.js';
 import {
   attackDamage, dealDamage, resolvedDamageText, enemyTarget, aoeAttackProbes,
   damageLandedCount, gainShield, gainBlock, addEffect,
-  breakAllBlock, reactFx,
+  breakAllBlock, reactFx, drawCards,
 } from './cardKit.js';
 
 // 格挡（格挡系列 C）：+1 层格挡 + 4 护盾。
@@ -72,7 +72,7 @@ registerSkill({
   describe: () => '/effect{格挡}2，4护盾',
 });
 
-// 完美格挡（格挡系列 S）：0 费 +2 层格挡 + 4 护盾（费用栏留空 → 无任何资源消耗）。
+// 完美格挡（格挡系列 S）：0 费 +2 层格挡 + 7 护盾 + 抽 1（费用栏留空 → 无任何资源消耗）。
 registerSkill({
   id: 'perfectBlock', name: '完美格挡', type: 'normal', tier: 'S', series: 'block',
   cost: { mana: 0, actionPoint: 0 },
@@ -80,10 +80,11 @@ registerSkill({
   cardMode: 'normal',
   use(sctx) {
     gainBlock(sctx, 2);
-    gainShield(sctx, 4);
+    gainShield(sctx, 7);
+    drawCards(sctx, 1);
     return true;
   },
-  describe: () => '/effect{格挡}2，4护盾',
+  describe: () => '/effect{格挡}2，7护盾，抽1',
 });
 
 // ==== 精准系列（位置要求——与刀组共享"位置"语言）================================
@@ -277,7 +278,7 @@ const sweepCard = ({ id, name, tier, damage, block, promotesTo = null }) => regi
 sweepCard({ id: 'sweepLegC', name: '扫堂腿', tier: 'C', damage: 5, block: 1, promotesTo: 'sweepLegB' });
 sweepCard({ id: 'sweepLegB', name: '扫堂腿', tier: 'B', damage: 8, block: 1, promotesTo: 'sweepLegA' });
 sweepCard({ id: 'sweepLegA', name: '扫堂腿', tier: 'A', damage: 11, block: 1, promotesTo: 'whirlLeg' });
-sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'S', damage: 15, block: 2 });
+sweepCard({ id: 'whirlLeg', name: '旋风腿', tier: 'S', damage: 18, block: 3 });
 
 // ==== 忍耐系列（受击转格挡）====================================================
 // 忍耐效果为常驻受击引擎（见 content/effects.js）；B 档另加自身和目标虚弱3。

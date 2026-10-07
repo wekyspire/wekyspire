@@ -541,7 +541,7 @@ const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registe
 sheathCard('sheatheC', '收刃', 'C', 11, 2, 'sheatheB');
 sheathCard('sheatheB', '收刃', 'B', 14, 2, 'sheatheA');
 sheathCard('sheatheA', '收刃', 'A', 17, 2, 'concealEdge');
-sheathCard('concealEdge', '藏锋', 'S', 27, 2);
+sheathCard('concealEdge', '藏锋', 'S', 62, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
 // B 消耗 / A 去消耗。打出即获得「呼吸」效果（content/effects.js：弃牌 POST 监听 +
@@ -591,7 +591,7 @@ const reminiscenceCard = (id, name, tier, shield, cd, { promotesTo = null, mini 
 reminiscenceCard('reminiscenceC', '怀念', 'C', 10, 2, { promotesTo: 'reminiscenceB' });
 reminiscenceCard('reminiscenceB', '怀念', 'B', 13, 2, { promotesTo: 'reminiscenceA' });
 reminiscenceCard('reminiscenceA', '怀念', 'A', 16, 3, { promotesTo: 'homecoming' });
-reminiscenceCard('homecoming', '归来', 'S', 16, 4, { mini: true });
+reminiscenceCard('homecoming', '归来', 'S', 16, 5, { mini: true });
 
 // ==== 培植系列（养刀，C/B/A 三阶）==============================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：

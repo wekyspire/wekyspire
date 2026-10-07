@@ -4,7 +4,8 @@
 // （damageFx 的 ignition tracked：await 真实抵达——小火 + 蹿升火苗）。
 // 参数：all = 逐敌错峰点种（群燃件）；selfSparks = 主角身上同时腾起火星
 // （纳气「气归于己」的读感）。
-import { cardFlare, arcProjectile } from './blocks.js';
+import { cardFlare } from './blocks.js';
+import { burnSeed } from './fireBlocks.js';
 
 export const igniteCast = {
   defaults: {
@@ -23,14 +24,11 @@ export const igniteCast = {
       const list = prm.all ? targets : targets.slice(0, 1);
       const jobs = list.map((unit, i) => ctx.spawn(async (c) => {
         await c.wait(i * prm.staggerMs);
-        await arcProjectile(c, deps, {
-          from: deps.playerAnchor?.() ?? deps.cardTipWorld(),   // 从主角手上弹出
-          to: deps.unitAnchor(unit),
-          track: unit,   // 抵达登记：伤害拍（ignition tracked）await 真实落定
-          color: prm.color, hot: prm.hot, size: prm.size,
-          ms: prm.projMs, arcH: prm.arcH,
-          fire: true,
-          trail: { color: 0xff8c3a, count: 2, ttl: 0.3 },
+        // 焰种原语（fireBlocks.burnSeed）；track 登记：伤害拍（ignition tracked）
+        // await 真实落定
+        await burnSeed(c, deps, {
+          unit, track: true,
+          color: prm.color, hot: prm.hot, size: prm.size, ms: prm.projMs, arcH: prm.arcH,
         });
       }).promise);
       if (prm.selfSparks) {

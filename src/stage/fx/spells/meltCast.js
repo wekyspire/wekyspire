@@ -1,8 +1,10 @@
 // 熔毁施术模板（melt 系：熔融 B / 熔毁 A——「消耗自身所有燃烧，赋予所有敌人
-// 虚弱」）：火从主角身上被**剥离**——脚边火体先熄半拍（火离体的抽离感），
-// 化作暗红火流逐敌飞掷；落点不爆火，改落**灰紫沉淀**（虚弱 = 燃势转弱成灰的
-// 语义——与火球落点的爆读感刻意分家）。火势（自身燃烧层数）驱动流股粗细。
+// 虚弱」）：火从主角身上被**剥离**——胸口的火焰先被抽起、汇聚到头顶一簇小闪
+// 即熄（火离体的抽离感，走共享吸焰原语 burnSiphon），化作暗红火流逐敌飞掷；
+// 落点不爆火，改落**灰紫沉淀**（虚弱 = 燃势转弱成灰的语义——与火球落点的爆
+// 读感刻意分家）。火势（自身燃烧层数）驱动流股粗细。
 import { cardFlare, arcProjectile, lampPulse } from './blocks.js';
+import { burnSiphon } from './fireBlocks.js';
 
 export const meltCast = {
   defaults: {
@@ -24,11 +26,16 @@ export const meltCast = {
       const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 240, scale: 1.4 });
       if (!feet || !targets.length) { await flareJob; notify(); return; }
 
-      // 火剥离：主角脚边火星被「抽起」（逆重力上升的细碎组——火离开身体）
-      deps.particles?.spawn?.(feet.x, feet.y + 1, {
-        color: 0xff7a3d, count: Math.round(10 * vigor), speed: 7, size: 0.7,
-        ttl: 0.7, gravity: 16, z: feet.z,
-      });
+      // 火剥离：胸口的火焰被抽起、汇聚到头顶一点一簇小闪即熄（吸焰原语——
+      // 火离开身体的抽离感）；火滴汇聚过半后暗红火流才开始逐敌飞掷
+      const chest = deps.unitAnchor(player);
+      ctx.spawn((c) => burnSiphon(c, deps, {
+        from: chest, to: { x: chest.x, y: chest.y + 11, z: chest.z },
+        color: prm.color, hot: prm.hot,
+        orbs: 2 + Math.min(5, Math.floor(burn / 4)),
+        ms: 260, staggerMs: 45,
+      }));
+      await ctx.wait(380);
 
       const jobs = targets.map((unit, i) => ctx.spawn(async (c) => {
         await c.wait(i * prm.staggerMs);

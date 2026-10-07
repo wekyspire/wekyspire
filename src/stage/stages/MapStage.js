@@ -11,7 +11,7 @@ import { SlotRollObject } from '../objects/SlotRollObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { grantCardFlight } from '../cardGrantFlight.js';
+import { installPanelHost } from '../panelHost.js';
 import { Picker } from '../picker/Picker.js';
 import { makeCardFaceBaker } from '../richtext/cardFaceDefaults.js';
 import { sharedCardArtCache } from '../art/cardArtCache.js';
@@ -162,12 +162,6 @@ export class MapStage {
   get panel() { return this._panel; }
 
   // ---- 休息阶段面板 ----
-  /** 意图上行出口（runController 注入：Stage 只上报「谁被点了」，不解释语义）。 */
-  setPanelIntentHandler(fn) { this._onIntent = fn; }
-
-  /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
-  setRunSequencer(seq) { this._runSequencer = seq ?? null; }
-
   /** 得卡演出的收编锚点：玩家状态栏（塔楼层没有牌库图标，卡收向"玩家"即入组）。 */
   _deckAnchor() { return { x: PLAYER_STATUS_POS.x + 10, y: PLAYER_STATUS_POS.y, z: PLAYER_STATUS_POS.z }; }
 
@@ -193,41 +187,6 @@ export class MapStage {
     this._snap = snap;
     this._renderPanel();
     this._syncCardArtSub();
-  }
-
-  /**
-   * 面板动作分流：`local: true` 的是**面板本地交互态**（如开选卡界面）——舞台自己消化
-   * 并就地重绘，不惊动 core；其余原样上报给 runController。
-   * 判据见 THREE_UI_MIGRATION §6.3：被确认前的勾选是纯 UI 态，确认时才作为载荷上行。
-   */
-  _onPanelAction(action, info) {
-    if (!action || this._grantBusy) return;
-    if (action.local) {
-      if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
-      if (action.action === 'openShop') { this._panelUi.shopOpen = true; this._renderPanel(); return; }
-      if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
-      if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
-      return;
-    }
-    // 得卡标记（古尔帕斯卡包三选一）：摘下被点的卡 → 解除 overlay → 播「择卡得卡」
-    // 演出（脉冲→飞向玩家状态栏，sequencer 指令化）→ 落袋才上行意图。
-    // overlay 是整体 _removePanel 而不是藏起：隐形面板会被随后的 setPanel 重绘但仍隐形
-    // （重建只在 kind 变化时），直接拆掉让下一份快照整份重建。
-    if (action.grantCard && info?.pickId && this._panel) {
-      const entry = this._panel.takeCard(info.pickId);
-      if (entry) {
-        grantCardFlight({
-          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
-          target: this._deckAnchor(), sequencer: this._runSequencer,
-          onBusy: (b) => { this._grantBusy = b; },
-          onDone: () => this._onIntent?.(action),
-        });
-        return;
-      }
-    }
-    // 老虎机演出完成回执：不是玩家意图，而是**舞台的演出回执**——旧实现由 DOM 的
-    // @animationend 发出，迁到 Three 后只能由本舞台自己给（结果揭示的闸门）。
-    this._onIntent?.(action);
   }
 
   /** 用当前快照 + 面板本地态重绘（setPanel 与本地交互共用同一入口）。 */
@@ -265,22 +224,6 @@ export class MapStage {
     });
   }
 
-  // ---- 获得物特写（通用组件）----
-  // 拿到遗物/药水/奖励时播一次：中央淡入放大（带弹跳）+ 背后上帝光 + 下方三行文本，
-  // 点击任意处退出。**实现已抽到 stagePickerKit**（与房间层/战斗层共用一份），
-  // 本舞台只保留同名转发（宿主编排器按"当前舞台"调用，签名不变）。
-  showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
-  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
-  dismissModals() { this._pickerKit?.dismissModals(); }
-
-  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
-  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
-
-  /** 特写是否在播（宿主据此吞掉面板输入）。 */
-  get showcasing() { return this._pickerKit.showcasing; }
-  /** 套件级模态占用（特写/升级演出/全屏界面开着）——宿主编排器据此避让自动演出。 */
-  get uiBusy() { return this._pickerKit.uiBusy; }
-
   // ---- 角色对话/思索泡泡（通用接口）----
   // 场景里的角色（商店老板、瑞米、事件 NPC…）异步说话/思索时用：
   //   sayAtWorld('shopkeeper', { x, y, z }, { text, kind, duration })
@@ -315,53 +258,6 @@ export class MapStage {
       const p = this._sm.worldToUI(a.x, a.y, a.z);
       this._bubbles.moveTo(key, p.x, p.y);
     }
-  }
-
-  // ---- 全屏选卡界面 + 粉碎入口（实现已抽 stagePickerKit，与房间层/战斗层共用一份）----
-  // 本舞台只保留对外同名转发：来源表/意图/文案都在 kit 里（stagePickerKit.js 的 UPGRADE_SOURCES），
-  // 候选一律取自当前快照（`this._snap`），选卡开关是舞台本地交互态，确认才上行意图。
-  // 覆盖来源：camp / training / bankUpgrade / bankBurn / slot / gurpasRemove / bossRemove。
-
-  /**
-   * 公开入口（宿主编排器用：银行升级/焚毁、中奖后的免费指定升级由 Shell 主动唤起）。
-   * 面板本地动作走同一条路（`_onPanelAction` 的 openUpgradePicker 分支）。
-   */
-  openUpgradePicker(source) {
-    const ok = this._pickerKit.openUpgradePicker(source, this._snap);
-    if (ok) this._syncCardArtSub();   // 选卡界面开着期间也要订阅卡图晚到重烘
-    return ok;
-  }
-
-  /** 卡包三选一（买到即开）：全屏 overlay，**可放弃**（返回 = 放弃卡包）。 */
-  openShopPackPicker() {
-    const ok = this._pickerKit.openShopPackPicker(this._snap);
-    if (ok) this._syncCardArtSub();
-    return ok;
-  }
-
-  /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
-  openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
-
-  /** 训练抓牌四选一（全屏 overlay；占位房间路径用——场景房走 RoomStage 同名口）。 */
-  openTrainingDrawPicker() {
-    const ok = this._pickerKit.openTrainingDrawPicker(this._snap);
-    if (ok) this._syncCardArtSub();
-    return ok;
-  }
-
-  /**
-   * 打开「粉碎物品」选择界面（老虎机吞噬入口；kind: 'card' | 'relic'）。
-   * 候选数据由编排器给（Stage 不读 run）。
-   * @returns 是否真的打开了（无候选时 false，编排器据此跳过）
-   */
-  openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
-
-  get cardPicker() { return this._pickerKit.cardPicker; }
-  get relicPicker() { return this._pickerKit.relicPicker; }
-
-  /** 滚轮：选卡界面优先消费（全屏界面，滚轮只作用于它）。 */
-  handleWheel(deltaY) {
-    return this._pickerKit.handleWheel(deltaY);
   }
 
   // ---- 老虎机转轮（演出即闸门）----
@@ -745,6 +641,19 @@ export class MapStage {
     cam.lookAt(_swayLook.copy(base.lookAt).add(_swayOff));
   }
 }
+
+// 共享面板宿主（pickerKit 转发族 + 面板动作分流骨架）见 panelHost.js；本舞台只留
+// setPanel/_renderPanel/_removePanel —— shopOpen 视图重映射 / 装卸区接线 / 转轮是本地分叉。
+// 开放卡阵的全屏界面后续上卡图晚到订阅（候选卡面重烘）。
+installPanelHost(MapStage, {
+  localActions: {
+    openUpgradePicker(a) { this.openUpgradePicker(a.source); },
+    openShop() { this._panelUi.shopOpen = true; this._renderPanel(); },
+    openShopPack() { this.openShopPackPicker(); },
+    openShopRelicPack() { this.openShopRelicPackPicker(); },
+  },
+  onCardPickerOpened(stage) { stage._syncCardArtSub(); },
+});
 
 // 缺省文本烘焙：浏览器走 RichTextEngine（与 BattleStage 小字号同参数）；
 // node 无 document 退化为 1x1 占位（与其他状态件一致）

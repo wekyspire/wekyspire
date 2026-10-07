@@ -87,7 +87,7 @@ function emberOriginCard({ id, tier, ap, promotesTo }) {
     describe: () => '敌方每有4层/effect{燃烧}，魏启上限+1',
     battleDescribe: (sctx) => {
       const total = totalEnemyBurn(sctx);
-      return `敌方/effect{燃烧}共${total}层：魏启上限+${Math.floor(total / 4)}（本场战斗内）`;
+      return `敌方每有4层/effect{燃烧}，魏启上限+1（现共${total}层）（本场战斗内）`;
     },
   });
 }
@@ -110,7 +110,7 @@ registerSkill({
   describe: () => '敌方每有4层/effect{燃烧}，获得1魏启',
   battleDescribe: (sctx) => {
     const total = totalEnemyBurn(sctx);
-    return `敌方/effect{燃烧}共${total}层：获得${Math.floor(total / 4)}魏启`;
+    return `敌方每有4层/effect{燃烧}，获得1魏启（现共${total}层）`;
   },
 });
 

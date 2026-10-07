@@ -13,7 +13,7 @@ export const PLAYER_BASE_AP = 3;
 export const PLAYER_BASE_MANA = 4;
 
 // 玩家：run 级实体，跨战斗存活。hp/money/deck/abilities/leino 是持久状态；
-// 魏启（mana）为战斗内资源——入战置为上限一半、每回合开始 +1（battle.md §6），
+// 魏启（mana）为战斗内资源——入战置 0、每回合开始 +1（battle.md §6），
 // 字段寄存在此仅供战斗流程读写；shield/effects/actionPoints 同为战斗内重置与推进。
 export default class Player extends Unit {
   constructor(opts = {}) {

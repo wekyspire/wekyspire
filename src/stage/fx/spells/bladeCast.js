@@ -1,14 +1,17 @@
 // 刀法施术模板（blade 体系默认，2026-10-02）：冷白刀光语言，与体修暖象牙拳风、
 // 火系橙红爆燃三分色相。命中斩痕在伤害节拍（damageFx slash 按卡名分方向），
 // 本模板只管「出刀」读感——刀光飞行体与命中斩痕一前一后（火球链同款结构）。
-// 四模式（params.mode，缺省按目标口径自动路由）：
+// 五模式（params.mode，缺省按目标口径自动路由）：
 //   slash    单发刀光（默认，enemy 目标）：细长拉伸、低弧、极快——读「出鞘即至」
+//   cleave   场景级横劈（横劈/强力劈/裂空劈群伤）：一记横贯敌阵的巨刀光扫过
+//            （场景里只劈一次），逐敌的命中交代在伤害拍依次落下
 //   daggers  飞刀链（飞刀/重匕/灭匕/回旋匕/精匕/绝匕）：3 把小刀错峰连投
 //   cascade  碎铁雨（ironRain 链）：碎铁自目标天顶泼落
 //   self     无打击对象自动退化（刀舞/养刀/吐纳/磨刀/拔刀）：刀光绕身一记 +
 //            可选磨刀火星（params.grindSparks）
 import { getSkillDefinition } from '../../../core/skills/registry.js';
 import { cardFlare, arcProjectile, slashSweep } from './blocks.js';
+import { moonArcSweep } from './moonArc.js';
 
 export const bladeCast = {
   defaults: {
@@ -73,6 +76,43 @@ export const bladeCast = {
           }
         }
         await Promise.all([flareJob, ...jobs]);
+        notify();
+        return;
+      }
+
+      if (mode === 'cleave') {
+        // 场景级横劈（2026-10-07 用户定：群伤刀 = 场景里劈一次 + 敌人依次受伤——
+        // 依次受伤由 core aoe 逐敌伤害拍白送，施术拍只演那一记横贯巨刀光）
+        const foes = deps.allEnemies?.() ?? targets;
+        const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 240, scale: 1.5 });
+        if (!foes.length) { await flareJob; notify(); return; }
+        let xMin = Infinity, xMax = -Infinity, ay = 0, az = 0;
+        for (const u of foes) {
+          const a = deps.unitAnchor(u);
+          xMin = Math.min(xMin, a.x); xMax = Math.max(xMax, a.x);
+          ay += a.y; az += a.z;
+        }
+        ay /= foes.length; az /= foes.length;
+        // 弦全宽（moonArc 的 x 两端 = 弧心 ± spanW/2）：敌阵两端各探 spanExtra——
+        // 够长优先（2026-10-07 用户定再拉升）；高阶劈探出更大（链路差异维度之一）
+        const spanW = Math.max(46, (xMax - xMin) + (prm.spanExtra ?? 20));
+        const cleaveMs = prm.cleaveMs ?? 225;   // 2026-10-07 用户定：动画压到 66%
+        await flareJob;
+        // 劈落瞬间一记微震（高阶才有：强力劈 0.8 / 裂空劈 1.3——链路差异维度之二）
+        if (prm.cleaveShake) {
+          ctx.spawn(async (c) => {
+            await c.wait(cleaveMs * 0.55);
+            deps.shake?.impulse?.(prm.cleaveShake);
+          });
+        }
+        // 全局大刀光 = 场景内 3D 弯月（一面实刃一面虚影，左→右出现-消失）；
+        // 伤害拍的命中斩痕（damageFx slash）不在本层，两层不重复
+        await moonArcSweep(ctx, deps, {
+          at: { x: (xMin + xMax) / 2, y: ay, z: az },
+          spanW, ms: cleaveMs,
+          color: prm.sweepColor ?? [0.55, 0.68, 0.95],
+          hot: prm.moonHot ?? [3.6, 3.9, 4.8],
+        });
         notify();
         return;
       }

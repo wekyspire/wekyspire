@@ -293,17 +293,79 @@ export const unitBeats = {
             if (flashed) unit.restoreColor?.();
             return;
           }
+          // 重击（敌方，2026-10-07 用户定）：击退 + 绕脚后仰 → 衰减摇晃弹回——立牌
+          // 「差点被拍倒」的语言（后仰角与死亡倾倒同轴，重击 = 没倒成的死亡前半程）。
+          // 致死重击不在此演：后仰/击退归死亡节拍的「撑不住」链，不叠两段
+          if (payload?.heavy && unit.side === 'enemy') {
+            if (!payload?.killed) {
+              const knock = 2.4 + Math.min(dealt, 40) * 0.06;                          // 2.4~4.8
+              const lean = THREE.MathUtils.degToRad(16 + Math.min(dealt, 40) * 0.28);  // 16°~27°
+              ctx.onKill(() => { unit.position.x = x0; unit.billboard.rotation.x = 0; unit.resetPose?.(); });
+              // ① 受击后仰（~110ms）：击退 + 绕脚仰到 lean 角 + 冲击压扁（果冻痛感的重击档）
+              await ctx.custom(unit.uniqueID, { durationMs: 110, ease: 'power2.out', onUpdate: (t) => {
+                unit.position.x = x0 + dir * knock * t;
+                unit.billboard.rotation.x = -lean * t;
+                unit.setPose({ squash: 1 - 0.12 * t });
+              } });
+              // ② 弹回摇晃（~560ms）：后仰角指数衰减 × 余弦摆（起步续仰 → 过冲回弹 →
+              // 归零），压扁随摇晃平方缓释，击退位移 quad-out 回槽——「晃着晃着站稳」
+              await Promise.all([
+                ctx.custom(unit.uniqueID, { durationMs: 560, ease: 'none', onUpdate: (t) => {
+                  const decay = Math.exp(-3.4 * t);
+                  unit.billboard.rotation.x = -lean * decay * Math.cos(t * Math.PI * 2.6);
+                  unit.position.x = x0 + dir * knock * (1 - t) * (1 - t);
+                  unit.setPose({ squash: 1 - 0.12 * (1 - t) * (1 - t) });
+                } }),
+                recover ?? Promise.resolve(),
+              ]);
+              unit.billboard.rotation.x = 0;
+            } else {
+              await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]);
+            }
+            if (flashed) unit.restoreColor?.();
+            return;
+          }
           // 通用击退（敌方/主角）：幅度随伤害缩放（与震荡同语言）——轻伤轻晃、重伤踉跄
           const knock = 1.1 + Math.min(dealt, 20) * 0.055;
+          // 果冻痛感（2026-10-07 用户定：任何伤害都要「痛一下」）：受击瞬压扁 →
+          // 回弹拉长 → 晃稳（衰减余弦，与召唤起立的 squash-stretch 同语言）——
+          // 敌方专属（主角的受击反馈由卡牌演出承担）
+          let flinch = null;
+          if (unit.side === 'enemy') {
+            const amp = 0.07 + Math.min(dealt, 24) * 0.0015;   // 0.07~0.106 随伤害
+            ctx.onKill(() => { unit.setPose({ squash: 1 }); });
+            flinch = ctx.custom(unit.uniqueID, {
+              durationMs: 360, ease: 'none',
+              onUpdate: (t) => unit.setPose({
+                squash: 1 - amp * Math.cos(t * Math.PI * 2.2) * Math.exp(-2.2 * t),
+              }),
+            });
+          }
           await ctx.tween(unit.uniqueID, { x: x0 + dir * knock }, { durationMs: 80, ease: 'power1.in' });
           await Promise.all([
             ctx.tween(unit.uniqueID, { x: x0 }, { durationMs: 120 }),
+            // 致命击不等痛感收尾（不拖死亡节拍——倒下途中微弹更生动，曲线末段自归 1）
+            payload?.killed ? Promise.resolve() : (flinch ?? Promise.resolve()),
             recover ?? Promise.resolve(),
           ]);
+          if (flinch && !payload?.killed) unit.setPose({ squash: 1 });   // 收尾硬化（阻尼尾巴不残留）
           if (flashed) unit.restoreColor?.();
           return;
         }
         if (flashed) unit.restoreColor?.();
+        // 附级 tick 的轻痛感（敌方）：短促小幅度压弹——「任何伤害」口径的下半场
+        if (unit.side === 'enemy') {
+          const amp = 0.035;
+          const flinch = ctx.custom(unit.uniqueID, {
+            durationMs: 300, ease: 'none',
+            onUpdate: (t) => unit.setPose({
+              squash: 1 - amp * Math.cos(t * Math.PI * 2.2) * Math.exp(-2.2 * t),
+            }),
+          });
+          await Promise.all([ctx.wait(r.beatMs), flinch, recover ?? Promise.resolve()]);
+          unit.setPose({ squash: 1 });
+          return;
+        }
         await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]); // 附级：短节拍即收
         return;
       }
@@ -407,8 +469,8 @@ export const unitBeats = {
   // 单位死亡演出：立牌「以脚为轴」向后倾倒（重力加速）→
   // 落地扬尘 + 一次阻尼回弹 → 焚毁（焦黑化 + alphaTest 侵蚀淡出 + 余烬升腾）→
   // 整体隐藏收殓。节拍阻塞至收殓，其后的 sync 才应用 isDead 面色（先演后变）。
-  // 倾倒作用于 billboard 的 X 轴（YXZ 序下与 faceCamera 的 yaw 正交组合，逐帧
-  // yaw 不吃掉倾倒角），旋转轴过脚底——立牌物理感的根源；牌面立面底部锚定，
+  // 倾倒作用于 billboard 的 X 轴（yaw 在 rig 层——2026-10-07 层级重构后两轴分层，
+  // 逐帧 yaw 不吃掉倾倒角），旋转轴过脚底——立牌物理感的根源；牌面立面底部锚定，
   // 绕原点转即天然「栽倒」而非「缩没」。
   _unitDeathBeat(unit, payload, finish) {
     const id = unit.uniqueID;
@@ -419,10 +481,12 @@ export const unitBeats = {
     // 误判走真死焚毁链（病灶：复苏后立起的是焚毁透明立牌）。
     if ((payload?.unit?._reviveCountdown ?? 0) > 0) {
       this._cleaveSplit?.delete(id);   // 复苏者不裂——标记不跨假死
-      return this._unitFakeDeathBeat(unit, finish);
+      return this._unitFakeDeathBeat(unit, payload, finish);
     }
     // 天斩击杀分支（heavenCleave 施术拍挂的断裂标记）：立牌沿斩缝裂成两半
     if (this._cleaveSplit?.delete(id)) return this._unitCleaveSplitBeat(unit, finish);
+    // 重击致死分支（heavy 标记）：击退后仰 → 撑不住 → 倒尽（加强版倾倒）
+    if (payload?.heavy) return this._unitHeavyDeathBeat(unit, finish);
     const billboard = unit.billboard;
     unit.hideIntention(); // 意图即隐：尸体不再预告下一手
     const px = unit.position.x;
@@ -452,25 +516,89 @@ export const unitBeats = {
       },
     });
   },
+  // 重击前两拍（heavy 标记共用段，2026-10-07 用户定）：① 击退 + 绕脚后仰到 30°
+  //（与死亡倾倒同轴——重击 = 差点被拍倒）→ ② 撑不住的挣扎（衰减摇晃 ±7° + 重心
+  // 二次缓缓下沉——还想站稳但已经不行了）。拍毕调 onFall（从当前角继续倒）。
+  _heavyStruggle(unit, onFall) {
+    const id = unit.uniqueID;
+    const billboard = unit.billboard;
+    const x0 = unit.position.x;
+    const KICK = 2.6;                              // 重击致死击退
+    const LEAN = THREE.MathUtils.degToRad(30);     // 后仰挣扎角
+    this.animator.animateCustom(id, {
+      durationMs: 140, ease: 'power2.out',
+      onUpdate: (t) => {
+        unit.position.x = x0 + KICK * t;
+        billboard.rotation.x = -LEAN * t;
+        unit.setPose({ squash: 1 - 0.12 * t });   // 冲击深压（果冻痛感的重击档）
+      },
+      onComplete: () => {
+        this.animator.animateCustom(id, {
+          durationMs: 600, ease: 'none',
+          onUpdate: (t) => {
+            const sway = THREE.MathUtils.degToRad(7) * Math.sin(t * Math.PI * 3) * Math.exp(-2.6 * t);
+            const sink = THREE.MathUtils.degToRad(9) * t * t;
+            billboard.rotation.x = -LEAN + sway - sink;
+            unit.setPose({ squash: 1 - 0.12 * (1 - t) * (1 - t) });   // 压扁随挣扎缓释
+          },
+          onComplete: onFall,
+        });
+      },
+    });
+  },
+  // 重击致死演出：普通倾倒的加强版——击退后仰 → 挣扎 → 彻底撑不住（余角加速倒尽，
+  // 比普通死亡快——重心早已失守）→ 回弹 + 焚毁收殓（后段与 _unitDeathBeat 同语言）。
+  _unitHeavyDeathBeat(unit, finish) {
+    const id = unit.uniqueID;
+    const billboard = unit.billboard;
+    unit.hideIntention();
+    const TIP = THREE.MathUtils.degToRad(82);   // 与死亡节拍同口径
+    this._heavyStruggle(unit, () => {
+      const from = billboard.rotation.x;
+      const { x: px, y: py, z: pz } = unit.position;
+      this.animator.animateCustom(id, {
+        durationMs: 320, ease: 'power2.in',
+        onUpdate: (t) => { billboard.rotation.x = from + (-TIP - from) * t; },
+        onComplete: () => {
+          this.particles.spawn(px, py + 0.8, { count: 18, color: 0xb59a72, speed: 9, ttl: 0.7, gravity: -6, size: 2.2, z: pz });
+          this.particles.spawn(px, py + 0.5, { count: 12, color: 0x857358, speed: 16, ttl: 0.45, gravity: -12, size: 1.4, z: pz });
+          this.animator.animateCustom(id, {
+            durationMs: 220,
+            onUpdate: (t) => {
+              const lift = THREE.MathUtils.degToRad(4) * Math.sin(Math.PI * t) * (1 - t);
+              billboard.rotation.x = -(TIP - lift);
+            },
+            onComplete: () => this._unitBurnAway(unit, finish),
+          });
+        },
+      });
+    });
+  },
   // 假死演出：与死亡同语言的倾倒+落尘，但**就地停住**——不焚毁不隐藏（尸体可见、
-  // 影子保留），状态条与意图隐藏（尸体不读数）。复苏节拍（ANIM_UNIT_SPAWN）从这
-  // 个 82° 倒地姿态直接起立；若它在到达前战斗结束，尸体随舞台销毁一起退场。
-  _unitFakeDeathBeat(unit, finish) {
+  // 影子保留），状态条与意图隐藏（尸体不读数；假死意图「?」在 rig 层立着）。
+  // 重击致死（heavy）走加强版前两拍（击退后仰+挣扎）。复苏节拍（ANIM_UNIT_SPAWN）
+  // 从倒地姿态直接起立；若它在到达前战斗结束，尸体随舞台销毁一起退场。
+  _unitFakeDeathBeat(unit, payload, finish) {
     const billboard = unit.billboard;
     unit.hideIntention();
     unit.hideStatus();
     const TIP = THREE.MathUtils.degToRad(82);
-    const { x: px, y: py, z: pz } = unit.position;
-    this.animator.animateCustom(unit.uniqueID, {
-      durationMs: 470,
-      ease: 'power2.in',
-      onUpdate: (t) => { billboard.rotation.x = -TIP * t; },
-      onComplete: () => {
-        this.particles.spawn(px, py + 0.8, { count: 14, color: 0x8fa06a, speed: 7, ttl: 0.7, gravity: -6, size: 2.0, z: pz });
-        this.particles.spawn(px, py + 0.5, { count: 8, color: 0x6d7a4f, speed: 12, ttl: 0.45, gravity: -12, size: 1.3, z: pz });
-        finish(); // 停在倒地态：等复苏（或战斗结束）
-      },
-    });
+    const fall = () => {
+      const { x: px, y: py, z: pz } = unit.position;
+      const from = billboard.rotation.x;
+      this.animator.animateCustom(unit.uniqueID, {
+        durationMs: payload?.heavy ? 320 : 470,   // 重击：重心已失守，余角加速倒尽
+        ease: 'power2.in',
+        onUpdate: (t) => { billboard.rotation.x = from + (-TIP - from) * t; },
+        onComplete: () => {
+          this.particles.spawn(px, py + 0.8, { count: 14, color: 0x8fa06a, speed: 7, ttl: 0.7, gravity: -6, size: 2.0, z: pz });
+          this.particles.spawn(px, py + 0.5, { count: 8, color: 0x6d7a4f, speed: 12, ttl: 0.45, gravity: -12, size: 1.3, z: pz });
+          finish(); // 停在倒地态：等复苏（或战斗结束）
+        },
+      });
+    };
+    if (payload?.heavy) this._heavyStruggle(unit, fall);
+    else fall();
   },
   // ③ 焚毁：状态绘制先隐（尸体不再读数），立牌焦黑化 + alphaTest 侵蚀淡出
   // （opacity 压低 alpha 后 0.5 阈值逐像素 discard，边缘呈烧蚀状）+ 余烬/烟升腾；

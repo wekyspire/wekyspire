@@ -1,6 +1,9 @@
 // 火雨施术模板（火雨/火瀑）：卡面起手 → 逐目标自天顶掷落流星（起点高位 +
 // 平缓弧 = 自上而下的坠感）。**流星离手即 notify**——落地爆炸在伤害节拍
 // （damageFx 的 fireburst ground），群伤逐敌落地 = 雨点读感白送。
+// 参数：aoe = 群伤件对**全体存活敌**落雨（targets() 按 payload.target 只给选中敌——
+// 火雨链是 aoeDamage，施术拍必须拿敌阵全员，否则只有选中敌天上有火球）；
+// size 按等阶逐卡覆写（火球体量随等阶涨）。
 import { cardFlare, arcProjectile } from './blocks.js';
 
 export const fireRainCast = {
@@ -11,11 +14,12 @@ export const fireRainCast = {
     size: 1.8, projMs: 380, arcH: 2.5, dropH: 26,   // dropH：天顶起掷高度
     staggerMs: 70,
     notifyAfterMs: 240,
+    aoe: false,
   },
   build(p) {
     const prm = { ...this.defaults, ...p };
     return async (ctx, deps, notify) => {
-      const targets = deps.targets();
+      const targets = prm.aoe ? (deps.allEnemies?.() ?? deps.targets()) : deps.targets();
       if (!targets.length) { notify(); return; }
       const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 240 });
       let lastLaunch = null;

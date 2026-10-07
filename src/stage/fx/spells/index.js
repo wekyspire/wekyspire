@@ -30,6 +30,7 @@ import { getSkillDefinition } from '../../../core/skills/registry.js';
 import { runScript } from '../script.js';
 import { uniform, uv } from 'three/tsl';
 import { spellQuad, linearColor, warmSpellQuad as warmVariant, compileWarmSpellQuads } from './blocks.js';
+import { moonWarmQuad } from './moonArc.js';
 import { punchShade, slashShade, projectileShade, ringFlashShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
 import { emberBurst } from './emberBurst.js';
 import { castFlare } from './castFlare.js';
@@ -43,7 +44,7 @@ import { sparkCast } from './sparkCast.js';
 import { selfFlame } from './selfFlame.js';
 import { fuelCast } from './fuelCast.js';
 import { fireWhirlCast } from './fireWhirlCast.js';
-import { makeWhirlMesh } from './whirlMesh.js';
+import { FIRE_WHIRL_ORBIT, FIRE_WHIRL_ORBIT_CHANT } from '../gpu/fireWhirlOrbit.js';
 import { bladeCast } from './bladeCast.js';
 import { blockCast } from './blockCast.js';
 import { manaCast } from './manaCast.js';
@@ -52,6 +53,7 @@ import { chargeUpCast } from './chargeUpCast.js';
 import { emptyFistCast } from './emptyFistCast.js';
 import { voidFistCast } from './voidFistCast.js';
 import { meltCast } from './meltCast.js';
+import { siphonCast } from './siphonCast.js';
 import { chantOffCast } from './chantOffCast.js';
 import { sparkSalvo } from './sparkSalvo.js';
 
@@ -62,7 +64,7 @@ const TEMPLATES = {
   emberBurst, castFlare, fireballCast, fireRainCast, igniteCast, heavenCleave,
   fistCast, burnSurge, sparkCast, selfFlame, fuelCast, fireWhirlCast,
   bladeCast, blockCast, manaCast, silenceCast, chargeUpCast,
-  emptyFistCast, voidFistCast, meltCast, sparkSalvo, chantOffCast,
+  emptyFistCast, voidFistCast, meltCast, siphonCast, sparkSalvo, chantOffCast,
 };
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
@@ -75,12 +77,12 @@ const SERIES_SPELLS = {
   punch:         { id: 'fistCast' },                                     // 基石拳同体修
   fireBall:      { id: 'fireballCast' },                                 // 火球链+蓄热火球
   firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
-  fireRain:      { id: 'fireRainCast' },                                 // 火雨/火瀑
+  fireRain:      { id: 'fireRainCast', params: { aoe: true } },            // 火雨/火瀑（群伤全体落雨）
   ignite:        { id: 'igniteCast' },                                   // 点火/热浪
   burst:         { id: 'castFlare', params: { flareColor: 0xff9a3d } },  // 爆裂咏唱（新星在伤害拍）
   selfImmolate:  { id: 'castFlare', params: { flareColor: 0xffb066 } },  // 焰刃/玩火（火刀）
   // ---- 2026-10-02 火系铺量 ----
-  burnDoubler:   { id: 'burnSurge' },                                    // 焚烧/星炎：燃烧翻倍
+  burnDoubler:   { id: 'burnSurge', params: { scale: 1.5 } },            // 焚烧/星炎：燃烧翻倍
   spark:         { id: 'sparkCast' },                                    // 火花链（多段小伤连珠）
   fireWhirl:     { id: 'fireWhirlCast' },                                // 火焰旋风：主角火环外推
   flameHeal:     { id: 'selfFlame', params: {                            // 焰愈：金焰缠身
@@ -128,11 +130,12 @@ const CARD_SPELLS = {
   skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
   godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
   // ---- 体修逐卡（2026-10-02）----
-  // 重拳蓄力：崩/轰/炮/猛/真/虎（空形拳已迁 S 签名档）
-  boomFist:       { template: 'fistCast', params: { mode: 'heavy' } },
-  collapseFist:   { template: 'fistCast', params: { mode: 'heavy' } },
+  // 重拳蓄力：重拳链/炮/真/虎（空形拳已迁 S 签名档）
+  heavyFistC:     { template: 'fistCast', params: { mode: 'heavy' } },
+  heavyFistB:     { template: 'fistCast', params: { mode: 'heavy' } },
+  heavyFistA:     { template: 'fistCast', params: { mode: 'heavy' } },
+  collapseFistS:  { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
   cannonFist:     { template: 'fistCast', params: { mode: 'heavy' } },
-  fierceFist:     { template: 'fistCast', params: { mode: 'heavy' } },
   trueFist:       { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
   tigerFist:      { template: 'fistCast', params: { mode: 'heavy' } },
   fullChargeC:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
@@ -149,7 +152,7 @@ const CARD_SPELLS = {
   thousandHands:  { template: 'fistCast', params: { mode: 'rapid', shots: 4, staggerMs: 80 } },
   myriadHands:    { template: 'fistCast', params: { mode: 'rapid', shots: 6, staggerMs: 65 } },   // S 万手
   // ---- 火系逐卡（2026-10-02）----
-  burnBurstStar:  { template: 'burnSurge', params: { scale: 1.25 } },     // 星炎（×3，S）
+  burnBurstStar:  { template: 'burnSurge', params: { scale: 2.0, grand: true } },     // 星炎（×3，S）
   nirvana:        { template: 'selfFlame', params: { pillar: true, scale: 1.1,    // 涅槃（S）
                     color: [1.0, 0.72, 0.30], hot: [1.3, 1.1, 0.75], ember: [1.0, 0.42, 0.08], core: 0xffd27a } },
   flameHealA:      { template: 'selfFlame', params: { pillar: true, scale: 1.0,    // 焰愈（A）
@@ -173,6 +176,13 @@ const CARD_SPELLS = {
                     color: [1.0, 0.70, 0.25], hot: [1.35, 1.15, 0.80], ember: [1.0, 0.40, 0.08], core: 0xffe08a,
                     sparks: { color: 0xffe08a, count: 30 } } },
   // ---- 刀法逐卡（2026-10-02 二批）----
+  // 横劈链（群伤）：场景级横劈巨刀光（一记扫过敌阵，逐敌命中在伤害拍）
+  cleave:           { template: 'bladeCast', params: { mode: 'cleave' } },
+  powerCleave:      { template: 'bladeCast', params: { mode: 'cleave', cleaveMs: 245,
+                        spanExtra: 24, cleaveShake: 0.8 } },
+  riftCleave:       { template: 'bladeCast', params: { mode: 'cleave', cleaveMs: 280,
+                        spanExtra: 28, cleaveShake: 1.3, moonHot: [4.2, 4.5, 5.4],
+                        sweepColor: [0.50, 0.55, 1.10] } },   // 裂空劈（A）：更长更白热偏冷紫 + 大震
   // 飞刀链：小刀错峰连投
   flyingDaggerC:     { template: 'bladeCast', params: { mode: 'daggers' } },
   flyingDaggerB:      { template: 'bladeCast', params: { mode: 'daggers' } },
@@ -318,12 +328,21 @@ const CARD_SPELLS = {
   // 熔融/熔毁：燃烧剥离（消耗自身燃烧→群虚弱）——新模板 meltCast
   meltDown:        { template: 'meltCast' },
   meltCollapse:    { template: 'meltCast', params: { staggerMs: 70 } },
+  // ---- 消耗燃烧件（共享吸焰原语 siphonCast，2026-10-07）----
+  gatherFlame:     { template: 'siphonCast', params: { from: 'all', to: 'self' } },   // 火源归一（全场→己）
+  burnSnapB:       { template: 'siphonCast', params: { from: 'target', to: 'above' } }, // 燃爆（吸干变现）
+  burnSnapA:       { template: 'siphonCast', params: { from: 'target', to: 'above' } },
+  douseFlameB:     { template: 'siphonCast', params: { from: 'self', to: 'above' } },  // 灭火（驱散己焰）
+  douseFlameA:     { template: 'siphonCast', params: { from: 'self', to: 'above' } },
+  // 控火术：燃（赋予燃烧3——焰种原语点火语言）
+  fireControlBurn: { template: 'igniteCast' },
   // 终极火花（S 随机×7）：七连预闪起手（伤害拍逐发乱射已有）——新模板 sparkSalvo
   ultimateSpark:   { template: 'sparkSalvo' },
   // 焰流飓风（S）：双段环叠浪
   flameHurricane:  { template: 'fireWhirlCast', params: { rings: 2 } },
-  // 火瀑（A 群 16 伤）：大火流密落
-  fireStream:      { template: 'fireRainCast', params: { size: 2.6, projMs: 420, dropH: 32 } },
+  // 火雨链等阶体量：C 默认 1.8 → B 2.2 → A 火瀑 3.4（群伤全体落雨在体系行 aoe）
+  fireRainB:       { template: 'fireRainCast', params: { aoe: true, size: 3.0 } },
+  fireStream:      { template: 'fireRainCast', params: { aoe: true, size: 4.4, projMs: 420, dropH: 32 } },
   // 无上控火术（S 发现件）：金橙亮档起手
   fireControlSupreme: { template: 'castFlare', params: { flareColor: 0xffc86a, ms: 300, scale: 1.7 } },
   // 白炽（A）：白热核的自燃爆
@@ -425,7 +444,7 @@ export function warmSpellFx(deckDefIds, deps) {
   // 固定字面量变体（伤害拍 punch/slash 的缺省色不随卡参数走，一次全覆盖）
   warmVariant('punch:default', () => spellQuad({
     shade: punchShade(uv(), uniform(0.5), linearColor([1.0, 0.92, 0.78]), linearColor([1.0, 0.98, 0.92]), linearColor([0.82, 0.92, 1.25])),
-    width: 16, height: 9.5, name: 'warm:punch',
+    width: 11.5, height: 7.6, name: 'warm:punch',
   }));
   warmVariant('slash:default', () => spellQuad({
     shade: slashShade(uv(), uniform(0.5), linearColor([1.0, 0.98, 0.92]), linearColor([0.5, 0.8, 1.6]), uniform(0.14), uniform(1), uniform(0.0)),
@@ -441,6 +460,16 @@ export function warmSpellFx(deckDefIds, deps) {
     if (!build) continue;
     const prm = { ...(hit.template.defaults ?? {}), ...hit.params };
     for (const v of build(prm)) warmVariant(v.key, v.mk);
+  }
+  // 粒子型施术（火旋风 GPU 池 custom 类型）：首次 compute 提交即编译管线——
+  // 开场预激活两段（rateScale 0 不产粒子），避免首施法的 compute 编译卡顿
+  if (deps?.worldPool && seen.has(TEMPLATES.fireWhirlCast)) {
+    try {
+      for (const t of [FIRE_WHIRL_ORBIT, FIRE_WHIRL_ORBIT_CHANT]) {
+        deps.worldPool.setTypeActive(t, 1);
+        deps.worldPool.setTypeRateScale(t, 0);
+      }
+    } catch (_) {}
   }
   compileWarmSpellQuads(deps?.renderer, deps?.camera);
 }
@@ -481,6 +510,9 @@ const beamQuad = (p) => () => spellQuad({
 });
 const keyOf = (tag, p) => `${tag}:${(p.color ?? []).join(',')}|${(p.hot ?? []).join(',')}|${(p.ember ?? []).join(',')}|${p.form ?? ''}`;
 const WARM_VARIANTS = new Map([
+  [TEMPLATES.bladeCast, (p) => p.mode === 'cleave'
+    ? [{ key: `moon:${(p.moonHot ?? []).join(',')}`, mk: moonWarmQuad(p) }]
+    : []],
   [TEMPLATES.fistCast, (p) => [{ key: keyOf('qi', p), mk: qiQuad(p) }]],
   [TEMPLATES.fireballCast, (p) => [{ key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }]],
   [TEMPLATES.igniteCast, (p) => [{ key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }]],
@@ -498,8 +530,6 @@ const WARM_VARIANTS = new Map([
       : [{ key: keyOf('fire', p), mk: fireQuad(p) }, { key: keyOf('beam', p), mk: beamQuad(p) }]],
   [TEMPLATES.burnSurge, (p) => [{ key: keyOf('fire', p), mk: fireQuad(p) }, { key: keyOf('beam', p), mk: beamQuad(p) }]],
   [TEMPLATES.blockCast, (p) => [{ key: keyOf('groundRing', p), mk: gRingQuad(p) }]],
-  [TEMPLATES.fireWhirlCast, (p) => [
-    { key: keyOf('whirl', p), mk: () => ({ quad: makeWhirlMesh({ color: p.color, hot: p.hot, seed: 1.7 }).mesh }) },
-    { key: keyOf('groundRing', p), mk: gRingQuad(p) }]],
+  [TEMPLATES.fireWhirlCast, (p) => [{ key: keyOf('groundRing', p), mk: gRingQuad(p) }]],
   [TEMPLATES.emberBurst, (p) => [{ key: keyOf('proj', p), mk: projQuad(p) }, { key: keyOf('ring', p), mk: ringQuad(p) }]],
 ]);

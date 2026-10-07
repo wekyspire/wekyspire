@@ -60,17 +60,18 @@ registerPureFist({
   cost: { mana: 0, actionPoint: 0 },
 });
 
-// ==== 2. 崩拳系列（出牌冷却附伤：充能大弹匣，出牌是唯一上膛途径）====
+// ==== 2. 重拳系列（出牌冷却附伤：充能大弹匣，出牌是唯一上膛途径）====
 
-// 崩拳族共用骨架：8 回合大冷却 + 高额伤害；冷却走全局回合扫掠（P2 每回合 1 拍），
+// 重拳族共用骨架：大冷却 + 高额伤害；冷却走全局回合扫掠（P2 每回合 1 拍），
 // 打出其他牌是**手中加速**途径（每打 1 牌即刻冷却 1，定向直达），
 // 与拳组合「高频出牌」哲学互为引擎。自身打出结算完成时已离手（pending→deck），
-// 不会自我加速。
-function registerCollapseFist({ id, name, tier, damage, promotesTo = null }) {
+// 不会自我加速。全链慢热（2026-10-07 定：开局从头冷却）。
+function registerCollapseFist({ id, name, tier, damage, promotesTo = null, cooldownTurns = 7 }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fist',
     cost: { mana: 0, actionPoint: 1 },
-    charges: { max: 1, cooldownTurns: 8 },
+    charges: { max: 1, cooldownTurns },
+    keywords: ['slowStart'],
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {
@@ -87,17 +88,19 @@ function registerCollapseFist({ id, name, tier, damage, promotesTo = null }) {
         reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
-    describe: () => `${damage}伤害；在手时每打出1牌冷却1`,
-    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}；在手时每打出1牌冷却1`,
+    describe: () => `${damage}伤害，/named{慢热}；在手时每打出1牌冷却1`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，/named{慢热}；在手时每打出1牌冷却1`,
   });
 }
 
-// 猛拳（崩拳系列 C）
-registerCollapseFist({ id: 'fierceFist', name: '猛拳', tier: 'C', damage: 15, promotesTo: 'boomFist' });
-// 轰拳（崩拳系列 B）
-registerCollapseFist({ id: 'boomFist', name: '轰拳', tier: 'B', damage: 20, promotesTo: 'collapseFist' });
-// 崩拳（崩拳系列 A）
-registerCollapseFist({ id: 'collapseFist', name: '崩拳', tier: 'A', damage: 25 });
+// 重拳（重拳系列 C）
+registerCollapseFist({ id: 'heavyFistC', name: '重拳', tier: 'C', damage: 20, promotesTo: 'heavyFistB' });
+// 重拳（重拳系列 B）
+registerCollapseFist({ id: 'heavyFistB', name: '重拳', tier: 'B', damage: 27, promotesTo: 'heavyFistA' });
+// 重拳（重拳系列 A）
+registerCollapseFist({ id: 'heavyFistA', name: '重拳', tier: 'A', damage: 34, promotesTo: 'collapseFistS' });
+// 崩拳（重拳系列 S）：更长冷却 + 82 伤害（A 34 × 2.4）
+registerCollapseFist({ id: 'collapseFistS', name: '崩拳', tier: 'S', damage: 82, cooldownTurns: 12 });
 
 // ==== 3. 敏捷连击系列（先手抽牌：本回合第一张打出 = 领跑奖励）====
 // 判据为【先手】时序而非「最左端打出」——最左端被抽牌顺序与激活咏唱驻左卡死
@@ -329,7 +332,7 @@ registerElbow({ id: 'fierceElbow', name: '猛烈肘击', tier: 'B', damage: 8, p
 // 强大肘击（A）——8 伤 + 2 盾
 registerElbow({ id: 'strongElbow', name: '强大肘击', tier: 'A', damage: 8, shield: 2, promotesTo: 'pureElbow' });
 // 纯粹肘击（S；费用栏留空 → 0 费）
-registerElbow({ id: 'pureElbow', name: '纯粹肘击', tier: 'S', damage: 10, shield: 4, ap: 0 });
+registerElbow({ id: 'pureElbow', name: '纯粹肘击', tier: 'S', damage: 12, shield: 4, ap: 0 });
 // 猛烈肘击·0 费形态：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
 // 的变换目标——同名同形态、只是免费（0AP），且**只经局内转化获得**（不进奖励池/不进抽选）。
 registerElbow({ id: 'fierceElbowFree', name: '猛烈肘击', tier: 'B', damage: 8, ap: 0, spawnable: false });
@@ -455,7 +458,7 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, pro
 registerPlayCountChant({ id: 'leverageC', name: '借力', tier: 'C', every: 5, promotesTo: 'leverageB' });
 registerPlayCountChant({ id: 'leverageB', name: '借力', tier: 'B', every: 5, ap: 0, promotesTo: 'leverageA' });
 registerPlayCountChant({ id: 'leverageA', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'taijiS' });
-registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 4, ap: 0, weight: 0 });
+registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 3, ap: 0, weight: 0 });
 
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage 伤，
@@ -493,7 +496,7 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, p
 registerDrawDamageChant({ id: 'masteryC', name: '精通', tier: 'C', damage: 2, promotesTo: 'masteryB' });
 registerDrawDamageChant({ id: 'masteryB', name: '精通', tier: 'B', damage: 2, ap: 0, promotesTo: 'masteryA' });
 registerDrawDamageChant({ id: 'masteryA', name: '精通', tier: 'A', damage: 3, ap: 0, promotesTo: 'peerlessS' });
-registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 3, ap: 0, weight: 0 });
+registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 4, ap: 0, weight: 0 });
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 
@@ -631,7 +634,7 @@ function flurryCard({ id, name, tier, damage = 3, hits, promotesTo = null }) {
 flurryCard({ id: 'wildFlurry', name: '乱拳', tier: 'C', damage: 3, hits: 3, promotesTo: 'rainFist' });
 flurryCard({ id: 'rainFist', name: '雨拳', tier: 'B', damage: 4, hits: 3, promotesTo: 'thousandHands' });
 flurryCard({ id: 'thousandHands', name: '千手', tier: 'A', damage: 4, hits: 4, promotesTo: 'myriadHands' });
-flurryCard({ id: 'myriadHands', name: '万手', tier: 'S', damage: 5, hits: 6 });
+flurryCard({ id: 'myriadHands', name: '万手', tier: 'S', damage: 4, hits: 8 });
 
 // 拳压 C→B→A（拳师深入卡，瞬击下游）：1AP 冷却1——6 伤；本回合每打出过 1 张瞬击
 // 伤害 +3/+4/+5（基础值对标白板，瞬击引擎是溢价来源——无引擎时近白板，故收进
@@ -737,13 +740,13 @@ function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = nu
 }
 discardEngineChant({ id: 'shiftMoveB', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'shiftMoveA' });
 discardEngineChant({ id: 'shiftMoveA', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
-discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 1, every: 2 });
+discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 0, every: 2 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
 
 // 肾上腺素 B/A（通用灰卡，COMMON_CARDS 定稿）：0 开销消耗卡——获得 1AP 并抽 2/3 牌。
-// 应急节奏阀，消耗属性保证不沉淀循环。体修基础能力 = 「多获得一张肾上腺素」
-// （起始组共两张，见 routes.js 的 body 路线）；本卡仍可经通用注入抽到（pack: 'common'）。
+// 应急节奏阀，消耗属性保证不沉淀循环。起始组自带一张（2026-10-07 用户定：基础
+// 能力不再追加第二张）；本卡仍可经通用注入抽到（pack: 'common'）。
 function adrenalineCard({ id, tier, draw, promotesTo = null }) {
   registerSkill({
     id, name: '肾上腺素', type: 'normal', pack: 'common', tier, series: 'fist',
@@ -792,8 +795,7 @@ registerSkill({
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
 // 拳（C）×5 + 盾（C）×4 + 格挡（C）×1 + 肾上腺素 ×1 + 情况不对 ×1（情况不对仅一张，
 // 双份组合逆天；迷你词条保留——计 0 张手牌，抽到不卡手）
-//（肾上腺素 ×2 ——第二张由体修基础能力追加，见 routes.js）
-// 肾上腺素做节奏阀、情况不对做鬼抽保险。
+// 肾上腺素做节奏阀、情况不对做鬼抽保险（2026-10-07 用户定：基础能力不再追加第二张肾上腺素）。
 // 斩不在初始卡组：由开局遗物「大剑」（默认装备、0 槽）在每场战斗开始时洗入 1 张斩
 // ——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([

@@ -5,7 +5,9 @@
 //   · 出生点 (x, y, z) 走 per-burst `at`（多爆发并发指向不同点位互不惊扰）；
 //   · 渲染口径对齐旧点粒子：radial ≈ speed×0.9（旧逐粒子 0.5~1.3 随机的均值带），
 //     ttlJit 0.3 ≈ 旧 ±30%，alpha×(1-age) 同旧线性淡出，ageHeat 补逐粒子亮度抖动的层次。
-// 旧 CPU 池的文本/贴图粒子与剧本 emitter 由 floatFx.js 承接（见该文件头）。
+// CPU/GPU 分工（2026-10-07 用户定，细则见 AGENTS）：本门面 spawn = GPU（默认路径）；
+// floatFx 承接的 spawnText/spawnSprite（per-粒子纹理/文本且总量十几个以内——CPU 双条件）是正当职责；
+// **spawnEmitter（点发射器）禁止新增调用**——WebGPU 下渲染件坏死，存量待迁 GPU 池。
 
 import * as THREE from 'three';
 import { defineParticleType } from './particleTypes.js';

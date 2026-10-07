@@ -161,7 +161,7 @@ export const syncBeats = {
       // WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法面片黑一拍（charBurn 同款）
       try {
         warmSpellFx((proj.zones?.deck ?? []).map(c => c.defId).filter(Boolean),
-          { renderer: r, camera: this._sm.camera });
+          { renderer: r, camera: this._sm.camera, worldPool: this.particles2World ?? null });
       } catch (err) {
         console.warn('[spellFx] 开场预热异常（忽略）：', err);
       }

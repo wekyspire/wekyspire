@@ -23,6 +23,8 @@ import {
  *  · 纵向 = 扫掠头（随 uProgress 推进的锐亮前沿 + 命中尖峰）+ 指数拖尾
  *    （头前缘 smoothstep 正向截断：未扫过区域严格为 0）；
  *  · 细条纹调制（刀锋流光的方向感）+ 全局尾段渐隐。
+ *  · 画布横向加宽 SLASH_QUAD_SPAN 倍 + x 坐标补偿（世界形状不变）——扫掠头热区
+ *    原本直接冲出 quad 直边（用户实测横向两道断层）；真边缘由 edge mask 软收。
  * @param vUv       quad uv
  * @param uProgress 0..1 扫掠进度（block 侧 tween 推 uniform）
  * @param uColor    vec3 核心色（线性；峰值 ~2.4×HDR）
@@ -30,13 +32,19 @@ import {
  * @param uArc      float 中心线弓高（0=直带）
  * @param uDir      float 扫掠方向（+1 左→右；-1 翻转）
  */
+export const SLASH_QUAD_SPAN = 1.3;   // 画布横向加宽系数（blocks.js quad 宽同步乘）
 export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg]) => {
   const p = vUv.sub(vec2(0.5));
-  const x = p.x.mul(uDir);
+  const x = p.x.mul(float(SLASH_QUAD_SPAN)).mul(uDir);   // 跨度补偿：画布加宽、世界形状不变
   const y = p.y;
+  // 边缘熄灭（全 shade 同款纪律）：扫掠头越过新月带端后仍热，无 mask 会在 quad
+  // 直边切出竖直亮缝
+  const edge = oneMinus(smoothstep(float(0.40), float(0.50), abs(p.x)))
+    .mul(oneMinus(smoothstep(float(0.42), float(0.50), abs(p.y))));
   const yc = uArc.mul(x.mul(x).mul(4.0).sub(1.0));
-  // 沿 x 的收尖（新月：两端薄、中段厚）——直接调制各层宽度
-  const taper = oneMinus(pow(abs(x.mul(2.0)), float(2.5)));
+  // 沿 x 的收尖（新月：两端薄、中段厚）——直接调制各层宽度；补偿后 |x| 可达
+  // 0.65（taper 转负）→ 钳 0，带宽恒为非负
+  const taper = max(oneMinus(pow(abs(x.mul(2.0)), float(2.5))), float(0.0));
   const thin = taper.mul(0.55).add(0.45);   // 宽度系数 0.45..1
   // 截面用**显式宽度**（UV 单位）分层——塞进一条薄带里核/晕/影互相挤压读不出层次：
   //   热核 ~4px 细线（HDR 白）、aura 3 倍宽冷蓝裙（阈下辉光）、画布高 5 世界单位给裙展开空间
@@ -60,7 +68,7 @@ export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg
   // （spike 曾同时进 energy 与 rgb 第三项，画面即黑；d 的双引用子树反而无事）。
   // 头部热度已由包络里的 spike 系数承担，rgb 不再单独引用 spike。
   const rgb = uFringe.mul(fringe.mul(1.6)).add(uColor.mul(core.mul(stri).mul(6.5)));
-  const out = vec4(rgb.mul(energy), float(1.0));
+  const out = vec4(rgb.mul(energy).mul(edge), float(1.0));
   // 排障可视化（spelldebug=shape/energy）：分段输出中间量定位黑屏项
   return select(uDbg.greaterThan(float(2.5)), vec4(uColor, float(1.0)),   // 排障：颜色 uniform 直读
     select(uDbg.greaterThan(float(1.5)), vec4(energy, energy, energy, float(1.0)),
@@ -145,28 +153,33 @@ export const ringFlashShade = Fn(([vUv, uProgress, uColor, uHot, uSeed]) => {
  * 拳击冲击（贴身命中读感）：横向拉伸的扩张冲击环（撞击主轴 = 攻击线）+
  * 纵向速度线条带（动漫式冲击线，沿攻击轴排布）+ 快衰白热闪光核。
  * 前向偏置在 +x 侧（来向侧线密）——左右镜像由 block 侧旋转 π 实现。
- * 边缘熄灭 mask：径向面片的亮度在 quad 边缘必须衰减到 0（直边穿帮是实测病根）。
+ * 画布横向加宽 PUNCH_QUAD_SPAN 倍 + x 坐标补偿（世界形状不变）——环峰半径若超
+ * quad 半宽会被 mask 拦腰切断（横向断层）；补偿后内容包络收回 mask 带之内，
+ * 真边缘由 mask 软收。
  * @param vUv       quad uv
  * @param uProgress 0..1 冲击进度（block 侧 tween 推 uniform）
  * @param uColor    vec3 线色（线性，暖象牙）
  * @param uHot      vec3 闪光核色（快衰窄核——层分离：核只管「命中一瞬」）
  * @param uRim      vec3 冲击环色（独立冷白缘——与暖核分层，否则 bloom 下糊成一块白）
  */
+export const PUNCH_QUAD_SPAN = 1.5;   // 画布横向加宽系数（blocks.js quad 宽同步乘）
 export const punchShade = Fn(([vUv, uProgress, uColor, uHot, uRim]) => {
   const p = vUv.sub(vec2(0.5));
-  const x = p.x;
+  const x = p.x.mul(float(PUNCH_QUAD_SPAN));   // 跨度补偿：画布加宽、世界形状不变
   const y = p.y;
-  // 边缘熄灭：|x|/|y| 出界压到 0（环扩张上限 0.70 与掩码起点 0.38 留余量——
-  // 掩码掐死扩张中的环是实测病根）
-  const mask = oneMinus(smoothstep(float(0.38), float(0.48), abs(p.x)))
-    .mul(oneMinus(smoothstep(float(0.36), float(0.48), abs(p.y))));
-  // y 压扁 2.1 倍 → 环横向拉长（贴身水平撞击，不是球形爆炸）
-  const r = length(vec2(p.x, p.y.mul(2.1)));
-  const ring = exp(pow(abs(r.sub(uProgress.mul(0.62).add(0.16))), float(2.0)).mul(-45.0));
+  // 边缘熄灭：mask 带全部落在内容包络之外——环峰 r_max 0.61 折回 |p.x|≤0.41 /
+  // |p.y|≤0.41（2026-10-07 调形：环收小 + 压扁 2.1→1.5 后重算，速度线由径向衰减
+  // 自然归零，mask 只兜尾段残量——上下直边不再当腰掐亮内容）
+  const mask = oneMinus(smoothstep(float(0.43), float(0.50), abs(p.x)))
+    .mul(oneMinus(smoothstep(float(0.43), float(0.50), abs(p.y))));
+  // y 压扁 1.5 倍 → 环横向拉长（贴身水平撞击，不是球形爆炸；原 2.1 过扁）
+  const r = length(vec2(x, y.mul(1.5)));
+  const ring = exp(pow(abs(r.sub(uProgress.mul(0.48).add(0.13))), float(2.0)).mul(-45.0));
   const core = exp(r.mul(r).mul(-16.0)).mul(pow(oneMinus(uProgress), float(2.0)));
-  // 纵向速度线：y 向条带从中心向外淡出（**不挂环门控**——线要填满环内读「冲击」）
+  // 纵向速度线：y 向条带从中心向外淡出（**不挂环门控**——线要填满环内读「冲击」；
+  // 径向 ×1.3 收在环峰内侧，到不了画布边——边带是 clip 病根）
   const bands = sin(y.mul(24.0).add(x.mul(3.0))).mul(0.5).add(0.5);
-  const lines = pow(bands, float(2.4)).mul(oneMinus(r.mul(0.95)));
+  const lines = pow(bands, float(2.4)).mul(oneMinus(r.mul(1.3)));
   // 前向偏置（来向侧线密）+ 全局尾段渐隐
   const fw = smoothstep(float(-0.6), float(0.7), x).mul(0.5).add(0.6);
   const fade = oneMinus(smoothstep(float(0.55), float(1.0), uProgress));

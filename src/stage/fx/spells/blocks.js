@@ -20,7 +20,7 @@ import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
-import { slashShade, darkSlashShade, projectileShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
+import { slashShade, darkSlashShade, projectileShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
@@ -135,6 +135,8 @@ export async function arcProjectile(ctx, deps, {
   arcJitter = 0,
   darting = 0,    // 窜天猴摆尾强度 0..1：飞行中垂直于航线随机甩动（双频 sin 叠加
                   // 伪随机感、端点锚定包络）——火花乱射的「窜」读感
+  dartFreq = 1,   // 摆尾频率系数：短飞行（<300ms）下 dF1 4.5-8Hz 一屏只走十几帧，
+                  // 高频摆会走样成抖直线——<1 换成少而大的甩（窜天猴的慢摆S弯）
   fire = false,   // 火系投射物：换 fireOrbShade（fbm 火面+头尾不对称+破边）——
                   // 平滑高斯「发光团」不够审美线（2026-10-06 审计）
 } = {}) {
@@ -152,7 +154,7 @@ export async function arcProjectile(ctx, deps, {
   const len0 = Math.hypot(dx0, dy0) || 1;
   const nx = -dy0 / len0, ny = dx0 / len0;   // 航线法向
   const dAmp = darting * 6.5 * (0.7 + Math.random() * 0.6);
-  const dF1 = 4.5 + Math.random() * 3.5, dF2 = 9 + Math.random() * 6;
+  const dF1 = (4.5 + Math.random() * 3.5) * dartFreq, dF2 = (9 + Math.random() * 6) * dartFreq;
   const dP1 = Math.random() * 6.28, dP2 = Math.random() * 6.28;
   const swayOf = (t) => (Math.sin(t * dF1 * 6.283 + dP1) * 0.62 + Math.sin(t * dF2 * 6.283 + dP2) * 0.38)
     * dAmp * Math.pow(Math.sin(Math.min(1, t * 1.05) * Math.PI), 0.55);   // 端点锚定
@@ -310,6 +312,7 @@ export async function slashSweep(ctx, deps, {
 } = {}) {
   if (!at) return;
   width *= scale; height *= scale;   // 伤害量驱动尺寸（弧度不变——新月形状是身份）
+  width *= SLASH_QUAD_SPAN;          // 画布横向加宽（shader 内坐标补偿保形——扫掠头不再冲出直边）
   // ⚠ TSL 实测坑之二：uniform(0) 整型字面量有绑定风险（暗层 α 曾无视强度恒为 1）；
   // 数值 uniform 一律写浮点 0.0，暗层强度烘成 float 常量节点（不走 Fn 末参）
   const uProg = uniform(0.0);
@@ -398,9 +401,11 @@ export async function punchImpact(ctx, deps, {
   const uProg = uniform(0.0);
   const { quad, release } = spellQuad({
     shade: punchShade(uv(), uProg, linearColor(color), linearColor(hot), linearColor(rim)),
-    // 面片要显著大于敌人本体——环的职责是「探出轮廓读冲击」，环半径撑满也出不了
-    // 本体 footprint 的话环就永远藏在身体后面（glm-flash 第七轮实测病根）
-    width: 16.0 * scale, height: 9.5 * scale, name: 'spellFx:punch',
+    // 面片要大于敌人本体——环的职责是「探出轮廓读冲击」（glm-flash 第七轮实测：
+    // 环撑满也出不了本体 footprint 就永远藏在身体后面）；横向 ×PUNCH_QUAD_SPAN
+    // 是画布加宽（shader 内坐标补偿保形）。2026-10-07 用户定整体收小一档
+    //（16→11.5 / 9.5→7.6——原 24×9.5 世界单位偏大）
+    width: 11.5 * PUNCH_QUAD_SPAN * scale, height: 7.6 * scale, name: 'spellFx:punch',
   });
   quad.position.set(at.x, at.y, (at.z ?? 0) + z);
   quad.rotation.z = dir < 0 ? Math.PI : 0;   // 左右镜像（y 向条带对称，旋转 π 安全）

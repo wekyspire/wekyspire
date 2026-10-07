@@ -766,7 +766,7 @@ function stackFirewoodCard({ id, tier, actionPoint, mana, promotesTo = null }) {
     describe: () => `弃自由手牌，获得${mana}魏启`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `弃${n}张自由手牌：获得${mana}魏启`;
+      return `弃自由手牌，获得${mana}魏启（现${n}张）`;
     },
   });
 }
@@ -880,7 +880,7 @@ function echoingFlamesCard({ id, tier, draw }) {
       drawCards(sctx, draw);
       return true;
     },
-    battleDescribe: (sctx) => `坟墓${sctx.battleState.zones.burnt.length}张：获得等量魏启，抽${draw}`,
+    battleDescribe: (sctx) => `每张坟墓中的卡牌提供1魏启（坟墓${sctx.battleState.zones.burnt.length}张），抽${draw}`,
     describe: () => `每张坟墓中的卡牌提供1魏启，抽${draw}`,
   });
 }
@@ -909,7 +909,7 @@ function lastStandCard({ id, tier, draw }) {
     describe: () => `焚毁所有/named{自由}手牌，每张回1魏启，抽${draw}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
-      return `焚毁${n}张自由手牌：回${n * 1}魏启，抽${draw}`;
+      return `焚毁所有/named{自由}手牌，每张回1魏启（现${n}张），抽${draw}`;
     },
   });
 }

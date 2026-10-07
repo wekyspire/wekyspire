@@ -20,7 +20,7 @@ import * as THREE from 'three';
 import { PointsNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, instancedBufferAttribute, uv, vec2, vec3, vec4, float,
-  exp, sin, clamp, mix, smoothstep, oneMinus, select, length, varying, dot,
+  exp, sin, cos, clamp, mix, smoothstep, oneMinus, select, length, varying, dot,
 } from 'three/tsl';
 import { bloomPassFlag, setBloomWriter } from '../bloomOffset.js';
 
@@ -62,9 +62,9 @@ export async function cartoonNova(ctx, deps, {
     const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
     const rr = Math.random() * 2.6 * wK;
     const o = [cx + Math.sin(ph) * Math.cos(th) * rr, cy + Math.cos(ph) * rr * 0.8, cz + Math.sin(ph) * Math.sin(th) * rr * 0.5];
-    const sp = R(8, 15);
+    const sp = R(7, 17);
     const v = [Math.sin(ph) * Math.cos(th) * sp * wK, Math.cos(ph) * sp * 0.9 + 2, Math.sin(ph) * Math.sin(th) * sp * 0.5];
-    add(0, o, v, R(6, 8.5), 1.6, R(0, 0.06), R(0.6, 0.9), 1.5, 1.0, 0.5);
+    add(0, o, v, R(4.5, 9.5), 1.6, R(0, 0.06), R(0.6, 0.9), 1.5, 1.0, 0.5);
     vel[vel.length - 1] = 2.4; // drag
   }
   // 1a 地面环形烟（冲击波）：XZ 外向
@@ -73,30 +73,32 @@ export async function cartoonNova(ctx, deps, {
     const th = (i / nRing) * Math.PI * 2 + R(-0.15, 0.15);
     const rr = R(2.5, 4.5) * wK;
     const o = [cx + Math.cos(th) * rr, cy - 1.2 + R(-0.5, 0.5), cz + Math.sin(th) * rr * 0.45];
-    const sp = R(19, 25);
+    const sp = R(15, 29);
     const v = [Math.cos(th) * sp * wK, R(0.5, 1.5), Math.sin(th) * sp * 0.45];
-    add(1, o, v, R(3, 4.2), 2.0, R(0, 0.08), R(1.0, 1.4), 0.8, 0.85, 0.55);
+    add(1, o, v, R(1.9, 3.9), 1.8, R(0, 0.08), R(1.0, 1.4), 0.8, 0.85, 0.55);
     vel[vel.length - 1] = 2.8;
   }
-  // 1b 主体烟（球冠滚卷，错帧出生）
+  // 1b 主体烟（球冠滚卷，错帧出生）——少数大烟团（慢/厚/长命）把尺寸分布拉开
   const nSmoke = Math.round(70 * cK);
   for (let i = 0; i < nSmoke; i++) {
     const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
     const rr = Math.random() * 3.6 * wK;
     const o = [cx + Math.sin(ph) * Math.cos(th) * rr, cy + Math.cos(ph) * rr * 0.85, cz + Math.sin(ph) * Math.sin(th) * rr * 0.5];
-    const sp = R(6.5, 13);
-    const v = [Math.sin(ph) * Math.cos(th) * sp * wK, Math.cos(ph) * sp * 0.9 + R(3, 7), Math.sin(ph) * Math.sin(th) * sp * 0.5];
-    add(1, o, v, R(3.5, 5), 2.6, R(0.05, 0.35), R(1.7, 2.7), 2.2, 0.92, 0.62);
+    const big = Math.random() < 0.16;
+    const sp = big ? R(4, 7.5) : R(5.5, 15.5);
+    const v = [Math.sin(ph) * Math.cos(th) * sp * wK, Math.cos(ph) * sp * 0.9 + R(2, 9), Math.sin(ph) * Math.sin(th) * sp * 0.5];
+    add(1, o, v, big ? R(4.6, 6.2) : R(2.0, 4.0), big ? 1.7 : 2.3, R(0.05, 0.35),
+      big ? R(2.3, 3.1) : R(1.6, 2.7), 2.2, big ? 0.95 : 0.92, 0.62);
     vel[vel.length - 1] = 2.0;
   }
   // 2 火星（最后画 = 压全场）
   const nSpark = Math.round(34 * cK);
   for (let i = 0; i < nSpark; i++) {
     const th = Math.random() * Math.PI * 2;
-    const sp = R(22, 34);
+    const sp = R(18, 40);
     const o = [cx + R(-1, 1), cy + R(-1, 1), cz + R(-0.5, 0.5)];
     const v = [Math.cos(th) * sp * wK, R(4, 8), Math.sin(th) * sp * 0.4];
-    add(2, o, v, R(0.8, 1.1), -0.55, R(0, 0.1), R(0.9, 1.5), -22, 1.0, 0.35);
+    add(2, o, v, R(0.55, 1.25), -0.55, R(0, 0.1), R(0.9, 1.5), -22, 1.0, 0.35);
     vel[vel.length - 1] = 0.8;
   }
 
@@ -142,12 +144,22 @@ export async function cartoonNova(ctx, deps, {
     const d = length(p).mul(2.0).toVar();
     const t = vT.toVar();
     const kind = vMisc.x;
-    // 块状边缘起伏（无 atan：双频 sin 哈希近似角向团块；年龄渐入防出生抖）
-    const wob = sin(p.x.mul(17.0).add(vSeed.mul(37.0)))
-      .add(sin(p.y.mul(15.0).add(vSeed.mul(51.0))))
-      .mul(0.045).mul(clamp(t.mul(2.5), 0.0, 1.0));
+    // 自转：逐粒角速度（seed 哈希）——团块采样坐标随年龄滚转（烟蓬滚卷感；
+    // length 旋转不变故只转 wob 坐标，轮廓圆度不受影响）
+    const ang = vSeed.mul(6.2832).add(vSeed.mul(9.4).sub(4.7).mul(t));
+    const cs = cos(ang), sn = sin(ang);
+    const pr = vec2(p.x.mul(cs).sub(p.y.mul(sn)), p.x.mul(sn).add(p.y.mul(cs)));
+    // 暴散：起伏幅度随年龄增强（烟越散边缘越毛糙）+ 高频碎边项（无 atan：
+    // 双频 sin 哈希近似角向团块 + 斜向碎频；年龄渐入防出生抖）
+    const wob = sin(pr.x.mul(17.0).add(vSeed.mul(37.0)))
+      .add(sin(pr.y.mul(15.0).add(vSeed.mul(51.0))))
+      .add(sin(pr.x.mul(29.0).sub(pr.y.mul(23.0)).add(vSeed.mul(73.0))).mul(0.6))
+      .mul(0.055).mul(clamp(t.mul(2.0), 0.05, 1.0).add(t.mul(0.6)));
     const r = d.add(wob).toVar();
     const body = oneMinus(smoothstep(0.88, 1.0, r)).toVar();
+    // 硬性边界保证：wob 为负会把 r 拉回不透明区（面片边缘 r≈0.77 → alpha=1 被
+    // 几何边界截断 = 硬边）——rim 用**未扰动**的 d 收边，d→1 时 alpha 必为 0
+    const rim = oneMinus(smoothstep(0.90, 1.0, d)).toVar();
     const outline = smoothstep(0.66, 0.82, r).mul(body).toVar();   // 卡通描边带
     // 烟三停：火照暖灰 → 中灰 → 近黑（卡通黑烟主体——首版中停 0.36 在暗场景
     // 反读成白雾，压到 0.26/0.095 才是「黑烟」）
@@ -170,7 +182,7 @@ export async function cartoonNova(ctx, deps, {
     const shape = select(isSpark, sparkBody, body).toVar();
     // 淡出：fadeStart 前满 alpha，之后线性收零
     const fade = oneMinus(smoothstep(vMisc.z, float(1.0), t)).toVar();
-    const a = vMisc.y.mul(shape).mul(fade).mul(vAlive).toVar();
+    const a = vMisc.y.mul(shape).mul(fade).mul(vAlive).mul(rim).toVar();
     return select(bloomPassFlag.greaterThan(0.5),
       vec4(dot(rgb, vec3(0.3, 0.5, 0.2)).mul(a).mul(0.7), 0.0, 0.0, 1.0),
       vec4(rgb, a));

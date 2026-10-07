@@ -54,7 +54,7 @@ import { HandSprings } from '../animator/HandSprings.js';
 import { Picker } from '../picker/Picker.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { grantCardFlight } from '../cardGrantFlight.js';
+import { installPanelHost } from '../panelHost.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { bakeButtonFace } from '../richtext/buttonFace.js';
@@ -418,8 +418,8 @@ export class BattleStage {
     // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
     // 场景切换被黑幕盖住（此前是战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）。
     this._panel = null;      // PanelObject（modal 形态：全屏背板 + 居中内容）
-    this._panelSnap = null;  // 当前快照（存在即"面板模态中"：吞掉一切指针）
-    this._onPanelIntent = null; // 面板意图上行出口（runController 注入，与 MapStage 同契约）
+    this._snap = null;       // 当前快照（存在即"面板模态中"：吞掉一切指针）
+    this._onIntent = null;   // 面板意图上行出口（runController 注入，与 MapStage 同契约）
     this._runSequencer = null;  // run 级动画队列（runController 后置注入：得卡演出指令化）
     this._grantBusy = false;    // 「择卡得卡」演出进行中：吞掉面板动作（见 _onPanelAction）
     // 全屏选卡界面（战后奖励的 Boss 删卡机会入口）：三舞台共用套件 stagePickerKit.js。
@@ -431,7 +431,7 @@ export class BattleStage {
       getPicker: () => this.picker,
       bakeFace: this._bakeFace,
       bus: () => this._bus,
-      onIntent: (a) => this._onPanelIntent?.(a),
+      onIntent: (a) => this._onIntent?.(a),
       getSequencer: () => this._runSequencer,
       getAnchor: () => this._deckAnchor(),
     });
@@ -494,11 +494,6 @@ export class BattleStage {
     for (const object of this._burning) object.updateBurn(dt);
   }
 
-  setPanelIntentHandler(fn) { this._onPanelIntent = fn; }
-
-  /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
-  setRunSequencer(seq) { this._runSequencer = seq ?? null; }
-
   /** 得卡演出的收编锚点：牌库图标（飞行落点 z 取 40，与造牌入库的飞行约定一致）。 */
   _deckAnchor() { return { x: PILE_POSITIONS.deck.x, y: PILE_POSITIONS.deck.y, z: 40 }; }
 
@@ -515,7 +510,7 @@ export class BattleStage {
       });
       this.uiScene.add(this._panel);
     }
-    this._panelSnap = snap;
+    this._snap = snap;
     this._panel.attachPicker(this.picker);
     this._panel.setWidgets(snap.kind, entry.build(snap));
     // 模态吞点击是既定语义（拖牌/瞄准/战场点击全被面板截获）——常驻 HUD 按钮
@@ -528,54 +523,6 @@ export class BattleStage {
   /** 面板按钮可用性查询（与 MapStage 同名：测试/宿主可读）。 */
   _buttonActionsOf(id) { return this._panel?._buttonActions?.get(id) ?? null; }
 
-  /** 面板动作分流：`local: true` 的由本舞台消化（选卡界面），其余上行给 runController。 */
-  _onPanelAction(action, info) {
-    if (!action || this._grantBusy) return;
-    if (action.local) {
-      if (action.action === 'openUpgradePicker') { this._openPanelCardPicker(action.source); return; }
-      return;
-    }
-    // 得卡标记（奖励三选一）：摘下被点的卡 → 解除 overlay → 播「择卡得卡」演出
-    // （脉冲→飞入牌库，sequencer 指令化与后续切幕串行）→ 落袋才上行意图。
-    // overlay 是整体 _removePanel 而不是藏起：隐形面板有被同 kind 快照重绘但仍隐形的坑；
-    // 拆掉后演出期间落到战场的点击全部是终局拒付（bridge 已判负/判胜，intents 静默拒绝）。
-    if (action.grantCard && info?.pickId && this._panel) {
-      const entry = this._panel.takeCard(info.pickId);
-      if (entry) {
-        grantCardFlight({
-          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
-          target: this._deckAnchor(), sequencer: this._runSequencer,
-          onBusy: (b) => { this._grantBusy = b; },
-          onDone: () => this._onPanelIntent?.(action),
-        });
-        return;
-      }
-    }
-    this._onPanelIntent?.(action);
-  }
-
-  /**
-   * 战后奖励里的「使用删卡机会」（Boss 层）：与塔楼层同一套全屏选卡界面，
-   * 候选 = 快照的 cardRemoval.removeCards（整副牌组），确认后上行 bossRemoveCard。
-   */
-  _openPanelCardPicker(source) {
-    if (source !== 'bossRemove') return false;
-    // 与塔楼层/房间层同一份实现（文案「选择要删除的卡/确认删除」也随之统一，
-    // 此前战斗层写的是「移除」）；候选与意图都由 kit 的 UPGRADE_SOURCES 表给出。
-    return this._pickerKit.openUpgradePicker('bossRemove', this._panelSnap);
-  }
-
-  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
-  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
-  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
-  dismissModals() { this._pickerKit?.dismissModals(); }
-  /** 获得物特写（与 Map/Room 同契约的一行转发）：战后奖励期活动舞台是战斗舞台，
-   *  run 级入账（Boss 掉落遗物）的特写要播在玩家看得见、点得到的地方。 */
-  showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
-  /** 特写/全屏界面占用（同契约：flushRelicShowcase 的让位判据、runController 读 uiBusy）。 */
-  get showcasing() { return this._pickerKit.showcasing; }
-  get uiBusy() { return this._pickerKit.uiBusy; }
-
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
     // 与塔楼层/房间层同律）——真正释放交给 dispose() 里的 kit.dispose()。
@@ -584,7 +531,7 @@ export class BattleStage {
     this.uiScene.remove(this._panel);
     this._panel.dispose();
     this._panel = null;
-    this._panelSnap = null;
+    this._snap = null;
   }
 
   _setDumpMode(on) {
@@ -1334,3 +1281,13 @@ export class BattleStage {
 // 演出族方法（battleBeats/）以原型混入装配：节拍表经 stage._xxxBeat 分发到这里，
 // this = BattleStage 实例（与类内方法同权访问宿主状态）。
 Object.assign(BattleStage.prototype, unitBeats, cardBeats, inputBeats, syncBeats);
+
+// 共享面板宿主（pickerKit 转发族 + 面板动作分流骨架）见 panelHost.js；本舞台只留
+// setPanel/_removePanel（模态压暗 HUD、只 close cardPicker 是本地分叉）。
+// 选卡来源只放 Boss 删卡机会一路（战后奖励的 cardRemoval；候选与意图由 kit 来源表给）。
+installPanelHost(BattleStage, {
+  localActions: {
+    openUpgradePicker(a) { this.openUpgradePicker(a.source); },
+  },
+  allowSource: (s) => s === 'bossRemove',
+});

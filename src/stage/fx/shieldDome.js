@@ -13,8 +13,8 @@
 //   · 被打破（吸收归 0）→ shatter()：全罩 HDR 爆闪后快速溃散（碎粒由 _shieldBreakFx
 //     既有粒子承担，本件管「罩」的消亡）。演完自清槽位（onGone）。
 // 悬挂点纪律：罩面竖片挂 _standee（随姿态通道前倾/蜷缩——单位突进不带罩 = 人出罩
-// 穿帮）；地环挂 _billboard（假透视水平椭圆必须随 yaw 对准相机——长轴与立牌底边
-// 平行才读「一圈环坐地上」，固定世界朝向会歪斜；billboard 只 yaw 不 pitch 故仍贴地；
+// 穿帮）；地环挂 _rig（假透视水平椭圆必须随 yaw 对准相机——长轴与立牌底边
+// 平行才读「一圈环坐地上」，固定世界朝向会歪斜；rig 只 yaw 不 pitch 故仍贴地；
 // 不挂 _standee 是不吃姿态通道——squash/lean 会把贴地环掀离地面）。
 // TSL 纪律照 shaders.js 头注 + tsl-fn-pitfalls：颜色烘常量 vec3、smoothstep 正向、
 // 多次引用的中间量一律 .toVar()（stasisShell 验证过的安全写法）、无控制流。
@@ -185,9 +185,9 @@ export function makeShieldDome(layer, {
   mesh.renderOrder = 1;
   group.add(mesh);
   unit._standee.add(group);
-  // 地环（挂 billboard 组：水平假透视椭圆必须随 yaw 对准相机——长轴与立牌底边
+  // 地环（挂 rig 组：水平假透视椭圆必须随 yaw 对准相机——长轴与立牌底边
   // 平行才读「一圈环坐地上」，固定世界朝向会歪斜（2026-10-02 用户指正的老问题，
-  // 与目标标注金环同一修法）；billboard 只 yaw 不 pitch，环 yaw 后仍贴地）
+  // 与目标标注金环同一修法）；rig 只 yaw 不 pitch，环 yaw 后仍贴地、尸体倾倒不掀环）
   const gMat = new MeshBasicNodeMaterial();
   gMat.colorNode = buildGroundColorNode(u, tintV, hotV);
   gMat.transparent = true; gMat.depthWrite = false; gMat.fog = false;
@@ -197,7 +197,7 @@ export function makeShieldDome(layer, {
   gMesh.rotation.x = -Math.PI / 2;
   gMesh.position.set(0, 0.14, 0.8);
   gMesh.renderOrder = 1;
-  unit._billboard.add(gMesh);
+  unit._rig.add(gMesh);
 
   let level = 0, dying = false;
   let tween = null;

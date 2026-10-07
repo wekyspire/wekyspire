@@ -1,21 +1,29 @@
 // 咏唱场景演出管理器（呈现层主题，不动 core）：咏唱激活期间把战场推向体系氛围——
 // 火焰旋风 = 环境余烬/火屑飘荡 + 场景暖调（后处理 uTint）+ 结构光压暗火光反抬
-// （lighting.mood 口径）+ 息旋涡壳；贴身气流粒子环绕（qiOrbit，GPU 池 custom 类型）仅 qiFlow 使用。
+// （lighting.mood 口径）+ 火龙卷粒子绕身（fireWhirlOrbit，GPU 池 custom 类型）；
+// 贴身气流粒子环绕（qiOrbit）仅 qiFlow 使用。
+// ⚠ drift/ring 的发射器目前走 floatFx 点粒子（spawnEmitter）——该路径 WebGPU 下
+// 渲染件坏死（粒子不可见，见 floatFx.js 头注）且违反 CPU/GPU 分工铁律（AGENTS：
+// 默认一律 GPU 池）。**新主题不要再加 drift/ring 发射器**，待整体迁 GPU 池类型行
+// 后本段拆除。
 // 驱动 = **快照对账**（不依赖 ANIM 事件）：hand 里 isActivated 的卡经主题注册表
 // 解析出 (主题, 强度k)，激活集合变化即重定包络目标——读档恢复/观战重连/任何
 // 离手熄灭路径天然一致（状态是唯一事实源）。
-// 包络单参 k 逐帧缓动，一切输出（mood/uTint/发射器 rate/环绕 level）由 k 派生——
-// 强度变化全程连续，无阶梯。注册新体系 = 加一行主题表（defId 逐卡覆写 → series
-// 族行 → null 无演出，与 spells 决议链同构）。
+// 双持合成（2026-10-07 用户定）：同一条进阶链（promotesTo 链）的多张激活咏唱只按
+// 最强者计；不同链同主题 = 强度叠加（cap 1）；不同主题 = 并存复合——每主题一条
+// 包络槽（各自建/拆件、各自包络），全场输出（mood/tint/染灯）由基值 + 全部活槽
+// 逐帧重算复合，槽全部退尽才一次性写回基值（单槽退场不碰全场，避免互相踩踏）。
 import * as THREE from 'three';
 import { createQiOrbitLink } from './gpu/qiOrbit.js';
-import { makeWhirlMesh } from './spells/whirlMesh.js';
+import { createFireWhirlLink, FIRE_WHIRL_ORBIT_CHANT } from './gpu/fireWhirlOrbit.js';
+import { getSkillDefinition } from '../../core/skills/registry.js';
 
 // ---- 主题表 ----------------------------------------------------------------
 // fireHeat（火系炙热场）：tint = 后处理暖调峰值色（uTint 白→此色按 k 插值）；
 // dimDrop/fireGainUp = mood 压结构光/抬火光幅度（×k）；lightWarm = 冷结构灯染色
 // 目标（只染 b>r 的冷灯，按 k 插值、熄灭还原——pyro 染灯配方的可逆版，火把本暖
 // 不碰）；drift = 环境余烬/火屑发射器布局（rate ×k）；
+// orbit = 绕身件（kind: qi = 气流 / fire = 火龙卷，radiusK = 半径占立牌高比）；
 // ringAt = 玩家热浪环出现阈值（高级才有的「火气蒸腾」）。
 const THEMES = {
   fireHeat: {
@@ -23,9 +31,9 @@ const THEMES = {
     dimDrop: 0.24, fireGainUp: 1.6,
     lightWarm: [1.0, 0.48, 0.16], lightWarmK: 0.8,
     ringAt: 0.7,
-    // 持续段「息旋涡」：低亮度旋涡壳常驻缓旋（与激活演出的涡同语言——
-    // 2026-10-06 用户指出持续段粗糙与激活不符；色用暗档，亮度靠色不做 level）
-    shell: { radius: 5.0, height: 15, color: [0.66, 0.26, 0.08], hot: [1.0, 0.60, 0.28] },
+    // 持续段「息旋涡」：低强度火龙卷粒子常驻绕身（与激活施术拍同语言——
+    // 2026-10-07 圆柱面片方案废弃换 GPU 粒子；常驻走 CHANT 段不与爆发抢 uniform）
+    orbit: { kind: 'fire', radiusK: 0.30 },
     // 高撒布布局：出生中心 dy（立牌高分数）× 2D 圆盘半径 0.45H → 垂直覆盖
     // dy±0.45H，0.2H~1.3H 从脚底撒到头顶上空（「空中飞荡」）；vby 续升偏置。
     // z 一律贴机位可见带（dz 相对锚偏移）——敌锚纵深 z≈-56，那边的粒子缩成
@@ -55,7 +63,7 @@ const THEMES = {
   qiFlow: {
     tint: null, dimDrop: 0, fireGainUp: 0,
     lightWarm: null, lightWarmK: 0,
-    orbit: { radiusK: 0.45 },   // 环绕半径 = 立牌高 × radiusK；三族流形/密度/亮暗在 qiOrbit.js
+    orbit: { kind: 'qi', radiusK: 0.45 },   // 环绕半径 = 立牌高 × radiusK；三族流形/密度/亮暗在 qiOrbit.js
     ringAt: 0.9,
     drift: [
       // 淡雾微点：大而软、慢而低（贴身气场，只锚自身）
@@ -66,6 +74,25 @@ const THEMES = {
     // 地气环（太极档）：淡白慢速环周流转——「气沉丹田，周流不息」
     ring: { color: 0xd8e4f8, speed: 3.2, size: 2.0, ttl: 2.4, gravity: 1.2, vby: 2.0, rate: 18 },
   },
+  // feverHeat（高热/白炽「自体发烧」场，2026-10-07）：自燃换纳气的咏唱——火在
+  // 自己身上烧（身体燃烧的 L1 舔火已在，主题补的是「热到发烫」的环境层）。
+  // 贴身主题（同 qiFlow 口径）：tint/mood/染灯三个全场输出全关，表现 = 贴身
+  // 热浪蒸腾 + 火星上冒 + 头顶热气；白炽档（k≥ringAt）热浪环绕上升。
+  feverHeat: {
+    tint: null, dimDrop: 0, fireGainUp: 0,
+    lightWarm: null, lightWarmK: 0,
+    ringAt: 0.72,
+    drift: [
+      // [锚, dz, 高度分数, 率, 尺寸, 色]——小亮火星急升（烧得急），淡红蒸汽大而软
+      // 慢升（热浪蒸腾），头顶热气（发烧读感）
+      { at: 'self', dz: 0, dy: 0.55, rate: 22, size: 1.7, color: 0xffb060, speed: 6.5, ttl: 2.4, gravity: 6, vby: 7 },
+      { at: 'self', dz: -8, dy: 0.65, rate: 16, size: 2.6, color: 0xd85020, speed: 4.5, ttl: 3.2, gravity: 3.5, vby: 6 },
+      { at: 'self', dz: 7, dy: 0.4, rate: 14, size: 3.4, color: 0xc04018, speed: 3.5, ttl: 3.8, gravity: 3, vby: 4.5 },
+      { at: 'self', dz: 0, dy: 1.15, rate: 12, size: 2.0, color: 0xffd0a0, speed: 3.0, ttl: 3.4, gravity: 2.5, vby: 8 },
+    ],
+    // 热浪环（白炽档）：暖橙热气绕身环周上升
+    ring: { color: 0xff9a4d, speed: 5, size: 1.6, ttl: 1.8, gravity: 4, vby: 9, rate: 26 },
+  },
 };
 
 // 主题注册表：series 族行（k 按等阶取值，缺档回落 0.5）+ defId 逐卡覆写位。
@@ -73,6 +100,7 @@ const THEMES = {
 const SERIES_ROW = {
   fireWhirl: { theme: 'fireHeat', k: { C: 0.5, B: 0.65, A: 0.8, S: 1.0 } },
   magmaArmor: { theme: 'fireHeat', k: { B: 0.5, A: 0.62 } },
+  fever: { theme: 'feverHeat', k: { B: 0.55, A: 0.75 } },
 };
 const CARD_ROW = {
   // 例：flameHurricane: { theme: 'fireHeat', k: { S: 1.0 } },
@@ -88,27 +116,42 @@ const CARD_ROW = {
   hunYuanS:     { theme: 'qiFlow', k: { S: 0.85 } },
 };
 
+// 链尖反查：沿 promotesTo（局外晋升链，线性）走到头——同链共享同一链尖 id，
+// 双持合成时同链只取最强（tip 缓存，一次对账多次查）
+const tipCache = new Map();
+function chainTipOf(defId) {
+  const cached = tipCache.get(defId);
+  if (cached) return cached;
+  let tip = defId;
+  const seen = new Set([defId]);
+  for (;;) {
+    const def = (() => { try { return getSkillDefinition(tip); } catch { return null; } })();
+    const next = def?.promotesTo;
+    if (!next || seen.has(next)) break;
+    seen.add(next);
+    tip = next;
+  }
+  tipCache.set(defId, tip);
+  return tip;
+}
+
 /**
  * @param {object} deps
- *   scene: 世界场景；particles: 组合粒子门面（spawnEmitter）；worldPool: 世界 GPU 池（qiOrbit 用，可空）；
+ *   particles: 组合粒子门面（spawnEmitter）；worldPool: 世界 GPU 池（orbit 环绕件用，可空）；
  *   cast: 命名寻址（light:mood）；composer: 体积月光 composer（setSceneTint，可空）；
  *   units: 单位视图 Map；playerId: () => 玩家 uniqueID；
  *   enemyIds: () => 敌 uniqueID 列表（快照口径）
  */
-export function createChantSceneFx({ scene, particles, worldPool = null, cast, composer, units, playerId, enemyIds }) {
-  const active = new Map();        // uniqueID → { defId, theme, k }
-  let k = 0;                       // 包络（逐帧缓动向 target）
-  let target = 0;
-  let theme = null;                // 当前/最近主题（淡出期沿用）
-  let moodBase = null;             // 点火沿捕获的 mood 基值（熄灭还原用）
-  let lightSnaps = [];             // 点火沿捕获的冷灯色快照（{ light, r, g, b }）
-  let emitters = [];               // { handle, baseRate }
-  let ring = null;                 // 玩家热浪环（≥ringAt 才发）
-  let orbit = null;
-  let shell = null;                // 息旋涡壳（fireHeat 持续段）
-  let shellWaning = null;          // 收场中的壳（quench 后走 wane 段淡出再 dispose）
+export function createChantSceneFx({ particles, worldPool = null, cast, composer, units, playerId, enemyIds }) {
+  const active = new Map();        // uniqueID → { defId, themeKey, k, tip }
+  const slots = new Map();         // themeKey → { theme, k, target, emitters, ring, orbit }
+  let baseCaptured = false;        // 基值快照是否已捕获（首个槽建立时一次，全灭清除）
+  let moodBase = null;             // 捕获的 mood 基值（复合起点 + 全灭还原）
+  let lightSnaps = [];             // 捕获的冷灯色快照（{ light, r, g, b }）
+  let tintActive = false;          // 上一帧是否有 tint 槽在写（退尽沿补一次白再放手）
   const WHITE = new THREE.Color(1, 1, 1);
   const scratch = new THREE.Color();
+  const scratch2 = new THREE.Color();
 
   // ---- 锚点 ----
   function unitAnchor(id, dyFrac) {
@@ -133,6 +176,64 @@ export function createChantSceneFx({ scene, particles, worldPool = null, cast, c
         ? (A.foes[0] && A.mid ? { x: A.foes[0].x, y: A.foes[0].y, z: A.mid.z, H: A.foes[0].H } : A.mid)
         : name === 'enemy0' ? (A.foes[0] ?? A.mid) : (A.foes[1] ?? A.foes[0] ?? A.mid);
 
+  // ---- 基值快照（首个槽建立时捕获；还原永远写回最初基值）----
+  function captureBase() {
+    if (baseCaptured) return;
+    baseCaptured = true;
+    const mood = cast?.get?.('light:mood') ?? null;
+    moodBase = mood ? { dim: mood.dim, fireGain: mood.fireGain } : null;
+    // 冷结构灯色快照（染暖还原用；灯色不被 lighting.update 重写，可直推——
+    // pyro 同口径。fx 池灯跳过：演出借用中，色随剧本走）。一律捕获（几个灯
+    // 的常数开销），染灯主题进场时才有快照可用
+    lightSnaps = [];
+    for (const { handle } of cast?.query?.('light:') ?? []) {
+      if (!handle?.isLight || handle.name?.startsWith('fxPool')) continue;
+      const c = handle.color;
+      if (c && c.b > c.r) lightSnaps.push({ light: handle, r: c.r, g: c.g, b: c.b });
+    }
+  }
+
+  // ---- 槽件建/拆（只动槽内资产，不碰全场输出——全场由 update 逐帧复合）----
+  function buildSlotAssets(slot) {
+    const t = slot.theme;
+    const A = anchors();
+    if (!A.self && !A.mid) return;
+    for (const d of t.drift ?? []) {
+      const a = anchorOf(d.at, A);
+      if (!a) continue;
+      const handle = particles?.spawnEmitter?.(a.x, a.y + a.H * d.dy, {
+        rate: 0, radius: a.H * 0.45, zJitter: a.H * 0.4,
+        color: d.color, speed: d.speed, ttl: d.ttl, size: d.size,
+        gravity: d.gravity, vby: d.vby ?? 0, z: a.z + (d.dz ?? 0),
+      });
+      if (handle) slot.emitters.push({ handle, baseRate: d.rate });
+    }
+    if (t.orbit) {
+      slot.orbit = t.orbit.kind === 'fire'
+        ? createFireWhirlLink(worldPool, { radiusK: t.orbit.radiusK, type: FIRE_WHIRL_ORBIT_CHANT })
+        : createQiOrbitLink(worldPool, t.orbit);
+      slot.orbit?.start();
+    }
+  }
+  function teardownSlot(slot) {
+    for (const e of slot.emitters) { try { e.handle.stop(); } catch (_) {} }
+    slot.emitters = [];
+    if (slot.ring) { try { slot.ring.handle.stop(); } catch (_) {} slot.ring = null; }
+    slot.orbit?.dispose();
+    slot.orbit = null;
+  }
+
+  // ---- 全灭沿（所有槽退尽）：全场输出写回基值 + 清快照，回到未捕获态 ----
+  function quenchAll() {
+    const mood = cast?.get?.('light:mood') ?? null;
+    if (mood && moodBase) { mood.dim = moodBase.dim; mood.fireGain = moodBase.fireGain; }
+    for (const s of lightSnaps) s.light.color.setRGB(s.r, s.g, s.b);
+    if (tintActive) { composer?.setSceneTint?.([1, 1, 1]); tintActive = false; }
+    moodBase = null;
+    lightSnaps = [];
+    baseCaptured = false;
+  }
+
   // ---- 对账（每次状态同步）----
   function reconcile(snapshot) {
     const hand = snapshot?.hand ?? [];
@@ -141,164 +242,133 @@ export function createChantSceneFx({ scene, particles, worldPool = null, cast, c
       if (!c.isActivated) continue;
       const row = CARD_ROW[c.defId] ?? SERIES_ROW[c.series] ?? null;
       if (!row) continue;
-      next.set(c.uniqueID, { defId: c.defId, theme: row.theme, k: row.k?.[c.tier] ?? 0.5 });
+      next.set(c.uniqueID, { defId: c.defId, themeKey: row.theme, k: row.k?.[c.tier] ?? 0.5, tip: chainTipOf(c.defId) });
     }
     let changed = next.size !== active.size;
     if (!changed) for (const [id, v] of next) {
       const old = active.get(id);
-      if (!old || old.k !== v.k || old.theme !== v.theme) { changed = true; break; }
+      if (!old || old.k !== v.k || old.themeKey !== v.themeKey) { changed = true; break; }
     }
     if (!changed) return;
     active.clear();
     for (const [id, v] of next) active.set(id, v);
-    // 最强激活者定包络目标与主题（多咏唱同开取峰值，不叠加——同一场景只能推向一个氛围）
-    let best = null;
-    for (const v of active.values()) if (!best || v.k > best.k) best = v;
-    target = best?.k ?? 0;
-    if (best) theme = THEMES[best.theme] ?? null;
-    if (target > 0 && k <= 0.01 && theme) ignite();
+    // 双持合成：同链（同链尖）取峰 → 跨链同主题强度叠加（cap 1）
+    const perChain = new Map();    // tip → { themeKey, k }
+    for (const v of active.values()) {
+      const cur = perChain.get(v.tip);
+      if (!cur || v.k > cur.k) perChain.set(v.tip, { themeKey: v.themeKey, k: v.k });
+    }
+    const perTheme = new Map();    // themeKey → 目标 k
+    for (const v of perChain.values()) {
+      perTheme.set(v.themeKey, Math.min(1, (perTheme.get(v.themeKey) ?? 0) + v.k));
+    }
+    // 目标落槽：新主题建槽（捕基值 + 建件），退场主题留槽退坡（k 归 0 由 update 收）
+    for (const [key, target] of perTheme) {
+      const theme = THEMES[key];
+      if (!theme) continue;
+      const slot = slots.get(key);
+      if (slot) { slot.target = target; continue; }
+      const fresh = { theme, k: 0, target, emitters: [], ring: null, orbit: null };
+      slots.set(key, fresh);
+      captureBase();
+      buildSlotAssets(fresh);
+    }
+    for (const [key, slot] of slots) if (!perTheme.has(key)) slot.target = 0;
   }
 
-  // ---- 点火沿（k 离 0）：捕获基值 + 建常驻件 ----
-  function ignite() {
-    const mood = cast?.get?.('light:mood') ?? null;
-    moodBase = mood ? { dim: mood.dim, fireGain: mood.fireGain } : null;
-    // 冷结构灯色快照（染暖还原用；灯色不被 lighting.update 重写，可直推——
-    // pyro 同口径。fx 池灯跳过：演出借用中，色随剧本走）。主题不染灯则连
-    // 快照都不捕（qiFlow——捕了也不用，quench 还原写同值纯属空转）
-    lightSnaps = [];
-    if (theme.lightWarm) {
-      for (const { handle } of cast?.query?.('light:') ?? []) {
-        if (!handle?.isLight || handle.name?.startsWith('fxPool')) continue;
-        const c = handle.color;
-        if (c && c.b > c.r) lightSnaps.push({ light: handle, r: c.r, g: c.g, b: c.b });
-      }
-    }
-    const A = anchors();
-    if (A.self || A.mid) {
-      for (const d of theme.drift) {
-        const a = anchorOf(d.at, A);
-        if (!a) continue;
-        const handle = particles?.spawnEmitter?.(a.x, a.y + a.H * d.dy, {
-          rate: 0, radius: a.H * 0.45, zJitter: a.H * 0.4,
-          color: d.color, speed: d.speed, ttl: d.ttl, size: d.size,
-          gravity: d.gravity, vby: d.vby ?? 0, z: a.z + (d.dz ?? 0),
-        });
-        if (handle) emitters.push({ handle, baseRate: d.rate });
-      }
-      if (theme.orbit) {
-        if (!orbit) orbit = createQiOrbitLink(worldPool, theme.orbit);
-        orbit?.start();
-      }
-    }
-    if (theme.shell && !shell) {
-      const a = anchors().self;
-      if (a) {
-        const sh = theme.shell;
-        shell = makeWhirlMesh({ radius: sh.radius, height: sh.height, color: sh.color, hot: sh.hot,
-          seed: Math.random() * 6.28 + 0.01 });
-        shell.mesh.position.set(a.x, a.y + sh.height * 0.5 + 0.2, a.z + 1);
-        shell.mesh.scale.set(0.86, 0.86, 1);
-        shell.uProg.value = 0.30;   // 起手越过 rise 段（life 平台）
-        scene.add(shell.mesh);
-      }
-    }
-  }
-
-  // ---- 熄灭（k 归 0）：还原基值 + 收常驻件 ----
-  function quench() {
-    const mood = cast?.get?.('light:mood') ?? null;
-    if (mood && moodBase) { mood.dim = moodBase.dim; mood.fireGain = moodBase.fireGain; }
-    moodBase = null;
-    for (const s of lightSnaps) s.light.color.setRGB(s.r, s.g, s.b);
-    lightSnaps = [];
-    composer?.setSceneTint?.([1, 1, 1]);
-    for (const e of emitters) { try { e.handle.stop(); } catch (_) {} }
-    emitters = [];
-    if (ring) { try { ring.handle.stop(); } catch (_) {} ring = null; }
-    orbit?.dispose();
-    orbit = null;
-    if (shell) { shellWaning = shell; shell = null; }   // 转入 wane 段（update 继续推）
-  }
-
-  // ---- 帧泵：包络推进 + 全输出派生 ----
+  // ---- 帧泵：逐槽包络推进 + 槽内件派生 + 全场输出复合 ----
   function update(dt) {
-    // 收场壳：uProg 走 wane 段（0.75~1 淡出上飘），走完自 dispose
-    if (shellWaning) {
-      shellWaning.uPhase.value += dt * 1.4;
-      shellWaning.uProg.value += dt * 2.4;
-      if (shellWaning.uProg.value >= 1) { shellWaning.dispose(); shellWaning = null; }
+    let anyAlive = false;
+    for (const [key, slot] of slots) {
+      if (slot.k !== slot.target) {
+        const rate = slot.target > slot.k ? 2.2 : 3.0;   // 起 ~0.7s 爬满 / 收 ~0.5s 退尽
+        slot.k += (slot.target - slot.k) * (1 - Math.exp(-rate * dt));
+        if (Math.abs(slot.target - slot.k) < 0.004) slot.k = slot.target;
+      }
+      if (slot.target === 0 && slot.k <= 0.01) { teardownSlot(slot); slots.delete(key); continue; }
+      anyAlive = true;
+      const t = slot.theme;
+      // 发射器 rate 随包络（点火渐密、熄灭渐稀）
+      for (const e of slot.emitters) e.handle.rate = e.baseRate * slot.k;
+      // 热浪环/地气环：达到 ringAt 才起（高级咏唱的「气蒸腾」档），参数随主题
+      if (slot.k >= (t.ringAt ?? 1) && !slot.ring && t.ring) {
+        const a = unitAnchor(playerId(), 0);
+        if (a) {
+          const R = t.ring;
+          const handle = particles?.spawnEmitter?.(a.x, a.y + a.H * 0.15, {
+            rate: 0, radius: a.H * 0.42, outward: true, vby: R.vby ?? 8, zJitter: a.H * 0.4,
+            color: R.color, speed: R.speed, ttl: R.ttl, size: R.size, gravity: R.gravity, z: a.z,
+          });
+          if (handle) slot.ring = { handle, baseRate: R.rate ?? 30 };
+        }
+      }
+      if (slot.ring) slot.ring.handle.rate = slot.ring.baseRate * slot.k;
+      slot.orbit?.setLevel(slot.k);
+      slot.orbit?.setAnchor(unitAnchor(playerId(), 0));
     }
-    if (k === target && k === 0) return;
-    const rate = target > k ? 2.2 : 3.0;   // 起 ~0.7s 爬满 / 收 ~0.5s 退尽
-    k += (target - k) * (1 - Math.exp(-rate * dt));
-    if (Math.abs(target - k) < 0.004) k = target;
-    if (k <= 0.01 && target === 0) {
-      if (emitters.length || orbit || moodBase) { k = 0; quench(); }
+    if (!anyAlive) {
+      if (baseCaptured) quenchAll();
       return;
     }
-    if (!theme) return;
-    // 环绕件随主题对齐：包络未过零而主题已换（更强咏唱易主）时补建/撤除
-    if (theme.orbit && !orbit) {
-      orbit = createQiOrbitLink(worldPool, theme.orbit);
-      orbit?.start();
-    } else if (orbit && !theme.orbit) {
-      orbit.dispose();
-      orbit = null;
-    }
-    // mood：结构光压暗 + 火光反抬（只在做主期间逐帧落笔——pyro 等剧本同写时
-    // 后到的一方覆盖，同 pvp 调光冲突量级可接受）。dimDrop/fireGainUp 全 0 的
-    // 主题（qiFlow 贴身场）不碰 mood——也不与任何调光剧本争写
+    // 全场输出复合（只在做主期间逐帧落笔——pyro 等剧本同写时后到的一方覆盖，
+    // 同 pvp 调光冲突量级可接受）：
+    // mood = 基值 × Π(各槽 dim/fireGain 因子)（dimDrop/fireGainUp 全 0 的槽不写）
     const mood = cast?.get?.('light:mood') ?? null;
-    if (mood && moodBase && (theme.dimDrop || theme.fireGainUp)) {
-      mood.dim = moodBase.dim * (1 - theme.dimDrop * k);
-      mood.fireGain = moodBase.fireGain * (1 + theme.fireGainUp * k);
-    }
-    // 冷结构灯染色（按 k 插值快照色 → 主题目标色；亮度不动、只移色相）。
-    // lightWarm null = 主题不染灯（qiFlow）
-    if (theme.lightWarm) {
-      const wk = (theme.lightWarmK ?? 0.5) * k;
-      for (const s of lightSnaps) {
-        s.light.color.setRGB(
-          s.r + (theme.lightWarm[0] - s.r) * wk,
-          s.g + (theme.lightWarm[1] - s.g) * wk,
-          s.b + (theme.lightWarm[2] - s.b) * wk,
-        );
+    if (mood && moodBase) {
+      let dim = moodBase.dim;
+      let fireGain = moodBase.fireGain;
+      for (const slot of slots.values()) {
+        const t = slot.theme;
+        if (t.dimDrop || t.fireGainUp) {
+          dim *= (1 - t.dimDrop * slot.k);
+          fireGain *= (1 + t.fireGainUp * slot.k);
+        }
       }
+      mood.dim = dim;
+      mood.fireGain = fireGain;
     }
-    // 后处理调色：uTint 白→主题色按 k 插值（tint null = 主题不调全场色，qiFlow）
-    if (theme.tint) {
-      scratch.setRGB(theme.tint[0], theme.tint[1], theme.tint[2]);
-      scratch.lerpColors(WHITE, scratch, k);
+    // tint = Π(各槽 白→主题色按 k 插值)（无 tint 槽 = 不写，退尽沿 quenchAll 补白）
+    scratch.setRGB(1, 1, 1);
+    let tintWrote = false;
+    for (const slot of slots.values()) {
+      const t = slot.theme;
+      if (!t.tint) continue;
+      scratch2.setRGB(t.tint[0], t.tint[1], t.tint[2]);
+      scratch2.lerpColors(WHITE, scratch2, slot.k);
+      scratch.r *= scratch2.r; scratch.g *= scratch2.g; scratch.b *= scratch2.b;
+      tintWrote = true;
+    }
+    if (tintWrote) {
       composer?.setSceneTint?.([scratch.r, scratch.g, scratch.b]);
+      tintActive = true;
+    } else if (tintActive) {
+      composer?.setSceneTint?.([1, 1, 1]);
+      tintActive = false;
     }
-    // 息旋涡：缓旋（包络越满旋越快）+ 微幅呼吸缩放
-    if (shell) {
-      shell.uPhase.value += dt * (0.9 + 2.4 * k);
-      shell.uProg.value = Math.min(0.45, shell.uProg.value + dt * 1.6);
-      const sc = 0.82 + 0.14 * k;
-      shell.mesh.scale.set(sc, sc, 1);
-    }
-    // 发射器 rate 随包络（点火渐密、熄灭渐稀）
-    for (const e of emitters) e.handle.rate = e.baseRate * k;
-    // 热浪环/地气环：达到 ringAt 才起（高级咏唱的「气蒸腾」档），参数随主题
-    if (k >= (theme.ringAt ?? 1) && !ring && theme.ring) {
-      const a = unitAnchor(playerId(), 0);
-      if (a) {
-        const R = theme.ring;
-        const handle = particles?.spawnEmitter?.(a.x, a.y + a.H * 0.15, {
-          rate: 0, radius: a.H * 0.42, outward: true, vby: R.vby ?? 8, zJitter: a.H * 0.4,
-          color: R.color, speed: R.speed, ttl: R.ttl, size: R.size, gravity: R.gravity, z: a.z,
-        });
-        if (handle) ring = { handle, baseRate: R.rate ?? 30 };
+    // 冷结构灯染色 = 自快照色逐槽插值（无染灯槽 = 写回快照色，天然归基）
+    for (const s of lightSnaps) {
+      let r = s.r, g = s.g, b = s.b;
+      for (const slot of slots.values()) {
+        const t = slot.theme;
+        if (!t.lightWarm) continue;
+        const wk = (t.lightWarmK ?? 0.5) * slot.k;
+        r += (t.lightWarm[0] - r) * wk;
+        g += (t.lightWarm[1] - g) * wk;
+        b += (t.lightWarm[2] - b) * wk;
       }
+      s.light.color.setRGB(r, g, b);
     }
-    if (ring) ring.handle.rate = ring.baseRate * k;
-    orbit?.setLevel(k);
-    orbit?.setAnchor(unitAnchor(playerId(), 0));
   }
 
-  function dispose() { quench(); k = 0; target = 0; active.clear(); }
+  function dispose() {
+    for (const slot of slots.values()) teardownSlot(slot);
+    slots.clear();
+    active.clear();
+    if (baseCaptured) quenchAll();
+  }
 
-  return { reconcile, update, dispose, get level() { return k; } };
+  return {
+    reconcile, update, dispose,
+    get level() { let m = 0; for (const s of slots.values()) m = Math.max(m, s.k); return m; },
+  };
 }

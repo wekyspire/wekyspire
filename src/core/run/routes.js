@@ -10,10 +10,9 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 //   · 灵脉路线 = 起始牌组（含基石卡）+ 体系能力，灵脉等级 0，牌组由通用填充卡（拳/盾）补足；
 //     首次进阶该灵脉（0→1）走 ascension.js 的获赠流程：基石卡已在起始组则不重复直发
 //     （种子包九选三已删除，见 ascension.js）。
-//   · 体修路线啥都不拿（无灵脉可点）——补偿是体修基础能力「多获得一张肾上腺素」
-//     （BODY_CULTIVATION_CARDS §0：肾上腺素 = 0 费消耗、+1AP 抽 2/3 的节奏阀，
-//     起始组共两张），以及拳/盾填充卡的晋升通道（见 promotion.js 的 FILLER_STARTERS
-//     门禁——体修与法师同为 3 AP。
+//   · 体修路线无灵脉可点、无基础能力（2026-10-07 用户定：开局不再追加肾上腺素，
+//     起始组仅 BODY_STARTER_DECK 自带一张）；拳/盾填充卡的晋升通道见
+//     promotion.js 的 FILLER_STARTERS 门禁——体修与法师同为 3 AP。
 
 // 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；填充组带一张「情况不对」
 // = 迷你保险（体修走起始组自带；情况不对带迷你词条计 0 张手牌，抽到不卡手）
@@ -22,8 +21,7 @@ const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC'
 export const ROUTES = Object.freeze({
   body: Object.freeze({
     id: 'body', name: '体修', leino: null, ability: null, apBonus: 0,
-    // 体修基础能力：多获得一张肾上腺素（起始组共两张）
-    deck: Object.freeze([...BODY_STARTER_DECK, 'adrenalineB']),
+    deck: Object.freeze(BODY_STARTER_DECK),
     blurb: '肉身成圣',
   }),
   fire: Object.freeze({

@@ -28,7 +28,7 @@ import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusOb
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
-import { grantCardFlight } from '../cardGrantFlight.js';
+import { installPanelHost } from '../panelHost.js';
 import { MACHINE_FACTORIES } from '../machines/index.js';
 import { PANEL_BUILDERS } from '../panels/index.js';
 import { Picker } from '../picker/Picker.js';
@@ -233,17 +233,12 @@ export class RoomStage {
 
   // ================= 对外 API（与 MapStage 同名同义，宿主代码可共用）=================
 
-  setPanelIntentHandler(fn) { this._onIntent = fn; }
-
   /**
    * 通用单位指令（后端驱动/cutscene 共用）：{unit, op:'moveTo'|'pose'|'face'|'wander', ...}。
    * 描述符可序列化（直播回放可直接重放）；返回 Promise（moveTo 等到达）。
    */
   roomUnitCommand(cmd) { return this._roomUnits?.command(cmd) ?? Promise.resolve(); }
   get roomUnitBusy() { return this._roomUnits?.busy ?? false; }
-
-  /** run 级动画队列注入（「择卡得卡」演出指令化的挂点，与切幕/清层串行）。 */
-  setRunSequencer(seq) { this._runSequencer = seq ?? null; }
 
   /** 得卡演出的收编锚点：玩家状态栏（房间里没有牌库图标，卡收向"玩家"即入组）。 */
   _deckAnchor() { return { x: PLAYER_STATUS_POS.x + 10, y: PLAYER_STATUS_POS.y, z: PLAYER_STATUS_POS.z }; }
@@ -318,51 +313,6 @@ export class RoomStage {
     const remiImg = this._unitArt?.getFile('remi_avatar.png');
     if (remiImg) this._statusBar.setRemiAvatar(remiImg);
   }
-
-  // ---- 全屏选择界面 / 获得物特写（实现已抽 stagePickerKit，与塔楼层/战斗层共用一份）----
-  // 本舞台只保留对外同名转发（宿主按"当前舞台"调用，签名不变）：来源表/意图/文案都在 kit 里，
-  // 候选取自当前房间快照（`this._snap`）。来源：camp / training / slot / bankUpgrade / bankBurn。
-
-  /**
-   * 打开「选卡」界面；source 决定候选与确认后上行的意图。
-   * ⚠ 候选按 source 取对应快照段（kit 的 UPGRADE_SOURCES）——曾经一律读 `snap.slot.upgradeCards`，
-   * 于是营地/训练桩面板里的「升级一张卡」在场景里是死按钮（点开空的 = 没反应）。
-   */
-  openUpgradePicker(source, opts) { return this._pickerKit.openUpgradePicker(source, this._snap, opts); }
-  /** 卡牌焚毁演出（恶魔词条随机焚毁 / 失去类烧卡的通用转发，见 stagePickerKit.playCardBurn）。 */
-  playCardBurn(payload) { return this._pickerKit.playCardBurn(payload); }
-
-  /**
-   * 打开「卡包三选一」全屏 overlay（买到的卡包：买到即开）。
-   * **可放弃**：确认 = 选中的卡入组；返回 = 放弃这个卡包（钱已花，选择权在玩家）。
-   */
-  openShopPackPicker() { return this._pickerKit.openShopPackPicker(this._snap); }
-
-  /** 遗物包三选一（售货机稀有度遗物包）：全屏 overlay，**可放弃**（返回 = 放弃遗物包）。 */
-  openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); }
-
-  /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里；统一全屏 overlay）。 */
-  openSlotPrizePicker() { return this._pickerKit.openSlotPrizePicker(this._snap); }
-
-  /** 训练抓牌四选一（全屏 overlay；候选取自当前房间快照）。 */
-  openTrainingDrawPicker() { return this._pickerKit.openTrainingDrawPicker(this._snap); }
-
-  /** 打开「粉碎物品」选择界面（卡或遗物；kind 决定列表）。 */
-  openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); }
-
-  /** 获得物特写（通用组件：有素材用素材，没有就拿色块代替）。 */
-  showcaseItem(item) { return this._pickerKit.showcaseItem(item); }
-  /** 切幕清算转发（wipe preStage）：收起本舞台特写与全屏选卡/选遗物。 */
-  dismissModals() { this._pickerKit?.dismissModals(); }
-
-  /** 卡牌升级演出（通用入口，stagePickerKit 包装的原卡变身→飞入牌库）。 */
-  playCardUpgrade(payload) { return this._pickerKit.playCardUpgrade(payload); }
-
-  get showcasing() { return this._pickerKit.showcasing; }
-  /** 套件级模态占用（特写/升级演出/全屏界面开着）——宿主编排器据此避让自动演出。 */
-  get uiBusy() { return this._pickerKit.uiBusy; }
-  get cardPicker() { return this._pickerKit.cardPicker; }
-  get relicPicker() { return this._pickerKit.relicPicker; }
 
   /** 当前聚焦的机器名（调试/测试）。 */
   get focusedMachine() { return this._focused; }
@@ -454,10 +404,6 @@ export class RoomStage {
     }
     // 抬起与按下不一致（拖出/误触）：只做"点空白处收起面板"
     if (!hit || hit.kind === 'background') this._focusMachine(null);
-  }
-
-  handleWheel(deltaY) {
-    return this._pickerKit.handleWheel(deltaY);
   }
 
   onEnter(manager) {
@@ -624,10 +570,9 @@ export class RoomStage {
 
   /**
    * 房里**还欠着的事**（null = 可以离房）：由各**机器模块自报**（`pendingDuty`）。
-   * 语义分两档（硬拦 / 软提示）由模块自己定义与提示，本舞台只做聚合：
-   *   · **硬拦**（如 'demon' / 'shop' / 'forced'）——钱已到手或升级已发生，不处理完不许走；
-   *   · **软提示**（如 'camp'）——休整是可选收益（训练同理），
-   *     第一次点「继续前进」只弹一句泡泡，再点一次就放行（各模块自己记"提示过没有"）。
+   * 现存门全为硬拦（'train' / 'pendingUpgrade' / 'demon' / 'shop'）——训练必做、
+   * 恶魔轮盘/售货机钱已到手，不处理完不许走；篝火休整是可选收益不设门
+   * （2026-10-07 用户定）。本舞台只做聚合。
    */
   _pendingRoomDuty() {
     return this._machines.some(m => m.pendingDuty?.(this._snap));
@@ -834,36 +779,6 @@ export class RoomStage {
     this._panel = null;
   }
 
-  /** 面板动作分流：本地动作（开选卡界面…）自己消化，其余原样上行。 */
-  _onPanelAction(action, info) {
-    if (!action || this._grantBusy) return;
-    if (action.local) {
-      if (action.action === 'openShop') { this.openShop(); return; }
-      if (action.action === 'openUpgradePicker') { this.openUpgradePicker(action.source); return; }
-      if (action.action === 'openShopPack') { this.openShopPackPicker(); return; }
-      if (action.action === 'openShopRelicPack') { this.openShopRelicPackPicker(); return; }
-      if (action.action === 'openSlotPrize') { this.openSlotPrizePicker(); return; }
-      return;
-    }
-    // 得卡标记（老虎机卡多选一 / 训练抓牌）：摘下被点的卡 → 收起操纵条 → 播「择卡得卡」
-    // 演出（脉冲→飞向玩家状态栏，sequencer 指令化）→ 落袋才上行意图。
-    // 操纵条整体 _removePanel 而不是藏起：dock 非模态不吞指针（点击由 _grantBusy 守），
-    // 且 setPanel → _renderPanel 只在新快照到达时整份重建，不存在"隐形面板被重绘"的坑。
-    if (action.grantCard && info?.pickId && this._panel) {
-      const entry = this._panel.takeCard(info.pickId);
-      if (entry) {
-        grantCardFlight({
-          entry, add: (c) => { this.uiScene.add(c); this._removePanel(); },   // 面板组在原点：局部即世界
-          target: this._deckAnchor(), sequencer: this._runSequencer,
-          onBusy: (b) => { this._grantBusy = b; },
-          onDone: () => this._onIntent?.(action),
-        });
-        return;
-      }
-    }
-    this._onIntent?.(action);
-  }
-
   // ================= 内部：逐帧 =================
 
   _tick(dt) {
@@ -928,6 +843,18 @@ export class RoomStage {
     }
   }
 }
+
+// 共享面板宿主（pickerKit 转发族 + 面板动作分流骨架）见 panelHost.js；本舞台只留
+// setPanel（room 快照 / 阶段模态双轨路由）与 dock 面板三件套（机器 widget 归口是本地分叉）。
+installPanelHost(RoomStage, {
+  localActions: {
+    openShop() { this.openShop(); },
+    openUpgradePicker(a) { this.openUpgradePicker(a.source); },
+    openShopPack() { this.openShopPackPicker(); },
+    openShopRelicPack() { this.openShopRelicPackPicker(); },
+    openSlotPrize() { this.openSlotPrizePicker(); },
+  },
+});
 
 // 与 MapStage 逐字同款：node 无 document 退化为 null（各调用方自行兜底）。
 // 塔楼与房间的状态栏/顶端资源行共用同一观感口径，故这里也保持一致。

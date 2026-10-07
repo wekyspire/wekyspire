@@ -4,7 +4,7 @@
 // 纯施法类给施法者一拍「进架」语言——命中侧反馈（受方姿态/粒子/护盾罩）由
 // ANIM_EFFECT/ANIM_SHIELD 等既有节拍承接，本剧本只补施法者的动作侧。
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
-import { arcProjectile, lightPillar } from '../spells/blocks.js';
+import { arcProjectile } from '../spells/blocks.js';
 
 // 自带 act 剧本编排的 Boss（转段 playScript 等）：通用起手会与之叠播，跳过
 const SKIP_ACT_FX = new Set(['pyro', 'kardas', 'mefm1']);
@@ -30,20 +30,16 @@ async function curseShot(ctx, deps, { unit, player }) {
   }
 }
 
-// 施法增益式（增强自身或友军）：施法者脚下金白光柱 + 上升金粒——「进架施法」，
-// 增益落点（受方 buff 姿态/粒子）由后续节拍承接
+// 施法增益式（增强自身或友军）：施法者周身一撮金白/蓝白粒子的轻起手（2026-10-07
+// 用户定：原脚下光柱删除——payoff 语言放在起手位读不通，「被捅」观感）。增益落点
+// （受方 buff 姿态/粒子）由后续节拍承接
 async function empowerCast(ctx, deps, { unit, light = false }) {
   const at = { x: unit.position.x, y: unit.position.y, z: unit.position.z };
-  await lightPillar(ctx, deps, {
-    at,
-    width: light ? 1.6 : 2.4, height: light ? 12 : 18, ms: light ? 400 : 650,
-    color: light ? [0.75, 0.85, 1.15] : [1.0, 0.85, 0.50],
-    hot: light ? [1.0, 1.1, 1.4] : [1.3, 1.15, 0.80],
-  });
   deps.particles?.spawn?.(at.x, at.y + 1.5, {
     color: light ? 0x8fc3ff : 0xffd88a, count: light ? 8 : 14, speed: 4,
     size: 0.8, ttl: 0.9, gravity: -6, z: at.z,
   });
+  await ctx.wait(light ? 280 : 380);   // 起手拍短停（粒子可见即可，不占戏）
 }
 
 export function registerEnemyActScript(registerScript) {

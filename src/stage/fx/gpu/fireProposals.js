@@ -167,72 +167,85 @@ export function createFireProposer(mesh, uFire, uTime) {
 // ---- sceneFire 粒子类型：spawn 读提案，积分上飘 + 风 + drag ---------------------
 const hash1 = Fn(([n]) => fract(sin(n).mul(43758.5453123)));
 
+/** sceneFire/sceneEmber 共用 build：提案表取出生点，积分风/浮力/阻尼（形态差异走 render 参数）。
+ * driveProposers = 是否由本类型驱动 proposer dispatch——两个类型同开时只允许一个驱动
+ * （双驱动 = 一帧双份表面采样 dispatch、提案帧号跳 2）；火舌开、火星关。 */
+function sceneFireCustomBuild(ctx, driveProposers = true) {
+  const P = fireProposals();
+  const fn = Fn(() => {
+    const li = int(instanceIndex);
+    const idx = ctx.globalIdx(li);
+    const A = ctx.stateS.element(idx.mul(int(2)));
+    const B = ctx.stateS.element(idx.mul(int(2)).add(int(1)));
+    const P1 = ctx.payloadS.element(idx.mul(int(2)).add(int(1)));
+
+    If(ctx.spawnWindow(li), () => {
+      const h1 = hash1(float(idx).mul(0.719).add(ctx.uFrame.mul(0.613))).toVar();
+      const h2 = hash1(h1.mul(91.7).add(0.13)).toVar();
+      const h3 = hash1(h1.mul(47.3).add(0.37)).toVar();
+      const h4 = hash1(h1.mul(71.9).add(0.61)).toVar();
+      const h6 = hash1(h1.mul(33.1).add(0.83)).toVar();
+      // 提案表非空才出生：随机槽位取条目（hash 均匀覆盖）
+      const live = min(float(P.counterRO.element(uint(0))), float(MAX_FIRE_PROPOSALS)).toVar();
+      If(live.greaterThan(0.5), () => {
+        const e = P.slotsS.element(uint(h2.mul(live))).toVar();
+        const wasAlive = A.w.greaterThanEqual(0.0).and(A.w.lessThan(1.0));
+        ctx.aliveAdd(wasAlive);
+        const r1 = ctx.row(1); // ttl w
+        const r3 = ctx.row(3); // vel + velJit
+        const r7 = ctx.row(7); // ttlJit y
+        const v0 = r3.xyz.add(vec3(h3, h4, h6).sub(0.5).mul(2.0).mul(r3.w))
+          .mul(float(0.7).add(h2.mul(0.6)));
+        const ttlA = max(r1.w.mul(float(1.0).add(h6.sub(0.5).mul(2.0).mul(r7.y))), 0.05);
+        A.assign(vec4(e.xyz.add(vec3(h2, h3, h4).sub(0.5).mul(1.1)), 0.001));
+        B.assign(vec4(v0, h1));
+        // payload.w 携带提案强度（旺火偏白——present 色温调制预留）
+        P1.assign(vec4(0.0, 0.0, ttlA, e.w));
+      });
+    }).Else(() => {
+      // —— 积分（风/浮力/阻尼；与 burnSparks 同式）——
+      const age = A.w;
+      If(age.greaterThanEqual(0.0).and(age.lessThan(1.0)), () => {
+        const r4 = ctx.row(4); // spread, gravity, drag, windK
+        const ttlA = P1.z;
+        const vel = B.xyz.add(windField(A.xyz, ctx.uTime).mul(r4.w)
+          .add(vec3(0.0, r4.y, 0.0)).mul(ctx.uDt))
+          .mul(exp(r4.z.negate().mul(ctx.uDt)));
+        const ageNew = age.add(ctx.uDt.div(ttlA));
+        const posNew = A.xyz.add(vel.mul(ctx.uDt));
+        If(ageNew.greaterThanEqual(1.0), () => {
+          A.assign(vec4(posNew, 1.5));
+          ctx.aliveSub();
+        }).Else(() => {
+          A.assign(vec4(posNew, ageNew));
+          B.assign(vec4(vel, B.w));
+          P1.assign(vec4(clamp(ageNew, 0.0, 1.0), 0.0, ttlA, P1.w));
+        });
+      });
+    });
+  });
+  return {
+    update: fn().compute(ctx.segCap, [64]),
+    tick: () => (driveProposers ? tickFireProposers() : []),   // 燃烧部件表面采样 → 提案（排在 spawn 前）
+    api: null,
+  };
+}
+
+// 火舌（大）：贴物体表面的焰体——阴燃时稀疏（rateScale 随 fireSum），不大不小
+// 不糊脸（旧 1.7/0.9 的「整件发光」病根）
 export const SCENE_FIRE = defineParticleType({
   name: 'sceneFire', space: 'world', cap: 2048, kind: 'custom',
   // rate 是 spawn 窗口推进率（真实出生还须提案表非空）；rateScale 由 combustion
   // 按燃烧部件火势总量推（火越多窗口越大——粒子数随火势缩放）
-  spawn: { rate: 900, ttl: 0.85, ttlJit: 0.35, vel: [0, 10.5, 0], velJit: 2.4, spread: 0, gravity: 3.4, drag: 1.15, windK: 0.8 },
-  render: { size: 1.7, sizeEndK: 0.12, color: [1.9, 0.78, 0.22], alpha: 0.9, heat: 0.5, ageHeat: 2.2 },
-  custom: {
-    build(ctx) {
-      const P = fireProposals();
-      const fn = Fn(() => {
-        const li = int(instanceIndex);
-        const idx = ctx.globalIdx(li);
-        const A = ctx.stateS.element(idx.mul(int(2)));
-        const B = ctx.stateS.element(idx.mul(int(2)).add(int(1)));
-        const P1 = ctx.payloadS.element(idx.mul(int(2)).add(int(1)));
+  spawn: { rate: 650, ttl: 0.85, ttlJit: 0.35, vel: [0, 10.5, 0], velJit: 2.4, spread: 0, gravity: 3.4, drag: 1.15, windK: 0.8 },
+  render: { size: 1.3, sizeEndK: 0.12, color: [1.9, 0.78, 0.22], alpha: 0.78, heat: 0.45, ageHeat: 2.2 },
+  custom: { build: sceneFireCustomBuild },
+});
 
-        If(ctx.spawnWindow(li), () => {
-          const h1 = hash1(float(idx).mul(0.719).add(ctx.uFrame.mul(0.613))).toVar();
-          const h2 = hash1(h1.mul(91.7).add(0.13)).toVar();
-          const h3 = hash1(h1.mul(47.3).add(0.37)).toVar();
-          const h4 = hash1(h1.mul(71.9).add(0.61)).toVar();
-          const h6 = hash1(h1.mul(33.1).add(0.83)).toVar();
-          // 提案表非空才出生：随机槽位取条目（hash 均匀覆盖）
-          const live = min(float(P.counterRO.element(uint(0))), float(MAX_FIRE_PROPOSALS)).toVar();
-          If(live.greaterThan(0.5), () => {
-            const e = P.slotsS.element(uint(h2.mul(live))).toVar();
-            const wasAlive = A.w.greaterThanEqual(0.0).and(A.w.lessThan(1.0));
-            ctx.aliveAdd(wasAlive);
-            const r1 = ctx.row(1); // ttl w
-            const r3 = ctx.row(3); // vel + velJit
-            const r7 = ctx.row(7); // ttlJit y
-            const v0 = r3.xyz.add(vec3(h3, h4, h6).sub(0.5).mul(2.0).mul(r3.w))
-              .mul(float(0.7).add(h2.mul(0.6)));
-            const ttlA = max(r1.w.mul(float(1.0).add(h6.sub(0.5).mul(2.0).mul(r7.y))), 0.05);
-            A.assign(vec4(e.xyz.add(vec3(h2, h3, h4).sub(0.5).mul(1.1)), 0.001));
-            B.assign(vec4(v0, h1));
-            // payload.w 携带提案强度（旺火偏白——present 色温调制预留）
-            P1.assign(vec4(0.0, 0.0, ttlA, e.w));
-          });
-        }).Else(() => {
-          // —— 积分（风/浮力/阻尼；与 burnSparks 同式）——
-          const age = A.w;
-          If(age.greaterThanEqual(0.0).and(age.lessThan(1.0)), () => {
-            const r4 = ctx.row(4); // spread, gravity, drag, windK
-            const ttlA = P1.z;
-            const vel = B.xyz.add(windField(A.xyz, ctx.uTime).mul(r4.w)
-              .add(vec3(0.0, r4.y, 0.0)).mul(ctx.uDt))
-              .mul(exp(r4.z.negate().mul(ctx.uDt)));
-            const ageNew = age.add(ctx.uDt.div(ttlA));
-            const posNew = A.xyz.add(vel.mul(ctx.uDt));
-            If(ageNew.greaterThanEqual(1.0), () => {
-              A.assign(vec4(posNew, 1.5));
-              ctx.aliveSub();
-            }).Else(() => {
-              A.assign(vec4(posNew, ageNew));
-              B.assign(vec4(vel, B.w));
-              P1.assign(vec4(clamp(ageNew, 0.0, 1.0), 0.0, ttlA, P1.w));
-            });
-          });
-        });
-      });
-      return {
-        update: fn().compute(ctx.segCap, [64]),
-        tick: () => tickFireProposers(),   // 燃烧部件表面采样 → 提案（排在 spawn 前）
-        api: null,
-      };
-    },
-  },
+// 飘散火星（小）：快升、强风偏摆、bloom 闪——「着火」的灵动层，读作火点而非光晕
+export const SCENE_EMBER = defineParticleType({
+  name: 'sceneEmber', space: 'world', cap: 1024, kind: 'custom',
+  spawn: { rate: 260, ttl: 1.3, ttlJit: 0.6, vel: [0, 15, 0], velJit: 3.2, spread: 0, gravity: 1.2, drag: 0.7, windK: 2.0 },
+  render: { size: 0.5, sizeEndK: 0.35, color: [2.2, 1.2, 0.45], alpha: 0.9, heat: 1.0, ageHeat: 1.5 },
+  custom: { build: (ctx) => sceneFireCustomBuild(ctx, false) },
 });

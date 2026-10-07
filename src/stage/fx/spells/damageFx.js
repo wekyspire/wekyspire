@@ -166,6 +166,19 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
       const angle = v.jitter != null ? (Math.random() * 2 - 1) * v.jitter : v.angle;
       const look = fx.look ?? { color: [1.0, 0.98, 0.92], fringe: [0.5, 0.8, 1.6] };
       const flame = fx.kind === 'flameslash';
+      if (flame) {
+        // 刃生成即带火（2026-10-07 用户定焰刃加强）：扫掠期间焰星随刃口连喷三轮
+        // （与刃同步——火刀是「刃上有火」，不是砍完才飘灰）；短循环先于父本演完
+        ctx.spawn(async (c) => {
+          for (let i = 0; i < 3; i++) {
+            deps.particles?.spawn?.(chest.x, chest.y + 0.8, {
+              color: 0xff8a3a, count: 9, speed: 14, size: 0.75, ttl: 0.55,
+              gravity: -10, z: chest.z,
+            });
+            await c.wait(70);
+          }
+        });
+      }
       await slashSweep(ctx, deps, {
         at: chest, angle, ms: v.ms,
         // 焰刃：下限抬高（火刀要罩住敌人全身）+ 上移避开血条 + 弧更弯（火舌感）
@@ -269,13 +282,16 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
     case 'ignition': {
       if (fx.proj === 'owned') {
         // 火花乱射：本拍自持投射物（窜天猴——飞行中随机甩尾，从主角手上弹出，
-        // 抵达才爆）；落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发
+        // 抵达才爆）；落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发。
+        // 慢摆大甩：dartFreq 0.42 把双频降到 2~3 个 S 弯（200ms 级飞行下原 4.5-8Hz
+        // 一屏十几帧走样成抖直线）；飞行拉长到 290ms 给甩尾留时间
         await arcProjectile(ctx, deps, {
           from: deps.playerAnchor?.() ?? { x: 0, y: 5, z: 0 },
           to: chest,
           color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55], size: 2.0,
-          ms: 200, arcH: 2.5, arcJitter: 1.2, stretch: 2.0, lampIntensity: 0, darting: 0.9, fire: true,
-          trail: { color: 0xffc95e, count: 1, ttl: 0.22, speed: 3, size: 0.6 },
+          ms: 290, arcH: 3.5, arcJitter: 1.6, stretch: 2.0, lampIntensity: 0,
+          darting: 1.35, dartFreq: 0.42, fire: true,
+          trail: { color: 0xffc95e, count: 1, ttl: 0.3, speed: 3.5, size: 0.7 },
         });
         projSync?.arrived?.();
       } else if (fx.proj === 'tracked') {

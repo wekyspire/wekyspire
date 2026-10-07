@@ -15,7 +15,7 @@ import {
   vec2, vec3, vec4, mix, sin, dot, floor, fract, smoothstep,
 } from 'three/tsl';
 import { M } from '../../scenes/kit/materials.js';
-import { createFireProposer, fireProposalClearNode, SCENE_FIRE } from '../gpu/fireProposals.js';
+import { createFireProposer, fireProposalClearNode, SCENE_FIRE, SCENE_EMBER } from '../gpu/fireProposals.js';
 
 // 族燃烧系数：ignite 点燃 / blaze 明火 / inferno 烈焰 / burnout 燃尽（热量单位）
 //（不可燃族门槛整体抬高 3.5 倍——持续高热仍可点燃，观感即「烧红了的铁」）
@@ -76,10 +76,18 @@ function attachCombust(material) {
     // 碳化（uChar）：albedo 混向炭黑（细频斑驳）
     const charCol = vec3(0.045, 0.028, 0.02).add(h2.sub(0.5).mul(0.035));
     const col = mix(materialColor.rgb, charCol, rec.uChar.mul(h2.mul(0.25).add(0.75)));
-    // 火光：着火表面暖色脉动（双 sin flicker；uFire 由 CPU 按 tier 平滑推）
+    // 火苗簇（大格低频场圈「烧到哪一块」）：火势越低簇越稀——阴燃 = 零星几处
+    // 暗红火点，明火起连片，烈焰全覆盖（防「整件物体发光」读感）
+    const cellH = cbHash(pos.mul(0.25).add(7.7));
+    const cluster = smoothstep(
+      float(1.0).sub(rec.uFire.mul(0.85)),
+      float(1.06).sub(rec.uFire.mul(0.85)), cellH);
+    // 火光：双 sin flicker 脉动 × 簇掩码；火色分档（阴燃暗红 → 明火橙 → 烈焰橙白）
     const flick = sin(rec.uTime.mul(9.3).add(h.mul(47.0))).mul(sin(rec.uTime.mul(3.1).add(h.mul(11.0)))).mul(0.28).add(0.72);
-    const glow = smoothstep(0.25, 0.95, rec.uFire.mul(flick).mul(h2.mul(0.6).add(0.4)));
-    const fired = mix(col, vec3(1.15, 0.45, 0.12), glow.mul(0.55));
+    const fireCol = mix(vec3(0.55, 0.10, 0.02), vec3(1.15, 0.45, 0.12), smoothstep(0.3, 0.75, rec.uFire))
+      .add(vec3(0.6, 0.5, 0.35).mul(smoothstep(0.8, 1.05, rec.uFire)));
+    const glow = smoothstep(0.25, 0.95, rec.uFire.mul(flick).mul(h2.mul(0.6).add(0.4))).mul(cluster);
+    const fired = mix(col, fireCol, glow.mul(0.6));
     return vec4(fired, materialColor.a);
   })();
   return rec;
@@ -129,14 +137,15 @@ export function createCombustion() {
       });
     },
     /** heat 事件注入（B.combustible 的 respond 委托）：温度 × 距离衰减打进部件热量。
-     * ×30 校准：大火球 temp 1.0 贴脸 ≈ +30 热（一发点着 wood，阈 26×随机 0.7–1.3）；
-     * 60u 外 ≈ +11（两三发才着）；nova 1.5 直逼明火档。 */
+     * ×34 / 远膝 62 校准（敌站位到墙边道具典型 20–35u）：temp 1.0 贴脸 +34（一发点着
+     * wood，阈 26×随机 0.7–1.3）；d=20 +25.5（一发着大半 wood）；d=35 +21.7（低耐
+     * 一发、高耐两发）；metal 阈 64–118 → 战线距离需持续高热三四发起。 */
     absorb(at, temp) {
       for (const p of parts) {
         if (p.dead || !p.mesh.parent) continue;
         p.mesh.getWorldPosition(_wp);
         const d = Math.hypot(_wp.x - at.x, _wp.z - at.z);
-        p.heat += temp * 30 * 34 / (34 + d);
+        p.heat += temp * 34 * 62 / (62 + d);
       }
     },
     step(dt, t) {
@@ -156,8 +165,9 @@ export function createCombustion() {
           const d = Math.hypot(_wp.x - b.x, _wp.z - b.z);
           if (d < 14) q.heat += b.tier * 4 * dt * 14 / (14 + d * 1.2);
         }
-        // 冷却（余温散掉——没人持续加热就不无限滞留）
-        q.heat *= Math.pow(0.55, dt);
+        // 冷却（0.72/s——0.55 时两回合间余温归零，战线距离的单发热量永远蓄不到
+        // 点燃阈；放慢后跨回合蓄热成立，没人持续加热仍自然衰减）
+        q.heat *= Math.pow(0.72, dt);
         // tier 演进（单调升：着了就不灭，火势只进不退——观感优先）
         if (q.tier === 0 && q.heat > q.igniteAt) {
           q.tier = 1;
@@ -171,8 +181,9 @@ export function createCombustion() {
           const u = q.uni;
           if (u) {
             u.uTime.value = t;
-            // 火势目标（tier 1/2/3 → 0.35/0.7/1.05）平滑逼近；燃尽段拉满（爆燃读感）
-            const target = q.gone >= 0 ? 1.3 : [0, 0.35, 0.7, 1.05][q.tier];
+            // 火势目标（tier 1/2/3 → 0.26/0.58/0.95：阴燃暗红零星、烈焰橙白连片）
+            // 平滑逼近；燃尽段拉满（爆燃读感）
+            const target = q.gone >= 0 ? 1.3 : [0, 0.26, 0.58, 0.95][q.tier];
             u.uFire.value += (target - u.uFire.value) * Math.min(1, dt * 2.4);
             u.uChar.value = Math.min(1, q.burnT * 1000 / q.charMs);
             u.uBurn.value = Math.min(0.6, q.burnT * 1000 / (q.charMs * 3.4));
@@ -184,13 +195,16 @@ export function createCombustion() {
           }
         }
       }
-      // 粒子窗口随火势（场景有火才 spawn；无火零窗口）
+      // 粒子窗口随火势（场景有火才 spawn；无火零窗口）——火舌主体 + 飘散火星
       if (pool?.setTypeActive) {
         if (fireSum > 0) {
           pool.setTypeActive(SCENE_FIRE, 1);
           pool.setTypeRateScale(SCENE_FIRE, Math.min(6, fireSum));
+          pool.setTypeActive(SCENE_EMBER, 1);
+          pool.setTypeRateScale(SCENE_EMBER, Math.min(4, fireSum * 0.6));
         } else {
           pool.setTypeActive(SCENE_FIRE, 0);
+          pool.setTypeActive(SCENE_EMBER, 0);
         }
       }
     },
