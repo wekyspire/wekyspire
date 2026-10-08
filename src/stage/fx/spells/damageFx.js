@@ -6,7 +6,42 @@
 // kind → 基础块映射在 runDamageBeat。语义源：体系 series（主）+ 卡名（方向变体）。
 // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送（每拍独立缩放伤害量）。
 import { getSkillDefinition } from '../../../core/skills/registry.js';
-import { slashSweep, punchImpact, fireBurst } from './blocks.js';
+import { slashSweep, punchImpact, fireBurst, screenFlash, arcProjectile, lampPulse } from './blocks.js';
+import { cartoonNova } from './cartoonNova.js';
+
+// 爆裂术大爆炸的去重表（defId → 上次爆心演出的 performance.now()）
+const _novaRecent = new Map();
+
+/**
+ * 爆裂术终止大爆（2026-10-02 用户定艺术方向）：敌方阵型中心一场**卡通烟云**
+ * 大爆炸——黑烟云朵为主体（cartoonNova：法线混合暗色 puff + 描边 + 变色），
+ * 配全屏暖白闪一瞬 + 灯池爆闪 + 重震屏。火球面片不上（写实湍流与卡通烟云
+ * 风格打架）。粒子对象 fire-and-forget，本协程只管编排时序。
+ */
+async function novaBlast(ctx, deps, { at, scale = 1, spread = 0 }) {
+  if (!at) return;
+  // 要吞没的阵型横展（世界单位；单敌 = 14 保底宽度）——烟云横向散布的依据
+  const width = Math.max(14, spread * 2 + 12);
+  // 烟云协程直接挂本协程（ctx.spawn 会随父本收尾连杀——爆炸要比震屏活得久，
+  // 收尾时 await 它）
+  const novaP = cartoonNova(ctx, deps, {
+    at: { x: at.x, y: at.y + 1.0, z: at.z }, scale, width,
+  });
+  // 白闪（一瞬）+ 灯爆 + 震屏（重击 + 短促持续微震）
+  ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.5, ms: 240, color: 0xffe0b0 }));
+  ctx.spawn(async (c) => {
+    await lampPulse(c, deps, {
+      name: 'light:fx0', at: { x: at.x, y: at.y, z: (at.z ?? 0) + 4 },
+      color: [1.0, 0.62, 0.25], peak: 2600 * scale, attackMs: 90, decayMs: 620,
+    });
+  });
+  deps.shake?.impulse?.(2.4 * scale);
+  deps.shake?.sustain?.(0.8);
+  ctx.onKill(() => deps.shake?.sustain?.(0));
+  await ctx.wait(520);
+  deps.shake?.sustain?.(0);
+  await novaP;   // 烟云散净才收本协程
+}
 
 // ---- 刀光方向语义（卡名后缀 = 数据）：…斩=竖劈斩、…劈=横扫劈、…刀舞=连击；缺省斜 ----
 const SLASH_VARIANTS = {
@@ -61,6 +96,9 @@ export function resolveDamageFx(defId) {
   // 天斩链（A/S/X）：heavenCleave 在施术拍已实体锁演完整场（压迫+巨刃+光柱+
   // 断裂），伤害拍不再补刀光——避免双斩读感
   if (def.id === 'godCleave' || def.id === 'skyCleave' || def.id === 'mountainCleave') return null;
+  // 空形拳（S）：命中兑付归 voidStrike（施术拍只有静场蓄意，命中才炸——
+  // 后手不成立则本拍根本不存在，静场收于「空」，whiff 即语义）
+  if (def.id === 'emptyFist') return { kind: 'voidStrike' };
   switch (def.series) {
     case 'blade':
       return { kind: 'slash', variant: slashVariantOf(def) };
@@ -77,16 +115,32 @@ export function resolveDamageFx(defId) {
       const rapid = /连击|乱拳|雨拳|千手|万手|瞬击|快拳/.test(name);
       return { kind: 'punch', heavy, rapid };
     }
-    case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点）
+    case 'block': {        // 格挡系攻击链（掌/腿/破架——体修同源，施术拍已逐卡走 fistCast）
+      const name = def.name ?? '';
+      const heavy = /摘星|贯心|旋风腿|碎骨|扫堂/.test(name);
+      const rapid = /二击|双击/.test(name);
+      return { kind: 'punch', heavy, rapid };
+    }
+    case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
-      return { kind: 'fireburst', impactDelayMs: 80 };
+      return { kind: 'fireburst', proj: 'tracked' };
     case 'fireRain':       // 火雨/火瀑（群伤落地）
       return { kind: 'fireburst', ground: true };
-    case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发）
-      return { kind: 'nova' };
-    case 'ignite':         // 点火/烈焰/炙焰/热浪（小伤 + 燃烧赋予）
-      return { kind: 'ignition' };
+    case 'fireWhirl':      // 火焰旋风（群伤——施术拍主角火环外推，逐敌落地火）
+      return { kind: 'fireburst', ground: true };
+    case 'spark':          // 火花链（乱射：本拍自持投射物——随机弧快弹，抵达才爆）
+      return { kind: 'ignition', proj: 'owned' };
+    case 'fireControl': {  // 控火术：按 id 分——燃=单体火爆 / 爆=群伤落地 / 破=小火
+      if (def.id === 'fireControlBurn') return { kind: 'fireburst' };
+      if (def.id === 'fireControlDetonate') return { kind: 'fireburst', ground: true };
+      if (def.id === 'burnSnapB' || def.id === 'burnSnapA') return { kind: 'ignition' };
+      return null;
+    }
+    case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发；id 供 AOE 多拍去重）
+      return { kind: 'nova', id: def.id };
+    case 'ignite':         // 点火/热浪（小伤 + 燃烧赋予；施术拍点种投射物，本拍等抵达）
+      return { kind: 'ignition', proj: 'tracked' };
     default:
       return null;
   }
@@ -96,8 +150,11 @@ export function resolveDamageFx(defId) {
  * 在伤害节拍跑一次命中演出（units.js _damageHit 经 _fxRunScript 调用，
  * fire-and-forget 不占节拍时序）。锚点口径：胸口锚 = 立绘中心（血条同款
  * 3.4×scale），脚边锚 = 落地爆心（火向上烧）。fromX = 攻击来向（拳面镜像）。
+ * projSync（投射物抵达门，projectileTrack.js）：tracked = 施术拍发射的飞行
+ * （await gate() 等真实抵达）；owned = 本拍自持发射（火花乱射——发完 arcProjectile
+ * 落定即 arrived() 回报，主受击拍同源等待）。
  */
-export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }) {
+export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, projSync = null }) {
   if (!fx || !unit) return;
   const s = unit._baseScale ?? 1;
   const chest = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
@@ -109,6 +166,19 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       const angle = v.jitter != null ? (Math.random() * 2 - 1) * v.jitter : v.angle;
       const look = fx.look ?? { color: [1.0, 0.98, 0.92], fringe: [0.5, 0.8, 1.6] };
       const flame = fx.kind === 'flameslash';
+      if (flame) {
+        // 刃生成即带火（2026-10-07 用户定焰刃加强）：扫掠期间焰星随刃口连喷三轮
+        // （与刃同步——火刀是「刃上有火」，不是砍完才飘灰）；短循环先于父本演完
+        ctx.spawn(async (c) => {
+          for (let i = 0; i < 3; i++) {
+            deps.particles?.spawn?.(chest.x, chest.y + 0.8, {
+              color: 0xff8a3a, count: 9, speed: 14, size: 0.75, ttl: 0.55,
+              gravity: -10, z: chest.z,
+            });
+            await c.wait(70);
+          }
+        });
+      }
       await slashSweep(ctx, deps, {
         at: chest, angle, ms: v.ms,
         // 焰刃：下限抬高（火刀要罩住敌人全身）+ 上移避开血条 + 弧更弯（火舌感）
@@ -148,8 +218,29 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       }
       return;
     }
+    case 'voidStrike': {
+      // 空形拳兑付：施术拍的静场在此炸开（静极而动）——全白重击 + 白闪 + 大震
+      // + 冷白落地尘。量级顶格（55 真伤是 S 签名的全部赌注）
+      const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
+      const s = unit._baseScale ?? 1;
+      const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
+      ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.5, ms: 200, attackMs: 40 }));
+      deps.shake?.impulse?.(3.2);
+      await punchImpact(ctx, deps, {
+        at, dir,
+        scale: Math.min(2.6, Math.max(punchScaleFor(dealt, true), 1.2) * 1.15),
+        ms: 380,
+        color: [1.0, 1.0, 1.0], hot: [1.7, 1.7, 1.8], rim: [1.2, 1.3, 1.6],
+        sparkColor: 0xffffff, sparkCount: 34, sparkSpeed: 26, lampIntensity: 1250,
+      });
+      deps.particles?.spawn?.(feet.x, feet.y, {
+        color: 0xe8ecf4, count: 18, speed: 12, size: 1.1, ttl: 1.0,
+        gravity: -10, z: feet.z,
+      });
+      return;
+    }
     case 'fireburst': {
-      if (fx.impactDelayMs) await ctx.wait(fx.impactDelayMs);   // 等投射物落定再爆（施术拍已放行）
+      if (fx.proj === 'tracked') await projSync?.gate();   // 等投射物真实抵达再爆
       await fireBurst(ctx, deps, {
         at: feet,
         scale: fireScaleFor(dealt) * (fx.ground ? 0.9 : 1.0),
@@ -164,26 +255,56 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null }
       return;
     }
     case 'nova': {
-      await fireBurst(ctx, deps, {
-        at: feet,
-        scale: Math.min(2.2, Math.max(1.2, fireScaleFor(dealt) * 1.4)),
-        ms: 560,
-        // 新星：重火花 + 长寿余烬双组（比火球更厚的「烧不尽」余韵）
-        sparkCount: 36, sparkSpeed: 30,
-        linger: { count: 24, speed: 9, ttl: 2.6, size: 0.95, gravity: -4 },
-        lampIntensity: 1300,
-        shakeSeverity: 1.2,
-      });
+      // 爆裂术终止 = 敌方阵型中心**一场**巨大的爆炸。AOE 是 N 拍伤害（每敌一拍），
+      // 同 defId 900ms 时间窗去重——首拍跑大爆炸（阵心），同窗内的其余拍只给
+      // 落敌脚边小火反馈（每敌仍有命中读感，但爆心只有一个）。
+      const now = performance.now();
+      const last = _novaRecent.get(fx.id) ?? -1e9;
+      const form = deps.enemyFormation?.() ?? null;
+      if (now - last > 900) {
+        _novaRecent.set(fx.id, now);
+        await novaBlast(ctx, deps, {
+          at: form?.center ?? chest,
+          spread: form?.spread ?? 0,
+          // 伤害量主缩放 + 阵型散布加成（炸的阵型越宽场面越大）
+          scale: Math.min(1.6, Math.max(0.9, fireScaleFor(dealt) * 0.8
+            + Math.min(0.4, (form?.spread ?? 0) * 0.03))),
+        });
+      } else {
+        // 同窗跟随拍：脚边一小团卡通烟云（同款语言，量级区分）
+        await cartoonNova(ctx, deps, {
+          at: { x: chest.x, y: chest.y - 1.2, z: chest.z }, scale: 0.9, mini: true,
+        });
+        return;
+      }
       return;
     }
     case 'ignition': {
+      if (fx.proj === 'owned') {
+        // 火花乱射：本拍自持投射物（窜天猴——飞行中随机甩尾，从主角手上弹出，
+        // 抵达才爆）；落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发。
+        // 慢摆大甩：dartFreq 0.42 把双频降到 2~3 个 S 弯（200ms 级飞行下原 4.5-8Hz
+        // 一屏十几帧走样成抖直线）；飞行拉长到 290ms 给甩尾留时间
+        await arcProjectile(ctx, deps, {
+          from: deps.playerAnchor?.() ?? { x: 0, y: 5, z: 0 },
+          to: chest,
+          color: [1.0, 0.78, 0.30], hot: [1.2, 1.05, 0.55], size: 2.0,
+          ms: 290, arcH: 3.5, arcJitter: 1.6, stretch: 2.0, lampIntensity: 0,
+          darting: 1.35, dartFreq: 0.42, fire: true,
+          trail: { color: 0xffc95e, count: 1, ttl: 0.3, speed: 3.5, size: 0.7 },
+        });
+        projSync?.arrived?.();
+      } else if (fx.proj === 'tracked') {
+        await projSync?.gate();   // 点火链：施术拍点种的投射物落定再引燃
+      }
       await fireBurst(ctx, deps, {
         at: feet,
-        scale: Math.max(1.0, fireScaleFor(dealt) * 0.9),
+        // 引燃是「点」不是「爆」：下限 0.72（旧 1.0 会让 0 伤点种也烧出火球级）
+        scale: Math.max(0.72, fireScaleFor(dealt) * 0.9),
         ms: 420,
         // 引燃走橙金调（深红会与受击红闪同色系，火属辨识度被稀释——glm-flash 第七轮）
         color: [1.0, 0.55, 0.20], ember: [1.0, 0.25, 0.06],
-        sparkCount: 12, sparkSpeed: 13,
+        sparkCount: 10, sparkSpeed: 13,
         linger: { count: 8, speed: 4, ttl: 1.6, size: 0.6, gravity: -3 },
         lampIntensity: 550,
       });

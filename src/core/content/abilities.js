@@ -1,15 +1,12 @@
 import { registerAbility } from '../abilities/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction } from '../instructions/cards.js';
+import { DiscardCardInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../instructions/combat.js';
-import { GainManaInstruction, GainActionPointsInstruction, ConsumeActionPointsInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
+import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
+import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { aliveEnemies } from '../state/battleState.js';
-import { getSkillDefinition } from '../skills/registry.js';
-import { isBladeCard } from './cardKit.js';
-import { poisonAmpSubscription } from './woodSkills.js';
-import { applyBattleModifier } from '../run/prep.js';
+import { isBladeCard, gainPower } from './cardKit.js';
 
 // 战意：战斗开始时获得 1 层力量。不作为初始能力授予，
 // 保留定义供旧档兼容与后续奖励/事件投放使用。
@@ -37,28 +34,36 @@ registerAbility({
 });
 
 // ---- 刀法体系能力（BODY_CULTIVATION_CARDS §2.5）----
-// 获取途径（进阶事件内择精英/大师能力）仍是占位（TODO「精英/大师能力系统实装」）；
-// 这里先把**效果本体**按设计稿落地——机制都是现成的：
-//   刀客 = 换牌费用上限（battleState.swapCostCap，见 state/battleState.swapCostOf）；
-//   刀圣 = 战斗窗口订阅，打出刀法牌（isBladeCard 判据，含碎铁/斩链衍生牌）就抽 1。
 registerAbility({
   id: 'bladeMaster', name: '刀客', grade: 'elite',
-  description: '弃卡开销不超过 1。',
-  onBattleStart(ctx) {
-    // 取更严者：将来若有多条能力同时封顶，低的那个生效（null = 无上限）
-    ctx.battleState.swapCostCap = Math.min(ctx.battleState.swapCostCap ?? Infinity, 1);
-  },
+  description: '你每弃 1 张牌，获得 1 护盾。',
+  subscriptions: () => [{
+    when: DiscardCardInstruction, phase: 'post',
+    filter: (instr) => Boolean(instr.result.card),
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new GainShieldInstruction({ target: ctx.player, amount: 1 }), instr),
+  }],
 });
 
 registerAbility({
   id: 'bladeSaint', requires: 'bladeMaster', name: '刀圣', grade: 'master',
-  description: '每打出一张刀法牌，抽 1 张牌。',
-  subscriptions: () => [{
-    when: UseSkillInstruction, phase: 'post',
-    filter: (instr) => isBladeCard(instr.skill),
-    react: (instr, ctx) => ctx.kernel.submitInstruction(
-      new DrawCardsInstruction({ count: 1, reason: '刀圣' }), instr),
-  }],
+  description: '你每弃 2 张牌，所有刀法牌伤害+1。',
+  subscriptions: () => {
+    let count = 0;
+    return [{
+      when: DiscardCardInstruction, phase: 'post',
+      filter: (instr) => Boolean(instr.result.card),
+      react: (instr, ctx) => {
+        count += 1;
+        if (count % 2 !== 0) return;
+        for (const zone of ['hand', 'deck']) {
+          for (const card of ctx.battleState.zones[zone]) {
+            if (isBladeCard(card)) gainPower(ctx, card, 1);
+          }
+        }
+      },
+    }];
+  },
 });
 
 // ============================================================================
@@ -90,19 +95,23 @@ registerAbility({
   }],
 });
 
-// 大师 **起手式**：战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。
-// 判据 = 伤害指令携带的 skill 反查 def.type === 'fire'（dealDamage 透传 sctx.self）。
+// 大师 **起手式**：战斗中，你打出的第一张攻击牌让你回复 3 魏启。
+// 「攻击牌」= 该次出牌的指令子树含对敌伤害（风怒同口径）。
 registerAbility({
   id: 'openerGambit', requires: 'pyroBlast', name: '起手式', grade: 'master',
-  description: '战斗中，你打出的第一张火灵脉攻击牌伤害翻倍。',
+  description: '战斗中，你打出的第一张攻击牌让你回复 3 魏启。',
   subscriptions: () => {
     let used = false; // 战斗窗口闭包：每场重置（订阅随战斗销毁）
     return [{
-      when: DealDamageInstruction, phase: 'pre',
-      filter: (instr, ctx) => !used && instr.source === ctx.player && !instr.fixed
-        && instr.type === 'major'
-        && instr.skill && getSkillDefinition(instr.skill.defId)?.type === 'fire',
-      react: (instr) => { used = true; instr.setPayload('damage', instr.payload.damage * 2); },
+      when: UseSkillInstruction, phase: 'post',
+      filter: () => !used,
+      react: (instr, ctx) => {
+        const dealtToEnemy = (node) => node.children?.some(c =>
+          (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
+        if (!dealtToEnemy(instr)) return;
+        used = true;
+        ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr);
+      },
     }];
   },
 });
@@ -346,177 +355,3 @@ registerAbility({
   }],
 });
 
-
-// ============================================================================
-// 木灵脉 / 空灵脉能力（WOOD_VEIN_CARDS §4 + AIR_VEIN_CARDS §3）。
-// 获赠能力随首次 0→1 进阶自动授予（FIRST_ASCENSION_GRANT）；精英/大师走
-// 进阶事件授予池（灵脉 2 级出精英、3 级出大师，大师 requires 前置精英）。
-// ============================================================================
-
-// ---- 获赠：木灵脉（战斗开始 再生2+荆棘1，对标火灵脉 烈焰亲和3）----
-registerAbility({
-  id: 'woodVein', name: '木灵脉',
-  description: '战斗开始时，获得再生2与荆棘1。',
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'regen', stacks: 2,
-    }));
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'thorns', stacks: 1,
-    }));
-  },
-});
-
-// ---- 获赠：空灵脉（T1 回合开始闪避1 + 战斗开始抽1）----
-// 闪避必须等 T1 回合开始的 POST 再上：闪避蒸发订阅挂在同一时点，战斗开始直接上
-// 会被 T1 回合开始立刻蒸发（从未有机会挡刀）。
-registerAbility({
-  id: 'airVein', name: '空灵脉',
-  description: '第一回合开始时，获得闪避1；战斗开始时，抽1牌。',
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: '空灵脉' }));
-  },
-  subscriptions: () => [{
-    when: PlayerTurnStartInstruction, phase: 'post',
-    filter: (instr, c) => c.battleState.turn.count === 1,
-    react: (instr, c) => {
-      c.kernel.submitInstruction(new AddEffectInstruction({
-        target: c.player, effectId: 'dodge', stacks: 1,
-      }), instr);
-    },
-  }],
-});
-
-// ---- 木·生息 精英 **茁壮**：你的治疗量 +2（ApplyHeal PRE 流水线，目标为你）----
-registerAbility({
-  id: 'renew', name: '茁壮', grade: 'elite',
-  description: '你的治疗量 +2。',
-  subscriptions: () => [{
-    when: ApplyHealInstruction, phase: 'pre',
-    filter: (instr, ctx) => instr.target === ctx.player && instr.payload.amount > 0,
-    react: (instr) => instr.setPayload('amount', instr.payload.amount + 2),
-  }],
-});
-
-// ---- 木·瘴毒 精英 **瘴主**：你施加的中毒 +1 层（判据=目标是敌人，见 woodSkills）----
-registerAbility({
-  id: 'blightLord', name: '瘴主', grade: 'elite',
-  description: '你施加的中毒 +1 层。',
-  subscriptions: () => [poisonAmpSubscription(1)],
-});
-
-// ---- 木·生息 大师 **森林之心**：每回合开始，若生命不高于一半，获得再生1 ----
-registerAbility({
-  id: 'forestHeart', requires: 'renew', name: '森林之心', grade: 'master',
-  description: '每回合开始时，若你生命不高于一半，获得再生1。',
-  subscriptions: () => [{
-    when: PlayerTurnStartInstruction, phase: 'post',
-    filter: (instr, ctx) => ctx.player.hp * 2 <= ctx.player.maxHp,
-    react: (instr, ctx) => ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'regen', stacks: 1,
-    }), instr),
-  }],
-});
-
-// ---- 木·瘴毒 大师 **瘟疫之源**：敌方单位死亡时，其余所有敌人中毒2 ----
-// 死亡判据 = 应用原语 POST 的 target 已是尸体（毒/燃/直伤致死全走伤害应用；
-// 死亡检测挂应用原语——死亡发生在受击结算处，不筛主/附级）。
-registerAbility({
-  id: 'plagueSource', requires: 'blightLord', name: '瘟疫之源', grade: 'master',
-  description: '敌方单位死亡时，其余所有敌人中毒2。',
-  subscriptions: () => [{
-    when: ApplyDamageInstruction, phase: 'post',
-    filter: (instr) => instr.target?.side === 'enemy' && instr.target.isDead(),
-    react: (instr, ctx) => {
-      for (const e of aliveEnemies(ctx.battleState)) {
-        ctx.kernel.submitInstruction(new AddEffectInstruction({
-          target: e, effectId: 'poison', stacks: 2,
-        }), instr);
-      }
-    },
-  }],
-});
-
-// ---- 空·御风 精英 **风怒**：每回合你第一次打出攻击牌后，抽1牌 ----
-// 「攻击牌」= 该次出牌的指令子树含对敌伤害；回合计数标记放
-// ctx.player 私有字段。
-registerAbility({
-  id: 'galeFury', name: '风怒', grade: 'elite',
-  description: '每回合你第一次打出攻击牌后，抽1牌。',
-  subscriptions: () => [{
-    when: UseSkillInstruction, phase: 'post',
-    filter: (instr, ctx) => ctx.player._galeFuryTurn !== ctx.battleState.turn.count,
-    react: (instr, ctx) => {
-      const dealtToEnemy = (node) => node.children?.some(c =>
-        (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
-      if (!dealtToEnemy(instr)) return;
-      ctx.player._galeFuryTurn = ctx.battleState.turn.count;
-      ctx.kernel.submitInstruction(
-        new DrawCardsInstruction({ count: 1, reason: '风怒' }), instr);
-    },
-  }],
-});
-
-// ---- 空·逍遥 精英 **行云**：战斗开始时，随机发动牌库中1张咏唱卡（无开销）----
-// 自动化点题：开局点亮一张咏唱。onBattleStart 时初始抽牌尚未进行（牌库完整）。
-registerAbility({
-  id: 'wanderClouds', name: '行云', grade: 'elite',
-  description: '战斗开始时，随机发动牌库中1张咏唱卡（无开销）。',
-  onBattleStart(ctx) {
-    const chants = ctx.battleState.zones.deck.filter(
-      c => getSkillDefinition(c.defId).cardMode === 'chant');
-    if (chants.length === 0) return;
-    const pick = chants[ctx.battleState.rng.int(0, chants.length - 1)];
-    ctx.kernel.submitInstruction(new UseSkillInstruction({
-      skill: pick, costOverride: { mana: 0, actionPoint: 0 },
-    }));
-  },
-});
-
-// ---- 空·御风 大师 **风之主宰**：每回合你打出的第一张牌无开销 ----
-// 逍遥游同型双 PRE（AP/蓝消耗指令置 0）+ 回合计数标记；同一张卡的两次资源消耗
-// 按结算栈内层 UseSkill 的 uniqueID 记忆，只吃一份额度。
-registerAbility({
-  id: 'windLord', requires: 'galeFury', name: '风之主宰', grade: 'master',
-  description: '每回合你打出的第一张牌无开销。',
-  // 可用性钩子（裁决链第二环）：本回合尚未免单时放行费用检查——否则资源低于
-  // 牌面费用时 canUse 先拒、免单根本启动不了（逍遥游 battleState.freePlays 同问题）。
-  canUseSkill(sctx) {
-    return sctx.player._windLordTurn !== sctx.battleState.turn.count ? true : undefined;
-  },
-  subscriptions: () => {
-    const innerUseUid = (ctx) => [...ctx.kernel.stack].reverse()
-      .find(i => i instanceof UseSkillInstruction)?.skill?.uniqueID ?? null;
-    const subs = [];
-    for (const Instr of [ConsumeActionPointsInstruction, ConsumeManaInstruction]) {
-      subs.push({
-        when: Instr, phase: 'pre',
-        filter: (_instr, ctx) => {
-          const uid = innerUseUid(ctx);
-          if (uid === null) return false;
-          const p = ctx.player;
-          return p._windLordTurn !== ctx.battleState.turn.count || p._windLordCard === uid;
-        },
-        react: (instr, ctx) => {
-          const p = ctx.player;
-          const uid = innerUseUid(ctx);
-          if (p._windLordTurn !== ctx.battleState.turn.count) {
-            p._windLordTurn = ctx.battleState.turn.count;
-            p._windLordCard = uid;
-          }
-          instr.setPayload('amount', 0);
-        },
-      });
-    }
-    return subs;
-  },
-});
-
-// ---- 空·逍遥 大师 **空无**：咏唱容量+2（只给咏唱容量，不给手牌上限）----
-registerAbility({
-  id: 'voidness', requires: 'wanderClouds', name: '空无', grade: 'master',
-  description: '咏唱容量 +2。',
-  onBattleStart(ctx) {
-    applyBattleModifier(ctx, 'chantCapacity', 2);
-  },
-});

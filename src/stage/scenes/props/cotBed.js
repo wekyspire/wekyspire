@@ -3,6 +3,7 @@
 // 毯子半搭床尾、一侧垂过床沿。变体走 build(opts)：草垫蓬数 / 毯子垂搭侧（±1）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'cloth'],
   footprint: { x: 10, z: 4.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ straw = 3, side = 1, rng } = {}) {
     const g = new THREE.Group();
     const len = 10, half = len / 2;

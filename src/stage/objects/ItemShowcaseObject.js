@@ -317,6 +317,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._onDismissShow = null;  // 本次 show 的出口回调（点击任意处 = 收下/关闭）
     this._autoDismissMs = 0;     // 本次 show 的自动收下时长（0 = 等点击）
     this._onSkipShow = null;     // 本次 show 的「跳过」出口（放弃产出）
+    this._pendingShow = null;    // 忙碌期 show 的一件挂起（重放见 update 的 out 收尾）
     this._build();
   }
 
@@ -451,6 +452,14 @@ export class ItemShowcaseObject extends THREE.Group {
    *   onDismiss / onSkip: 两个出口的回调（点任意处 / 点跳过；仅本次 show 有效）
    */
   show(item = {}) {
+    // 忙碌期（含 out 收尾中）不得硬切：硬切会覆写在播件的 _onDismissShow/_onSkipShow，
+    // 其出口回调永不触发。挂起一件（新的覆盖旧的），在播件落定后由 update 重放。
+    if (this._phase !== 'idle') {
+      if (this._pendingShow) console.warn('[showcase] 挂起特写被覆盖:', this._pendingShow?.title);
+      this._pendingShow = item;
+      return true;   // 已受理、稍后播——调用点「播成功才记已播」口径不变
+    }
+    this._pendingShow = null;    // 空闲直播优先：清掉上一周期可能遗留的挂起
     // ⚠ 千万别往 Object3D 上塞 `pivot`：three 的 `updateMatrix()` 会把 `this.pivot`
     // 当作**变换枢轴**参与矩阵合成（非 Vector3 会让平移整列变 NaN → 物件凭空消失，
     // 症状是"光效和文字都在、物品图不见了"）。这条坑 踩过一次。
@@ -505,6 +514,9 @@ export class ItemShowcaseObject extends THREE.Group {
     this._closeReason = reason;
     return true;
   }
+
+  /** 强制收场（切幕 dismissModals / dispose）：挂起件一并弃掉——舞台将死，不得重放。 */
+  clearPending() { this._pendingShow = null; }
 
   _setOpacity(k) {
     this._back.material.opacity = 0.78 * k;
@@ -562,6 +574,12 @@ export class ItemShowcaseObject extends THREE.Group {
         this._onSkipShow = null;
         cb?.();
         this._onDismiss?.();   // 构造期给的可选统一回调（缺省无动作）
+        // 挂起重放：落定后仍空闲才播（回调链可能已直接占台——恶魔连拍从 onDismiss 接力）
+        if (this._phase === 'idle' && this._pendingShow) {
+          const p = this._pendingShow;
+          this._pendingShow = null;
+          this.show(p);
+        }
       }
     }
     return true;
@@ -585,6 +603,7 @@ export class ItemShowcaseObject extends THREE.Group {
   }
 
   dispose() {
+    this._pendingShow = null;
     for (const m of this._lines) m.material.map?.dispose?.();
     this._baked.forEach((t) => t.dispose?.());
     for (const t of (this._placeholders?.values() ?? [])) t?.dispose?.();

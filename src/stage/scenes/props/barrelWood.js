@@ -2,6 +2,7 @@
 // 原点=底面中心（y=0 落地），x=宽 z=深；变体走 build(opts)：桶高/桶板凸度/箍数/出酒嘴。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -10,7 +11,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container'],
   footprint: { x: 2.3, z: 2.5 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ h = 4.4, bulge = 1, hoops = 3, tap = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('barrelWood');

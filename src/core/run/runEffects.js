@@ -17,6 +17,9 @@
 // 自动兜（Shell 在 notify 里 diff `run.player.relics`），所以 gainRelic 不重复声明。
 import { createSkillRuntime } from '../state/skillRuntime.js';
 import { getSkillDefinition } from '../skills/registry.js';
+import {
+  attachModifierInstance, detachModifierInstance, getCardModifier,
+} from '../skills/cardModifiers.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { grantRelic } from './prep.js';
 import { promoteCard } from './promotion.js';
@@ -114,6 +117,35 @@ export function upgradeCard(ctx, uniqueID, targetId = null, { source = '' } = {}
     title: toDef.name, desc: `${fromName} → ${toDef.name}`,
   });
   return next;
+}
+
+// ---- 卡牌 modifier（run 级：一次游玩持久，战斗克隆自动继承；机制见
+// quest_prompts/CARD_MODIFIERS.md。战斗外挂载无 kernel 语境——只动数据，
+// 钩子在下次 enterBattle 对账时注册）----
+
+/**
+ * 给 run 牌组的某张卡挂 modifier。同 modId 重挂 = 覆盖 data（存储序不变）。
+ * modId 未注册会在 getCardModifier 处抛错（定义期错误就地暴露）。
+ * @returns 挂上的实例；卡不在牌组 → null（内容自行叙述）
+ * 表现意图暂不声明 showcase：首个事件内容接线时按 kind 'cardMod' 接（Shell 侧待接）。
+ */
+export function attachCardModifier(ctx, uniqueID, modId, data = {}, { source = 'event' } = {}) {
+  const card = ctx.run.player.deck.find(s => s.uniqueID === uniqueID);
+  if (!card) return null;
+  const { inst } = attachModifierInstance(card, { modId, data, source });
+  const def = getCardModifier(modId);
+  recordEffect(ctx, { kind: 'cardMod', modId, uniqueID, name: def.name, source });
+  return inst;
+}
+
+/**
+ * 摘除 run 牌组某张卡上的 modifier（幂等：未挂载返回 false）。
+ * 战斗外的摘除同样不跑 onDetach（无 kernel 语境）。
+ */
+export function detachCardModifier(ctx, uniqueID, modId) {
+  const card = ctx.run.player.deck.find(s => s.uniqueID === uniqueID);
+  if (!card) return false;
+  return detachModifierInstance(card, modId) != null;
 }
 
 // ---- 剧情旗标（故事模式的"记忆"；run 内存续，跨 run 的进度放 run.profile）----

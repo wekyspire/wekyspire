@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import gsap from 'gsap';
 import { WebGPURenderer } from 'three/webgpu';
 import { applyToneMapping, DEFAULT_TONE_MODE } from './post/passes.js';
+import { tickSceneMood } from './fx/sceneMood.js';
 import { createUiComposer } from './post/uiComposer.js';
 import { moonQualityFromUrl, MOON_QUALITY_PRESETS } from './scenes/volumetricMoon.js';
 import { CameraDirector } from './fx/camera.js';
@@ -306,6 +307,9 @@ export class StageManager {
       const dt = Math.min(this._clock.getDelta() * tickScale, 0.1 * tickScale); // 掉帧保护：单帧最多推进 100ms×k
       this.cameraDirector.tick(dt); // 相机 override 栈顶控制器的逐帧钩子
       for (const fn of this._tickHandlers) fn(dt);
+      // 场景级缓变（sceneMood：曝光/冷暖/压暗/相机微移/FOV 偏移——modifier 栈
+      // 异步 lerp）——在相机落笔与渲染前推进，写 grade uniform 与偏移通道
+      tickSceneMood(dt, this.cameraDirector);
       // 相机位姿唯一的落笔点：运镜写 pose、震荡等写偏移通道，这里渲染前一次性合成
       // （各路写入者不再各自直写相机，因此互不覆盖、可自然叠加）
       this.cameraDirector.commit();

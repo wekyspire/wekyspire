@@ -22,8 +22,6 @@ const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[
 const PALETTES = {
   fire: 'red, orange, yellow, white and black only',
   body: 'rock gray, off-white, black with subtle ochre accents only',
-  wood: 'deep green, moss green, yellow-green, off-white only',
-  air: 'cyan, sky blue, white, dark navy only',
 };
 
 // 符号图风格：纹章感 + 家样粗厚涂 + 零细节。白底是为了抠图（cutCardArt.py）。
@@ -53,15 +51,6 @@ const SERIES = [
   { id: 'fever', palette: 'fire', prompt: 'a blazing fever flame with wavy heat emblem' },
   { id: 'fireChant', palette: 'fire', prompt: 'a candle flame emblem' },
   { id: 'inflame', palette: 'fire', prompt: 'a spark igniting into flame emblem' },
-  // —— 木大系 ——
-  { id: 'woodHerb', palette: 'wood', prompt: 'a sprouting herb with two leaves emblem' },
-  { id: 'woodMiasma', palette: 'wood', prompt: 'a swamp miasma cloud with droplets emblem' },
-  { id: 'woodBark', palette: 'wood', prompt: 'a tree bark shield emblem' },
-  { id: 'woodChant', palette: 'wood', prompt: 'a growing seedling in a circle emblem' },
-  // —— 风大系 ——
-  { id: 'airBlade', palette: 'air', prompt: 'a crescent wind slash emblem' },
-  { id: 'airDodge', palette: 'air', prompt: 'a swirling gust spiral emblem' },
-  { id: 'airChant', palette: 'air', prompt: 'a floating feather with air rings emblem' },
   // —— 火系通用（series='common' 的火基础卡） ——
   { id: 'common', palette: 'fire', prompt: 'a simple standing flame emblem' },
   // —— 通用灰卡家族（series 未设，经 def.image 逐卡接线；偏白灰黑 + 一点赭） ——
@@ -108,10 +97,6 @@ const SERIES = [
   { id: 'spark', palette: 'fire', prompt: 'a burst of tiny sparks emblem' },
   { id: 'shock', palette: 'fire', prompt: 'a fiery impact shockwave ring emblem' },
   { id: 'magmaArmor', palette: 'fire', prompt: 'a chestplate of cracked glowing magma rock emblem' },
-  { id: 'woodSting', palette: 'wood', prompt: 'a thorny stinger with a poison drop emblem' },
-  { id: 'woodBlood', palette: 'wood', prompt: 'a leaf with a falling dark blood drop emblem' },
-  { id: 'airEase', palette: 'air', prompt: 'a soft floating cloud puff emblem' },
-  { id: 'airFloat', palette: 'air', prompt: 'a feather floating upward emblem' },
   { id: 'enemyJunk', palette: 'body', prompt: 'a dripping goo slime blob emblem' },
   { id: 'relic', palette: 'body', prompt: 'a flying bullet with speed lines emblem' },
 ];

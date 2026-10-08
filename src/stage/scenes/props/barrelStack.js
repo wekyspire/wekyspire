@@ -3,6 +3,7 @@
 // 原点=底面中心（y=0 落地）；变体走 build(opts)：桶板凸度/横桶滚转角/横桶纵移/转向角。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 单只桶（鼓形桶身 lathe + 凹嵌桶头 + 双端箍；两竖一横共用）
@@ -27,7 +28,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container'],
   footprint: { x: 4.4, z: 4.6 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ bulge = 1, roll = 0.16, shift = 0.42, yaw = 0.08, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('barrelStack');

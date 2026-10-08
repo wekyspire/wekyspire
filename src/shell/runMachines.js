@@ -24,6 +24,7 @@ import {
 import { takeShopCard, takeShopRelic } from '../core/run/rooms/shop.js';
 import { getRelicDefinition } from '../core/relics/registry.js';
 import { tooltipHide } from './tooltipHub.js';
+import { FuseBag } from './fuse.js';
 
 export function createRunMachines(ctx) {
   const { run, slot, runSequencer, cutscene, showcase } = ctx;
@@ -76,6 +77,7 @@ export function createRunMachines(ctx) {
   }
 
   let slotFinish = null; // 当前 roll 指令回执句柄（UI animationend → reportSlotAnimDone）
+  const fuses = new FuseBag(); // 转轮回执的兜底保险丝（key: 'slotSpin'）
   // 中奖落定的获得演出（含"收下/跳过"两个出口）在 runShowcase.js（maybeShowSlotPrize）。
   function spin() { // 可重复消费（每次扣费/消耗免费 roll）；roll 动画经 run sequencer 串行编排
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
@@ -87,10 +89,9 @@ export function createRunMachines(ctx) {
       durationMs: SPIN_FUSE_MS, // 前端卡死保险丝（UI 未回执时兜底推进）
       start: ({ id, emit }) => {
         slot.anim = { id, prize };
-        let fallback = null;
           slotFinish = (reportId) => {
           if (reportId !== id) return false;
-          clearTimeout(fallback);
+          fuses.clear('slotSpin');
           slot.anim = null;
           slot.lastSpin = prize; // 结果在动画落定后揭示（渐进揭示语义）
           slotFinish = null;
@@ -104,7 +105,7 @@ export function createRunMachines(ctx) {
         // 保险丝路径兜底：sequencer 超时只杀指令、不会清 slot.anim——不清的话「转轮在播」
         // 闸门永锁（中奖演出弹不出、lastSpin 不揭示）。同拍走一遍正常 settle（emit 幂等：
         // 指令可能已被保险丝标 finished，finish() 对重复完成直接返回 true）。
-        fallback = setTimeout(() => slotFinish?.(id), SPIN_FUSE_MS);
+        fuses.arm('slotSpin', SPIN_FUSE_MS, () => slotFinish?.(id));
       },
     });
     ctx.notify();

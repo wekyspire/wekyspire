@@ -3,6 +3,7 @@
 // 斜撑自横档上托凳面。变体走 build(opts)：凳长 / 拼板数 / 腿外撇角。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture'],
   footprint: { x: 7.5, z: 1.9 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ len = 7, planks = 2, splay = 0.06, rng } = {}) {
     const g = new THREE.Group();
     // 凳面：拼板（板色微差 + rng 微翘，读出旧板面）

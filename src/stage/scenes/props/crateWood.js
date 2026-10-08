@@ -2,6 +2,7 @@
 // 原点=底面中心（y=0 落地），x=宽 z=深；变体走 build(opts)：尺寸/板缝数/包铁。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -10,7 +11,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'container'],
   footprint: { x: 3.2, z: 3.2 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ w = 2.9, h = 2.6, d = 2.9, planks = 2, iron = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('crateWood');

@@ -112,17 +112,18 @@ export const tslBlur = Fn(([tSrc, uDir]) => {
 // 编码统一由渲染器帧末输出 blit 施加（Khronos PBR Neutral 曲线走 three 内置
 // NeutralToneMapping，与旧手译节点版同一公式）。节点内 tone 库已随 flavor A 删除。
 
-// 世界链终段：线性色 + bloom 加算，直出线性 HDR
-export const tslFinalWorld = Fn(([tColor, tBloom, uBloom]) => {
-  const c = texture(tColor, passUV).rgb.add(texture(tBloom, passUV).rgb.mul(uBloom));
+// 世界链终段：线性色 + bloom 加算，直出线性 HDR。uGrade = 场景缓变 grade
+// （sceneMood 的曝光/冷暖/压暗乘子——两链共享同一 uniform 实例）
+export const tslFinalWorld = Fn(([tColor, tBloom, uBloom, uGrade]) => {
+  const c = texture(tColor, passUV).rgb.add(texture(tBloom, passUV).rgb.mul(uBloom)).mul(uGrade);
   return vec4(c, 1.0);
 });
 
 // UI 链终段：同上加算，唯一差别 = alpha 透传（tColor 的 a 是真覆盖率，
 // 由调用侧以 premultiplied 混合线性叠加进帧缓冲）
-export const tslFinalUi = Fn(([tColor, tBloom, uBloom]) => {
+export const tslFinalUi = Fn(([tColor, tBloom, uBloom, uGrade]) => {
   const src = texture(tColor, passUV);
-  const c = src.rgb.add(texture(tBloom, passUV).rgb.mul(uBloom));
+  const c = src.rgb.add(texture(tBloom, passUV).rgb.mul(uBloom)).mul(uGrade);
   return vec4(c, src.a);
 });
 

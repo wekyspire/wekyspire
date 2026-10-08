@@ -1,4 +1,4 @@
-// 批量生图（ComfyUI API · Qwen Image 2.1）：第一章敌人立绘，风格 = 大平面色块厚涂。
+// 批量生图（ComfyUI API · Qwen Image 2.1）：第一/二章敌人立绘，风格 = 大平面色块厚涂。
 // 用法：node tools/genEnemies.mjs [--dry] [--only id1,id2] [--out 目录] [--force]
 // 产物：<out>/<id>.png（未压缩 PNG，压缩进 src/assets 走 tools/compress_art.py）
 import fs from 'node:fs';
@@ -18,8 +18,8 @@ const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').split('=')[
 // 纪律（沿袭遗物 PROMPT_TEMPLATE 实测结论）：完成度的第一驱动是描述里的高频名词，
 // 不是风格措辞——逐怪描述只写「是什么 + 大致轮廓 + 主色/主材质 + 一个点缀」，
 // 禁写纹理/裂纹/斑点/笔触这类诱发逐一刻画的名词。
-const STYLE = 'rough gouache sketch, soft thick paint, low completion, muted desaturated dark colors, large flat polygonal facet color planes, matte flat lighting, coarse visible brush strokes, simplified geometric shapes, minimal detail, dark moody palette, full body visible from head to tail, strict side view, facing left, plain pure white background, no shadow, single subject filling the frame, stylized game creature art, unfinished sketchy edges, nothing else in frame';
-const NEGATIVE = 'detailed, intricate, fine texture, individual hairs, individual spines, realistic fur, photorealistic, photographic, 3d render, smooth airbrush gradients, bright saturated colors, vivid, neon, clean vector, glossy, ornate, complex pattern, many small elements, high frequency detail, black background, gradient background, colored background, environment, ground shadow, drop shadow, atmospheric fog, scenery, anime, cartoon, front view, three-quarter view, back view, portrait, head only, bust, cropped body, facing right';
+const STYLE = 'rough gouache sketch, soft thick paint, low completion, muted desaturated dark colors, large flat polygonal facet color planes, matte flat lighting, coarse visible brush strokes, simplified geometric shapes, minimal detail, dark moody palette, full body visible from head to tail, strict side view, facing left, plain pure white background, no shadow, single subject filling the frame, stylized game creature art, unfinished sketchy edges, primitive naive folk painting, blunt clumsy shapes, dull matte surfaces, nothing else in frame';
+const NEGATIVE = 'detailed, intricate, fine texture, individual hairs, individual spines, realistic fur, photorealistic, photographic, 3d render, smooth airbrush gradients, bright saturated colors, vivid, neon, clean vector, glossy, ornate, complex pattern, many small elements, high frequency detail, black background, gradient background, colored background, environment, ground shadow, drop shadow, atmospheric fog, scenery, anime, cartoon, front view, three-quarter view, back view, portrait, head only, bust, cropped body, facing right, touching the frame edge, cropped at edge, trailing stray line behind body, detailed face, expressive detailed eyes, clean sharp line art, polished rendering, sharp specular highlights, metallic reflections, glossy armor, refined illustration, intricate clothing details';
 
 // 敌人 prompt 表：id → 是什么 + 大轮廓 + 主色/主材质 + 一个点缀（别写全，留白）
 const ENEMIES = [
@@ -41,14 +41,37 @@ const ENEMIES = [
   { id: 'snowwolf', prompt: 'a large white-gray wolf standing, full body, blue shadows, pale blue eyes, snarling open mouth' },
   { id: 'swampAmbusher', prompt: 'a low-slung lurking crocodile, mottled olive and dark teal, long snout, small red eyes' },
   { id: 'rockPangolin', prompt: 'a curled pangolin with gray stone scale armor, brown edges, small black eyes' },
+  // ==== 第二章（南孚宫 · ENEMIES_2.md；变体共享族底图，19 族一张）====
+  { id: 'bigSlime', prompt: 'a huge round dark slime blob, blue-black, compact dome silhouette, two small white oval eyes, centered small in frame, body occupying only sixty percent of frame width, wide empty white margins on every side' },
+  { id: 'corpAssassin', prompt: 'a lean hooded assassin in a loose baggy dark gray suit, face fully hidden in hood shadow, one short knife held low' },
+  { id: 'corpGuard', prompt: 'a stocky security guard in a loose boxy dark navy uniform, matte fabric, small round helmet, a heavy riot baton' },
+  { id: 'spy', prompt: 'a lanky spy in a long olive trench coat and narrow brim hat, face completely hidden in deep shadow under the brim, only one tiny pale eye dot visible' },
+  { id: 'killer', prompt: 'a tall grim hitman in a dark brown long coat, hidden face, one hand holding a thin blade' },
+  { id: 'recruitGunner', prompt: 'a skinny young recruit soldier, oversized round helmet, short cropped hair, long rifle, loose olive drab uniform' },
+  { id: 'nymph', prompt: 'a dark butterfly with large muted purple-gray wings, small dark body, faint pale wing spots' },
+  { id: 'palaceGuard', prompt: 'a palace guard in dull matte gray armor, cloth-covered small round shield and long spear, olive tassel' },
+  { id: 'ironGuard', prompt: 'a heavy ironclad guard in matte rough iron plate armor, no shine, tall tower shield, one dull dark red plume' },
+  { id: 'channeler', prompt: 'a slender court mystic in dark teal robes, long wide sleeves, small pale glow between hands' },
+  { id: 'apprentice', prompt: 'a small apprentice mystic in oversized slate-blue robes, drooping sleeves, one tiny spark' },
+  { id: 'soldier', prompt: 'a palace soldier in loose matte olive cloth uniform holding a long spear, plain conical hat' },
+  { id: 'burnBot', prompt: 'a stubby barrel robot seen in strict side profile, dark rusted iron plates, four short legs clearly separated, one small furnace grate glowing warm orange on its side, whole body inside the frame' },
+  { id: 'legionnaire', prompt: 'a broad soldier in dark field uniform, heavy backpack tank, holding a short thick cannon-barreled gun in both hands' },
+  { id: 'sniper', prompt: 'a thin marksman in a smooth plain gray-brown long coat with no straps, one very long rifle held level, single pale goggle' },
+  { id: 'bugler', prompt: 'a soldier blowing a long dull brass trumpet, olive uniform, small flat cap, simple crude face, compact silhouette with nothing trailing behind the body' },
+  { id: 'motherNymph', prompt: 'a giant butterfly with huge dark wings, pale lavender spots, small glowing eyes' },
+  // 章2 精英
+  { id: 'demolitions', prompt: 'a bulky demolition expert in a dark leather apron, bandolier of round black bombs, one lit fuse' },
+  { id: 'hunter', prompt: 'a lean hunter mystic in a charcoal long coat, holding a slender long-barreled rifle with a small scope, pale blue dot eyes' },
 ];
 
 async function queuePrompt(promptText, seed) {
   // 从 qwen21_t2i.json 子图展开的原子节点流（API 格式）
   const workflow = {
-    // 模型加载
-    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'default' } },
-    '453': { class_type: 'CLIPLoader', inputs: { clip_name: 'qwen3vl_8b_bf16.safetensors', type: 'qwen_image', device: 'default' } },
+    // 模型加载（显存账本）：fp8 TE 文件载入后仍按 bf16 常驻 16.7G（fp8 只是磁盘省）——
+    // TE 挤上 GPU 会把 VAE 解码逼成逐层换页（采样 30s、解码 8 分钟的病灶）。因此 TE 挂
+    // CPU（编码慢一点），UNet fp8 运行时量化常驻 ~7G，VAE 全速解码。
+    '451': { class_type: 'UNETLoader', inputs: { unet_name: 'qwen_image_2.1_bf16.safetensors', weight_dtype: 'fp8_e4m3fn' } },
+    '453': { class_type: 'CLIPLoader', inputs: { clip_name: 'qwen3vl_8b_fp8.safetensors', type: 'qwen_image', device: 'cpu' } },
     '454': { class_type: 'VAELoader', inputs: { vae_name: 'qwen_image_2.1_vae_bf16.safetensors' } },
     // 文本编码（Qwen Image 2.1 专用节点）
     '452': {
@@ -103,13 +126,14 @@ async function queuePrompt(promptText, seed) {
 }
 
 async function waitDone(promptId) {
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 300; i++) {
     await new Promise(r => setTimeout(r, 2000));
     const res = await fetch(`${COMFY}/history/${promptId}`);
     const hist = await res.json();
     if (hist[promptId]?.status?.completed) return hist[promptId];
     if (hist[promptId]?.status?.status_str === 'error') throw new Error(`generation error: ${JSON.stringify(hist[promptId].status)}`);
   }
+  // 首张含模型装载（fp8 组合约 1–2 分钟）；300×2s = 10 分钟兜底
   throw new Error('timeout');
 }
 

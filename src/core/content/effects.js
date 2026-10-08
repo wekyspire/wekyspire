@@ -2,8 +2,9 @@ import { registerEffect, getEffectDefinition } from '../effects/registry.js';
 import { TurnStartInstruction, TurnEndInstruction, PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instructions/turn.js';
 import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction, ClearShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DrawCardsInstruction, DiscardCardInstruction } from '../instructions/cards.js';
-import { GainManaInstruction } from '../instructions/resources.js';
+import { DrawCardsInstruction, DiscardCardInstruction, AddCardInstruction } from '../instructions/cards.js';
+import { GainManaInstruction, ConsumeManaInstruction } from '../instructions/resources.js';
+import { UseSkillInstruction } from '../instructions/skill.js';
 import AIActInstruction from '../instructions/aiAct.js';
 import { aliveEnemies, aliveAllies } from '../state/battleState.js';
 
@@ -376,12 +377,9 @@ registerEffect({
 });
 
 // ==== 呼吸系列（刀系·弃牌回补）==================================================
-// 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层
-// （武者/完美另加格挡，每层各 block 层）。
-// 正面增益：监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销），敌方清除增益时
-// 随层数一并拆除；回合末自行消散（提交 -全部层数 → 过零自动注销订阅）。
-// 换牌（R3）内部走弃牌指令，同样触发。全系效果同强度（格挡1）；阶梯差在卡牌侧：
-// C/B 纯消耗整战一次、A 完美呼吸去消耗。
+// 打出呼吸卡即获得对应效果：效果自带「弃牌 POST」监听——每弃 1 牌抽 1/层。
+// 监听器生命周期与效果实例绑定（首获挂载 / 扣尽注销）；回合末自行消散
+// （提交 -全部层数 → 过零自动注销订阅）。换牌（R3）内部走弃牌指令，同样触发。
 
 // 回合内增益自清：玩家回合结束提交 -全部层数（扣尽 → 订阅按 owner 自动注销）
 const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
@@ -393,12 +391,10 @@ const clearsAtPlayerTurnEnd = (effectId) => (unit) => ({
   }), instr),
 });
 
-function registerBreathEffect({ id, name, block = 0 }) {
+function registerBreathEffect({ id, name }) {
   registerEffect({
     id, type: 'buff', stacking: 'count', name,
-    description: block > 0
-      ? `本回合内每弃 1 张牌：抽 1 张牌、获得格挡 ${block} 层。回合结束时消散。`
-      : '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
+    description: '本回合内每弃 1 张牌：抽 1 张牌（每层 1 张）。回合结束时消散。',
     icon: '🌬️',
     color: 'green',
     subscriptions: (unit) => [{
@@ -409,18 +405,11 @@ function registerBreathEffect({ id, name, block = 0 }) {
         const stacks = unit.getEffectStacks(id);
         if (stacks <= 0) return;
         ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: stacks }), instr);
-        if (block > 0) {
-          ctx.kernel.submitInstruction(new AddEffectInstruction({
-            target: unit, effectId: 'block', stacks: stacks * block,
-          }), instr);
-        }
       },
     }, clearsAtPlayerTurnEnd(id)(unit)],
   });
 }
 registerBreathEffect({ id: 'breath', name: '呼吸' });
-registerBreathEffect({ id: 'warriorBreath', name: '武者呼吸', block: 1 });
-registerBreathEffect({ id: 'perfectBreath', name: '完美呼吸', block: 1 });
 
 // 治疗（EFFECTS.md）：回合开始时恢复层数点生命，失去所有层数——与再生的区别是
 // 整取清零（一次结清而非逐层递减），午休的「醒来回血」账单。
@@ -812,7 +801,7 @@ registerEffect({
 });
 
 // 扩容（EFFECTS.md：「手牌上限提升层数张」）：紧勒的镜像，同走效果轨。
-// 首用：火系「膨胀」。空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨（见 airSkills）。
+// 首用：火系「膨胀」。（空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨。）
 registerEffect({
   id: 'expand',
   type: 'buff',
@@ -936,6 +925,199 @@ registerEffect({
         ctx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 8 }), instr);
         ctx.kernel.submitInstruction(
           new AddEffectInstruction({ target: e, effectId: 'strength', stacks: 2 }), instr);
+      }
+    },
+  }],
+});
+
+// ==== 章2 效果（南孚宫；EFFECTS.md 已收录，随 ENEMIES_2 实装落地）====================
+
+// 漏气（大队战士）：玩家回合开始时失去层数点魏启，层数归零（纳气的镜像——一次性整取）。
+// 失去量经 ConsumeMana 的下限 0 截断（没蓝就少扣，不产生负蓝）。
+registerEffect({
+  id: 'leak',
+  type: 'debuff',
+  stacking: 'count',
+  name: '漏气',
+  description: '回合开始时失去层数点魏启，然后层数归零。',
+  icon: '💨',
+  color: 'gray',
+  subscriptions: (unit) => [{
+    when: PlayerTurnStartInstruction,
+    phase: 'post',
+    filter: (instr) => instr.side === 'player' && unit.getEffectStacks('leak') > 0,
+    react: (instr, ctx) => {
+      const stacks = unit.getEffectStacks('leak');
+      ctx.kernel.submitInstruction(
+        new ConsumeManaInstruction({ amount: stacks }), instr);
+      ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'leak', stacks: -stacks }), instr);
+    },
+  }],
+});
+
+// 幻象（巨型妖蝶）：抽出的卡牌 AP 开销随机 −1/0/+1（妖蝶鳞粉的错觉——费用不可信）。
+// 层数 = 持续回合数（玩家回合结束 −1，滞气同款时长语义）；开销扰动落在卡的 runtime
+// 字段 apCostShift 上——结算（ConsumeSkillResources）/合法预检（canUseSkill）/费用徽章
+// （projection）三处同源读它。每次抽牌重掷（覆盖旧值）：离手回库后再抽会重新摇，
+// 幻象过期后抽到的卡不再携带。层数归零时扫清手牌中的残留扰动。
+registerEffect({
+  id: 'illusion',
+  type: 'debuff',
+  stacking: 'count',
+  name: '幻象',
+  description: '抽到的卡牌，AP 开销随机增减 0 或 1。回合结束时层数减少 1。',
+  icon: '🦋',
+  color: 'purple',
+  subscriptions: (unit) => [
+    {
+      when: DrawCardsInstruction,
+      phase: 'post',
+      filter: () => unit.getEffectStacks('illusion') > 0,
+      react: (instr, ctx) => {
+        for (const card of instr.result?.drawn ?? []) {
+          card.apCostShift = ctx.battleState.rng.pick([-1, 0, 1]);
+        }
+      },
+    },
+    {
+      when: PlayerTurnEndInstruction,
+      phase: 'post',
+      react: (instr, ctx) => {
+        const stacks = unit.getEffectStacks('illusion');
+        ctx.kernel.submitInstruction(
+          new AddEffectInstruction({ target: unit, effectId: 'illusion', stacks: -1 }), instr);
+        if (stacks <= 1) {
+          for (const card of ctx.battleState.zones.hand) card.apCostShift = 0;
+        }
+      },
+    },
+  ],
+});
+
+// 冲撞（仪仗铁卫）：攻击伤害提升当前护盾值的一半（以盾代攻——破盾直接削它的伤害，
+// 读数实时跟随护盾）。与蓄势同为 DealDamage PRE 修正；固定伤害（payload 白名单为空）
+// 不受影响。
+registerEffect({
+  id: 'ram',
+  type: 'buff',
+  stacking: 'count',
+  name: '冲撞',
+  description: '攻击伤害提升当前护盾值的一半。',
+  icon: '🛡️',
+  color: 'yellow',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'pre',
+    filter: (instr) => instr.source === unit && !instr.fixed,
+    react: (instr) => {
+      const bonus = Math.floor(unit.shield / 2);
+      if (bonus > 0) instr.setPayload('damage', instr.payload.damage + bonus);
+    },
+  }],
+});
+
+// 齐射（军号手）：攻击分为多段，段数等于当前存活友军数（含自身）——状态轨/图鉴展示件，
+// 分段行为在敌人 act 里实现（效果系统不管攻击的段数结构）。
+registerEffect({
+  id: 'volley',
+  type: 'buff',
+  stacking: 'count',
+  name: '齐射',
+  description: '攻击分为多段，段数等于当前存活友军数（含自身）。',
+  icon: '🎺',
+  color: 'yellow',
+});
+
+// 灵体（公司刺客）：受到伤害时伤害置 1，层数 -1。固定伤害（tick 类，payload 不可修饰）
+// 不受影响——燃烧/中毒照常全额跳伤。多段攻击逐段消耗层数。
+registerEffect({
+  id: 'phantom',
+  type: 'buff',
+  stacking: 'count',
+  name: '灵体',
+  description: '受到伤害时，将伤害置 1，层数减少 1。',
+  icon: '👻',
+  color: 'cyan',
+  subscriptions: (unit) => [
+    {
+      when: DealDamageInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit && !instr.fixed
+        && unit.getEffectStacks('phantom') > 0 && instr.payload.damage > 1,
+      react: (instr) => instr.setPayload('damage', 1),
+    },
+    {
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit && (instr.result?.dealt ?? 0) > 0,
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'phantom', stacks: -1 }), instr),
+    },
+  ],
+});
+
+// 灵态：受到高于 1 点的实际伤害后获得灵体 1（通用机制，无自持——重置/永续类
+// 保底是施加方的自身特性，写在其订阅里，不进词条）。净效果 = 每第二次伤害被
+// 清理到 1。固定伤害（燃烧/中毒 tick）不受灵体的 PRE 减免，但「受到高于1伤害」
+// 的判定含它——按实际落血判定，与灵体的消耗判定同口径。
+registerEffect({
+  id: 'spiritStance',
+  type: 'buff',
+  stacking: 'count',
+  name: '灵态',
+  description: '受到高于1点的伤害后，获得灵体1。',
+  icon: '🌀',
+  color: 'cyan',
+  subscriptions: (unit) => [
+    {
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit && (instr.result?.dealt ?? 0) > 1,
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'phantom', stacks: 1 }), instr),
+    },
+  ],
+});
+
+// 杀手（杀手）：每有一张牌被打出，获得蓄势 1——出牌量税，速攻流的节奏对冲。
+// 订阅玩家出牌指令 POST（嵌套强发也计入——被万变拳白嫖打出的牌同样是「被打出」）。
+registerEffect({
+  id: 'killer',
+  type: 'buff',
+  stacking: 'count',
+  name: '杀手',
+  description: '每有一张牌被打出，获得蓄势 1。',
+  icon: '🗡️',
+  color: 'red',
+  subscriptions: (unit) => [{
+    when: UseSkillInstruction,
+    phase: 'post',
+    react: (instr, ctx) => ctx.kernel.submitInstruction(
+      new AddEffectInstruction({ target: unit, effectId: 'momentum', stacks: 1 }), instr),
+  }],
+});
+
+// 干扰（灵御猎手）：每回复 1 魏启，向牌库洗入 1 张虚无——回蓝体系的对冲件
+// （当前回蓝手段少近乎空转，回蓝卡补齐后是主要压力源）。按实际到账量计
+//（result.gained，上限截断后），不是请求量。
+registerEffect({
+  id: 'interfere',
+  type: 'debuff',
+  stacking: 'count',
+  name: '干扰',
+  description: '每回复 1 魏启，向牌库洗入 1 张虚无。',
+  icon: '📻',
+  color: 'purple',
+  subscriptions: () => [{
+    when: GainManaInstruction,
+    phase: 'post',
+    react: (instr, ctx) => {
+      const n = instr.result?.gained ?? 0;
+      for (let i = 0; i < n; i++) {
+        ctx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'voidCard', toZone: 'deck', index: 'random',
+        }), instr);
       }
     },
   }],

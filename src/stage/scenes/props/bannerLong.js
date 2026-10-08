@@ -4,6 +4,7 @@
 // 变体走 build(opts)：旗色 hue（red/blue）/总长/撕裂数/撕裂幅度；rng 驱动确定性。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   place: 'wallDecor',
   band: 'high',
   tags: ['cloth'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ hue = 'red', len = 18, strips = 4, tear = 1, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bannerLong');

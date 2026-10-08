@@ -227,7 +227,7 @@ registerSkill({
 // 压榨（A）：1AP，冷却2：纳气2。
 const drawQiCard = (id, name, tier, cooldown, stacks, promotesTo = null) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
-  image: 'drawQi',
+  image: 'drawQiC',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: cooldown },
   cardMode: 'normal',
@@ -238,8 +238,8 @@ const drawQiCard = (id, name, tier, cooldown, stacks, promotesTo = null) => regi
   },
   describe: () => `/effect{纳气}${stacks}`,
 });
-drawQiCard('drawQi', '汲取', 'C', 3, 1, 'drawQiPlus');
-drawQiCard('drawQiPlus', '汲取', 'B', 2, 1, 'squeezeQi');
+drawQiCard('drawQiC', '汲取', 'C', 3, 1, 'drawQiB');
+drawQiCard('drawQiB', '汲取', 'B', 2, 1, 'squeezeQi');
 drawQiCard('squeezeQi', '压榨', 'A', 2, 2);
 
 // ---- 魏启罐系列（无费用消耗品：纳气 N）----
@@ -346,7 +346,7 @@ registerSkill({
 // 固有开局直接入手，不占初始抽牌位）。
 const prePreparedCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '早有防备', type: 'normal', pack: 'common', tier,
-  image: 'prePrepared',
+  image: 'prePreparedC',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -358,14 +358,14 @@ const prePreparedCard = (id, tier, shield, promotesTo = null) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-prePreparedCard('prePrepared', 'C', 8, 'prePreparedPlus');
-prePreparedCard('prePreparedPlus', 'B', 10, 'prePreparedA');
+prePreparedCard('prePreparedC', 'C', 8, 'prePreparedB');
+prePreparedCard('prePreparedB', 'B', 10, 'prePreparedA');
 prePreparedCard('prePreparedA', 'A', 12);
 
 // 盼盼小面包 C/B/A（1AP，消耗）：恢复 3/4/5 生命（即时治疗，走 ApplyHeal 管线）。
 const panpanBreadCard = (id, tier, heal, promotesTo = null) => registerSkill({
   id, name: '盼盼小面包', type: 'normal', pack: 'common', tier,
-  image: 'panpanBread',
+  image: 'panpanBreadC',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -377,8 +377,8 @@ const panpanBreadCard = (id, tier, heal, promotesTo = null) => registerSkill({
   },
   describe: () => `恢复${heal}生命`,
 });
-panpanBreadCard('panpanBread', 'C', 3, 'panpanBreadPlus');
-panpanBreadCard('panpanBreadPlus', 'B', 4, 'panpanBreadA');
+panpanBreadCard('panpanBreadC', 'C', 3, 'panpanBreadB');
+panpanBreadCard('panpanBreadB', 'B', 4, 'panpanBreadA');
 panpanBreadCard('panpanBreadA', 'A', 5);
 
 // 午休 C/B/A（消耗，设计稿未写费用 → 0 费）：晕眩1，治疗12/16/20。
@@ -386,7 +386,7 @@ panpanBreadCard('panpanBreadA', 'A', 5);
 // 清零，见 content/effects.js），与晕眩同在下一回合开始生效：睡这一觉 = 下回合动不了。
 const noonNapCard = (id, tier, mend, promotesTo = null) => registerSkill({
   id, name: '午休', type: 'normal', pack: 'common', tier,
-  image: 'noonNap',
+  image: 'noonNapC',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -399,8 +399,8 @@ const noonNapCard = (id, tier, mend, promotesTo = null) => registerSkill({
   },
   describe: () => `/effect{晕眩}1，/effect{治疗}${mend}`,
 });
-noonNapCard('noonNap', 'C', 12, 'noonNapPlus');
-noonNapCard('noonNapPlus', 'B', 16, 'noonNapA');
+noonNapCard('noonNapC', 'C', 12, 'noonNapB');
+noonNapCard('noonNapB', 'B', 16, 'noonNapA');
 noonNapCard('noonNapA', 'A', 20);
 
 // 防住！C/B/A（消耗，设计稿未写费用 → 0 费）：10/13/16 护盾。
@@ -408,7 +408,7 @@ noonNapCard('noonNapA', 'A', 20);
 // 不耗蓝、不管冷却，但整场战斗就这一发。
 const holdOutCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '防住！', type: 'normal', pack: 'common', tier,
-  image: 'holdOut',
+  image: 'holdOutC',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -420,8 +420,8 @@ const holdOutCard = (id, tier, shield, promotesTo = null) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-holdOutCard('holdOut', 'C', 10, 'holdOutPlus');
-holdOutCard('holdOutPlus', 'B', 13, 'holdOutA');
+holdOutCard('holdOutC', 'C', 10, 'holdOutB');
+holdOutCard('holdOutB', 'B', 13, 'holdOutA');
 holdOutCard('holdOutA', 'A', 16);
 
 // 瞬间冷却（A，消耗，设计稿未写费用 → 0 费）：选一张手牌，令其冷却5。
@@ -455,7 +455,7 @@ registerSkill({
 // （提交 ChantTriggerInstruction，与 P5 同一挂载点，激活咏唱卡的触发订阅照常响应）。
 const murmurCard = (id, tier, ap, promotesTo = null) => registerSkill({
   id, name: '念念有词', type: 'normal', pack: 'common', tier,
-  image: 'murmurChant',
+  image: 'murmurChantC',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -467,15 +467,15 @@ const murmurCard = (id, tier, ap, promotesTo = null) => registerSkill({
   },
   describe: () => '/named{快速咏唱}',
 });
-murmurCard('murmurChant', 'C', 1, 'murmurChantPlus');
-murmurCard('murmurChantPlus', 'B', 0);
+murmurCard('murmurChantC', 'C', 1, 'murmurChantB');
+murmurCard('murmurChantB', 'B', 0);
 
 // 扩容 A/S（消耗，设计稿未写费用 → 0 费）：本场战斗咏唱容量 +1/+2
 // （applyBattleModifier 战斗级通道，战斗结束自动归零——与空系自在系列同口径；
 // 这张「扩容」只给咏唱容量，与火系「膨胀」给手牌上限是两条轨）。
 const expandChantCard = (id, tier, n) => registerSkill({
   id, name: '扩容', type: 'normal', pack: 'common', tier,
-  image: 'expandChant',
+  image: 'expandChantA',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -486,7 +486,7 @@ const expandChantCard = (id, tier, n) => registerSkill({
   },
   describe: () => `本场战斗咏唱容量+${n}`,
 });
-expandChantCard('expandChant', 'A', 1);
+expandChantCard('expandChantA', 'A', 1);
 expandChantCard('expandChantS', 'S', 2);
 
 // ---- 高速魏启罐系列 ----

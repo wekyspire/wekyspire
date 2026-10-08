@@ -11,7 +11,7 @@ import { maxRewardTier, packOf, TIER_RANK } from './rewards.js';
 //
 // 等阶门禁（§5.2，与抓牌同口径）：晋升目标等阶不得超过该卡**所属体系**当前解锁的
 // 最高等阶（体修看隐藏 bodyLevel，灵脉看 leino 维度；0 级 → C，1 级 → B，2 级 → A）。
-// 体修 0 级升出 A 级揽云手的事故即门禁漏接所致——抓牌侧（rewards.js）有门禁，
+// 体修 0 级升出 A 级精准一击的事故即门禁漏接所致——抓牌侧（rewards.js）有门禁，
 // 晋升侧也必须过同一道闸。
 
 // 某定义当前可用的晋升目标（内容缺省/未注册的目标自动跳过，§9 内容留坑）
@@ -23,7 +23,7 @@ export function promotionTargets(def) {
 
 // 通用填充卡（拳/盾）：不走体修路线无法升级——填充卡是全体系
 // 起始牌组的凑数位，晋升通道是体修路线的专属甜头（StS Strike/Defend 不可升级的变体口径）。
-const FILLER_STARTERS = new Set(['punch', 'guard']);
+const FILLER_STARTERS = new Set(['punch', 'shieldC']);
 
 // 过等阶门禁后的可用晋升目标（run 语境；UI 候选与执行判定都走这里，保证同源）。
 // S 阶不可经晋升获得：训练场/老虎机升级一律到不了 S——晋升链

@@ -5,6 +5,7 @@
 // 旗色 hue /飘片数 flutter（0~3）/撕裂竖片数 rag（4~6）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -12,7 +13,7 @@ export default {
   place: 'wallDecor',
   band: 'mid',
   tags: ['cloth', 'barrack'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ hue = 'red', flutter = 2, rag = 5, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bannerTorn');

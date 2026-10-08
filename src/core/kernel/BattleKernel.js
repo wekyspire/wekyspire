@@ -81,6 +81,13 @@ export default class BattleKernel {
     this.subscriptions = this.subscriptions.filter(s => s.owner !== owner);
   }
 
+  // 按 owner 前缀批量注销（卡牌 modifier 订阅 owner = `${uniqueID}:mod:${modId}`，
+  // 卡离场（leaveBattle）时整体拆除其名下全部 modifier 订阅）
+  removeSubscriptionsByOwnerPrefix(prefix) {
+    this.subscriptions = this.subscriptions.filter(
+      s => !(typeof s.owner === 'string' && s.owner.startsWith(prefix)));
+  }
+
   // ---- 取消 ----
 
   // veto：仅 PRE 阶段、针对尚未执行的节点。节点弹掉、不触发 POST；

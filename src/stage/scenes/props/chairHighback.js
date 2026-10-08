@@ -3,6 +3,7 @@
 // 雕花=背板菱花钉 + 柱顶尖饰。变体走 build(opts)：背高 / 是否带雕花。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture'],
   footprint: { x: 2.4, z: 2.1 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ backH = 7.2, carved = true, rng } = {}) {
     const g = new THREE.Group();
     // 座面 + 前腿（后腿即背柱，见下）

@@ -31,7 +31,7 @@ const TOTAL_MS = CARD_UPGRADE_TIMING.gatherMs + CARD_UPGRADE_TIMING.surgeMs
 // sequencer 指令保险丝：节拍卫生要求远宽于实际时长（≥2.5 倍），强杀只是防僵死兜底
 const FUSE_MS = TOTAL_MS * 3;
 
-/** 升级金闪的专属色（与战斗内 _cardPowerBeat 的威力提升同款金色，同一语言）。 */
+/** 升级金闪的专属色（与战斗内威力提升反应节拍同款金色，同一语言）。 */
 export const UPGRADE_GOLD = 0xffd34c;
 
 /**

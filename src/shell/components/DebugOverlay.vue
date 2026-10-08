@@ -27,7 +27,30 @@ const dbg = props.ctrl.debug;
 const tab = ref('state');
 const importText = ref('');
 const exportText = ref('');
-const pick = ref({ card: '', relic: '', effect: 'burn', battleCard: '', pack: '' });
+const pick = ref({ relic: '', effect: 'burn', pack: '' });
+// —— 卡牌候选搜索（deck/battle 两处加卡共用——466 张手翻效率太低）——
+const cardQuery = ref('');
+const battleCardQuery = ref('');
+function searchCards(q) {
+  const s = (q ?? '').trim().toLowerCase();
+  if (!s) return [];
+  const out = [];
+  for (const def of allSkills()) {
+    if (`${def.id} ${def.name ?? ''} ${def.series ?? ''} ${def.tier ?? ''}`.toLowerCase().includes(s)) {
+      out.push(def);
+      if (out.length >= 80) break;
+    }
+  }
+  return out;
+}
+const deckCandidates = computed(() => searchCards(cardQuery.value));
+const battleCandidates = computed(() => searchCards(battleCardQuery.value));
+function addDeckCandidate(def) { dbg.addCard(def.id); }
+function addBattleCandidate(def) { dbg.addCardToHand(def.id); }
+function drawBattleCandidate(def) { dbg.drawCard(def.id); }
+function addFirstDeckCandidate() { const [d] = deckCandidates.value; if (d) addDeckCandidate(d); }
+function addFirstBattleCandidate() { const [d] = battleCandidates.value; if (d) addBattleCandidate(d); }
+function drawFirstBattleCandidate() { const [d] = battleCandidates.value; if (d) drawBattleCandidate(d); }
 
 // ---- 拖拽移位：缺省顶部居中（旧缺省左上角会遮塔楼层按钮）——
 // 抓住标题栏拖动换位置，坐标持久化到 localStorage；钳制防拖出屏外找不回
@@ -71,16 +94,6 @@ const TABS = [
 
 // ---- 内容清单（一次算好；注册表是静态的）----
 const TIER_ORDER = ['D', 'C', 'B', 'A', 'S', 'X', 'Z'];
-const cardsByTier = computed(() => {
-  const out = {};
-  for (const def of allSkills()) {
-    const t = def.tier ?? '?';
-    (out[t] ??= []).push(def);
-  }
-  for (const k of Object.keys(out)) out[k].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  return out;
-});
-const tiersPresent = computed(() => TIER_ORDER.filter(t => cardsByTier.value[t]?.length));
 const relicsByRarity = computed(() => {
   const out = {};
   for (const def of allRelics()) (out[def.rarity ?? 'C'] ??= []).push(def);
@@ -119,14 +132,8 @@ const bumpLeino = (dim, delta) => dbg.setLeino(dim, Number(p.value.leino?.[dim] 
 const jumpFloor = (delta) => dbg.setFloor(Number(run.value.floor) + delta);
 const jumpToFloor = (e) => dbg.setFloor(Number(e.target.value));
 
-function addPickedCard() {
-  if (pick.value.card) dbg.addCard(pick.value.card);
-}
 function addPickedRelic() {
   if (pick.value.relic) dbg.addRelic(pick.value.relic);
-}
-function addPickedBattleCard() {
-  if (pick.value.battleCard) dbg.addCardToHand(pick.value.battleCard);
 }
 function addAllRelics() {
   for (const def of allRelics()) {
@@ -231,17 +238,20 @@ function reloadCurrent() {
       <div v-else-if="tab === 'deck'" class="pane">
         <div class="row">
           <span class="k">共 {{ p.deck.length }} 张</span>
-          <select v-model="pick.card">
-            <option value="">（选一张卡加入）</option>
-            <template v-for="t in tiersPresent" :key="t">
-              <optgroup :label="`${t} 级`">
-                <option v-for="def in cardsByTier[t]" :key="def.id" :value="def.id">{{ def.name }}（{{ def.id }}）</option>
-              </optgroup>
-            </template>
-          </select>
-          <button class="pri" @click="addPickedCard()">加入</button>
+          <input v-model="cardQuery" class="card-search" placeholder="搜索卡牌：名 / id / 体系 / 阶"
+                 @keydown.enter="addFirstDeckCandidate()">
+          <button class="pri" :disabled="!deckCandidates.length" @click="addFirstDeckCandidate()">加首条</button>
           <button @click="dbg.addCard('onePunch')">发一拳</button>
           <button @click="dbg.resetDeck()">重置牌组</button>
+        </div>
+        <div v-if="cardQuery.trim()" class="cand-list">
+          <div class="cand-head dim">命中 {{ deckCandidates.length }}{{ deckCandidates.length >= 80 ? '+' : '' }} —— 点条目加入卡组 / 回车加首条</div>
+          <div v-for="def in deckCandidates" :key="def.id" class="cand" @click="addDeckCandidate(def)">
+            <span class="nm">{{ def.name }}</span>
+            <span class="dim-tag">{{ def.tier }}</span>
+            <span class="sub">{{ def.id }}</span>
+            <span v-if="def.series" class="sub">· {{ def.series }}</span>
+          </div>
         </div>
         <div class="list">
           <div v-for="(rt, i) in p.deck" :key="rt.uniqueID" class="item">
@@ -333,17 +343,21 @@ function reloadCurrent() {
           </div>
           <div class="row">
             <span class="k">加卡</span>
-            <select v-model="pick.battleCard">
-              <option value="">（选一张加到手牌）</option>
-              <template v-for="t in tiersPresent" :key="t">
-                <optgroup :label="`${t} 级`">
-                  <option v-for="def in cardsByTier[t]" :key="def.id" :value="def.id">{{ def.name }}（{{ def.id }}）</option>
-                </optgroup>
-              </template>
-            </select>
-            <button class="pri" @click="addPickedBattleCard()">加到手里</button>
+            <input v-model="battleCardQuery" class="card-search" placeholder="搜索卡牌：名 / id / 体系 / 阶"
+                   @keydown.enter="addFirstBattleCandidate()">
+            <button class="pri" :disabled="!battleCandidates.length" @click="addFirstBattleCandidate()">加首条</button>
+            <button @click="drawFirstBattleCandidate()">抽首条</button>
             <button @click="dbg.addCardToHand('gmPunch50')">塞调试重拳</button>
             <button @click="dbg.addCardToHand('onePunch')">塞一拳</button>
+          </div>
+          <div v-if="battleCardQuery.trim()" class="cand-list">
+            <div class="cand-head dim">命中 {{ battleCandidates.length }}{{ battleCandidates.length >= 80 ? '+' : '' }} —— 点条目加到手牌 / 回车加首条 / 「抽首条」从牌库抽出</div>
+            <div v-for="def in battleCandidates" :key="def.id" class="cand" @click="addBattleCandidate(def)">
+              <span class="nm">{{ def.name }}</span>
+              <span class="dim-tag">{{ def.tier }}</span>
+              <span class="sub">{{ def.id }}</span>
+              <span v-if="def.series" class="sub">· {{ def.series }}</span>
+            </div>
           </div>
           <div class="row">
             <span class="k">效果</span>
@@ -450,6 +464,12 @@ select { max-width: 190px; }
 .ta { width: 100%; height: 90px; resize: vertical; font-family: monospace; font-size: 10px; }
 .hint { color: #8a93b2; font-size: 11px; line-height: 1.5; }
 .hint code { color: #c3cee0; }
+.card-search { flex: 1; min-width: 150px; }
+.cand-list { max-height: 190px; overflow: auto; border: 1px solid #26324a; }
+.cand { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; border-bottom: 1px solid #1b2436; }
+.cand:hover { background: rgba(52, 84, 126, .6); }
+.cand .nm { color: #e8eefb; }
+.cand-head { padding: 2px 6px; }
 .log { border-top: 1px solid #26324a; padding: 5px 8px; font-size: 11px; color: #c3cee0; }
 .log .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

@@ -4,6 +4,7 @@ import { DealDamageInstruction, GainShieldInstruction, previewDamage } from '../
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { PlayerTurnStartInstruction } from '../instructions/turn.js';
+import { reactFx } from './cardKit.js';
 
 // 应用后伤害文本（content 攻击卡通用）：基数 + 攻击面板 + power，再经
 // previewDamage 干跑吃 PRE 修正（下次伤害翻倍、目标格挡免伤等）。
@@ -50,14 +51,14 @@ export function enemyTarget(sctx) {
 }
 
 // ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
-// 无冷却（冷却1 在 B 坚固盾——升阶的阶差）。
+// 无冷却（冷却1 在 B 盾——升阶的阶差）。
 registerSkill({
-  id: 'guard', name: '盾', type: 'normal', tier: 'C', series: 'block',
+  id: 'shieldC', name: '盾', type: 'normal', tier: 'C', series: 'block',
   canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  promotesTo: 'solidShield',
+  promotesTo: 'shieldB',
   use(sctx) {
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 5 }));
     return true;
@@ -65,16 +66,16 @@ registerSkill({
   describe: () => '5护盾',
 });
 
-// ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位：点火→烈焰→炙焰；1AP，伤害走 F1 攻击面板轨）
+// ③ 施加/触发效果牌：伤害 + 燃烧（点火系列 C 位；1AP 冷却1，伤害走 F1 攻击面板轨）
 // 点火是火体系的燃烧入口——由首次点亮火灵脉时进阶获赠直发
 // （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
-  id: 'inflame', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
+  id: 'igniteC', name: '点火', type: 'fire', tier: 'C', series: 'ignite',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   targetMode: 'enemy',
-  promotesTo: 'blaze',
+  promotesTo: 'igniteB',
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new DealDamageInstruction({
@@ -102,11 +103,12 @@ registerSkill({
   chantWeight: 1,
   use() { return true; },
   activated: {
-    subscriptions: () => [{
+    subscriptions: (sctx) => [{
       when: PlayerTurnStartInstruction,
       phase: 'post',
       react: (instr, ctx) => {
         ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 1 }), instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
   },

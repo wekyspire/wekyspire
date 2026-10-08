@@ -31,10 +31,11 @@ export const EventNames = {
   ANIM_CARD_SHOWCASE: 'anim:card-showcase', // 结算宾语入结算区展示（原位 → 场中央）
   ANIM_CARD_TRANSFORMED: 'anim:card-transformed',
   ANIM_CARDS_DUMPED: 'anim:cards-dumped', // 弃牌动作（改制：付一次费弃任意张）的动作级节拍
-  // 卡牌威力提升（power 增加）：卡面一次放缩脉冲，表示"这张牌的状态变了"。
-  // 公共节拍——养刀术/锻刀术/练刀/火光爆发等任何会改 runtime.power 的效果都走它
-  // （presenter.cardPowerUp，见 core/content/cardKit.gainPower）。
-  ANIM_CARD_POWER_UP: 'anim:card-power-up',
+  // 卡面反应（受益/副作用发动）：卡牌因其它操作状态变更时播体系专属 shader 演出
+  // （火系火脉/刀系锻打淬火/体修气血……，见 stage cardBodyFx.cbfReact）。
+  // 公共节拍——威力提升（cardKit.gainPower）、爆裂蓄能、咏唱触发、自燃代价等都走它
+  // （presenter.cardReact，见 core/content/cardKit.reactFx）。
+  ANIM_CARD_REACT: 'anim:card-react',
   // 通用剧本闸口（fx 架构，唯一的新增口子）：core 只报「放哪个剧本 + 标量参数」
   // （presenter.playScript({ script, ...args })），内容全在 stage 侧 fx/scripts/ 注册表——
   // Boss 转阶段/特殊演出走这里，伤害类特效仍蹲 _damageHit 节拍内（铁律不变）。
@@ -84,7 +85,7 @@ export const ANIM_TIMING = {
   [EventNames.ANIM_CARD_SHOWCASE]: 2500,
   [EventNames.ANIM_CARD_TRANSFORMED]: 3000,
   [EventNames.ANIM_CARDS_DUMPED]: 2500,
-  [EventNames.ANIM_CARD_POWER_UP]: 2000,   // 放缩脉冲 ~130ms + 回位；非阻塞语义（见 BattleStage 节拍）
+  [EventNames.ANIM_CARD_REACT]: 2000,   // 反应 shader 攻击+保持 ~190ms 即回 finish；包络衰减在 fx 层自续
   [EventNames.ANIM_SCRIPT]: 15000,  // 剧本不定长（Boss 转阶段等），保险丝按最宽档
   [EventNames.ANIM_STATE_SYNC]: 2000,   // 实际时长≈0（Stage 应用快照即回 finish），兜底同理
 };

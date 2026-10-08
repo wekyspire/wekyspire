@@ -49,8 +49,8 @@ const NEGATIVE = 'outline, line art, ink lines, thin lines, cel shading, flat sh
 //   骑士当主体曾占 65/204 → 辨识度崩盘。四原型轮转，写 prompt 先选原型再写内容：
 //   ① 部位微距（拳/掌/臂甲/靴/盔填满画幅）② 剪影环境（小黑影置于大现象中：血海/护盾泡/火墙/月夜）
 //   ③ 动态抽象（速度线/残影/刀光轨迹为主体，无整体人）④ 物件主体（那东西本身：罐/刃/火/刺）
-//   骑士全身/半身主体仅保留 8 键「确实帅」的名额（airFloat/flameHeal/fireWhirl/lastStand/pluckStar/
-//   allIn/atEase/noonNap）——新增骑士主体须用户点头。等阶分级轴随之升级：不只加元素，
+//   骑士全身/半身主体仅保留 6 键「确实帅」的名额（flameHeal/fireWhirl/lastStand/pluckStar/
+//   allIn/noonNap）——新增骑士主体须用户点头。等阶分级轴随之升级：不只加元素，
 //   可用**饱和度/亮度/密度连续轴**（血色鲜艳度·bloodFist、护盾亮度·psiShield、速度线密度·wildPunch）。
 // 武装设定（2026-09-22 用户定）：骑士**无盾**（格挡只靠臂甲）；佩**大剑**（直刃双手巨剑，非刀）。
 // 家族色彩锚点（2026-09-22 用户定）：**体修 = 骑士本体 + 大面积黑/灰黑**；**火系 = 橙黄橙红为
@@ -227,9 +227,8 @@ const SCENES = [
   { id: 'fireControlRefine', prompt: `a bright orange flame and a black smog mass colliding mid-frame and annihilating each other in white sparks, paired cancellation, a steel-gray gauntlet directing the clash from the bottom edge` },
   { id: 'fireControlScorch', prompt: `extreme close-up of a steel-gray gauntlet fist being dipped and coated in thick clinging flame, fire wrapping the knuckles like fuel, loaded for the next strike, dark background` },
   { id: 'fireControlSupreme', prompt: `an open steel-gray gauntlet palm-up with a whole court of tiny shaped flames hovering above it — a ring, a serpent, a blade, a bird — every flame bending to one will, supreme mastery, dark background` },
-  // 自焚/焰愈/焚天/镜燃/燃心
+  // 自焚/焰愈/焚烧/镜燃/燃心
   { id: 'redHotBlade', prompt: `a greatsword blade glowing red-hot from within filling the frame diagonally, heat shimmer rising off the steel, embers dripping from the edge` },
-  { id: 'immolateGrand', prompt: `everything in the frame consumed by white-hot incinerating fire, a knight silhouette at the center walking forward out of the inferno unburned, total annihilation blaze, the white fire dominant` },
   { id: 'nirvana', prompt: `a steel-gray knight kneeling inside a blooming lotus of fire, new bright armor gleaming through the burning old shell, rebirth from the flames, rising fire petals filling the frame` },
   { id: 'burnBurstStar', prompt: `a star-shaped flame erupting in three blinding points, the triple-pronged star fire huge in frame, radiating triple heat waves, only a steel-gray gauntlet at the bottom edge presenting it` },
   { id: 'karmaFire', prompt: `a small dark silhouette as a conduit: fire streaming onto one shoulder and pouring out the other arm toward the left, twin fire streams crossing at the tiny figure, the fire dominant` },
@@ -243,19 +242,6 @@ const SCENES = [
   { id: 'fireMastery', prompt: `concentric rings of fire orbiting a steel-gray knight like layered shields, each flame ring spinning at a different height, mastery of the element, the fire rings filling the frame` },
   { id: 'fireWard', prompt: `a wave of fire splashing against an invisible barrier around a calm steel-gray knight, the flames parting around him like water around a stone, a ward circle traced in light` },
   { id: 'shockCard', prompt: `extreme close-up of a steel-gray knight flinching, shoulders hunched and arms half-raised in a startle, a cold shock ripple stamped across the armor, intimidated, dark background` },
-  // —— 木大系 ——
-  { id: 'herbPaste', prompt: `close-up of a sprouting herb with bright leaves held in a gentle steel-gray gauntlet grip, soft green glow, careful and tender` },
-  { id: 'miasma', prompt: `a huge sickly green miasma cloud filling the frame, poison droplets beading inside it, one steel-gray armored arm disappearing into the vapor from the edge` },
-  { id: 'woodBark', prompt: `extreme close-up of a steel-gray armored forearm held across the frame, thick tree-bark plates sprouting over the vambrace, bark texture in big planes, no helmet in frame` },
-  { id: 'breathOfLife', prompt: `top-down view: two steel-gray armored gauntlets cupping soil with a tiny sprouting seedling inside a ring of soft light, the rim of a rounded helmet just at the top edge of the frame, ground-level composition` },
-  { id: 'woodSting', prompt: `a thorny stinger huge in frame flying toward the left, a glistening poison drop on its tip, more stingers blurred behind` },
-  { id: 'woodBlood', prompt: `close-up of a steel-gray armored hand pressing onto a thorned black vine, thorns pricking the palm seam, drops of glowing dark-red sap welling up, the vine coiling around the wrist` },
-  // —— 风大系 ——
-  { id: 'windBlade', prompt: `a huge cyan crescent wind blade filling the frame, sharp translucent layers of compressed air, cutting wind` },
-  { id: 'lightness', prompt: `a figure dissolving into a gust: the silhouette stretched into horizontal motion streaks, cyan air rings trailing, barely a body anymore` },
-  { id: 'bathWind', prompt: `a single feather floating huge in frame wrapped in rings of cyan air, a hint of a releasing gauntlet at the bottom edge, serene` },
-  { id: 'atEase', prompt: `${KNIGHT}, floating cross-legged on a soft cloud puff, relaxed weightless pose, scarf drifting slowly` },
-  { id: 'airFloat', prompt: `${KNIGHT}, levitating high off the ground at a tilted diagonal, boots dangling, red scarf drifting straight upward, a ring of pale cyan air beneath him, weightless floating pose` },
   // —— 通用灰卡家族（骑士的日常动作） ——
   { id: 'purify', prompt: `a steel-gray armored gauntlet held up in close-up, a soft cascade of pale glowing light pouring over it like a luminous waterfall, black grime and dark smoke dissolving off the metal plates where the light touches, the steel gleaming clean and bright, light made visible, not liquid, no water, brilliant purity, dark background` }, // 2026-09-26 二改：旧版真倒水=洗手梗；纯化改「光之涤荡」
   { id: 'extract', prompt: `a steel-gray armored gauntlet pulling a long taut stream of glowing essence out of a cracked dull gray rock, the stream made of luminous pale vapor, breath made visible, faint green gold and blue shimmer within the light, smoke-like, not liquid, not metal, stretched across the frame, dark background` }, // 2026-09-26 二改：旧版虹彩管=热成像图；萃取改「光雾精华流」
@@ -313,8 +299,6 @@ const T2I_TIERS = {
   'relief-3': 'a colossal wall of white steam erupting sideways and filling the entire frame edge to edge, dense billowing vapor textures, a tiny round pressure valve barely visible at the bottom corner, no creature, no face, no figure, pure steam only',
   'spark-2': 'a figure wearing a wide-brim hat and goggles, hundreds of bright sparks bursting and flying everywhere around the raised hands, the whole frame full of glowing points',
   'spark-3': 'an overwhelming storm of hundreds of blazing white-orange sparks flooding the entire frame edge to edge, blinding shower of glowing points, a small figure with a wide-brim hat and goggles barely visible at the bottom edge, no readable book, no props',
-  'lightness-3': 'a swirling cyan wind storm of horizontal streaks and air rings sweeping across the dark frame, only one small bright red scarf streak remaining in the wind, no body left',
-  'windBlade-3': 'a hurricane of many separate cyan crescent wind blades tearing across the entire frame, overlapping translucent air blades everywhere at different angles, a storm of steel-sharp wind, no person',
   // 真拳 S（2026-09-22）：「拳化纯白炽影」是本质级变身，i2i 0.8 保真四轮全灭 → 免参考直出。
   'fastPunch-4': 'dramatic side-view straight punch: a huge gauntlet fist filling the left third has become pure light — the fist a blinding pure-white silhouette with hard white rim light, massive faceted knuckle boulders dissolving into the glare, the steel-gray armored forearm receding into near-black at the right with harsh contrast, a thin red scarf edge at the frame corner as the sole spot of color, pure void-calm, a few essential blurred strokes',
 };
@@ -422,7 +406,7 @@ const ESCALATION_CUSTOM = {
     2: ', the same flat arc, a wider thicker brighter blade-trail, the air visibly splitting with a rip of light behind the edge',
     3: ', the same arc, a huge splitting arc tearing the whole frame open along its path, debris flung',
   },
-  cycloneSlash: { // 回旋斩(C)→回旋爆斩(B)→完美回斩(A)：环爆、双环
+  cycloneSlash: { // 回旋斩(C/B/A)：环爆、双环
     2: ', the same spinning armored knight inside the same ring of blade-light, the steel circle brighter, sparks streaming off the rim',
     3: ', the same spinning knight, feet planted wide in a low balanced stance, torso upright and controlled, a blazing double circle of blade-light sweeping around the knight at arms length outside the body, nothing passing through the knight, the greatsword gripped firmly in one gauntlet, clear depth between the light ring and the armor, sparks storming outward',
   },
@@ -449,7 +433,7 @@ const ESCALATION_CUSTOM = {
     2: ', the same two silhouettes, the ghost double now clearly more solid, motion-split streaks stretching between the two bodies, harder to tell apart',
     3: ', the same pair, the ghost double fully materialized with its own red scarf line, two indistinguishable silhouettes',
   },
-  flyingDagger: { // 飞刀(C)→强力飞刀(B)→绝灭飞刀(A)：刀尾光轨
+  flyingDagger: { // 飞刀(C/B)→绝灭飞刀(A)：刀尾光轨
     2: ', the same throwing knife, a long bright speed trail now stretching across the whole frame, the knife blurred with speed',
     3: ', the same knife, a screaming triple-bright trail with a spark wake, the tip glowing white-hot, annihilating momentum',
   },
@@ -487,49 +471,6 @@ const ESCALATION_CUSTOM = {
   },
   winWithout: { // 以无胜有(B)→A：唯一牌更亮
     3: ', the same single held card, its blank face now rimmed in bright confident light, a radiant outline against the emptiness, decisive minimalism',
-  },
-  // —— 预防性定制（主批后半段的安静/青绿键——通用「blazing」会把木绿/风青拉成橙，且微距无钩可读） ——
-  miasma: { // 瘴气：毒雾逐浓
-    1: ', the same cloud, thicker, more droplets beading',
-    2: ', the same arm, a far denser opaque green cloud engulfing it, heavy poison dripping',
-    3: ', the same arm, a huge roiling opaque miasma filling the entire frame',
-  },
-  woodBark: { // 树皮甲：甲皮逐厚（审计：低阶钢铁化、木元素缺席——点名藤蔓/苔藓）
-    1: ', the same forearm, green living vines now clearly winding around the vambrace between the steel plates, sprouting leaf buds',
-    2: ', the same forearm, the steel half-overgrown with thick bark plates and green moss, ancient wood armor emerging',
-    3: ', the same forearm, a full ancient-tree bark shell: massive ridged plates, green vitality glowing in the seams',
-  },
-  woodSting: { // 飞刺：刺雨逐密
-    1: ', the same thorny stinger, two more smaller stingers now flanking it in a loose volley, brighter poison drops',
-    2: ', the same thorny stingers, a wide fan of five identical stingers spread across the frame, glistening drops on every tip',
-    3: ', the same thorny stingers, a dense storm of stingers with green trails filling the frame',
-  },
-  breathOfLife: { // 育苗：苗逐壮
-    1: ', the same cupped soil, the seedling taller with one more bright leaf, the light ring a touch brighter',
-    2: ', the same cupped soil, the seedling grown into a small lush sapling, vivid green glow, the light ring radiant',
-  },
-  airFloat: { // 浮空：浮更高
-    1: ', the same levitation, floating higher, the pale air ring beneath brighter, more debris motes orbiting',
-    2: ', the same levitation at a steeper tilt, a bright double air ring beneath, the scarf streaming straight up, weightless',
-  },
-  atEase: { // 云坐：云逐软
-    1: ', the same cloud float, the cloud clearly bigger and fluffier, deeper relaxation',
-    2: ', the same pose, a grand fluffy cloud filling half the frame, two drifting motes of dream-light',
-    3: ', the same pose on a glowing cloud throne filling the frame, soft radiance all around, total serenity',
-  },
-  bathWind: { // 放羽：羽环逐多
-    1: ', the same feather release, two feathers floating, more air rings drifting',
-    2: ', the same release, a small swirl of feathers wrapped in bright cyan air rings',
-  },
-  lightness: { // 化风：人逐散
-    1: ', the same dodge, more blurred, an extra cyan air ring',
-    2: ', the same dodge, the body now half transparent and breaking apart into horizontal streaks and cyan rings',
-    3: ', the same gust, the body almost fully vanished: just a swirling cyan wind storm and one small red scarf streak blowing in it',
-  },
-  windBlade: { // 风刃：刃逐大（C 连击=多刃必须点名数量）
-    1: ', the same cyan crescents, now three separate blades slashing in quick diagonal succession',
-    2: ', the same crescent, huge and bright with gust rings trailing',
-    3: ', the same crescents, a massive tearing blade-storm, the air ripped open',
   },
   psiShield: { // 灵能屏障：两层屏障显形（两轮「更大更亮」都读不出——屏障已大，加新层）
     2: ', the same pale light blue hexagon sphere, now with a second outer hexagon shell blazing bright around it, double barrier, light-blue facets filling the frame, the tiny silhouette inside completely empty-handed with arms at its sides, no shield, no staff, no objects anywhere',
@@ -625,11 +566,6 @@ const ESCALATION_CUSTOM = {
     2: ', the same wrist, three small bright flames now standing on the blood trail, the blood drops glowing',
     3: ', the same arm, the kindled blood flame roaring up along the vambrace, bright fire wrapping the forearm',
   },
-  herbPaste: { // 草药（旧 woodHerb 键改名）——审计：四阶平移，逐级点名体量
-    1: ', the same gentle grip, the herb noticeably larger with three bright leaves, a stronger green glow halo',
-    2: ', the same gentle grip, a lush bundle of glowing leaves nearly filling the palm, drifting light motes, vivid green radiance',
-    3: ', the same gentle grip, a huge bursting spray of radiant leaves and curling tendrils overflowing the hand, the frame washed in green light',
-  },
   manaJar: {
     1: ', the same jar, the blue glow escaping a little brighter, a wisp of light rising',
     2: ', the same jar, bright sapphire-blue glow pouring from the mouth, light wisps swirling',
@@ -656,9 +592,6 @@ const ESCALATION_CUSTOM = {
   },
   willOWisp: {
     3: ', the same ghost flame grown huge and blazing, filling most of the frame, cold blue-white light washing the armor edge, wisps of cold mist trailing',
-  },
-  woodBlood: {
-    2: ', the same hand and vine, more thorns coiling further up the wrist, more glowing dark-red sap dripping',
   },
   extract: {
     2: ', the same pull, the luminous vapor stream thicker and brighter, more pale light billowing out of the cracking rock',

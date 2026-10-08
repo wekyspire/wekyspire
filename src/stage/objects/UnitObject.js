@@ -1,9 +1,11 @@
 // UnitObject（STAGE_DESIGN §3）：场景内的一个单位（玩家/敌人/队友）——2.5D 立牌。
 // 结构：Group（位置/缩放由 BattleStage 按战线轴槽位设置，animator 补间作用于整组）
-//   ├─ billboard: 立牌形 billboard 子组（faceCamera 逐帧 yaw 转向相机，立面保持垂直地面）
-//   │   ├─ standee: 立牌子组（呼吸/受击等仿射只作用在这里）
-//   │   │   └─ body: PlaneGeometry，**底部锚定**（position.y = h/2），纹理=抠图 PNG，
-//   │   │            无图回退 side 配色色块
+//   ├─ rig:      unit 层级统领组（faceCamera 逐帧 yaw 转向相机，立面保持垂直地面）
+//   │   ├─ billboard: 倾倒组（rotation.x = 以脚为轴的死亡倾倒/假死留尸/召唤起立）
+//   │   │   ├─ standee: 立牌子组（呼吸/受击等仿射只作用在这里）
+//   │   │   │   └─ body: PlaneGeometry，**底部锚定**（position.y = h/2），纹理=抠图 PNG，
+//   │   │   │            无图回退 side 配色色块
+//   │   │   └─ （L1-L3 特效分组 / 裂半快照面：贴体件，随尸体倾倒）
 //   │   ├─ hpBar:   底槽 + 填充条（左锚定）+ 数字文本（"20/60"）
 //   │   │   ├─ shieldGroup: 护盾层（shield>0 时可见）——蓝色保护框包裹血条
 //   │   │   │  + 左侧盾徽数值 chip（数值变更时放缩跳动，牌库脉冲同语言）
@@ -11,8 +13,9 @@
 //   │   │      buff 层数绿 / debuff 层数红；行网格带 userData.token
 //   │   │      （{ type:'effect', payload:{ effectId, name } }，与卡面热区同构），
 //   │   │      Picker 二级查询返回 token 命中 → tooltip 协议与卡面热区同构）
-//   │   └─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
-//   └─ ring:    目标标注金环（平贴地板）
+//   │   ├─ fxAnchor: 头侧效果图标锚点（overlay 后续批次，先留位）
+//   │   ├─ intention: 意图图标条（头顶预告——假死尸的「?」不随尸体倒平）
+//   │   └─ ring:    目标标注金环（水平贴地，随 rig yaw 对准——假透视椭圆纪律）
 // 极简状态机（idle 呼吸 / hurt 抖动红闪 / dead 倒地）由 update(dt) + BattleStage 节拍驱动；
 // 行动姿态（攻击/防御/增强/削弱）走 _pose 通道，每帧与呼吸合成（见 setPose/update）。
 // 文本签名不变不重烘。
@@ -22,6 +25,7 @@
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
+import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
 
@@ -50,6 +54,8 @@ const FX_ICON_GAP = 0.35; // 图标与名称文本的间距（wu）
 // 状态绘制（HP 条/护盾框/盾徽/数字）的 renderOrder 基值：场景(0)之上、粒子(70/71)之下；
 // 卡牌等 UI 是独立 uiScene pass（清深度后渲染），天然在其上方
 const STATUS_RENDER_ORDER = 60;
+// 立牌固有偏航角（faceCamera 应用，符号按单位哈希正负交替）
+const BOARD_YAW_BIAS = THREE.MathUtils.degToRad(14);
 // 状态件"浮在场景上方"：关深度测试（不被柱子/地板/立牌遮挡），不写深度
 // （不污染体积光 RT 深度），renderOrder 显式排层（depthTest 关闭后只能靠 painter 序）
 function statusify(mesh, order) {
@@ -82,19 +88,33 @@ export class UnitObject extends THREE.Group {
     this._hasArt = false;
     this._artVariant = null; // 形态变体（Boss 转阶段换立绘；取图与重挂由舞台做）
     this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
+    // 立牌固有偏航：±BOARD_YAW_BIAS，符号按 uniqueID 哈希奇偶（同屏相邻单位左右错开）
+    let _h = 0;
+    for (let i = 0; i < uniqueID.length; i++) _h = (_h * 31 + uniqueID.charCodeAt(i)) | 0;
+    this._boardYawBias = BOARD_YAW_BIAS * ((_h & 1) ? 1 : -1);
 
     // 命名部件表（多部件敌人，fx Phase 5）：key → Object3D（环绕火球/浮游炮等挂接件）。
     // 剧本经 partOrRoot(key) 寻址——部件不存在回落根节点（内容演进不炸旧剧本）
     this.parts = new Map();
     this._tickFns = new Set(); // 附件的逐帧钩子（环绕轨道等），update 统一驱动
 
-    // billboard 子组：standee/hpBar/fxAnchor 全部挂进来，faceCamera 逐帧水平转向相机
-    // （立牌形/圆柱 billboard，只 yaw——斜视下立牌不转正会被透视压斜；
-    // 立面保持垂直地面，球面 pitch 后仰已弃；金环贴地不参与）
+    // unit 层级（rig）：统领 billboard（倾倒体）与 status（血条/盾/效果行/意图）。
+    // faceCamera 逐帧水平 yaw 转向相机（立牌形/圆柱 billboard，只 yaw——斜视下
+    // 立牌不转正会被透视压斜；立面保持垂直地面，球面 pitch 后仰已弃）。
+    // 脚下的假透视水平件（金环/护盾地环等）也挂这里：它们只有 yaw 对准相机后
+    // 椭圆长轴才与立牌底边平行——贴地不参与是旧错误约定，2026-10-02 用户指正后
+    // 统一收口；倾倒（死亡倾倒/假死留尸）只作用 billboard，status 与地面件不跟着倒
+    this._rig = new THREE.Group();
+    this._rig.name = 'rig';
+    this._rig.rotation.order = 'YXZ';
+    this.add(this._rig);
+
+    // billboard 倾倒组（rotation.x = 以脚为轴的倒下）：立牌本体与贴体 fx 层，
+    // 死亡/假死/召唤起立都转它——status 件在 rig 层不随尸体倒平
     this._billboard = new THREE.Group();
     this._billboard.name = 'billboard';
     this._billboard.rotation.order = 'YXZ';
-    this.add(this._billboard);
+    this._rig.add(this._billboard);
 
     // 立牌（底部锚定）：仿射动效只作用在 standee 子组
     this._standee = new THREE.Group();
@@ -121,10 +141,11 @@ export class UnitObject extends THREE.Group {
 
     // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（脚底=地板，旧稿"站台下方"
     // 在真 3D 地板下会被地面裁掉，故上移叠腿前，z 微抬避免与立牌 z-fight）
+    // （rig 层：不随尸体倾倒）
     this._hpBar = new THREE.Group();
     this._hpBar.name = 'hpBar';
     this._hpBar.position.set(0, 3.4, 0.6);
-    this._billboard.add(this._hpBar);
+    this._rig.add(this._hpBar);
     this._hpBg = statusify(new THREE.Mesh(
       new THREE.PlaneGeometry(HP_BAR_WIDTH, HP_BAR_HEIGHT),
       new THREE.MeshBasicMaterial({ color: 0x14161e, transparent: true, opacity: 0.85, fog: false }),
@@ -194,10 +215,10 @@ export class UnitObject extends THREE.Group {
     this._fxRows = [];
     this._fxSig = null;
 
-    // 效果图标锚点（overlay 后续批次）
+    // 效果图标锚点（overlay 后续批次；rig 层——不随尸体倾倒）
     this.fxAnchor = new THREE.Object3D();
     this.fxAnchor.position.set(standeeHeight * 0.4, standeeHeight * 0.8, 0);
-    this._billboard.add(this.fxAnchor);
+    this._rig.add(this.fxAnchor);
 
     // 意图图标条（敌方专属）：头顶预告下一手——五基础意图（剑/盾/升/降/?）
     // 两两组合横排，仅攻击附 N×M 数字。呼吸浮动由 update 驱动（与 idle 呼吸
@@ -210,7 +231,7 @@ export class UnitObject extends THREE.Group {
     this._intention.name = 'intention';
     this._intention.position.set(0, standeeHeight + INTENTION_LIFT + INTENTION_STRIP_H / 2, 0.4);
     this._intention.visible = false;
-    this._billboard.add(this._intention);
+    this._rig.add(this._intention);   // rig 层：假死尸体倒平后「?」仍立着（2026-10-07 用户定）
     this._intentionSig = null;
     this._name = '';
     this._intentionT = Math.random() * Math.PI * 2;
@@ -294,7 +315,7 @@ export class UnitObject extends THREE.Group {
       hp: projection.hp, max: projection.maxHp,
       sh: projection.shield, dead: projection.isDead, ef: projection.effects,
     });
-    this._syncIntention(projection.intention, projection.isDead);
+    this._syncIntention(projection.intention, projection.isDead, projection.reviving);
     if (sig === this._signature) return false;
     this._signature = sig;
     this._dead = projection.isDead;
@@ -328,6 +349,23 @@ export class UnitObject extends THREE.Group {
       this._shieldBaked = sh; // 值不变不重烘（hp 变化也会过签名）
     }
 
+    // 护盾罩（L2 笼罩层，fx/shieldDome.js）：盾量在则罩在、厚度驱动边缘凝实度。
+    // 生命周期分派——获得/加厚：增量>0 → pulse 扫光；受击未破/被打破：由伤害节拍
+    // （units.js）先行触发 hit/shatter（先演后变，此处 sync 只推 level）；
+    // 自然消失（回合清零）：此处触发 vanish 蒸发。消亡演出播完由罩件 onGone 自清槽位。
+    if (sh > 0 && !projection.isDead) {
+      const dome = this._fxLayer.overlay('shieldDome', 2,
+        (layer) => makeShieldDome(layer, { onGone: () => layer.clear('shieldDome') }));
+      if (dome) {
+        dome.setLevel(shieldDomeLevel(sh));
+        if (prev !== undefined && sh > prev) dome.pulse();
+      }
+    } else {
+      const dome = this._fxLayer.get('shieldDome');
+      if (dome) { if (!dome.dying) dome.vanish(); }
+      else this._fxLayer.clear('shieldDome'); // headless 句柄 null：槽位直接清
+    }
+
     // 效果行（血条上方左对齐纵列）：签名驱动整列重建
     this._syncEffectRows(projection.effects ?? []);
 
@@ -353,8 +391,9 @@ export class UnitObject extends THREE.Group {
    * 单位名）——Picker 悬浮二级查询走 tooltip 协议释义；隐藏态无需摘 token
    * （Picker 可见性守卫拦截）。
    */
-  _syncIntention(intention, isDead) {
-    const sig = intention && !isDead ? JSON.stringify(intention) : null;
+  _syncIntention(intention, isDead, reviving = false) {
+    // 假死（将复苏）尸体照常显示意图（未知「?」）——空意图会让玩家误当彻底死亡
+    const sig = intention && (!isDead || reviving) ? JSON.stringify(intention) : null;
     if (sig === this._intentionSig) return;
     this._intentionSig = sig;
     if (!sig) {
@@ -465,11 +504,16 @@ export class UnitObject extends THREE.Group {
   /**
    * 立牌形（圆柱）billboard：只转 yaw 让牌面水平朝向相机，立面保持与地面垂直
    * （球面 billboard 的 pitch 后仰视觉上像"纸片倒下"，已弃）。
-   * 相机静止时每帧结果相同，代价可忽略；金环贴地不参与。
+   * 相机静止时每帧结果相同，代价可忽略；脚下水平假透视件（金环/地环）挂在
+   * 组内随 yaw 对准（仍贴地——组只有 yaw 没有 pitch）。
    * @param {THREE.Vector3|{x,y,z}} camDir 相机方向向量
    */
   faceCamera(camDir) {
-    this._billboard.rotation.y = Math.atan2(camDir.x, camDir.z);
+    this._rig.rotation.y = Math.atan2(camDir.x, camDir.z);
+    // 立牌固有偏航（2026-10-07 用户定）：不完全正对相机——正对视角下绕脚倒伏/
+    // 摆动的透视压扁读不出幅度；偏一个固定角后倒伏带横向位移分量，读感立体。
+    // 偏航写 billboard（倾倒组）：status/地面件仍在 rig 层保持正对相机
+    this._billboard.rotation.y = this._boardYawBias;
   }
 
   /** 帧驱动：附件钩子（环绕轨道等）+ idle 呼吸 + 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
@@ -525,7 +569,10 @@ export class UnitObject extends THREE.Group {
     else this._body.material.color.set(SIDE_COLORS[this.side] ?? 0x888888);
   }
 
-  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板）。 */
+  /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板但**挂 rig**——
+   *  椭圆环是「假透视圆」（长轴压扁比模拟俯视），必须随立牌 yaw 对准相机，
+   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜（2026-10-02 用户指正）。
+   *  rig 只 yaw 不 pitch，水平环 yaw 后仍贴地；尸体倾倒也不掀环（rig 层不吃倾倒）。 */
   setHighlight(on) {
     if (on === !!this._ring) return;
     if (on) {
@@ -540,9 +587,9 @@ export class UnitObject extends THREE.Group {
       this._ring.rotation.x = -Math.PI / 2;
       this._ring.position.y = 0.25;
       this._ring.scale.set(rx * 1.3, this._standeeHeight * 0.14, 1);
-      this.add(this._ring);
+      this._rig.add(this._ring);
     } else {
-      this.remove(this._ring);
+      this._ring.parent?.remove(this._ring);
       this._ring.geometry.dispose();
       this._ring.material.dispose();
       this._ring = null;

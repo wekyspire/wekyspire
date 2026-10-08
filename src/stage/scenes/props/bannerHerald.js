@@ -4,6 +4,7 @@
 // （菱形 diamond / 十字 cross 双形）。变体走 build(opts)：旗色/徽形/穗长；rng 驱动确定性。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   place: 'wallDecor',
   band: 'mid',
   tags: ['cloth'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 11 }), B.combustible()],
   build({ hue = 'blue', size = 6, emblem = 'diamond', tasselLen = 1.9, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bannerHerald');

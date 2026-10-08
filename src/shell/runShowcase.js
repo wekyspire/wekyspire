@@ -18,6 +18,7 @@ import { chooseDemonDebuff, DEMON_DEBUFFS , takeBankOffer } from '../core/run/ro
 import { buyShopItem } from '../core/run/rooms/shop.js';
 import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 import { tooltipHide } from './tooltipHub.js';
+import { FuseBag } from './fuse.js';
 
 export function createRunShowcase(ctx) {
   const { run, runPresenter, actions, slot } = ctx;
@@ -31,11 +32,11 @@ export function createRunShowcase(ctx) {
   let shownRelicIds = new Set(run.player.relics);
   const relicShowcaseQueue = [];
   // 售货机购买的演出协调（声明在 flushRelicShowcase 之前：那个闭包要读 shopDispensing）
+  const fuses = new FuseBag(); // 场景回执的兜底保险丝（key: 'demon' | 'shop'）
   let shopPendingShow = null;   // 刚买下、等着播获得演出的那件
   let shopDispensing = false;   // 出货演出进行中（挡住遗物差分的即时特写）
-  let shopFuse = null;          // 兜底：场景没回执（无场景/被拆）也要把特写放出来
   const flushRelicShowcase = () => {
-    const stage = ctx.panelStage();                     // 当前活动舞台（roomStage ?? mapStage，晚绑定）
+    const stage = ctx.panelStage();                     // 当前活动舞台（battle ?? room ?? map，晚绑定）
     if (!stage?.showcaseItem || !relicShowcaseQueue.length || stage.showcasing) return false;
     if (run.gameStage === 'battle') return false;        // 战斗内不打断（差分已记，战后那拍再播）
     if (shopDispensing) return false;                    // 售货机出货演出中：等场景回执再播（别盖住出货）
@@ -69,7 +70,6 @@ export function createRunShowcase(ctx) {
   const DEMON_TIER_LABEL = { yellow: '黄色级', red: '红色级', black: '黑色级' };
   const DEMON_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
   let demonRewardShow = null;   // { gold, tier, name, desc }
-  let demonFuse = null;         // 兜底：场景没回执（无场景/被拆）也要把特写放出来
   function bankDemonPick(id) {
     const pr = run.bank?.pendingRoll;
     const gold = pr?.gold ?? 0;
@@ -83,8 +83,8 @@ export function createRunShowcase(ctx) {
     demonRewardShow = { gold, tier: res.tier, name: res.name, desc: def?.desc ?? '', burnt };
     const inScene = !!ctx.roomStage() && run.currentRoom === 'slot';
     if (!inScene) { showDemonReward(); return res; }
-    clearTimeout(demonFuse);
-    demonFuse = setTimeout(() => { demonFuse = null; showDemonReward(); }, 6000);
+    // 场景没回执（无场景/被拆）也要把特写放出来
+    fuses.arm('demon', 6000, showDemonReward);
     return res;
   }
   /**
@@ -109,8 +109,7 @@ export function createRunShowcase(ctx) {
   /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
    *  金币那拍**不再写"代价：xxx"**（上一拍刚演过，纯冗余）。 */
   function showDemonReward() {
-    clearTimeout(demonFuse);
-    demonFuse = null;
+    fuses.clear('demon');
     const p = demonRewardShow;
     demonRewardShow = null;
     if (!p) return false;
@@ -248,15 +247,14 @@ export function createRunShowcase(ctx) {
     const hasTile = !!shopPendingShow && [...(ctx.roomStage()?.rigs?.values() ?? [])]
       .some(r => (r.goodsTargets?.() ?? []).some(t => t.index === index));
     shopDispensing = hasTile;
-    clearTimeout(shopFuse);
-    shopFuse = null;
+    fuses.clear('shop');
     if (shopDispensing) {
-      shopFuse = setTimeout(() => {
-        shopFuse = null;
+      // 场景没回执（无场景/被拆）也要把特写放出来
+      fuses.arm('shop', 4000, () => {
         shopDispensing = false;
         shopShowcase(shopPendingShow);
         shopPendingShow = null;
-      }, 4000);
+      });
     }
     ctx.notify();
     if (!shopDispensing) { shopShowcase(shopPendingShow); shopPendingShow = null; }
@@ -265,8 +263,7 @@ export function createRunShowcase(ctx) {
   /** 场景回执：那件货已经掉进出货口了 → 播获得特写（遗物走全局差分那条线，口径统一）。 */
   function shopAnimDone(index) {
     if (run.gameStage !== 'room') return false;
-    clearTimeout(shopFuse);
-    shopFuse = null;
+    fuses.clear('shop');
     shopDispensing = false;
     const p = shopPendingShow && (index == null || shopPendingShow.index === index) ? shopPendingShow : null;
     shopPendingShow = null;
@@ -326,13 +323,10 @@ export function createRunShowcase(ctx) {
     }
   }
 
-  /** 离局清理：两个兜底定时器必须清掉（否则离局后仍可能开火——原实现漏清，本次补上），
-   *  挂起的待播演出/队列也一并弃掉（属于这一局，重进由检查点重建稳态）。 */
+  /** 离局清理：兜底保险丝必须清掉（否则离局后仍可能开火），挂起的待播演出/队列
+   *  一并弃掉（属于这一局，重进由检查点重建稳态）。 */
   function dispose() {
-    clearTimeout(demonFuse);
-    demonFuse = null;
-    clearTimeout(shopFuse);
-    shopFuse = null;
+    fuses.clearAll();
     demonRewardShow = null;
     shopPendingShow = null;
     shopDispensing = false;

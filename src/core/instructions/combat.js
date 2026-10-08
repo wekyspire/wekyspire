@@ -1,5 +1,6 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import { getEnemyDefinition, hasEnemy } from '../enemies/registry.js';
+import { AddEffectInstruction } from './effects.js';
 
 // ==== 伤害两原语（结算原语 DealDamage / 应用原语 ApplyDamage）====
 //
@@ -168,15 +169,26 @@ export class ApplyDamageInstruction extends BattleInstruction {
       // 靠 type='minor' 在舞台侧降规格（小数字、无击退、无震荡）；tags 供配方表配色；
       // killed 供致命击加重。全是标量，wire 描述符可序列化，观战端同源一致。
       type: this.type, tags: [...this.tags], fixed: this.fixed, killed: target.isDead(),
+      // 重击标记（标量）：舞台后仰/撑不住演出分流，与死亡节拍同源
+      heavy: isHeavyDamage(dmg, target),
     });
     if (target.isDead()) {
-      ctx.presenter?.unitDeath?.({ unit: target });
+      ctx.presenter?.unitDeath?.({ unit: target, heavy: isHeavyDamage(dmg, target) });
       // 亡语（敌人定义的 onDeath 钩子）：与 def.act 同上下文（actx = {...ctx, unit, def}）；
       // submitInstruction 的默认父节点 = 当前指令，故亡语作为「致死那一下」的子节点立即结算
       // ——不额外占节拍、不改回合序，也不需要新增一种「死亡指令」。
       if (target.defId && hasEnemy(target.defId)) {
         const def = getEnemyDefinition(target.defId);
         def?.onDeath?.({ ...ctx, unit: target, def });
+      }
+      // 假死净化（2026-10-07 用户定）：亡语后仍挂复活倒计时的单位（reviveKit 类假死）
+      // 效果全清——复苏不带旧状态归来。走 AddEffectInstruction 负层：订阅注销与
+      // 播报都在指令层，与「层数扣尽移除」同一管线。
+      if ((target._reviveCountdown ?? 0) > 0) {
+        for (const e of [...target.effects]) {
+          ctx.kernel.submitInstruction(
+            new AddEffectInstruction({ target, effectId: e.effectId, stacks: -e.stacks }), this);
+        }
       }
     }
     return true;
@@ -194,6 +206,12 @@ export function wouldBeLethal(instr, target) {
   let dmg = Math.max(raw - defense, 0);
   if (!pierce) dmg -= Math.min(target.shield, dmg);
   return target.hp - dmg <= target.getStat('minHp');
+}
+
+/** 重击判定（演出语义，2026-10-07 用户定）：单发生命值伤害 ≥ max(12, 目标最大生命 25%)
+ * ——舞台「受重击后仰弹回摇晃」「重击致死撑不住倒下」与死亡节拍 heavy 标记共用口径。 */
+export function isHeavyDamage(dealt, target) {
+  return dealt >= Math.max(12, (target?.maxHp ?? 0) * 0.25);
 }
 
 // 清空护盾（回合开始的护盾重置）。**执行时机必须晚于回合开始的效果结算**：

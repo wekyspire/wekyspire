@@ -359,7 +359,7 @@ function execBattle(S, cmd, t) {
         ? battle.battleState.enemies[idxOk(num(targetArg), battle.battleState.enemies.length, '敌人')] : null;
       // 指定目标已死：引擎会回落到首个存活敌人（cardKit.enemyTarget）——静默改打很坑，明确告知
       const deadTargetNote = target?.isDead() ? `（指定目标「${target.name}」已死，实际打向首个存活敌人）` : '';
-      // 离手副作用回执（V5/D 实报：强力飞刀弃两侧牌在 headless 里静默——误弃主力件
+      // 离手副作用回执（V5/D 实报：飞刀弃两侧牌在 headless 里静默——误弃主力件
       // 直到下个状态渲染才发现）：打出前快照手牌，结算后 diff 出「被打出的卡顺带
       // 弄丢的牌」并点名去向（牌库底/焚毁）。GUI 有动画可见，文本界面必须给回执。
       const handBefore = new Map(hand.map(s => [s.uniqueID, defOf(s).name]));
@@ -672,7 +672,7 @@ function execRoomTraining(S, t) {
     const due = beginTraining(run);
     S.lastOutcome = due
       ? '开始训练（训练次数+1）——修行达标，进阶事件当场引动！'
-        + '（当前已在进阶：dim 火|木|空|跳过 → ability <#>|skip，解完自动回房）'
+        + '（当前已在进阶：dim 火|跳过 → ability <#>|skip，解完自动回房）'
       : `开始训练（训练次数+1，累计 ${run.player.trainingCount}）——可选段：act draw 看四选一候选，不抓就处理营地/next 离开`;
     return;
   }
@@ -924,10 +924,9 @@ function execAscension(S, cmd, t) {
   const a = t[1];
   if (cmd === 'dim') {
     if (run.gameStage !== 'ascension') throw new Error('当前不在进阶事件');
-    // 维度别名表（与 PACK_ALIAS 同款本地化层；wood/air 内容 2026-09 已进 core，
-    // 此处早先只接了 fire，d-wood 试玩实报「木维度不存在」）
-    const DIM_ALIAS = { 火: 'fire', fire: 'fire', 木: 'wood', wood: 'wood', 空: 'air', air: 'air', 风: 'air' };
-    const DIM_LABEL = { fire: '火灵脉', wood: '木灵脉', air: '空灵脉' };
+    // 维度别名表（与 PACK_ALIAS 同款本地化层；当前可进阶维度只有火）
+    const DIM_ALIAS = { 火: 'fire', fire: 'fire' };
+    const DIM_LABEL = { fire: '火灵脉' };
     if (a === '跳过' || a === 'skip') { chooseAscension(run, null); S.lastOutcome = `跳过进阶（体修等阶+1，生命上限+3，删卡机会+1——remove <构筑#> [卡名] 使用，不用则保留；不回血不提魏启）`; }
     else if (DIM_ALIAS[a]) {
       const dim = DIM_ALIAS[a];
@@ -940,7 +939,7 @@ function execAscension(S, cmd, t) {
         : '';
       S.lastOutcome = `${DIM_LABEL[dim]} +1（恢复${ASCENSION_PLACEHOLDER.healAmount}点生命，魏启上限+1）${grantText}`;
     }
-    else throw new Error('dim 火 | dim 木 | dim 空 | dim 跳过');
+    else throw new Error('dim 火 | dim 跳过');
     return;
   }
   // ability

@@ -18,15 +18,21 @@
 //                    （×4 的冗余是为衰减后段留的：uCostGlow≈0.5 时峰值仍过阈。）
 //                    徽章位置 = rec.costBadges（CardObject._setBakedFace 按 cardFace.js
 //                    的 costBadgeUvs 填，rebind 时静态烘进 mask——换脸自动跟随）
+//   uReact     0..n  反应演出包络（受益/副作用发动，峰 = intensity）：JS 侧
+//                    攻击→保持→衰减推进；uReactKind 选配方（CARD_REACT_MODES），
+//                    uReactTime 为触发起秒（扫掠/扩散相位），uReactSeed 逐次随机。
+//                    受益配方峰过 bloom 阈（「流入的能量」会起晕），副作用配方压阈下
+//                    （焦蚀/瘀斑/崩裂是沉下去的读感，不发光）。
 //   uTime            秒计时（CardFxLayer 的层内统一钟推进）
 // 纪律：
 //   · 只动 rgb，不碰 alpha——命中热区/透明度语义零影响；
-//   · HDR 约定：焚毁火线峰 ~2.05 与徽章辉光 ×3.4 过 uiScene bloom 阈 1.45（刻意保留）；
-//     状态档（dim/highlight）全部压阈下——状态是读数不是演出；
-//   · 合成顺序固定：状态档 → 徽章辉光 → 焚毁（焚毁最大，盖过一切状态）。
+//   · HDR 约定：焚毁火线峰 ~2.05 与徽章辉光 ×3.4、反应受益配方过 uiScene bloom 阈 1.45
+//     （刻意保留）；状态档（dim/highlight）与副作用反应全部压阈下——状态是读数不是演出；
+//   · 合成顺序固定：状态档 → 徽章辉光 → 反应 → 焚毁（焚毁最大，盖过一切状态）。
 import {
   Fn, If, Discard, uniform, uv, materialColor,
   vec2, vec3, vec4, mix, sin, dot, floor, fract, oneMinus, length, smoothstep,
+  min, pow, exp, abs, step, clamp,
 } from 'three/tsl';
 
 const PATCH_KEY = '_cardBodyFx';
@@ -60,9 +66,111 @@ const cbfShade = Fn(([base, uDim, uHighlight, uTime]) => {
   return c;
 });
 
+// 反应配方 mode 词汇（uReactKind 取值）：体系 × 极性。体系归属 = 卡 type
+// （fire/wood/air…）优先，type 'normal' 的体系卡按 series 归宗（刀/拳/格挡）。
+export const CARD_REACT_MODES = {
+  fire: { benefit: 1, backfire: 2 },
+  blade: { benefit: 3, backfire: 4 },
+  body: { benefit: 5, backfire: 6 },
+  block: { benefit: 7, backfire: 8 },
+  normal: { benefit: 9, backfire: 10 },
+};
+const SERIES_SYSTEM = { blade: 'blade', fist: 'body', block: 'block' };
+
+/** 卡投影 + 极性 → 配方 mode（无专属配方的体系回落通用档）。 */
+export function cardReactMode(cardData, kind) {
+  const sys = cardData?.type && cardData.type !== 'normal'
+    ? cardData.type
+    : (SERIES_SYSTEM[cardData?.series] ?? 'normal');
+  return CARD_REACT_MODES[sys]?.[kind] ?? CARD_REACT_MODES.normal[kind] ?? 9;
+}
+
+// ---- 反应配方（C0 中段，受益/副作用发动）--------------------------------------
+// 每体系一对：benefit = 能量流入牌面（暖亮、过阈起晕）；backfire = 代价渗出
+// （焦化/瘀斑/崩裂，压暗阈下）。env = 包络（0..峰值），t = 触发起秒，seed = 逐次随机。
+const cbfReact = Fn(([c, fxUv, rec]) => {
+  const env = rec.uReact;
+  const t = rec.uReactTime;
+  const seed = rec.uReactSeed;
+  const o = c.toVar();
+  const edgeD = min(min(fxUv.x, oneMinus(fxUv.x)), min(fxUv.y, oneMinus(fxUv.y)));
+
+  // fire benefit：火脉自底缘涌入（上飘噪声脉 × 底部强势 mask），整体暖提
+  If(rec.uReactKind.equal(1), () => {
+    const n = cbfNoise(fxUv.mul(vec2(5.0, 7.0)).add(vec2(seed, seed.mul(0.7))).sub(vec2(0.0, t.mul(1.4))));
+    const vein = pow(n, 3.0).mul(oneMinus(smoothstep(0.15, 0.85, fxUv.y))).mul(env);
+    const fireCol = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.85, 0.35), env.mul(0.7));
+    o.assign(mix(o, o.mul(vec3(1.25, 1.05, 0.85)), env.mul(0.5)));
+    o.addAssign(fireCol.mul(vein).mul(3.2));
+  });
+  // fire backfire：焦黑自边缘向里爬 + 暗红裂线，压暗阈下
+  If(rec.uReactKind.equal(2), () => {
+    const n = cbfNoise(fxUv.mul(vec2(7.0, 9.0)).add(vec2(seed, seed)));
+    const creep = oneMinus(smoothstep(0.0, 0.30, edgeD.sub(env.mul(0.22)).add(n.sub(0.5).mul(0.18))));
+    const crack = pow(oneMinus(abs(n.mul(2.0).sub(1.0))), 6.0);
+    o.assign(mix(o, o.mul(vec3(0.30, 0.22, 0.18)), creep.mul(env).mul(0.85)));
+    o.addAssign(vec3(0.55, 0.08, 0.02).mul(crack).mul(creep).mul(env).mul(0.9));
+  });
+  // blade benefit：白热锤击线对角扫过 + 沿线火星散点（淬火一瞬）
+  If(rec.uReactKind.equal(3), () => {
+    const diag = fxUv.x.add(fxUv.y).mul(0.5);
+    const pos = clamp(t.mul(3.2), 0.0, 1.0).mul(1.3).sub(0.15);
+    const band = exp(abs(diag.sub(pos)).mul(-26.0));
+    const sparkN = cbfHash(floor(fxUv.mul(vec2(30.0, 40.0))).add(floor(t.mul(20.0))));
+    o.addAssign(vec3(0.85, 0.92, 1.05).mul(band).mul(env).mul(3.0));
+    o.addAssign(vec3(1.0, 0.75, 0.35).mul(step(0.93, sparkN).mul(band)).mul(env).mul(2.2));
+  });
+  // blade backfire：钝蚀——去饱和 + 蚀斑压暗
+  If(rec.uReactKind.equal(4), () => {
+    const g = dot(o, vec3(0.299, 0.587, 0.114));
+    const pit = step(0.72, cbfNoise(fxUv.mul(vec2(9.0, 12.0)).add(seed)));
+    o.assign(mix(o, vec3(g), env.mul(0.5)));
+    o.assign(mix(o, o.mul(vec3(0.45, 0.42, 0.40)), pit.mul(env).mul(0.7)));
+  });
+  // body benefit：气血径向涌波（中心偏下起，随时间外扩）
+  If(rec.uReactKind.equal(5), () => {
+    const r = length(fxUv.sub(vec2(0.5, 0.35)));
+    const wave = exp(abs(r.sub(t.mul(0.9))).mul(-10.0));
+    o.assign(mix(o, o.mul(vec3(1.3, 0.95, 0.75)), env.mul(0.45)));
+    o.addAssign(vec3(1.0, 0.35, 0.15).mul(wave).mul(env).mul(2.4));
+  });
+  // body backfire：瘀斑渗开 + 整体沉
+  If(rec.uReactKind.equal(6), () => {
+    const n = cbfNoise(fxUv.mul(vec2(4.0, 5.5)).add(vec2(seed.mul(1.3), seed)));
+    const blotch = smoothstep(0.45, 0.75, n);
+    o.assign(mix(o, o.mul(vec3(0.55, 0.35, 0.60)), blotch.mul(env).mul(0.8)));
+    o.mulAssign(oneMinus(env.mul(0.25)));
+  });
+  // block benefit：加固——四边金亮内收环 + 微提
+  If(rec.uReactKind.equal(7), () => {
+    const rim = exp(edgeD.mul(-9.0));
+    o.addAssign(vec3(1.0, 0.82, 0.40).mul(rim).mul(env).mul(2.6));
+    o.assign(mix(o, o.mul(vec3(1.12, 1.08, 0.95)), env.mul(0.35)));
+  });
+  // block backfire：崩裂——细白裂纹 + 压暗
+  If(rec.uReactKind.equal(8), () => {
+    const n = cbfNoise(fxUv.mul(vec2(8.0, 11.0)).add(seed));
+    const crack = pow(oneMinus(abs(n.mul(2.0).sub(1.0))), 8.0);
+    o.mulAssign(oneMinus(env.mul(0.30)));
+    o.addAssign(vec3(0.75, 0.78, 0.85).mul(crack).mul(env).mul(1.1));
+  });
+  // generic benefit：柔金提亮 + 细闪点
+  If(rec.uReactKind.equal(9), () => {
+    o.assign(mix(o, o.mul(vec3(1.20, 1.12, 0.95)), env.mul(0.6)));
+    const tw = step(0.90, cbfHash(floor(fxUv.mul(vec2(24.0, 32.0))).add(floor(t.mul(14.0)))));
+    o.addAssign(vec3(1.0, 0.95, 0.75).mul(tw).mul(env).mul(1.6));
+  });
+  // generic backfire：灰黯沉降
+  If(rec.uReactKind.equal(10), () => {
+    const g = dot(o, vec3(0.299, 0.587, 0.114));
+    o.assign(mix(o, vec3(g.mul(0.55)), env.mul(0.7)));
+  });
+  return o;
+});
+
 /**
  * 给牌面材质挂 C0 特效（幂等：已挂过直接取原记录）。
- * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, uCostGlow, costBadges, rebind: () => void }}
+ * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, uCostGlow, uReact, uReactKind, uReactTime, uReactSeed, costBadges, rebind: () => void }}
  */
 export function attachCardBodyFx(material) {
   if (material.userData[PATCH_KEY]) return material.userData[PATCH_KEY];
@@ -73,6 +181,10 @@ export function attachCardBodyFx(material) {
     uHighlight: uniform(0),
     uTime: uniform(0),
     uCostGlow: uniform(0),
+    uReact: uniform(0),
+    uReactKind: uniform(0),
+    uReactTime: uniform(0),
+    uReactSeed: uniform(0),
     // 出席费用徽章 [{kind:'mana'|'ap', u, vTop}]（纹理 uv，v 顶起）——
     // CardObject._setBakedFace 按 cardFace.costBadgeUvs 填；rebind 烘成 mask 常量
     costBadges: [],
@@ -99,6 +211,10 @@ export function attachCardBodyFx(material) {
             c.assign(mix(c, c.mul(4.0), m.mul(rec.uCostGlow)));
             c.addAssign(tint.mul(m).mul(rec.uCostGlow).mul(0.3));
           }
+        });
+        // 反应演出（受益/副作用发动，配方见 cbfReact；包络 JS 侧推进）
+        If(rec.uReact.greaterThan(0.001), () => {
+          c.assign(cbfReact(c, fxUv, rec));
         });
         // 焚毁（C0 上段，离场演出）：双频值噪声咬边火线，自底向上吞蚀
         If(rec.uBurn.greaterThan(0.001), () => {

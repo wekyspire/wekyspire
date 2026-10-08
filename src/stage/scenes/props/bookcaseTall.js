@@ -4,6 +4,7 @@
 // 书脊前缘齐平。变体走 build(opts)：层高系数 lean（乱架程度，0=整齐 1=散乱）。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 // 书脊色带（调色板内取色，冷月夜下的旧书堆——赭/暗红/青绿/羊皮/木深交替）
@@ -14,7 +15,7 @@ export default {
   place: 'wallStructure',
   bayWidth: 2,
   tags: ['wood', 'library'],
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ lean = 0.3, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('bookcaseTall');

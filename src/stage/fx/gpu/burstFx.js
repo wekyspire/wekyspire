@@ -5,21 +5,27 @@
 //   · 出生点 (x, y, z) 走 per-burst `at`（多爆发并发指向不同点位互不惊扰）；
 //   · 渲染口径对齐旧点粒子：radial ≈ speed×0.9（旧逐粒子 0.5~1.3 随机的均值带），
 //     ttlJit 0.3 ≈ 旧 ±30%，alpha×(1-age) 同旧线性淡出，ageHeat 补逐粒子亮度抖动的层次。
-// 旧 CPU 池的文本/贴图粒子与剧本 emitter 由 floatFx.js 承接（见该文件头）。
+// CPU/GPU 分工（2026-10-07 用户定，细则见 AGENTS）：spawn/spawnEmitter = GPU（默认路径，
+// 后者经 ambientMotes 桥承载）；floatFx 只承接 spawnText/spawnSprite（per-粒子纹理/文本
+// 且总量十几个以内——CPU 双条件职责）。
 
 import * as THREE from 'three';
 import { defineParticleType } from './particleTypes.js';
 import { createFloatFx } from '../floatFx.js';
+import { createAmbientEmitterBridge } from './ambientMotes.js';
 
 const BURST_TYPE_CACHE = new Map();   // 参数组合 → 类型 id（模块级跨局共享）
 
 /**
- * 组合门面：spawn 走 GPU 池 burst；spawnText/spawnSprite/spawnEmitter/update 与
- * points/sprites/spritesUI 容器、activeCount 读数转接 floatFx——调用点零改动。
- * @param {object|null} worldPool 粒子池 v2 世界实例（null = 无 WebGPU，spawn 静默跳过）
+ * 组合门面：spawn 走 GPU 池 burst；spawnEmitter 走 ambientMotes 桥（GPU custom
+ * 类型）；spawnText/spawnSprite 与 sprites/spritesUI 容器转接 floatFx。
+ * @param {object|null} worldPool 粒子池 v2 世界实例（null = 无 WebGPU，spawn/
+ *   发射器静默降级为无操作句柄——headless 无渲染诉求）
  */
-export function createBurstFacade(worldPool) {
+export function createBurstFacade(worldPool, getCamera = null) {
   const floatFx = createFloatFx();
+  const ambience = createAmbientEmitterBridge(worldPool, getCamera);
+  const nullEmitter = () => ({ rate: 0, stopped: true, stop() {}, setPosition() {} });
 
   function spawn(x, y, o = {}) {
     if (!worldPool) return;
@@ -51,12 +57,10 @@ export function createBurstFacade(worldPool) {
     spawn,
     spawnText: floatFx.spawnText,
     spawnSprite: floatFx.spawnSprite,
-    spawnEmitter: floatFx.spawnEmitter,
-    update: floatFx.update,
-    get points() { return floatFx.points; },
+    spawnEmitter: (x, y, o) => (ambience ? ambience.spawnEmitter(x, y, o) : nullEmitter()),
+    update: (dt) => { floatFx.update(dt); ambience?.update(dt); },
     get sprites() { return floatFx.sprites; },
     get spritesUI() { return floatFx.spritesUI; },
-    get activeCount() { return floatFx.activeCount; },
     get activeSpriteCount() { return floatFx.activeSpriteCount; },
   };
 }

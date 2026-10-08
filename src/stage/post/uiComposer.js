@@ -14,6 +14,7 @@ import {
   tslFinalUi,
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from './passes.js';
+import { uSceneGrade } from '../fx/sceneMood.js';
 import { createBloomChain } from './bloomChain.js';
 import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 
@@ -42,7 +43,7 @@ export function createUiComposer() {
   const tColor = texture(blackTex);
   const tBloom = texture(blackTex);
   const uBloom = uniform(bloomParams.strength);
-  const finalScene = makeFullScreenPass(tslFinalUi(tColor, tBloom, uBloom));
+  const finalScene = makeFullScreenPass(tslFinalUi(tColor, tBloom, uBloom, uSceneGrade));
   {
     // 铁律①：终段 premultiplied 合成（rgb 已是预乘色，不再乘 alpha）
     const mat = finalScene.children[0].material;

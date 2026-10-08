@@ -3,6 +3,7 @@
 // 磨亮坐面=座板比椅身木色提亮一档（久坐磨出的光面）。变体走 build(opts)：背高 / 磨亮程度。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture', 'quarters'],
   footprint: { x: 1.8, z: 1.9 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ backH = 4.6, polish = 0.15, rng } = {}) {
     const g = new THREE.Group();
     // 前腿一对（方细腿，后腿即背柱见下）

@@ -17,6 +17,18 @@ export default class AIActInstruction extends BattleInstruction {
     if (this._stage === 0) {
       this._stage = 1;
       if (this.unit.isDead()) return true;
+      // 敌方行动起手播报（fx 五模板通配）：意图快照（kinds/hits 标量）→ 舞台剧本
+      // 按模板分流（攻击类不演、施法类起手）。瑞米等盟友（side 'player'）不报；
+      // 晕眩行动被 PRE veto 在本 stage 之前，播报天然不发。
+      if (this.unit.side === 'enemy' && ctx.presenter?.playScript) {
+        const it = this.unit.intention ?? {};
+        ctx.presenter.playScript({
+          script: 'enemyAct',
+          unit: this.unit.uniqueID,
+          kinds: [...(it.kinds ?? [])],
+          hits: it.hits ?? 0,
+        });
+      }
       const def = this.resolveDef(this.unit.defId);
       def.act({ ...ctx, unit: this.unit, def });
       this.unit.actionIndex += 1;

@@ -44,9 +44,9 @@ const file = sessionPath(sessionName);
 
 if (argv[0] === 'new') {
   const seed = Number.parseInt(argv[1] ?? '', 10);
-  if (!Number.isInteger(seed)) { console.error('用法: new <种子数字> [路线]（路线 = body/fire/wood/air，缺省 body）'); process.exit(1); }
+  if (!Number.isInteger(seed)) { console.error('用法: new <种子数字> [路线]（路线 = body/fire，缺省 body）'); process.exit(1); }
   const route = argv[2] ?? 'body';
-  if (!['body', 'fire', 'wood', 'air'].includes(route)) { console.error(`未知路线：${route}（可选 body/fire/wood/air）`); process.exit(1); }
+  if (!['body', 'fire'].includes(route)) { console.error(`未知路线：${route}（可选 body/fire）`); process.exit(1); }
   if (fs.existsSync(file)) {
     console.error(`会话已存在：${file}`);
     console.error(`（不用再 new：直接给动作即可，例如 node tools/headlessPlay.mjs ${sessionName} state）`);

@@ -198,6 +198,7 @@ export class ScrollPickerObject extends THREE.Group {
     }
     this._nodes = [];
     this._selected.clear();
+    this._hovered?.obj?.setShiftHover?.(false);   // 关闭/清场：悬停态必还原
     this._hovered = null;
     this._barDrag = null;
     this._scrollY = 0;
@@ -223,6 +224,7 @@ export class ScrollPickerObject extends THREE.Group {
     const i = this._entries.findIndex(e => e.key === key);
     if (i < 0) return null;
     const [entry] = this._entries.splice(i, 1);
+    entry.obj?.setShiftHover?.(false);            // 摘牌带走前还原详情面
     this._picker?.removePickable(entry.id);
     this.remove(entry.obj);
     return entry;
@@ -466,7 +468,9 @@ export class ScrollPickerObject extends THREE.Group {
 
   _setHovered(entry) {
     if (this._hovered === entry) return;
+    this._hovered?.obj?.setShiftHover?.(false);   // Shift 详情通用化：离卡还原
     this._hovered = entry;
+    entry?.obj?.setShiftHover?.(true);            // 压卡喂入（卡内与全局 Shift 合成）
     if (!entry) this._hideTooltip();
     this._applySelection();
   }

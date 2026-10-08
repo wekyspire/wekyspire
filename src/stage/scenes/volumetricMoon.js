@@ -28,6 +28,7 @@ import {
   tslFinalWorld, passUV,
   makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass,
 } from '../post/passes.js';
+import { uSceneGrade } from '../fx/sceneMood.js';
 import { createBloomChain } from '../post/bloomChain.js';
 import { renderBloomOffsetPass } from '../fx/bloomOffset.js';
 
@@ -209,7 +210,7 @@ export function createVolumetricMoonlight({
   const bloom = createBloomChain(bloomParams);
   let marchScene = makeFullScreenPass(vmMarch(u, marchSteps));
   const compositeScene = makeFullScreenPass(vmComposite(tDiffuse, tLight, uTint));
-  const finalScene = makeFullScreenPass(tslFinalWorld(tFinalColor, tFinalBloom, uBloomStr));
+  const finalScene = makeFullScreenPass(tslFinalWorld(tFinalColor, tFinalBloom, uBloomStr, uSceneGrade));
   let lastW = 2, lastH = 2;   // setQuality 重缩放用
 
   function resize(w, h) {
@@ -326,6 +327,9 @@ export function createVolumetricMoonlight({
   return {
     render, resize, dispose, setBloom, bloomParams, setQuality,
     get marchQuality() { return { scale: marchScale, steps: marchSteps }; },
+    /** 场景调色（composite 段 uTint，线性域乘算）：运行期推氛围（咏唱场景暖调等）。
+     *  纯 uniform 直推——零管线重建；r/g/b 缺省 1（白 = 不调）。 */
+    setSceneTint(rgb) { uTint.value.setRGB(rgb[0] ?? 1, rgb[1] ?? 1, rgb[2] ?? 1); },
     _uniforms: u,                    // 调试/调参口（页面内实时改 density 等；.value 直推）
     _compositeUniforms: { tDiffuse, tLight, uTint },
     /** 调试探针口：RT 现场只读暴露（排障用；别在渲染逻辑里消费）。 */

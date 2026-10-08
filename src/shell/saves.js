@@ -4,6 +4,8 @@
 // 槽位隔离：肉鸽 / 故事 / **调试** 各占一个槽，互不覆盖——调试局（改过状态的局）只写
 // debug 槽，真实存档永不被污染（见 runController 的 persist 守卫与 modeOf）。
 
+import { cloneModifiers } from '../core/skills/cardModifiers.js';
+
 const KEYS = Object.freeze({
   infinite: 'wekyspire:save:infinite',
   story: 'wekyspire:save:story',
@@ -84,7 +86,8 @@ export function snapshotRun(run) {
       mana: p.mana, maxMana: p.maxMana,
       maxActionPoints: p.maxActionPoints,
       money: p.money,
-      deck: p.deck.map(rt => ({ ...rt })),
+      // modifiers 深拷贝：快照与活局不共享引用（后续挂/摘不得改写历史快照）
+      deck: p.deck.map(rt => ({ ...rt, modifiers: cloneModifiers(rt.modifiers) })),
       abilities: [...p.abilities],
       relics: [...p.relics],
       equippedRelics: [...p.equippedRelics],

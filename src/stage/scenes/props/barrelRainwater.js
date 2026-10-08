@@ -6,6 +6,7 @@
 // 外伸木柄斜搭口沿。变体走 build(opts)：桶高 h/箍数 hoops/木瓢有无 ladle。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -14,7 +15,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'kitchen'],
   footprint: { x: 2.6, z: 2.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ h = 3.5, hoops = 3, ladle = true, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('barrelRainwater');

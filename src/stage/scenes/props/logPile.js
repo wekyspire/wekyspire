@@ -5,6 +5,7 @@
 // 变体走 build(opts)：底行根数/层数/切面密度/残茬数。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 const LOG_R = 0.28;
@@ -29,7 +30,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'kitchen'],
   footprint: { x: 4.3, z: 2.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ baseRows = 7, layers = 3, capRate = 0.8, stubs = 3, rng } = {}) {
     const g = new THREE.Group();
     const r = rng ?? K.createRng('logPile');

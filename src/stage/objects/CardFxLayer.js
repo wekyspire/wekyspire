@@ -230,8 +230,21 @@ export class CardFxLayer extends THREE.Group {
     this._lock = null;       // 锁定特效组（四角瞄准括号，惰性创建）
     this._pulse = null;      // 脉冲平面
     this._pulseTl = null;    // { elapsed, duration, scale } | null
+    this._react = null;      // 反应演出时间线 { t, i }（C0 shader 块，见 cardBodyFx.cbfReact）
     this._edgeGlow = null;   // 咏唱流光面片（自定义 shader，惰性创建）
     this._edgeUniforms = null; // 面片 uniforms 句柄（update 推进 uTime/uFade）
+  }
+
+  /**
+   * 卡面反应演出（受益/副作用发动）：C0 牌面 shader 配方，体系 × 极性选 mode
+   * （cardBodyFx.CARD_REACT_MODES / cardReactMode 解析）。重触发重置时间线；
+   * 包络（攻击→保持→衰减）由 update() 自推进，播完自动归零。
+   */
+  react({ mode = 9, intensity = 1 } = {}) {
+    if (!this.body) return;
+    this.body.uReactKind.value = mode;
+    this.body.uReactSeed.value = Math.random() * 97.0;
+    this._react = { t: 0, i: Math.max(0.2, intensity) };
   }
 
   /** 一次性加色闪光（冷却推进/衰败反向/威力提升）。重触发即重置时间线（新脉冲顶掉旧脉冲）。 */
@@ -247,6 +260,7 @@ export class CardFxLayer extends THREE.Group {
       this.add(this._pulse);
     }
     this._pulse.material.color.set(color);
+    this._pulse.material.opacity = PULSE_OPACITY; // 重触发重置（update 里会随时间衰减）
     this._pulseTl = { elapsed: 0, duration: Math.max(0.001, durationMs / 1000), scale };
     this._pulse.scale.set(scale, scale, 1);
     this._pulse.visible = true;
@@ -461,9 +475,11 @@ export class CardFxLayer extends THREE.Group {
     this.setLocked(false);
     if (this._pulse) this._pulse.visible = false;
     this._pulseTl = null;
+    this._react = null;
+    if (this.body) { this.body.uReact.value = 0; this.body.uReactKind.value = 0; }
   }
 
-  /** 帧驱动：C0 状态收敛与钟 / 脉冲进度回程 / 盖纱呼吸 / 流光 shader 时钟与淡入。 */
+  /** 帧驱动：C0 状态收敛与钟 / 脉冲进度回程 / 反应包络 / 盖纱呼吸 / 流光 shader 时钟与淡入。 */
   update(dt) {
     this._t += dt;
     if (this.body) {
@@ -476,12 +492,30 @@ export class CardFxLayer extends THREE.Group {
       if (Math.abs(this._hlT - this._hl) < 1e-3) this._hl = this._hlT;
       this.body.uDim.value = this._dim;
       this.body.uHighlight.value = this._hl;
+      // 反应包络：70ms 攻击 → 120ms 保持 → 620ms 衰减，峰值 = intensity
+      if (this._react) {
+        const r = this._react;
+        r.t += dt;
+        const e = r.t < 0.07 ? r.t / 0.07
+          : r.t < 0.19 ? 1
+            : Math.max(0, 1 - (r.t - 0.19) / 0.62);
+        this.body.uReact.value = e * r.i;
+        this.body.uReactTime.value = r.t;
+        if (e <= 0 && r.t >= 0.19) {
+          this._react = null;
+          this.body.uReact.value = 0;
+          this.body.uReactKind.value = 0;
+        }
+      }
     }
     if (this._pulse?.visible && this._pulseTl) {
       this._pulseTl.elapsed += dt;
       const k = Math.min(this._pulseTl.elapsed / this._pulseTl.duration, 1);
       const s = this._pulseTl.scale + (1 - this._pulseTl.scale) * k; // scale→1 回程
       this._pulse.scale.set(s, s, 1);
+      // 不透明度随时间衰减（(1-k)^1.6）：闪光应「一闪即灭」。不衰减会在咏唱激活的
+      // 放缩段把整卡洗白（亮面卡 + 0.55 恒亮加色 + bloom = 牌面短暂消失）
+      this._pulse.material.opacity = PULSE_OPACITY * (1 - k) ** 1.6;
       if (k >= 1) {
         this._pulse.visible = false;
         this._pulseTl = null;
@@ -528,6 +562,8 @@ export class CardFxLayer extends THREE.Group {
       this.body.uBurn.value = 0;
       this.body.uDim.value = 0;
       this.body.uHighlight.value = 0;
+      this.body.uReact.value = 0;
+      this.body.uReactKind.value = 0;
     }
     if (this._pulse) {
       this.remove(this._pulse);

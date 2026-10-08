@@ -1,4 +1,5 @@
 // 指针输入域（BattleStage 原型混入，this = BattleStage 宿主）：
+import { setCardShiftDown } from '../../objects/CardObject.js';
 // hover/拖拽/瞄准/Shift 详情/滚轮 + 目标池与判定。App.vue 指针路由进 handlePointer*；
 // 输入态存宿主字段（_hoveredCardId/_dragging/_aiming/_shiftDown 等），与视图/同步域共享。
 
@@ -74,12 +75,6 @@ export const inputBeats = {
     this._btnHover[key] = on;
     this._setButtonState(key);   // 用缓存的上一次数据重烘（hover 已进签名）
     if (key === 'main') this._updateDoomMarks();
-  },
-  // 滚轮：转发给选卡套件（全屏选卡界面的滚动）。战斗舞台此前漏了这一手（Map/Room 都有）
-  // ——战后删卡界面画在战斗舞台 uiScene 上，App 的 activeStage() 会把滚轮喂到这里，
-  // 缺这个方法时静默落空（实报「删卡界面滚轮无响应」的病灶）。
-  handleWheel(deltaY) {
-    return this._pickerKit.handleWheel(deltaY);
   },
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
@@ -298,19 +293,18 @@ export const inputBeats = {
 
   // ========== Shift 详情卡面（应用描述 ↔ 未应用描述临时切换） ==========
 
-  /** Shift 键态入口（window 监听 / 单测直调）：驱动压着卡的详情面切换。 */,
+  /** Shift 键态入口（单测直调；window 监听已由 CardObject 模块级通用件接管）。 */,
   setShiftDown(on) {
     on = !!on;
-    if (on === this._shiftDown) return;
-    this._shiftDown = on;
-    this._refreshShiftFace();
+    this._shiftDown = on;   // 本地镜像（排查读数用），生效走全局通用态
+    setCardShiftDown(on);
   },
   // 指针压卡跟踪：整卡或卡面 token 都算"压着"——详情态悬到 S 方标（token）上也不得闪切回
   _setOverCard(hit) {
     const id = (hit?.kind === 'card' || hit?.kind === 'token') ? hit.id : null;
     if (this._overCardId === id) return;
     this._overCardId = id;
-    this._refreshShiftFace();
+    this._refreshShiftFace();   // 喂悬停（详情面由卡内 shift×hover 合成）
     // 容量珠 hover 联动：指针压着的卡 → slot 按 card 主匹配，它占用的珠/迷你竖线改 HDR 色
     this._capacityBeads.setHover(id);
   }

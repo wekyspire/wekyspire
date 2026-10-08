@@ -3,6 +3,7 @@ import { cloneSkillRuntime } from '../state/skillRuntime.js';
 import { moveCard, aliveEnemies } from '../state/battleState.js';
 import { enterBattle } from '../skills/helpers.js';
 import { getSkillDefinition } from '../skills/registry.js';
+import { keywordsOf } from '../skills/cardModifiers.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
@@ -45,7 +46,7 @@ export class PreBattleInstruction extends BattleInstruction {
       }
 
       // 玩家战斗字段重置（hp/money/deck 等 run 级不动）：
-      // 魏启为战斗内资源——入战置为上限一半（下取整，battle.md §6），自然恢复走回合开始 +1
+      // 魏启为战斗内资源——入战置 0、回合 1 自动回 1（见下方 player.mana 赋值行）
       player.shield = 0;
       // debug 无敌是「面板开关」语义（开了就该一直无敌直到手动关）——跨战斗边界
       // 保活，不随下面的效果清空消失（夜测 r2路2 探针实报：战前开启进战斗即失效）
@@ -53,9 +54,8 @@ export class PreBattleInstruction extends BattleInstruction {
       player.clearEffects();
       if (keepInvuln) player.addEffect('invulnerable', 1);
       player.actionPoints = player.maxActionPoints;
-      // 入战魏启固定 1（2026-09-30 用户定：不再按上限一半——上限抬高不该免费换成开局爆发，
-      // 回蓝节奏完全交给回合开始 +1 与回蓝件）。可乐等「入战额外恢复」叠加其上。
-      player.mana = 1;
+      // 入战魏启固定 0（2026-10-07 用户定）：回合 1 开始自动回 1，实际 1 魏启开局。
+      player.mana = 0;
       // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清
       const manaGift = runState.pendingManaBonus ?? 0;
       if (manaGift > 0) {
@@ -68,10 +68,10 @@ export class PreBattleInstruction extends BattleInstruction {
       battleState.rng.shuffle(battleState.zones.deck);
       for (const skill of battleState.zones.deck) enterBattle(ctx, skill);
       // 固有（named 术语，keywords 'innate'）：游戏开始时在牌库中的固有卡直接入手——
-      // 不占初始抽牌位，起手必然见到（鬼抽保险「情况不对」等）。裸 moveCard 静默迁移：
-      // 首个 battleStart 快照自然覆盖显示
+      // 不占初始抽牌位，起手必然见到（鬼抽保险「情况不对」等）。词条读有效视图
+      // （modifier 可挂固有）。裸 moveCard 静默迁移：首个 battleStart 快照自然覆盖显示
       for (const skill of [...battleState.zones.deck]) {
-        if (getSkillDefinition(skill.defId).keywords?.includes('innate')) {
+        if (keywordsOf(skill).includes('innate')) {
           moveCard(battleState, skill.uniqueID, 'hand');
         }
       }

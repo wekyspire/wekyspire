@@ -3,6 +3,7 @@
 // 桌缘色差=台面下沿一圈略外凸的深色边带。变体走 build(opts)：桌径 / 三脚外撇角 / 边带。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture', 'quarters'],
   footprint: { x: 5.4, z: 5.4 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ dia = 5, splay = 0.72, rimBand = true, rng } = {}) {
     const g = new THREE.Group();
     const r = dia / 2;

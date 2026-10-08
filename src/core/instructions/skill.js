@@ -4,6 +4,7 @@ import { getSkillDefinition } from '../skills/registry.js';
 import {
   makeSkillCtx, deactivateChant, freeChantToggle, chantActivationLegal,
 } from '../skills/helpers.js';
+import { keywordsOf, costOf, cooldownOf } from '../skills/cardModifiers.js';
 import { ConsumeManaInstruction, ConsumeActionPointsInstruction } from './resources.js';
 import { refreshIntentions } from './aiAct.js';
 
@@ -43,8 +44,9 @@ export class UseSkillInstruction extends BattleInstruction {
         // 咏唱双态意图（费用豁免与收尾分流都读它；费用指令在其子节点执行时卡未离手）
         this._chantOff = sctx.def.cardMode === 'chant' && this.skill.isActivated;
         // target = 玩家指定的目标单位 id（免目标卡为 null）——施术演出（stage spellFx）
-        // 的世界向落点依据；纯标量，可过 wire（观战端同口径）
-        ctx.presenter?.skillUsed?.({ skill: this.skill, def: sctx.def, target: this.targetUniqueID });
+        // 的世界向落点依据；纯标量，可过 wire（观战端同口径）。
+        // chantOff = 本次打出是「解除已激活咏唱」——表现层据此换解除演出（激活/解除分家）
+        ctx.presenter?.skillUsed?.({ skill: this.skill, def: sctx.def, target: this.targetUniqueID, chantOff: this._chantOff });
         ctx.kernel.submitInstruction(
           new ConsumeSkillResourcesInstruction({ skill: this.skill, costOverride: this.costOverride }), this);
         return false;
@@ -55,10 +57,12 @@ export class UseSkillInstruction extends BattleInstruction {
         // 先手捕获：本回合首张打出 = 此前无出牌计数且结算区无卡（嵌套出牌时母卡已占坑）
         this._firstPlayThisTurn = ctx.battleState.history.turn.played === 0
           && ctx.battleState.zones.pending.length === 0;
-        // 打出已激活咏唱 = 免费解除：离手前先熄（播报/注销订阅在 deactivateChant 内）；
+        // 打出已激活咏唱 = 免费解除：离手前先熄（播报/注销订阅/冷却锚定在 deactivateChant 内）；
         // 解除目标随行（终止类群伤的软指定：选定目标恒最后命中）
-        if (this._chantOff) deactivateChant(ctx, this.skill, 'played',
-          this.targetUniqueID ? findAliveUnit(ctx, this.targetUniqueID) : null);
+        if (this._chantOff) {
+          deactivateChant(ctx, this.skill, 'played',
+            this.targetUniqueID ? findAliveUnit(ctx, this.targetUniqueID) : null);
+        }
         moveCard(ctx.battleState, this.skill.uniqueID, 'pending');
         ctx.kernel.submitInstruction(new ActivateSkillInstruction({
           skill: this.skill,
@@ -106,8 +110,8 @@ export class UseSkillInstruction extends BattleInstruction {
               anim: def.activated ? (def.activated.anim ?? { kind: 'pulse' }) : null,
             });
           }
-        } else if (def.keywords?.includes('exhaust')) {
-          // 消耗卡（含咏唱解除）：→ 焚毁区
+        } else if (keywordsOf(this.skill).includes('exhaust')) {
+          // 消耗卡（含咏唱解除）：→ 焚毁区（词条读有效视图——modifier 可挂/摘消耗）
           moveCard(ctx.battleState, this.skill.uniqueID, 'burnt');
           ctx.presenter?.cardBurnt?.({ card: this.skill });
         } else {
@@ -126,11 +130,9 @@ export class UseSkillInstruction extends BattleInstruction {
 }
 
 // 资源消耗：费用不直接扣，而是提交资源指令——费用修正（PRE 订阅）因此对技能费用生效。
-// 费用取值优先级（统一覆写通道）：激活态咏唱打出恒免费（关停语义）＞
-// 指令级 costOverride（嵌套出牌豁免：万变拳/铁雨/漂浮）＞ runtime costOverride
-// （随卡旅行的费用覆写：控火术：无上「发现 0 费」等——经 createSkillRuntime/addCard 的
-// overrides 盖章，对本场战斗存活期持续生效）＞ 定义费用 def.cost。
-// 逐卡动态加价（manaCostDelta）只叠在**定义费用**上，任何覆写命中即不叠加。
+// 费用取值（统一有效视图 cardModifiers.costOf）：def ⊕ modifier patch ⊕ legacy 末端合成
+// （runtime costOverride / manaCostDelta / apCostShift）；指令级 costOverride（嵌套出牌
+// 豁免：万变拳/铁雨/漂浮）最后落地、按费种覆盖。激活态咏唱打出恒免费（关停语义）。
 // 充能消耗不受影响。
 export class ConsumeSkillResourcesInstruction extends BattleInstruction {
   constructor({ skill, costOverride = null }, opts = {}) {
@@ -143,15 +145,11 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
     const def = getSkillDefinition(this.skill.defId);
     if (this._stage === 0) {
       const free = freeChantToggle(def, this.skill);
-      // 覆写链：指令级（嵌套强发）＞ runtime 级（随卡旅行）＞ 定义费用
-      const ov = this.costOverride ?? this.skill.costOverride ?? null;
-      let rawMana = free ? 0 : ov?.mana ?? def.cost?.mana ?? 0;
-      const rawAp = free ? 0 : ov?.actionPoint ?? def.cost?.actionPoint ?? 0;
-      // 逐卡动态费用（runtime 计数加价，如蓄热火球链）：只叠在**定义费用**上——
-      // 任何覆写（指令级/runtime 级）与免费窗口均不叠加
-      if (!free && !ov && typeof rawMana === 'number') {
-        rawMana += def.manaCostDelta?.(makeSkillCtx(ctx, this.skill)) ?? 0;
-      }
+      // 费用统一走有效视图（def ⊕ modifier patch ⊕ legacy 通道，见 cardModifiers.costOf）；
+      // 指令级 costOverride（嵌套强发豁免）最后落地，按费种覆盖视图值。
+      const eff = costOf(this.skill, makeSkillCtx(ctx, this.skill));
+      let rawMana = free ? 0 : this.costOverride?.mana ?? eff.mana;
+      let rawAp = free ? 0 : this.costOverride?.actionPoint ?? eff.actionPoint;
       // 【X 费】cost 为 'X' = 打出时点的全部现有资源（NAMED「消耗为X」）。实付量记在
       // runtime.xCost 上供卡牌效果读取——支付先于 use()，效果读不到余额。
       const mana = rawMana === 'X' ? ctx.player.mana : rawMana;
@@ -163,11 +161,14 @@ export class ConsumeSkillResourcesInstruction extends BattleInstruction {
         { amount: ap, sourceSkillId: this.skill.uniqueID }), this);
       return false;
     }
-    // 消耗一次充能，并按需启动冷却计时
+    // 消耗一次充能，并按需启动冷却计时。咏唱例外：激活不启动冷却——
+    // 咏唱冷却只自终止起算，锚点统一在 deactivateChant（不能依赖 max:Infinity
+    // 恰好绕过此分支）
     this.skill.remainingUses -= 1;
     const max = def.charges?.max ?? Infinity;
-    const cd = def.charges?.cooldownTurns ?? 0;
-    if (cd > 0 && this.skill.remainingUses < max && this.skill.currentCooldown === 0) {
+    const cd = cooldownOf(this.skill); // 冷却时长走有效视图（modifier 可 patch 出冷却）
+    if (cd > 0 && def.cardMode !== 'chant'
+      && this.skill.remainingUses < max && this.skill.currentCooldown === 0) {
       this.skill.currentCooldown = cd;
     }
     return true;
@@ -228,7 +229,7 @@ export class SkillCooldownInstruction extends BattleInstruction {
   execute(ctx) {
     const def = getSkillDefinition(this.skill.defId);
     const max = def.charges?.max ?? Infinity;
-    const cd = def.charges?.cooldownTurns ?? 0;
+    const cd = cooldownOf(this.skill); // 未满继续下一段充能的时长同样吃 modifier patch
     const delta = this.payload.delta ?? this.delta;
     if (delta > 0) {
       let stepped = 0;
@@ -261,8 +262,11 @@ export class SweepSkillCooldownInstruction extends BattleInstruction {
         const zones = def.cooldownZones ?? ['hand', 'deck'];
         if (!zones.includes(zoneName)) continue;
         const max = def.charges?.max ?? Infinity;
-        const cd = def.charges?.cooldownTurns ?? 0;
-        if (cd === 0 || skill.remainingUses >= max || skill.currentCooldown <= 0) continue;
+        const cd = cooldownOf(skill);
+        if (cd === 0 || skill.currentCooldown <= 0) continue;
+        // 满充能跳过门只对普通卡成立：咏唱冷却与充能无关（终止锚定、充能恒满），
+        // 无限充能咏唱若按此门跳过会让终止冷却永不递减
+        if (def.cardMode !== 'chant' && skill.remainingUses >= max) continue;
         ctx.kernel.submitInstruction(new SkillCooldownInstruction({ skill, delta: 1 }), this);
       }
     }
@@ -278,7 +282,7 @@ export function tickCooldownOnEnterDeck(ctx, card) {
   const def = getSkillDefinition(card.defId);
   if (!def.cooldownOnEnterDeck) return;
   const max = def.charges?.max ?? Infinity;
-  if ((def.charges?.cooldownTurns ?? 0) === 0) return;
+  if (cooldownOf(card) === 0) return;
   if (card.remainingUses >= max || card.currentCooldown <= 0) return;
   ctx.kernel.submitInstruction(new SkillCooldownInstruction({ skill: card, delta: 1 }));
 }

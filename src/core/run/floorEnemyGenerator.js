@@ -19,11 +19,13 @@ import { allEnemies, getEnemyDefinition } from '../enemies/registry.js';
 import { deriveBattleSeed, isBossFloor, FLOORS_PER_CHAPTER, TOTAL_FLOORS } from './runFlow.js';
 
 // ---- 楼层难度曲线（调平衡只动这里）----
-// 章1 表驱动（陡升后收平等 Boss），章 2–4 每 2 层 +1；
+// 章1 表驱动（陡升后收平等 Boss），章 2 表驱动（ENEMIES_2.md 阶梯 10→15，
+// F17/F20 精英位为占位值 D=12/13——精英 base 12 落两窗），章 3–4 每 2 层 +1；
 // Boss 层难度按章取值。D 是一层战斗的总预算，与编成难度对齐（漂移 ±2）。
 const CHAPTER_START = [1, 12, 23, 34];            // 各章普通层起点
-const CHAPTER_BASE = [2, 9, 13, 17];              // 各章起始难度
+const CHAPTER_BASE = [2, 9, 13, 17];              // 章1/章3/章4 起始难度（章2 表驱动，[1] 槽不再消费）
 const CHAPTER1_CURVE = [2, 3, 5, 6, 7, 10, 10, 10, 10, 11]; // 章1 表驱动（6/9 层精英、11 层 Boss；L6/9 位是精英占位值，普通层不消费）。前段放缓（L2/L3 是 build 零成长窗口）+ 中段压平
+const CHAPTER2_CURVE = [10, 11, 11, 12, 12, 12, 13, 13, 13, 15]; // 章2 表驱动（ENEMIES_2.md 阶梯；F21=15 是 Boss 前冲刺层）
 const BOSS_DIFFICULTY = [8, 11, 14, 18];
 
 /** 楼层难度（Boss 层返回 Boss 难度；越界钳到 1..44）。 */
@@ -31,6 +33,7 @@ export function floorDifficulty(floor) {
   const f = Math.min(Math.max(1, Math.floor(floor)), TOTAL_FLOORS);
   if (isBossFloor(f)) return BOSS_DIFFICULTY[f / FLOORS_PER_CHAPTER - 1];
   if (f <= 10) return CHAPTER1_CURVE[f - 1];
+  if (f <= 21) return CHAPTER2_CURVE[f - 12];
   const ch = CHAPTER_START.findIndex((s, i) =>
     f >= s && (i === CHAPTER_START.length - 1 || f < CHAPTER_START[i + 1]));
   return CHAPTER_BASE[ch] + Math.floor((f - CHAPTER_START[ch]) / 2);
@@ -100,11 +103,44 @@ const TEMPLATES = [
     slots: [{ fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }, { fixed: 'buzzbugA' }, { fixed: 'buzzbugB' }] },
   { id: 'trinity', name: '三位一体', cost: 12, minFloor: 4, maxFloor: 10, once: true,
     slots: [{ fixed: 'diggerMole' }, { fixed: 'rottenTreeHeart' }, { fixed: 'rockSnail' }] },
-  { id: 'slimeTide', name: '史莱姆潮', minFloor: 12, maxFloor: 14, slots: [{ fixed: 'bigSlime' }, { fixed: 'slime' }] },
-  { id: 'shadowAmbush', name: '影袭', minFloor: 12, maxFloor: 30, slots: [{ fixed: 'shadowblade' }, {}] },
-  // —— 第二~四章主题编队 ——
-  { id: 'palaceGuard', name: '宫廷卫队', minFloor: 12, maxFloor: 21, slots: [{ fixed: 'palaceGuard' }, {}] },
-  { id: 'honorGuard', name: '仪仗队', minFloor: 14, maxFloor: 21, slots: [{ fixed: 'herald' }, { fixed: 'palaceGuard' }, {}] },
+  // —— 第二章主题战（ENEMIES_2.md；cost = 设计卡标定遭遇难度，全部 once ——
+  // 潜伏/暴露/双雄三互斥，操练↔实弹、罪人↔押送↔赎罪分段互斥；蛊惑首槽 oneOf 择一）——
+  { id: 'lurk', name: '潜伏', cost: 11, minFloor: 12, maxFloor: 21, once: true, excl: ['powerDuo'],
+    slots: [{ fixed: 'corpAssassin' }, { fixed: 'corpAssassinB' }, { fixed: 'spy' }] },
+  { id: 'expose', name: '暴露', cost: 11, minFloor: 12, maxFloor: 21, once: true, excl: ['powerDuo'],
+    slots: [{ fixed: 'corpGuard' }, { fixed: 'corpGuardB' }, { fixed: 'killer' }] },
+  { id: 'powerDuo', name: '双雄', cost: 11, minFloor: 12, maxFloor: 21, once: true, excl: ['lurk', 'expose'],
+    slots: [{ fixed: 'spy' }, { fixed: 'killer' }] },
+  { id: 'drill', name: '新兵操练', cost: 10, minFloor: 12, maxFloor: 21, once: true, excl: ['liveFire'],
+    slots: [{ fixed: 'recruitGunner' }, { fixed: 'recruitGunner' }, { fixed: 'recruitGunnerB' }] },
+  { id: 'liveFire', name: '实弹演习', cost: 12, minFloor: 12, maxFloor: 21, once: true, excl: ['drill'],
+    slots: [{ fixed: 'recruitGunner' }, { fixed: 'recruitGunner' }, { fixed: 'recruitGunnerB' }, { fixed: 'recruitGunnerC' }] },
+  { id: 'huntSquad', name: '猎杀小队', cost: 15, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'spy' }, { fixed: 'spyB' }, { fixed: 'killer' }, { fixed: 'channeler' }] },
+  { id: 'butterflySwarm', name: '蝶群', cost: 10, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'nymph' }, { fixed: 'nymphB' }, { fixed: 'nymphC' }, { fixed: 'nymphD' }] },
+  { id: 'monsterInvasion', name: '怪物入侵', cost: 12, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'nymph' }, { fixed: 'nymphD' }, { fixed: 'slime' }, { fixed: 'bigSlime' }] },
+  { id: 'courtGuard', name: '宫廷守护', cost: 11, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'palaceGuard' }, { fixed: 'soldier' }, { fixed: 'channeler' }] },
+  { id: 'darkCollusion', name: '黑暗勾结', cost: 12, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'corpAssassin' }, { fixed: 'corpGuard' }, { fixed: 'palaceGuard' }, { fixed: 'channeler' }] },
+  { id: 'apprenticeClass', name: '见习课堂', cost: 11, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'apprentice' }, { fixed: 'apprentice' }, { fixed: 'palaceGuard' }] },
+  { id: 'spiritStudy', name: '灵御研习', cost: 12, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'apprentice' }, { fixed: 'apprenticeB' }, { fixed: 'apprenticeC' }] },
+  { id: 'sinnerConvoy', name: '罪人', cost: 12, minFloor: 12, maxFloor: 21, once: true, excl: ['escortConvoy'],
+    slots: [{ fixed: 'burnBot' }, { fixed: 'burnBot' }, { fixed: 'burnBotC' }, { fixed: 'burnBotB' }] },
+  { id: 'escortConvoy', name: '押送', cost: 14, minFloor: 12, maxFloor: 21, once: true, excl: ['sinnerConvoy', 'atonement'],
+    slots: [{ fixed: 'burnBot' }, { fixed: 'burnBotC' }, { fixed: 'burnBotC' }, { fixed: 'burnBotB' }, { fixed: 'corpGuard' }] },
+  { id: 'atonement', name: '赎罪', cost: 14, minFloor: 12, maxFloor: 21, once: true, excl: ['escortConvoy'],
+    slots: [{ fixed: 'burnBot' }, { fixed: 'burnBotB' }, { fixed: 'burnBotC' }, { fixed: 'burnBotC' }, { fixed: 'bugler' }] },
+  { id: 'fullCharge', name: '冲锋', cost: 15, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'legionnaire' }, { fixed: 'legionnaireB' }, { fixed: 'bugler' }, { fixed: 'sniper' }] },
+  { id: 'motherLair', name: '巨蝶巢穴', cost: 13, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ fixed: 'motherNymph' }, { fixed: 'motherNymph' }, { fixed: 'nymphB' }, { fixed: 'nymphC' }] },
+  { id: 'bewitch', name: '蛊惑', cost: 12, minFloor: 12, maxFloor: 21, once: true,
+    slots: [{ oneOf: ['corpAssassin', 'corpGuard'] }, { fixed: 'burnBot' }, { fixed: 'nymph' }, { fixed: 'motherNymph' }] },
   { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
   { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
@@ -134,13 +170,13 @@ const TEMPLATES = [
 
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
 // 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
-// 11 层火主题三候选 / 22 层三题 / 33 层四考 / 44 层终塔神兵躯壳——
-// 设计与缩放口径见 ENEMY_GENERATION.md §4.3。
+// 11 层火主题三候选 / 22 层三题 / 33 层四考 / 44 层终塔双候选（神兵躯壳、怪异的瑞米
+// ——三者编成方式待定，暂按入池轮换）——设计与缩放口径见 ENEMY_GENERATION.md §4.3。
 const BOSS_OF_FLOOR = Object.freeze({
   11: ['pyro', 'kardas', 'mefm1'],
   22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
   33: ['gluttonLord', 'intactDrone', 'greenhouseQueen', 'essenceEater'],
-  44: ['divineShell'],
+  44: ['divineShell', 'weirdRemi'],
 });
 const BOSS_IDS = new Set(Object.values(BOSS_OF_FLOOR).flat());
 
@@ -169,6 +205,7 @@ function eligibleAtFloor(def, floor) {
 // slot.exclude：通配位排除指定敌 id（血牛互斥——双龟/龟+像是马拉松病灶）。
 function slotPool(slot, floor) {
   if (slot.fixed) return [getEnemyDefinition(slot.fixed)];
+  if (slot.oneOf) return slot.oneOf.map(getEnemyDefinition); // 择一槽（蛊惑"刺客或保安"）
   const pool = eligiblePool(floor, slot.elite === true);
   return slot.exclude?.length ? pool.filter(def => !slot.exclude.includes(def.id)) : pool;
 }
@@ -272,6 +309,12 @@ export function generateEncounter(run) {
   // unique 敌人已被前面槽位占用则不再进池。
   const used = new Set();
   const slots = picked.slots.map((slot) => {
+    // 择一槽（蛊惑）：由种子确定性取一（同层重打同配置）
+    if (slot.oneOf) {
+      const def = rng.pick(slot.oneOf.map(getEnemyDefinition));
+      used.add(def.id);
+      return { defId: def.id, d: def.difficulty.base };
+    }
     // 固定槽难度取该敌 base；模板专属变体（如根须B）无难度元数据 → 0（仅展示/调试用）
     if (slot.fixed) { used.add(slot.fixed); return { defId: slot.fixed, d: getEnemyDefinition(slot.fixed).difficulty?.base ?? 0 }; }
     const full = slotPool(slot, floor);
@@ -293,6 +336,20 @@ export function generateEncounter(run) {
   // staticPuffB 固定 17 血——精确 id 匹配不覆盖 B 变体
   for (let i = 0; i < out.length; i++) {
     if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([20, 23, 26, 29]) };
+  }
+  // 章2 血量随机档（ENEMIES_2.md"X-Y 血随机"单位；B 变体同档，burnBotB 的减半血在
+  // 定义内固定、不经此表）
+  const RANDOM_HP = {
+    corpGuard: [42, 48], corpGuardB: [42, 48],
+    recruitGunner: [42, 48], recruitGunnerB: [42, 48], recruitGunnerC: [42, 48],
+    channeler: [53, 58],
+    apprentice: [38, 45], apprenticeB: [38, 45], apprenticeC: [38, 45],
+    legionnaire: [55, 64], legionnaireB: [55, 64],
+    nymph: [21, 29],
+  };
+  for (let i = 0; i < out.length; i++) {
+    const r = RANDOM_HP[out[i].defId];
+    if (r) out[i] = { ...out[i], maxHp: rng.int(r[0], r[1]) };
   }
   // 音叉群：第二只起 wakeDelay=1（两台大振恒错拍）
   const forks = out.map((s, i) => (s.defId === 'tuningFork' ? i : -1)).filter(i => i >= 0);

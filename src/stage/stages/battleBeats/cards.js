@@ -9,7 +9,7 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
-import { runSpellFx } from '../../fx/spells/index.js';
+import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -252,6 +252,16 @@ export const cardBeats = {
             // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
           }
         };
+        // 施术演出模板接管停留窗期间，卡必须停在展示位：held 分流与 springs.release
+        // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
+        // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
+        // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
+        // 根治：命中模板即刻摘弹簧目标 + 预置 held——布局/状态语义本就允许展示期持 held
+        // （_setCardZone 的 held 守卫只挡「解除停留」，不挡提前进入），settle 幂等收尾。
+        if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
+          this.model.setZone(id, 'held');
+          this.springs.release(id);
+        }
         // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
         // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
         // 全程 hold）。未命中 = BASE 现行为（100ms 停留窗），零回归。
@@ -277,13 +287,63 @@ export const cardBeats = {
       scene: this.scene,
       uiScene: this.uiScene,
       particles: this.particles,
+      worldPool: this.particles2World ?? null,   // 世界 GPU 池（粒子火旋风等 custom 类型用，可空）
+      // PCG 道具单向事件口（场景交互：冲击/高温）——blocks 基础块按需广播
+      notify: this.notify,
+      // 敌方阵型（显示态口径）：存活敌视图的质心 + 散布半径——AOE 大场面
+      // （爆裂术爆炸云）的锚点，单敌时退化为该敌胸口
+      enemyFormation: () => {
+        const list = (this._snapshot?.enemies ?? [])
+          .map(e => this._units.get(e.uniqueID))
+          .filter(v => v && !v._dead);
+        if (!list.length) return null;
+        let cx = 0, cy = 0, cz = 0;
+        for (const v of list) {
+          const s = v._baseScale ?? 1;
+          cx += v.position.x; cy += v.position.y + 3.4 * s; cz += v.position.z;
+        }
+        cx /= list.length; cy /= list.length; cz /= list.length;
+        let spread = 0;
+        for (const v of list) spread = Math.max(spread, Math.hypot(v.position.x - cx, v.position.z - cz));
+        return { center: { x: cx, y: cy, z: cz }, spread };
+      },
+      // 全体存活敌视图（显示态口径）——群伤施术拍的真目标集：targets() 按
+      // payload.target 只给选中敌，AOE 卡（裂空劈/火瀑）要的是敌阵全员
+      allEnemies: () => (this._snapshot?.enemies ?? [])
+        .map(e => this._units.get(e.uniqueID))
+        .filter(v => v && !v._dead),
       cast: this._cast,
       shake: this.shake,
       animator: this.animator,
       unitById: (id) => this._units.get(id) ?? null,
+      // 主角单位视图（自燃类施术的身体锚——配合 unitAnchor/unitFeet 使用）
+      playerUnit: () => {
+        const id = this._snapshot?.player?.uniqueID;
+        return id != null ? (this._units.get(id) ?? null) : null;
+      },
+      // 效果层数读取（条件造型：burnSurge 只点燃烧中的单位——快照口径，演出不读真值）
+      effectStacksOf: (unit, effectId) => {
+        const id = unit?.uniqueID;
+        if (id == null) return 0;
+        const u = (this._snapshot?.enemies ?? []).find(x => x.uniqueID === id)
+          ?? (this._snapshot?.player?.uniqueID === id ? this._snapshot.player : null);
+        return u?.effects?.find(e => e.effectId === effectId)?.stacks ?? 0;
+      },
       camera: this._sm.cameraDirector,   // 场景参数演出（天斩 fov 压迫/复原）
       markCleaveSplit: (units) => {   // 天斩断裂标记（死亡节拍消费）
         for (const u of units ?? []) this._cleaveSplit?.add(u.uniqueID);
+      },
+      // 投射物抵达追踪（施术拍登记 / 伤害拍 await——火花自持发射也走这里对齐时刻）
+      projectiles: this._projectiles,
+      // 主角施术锚 = 抬手高度（2026-10-01 用户定：火弹等投掷物从**主角这儿**飞出来，
+      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者）。缺玩家视图时兜底卡尖。
+      // （伤害拍自持投射物也用——火花乱射从手上弹出）
+      playerAnchor: () => {
+        const id = this._snapshot?.player?.uniqueID;
+        const v = id != null ? (this._units.get(id) ?? null) : null;
+        if (!v) return null;
+        const s = v._baseScale ?? 1;
+        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
       },
     };
   },
@@ -310,15 +370,6 @@ export const cardBeats = {
         const s = unit._baseScale ?? 1;
         return { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
       },
-      // 主角施术锚 = 抬手高度（2026-10-01 用户定：火弹等投掷物从**主角这儿**飞出来，
-      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者）。缺玩家视图时兜底卡尖。
-      playerAnchor: () => {
-        const id = this._snapshot?.player?.uniqueID;
-        const v = id != null ? (this._units.get(id) ?? null) : null;
-        if (!v) return null;
-        const s = v._baseScale ?? 1;
-        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
-      },
       // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
       // 火弹/投射物从这里起飞
       cardTipWorld: () => {
@@ -328,7 +379,7 @@ export const cardBeats = {
       },
     };
     try {
-      return runSpellFx({ defId, deps, notify });
+      return runSpellFx({ defId, deps, notify, chantOff: !!payload?.chantOff });
     } catch (err) {
       console.warn('[spellFx] 施术演出发起异常（回落 BASE）：', err);
       return null;

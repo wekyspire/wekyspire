@@ -3,6 +3,7 @@
 // 可残留熄烛头，无火苗——本资产不承担布光职责）。变体走 build(opts)：案长/烛位数/烛头。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture'],
   footprint: { x: 8, z: 2.2 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 34 }), B.combustible()],
   build({ len = 8, sockets = 3, stub = true, rng } = {}) {
     const g = new THREE.Group();
     const legX = len / 2 - 0.55;

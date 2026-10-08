@@ -3,6 +3,7 @@
 // 读作木面微裂，一角轻缺（chip 小量掉角）。变体走 build(opts)：裂缝道数 / 腿外撇角。
 
 import * as THREE from 'three';
+import { B } from '../kit/behaviors.js';
 import { P, K, shade } from '../kit/index.js';
 
 export default {
@@ -11,7 +12,7 @@ export default {
   mount: 'floor',
   tags: ['wood', 'furniture', 'quarters'],
   footprint: { x: 1.9, z: 1.9 },
-  behaviors: [],
+  behaviors: [B.physBody({ integrity: 22 }), B.combustible()],
   build({ cracks = 2, splay = 0.08, rng } = {}) {
     const g = new THREE.Group();
     // 方座面：厚板一角轻缺（微裂旧凳的掉角）
