@@ -14,7 +14,7 @@
 //     destination: null | { domainMode, steerDelay, steerRamp, steerK, arriveR, curveK },
 //     endMode: 0 ttl | 1 arrive | 2 ttlOrArrive | 3 lingerAfterArrive,
 //     progressMode: 0 ageProgress | 1 distanceProgress,
-//     render: { size, sizeEndK, color, colorEnd, alpha, heat },
+//     render: { size, sizeEndK, sizeMode, color, colorEnd, alpha, heat },
 //     custom: { build(ctx) → { nodes: [] } },   // kind=custom 必填
 //   })
 //
@@ -47,6 +47,11 @@ export function defineParticleType(desc = {}) {
     size: 0.5, sizeEndK: 0.4, color: [1, 1, 1], colorEnd: null, alpha: 1, heat: 1,
     ageHeat: 0, // 随年龄衰减的亮度增益（燃烧火星类「新鲜更亮」用；0 = 关）
     softness: 1, // sprite 径向衰减指数（1 = 池缺省平底+边沿衰减；>1 = 中心亮缘更虚）
+    sizeMode: 'prog', // 尺寸斜坡驱动：'prog' = progress 通道（uber 缺省）；'age' = 年龄
+                     //（亮度与尺寸解耦用——progress 是亮度包络的类型（orbit 族）不得
+                     //   让族亮/闪烁/level 泄漏进尺寸）
+    alphaMode: 'out', // alpha 包络：'out' = 线性淡出（缺省）；'in' = 淡入20%再线性淡出
+                     //（发射器类防满尺寸弹入）
     ...(desc.render || {}),
   };
   if (!render.colorEnd) render.colorEnd = [...render.color];

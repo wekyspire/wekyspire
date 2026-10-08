@@ -47,8 +47,10 @@ const deckCandidates = computed(() => searchCards(cardQuery.value));
 const battleCandidates = computed(() => searchCards(battleCardQuery.value));
 function addDeckCandidate(def) { dbg.addCard(def.id); }
 function addBattleCandidate(def) { dbg.addCardToHand(def.id); }
+function drawBattleCandidate(def) { dbg.drawCard(def.id); }
 function addFirstDeckCandidate() { const [d] = deckCandidates.value; if (d) addDeckCandidate(d); }
 function addFirstBattleCandidate() { const [d] = battleCandidates.value; if (d) addBattleCandidate(d); }
+function drawFirstBattleCandidate() { const [d] = battleCandidates.value; if (d) drawBattleCandidate(d); }
 
 // ---- 拖拽移位：缺省顶部居中（旧缺省左上角会遮塔楼层按钮）——
 // 抓住标题栏拖动换位置，坐标持久化到 localStorage；钳制防拖出屏外找不回
@@ -344,11 +346,12 @@ function reloadCurrent() {
             <input v-model="battleCardQuery" class="card-search" placeholder="搜索卡牌：名 / id / 体系 / 阶"
                    @keydown.enter="addFirstBattleCandidate()">
             <button class="pri" :disabled="!battleCandidates.length" @click="addFirstBattleCandidate()">加首条</button>
+            <button @click="drawFirstBattleCandidate()">抽首条</button>
             <button @click="dbg.addCardToHand('gmPunch50')">塞调试重拳</button>
             <button @click="dbg.addCardToHand('onePunch')">塞一拳</button>
           </div>
           <div v-if="battleCardQuery.trim()" class="cand-list">
-            <div class="cand-head dim">命中 {{ battleCandidates.length }}{{ battleCandidates.length >= 80 ? '+' : '' }} —— 点条目加到手牌 / 回车加首条</div>
+            <div class="cand-head dim">命中 {{ battleCandidates.length }}{{ battleCandidates.length >= 80 ? '+' : '' }} —— 点条目加到手牌 / 回车加首条 / 「抽首条」从牌库抽出</div>
             <div v-for="def in battleCandidates" :key="def.id" class="cand" @click="addBattleCandidate(def)">
               <span class="nm">{{ def.name }}</span>
               <span class="dim-tag">{{ def.tier }}</span>

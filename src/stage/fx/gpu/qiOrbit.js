@@ -2,8 +2,9 @@
 // 三族流形交织：内升螺旋（密/暗/快）、外缘缓带（疏/中/慢）、逆行游丝（稀/亮/中速）
 // ——每粒独立极坐标运动（θ 积分 + 半径呼吸 + 高度带按生命线性爬升：终点钉在头肩
 // 带内，升腾永不过头顶），角向密度由慢漂移的正弦
-// 乘积场做 rejection 采样（环带没有均匀圈感，只有流动的浓淡），亮暗/大小走
-// present 的 progress 通道（生命期正弦包络 × 逐粒抖动 × 闪烁 × 包络 k）。
+// 乘积场做 rejection 采样（环带没有均匀圈感，只有流动的浓淡），亮暗走
+// present 的 progress 通道（生命期正弦包络 × 逐粒抖动 × 闪烁 × 包络 k），
+// 尺寸按年龄斜坡（sizeMode 'age'——与亮度解耦）。
 // 链路：chantSceneFx（qiFlow 主题）→ createQiOrbitLink(pool).start/setAnchor/setLevel。
 import {
   Fn, If, uniform,
@@ -20,7 +21,9 @@ export const QI_ORBIT = defineParticleType({
   name: 'qiOrbit', space: 'world', cap: 320, kind: 'custom',
   // rate 是「spawn 尝试」口径：角向密度 rejection 平均放行 ~0.62，稳态存活 ≈ rate×0.62×ttl
   spawn: { rate: 140, ttl: 2.6, ttlJit: 0.55, vel: [0, 0, 0], velJit: 0, spread: 0, gravity: 0, drag: 0, windK: 0 },
-  render: { size: 0.30, sizeEndK: 2.7, color: [0.58, 0.68, 0.92], colorEnd: [1.0, 1.05, 1.2], alpha: 0.45, heat: 0.6, softness: 2.6 },
+  // sizeMode 'age'：尺寸斜坡按年龄走——progress 通道承载的是亮度包络（族亮/闪烁/
+  // level 都在里面），不能当尺寸驱动（亮族会变大、尺寸随火闪脉动）
+  render: { size: 0.30, sizeEndK: 1.35, sizeMode: 'age', color: [0.58, 0.68, 0.92], colorEnd: [1.0, 1.05, 1.2], alpha: 0.45, heat: 0.6, softness: 2.6 },
   custom: {
     build(ctx) {
       // JS 侧逐帧推的运行参数（api 写、shader 读）：锚点三分量/立牌高/环绕半径/包络

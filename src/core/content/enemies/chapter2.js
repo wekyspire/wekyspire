@@ -13,31 +13,23 @@ import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { AddCardInstruction, BurnCardInstruction, LockCardsInstruction } from '../../instructions/cards.js';
 import { PlayerTurnEndInstruction } from '../../instructions/turn.js';
 import { aliveEnemies, zoneOf } from '../../state/battleState.js';
+import { lockedCardsSettleReact, hasCardModifier } from '../../skills/cardModifiers.js';
 
 // ---- 手牌锁定（间谍/狙击手；无人战体同款口径：锁定不影响打出，玩家回合结束仍在手则焚毁，
-// 离手即免除。结算逻辑抄自 bosses.js 的通用段——标记只落手牌（随抽随清），无牌库标记）----
+// 离手即免除。结算走 cardModifiers 的通用段——标记只落手牌（随抽随清），无牌库标记）----
 function attachHandLockSettle(ctx, unit) {
   ctx.kernel.addSubscription({
     when: PlayerTurnEndInstruction,
     phase: 'post',
     owner: `enemy:${unit.uniqueID}:handLock`,
     filter: () => !unit.isDead(),
-    react: (instr, c) => {
-      for (const card of [...c.battleState.zones.hand]) {
-        if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
-          c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
-        }
-      }
-      for (const zone of ['hand', 'burnt', 'pending']) {
-        for (const card of c.battleState.zones[zone]) card.locked = false;
-      }
-    },
+    react: lockedCardsSettleReact,
   });
 }
 
 // 锁定 N 张随机手牌（已锁定的跳过；手牌不足则全锁）。
 function lockRandomHandCards(actx, n) {
-  const hand = actx.battleState.zones.hand.filter(c => !c.locked);
+  const hand = actx.battleState.zones.hand.filter(c => !hasCardModifier(c, 'locked'));
   const picked = actx.battleState.rng.shuffle([...hand]).slice(0, n);
   if (picked.length > 0) {
     actx.kernel.submitInstruction(new LockCardsInstruction({ uniqueIDs: picked.map(c => c.uniqueID) }));

@@ -11,6 +11,7 @@ import './fireEmberSkills.js';
 import './fireEmberMoreSkills.js';
 import './fireExpansionSkills.js';
 import './commonSkills.js';
+import './weirdRemiCurses.js';
 import './gmSkills.js';
 import './enemies/index.js';
 import './allies.js';

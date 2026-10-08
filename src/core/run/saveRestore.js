@@ -6,6 +6,7 @@
 // 语义：存档 = 检查点。**真实档**落盘只在 prep，恢复后必处 prep；**调试档**（造档工具产出 /
 // 面板导出）要能从"房内 / 进阶中"接着跑，故额外恢复 gameStage/currentRoom/roomData/encounter。
 import { advanceFloor } from './runFlow.js';
+import { cloneModifiers } from '../skills/cardModifiers.js';
 
 export function restoreRunFromSave(run, save) {
   while (run.floor < save.floor) advanceFloor(run);
@@ -20,7 +21,8 @@ export function restoreRunFromSave(run, save) {
   p.mana = sp.mana; p.maxMana = sp.maxMana;
   p.maxActionPoints = sp.maxActionPoints; p.actionPoints = sp.maxActionPoints;
   p.money = sp.money;
-  p.deck = sp.deck.map(rt => ({ ...rt }));
+  // modifiers 深拷贝：恢复的 run 与存档快照不得共享引用（挂/摘会互相污染）
+  p.deck = sp.deck.map(rt => ({ ...rt, modifiers: cloneModifiers(rt.modifiers) }));
   p.abilities = [...sp.abilities];
   p.relics = [...sp.relics];
   p.equippedRelics = [...sp.equippedRelics];

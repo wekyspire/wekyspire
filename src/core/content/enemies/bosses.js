@@ -8,9 +8,10 @@ import { AddCardInstruction, BurnCardInstruction, LockCardsInstruction } from '.
 import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
-import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../../instructions/turn.js';
+import { PlayerTurnStartInstruction, PlayerTurnEndInstruction, TurnStartInstruction } from '../../instructions/turn.js';
 import { GainManaInstruction } from '../../instructions/resources.js';
 import { aliveEnemies, aliveAllies, allAliveUnits, zoneOf } from '../../state/battleState.js';
+import { lockedCardsSettleReact } from '../../skills/cardModifiers.js';
 import { ESSENCE_STEAL_BLACKLIST } from './chapter1.js';
 
 // 【过热自保】受压计数挂载（无人战体 / 神兵躯壳共用）：
@@ -684,16 +685,7 @@ registerEnemy({
     ctx.kernel.addSubscription({
       when: PlayerTurnEndInstruction, phase: 'post', owner,
       filter: () => !unit.isDead(),
-      react: (instr, c) => {
-        for (const card of [...c.battleState.zones.hand]) {
-          if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
-            c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
-          }
-        }
-        for (const zone of ['hand', 'burnt', 'pending']) {
-          for (const card of c.battleState.zones[zone]) card.locked = false;
-        }
-      },
+      react: lockedCardsSettleReact,
     });
   },
   act(actx) {
@@ -936,21 +928,12 @@ registerEnemy({
       filter: (instr) => instr.target === unit && instr.tags?.includes('droneLockdown'),
       react: () => { unit._detonated = true; },
     });
-    // 锁定结算：玩家回合结束时，手牌中的锁定卡焚毁（离手即免除），随后全 zone 清标
+    // 锁定结算：玩家回合结束时，手牌中的锁定卡焚毁（离手即免除），随后连牌库一起清标
     // ——本轮锁定结算完毕，离手的卡不带标回库/回手。
     ctx.kernel.addSubscription({
       when: PlayerTurnEndInstruction, phase: 'post', owner,
       filter: () => !unit.isDead(),
-      react: (instr, c) => {
-        for (const card of [...c.battleState.zones.hand]) {
-          if (card.locked && zoneOf(c.battleState, card.uniqueID) === 'hand') {
-            c.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: card.uniqueID }), instr);
-          }
-        }
-        for (const zone of ['hand', 'deck', 'burnt', 'pending']) {
-          for (const card of c.battleState.zones[zone]) card.locked = false;
-        }
-      },
+      react: (instr, c) => lockedCardsSettleReact(instr, c, ['hand', 'deck', 'burnt', 'pending']),
     });
   },
   act(actx) {
@@ -1334,5 +1317,94 @@ registerEnemy({
     if (beat === 0) return { kinds: ['attack'], hits: 3, damage: 6 + atk, note: `灵潮倾泻（每拍过载：自伤4换力量+1）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 8 + atk, note: '掠夺成性：偷2魏启，力量+1' };
     return { kinds: ['attack', 'buff'], hits: 1, damage: 5, note: '渊素反噬：5点穿透生命伤害，自愈5' };
+  },
+});
+
+// ⑦ 44 层 Boss · 怪异的瑞米（章4 Boss 池之二；设计卡 = BOSSES_4.md「怪异的瑞米」）。
+// 诅咒输出流：血少（相对神兵躯壳的 300+200 盾而言的 360 裸血）但极难打死——
+// 灵态/灵体兜底（净效果 = 每第二次伤害被清理到 1，回合开始重置引擎永不下线）
+// + 节拍 3 自回 33% 已损失血量；真压力全在诅咒污染上：
+//   · 开局往你牌库洗 5 张恶意（受 7 伤抽 3 的消耗牌——处理它们要付血）；
+//   · 每回合随机塞 1 张非恶意诅咒（忘却/歪曲/痛楚/缄默/邪咒，见 weirdRemiCurses.js）；
+//   · 第 5 拍一性塞 3 张恶意（该拍不塞其它诅咒）。
+// 节拍（五拍循环）：攻 20 → 4×4 → 回复 33% 已损失 → 5×4 → 塞 3 恶意。
+// 攻读数 = 基数 + attack（F1 同源），意图预告同一算式（所见即所算）。
+registerEnemy({
+  // elite:true 仅借「锚点=base」的缩放语义（章4 Boss 难度18 → hpMult=1），让 360 血
+  // 精确落地；floorMin/Max=44 + BOSS_IDS 排除保证它不进任何精英/通配取材池。
+  difficulty: { base: 18, floorMin: 44, floorMax: 44, elite: true },
+  id: 'weirdRemi', name: '怪异的瑞米',
+  createUnit: () => new Enemy({ defId: 'weirdRemi', name: '怪异的瑞米', maxHp: 360 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'spiritStance', stacks: 1 }));
+    // 灵态引擎永不下线（瑞米自身特性，不进灵态词条）：每回合开始重置为 1 层——
+    // 被净化也会在下一回合重生，兜底类保底一律写施加方订阅
+    const owner = `enemy:${unit.uniqueID}:weirdRemi`;
+    ctx.kernel.addSubscription({
+      when: TurnStartInstruction, phase: 'post', owner,
+      filter: () => !unit.isDead(),
+      react: (instr, c) => {
+        const cur = unit.getEffectStacks('spiritStance');
+        if (cur !== 1) c.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'spiritStance', stacks: 1 - cur }), instr);
+      },
+    });
+    // 开局：往玩家牌库随机洗入 5 张恶意
+    for (let i = 0; i < 5; i++) {
+      ctx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'malice', toZone: 'deck', index: 'random' }));
+    }
+  },
+  act(actx) {
+    const { unit, player, battleState: bs } = actx;
+    const atk = unit.getStat('attack');
+    const beat = unit._beat ?? 0;
+    unit._beat = beat + 1;
+    const b = beat % 5;
+
+    const hit = (dmg) => actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player, amount: dmg + atk }));
+    // 每回合随机塞 1 张非恶意诅咒（恶意拍除外——那一拍专属恶意）
+    const seedCurse = () => {
+      const pool = ['forget', 'distort', 'painCurse', 'hush', 'evilHex'];
+      const id = pool[bs.rng.int(0, pool.length - 1)];
+      actx.kernel.submitInstruction(new AddCardInstruction({
+        defId: id, toZone: 'deck', index: 'random' }));
+    };
+
+    if (b === 0) {
+      hit(20);
+      seedCurse();
+    } else if (b === 1) {
+      for (let i = 0; i < 4; i++) hit(4);
+      seedCurse();
+    } else if (b === 2) {
+      // 回复 33% 已损失血量（低血时回复压手——它越残血越难终结）
+      const lost = unit.maxHp - unit.hp;
+      if (lost > 0) {
+        actx.kernel.submitInstruction(new ApplyHealInstruction({
+          target: unit, amount: Math.floor(lost * 0.33) }));
+      }
+      seedCurse();
+    } else if (b === 3) {
+      for (let i = 0; i < 4; i++) hit(5);
+      seedCurse();
+    } else {
+      // 塞入 3 张恶意（本拍不塞其它诅咒卡）
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new AddCardInstruction({
+          defId: 'malice', toZone: 'deck', index: 'random' }));
+      }
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const b = (unit._beat ?? 0) % 5;
+    if (b === 0) return { kinds: ['attack', 'debuff'], hits: 1, damage: 20 + atk, note: '污染：向你牌库塞入1张诅咒' };
+    if (b === 1) return { kinds: ['attack', 'debuff'], hits: 4, damage: 4 + atk, note: '污染：向你牌库塞入1张诅咒' };
+    if (b === 2) return { kinds: ['buff'], note: '回流：回复已损失血量的33%，塞入1张诅咒' };
+    if (b === 3) return { kinds: ['attack', 'debuff'], hits: 4, damage: 5 + atk, note: '污染：向你牌库塞入1张诅咒' };
+    return { kinds: ['debuff'], note: '恶意横流：向你牌库塞入3张恶意' };
   },
 });

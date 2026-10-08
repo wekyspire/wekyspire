@@ -1057,6 +1057,29 @@ registerEffect({
   ],
 });
 
+// 灵态：受到高于 1 点的实际伤害后获得灵体 1（通用机制，无自持——重置/永续类
+// 保底是施加方的自身特性，写在其订阅里，不进词条）。净效果 = 每第二次伤害被
+// 清理到 1。固定伤害（燃烧/中毒 tick）不受灵体的 PRE 减免，但「受到高于1伤害」
+// 的判定含它——按实际落血判定，与灵体的消耗判定同口径。
+registerEffect({
+  id: 'spiritStance',
+  type: 'buff',
+  stacking: 'count',
+  name: '灵态',
+  description: '受到高于1点的伤害后，获得灵体1。',
+  icon: '🌀',
+  color: 'cyan',
+  subscriptions: (unit) => [
+    {
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit && (instr.result?.dealt ?? 0) > 1,
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'phantom', stacks: 1 }), instr),
+    },
+  ],
+});
+
 // 杀手（杀手）：每有一张牌被打出，获得蓄势 1——出牌量税，速攻流的节奏对冲。
 // 订阅玩家出牌指令 POST（嵌套强发也计入——被万变拳白嫖打出的牌同样是「被打出」）。
 registerEffect({

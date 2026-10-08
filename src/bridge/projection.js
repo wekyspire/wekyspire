@@ -2,6 +2,9 @@ import { swapCostOf } from '../core/state/battleState.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { getEffectDefinition, hasEffect } from '../core/effects/registry.js';
 import { makeSkillCtx, canUseSkill, chantActivationLegal, pickOverflowVictims, handCapacitySlots } from '../core/skills/helpers.js';
+import {
+  costOf, keywordsOf, hasCardModifier, hasCardModifierDef, getCardModifier,
+} from '../core/skills/cardModifiers.js';
 import { isWaitingPlayerInput } from '../core/flow/battle.js';
 import { createSkillRuntime } from '../core/state/skillRuntime.js';
 
@@ -14,6 +17,16 @@ export function projectSkill(rt) {
     uniqueID: rt.uniqueID,
     defId: rt.defId,
     power: rt.power,
+    // 卡牌 modifier 徽章数据（定义元数据压平；未注册定义按 id 兜底——旧存档宽松口径）
+    mods: (rt.modifiers ?? []).map(m => {
+      const d = hasCardModifierDef(m.modId) ? getCardModifier(m.modId) : null;
+      return {
+        id: m.modId,
+        name: d?.name ?? m.modId,
+        icon: d?.icon ?? null,
+        color: d?.color ?? null,
+      };
+    }),
     remainingUses: rt.remainingUses,
     currentCooldown: rt.currentCooldown,
     isActivated: rt.isActivated,
@@ -76,26 +89,21 @@ export function projectCardFull(battle, rt) {
     type: def.type ?? 'normal',
     series: def.series ?? null,
     image: def.image ?? null,
-    // 费用徽章同口径带上逐卡动态加价（manaCostDelta，如蓄热火球链「每次打出+1」）——
-    // 手牌 sig 含 cost，蓄热次数变化会触发卡面重烘，徽章不漂移。
-    // runtime costOverride（覆写通道）命中时直接显示覆写费用，动态加价不叠加
-    //（与结算/canUse 同口径）。
+    // 费用徽章统一走有效视图（def ⊕ modifier patch ⊕ legacy 通道，与结算/canUse 同口径）；
+    // AP 负值显示钳 0（结算侧同口径免付），X 费原样透传。手牌 sig 含 cost，
+    // patch/掷值变化会触发卡面重烘，徽章不漂移。
     cost: (() => {
-      const c = def.cost ?? { mana: 0, actionPoint: 0 };
-      const ov = rt.costOverride;
-      if (ov) return { mana: ov.mana ?? c.mana, actionPoint: ov.actionPoint ?? c.actionPoint };
-      if (typeof c.mana !== 'number') return c;
-      const d = def.manaCostDelta?.(sctx) ?? 0;
-      // 幻象的 AP 扰动（rt.apCostShift，抽牌时掷出）：徽章钳 0 下限（−1 显示为 0 费，
-      // 结算侧同口径免付）；sig 含 cost，掷值变化自动触发卡面重烘
-      const apD = rt.apCostShift ?? 0;
-      return (d || apD)
-        ? { ...c, mana: c.mana + d, actionPoint: Math.max(0, (c.actionPoint ?? 0) + apD) }
-        : c;
+      const c = costOf(rt, sctx);
+      return {
+        ...def.cost,
+        mana: c.mana,
+        actionPoint: typeof c.actionPoint === 'number' ? Math.max(0, c.actionPoint) : c.actionPoint,
+      };
     })(),
     // keywords = 展示用中文标签（KEYWORD_LABELS 翻译后，如 'mini' → '迷你'）——判英文
-    // 词条键永不命中，别拿它做逻辑判断（弃牌坏态根因）；逻辑判定读 core 侧 def
-    keywords: (def.keywords ?? []).map(k => KEYWORD_LABELS[k] ?? k),
+    // 词条键永不命中，别拿它做逻辑判断（弃牌坏态根因）；逻辑判定读 core 侧 def。
+    // 读有效视图（modifier 挂上的词条照常显示）
+    keywords: keywordsOf(rt).map(k => KEYWORD_LABELS[k] ?? k),
     cardMode: def.cardMode ?? 'normal',
     chantWeight: def.chantWeight ?? null,
     pack: def.pack ?? null, // 'common' = 通用灰卡：卡面走偏白主题色
@@ -158,8 +166,9 @@ export function projectBattle(battle) {
       const blocked = (!usable && def?.cardMode === 'chant' && !rt.isActivated
         && !chantActivationLegal(ctx, rt, def)) ? 'chantPressure' : null;
       // locked（无人战体「解除威胁」）：被锁定的卡——回合结束时仍在手则被焚毁，
-      // 离手即免除；不影响任何操作（BattleStage 据此挂四角锁定标记）
-      return { ...projectCardFull(battle, rt), usable, blocked, locked: !!rt.locked };
+      // 离手即免除；不影响任何操作（BattleStage 据此挂四角锁定标记）。
+      // 锁定已迁移为内建 `locked` modifier，此处投影派生布尔（stage 零改动）
+      return { ...projectCardFull(battle, rt), usable, blocked, locked: hasCardModifier(rt, 'locked') };
     }),
     // 结算区（发动/被跨节拍处理的卡）：仅 id 列表——手牌来源的卡视图已在离手前
     // 的 hand 投影中建好；牌库来源（如斩进阶的宾语转化）无既有卡面，由 presenter

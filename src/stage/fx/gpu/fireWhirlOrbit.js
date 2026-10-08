@@ -157,8 +157,10 @@ function defineFireWhirlType(name, cap, rate) {
     name, space: 'world', cap, kind: 'custom',
     // rate 是「spawn 尝试」口径：角向浓淡 rejection 平均放行 ~0.6
     spawn: { rate, ttl: 1.9, ttlJit: 0.4, vel: [0, 0, 0], velJit: 0, spread: 0, gravity: 0, drag: 0, windK: 0 },
-    // 生命期色温：热根白黄 → 梢头暗红（单调上升 ⇒ 年龄 ≈ 高度）
-    render: { size: 0.46, sizeEndK: 3.3, color: [1.15, 0.72, 0.28], colorEnd: [0.72, 0.16, 0.04], alpha: 0.55, heat: 1.0, softness: 2.2 },
+    // 生命期色温：热根白黄 → 梢头暗红（单调上升 ⇒ 年龄 ≈ 高度）。
+    // sizeMode 'age'：尺寸斜坡按年龄（progress 是亮度包络——族亮/火闪/level 不得
+    // 泄漏进尺寸；火舌的「大软点」靠温和的 sizeEndK 年龄斜坡表达）
+    render: { size: 0.46, sizeEndK: 1.5, sizeMode: 'age', color: [1.15, 0.72, 0.28], colorEnd: [0.72, 0.16, 0.04], alpha: 0.55, heat: 1.0, softness: 2.2 },
     custom: { build: buildWhirl },
   });
 }

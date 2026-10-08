@@ -11,6 +11,7 @@
 import { zoneOf, aliveEnemies } from '../state/battleState.js';
 import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { handIndexAtPlay, handLimitOf, effectiveHandCount } from '../skills/helpers.js';
+import { keywordsOf } from '../skills/cardModifiers.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import {
@@ -302,5 +303,5 @@ export function selected(instr) {
 // 但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）。
 export function isBladeCard(card) {
   const def = getSkillDefinition(card.defId);
-  return def.series === 'blade' || def.keywords?.includes('blade') === true;
+  return def.series === 'blade' || keywordsOf(card).includes('blade');
 }

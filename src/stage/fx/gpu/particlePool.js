@@ -55,7 +55,7 @@ const T_STRIDE = 12;  // 每类型行 12 vec4：
 //  r8: color.rgb, alpha
 //  r9: colorEnd.rgb, heat
 //  r10: radial（径向爆散初速）, ageHeat（随年龄衰减的亮度增益）, —, —
-//  r11: softness（sprite 径向衰减指数）, —, —（只许尾部追加——L1 分块纪律）
+//  r11: softness（sprite 径向衰减指数）, sizeMode（1 = 尺寸斜坡按年龄，0 = 按 progress）, alphaMode（1 = 淡入+淡出，0 = 只淡出）, —（只许尾部追加——L1 分块纪律）
 const A_STRIDE = 2;   // 每锚点 2 vec4：
 //  a0: type(0 线段/1 矩形/2 圆), alive, p0.x, p0.y
 //  a1: p0.z, p1.x, p1.y, p1.z
@@ -375,12 +375,21 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       const r10 = tS.element(base.add(int(10)));
       const prog = clamp(payloadS.element(idx.mul(int(2)).add(int(1))).x, 0.0, 1.0);
       const ageP = clamp(age, 0.0, 1.0);
-      const sz = r7.z.mul(mix(float(1.0), r7.w, prog));
-      const soft = tS.element(base.add(int(11))).x;
+      // 尺寸斜坡驱动分两档（r11.y）：'prog'（缺省）= progress 通道；'age' = 年龄——
+      // progress 被类型当亮度包络用时（orbit 族：族亮/闪烁/level 都在里面），
+      // 尺寸必须解耦到年龄，否则亮族变大、闪烁脉动尺寸
+      const r11 = tS.element(base.add(int(11)));
+      const szRamp = select(r11.y.greaterThan(0.5), ageP, prog);
+      const sz = r7.z.mul(mix(float(1.0), r7.w, szRamp));
+      // alpha 包络分两档（r11.z）：'out'（缺省）= 线性淡出；'in' = 淡入 20% 再线性
+      // 淡出——发射器类粒子不许满尺寸弹入（「凭空出现」病灶）
+      const fade = select(r11.z.greaterThan(0.5),
+        smoothstep(0.0, 0.2, ageP).mul(oneMinus(ageP)), oneMinus(ageP));
+      const soft = r11.x;
       // ageHeat：随年龄衰减的亮度增益（燃烧火星「新鲜更亮」口径 = heat×(1+ageHeat×(1-age))）
       const rgb = mix(r8.rgb, r9.rgb, prog)
         .mul(r9.w.mul(float(1.0).add(r10.y.mul(oneMinus(ageP)))));
-      col.assign(vec4(rgb, r8.w.mul(oneMinus(ageP))));
+      col.assign(vec4(rgb, r8.w.mul(fade)));
       misc.assign(vec4(sz, prog, soft, 0.0));
     });
     renderColorS.element(idx).assign(col);
@@ -643,7 +652,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       put(8, rd.color[0], rd.color[1], rd.color[2], rd.alpha);
       put(9, rd.colorEnd[0], rd.colorEnd[1], rd.colorEnd[2], rd.heat);
       put(10, s.radial, rd.ageHeat ?? 0, 0, 0);
-      put(11, rd.softness ?? 1, 0, 0, 0);
+      put(11, rd.softness ?? 1, rd.sizeMode === 'age' ? 1 : 0, rd.alphaMode === 'in' ? 1 : 0, 0);
     }
     tAttr.needsUpdate = true;
   }
@@ -727,7 +736,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   async function debugReadCounts() {
     return Array.from(new Uint32Array(await renderer.getArrayBufferAsync(aliveAttr)));
   }
-  async function debugReadState() {
+  async function debugReadState(maxSample = 6) {
     const buf = new Float32Array(await renderer.getArrayBufferAsync(stateAttr));
     const pay = new Float32Array(await renderer.getArrayBufferAsync(payloadAttr));
     let alive = 0; const sample = [];
@@ -735,7 +744,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       const age = buf[i * 8 + 3];
       if (age >= 0 && age < 1) {
         alive++;
-        if (sample.length < 6) {
+        if (sample.length < maxSample) {
           sample.push({
             pos: [+buf[i * 8].toFixed(2), +buf[i * 8 + 1].toFixed(2), +buf[i * 8 + 2].toFixed(2)],
             age: +age.toFixed(3),

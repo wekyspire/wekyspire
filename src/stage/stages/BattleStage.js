@@ -244,8 +244,7 @@ export class BattleStage {
     // this.particles = 组合门面（fx/gpu/burstFx.js）：一次性爆发 spawn 落 GPU 池 burst
     // （懒登记 uber 类型）；伤害数字等文本/贴图粒子与剧本 emitter 由 floatFx 承接
     // （同容器名 points/sprites/spritesUI，场景挂载与既有调用点零改动）
-    this.particles = createBurstFacade(this.particles2World);
-    this.scene.add(this.particles.points);      // emitter 点粒子（Boss 剧本氛围尾巴）
+    this.particles = createBurstFacade(this.particles2World, () => this._sm.camera);
     this.scene.add(this.particles.sprites);     // 世界内贴图粒子层（3D 场景演出）
     this.uiScene.add(this.particles.spritesUI); // 读数文本粒子层（前景，恒定屏幕尺寸）
     this._drainFx = null; // _resources 就位后创建（见下）

@@ -3,6 +3,7 @@ import { cloneSkillRuntime } from '../state/skillRuntime.js';
 import { moveCard, aliveEnemies } from '../state/battleState.js';
 import { enterBattle } from '../skills/helpers.js';
 import { getSkillDefinition } from '../skills/registry.js';
+import { keywordsOf } from '../skills/cardModifiers.js';
 import { getAbilityDefinition } from '../abilities/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { activeRelics, refreshRunModifiers } from '../run/prep.js';
@@ -67,10 +68,10 @@ export class PreBattleInstruction extends BattleInstruction {
       battleState.rng.shuffle(battleState.zones.deck);
       for (const skill of battleState.zones.deck) enterBattle(ctx, skill);
       // 固有（named 术语，keywords 'innate'）：游戏开始时在牌库中的固有卡直接入手——
-      // 不占初始抽牌位，起手必然见到（鬼抽保险「情况不对」等）。裸 moveCard 静默迁移：
-      // 首个 battleStart 快照自然覆盖显示
+      // 不占初始抽牌位，起手必然见到（鬼抽保险「情况不对」等）。词条读有效视图
+      // （modifier 可挂固有）。裸 moveCard 静默迁移：首个 battleStart 快照自然覆盖显示
       for (const skill of [...battleState.zones.deck]) {
-        if (getSkillDefinition(skill.defId).keywords?.includes('innate')) {
+        if (keywordsOf(skill).includes('innate')) {
           moveCard(battleState, skill.uniqueID, 'hand');
         }
       }

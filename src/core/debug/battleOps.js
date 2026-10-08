@@ -11,7 +11,7 @@ import { currentPlayerTurn } from '../flow/battle.js';
 import { aliveEnemies } from '../state/battleState.js';
 import { DealDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
-import { AddCardInstruction, DrawCardsInstruction } from '../instructions/cards.js';
+import { AddCardInstruction, DrawCardsInstruction, MoveCardInstruction } from '../instructions/cards.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { getEffectDefinition } from '../effects/registry.js';
 import { getSkillDefinition } from '../skills/registry.js';
@@ -79,6 +79,20 @@ export function addCardToHand(battle, defId) {
   const def = getSkillDefinition(defId); // 未注册抛错
   submit(battle, [new AddCardInstruction({ defId, toZone: 'hand' })]);
   return `手牌加入「${def.name}」`;
+}
+
+/** 抽出指定卡（测试刚需：牌库里该 defId 的第一张直接搬进手牌——绕过随机抽取，
+ * 测试卡不必再靠塞满牌组赌上手；牌库没有该卡时退化为新建一张入手（同 addCardToHand）。 */
+export function drawCard(battle, defId) {
+  const def = getSkillDefinition(defId); // 未注册抛错
+  const deck = battle.ctx.battleState.zones.deck;
+  const rt = deck.find(c => c.defId === defId);
+  if (rt) {
+    submit(battle, [new MoveCardInstruction({ uniqueID: rt.uniqueID, toZone: 'hand' })]);
+    return `「${def.name}」从牌库抽到手牌`;
+  }
+  submit(battle, [new AddCardInstruction({ defId, toZone: 'hand' })]);
+  return `牌库没有「${def.name}」，已新建入手`;
 }
 
 /** 抽 N 张（走抽牌指令：手牌上限/牌库空等规则照走）。 */

@@ -154,6 +154,7 @@ export function createRunDebug(ctx) {
   const gainApInBattle = (n) => battleAct('加行动力', () => bops.gainActionPoints(battle(), n));
   const gainShieldInBattle = (n) => battleAct('加护盾', () => bops.gainShield(battle(), n));
   const addCardToHand = (defId) => battleAct('加到手牌', () => bops.addCardToHand(battle(), defId));
+  const drawCard = (defId) => battleAct('抽出指定卡', () => bops.drawCard(battle(), defId));
   const drawCards = (n) => battleAct('抽牌', () => bops.drawCards(battle(), n));
   const addBattleEffect = (targetKey, effectId, stacks) =>
     battleAct('加效果', () => bops.addEffect(battle(), targetKey, effectId, stacks));
@@ -196,6 +197,6 @@ export function createRunDebug(ctx) {
     triggerAscension, skipCutscene,
     // 战斗页
     killAllEnemies, killEnemy, healFull, gainManaInBattle, gainApInBattle, gainShieldInBattle,
-    addCardToHand, drawCards, addBattleEffect, cleanseBattle, enemyViews, hardResetBattle,
+    addCardToHand, drawCard, drawCards, addBattleEffect, cleanseBattle, enemyViews, hardResetBattle,
   };
 }

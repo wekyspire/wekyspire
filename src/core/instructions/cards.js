@@ -5,6 +5,7 @@ import {
   enterBattle, leaveBattle, deactivateChant, effectiveHandCount, handLimitOf,
   overloadLimitOf, pickOverflowVictims,
 } from '../skills/helpers.js';
+import { attachModifierInstance } from '../skills/cardModifiers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
 import { tickCooldownOnEnterDeck } from './skill.js';
 
@@ -277,13 +278,15 @@ export class TransformCardInstruction extends BattleInstruction {
   }
 }
 
-// 锁定（无人战体「解除威胁/反反反反制」）：给卡打「回合结束时若仍在手则被焚毁」的
-// 纯标记——不打断任何玩家操作（照常打出/弃置），离手即免除。结算与清标由施加方的
-// 订阅负责（enemies.js intactDrone 的 PlayerTurnEnd 订阅：手牌中的锁定卡焚毁、
-// 全 zone 清标——本轮锁定结算完毕，离手的卡不带标回库）。
+// 锁定（无人战体「解除威胁/反反反反制」）：给卡挂 `locked` 焚毁烙印 modifier——
+// 「回合结束时若仍在手则被焚毁」，不打断任何玩家操作（照常打出/弃置），离手即免除。
+// 结算与清标由施加方的订阅负责（bosses.js/chapter2.js 的 PlayerTurnEnd 订阅：手牌中
+// 的锁定卡焚毁、全 zone 清标——本轮锁定结算完毕，离手的卡不带标回库）。
 // 可锁**牌库里的卡**（神兵躯壳【蓄能】要锁「你最先抽到的三张」= 牌库顶
 // 三张，抽到手上才带标、回合末仍在手则焚）——原实现只查手牌，会静默锁空。
 // 过期引用无害：锁定时已离场的 uniqueID 静默跳过（与弃/移同哲学）。
+// 单节拍原子（不入 pending）：直接写实例、不经 AddCardModifierInstruction
+// （locked 无钩子，无订阅可注册）。
 export class LockCardsInstruction extends BattleInstruction {
   constructor({ uniqueIDs }, opts = {}) {
     super(opts);
@@ -296,7 +299,7 @@ export class LockCardsInstruction extends BattleInstruction {
       const zone = zoneOf(ctx.battleState, uniqueID);
       const card = zone && ctx.battleState.zones[zone].find(c => c.uniqueID === uniqueID);
       if (!card) continue;
-      card.locked = true;
+      attachModifierInstance(card, { modId: 'locked', source: 'enemy' });
       locked.push(card);
     }
     this.result = { locked };
