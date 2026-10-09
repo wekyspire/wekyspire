@@ -21,7 +21,7 @@ export function trainingWidgets(w, snap) {
     w.push({ kind: 'button', id: 'train:resume', width: 260, size: 'main', label: '继续修行…', action: { action: 'trainingUpgradeResume' } });
   } else if (t.choices?.length) {
     // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底
-    w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '挑选抓牌候选…', action: { action: 'trainingDrawPick' } });
+    w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '选择一张新卡牌…', action: { action: 'trainingDrawPick' } });
   } else if (!t.optionalDone) {
     // 可选段入口：按钮只写动作，代价与收益走下方说明小字（用户定两层结构）
     w.push({ kind: 'button', id: 'train:roll', width: 260, size: 'main', label: '继续训练', action: { action: 'trainingDrawRoll' } });

@@ -75,12 +75,13 @@ export class CardScrollPickerObject extends ScrollPickerObject {
         return {
           obj, key: c.uniqueID, id, enabled: c.enabled,
           meta: { uniqueID: c.uniqueID, defId: c.defId, view: c.view, tipDefId: c.tipDefId },
-          // 预览用 `tipDefId ?? defId`（升级入口传的是升阶后的卡；无目标时预览自身，hover 不落空）；
-          // 升级分叉（tipDefIds 多张）→ 多卡并列预览（「可升方向全摆出来」）。
-          // tips=false 的入口（删卡）整卡不弹——tip 置 null 后基类 hover 自然静默
+          // 整卡预览必须**显式异内容**（升级类入口传 tipDefId/tipDefIds = 预览升阶后的卡）；
+          // 不允许「预览自己」——候选卡已完整摆在界面上，自预览只是重复噪音，还占死
+          // 全局唯一 tooltip、把卡面 hitRegion 的 named/effect hover 顶掉（多次回归的结构
+          // 根源：新入口漏传 tipDefId 时不得缺省获得自预览）。tips=false（删卡类）同 null。
           tip: !tips ? null : (c.tipDefIds?.length > 1)
             ? { type: 'cards', payload: { cardIds: c.tipDefIds } }
-            : { type: 'card', payload: { cardId: c.tipDefId ?? c.defId } },
+            : (c.tipDefId != null ? { type: 'card', payload: { cardId: c.tipDefId } } : null),
           setState: (s) => obj.setVisualState(s),
         };
       },

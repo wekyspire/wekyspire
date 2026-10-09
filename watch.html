@@ -71,8 +71,8 @@
             else if (p.totalBytes > 0) pct = Math.min(100, Math.round((p.loadedBytes || 0) / p.totalBytes * 100));
             else if (total > 0) pct = Math.round(loaded / total * 100);
             fill.style.width = pct + '%';
-            var line = '加载美术资源… ' + loaded + ' / ' + total;
-            if (p.totalBytes > 0) line += ' ｜ ' + fmtB(p.loadedBytes) + ' / ' + fmtB(p.totalBytes);
+            var line = '加载美术资源…';
+            if (p.totalBytes > 0) line += ' ' + fmtB(p.loadedBytes) + ' / ' + fmtB(p.totalBytes);
             text.textContent = line;
           },
           dismiss: function () {

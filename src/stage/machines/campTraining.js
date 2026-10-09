@@ -75,8 +75,8 @@ export function createCampTrainingMachine(ctx) {
       if (!snap) return false;
       const t = snap.training ?? {};
       if (snap.room === 'campTraining' || snap.room === 'training') {
-        if (!t.started) { _nudgeTraining('先开始训练，才能继续赶路。'); return true; }
-        if (t.pendingUpgrade) { _nudgeTraining('抓到的卡还欠一次升级呢。'); return true; }
+        if (!t.started) { _nudgeTraining('请先完成训练。'); return true; }
+        if (t.pendingUpgrade) { _nudgeTraining('请先完成卡牌升级。'); return true; }
       }
       return false;
     },

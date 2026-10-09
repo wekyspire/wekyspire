@@ -463,9 +463,9 @@ export function createStagePickerKit({
       cancelFn = () => { onIntent?.({ action: 'trainingDraw', defId: null }); };
       picker.attachPicker(pickerNow());
       picker.open({
-        title: '训练抓牌',
+        title: '选择一张卡牌加入构筑',
         cards: choices.map(c => ({
-          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true,
         })),
         confirmLabel: '加入牌组',
       });
@@ -499,7 +499,7 @@ export function createStagePickerKit({
       picker.open({
         title: `${pend.packName ?? pend.packId}卡包`,
         cards: pend.cards.map(c => ({
-          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+          uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true,
         })),
         confirmLabel: '加入牌组',
       });
@@ -570,7 +570,7 @@ export function createStagePickerKit({
         picker.open({
           title: pd.tier === 'major' ? '选一张卡牌（大奖）' : '选一张卡牌（小奖）',
           cards: pd.choices.map(c => ({
-            uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true, tipDefId: c.defId,
+            uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true,
           })),
           confirmLabel: '加入牌组',
         });

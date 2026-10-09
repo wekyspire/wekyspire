@@ -26,50 +26,50 @@ import {
   breakAllBlock, reactFx, drawCards,
 } from './cardKit.js';
 
-// 格挡（格挡系列 C）：+1 层格挡 + 4 护盾。
-// 不是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
+// 格挡（格挡系列 C）：+1 层格挡 + 3 护盾。0 费冷却 3——免费但占节奏位，
+// 升阶 = 冷却缩短。不是起始专属卡，作为系列链首正常入包（通用填充卡只有拳/盾）。
 registerSkill({
   id: 'blockC', name: '格挡', type: 'normal', tier: 'C', series: 'block',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 3 },
   cardMode: 'normal',
   promotesTo: 'blockB',
   use(sctx) {
     gainBlock(sctx, 1);
-    gainShield(sctx, 4);
+    gainShield(sctx, 3);
     return true;
   },
-  describe: () => '/effect{格挡}1，4护盾',
+  describe: () => '/effect{格挡}1，3护盾',
 });
 
-// 格挡（格挡系列 B）：+1 层格挡 + 4 护盾，**无冷却**（升阶 = 去冷却）。
+// 格挡（格挡系列 B）：+1 层格挡 + 3 护盾，0 费冷却 1。
 registerSkill({
   id: 'blockB', name: '格挡', type: 'normal', tier: 'B', series: 'block',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   promotesTo: 'blockA',
   use(sctx) {
     gainBlock(sctx, 1);
-    gainShield(sctx, 4);
+    gainShield(sctx, 3);
     return true;
   },
-  describe: () => '/effect{格挡}1，4护盾',
+  describe: () => '/effect{格挡}1，3护盾',
 });
 
-// 格挡（格挡系列 A）：+2 层格挡 + 4 护盾，无冷却。
+// 格挡（格挡系列 A）：+2 层格挡 + 3 护盾，0 费冷却 1。
 registerSkill({
   id: 'blockA', name: '格挡', type: 'normal', tier: 'A', series: 'block',
-  cost: { mana: 0, actionPoint: 1 },
-  charges: { max: Infinity, cooldownTurns: 0 },
+  cost: { mana: 0, actionPoint: 0 },
+  charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   promotesTo: 'perfectBlock',
   use(sctx) {
     gainBlock(sctx, 2);
-    gainShield(sctx, 4);
+    gainShield(sctx, 3);
     return true;
   },
-  describe: () => '/effect{格挡}2，4护盾',
+  describe: () => '/effect{格挡}2，3护盾',
 });
 
 // 完美格挡（格挡系列 S）：0 费 +2 层格挡 + 7 护盾 + 抽 1（费用栏留空 → 无任何资源消耗）。

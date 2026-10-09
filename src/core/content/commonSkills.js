@@ -403,16 +403,17 @@ noonNapCard('noonNapC', 'C', 12, 'noonNapB');
 noonNapCard('noonNapB', 'B', 16, 'noonNapA');
 noonNapCard('noonNapA', 'A', 20);
 
-// 防住！C/B/A（消耗，设计稿未写费用 → 0 费）：10/13/16 护盾。
+// 防住！（C/B/A，消耗，0 费，迷你）：10/13/16 护盾。
 // 一次性大盾——消耗品定位与同阶护盾件（灵力护盾 1MP 6盾 可循环）错位：
-// 不耗蓝、不管冷却，但整场战斗就这一发。
+// 不耗蓝、不管冷却，但整场战斗就这一发；迷你 = 计 0 张手牌（捏在手里等时机
+// 不挤容量）。
 const holdOutCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '防住！', type: 'normal', pack: 'common', tier,
   image: 'holdOutC',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  keywords: ['exhaust'],
+  keywords: ['exhaust', 'mini'],
   promotesTo,
   use(sctx) {
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: shield }));

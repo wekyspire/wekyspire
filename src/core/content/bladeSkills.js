@@ -522,25 +522,28 @@ registerSkill({
 });
 
 // ==== 藏锋系列（斩杀）==========================================================
-// 收刃 C/B/A → 藏锋 S：滞气2 + 高伤，0费无消耗无冷却。
+// 收刃 C/B/A → 藏锋 S：滞气2 + 高伤，0费无消耗无冷却，迷你（计 0 张手牌——
+// 滞气的自反补：卡住自己的牌位但不占手牌容量）。
 const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'blade',
-  keywords: ['blade'],
+  keywords: ['blade', 'mini'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo,
   use(sctx) {
-    attackDamage(sctx, damage);
+    // 效果分先后（卡面文字序 = 结算序）：先获得滞气，再攻击——攻击前获得效果
+    // 会先触发「获得效果」类敌方响应（渊素食客等），且斩杀线内外的叙述一致
     addEffect(sctx, 'stall', stall);
+    attackDamage(sctx, damage);
     return true;
   },
   describe: () => `/effect{滞气}${stall}，${damage}伤害`,
   battleDescribe: (sctx) => `/effect{滞气}${stall}，${resolvedDamageText(sctx, damage)}`,
 });
 sheathCard('sheatheC', '收刃', 'C', 11, 2, 'sheatheB');
-sheathCard('sheatheB', '收刃', 'B', 14, 2, 'sheatheA');
-sheathCard('sheatheA', '收刃', 'A', 17, 2, 'concealEdge');
+sheathCard('sheatheB', '收刃', 'B', 15, 2, 'sheatheA');
+sheathCard('sheatheA', '收刃', 'A', 19, 2, 'concealEdge');
 sheathCard('concealEdge', '藏锋', 'S', 62, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
