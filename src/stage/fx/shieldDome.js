@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, uv, vec2, vec3, vec4,
-  clamp, exp, sin, fract, smoothstep, oneMinus, atan,
+  float, clamp, exp, sin, fract, smoothstep, oneMinus, atan,
 } from 'three/tsl';
 import { gsap } from 'gsap';
 
