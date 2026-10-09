@@ -132,6 +132,9 @@ export default class AnimationSequencer {
     } catch (err) {
       console.error('[sequencer] start logic error:', err);
     }
+    // 同步自完结（start 内即 finish，如 state-sync 即拍应用）：不再武装保险丝——
+    // 死后武装的 fuse 会迟至引爆打空（指令已移除），污染 finishReasons 且无谓占定时器
+    if (instr.status === 'finished') return;
     if (Number.isFinite(instr.durationMs) && instr.durationMs >= 0) {
       const timerId = setTimeout(() => this.finish(instr.id, 'timeout'), Math.max(0, instr.durationMs));
       this._idToTimer.set(instr.id, timerId);

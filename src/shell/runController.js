@@ -676,10 +676,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
             type: 'dialogue',
             pages: [{
               speaker: '训练桩',
-              text: '抓到的卡牌要配一次修行。选一种修行方式：',
+              text: '训练还差最后一步——升级卡牌。',
               choices: [
-                { id: 'twoC', label: '夯实基础', hint: '升 2 张 C 阶卡牌' },
-                { id: 'oneB', label: '精益求精', hint: '升 1 张 B 阶卡牌' },
+                { id: 'twoC', label: '夯实基础', hint: '选择两张C级卡牌升级。' },
+                { id: 'oneB', label: '精益求精', hint: '选择一张B级卡牌升级。' },
               ],
             }],
             onChoice: (id) => { mode = id; },
