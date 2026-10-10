@@ -42,6 +42,8 @@ const UNIT_ART_FILES = Object.freeze({
   buzzbugB: 'unit_buzzbug.png',
   swampAmbusher: 'unit_swampAmbusher.png',
   thornWeed: 'unit_thornWeed.png',
+  // B 变体（分泌拍起步）：复用基底立绘
+  thornWeedB: 'unit_thornWeed.png',
   carrionBeetle: 'unit_carrionBeetle.png',
   // B 变体（首拍硬化）：复用基底立绘
   carrionBeetleB: 'unit_carrionBeetle.png',
@@ -134,6 +136,7 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   buzzbugB: 0.45,
   swampAmbusher: 1.0,
   thornWeed: 0.55,
+  thornWeedB: 0.55,
   carrionBeetle: 0.5,
   carrionBeetleB: 0.5,
   staticPuff: 0.55,

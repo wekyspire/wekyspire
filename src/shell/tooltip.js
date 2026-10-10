@@ -13,7 +13,7 @@
 //            模型带 cardPreview { skillId, params }，TooltipOverlay 渲染 CardFacePreview
 //            （应用前口径 describe，params 经 ctx.params 透传插值）
 //   cards    多卡并列预览（升级分叉 hover）：模型带 cardPreviews [{ skillId, params }]
-//   named    术语文档（namedTerms，键即术语名，含参数如「衰败2」）
+//   named    术语文档（namedTerms，键即术语名，含参数如「咏唱2」）
 //   intention 意图投影数据直译短句（与 UnitObject 意图条图标一一对应）
 //   shift    Shift 详情方标（文案由热区携带）
 

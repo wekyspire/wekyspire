@@ -145,7 +145,7 @@ function chantToggledBeat(stage, payload, finish) {
 }
 
 function cooldownTickBeat(stage, payload, finish) {
-  // 冷却推进/反向（payload.delta 带方向）：正向=绿、衰败=暗红（与 named 术语「衰败」同色）。
+  // 冷却推进/反向（payload.delta 带方向）：正向=绿、反向=暗红。
   // ⚠ 判据必须是「视图可见」（= 卡在手牌），不是 _views 是否命中——牌库中的卡视图保留
   // 但 visible=false，打在它上面的脉冲肉眼不可见（障：斩弃回牌库看不到冷却动画，
   // 脉冲全喂给了隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍

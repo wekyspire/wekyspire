@@ -289,15 +289,15 @@ export class RelicLoadoutObject extends THREE.Group {
 
     // —— 已装备区 / 背囊区（drop target）——
     if (hasLoadout) {
-      y = this._buildZone('eq', '已装备 · 拖回背囊卸下', y, eq, perRow, eqRows, W);
+      y = this._buildZone('eq', '已装备', y, eq, perRow, eqRows, W);
       y -= 0.8;
-      y = this._buildZone('bag', '背囊 · 拖到上方装备', y, bag, perRow, bagRows, W);
+      y = this._buildZone('bag', '背囊', y, bag, perRow, bagRows, W);
     }
 
-    // —— 恒生效行（不占槽，只读）——
+    // —— 无需装备的遗物行（只读）——
     if (ns.length) {
       y -= 0.8;
-      const label = this._label('恒生效（不占槽）', '#a8c6a0');
+      const label = this._label('无需装备的遗物', '#a8c6a0');
       label.position.set(0, y - LABEL_H / 2, Z.content);
       this.add(label);
       y -= LABEL_H;
@@ -313,7 +313,7 @@ export class RelicLoadoutObject extends THREE.Group {
 
     // —— 操作提示行 ——
     y -= 0.6;
-    const hint = this._label(hasLoadout ? '拖拽图标装卸 ｜ 金点遗物点击使用' : '', '#6f7a92');
+    const hint = this._label(hasLoadout ? '拖拽图标装卸，金色圆点的遗物可点击使用' : '', '#6f7a92');
     hint.position.set(0, y - HINT_H / 2, Z.content);
     this.add(hint);
   }

@@ -151,7 +151,7 @@ export function bakeCardFace(card, options = {}) {
       const { color } = effectLook(name);
       return color ? { color } : {};
     }),
-    // named 术语特征色（斩/衰败等，core/skills/namedTerms.js 供表）
+    // named 术语特征色（斩/咏唱等，core/skills/namedTerms.js 供表）
     resolveNamed: options.resolveNamed ?? ((name) => {
       const { color } = namedLook(name);
       return color ? { color } : {};

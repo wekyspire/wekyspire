@@ -41,7 +41,7 @@ import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { TargetingArrowObject } from '../objects/TargetingArrowObject.js';
-import { ScreenShake, DamageVignette } from '../objects/screenImpactFX.js';
+import { ScreenShake, DamageVignette, lowHpVignetteLevel } from '../objects/screenImpactFX.js';
 import { createBurstFacade } from '../fx/gpu/burstFx.js';
 import { createParticlePool } from '../fx/gpu/particlePool.js';
 import { createBurnLink } from '../fx/gpu/burnSparks.js';
@@ -365,7 +365,9 @@ export class BattleStage {
       this._bubbles.update(dt);   // 角色自语/对话泡泡（自带冒出→停留→放缩消失时序）
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
-      this._vignette.update(dt);  // 友军受击渐晕释放
+      // 低血常驻渐晕：按显示快照血量每帧推（状态驱动，回升即退）+ 受击脉冲释放
+      this._vignette.lowHp(lowHpVignetteLevel(this._snapshot?.player));
+      this._vignette.update(dt);
       this.shake.update(dt);      // 震荡只登记偏移通道，落笔在导演的 commit（渲染前）
     });
 
