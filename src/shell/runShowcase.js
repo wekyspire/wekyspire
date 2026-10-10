@@ -42,10 +42,8 @@ export function createRunShowcase(ctx) {
     if (shopDispensing) return false;                    // 售货机出货演出中：等场景回执再播（别盖住出货）
     const def = getRelicDefinition(relicShowcaseQueue.shift());
     if (!def) return false;
-    const cost = def.nonSlot ? '非槽位式' : `占用 ${def.cost ?? 0} 槽`;
     return stage.showcaseItem({
       title: def.name ?? def.id,
-      desc: `遗物 · ${def.rarity ?? 'C'} 级 · ${cost}`,
       effect: def.description ?? '',
       // 设计稿 RELICS.md 里该遗物的斜体文本（铭文）——获得演出最下方一行斜体
       // （定义侧 flavor 字段与设计稿逐字同步，见 smoke-relic-flavor）
@@ -67,7 +65,6 @@ export function createRunShowcase(ctx) {
   // 承受词条**（转出来的那一面就是诅咒本身；悬停出 tooltip）→ 退场换回普通盘 →
   // **获得演出**（先"获得"这个词条，再报那笔超额取款的金币）。场景那半在 RoomStage 的
   // 状态机里，这里只记"选完词条后要播什么"，等场景回执 demonAnimDone 再播（否则特写会盖住退场演出）。
-  const DEMON_TIER_LABEL = { yellow: '黄色级', red: '红色级', black: '黑色级' };
   const DEMON_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
   let demonRewardShow = null;   // { gold, tier, name, desc }
   function bankDemonPick(id) {
@@ -120,7 +117,6 @@ export function createRunShowcase(ctx) {
     // 舞台没有该能力时退回「焚毁」文字特写）→ 金币 → （有附赠则）自动开选卡界面。
     const steps = [{ show: {
       title: p.name,
-      desc: `恶魔词条（${DEMON_TIER_LABEL[p.tier] ?? p.tier}）`,
       effect: p.desc,
       tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
       autoDismissMs: 1900,
@@ -128,7 +124,6 @@ export function createRunShowcase(ctx) {
     for (const b of p.burnt ?? []) steps.push({ burn: b });
     steps.push({ show: {
       title: `+${p.gold} 金币`,
-      desc: '银行机超额取款',
       artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
       tint: 0xffd75e,
       autoDismissMs: 1700,
@@ -184,10 +179,16 @@ export function createRunShowcase(ctx) {
     if (stage.uiBusy) return false;   // 特写/选卡界面在播：等下一拍 notify 再试（不记已播）
     const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
     const freeUpgrade = p.upgrade?.kind === 'free';
+    // 单件遗物奖不做「奖品箱」中转特写：直接领取，遗物差分特写（立绘/铭文）即获得演出。
+    // 领取在 notify 链内再入一次 notify——内层的 diffNewRelics 负责起播遗物特写
+    if (p.relicId && !needsPick && !freeUpgrade) {
+      actions.slotTake(null);
+      if (!run.slotPending) { shownSlotPrize = p; return true; }
+      return false;   // core 校验失败（脏档/竞态）：不记已播，下一拍 notify 重试
+    }
     const major = p.tier === 'major';
     const shown = stage.showcaseItem({
       title: slotPrizeText(p),
-      desc: major ? '老虎机（大奖）' : '老虎机（小奖）',
       effect: needsPick ? '收下之后挑一件带走'
         : freeUpgrade ? '收下之后，选一张卡牌免费升级'
           : null,
@@ -284,7 +285,6 @@ export function createRunShowcase(ctx) {
     const relicPack = p.kind === 'relic';
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
-      desc: pack ? '卡包（售货机）' : relicPack ? '遗物包（售货机）' : '售货机',
       effect: p.effect ?? '',
       artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材就色块）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,

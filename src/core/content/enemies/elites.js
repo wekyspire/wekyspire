@@ -79,7 +79,7 @@ registerEnemy({
 });
 
 // ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
-// 被斩杀），首拍扑咬 25；随后三拍循环：盾15+中毒5 → 盾15+攻10 → 晕眩发呆（破盾窗口）。
+// 被斩杀），首拍扑咬 23；随后三拍循环：盾15+中毒6 → 盾15+攻10 → 晕眩发呆（破盾窗口）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
@@ -92,7 +92,7 @@ registerEnemy({
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 25 + atk,
+        source: actx.unit, target: actx.player, amount: 23 + atk,
       }));
       return;
     }
@@ -100,7 +100,7 @@ registerEnemy({
     if (phase === 0) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'poison', stacks: 5,
+        target: actx.player, effectId: 'poison', stacks: 6,
       }));
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
@@ -113,22 +113,22 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) {
-      return { kinds: ['attack'], hits: 1, damage: 25 + atk, note: '自身开局自带护盾20' };
+      return { kinds: ['attack'], hits: 1, damage: 23 + atk, note: '自身开局自带护盾20' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒5' };
+    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒6' };
     if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 10 + atk, note: '自身护盾15' };
     return { kinds: ['stun'], note: '晕眩（不行动）' };
   },
 });
 
 // ⑳ 碎岩穿山甲（第 1 章精英）：重甲 + 蓄势冲锋——固定防御 3
-//（白板 6 伤拳只磨出 3）；两拍循环：蓄力（盾15 + 蓄势6）→ 冲锋（攻12，
+//（白板 6 伤拳只磨出 3）；两拍循环：蓄力（盾15 + 蓄势7）→ 冲锋（攻7，
 // 蓄势让每一击都吃满加成）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'rockPangolin', name: '碎岩穿山甲',
-  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 59 }),
+  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 63 }),
   onBattleStart(ctx, unit) {
     unit.defense += 3; // 花岗岩甲：固定减伤轨
   },
@@ -137,19 +137,19 @@ registerEnemy({
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'momentum', stacks: 6,
+        target: unit, effectId: 'momentum', stacks: 7,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player,
-        amount: 12 + unit.getStat('attack'), // 蓄势走 PRE 订阅，不双计
+        amount: 7 + unit.getStat('attack'), // 蓄势走 PRE 订阅，不双计
       }));
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+6' }
+    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+7' }
     : { kinds: ['attack'], hits: 1,
-        damage: 12 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
+        damage: 7 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
 });
 

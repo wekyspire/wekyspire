@@ -73,7 +73,7 @@ export function effectLook(name) {
   return { color, icon: def?.icon ?? null };
 }
 
-/** 命名实体（NAMED 术语）外观：术语表自带特征色（含尾缀参数如「衰败2」）。 */
+/** 命名实体（NAMED 术语）外观：术语表自带特征色（含尾缀参数如「咏唱2」）。 */
 export function namedLook(name) {
   const term = getNamedTerm(name);
   return { color: term?.color ?? null };

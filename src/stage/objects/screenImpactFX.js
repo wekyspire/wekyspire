@@ -5,8 +5,10 @@
 //   │   幅度/时长随受击烈度增长，线性包络衰减，正弦双轴抖动（每次 impulse 随机相位，
 //   │   重复受击不重样）。震荡是 non-blocking FX（不进动画队列、不占节拍），与粒子/读数同律。
 //   │   与运镜天然可叠加：震荡震它的，flyTo 飞它的，两路各写各的数据、互不覆盖。
-//   └─ DamageVignette：视角边缘压暗压红渐晕——友军受击时播放（uiScene 顶层覆盖面，
-//       径向渐变贴图：中心全透明，边角暗红）。峰值随烈度、指数释放。
+//   └─ DamageVignette：视角边缘压暗压红渐晕（uiScene 顶层覆盖面，径向渐变贴图：
+//       中心全透明，边角暗红）。两层：①受击脉冲（友军受伤时播，峰值随烈度、指数
+//       释放）②低血常驻档（hp ≤ 20% 状态驱动，慢呼吸起伏、不随释放消退——
+//       BattleStage 每帧按快照血量推 lowHp；受击脉冲叠加其上）。
 //
 // 烈度口径（damageSeverity）：生命值伤害全值 + 护盾吸收 ×0.2——护盾受击严重度低
 // ，震荡/渐晕强度都吃同一口径，演出与结算同源不漂移。
@@ -32,6 +34,21 @@ const VIGNETTE_PEAK_BASE = 0.12;     // 轻击渐晕几乎不可感（压暗是�
 const VIGNETTE_PEAK_PER_SEVERITY = 0.024;
 const VIGNETTE_PEAK_MAX = 0.85;
 const VIGNETTE_RELEASE_TAU = 0.45;   // 指数释放时间常数（秒）：峰值后约 0.3s 肉眼可感
+// 低血常驻档（状态驱动，不随释放衰减）：hp 跌破阈值起、越低越浓（到地板值封顶），
+// 慢呼吸起伏——读「持续的危险状态」而非静止贴图。受击脉冲叠加其上（和封顶）
+const LOW_HP_THRESHOLD = 0.20;       // 血量占比阈值（20% 以下起）
+const LOW_HP_FLOOR = 0.06;           // 到此占比常驻档拉满
+const LOW_HP_PEAK = 0.30;            // 常驻档满值透明度（要压得住屏、又不糊视野）
+const LOW_HP_BREATH_RATE = 2.0;      // 呼吸角频率（rad/s）
+const LOW_HP_BREATH_DEPTH = 0.12;    // 呼吸深度（±12%）
+
+/** 血量占比 → 低血常驻档强度（0..1）；player 投影缺省/满血返回 0。 */
+export function lowHpVignetteLevel(player) {
+  if (!player || !(player.maxHp > 0)) return 0;
+  const ratio = Math.max(0, player.hp) / player.maxHp;
+  const t = (LOW_HP_THRESHOLD - ratio) / (LOW_HP_THRESHOLD - LOW_HP_FLOOR);
+  return Math.min(1, Math.max(0, t));
+}
 
 /** 受击烈度：生命值伤害全值 + 护盾吸收 ×0.2。震荡与渐晕共用的唯一口径。 */
 export function damageSeverity(dealt, shieldAbsorbed) {
@@ -131,6 +148,8 @@ export class DamageVignette {
     this._peak = 0;      // 本次脉冲峰值透明度
     this._timer = 0;     // 释放计时
     this._opacity = 0;   // 当前透明度（测试断言口）
+    this._low = 0;       // 低血常驻档强度（0..1，状态驱动——由持有方每帧推）
+    this._clock = 0;     // 常驻档呼吸钟
 
     // 覆盖面：正交 UI 视界整幅（16:9 假定下世界宽 ≈177.8；宽高各放 18% 余量防裁边），
     // 挂 uiCamera 可见 z 区间顶端 + 显式 renderOrder——必须盖过查看器（z=80）等一切前景
@@ -165,15 +184,23 @@ export class DamageVignette {
 
   get opacity() { return this._opacity; }
 
+  /** 低血常驻档强度（0..1）：状态驱动，持有方在血量变化时每帧推（0 = 关）。 */
+  lowHp(level) { this._low = Math.min(1, Math.max(0, level ?? 0)); }
+
   update(dt) {
-    if (this._peak <= 0) return;
-    this._timer += dt;
-    this._opacity = this._peak * Math.exp(-this._timer / VIGNETTE_RELEASE_TAU);
-    if (this._opacity < 0.01) { // 收尽：隐藏面省一整幅透明过绘
-      this._opacity = 0;
-      this._peak = 0;
+    this._clock += dt;
+    // 常驻档：慢呼吸起伏；与受击脉冲相加后封顶（低血时受击 = 泛红骤深，读得出叠加）
+    const low = this._low * LOW_HP_PEAK
+      * (1 - LOW_HP_BREATH_DEPTH + LOW_HP_BREATH_DEPTH * Math.sin(this._clock * LOW_HP_BREATH_RATE));
+    if (this._peak <= 0) {
+      this._opacity = low;   // 脉冲收尽：只剩常驻档（或全关）
+    } else {
+      this._timer += dt;
+      const pulse = this._peak * Math.exp(-this._timer / VIGNETTE_RELEASE_TAU);
+      this._opacity = Math.min(pulse + low, VIGNETTE_PEAK_MAX);
+      if (pulse < 0.01) this._peak = 0;   // 脉冲收尽，常驻档接管
     }
-    this.object.visible = this._opacity > 0;
+    this.object.visible = this._opacity > 0.005;
     this.object.material.opacity = this._opacity;
   }
 

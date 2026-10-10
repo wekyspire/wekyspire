@@ -109,14 +109,14 @@ registerEffect({
 });
 
 // 滞气（体修通用代价关键词）：debuff，无法抽牌（含回合开始抽牌与技能抽牌），
-// 玩家回合结束层数 -1。藏锋系列等高收益卡的费用语言。
+// 玩家回合结束或你击杀敌人时层数 -1。藏锋系列等高收益卡的费用语言。
 // 原型验证：test/slashSeries.test.js。
 registerEffect({
   id: 'stall',
   type: 'debuff',
   stacking: 'count',
   name: '滞气',
-  description: '无法抽牌。回合结束时层数减少 1。',
+  description: '无法抽牌。回合结束时或击杀敌人时，层数减少 1。',
   icon: '🌀',
   color: 'gray',
   subscriptions: (unit) => [
@@ -128,6 +128,17 @@ registerEffect({
     {
       when: PlayerTurnEndInstruction,
       phase: 'post',
+      react: (instr, ctx) => ctx.kernel.submitInstruction(
+        new AddEffectInstruction({ target: unit, effectId: 'stall', stacks: -1 }), instr),
+    },
+    {
+      // 击杀敌人时层数 -1（EFFECTS.md）：击杀归因 = 我方来源的直接伤害（含盟友；
+      // 燃烧/中毒 tick 的 source 为空，不算击杀）。与融合同款「真实致死」过滤。
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.source?.side === 'player'
+        && instr.target?.side === 'enemy'
+        && (instr.result?.targetDead ?? false) && !(instr.result?.skipped ?? false),
       react: (instr, ctx) => ctx.kernel.submitInstruction(
         new AddEffectInstruction({ target: unit, effectId: 'stall', stacks: -1 }), instr),
     },

@@ -36,12 +36,12 @@ function attachPressureCounter(kernel, unit, owner) {
 }
 
 // ② 11 层 Boss · 燃焰术士（章1 火主题 Boss 池之一）：
-// 一阶段四拍：盾6+塞1灼伤 → 燃烧5+攻6 → 攻6+塞1灼伤 → 攻20。灼伤是状态牌
+// 一阶段四拍：盾6+塞2灼伤入牌库 → 燃烧5+攻6 → 攻6+塞1灼伤进手牌 → 重击18。灼伤是状态牌
 // （无法打出，回合结束在手牌中受 2 伤——塞牌库随机位，抽到手上才开始计时）。
-// 转段：第 8 回合起（turn.count > 7）或血量跌至 105 及以下——首拍空转（蓄力），
-// 随后四拍循环：全场燃烧13（含自己）→ 攻10+盾10 → 消耗全场燃烧每层回 2 血 → 攻10+盾10。
+// 转段：第 8 回合起（turn.count > 7）或血量跌至 115 及以下——首拍空转（蓄力），
+// 随后四拍循环：全场燃烧11（含自己）→ 攻9+塞1灼伤进手牌 → 消耗全场燃烧每层回 2 血 → 重击24。
 // 机智点：它给自己也点燃烧、再靠「消耗燃烧回血」闭环——玩家的叠炎既是在烧它、
-// 也是在给它备血包（引爆窗口 = 燃烧13 刚挂上、回血拍未到的一拍）。
+// 也是在给它备血包（引爆窗口 = 燃烧11 刚挂上、回血拍未到的一拍）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
@@ -67,7 +67,7 @@ registerEnemy({
   },
   act(actx) {
     const { unit, battleState: bs } = actx;
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 105)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 115)) {
       unit._phase2 = true; unit._phaseBeat = 0; // 转段首拍空转（蓄力）
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT）：core 只报 id+标量参数，
       // 内容全在 stage 侧 fx/scripts/bosses/pyro.js；观战端同源重放
@@ -79,8 +79,10 @@ registerEnemy({
       const beat = unit.actionIndex % 4;
       if (beat === 0) {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
-        actx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'burnWound', toZone: 'deck', index: 'random' }));
+        for (let i = 0; i < 2; i++) {
+          actx.kernel.submitInstruction(new AddCardInstruction({
+            defId: 'burnWound', toZone: 'deck', index: 'random' }));
+        }
       } else if (beat === 1) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: actx.player, effectId: 'burn', stacks: 5 }));
@@ -90,10 +92,12 @@ registerEnemy({
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: actx.player, amount: 6 + atk }));
         actx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'burnWound', toZone: 'deck', index: 'random' }));
+          defId: 'burnWound', toZone: 'hand', index: 'random' }));
       } else {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: actx.player, amount: 20 + atk }));
+          source: unit, target: actx.player, amount: 18 + atk,
+          tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
+        }));
       }
       return;
     }
@@ -102,14 +106,19 @@ registerEnemy({
     if (beat === 0) {
       for (const u of aliveEnemies(bs)) { // 全场 = 敌方（自己）+ 玩家与盟友
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: u, effectId: 'burn', stacks: 13 }));
+          target: u, effectId: 'burn', stacks: 11 }));
       }
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'burn', stacks: 13 }));
+        target: actx.player, effectId: 'burn', stacks: 11 }));
       for (const a of aliveAllies(bs)) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: a, effectId: 'burn', stacks: 13 }));
+          target: a, effectId: 'burn', stacks: 11 }));
       }
+    } else if (beat === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 9 + atk }));
+      actx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'burnWound', toZone: 'hand', index: 'random' }));
     } else if (beat === 2) {
       // 消耗全场所有燃烧，每层回复 2 血（自身闭环：烧自己 → 吃回）
       let total = 0;
@@ -126,26 +135,28 @@ registerEnemy({
       }
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: actx.player, amount: 10 + atk }));
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
+        source: unit, target: actx.player, amount: 24 + atk,
+        tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
+      }));
     }
   },
   getIntention: (unit, bs) => {
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 105)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 115)) {
       return { kinds: ['buff'], note: '二阶段蓄力：下回合起全场点燃' };
     }
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
       const beat = unit.actionIndex % 4;
-      if (beat === 0) return { kinds: ['defend', 'debuff'], note: '护盾+6，塞1张灼伤入你牌库' };
+      if (beat === 0) return { kinds: ['defend', 'debuff'], note: '护盾+6，塞2张灼伤入你牌库' };
       if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '赋予燃烧5' };
-      if (beat === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '塞1张灼伤入你牌库' };
-      return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '重击' };
+      if (beat === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '塞1张灼伤进手牌' };
+      return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
     }
     const beat = (unit._phaseBeat ?? 0) % 4;
-    if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧13（含它自己）' };
+    if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧11（含它自己）' };
+    if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 9 + atk, note: '塞1张灼伤进手牌' };
     if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复2血' };
-    return { kinds: ['attack', 'defend'], hits: 1, damage: 10 + atk, note: '自身护盾+10' };
+    return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
   },
 });
 
@@ -220,9 +231,9 @@ registerEnemy({
 
 // ②″ 11 层 Boss · MEFM-1（章1 火主题 Boss 池之一；
 // lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击免伤）。
-// 一阶段三拍：攻3×2 → 攻3×3 → 炎魔1+格挡1（积焰）。
-// 转段：血量跌至 80 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
-// 二阶段：首拍获得炎魔2，随后 攻2×3 → 攻2×4 交替（积焰已久的点燃海）。
+// 一阶段四拍：钩爪发射（伤残1，不造成伤害）→ 攻2×2 → 攻2×4 → 炎魔1+格挡2（积焰）。
+// 转段：血量跌至 100 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
+// 二阶段：首拍获得炎魔2，随后三拍循环：攻5×3 → 钩爪发射（伤残2）→ 攻5×3（点燃海）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
@@ -243,7 +254,9 @@ registerEnemy({
           source: unit, target: actx.player, amount: amount + atk }));
       }
     };
-    if (!unit._phase2 && unit.hp < 80) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
+    const claw = (stacks) => actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: actx.player, effectId: 'maim', stacks }));
+    if (!unit._phase2 && unit.hp < 100) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
       unit._phase2 = true; unit._phaseBeat = 0;
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT，同 pyro）
       actx.presenter?.playScript?.({ script: 'bosses/mefm1P2', unit: unit.uniqueID });
@@ -254,14 +267,15 @@ registerEnemy({
       return;
     }
     if (!unit._phase2) {
-      const beat = unit.actionIndex % 3;
-      if (beat === 0) hit(2, 3);
-      else if (beat === 1) hit(3, 3);
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) claw(1);
+      else if (beat === 1) hit(2, 2);
+      else if (beat === 2) hit(4, 2);
       else {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: unit, effectId: 'flameDemon', stacks: 1 }));
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: 'block', stacks: 1 }));
+          target: unit, effectId: 'block', stacks: 2 }));
       }
       return;
     }
@@ -272,20 +286,24 @@ registerEnemy({
         target: unit, effectId: 'flameDemon', stacks: 2 }));
       return;
     }
-    hit(beat % 2 === 1 ? 3 : 4, 2);
+    const b = (beat - 1) % 3;
+    if (b === 1) claw(2);
+    else hit(3, 5);
   },
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
-      if (unit.hp < 80) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
-      const beat = unit.actionIndex % 3;
-      if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 3 + atk };
-      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
-      return { kinds: ['buff'], note: '积焰：炎魔1、格挡1' };
+      if (unit.hp < 100) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
+      const beat = unit.actionIndex % 4;
+      if (beat === 0) return { kinds: ['debuff'], note: '钩爪发射：赋予伤残1（受到的伤害+1）' };
+      if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 2 + atk };
+      if (beat === 2) return { kinds: ['attack'], hits: 4, damage: 2 + atk };
+      return { kinds: ['buff'], note: '积焰：炎魔1、格挡2' };
     }
     if ((unit._phaseBeat ?? 0) === 0) return { kinds: ['buff'], note: '点火完成：炎魔2' };
-    const beat = unit._phaseBeat ?? 0;
-    return { kinds: ['attack'], hits: beat % 2 === 1 ? 3 : 4, damage: 2 + atk, note: '点燃海' };
+    const b = ((unit._phaseBeat ?? 0) - 1) % 3;
+    if (b === 1) return { kinds: ['debuff'], note: '钩爪发射：赋予伤残2（受到的伤害+2）' };
+    return { kinds: ['attack'], hits: 3, damage: 5 + atk, note: '点燃海' };
   },
 });
 

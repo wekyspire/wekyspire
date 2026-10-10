@@ -687,8 +687,8 @@ counterDrawCard({ id: 'counterDrawB', tier: 'B', threshold: 3, extra: 1, promote
 counterDrawCard({ id: 'counterDrawA', tier: 'A', threshold: 4, extra: 1 });
 
 // 满拳系列 C→B→A（全神一击从「每张手牌+3」收回阈值加成——手牌加成与阈值红利是
-// 同一个身份，双轨叠乘会让 A 档失控）：C/B 蓄满一击：6 群伤，手牌不少于 4 张时
-// +7/+10；A 全神一击：8 群伤，手牌不少于 4 张时 +13。
+// 同一个身份，双轨叠乘会让 A 档失控）：C/B 蓄满一击：6 群伤，手牌不少于 6 张时
+// +7/+10；A 全神一击：8 群伤，手牌不少于 6 张时 +13。
 // 手牌数按**裸张数**计（卡面写的手牌数量 = 直观张数，激活咏唱算 1 张，不加权
 // ——见 battle.md §1 基础约定）。
 function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = null }) {
@@ -707,9 +707,9 @@ function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = n
     // 无 battleDescribe：阈值条件简单，静态描述即机制。
   });
 }
-fullChargeCard({ id: 'fullChargeC', name: '蓄满一击', tier: 'C', base: 6, bonus: 7, threshold: 4, promotesTo: 'fullChargeB' });
-fullChargeCard({ id: 'fullChargeB', name: '蓄满一击', tier: 'B', base: 6, bonus: 10, threshold: 4, promotesTo: 'fullSpirit' });
-fullChargeCard({ id: 'fullSpirit', name: '全神一击', tier: 'A', base: 8, bonus: 13, threshold: 4 });
+fullChargeCard({ id: 'fullChargeC', name: '蓄满一击', tier: 'C', base: 6, bonus: 7, threshold: 6, promotesTo: 'fullChargeB' });
+fullChargeCard({ id: 'fullChargeB', name: '蓄满一击', tier: 'B', base: 6, bonus: 10, threshold: 6, promotesTo: 'fullSpirit' });
+fullChargeCard({ id: 'fullSpirit', name: '全神一击', tier: 'A', base: 8, bonus: 13, threshold: 6 });
 
 // 变招/混元 B/A/S（弃牌引擎）：咏唱2/2/1——每弃 3/2/2 张牌，抽 1（太极「每打 N 抽 1」
 // 的弃牌镜像；弃牌语言在体修三子系都有：假动作/呼吸/以无胜有）。计数挂

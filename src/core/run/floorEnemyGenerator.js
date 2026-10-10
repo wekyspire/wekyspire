@@ -85,6 +85,8 @@ const TEMPLATES = [
     slots: [{ fixed: 'blastPodB' }, { fixed: 'blastPodB' }, { fixed: 'stoneCocoon' }, { fixed: 'pufferToadA' }] },
   { id: 'rockfall', name: '石头崩落', cost: 10, minFloor: 4, maxFloor: 10, once: true,
     slots: [{ fixed: 'blastPod' }, { fixed: 'stoneCocoon' }, { fixed: 'rockSnail' }] },
+  { id: 'thicket', name: '草丛', cost: 6, minFloor: 2, maxFloor: 10, once: true,
+    slots: [{ fixed: 'thornWeed' }, { fixed: 'thornWeed' }, { fixed: 'thornWeedB' }] },
   { id: 'grassA', name: '草地麻烦A', cost: 6, minFloor: 4, maxFloor: 10, once: true, excl: ['grassB'],
     slots: [{ fixed: 'thornWeed' }, { fixed: 'carrionBeetle' }, { fixed: 'carrionBeetle' }] },
   { id: 'grassB', name: '草地麻烦B', cost: 6, minFloor: 4, maxFloor: 10, once: true, excl: ['grassA'],
@@ -336,6 +338,12 @@ export function generateEncounter(run) {
   // staticPuffB 固定 17 血——精确 id 匹配不覆盖 B 变体
   for (let i = 0; i < out.length; i++) {
     if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([20, 23, 26, 29]) };
+  }
+  // 刺刺草：17–22 血随机（ENEMIES_1.md；B 变体同档）
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].defId === 'thornWeed' || out[i].defId === 'thornWeedB') {
+      out[i] = { ...out[i], maxHp: rng.int(17, 22) };
+    }
   }
   // 章2 血量随机档（ENEMIES_2.md"X-Y 血随机"单位；B 变体同档，burnBotB 的减半血在
   // 定义内固定、不经此表）

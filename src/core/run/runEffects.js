@@ -30,8 +30,9 @@ export function gainMoney(ctx, amount, { source = '' } = {}) {
   const n = Math.max(0, Math.floor(amount ?? 0));
   if (n <= 0) return 0;
   ctx.run.player.money += n;
+  // source 只进日志（归因），不上特写——事件对话刚演过来源，界面复述即冗余
   recordEffect(ctx, { kind: 'money', amount: n, source });
-  ctx.presenter.showcase({ kind: 'gold', amount: n, title: `+${n} 金币`, desc: source });
+  ctx.presenter.showcase({ kind: 'gold', amount: n, title: `+${n} 金币` });
   return n;
 }
 
@@ -93,7 +94,7 @@ export function gainCard(ctx, defId, { source = '' } = {}) {
   const def = getSkillDefinition(defId); // 未注册直接抛错（内容笔误要早暴露）
   ctx.run.player.deck.push(createSkillRuntime(defId));
   recordEffect(ctx, { kind: 'card', defId, name: def.name, source });
-  ctx.presenter.showcase({ kind: 'card', defId, title: def.name, desc: source });
+  ctx.presenter.showcase({ kind: 'card', defId, title: def.name });
   return defId;
 }
 
