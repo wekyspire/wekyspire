@@ -21,6 +21,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
   drawCards, burnCard, discardCard, requestHandSelection, selected, gainPower, addCard, reactFx,
+  aoeAttack,
 } from './cardKit.js';
 
 // ====================================================================
@@ -59,7 +60,7 @@ function cardConsumingMana(instr) {
 // 火球系列工厂：N 魏启直伤（可多段）+ 抽牌。伤害走 F1 面板轨（见文件头）。
 function fireBallCard({ id, name, tier, damage, hits = 1, draw, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireBall',
+    id, name, type: 'fire', tier, series: 'fireBall', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -90,7 +91,7 @@ fireBallCard({ id: 'greaterFireBall', name: '大火球术', tier: 'A', damage: 2
 // 离场自然清零）；先结算本拍再涨：本次打出既不享受加伤也不付加价。
 function heatBallCard({ id, name, tier, damage, ramp, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireBall',
+    id, name, type: 'fire', tier, series: 'fireBall', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -132,7 +133,7 @@ heatBallCard({ id: 'heatBallMaster', name: '白炽火球', tier: 'A', damage: 9,
 // ——karadiaBurst 不设 promotesTo；S 齐明天炎另有注册）。
 function burstChantCard({ id, name, tier, base, perMana, innate = true, promotesTo = null }) {
   const def = {
-    name, type: 'fire', tier, series: 'burst',
+    name, type: 'fire', tier, series: 'burst', subsystem: 'burst',
     cost: { mana: 1, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 4 },
     cardMode: 'chant', chantWeight: 2,
@@ -192,7 +193,7 @@ burstChantCard({ id: 'qimingBlaze', name: '齐明天炎', tier: 'S', base: 6, pe
 // 「燃烧变现率」，不在基础虚弱。
 function meltCard({ id, name, tier, weak, per, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'melt',
+    id, name, type: 'fire', tier, series: 'melt', subsystem: 'burst',
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -215,11 +216,11 @@ function meltCard({ id, name, tier, weak, per, promotesTo }) {
 meltCard({ id: 'meltDown', name: '熔融', tier: 'B', weak: 2, per: 4, promotesTo: 'meltCollapse' });
 meltCard({ id: 'meltCollapse', name: '熔毁', tier: 'A', weak: 3, per: 3 });
 
-// 炎魔决（A，4魏）：获得炎魔2——主级伤害每次命中附带燃烧
+// 炎魔决（A，4魏，深入）：获得炎魔2——主级伤害每次命中附带燃烧
 // （效果 flameDemon，与体系能力同款、可叠层）。多段卡（火花/炽流/连珠火）与火球链
-// 每击皆触发，「撑到收割」的过程同时变成铺燃烧。
+// 每击皆触发，「撑到收割」的过程同时变成铺燃烧。2026-10-10 自散卡移入深入。
 registerSkill({
-  id: 'flameDemonPact', name: '炎魔决', type: 'fire', tier: 'A', series: 'burst',
+  id: 'flameDemonPact', name: '炎魔决', type: 'fire', tier: 'A', series: 'burst', subsystem: 'burst', deep: 'burst',
   cost: { mana: 4, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -245,7 +246,7 @@ const BURST_TIER_TWIN = { C: 'fireworksUnbound', B: 'smallBurstUnbound', A: 'kar
 function explosiveArtCard({ id, tier, promotesTo }) {
   const twin = BURST_TIER_TWIN[tier];
   registerSkill({
-    id, name: '爆炸艺术', type: 'fire', tier, series: 'explosiveArt',
+    id, name: '爆炸艺术', type: 'fire', tier, series: 'explosiveArt', subsystem: 'burst',
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -273,7 +274,7 @@ explosiveArtCard({ id: 'explosiveArtA', tier: 'A' });
 function fireWhirlCard({ id, name = '火焰旋风', tier, dmg, burnPer = 4, promotesTo = null }) {
   const dmgOf = (sctx) => dmg + Math.floor(sctx.player.getEffectStacks('burn') / burnPer);
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireWhirl',
+    id, name, type: 'fire', tier, series: 'fireWhirl', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -293,14 +294,14 @@ function fireWhirlCard({ id, name = '火焰旋风', tier, dmg, burnPer = 4, prom
           if (procs > 0) reactFx(sctx, self, 'benefit', { variant: 'proc', magnitude: procs });
           while (procs-- > 0) {
             for (const e of aliveEnemies(sctx.battleState)) {
-              if (!e.isDead()) dealDamage(sctx, dmgOf(sctx), { target: e, type: 'minor', tags: ['aoe'] });
+              if (!e.isDead()) dealDamage(sctx, dmgOf(sctx), { target: e, fixed: true, type: 'minor', tags: ['aoe'] });
             }
           }
         },
       }],
     },
-    describe: () => `每消耗2魏启，${dmg}次级群伤，你每${burnPer}层/effect{燃烧}伤害+1`,
-    battleDescribe: (sctx) => `每消耗2魏启，${dmgOf(sctx)}次级群伤`,
+    describe: () => `每消耗2魏启，${dmg}固定群伤，你每${burnPer}层/effect{燃烧}伤害+1`,
+    battleDescribe: (sctx) => `每消耗2魏启，${dmgOf(sctx)}固定群伤`,
   });
 }
 fireWhirlCard({ id: 'fireWhirlC', tier: 'C', dmg: 3, promotesTo: 'fireWhirlB' });
@@ -315,7 +316,7 @@ fireWhirlCard({ id: 'flameHurricane', name: '焰流飓风', tier: 'S', dmg: 5, b
 // S 位只走事件直出（余热是引擎件，S 不随包、不可升阶）。
 function residualHeatCard({ id, name = '余热', tier, per, back, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'residualHeat',
+    id, name, type: 'fire', tier, series: 'residualHeat', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -345,7 +346,7 @@ residualHeatCard({ id: 'reignite', tier: 'S', name: '重燃', per: 3, back: 4 })
 // 喂蓄能/旋风/余热台账，一次过蓝多份回报。
 function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireTemper',
+    id, name, type: 'fire', tier, series: 'fireTemper', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
@@ -366,24 +367,27 @@ fireTemperCard({ id: 'fireTemperA', name: '淬炼', tier: 'A', mana: 3, shield: 
 // 烫手 C/B/A（冷却1）：抽 3/4/4，A 档费用 2魏→1魏（阶差 = 「C→B 抽数、B→A 费用」）。
 // 冷却限频保住「烫手山芋扔了又回来」的循环意象——爆裂体系的过牌引擎。
 // 刻意的高斜率：抽到的牌仍要付蓝/AP 才变现，手牌上限是天然刹车。
-function hotHandsCard({ id, tier, mana, draw, promotesTo }) {
+// 烫手 C/B/A（0费，冷却1）：自燃 3，抽 3/4/5。2026-10-10 火系大改：去魏启费——
+// 过牌的代价从蓝量改为燃烧（自焚语言），A 阶抽 5。
+function hotHandsCard({ id, tier, burn, draw, promotesTo }) {
   registerSkill({
-    id, name: '烫手', type: 'fire', tier, series: 'hotHands',
-    cost: { mana, actionPoint: 0 },
+    id, name: '烫手', type: 'fire', tier, series: 'hotHands', subsystem: 'burst',
+    cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
     promotesTo,
     use(sctx) {
+      addEffect(sctx, 'burn', burn);
       drawCards(sctx, draw);
       return true;
     },
-    describe: () => `抽${draw}`,
-    battleDescribe: () => `抽${draw}`,
+    describe: () => `/effect{燃烧}${burn}，抽${draw}`,
+    battleDescribe: () => `/effect{燃烧}${burn}，抽${draw}`,
   });
 }
-hotHandsCard({ id: 'hotHandsC', tier: 'C', mana: 2, draw: 3, promotesTo: 'hotHandsB' });
-hotHandsCard({ id: 'hotHandsB', tier: 'B', mana: 2, draw: 4, promotesTo: 'hotHandsA' });
-hotHandsCard({ id: 'hotHandsA', tier: 'A', mana: 1, draw: 4 });
+hotHandsCard({ id: 'hotHandsC', tier: 'C', burn: 3, draw: 3, promotesTo: 'hotHandsB' });
+hotHandsCard({ id: 'hotHandsB', tier: 'B', burn: 3, draw: 4, promotesTo: 'hotHandsA' });
+hotHandsCard({ id: 'hotHandsA', tier: 'A', burn: 3, draw: 5 });
 
 // ====================================================================
 // §1.1 爆裂防御（沉默 + 泄压阀）
@@ -397,7 +401,7 @@ hotHandsCard({ id: 'hotHandsA', tier: 'A', mana: 1, draw: 4 });
 // 引擎重启成本即其 balancing）。
 function silenceCard({ id, tier, shield, promotesTo }) {
   registerSkill({
-    id, name: '沉默', type: 'fire', tier, series: 'silence',
+    id, name: '沉默', type: 'fire', tier, series: 'silence', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -427,7 +431,7 @@ silenceCard({ id: 'silenceA', tier: 'A', shield: 14 });
 // 消耗+弹性是它的档位语言。
 function reliefValveCard({ id, tier, base, perMana, promotesTo }) {
   registerSkill({
-    id, name: '泄压阀', type: 'fire', tier, series: 'relief',
+    id, name: '泄压阀', type: 'fire', tier, series: 'relief', subsystem: 'burst',
     cost: { mana: 'X', actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -459,7 +463,7 @@ reliefValveCard({ id: 'reliefValveA', tier: 'A', base: 7, perMana: 5 });
 // 纳气全档统一 2；焰涌 C/B/A = 2X+1/2X+3/2X+5；S 档焰凝 = 3X+5。
 function condenseFlameCard({ id, name, tier, naqi, burnPerX, burnFlat = 0, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'condense',
+    id, name, type: 'fire', tier, series: 'condense', subsystem: 'burst',
     cost: { mana: 'X', actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -493,12 +497,12 @@ condenseFlameCard({ id: 'flameForm', name: '焰凝', tier: 'S', naqi: 2, burnPer
 // 燃烧自施（副作用语言）。再次打出免费解除，因带消耗关键词落焚毁区。
 // 系列 B 起步（高热 纳气1 → 白炽 纳气2）。
 // 咏唱 0——消耗+自施已付清代价，点亮不占容量，走燃心决同款 0 咏通道。
-function feverChantCard({ id, name, tier, naqi, promotesTo }) {
+function feverChantCard({ id, name, tier, naqi, chantWeight = 0, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fever',
+    id, name, type: 'fire', tier, series: 'fever', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 0,
+    cardMode: 'chant', chantWeight,
     keywords: ['exhaust'],
     promotesTo,
     use() { return true; },
@@ -515,7 +519,7 @@ function feverChantCard({ id, name, tier, naqi, promotesTo }) {
     describe: () => `/effect{纳气}${naqi}，/effect{燃烧}4`,
   });
 }
-feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 1, promotesTo: 'whiteFever' });
+feverChantCard({ id: 'highFever', name: '高热', tier: 'B', naqi: 2, chantWeight: 1, promotesTo: 'whiteFever' });
 feverChantCard({ id: 'whiteFever', name: '白炽', tier: 'A', naqi: 2 });
 
 // ====================================================================
@@ -532,7 +536,7 @@ feverChantCard({ id: 'whiteFever', name: '白炽', tier: 'A', naqi: 2 });
 // 全系咏唱 1（轻量档不独占咏唱容量，可与火焰旋风等 1 档咏唱共存）。
 function kindlingBloodCard({ id, name, tier, shield, ap, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'kindling',
+    id, name, type: 'fire', tier, series: 'kindling', subsystem: 'burst',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -563,7 +567,7 @@ kindlingBloodCard({ id: 'kindlingBloodA', name: '可燃血液', tier: 'A', shiel
 // 火雨 C/B/A（3魏）：对所有敌人 12/14/16 伤害（每敌一枚 aoe 标记指令）。A 档名「火瀑」。
 function fireRainCard({ id, name = '火雨', tier, damage, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireRain',
+    id, name, type: 'fire', tier, series: 'fireRain', subsystem: 'burst',
     cost: { mana: 3, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -589,7 +593,7 @@ fireRainCard({ id: 'fireStream', name: '火瀑', tier: 'A', damage: 16 });
 // 预览态读手牌需排除自身）。
 function fuelCard({ id, name, tier, mana, exhaust = true, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fuel',
+    id, name, type: 'fire', tier, series: 'fuel', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -622,7 +626,7 @@ fuelCard({ id: 'stokeB', name: '添柴', tier: 'B', mana: 2, exhaust: false, pro
 
 // 添柴（A，不消耗）：选 1 手牌焚毁 → 获得 3 魏启。
 registerSkill({
-  id: 'stokeA', name: '添柴', type: 'fire', tier: 'A', series: 'fuel',
+  id: 'stokeA', name: '添柴', type: 'fire', tier: 'A', series: 'fuel', subsystem: 'burst',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -649,7 +653,7 @@ registerSkill({
 // 「抽2牌焚毁」分两个 stage：先抽（持有 DrawCardsInstruction 引用读 result.drawn），
 // 次段焚毁刚抽到的牌——满手/空库时抽牌落空，焚毁随之落空，魏启照发。
 registerSkill({
-  id: 'stokeAWild', name: '添柴', type: 'fire', tier: 'A', series: 'fuel',
+  id: 'stokeAWild', name: '添柴', type: 'fire', tier: 'A', series: 'fuel', subsystem: 'burst',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -674,7 +678,7 @@ registerSkill({
 // 空手也可打出：无牌可焚时退化为纯抽牌（不焚毁直接抽）。
 function burnWindCard({ id, tier, actionPoint, draw, promotesTo = null }) {
   registerSkill({
-    id, name: '浇油', type: 'fire', tier, series: 'pourOil',
+    id, name: '浇油', type: 'fire', tier, series: 'pourOil', subsystem: 'burst',
     cost: { mana: 0, actionPoint },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'none',
@@ -708,51 +712,21 @@ burnWindCard({ id: 'pourOilA', tier: 'A', actionPoint: 0, draw: 3 });
 // §1.1 鼓风系列（弃抽循环）
 // ====================================================================
 
-// 鼓风 C/B/A：选 1 手牌弃置（回牌库底，下回合抽回——弃牌是调度不是失去），抽 2/2/3。
-// 全员不消耗；C 冷却1（0 开销纪律），B 去冷却，A 提为抽3（同 1AP）——升级链逐档严格超集。
-function airBlastCard({ id, tier, actionPoint, draw, cooldownTurns = 0, promotesTo = null }) {
-  registerSkill({
-    id, name: '鼓风', type: 'fire', tier, series: 'airBlast',
-    cost: { mana: 0, actionPoint },
-    charges: { max: Infinity, cooldownTurns },
-    cardMode: 'normal', targetMode: 'none',
-    promotesTo,
-    canUse: (sctx) => sctx.battleState.zones.hand.some(
-      c => c.uniqueID !== sctx.self.uniqueID),
-    use(sctx, stage) {
-      if (stage === 0) {
-        if (sctx.battleState.zones.hand.length === 0) return true;
-        sctx.self._pick = requestHandSelection(sctx, { count: 1, reason: '选择1张手牌弃置' });
-        return false;
-      }
-      const [uniqueID] = selected(sctx.self._pick);
-      sctx.self._pick = null;
-      if (uniqueID != null) {
-        discardCard(sctx, uniqueID);
-        drawCards(sctx, draw);
-      }
-      return true;
-    },
-    describe: () => `选1手牌弃置，抽${draw}`,
-  });
-}
-airBlastCard({ id: 'airBlastC', tier: 'C', actionPoint: 1, draw: 2, cooldownTurns: 1, promotesTo: 'airBlastB' });
-airBlastCard({ id: 'airBlastB', tier: 'B', actionPoint: 1, draw: 2, promotesTo: 'airBlastA' });
-airBlastCard({ id: 'airBlastA', tier: 'A', actionPoint: 1, draw: 3 });
 
 // ====================================================================
 // §1.1 积薪系列（弃牌蓄能）
 // ====================================================================
 
 // 积薪 C/B/A：弃自由手牌（未激活咏唱豁免，口径同背水一战/情况不对），获得固定
-// 1/2/2 魏启（固定值而非按张计——弃牌本身有价值：牌回牌库底，
-// 下回合照常抽回，还喂「每弃N张」类触发；魏启只是添头）。
-function stackFirewoodCard({ id, tier, actionPoint, mana, promotesTo = null }) {
+// 2/2/2 魏启（C 收 1AP；B 去行动点；A 加迷你——固定值而非按张计，弃牌本身有价值：
+// 牌回牌库底，下回合照常抽回，还喂「每弃N张」类触发；魏启只是添头）。
+function stackFirewoodCard({ id, tier, actionPoint, mana, mini = false, promotesTo = null }) {
   registerSkill({
-    id, name: '积薪', type: 'fire', tier, series: 'stackFirewood',
+    id, name: '积薪', type: 'fire', tier, series: 'stackFirewood', subsystem: 'burst',
     cost: { mana: 0, actionPoint },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
+    keywords: mini ? ['mini'] : undefined,
     promotesTo,
     use(sctx) {
       // 自身已在结算区（pending），弃其余非激活咏唱手牌即所有自由牌
@@ -770,9 +744,9 @@ function stackFirewoodCard({ id, tier, actionPoint, mana, promotesTo = null }) {
     },
   });
 }
-stackFirewoodCard({ id: 'stackFirewoodC', tier: 'C', actionPoint: 1, mana: 1, promotesTo: 'stackFirewoodB' });
-stackFirewoodCard({ id: 'stackFirewoodB', tier: 'B', actionPoint: 1, mana: 2, promotesTo: 'stackFirewoodA' });
-stackFirewoodCard({ id: 'stackFirewoodA', tier: 'A', actionPoint: 0, mana: 2 });
+stackFirewoodCard({ id: 'stackFirewoodC', tier: 'C', actionPoint: 1, mana: 2, promotesTo: 'stackFirewoodB' });
+stackFirewoodCard({ id: 'stackFirewoodB', tier: 'B', actionPoint: 0, mana: 2, promotesTo: 'stackFirewoodA' });
+stackFirewoodCard({ id: 'stackFirewoodA', tier: 'A', actionPoint: 0, mana: 2, mini: true });
 
 // ====================================================================
 // §1.1 先发系列（固有消耗快速开场爆发）
@@ -782,7 +756,7 @@ stackFirewoodCard({ id: 'stackFirewoodA', tier: 'A', actionPoint: 0, mana: 2 });
 // 先发火弹 C 6 / 先发火矢 B 10 / 先发火球 A 10 抽2（A 档阶差从伤害移到过牌）。
 function firstStrikeCard({ id, name, tier, damage, draw = 1, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'firstStrike',
+    id, name, type: 'fire', tier, series: 'firstStrike', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -812,7 +786,7 @@ firstStrikeCard({ id: 'firstFireBall', name: '先发火球', tier: 'A', damage: 
 // 咏唱 0——纯被动不占容量。
 function bloodFlameCard({ id, tier, per, promotesTo }) {
   registerSkill({
-    id, name: '血焰', type: 'fire', tier, series: 'bloodFlame',
+    id, name: '血焰', type: 'fire', tier, series: 'bloodFlame', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 0,
@@ -847,7 +821,7 @@ bloodFlameCard({ id: 'bloodFlameA', tier: 'A', per: 4 });
 // 的 clamp 兜底，蓝量扣到 0 为止）。放行钩子走 helpers.canUseSkill 的「已激活咏唱
 // activated.canUseSkill」裁决环——卡牌级费用豁免，与能力的 canUseSkill 同语义。
 registerSkill({
-  id: 'breakLimit', name: '突破极限', type: 'fire', tier: 'A', series: 'depth',
+  id: 'breakLimit', name: '突破极限', type: 'fire', tier: 'A', series: 'depth', subsystem: 'burst', subsystem: 'burst',
   cost: { mana: 4, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
@@ -869,7 +843,7 @@ registerSkill({
 // 计数时点 = 打出时（自身尚未落位，不把自己算进去）。
 function echoingFlamesCard({ id, tier, draw }) {
   registerSkill({
-    id, name: '回响烈焰', type: 'fire', tier, series: 'depth', deep: 'burst',
+    id, name: '回响烈焰', type: 'fire', tier, series: 'depth', subsystem: 'burst', deep: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -887,12 +861,12 @@ function echoingFlamesCard({ id, tier, draw }) {
 echoingFlamesCard({ id: 'echoingFlamesB', tier: 'B', draw: 3 });
 echoingFlamesCard({ id: 'echoingFlamesA', tier: 'A', draw: 5 });
 
-// 背水一战 B/A（消耗）：焚毁所有未激活咏唱的手牌（/named{自由}手牌），每张回 1 魏启，
-// 抽 3/4。已激活的咏唱卡豁免——点亮的
-// 咏唱是构筑引擎本身，烧引擎换蓝等于自拆台。
+// 一战 B/A（消耗）：焚毁所有未激活咏唱的手牌（/named{自由}手牌），每张回 1 魏启，
+// 抽 3/4。已激活的咏唱卡豁免——点亮的咏唱是构筑引擎本身，烧引擎换蓝等于自拆台。
+// 2026-10-10 火系大改：自深入卡降为散卡（原「背水一战」更名，去精英门禁）。
 function lastStandCard({ id, tier, draw }) {
   registerSkill({
-    id, name: '背水一战', type: 'fire', tier, series: 'depth', deep: 'burst',
+    id, name: '一战', type: 'fire', tier, series: 'lastStand', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -941,7 +915,7 @@ class AllInInstruction extends BattleInstruction {
   }
 }
 registerSkill({
-  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth', deep: 'burst',
+  id: 'allIn', name: '放手一搏', type: 'fire', tier: 'A', series: 'depth', subsystem: 'burst', deep: 'burst',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -963,7 +937,7 @@ registerSkill({
 // ——检索完顺手把点亮这批爆裂的首笔燃料备齐。S 不可经升阶获得（烟花秀不设 promotesTo）。
 function fireworkShowCard({ id, name, tier, manaBack = 0 }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'depth', deep: 'burst',
+    id, name, type: 'fire', tier, series: 'depth', subsystem: 'burst', deep: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -1055,24 +1029,30 @@ registerSkill({
   describe: () => '手牌上限+1，/effect{燃烧}5',
 });
 
-// 灭火 B/A（消耗，1AP / A 档 0AP）：驱散自身所有燃烧。
-// 玩火体系的紧急泄压阀——与控火术：扰（燃烧转盾变现）互补：扰是把火变现，
-// 灭火是纯保命（消耗，清完不附带任何后续防护；对标含焰术防火只挡跳伤）。
+// 灭火 B/A（1AP / A 档 0AP）：驱散自身燃烧，每 4 层向牌库洗入 1 张余烬。
+// 2026-10-10 火系大改：纯保命泄压阀加余烬回收——火灭成烬。不再消耗（循环件）。
 function douseFlameCard({ id, tier, ap, promotesTo = null }) {
   registerSkill({
     id, name: '灭火', type: 'fire', tier, series: 'common',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
-    keywords: ['exhaust'],
     promotesTo,
     use(sctx) {
       const stacks = sctx.player.getEffectStacks('burn');
-      if (stacks > 0) addEffect(sctx, 'burn', -stacks);
+      if (stacks > 0) {
+        addEffect(sctx, 'burn', -stacks);
+        for (let i = 0; i < Math.floor(stacks / 4); i++) {
+          addCard(sctx, 'emberMote', { index: 'random' });
+        }
+      }
       return true;
     },
-    describe: () => '驱散自身所有/effect{燃烧}',
-    battleDescribe: () => '驱散自身所有/effect{燃烧}',
+    describe: () => '驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMote}',
+    battleDescribe: (sctx) => {
+      const stacks = sctx.player.getEffectStacks('burn');
+      return `驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMote}（当前${stacks}层 → 洗入${Math.floor(stacks / 4)}张）`;
+    },
   });
 }
 douseFlameCard({ id: 'douseFlameB', tier: 'B', ap: 1, promotesTo: 'douseFlameA' });
@@ -1140,6 +1120,30 @@ function fireAffinityCard({ id, tier, promotesTo }) {
 }
 fireAffinityCard({ id: 'fireAffinityB', tier: 'B', promotesTo: 'fireAffinityA' });
 fireAffinityCard({ id: 'fireAffinityA', tier: 'A' });
+
+// ==== 巨火球术系列（大师深入：7魏启巨型群伤）===================================
+// 巨火球术 B/A + 天明火球 S｜7 魏启，35/42/76 群伤——爆炎的终极蓝量倾泻口。
+// 大师深入（deepGrade: 'master'）：只在获得爆炎**大师能力**（起手式）后入池
+// （rewards.js MASTER_DEEP_GATES）；数值对齐 X 费全押的终局口径。
+function giantFireballCard({ id, name, tier, damage, promotesTo = null }) {
+  registerSkill({
+    id, name, type: 'fire', tier, series: 'giantFireball', subsystem: 'burst',
+    cost: { mana: 7, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    promotesTo,
+    deep: 'burst', deepGrade: 'master',
+    use(sctx) {
+      aoeAttack(sctx, damage);
+      return true;
+    },
+    describe: () => `${damage}群伤`,
+    battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage, AOE_TAGS)}群伤`,
+  });
+}
+giantFireballCard({ id: 'giantFireballB', name: '巨火球术', tier: 'B', damage: 35, promotesTo: 'giantFireballA' });
+giantFireballCard({ id: 'giantFireballA', name: '巨火球术', tier: 'A', damage: 42, promotesTo: 'heavenFireball' });
+giantFireballCard({ id: 'heavenFireball', name: '天明火球', tier: 'S', damage: 76 });
 
 // type 读取（定义缺失防御：非注册卡不参与减免）
 function getSkillDefinitionSafe(defId) {

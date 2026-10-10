@@ -321,6 +321,9 @@ export const syncBeats = {
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
+      // 条件满足金光：condMet（def.condition 成立）∨ 弃牌模式下的灵活卡；
+      // 与咏唱流光在特效层内互斥（咏唱优先）
+      view.setCondGlow(!!card.condMet || (this._dumpMode && !!card.flexible));
       // 冷却薄纱（特效层持久指示，高度 = 剩余冷却比例：全灰=刚入冷、半灰=冷了一半）+
       // 剩余拍数水印（第三版视觉）；衰败推深超基准 = 暗红薄纱
       const max = card.charges?.max ?? Infinity;
@@ -335,6 +338,14 @@ export const syncBeats = {
       }
       view.fx.setCooling(decayed ? 'decayed' : (cooling ? 'cooling' : null),
         card.currentCooldown ?? 0, coolFrac);
+    }
+  },
+
+  // 弃牌模式切换时灵活卡金光重涂（无 sync 节拍的本地驱动；condMet 部分沿用快照值）
+  _applyFlexGlows() {
+    for (const c of this._snapshot?.hand ?? []) {
+      this._views.get(c.uniqueID)?.setCondGlow(
+        !!c.condMet || (this._dumpMode && !!c.flexible));
     }
   },
   _syncButtons(proj) {

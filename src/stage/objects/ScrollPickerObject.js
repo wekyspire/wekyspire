@@ -156,7 +156,13 @@ export class ScrollPickerObject extends THREE.Group {
       };
       this.add(built.obj);
       this._entries.push(entry);
-      this._picker?.addPickable(entry.id, built.obj, { kind: 'button', space: 'ui' });
+      // 候选是 CardObject（带烘焙卡面 hitRegions）时随注册交出 cardObject：
+      // Picker 的卡面词条二级查询靠它（named/effect hover tooltip），kind 保持
+      // 'button' 不变（选中/高亮语义归本界面）
+      this._picker?.addPickable(entry.id, built.obj, {
+        kind: 'button', space: 'ui',
+        cardObject: typeof built.obj?.hitTestUV === 'function' ? built.obj : null,
+      });
     });
 
     // ---- 底部：取消 / 确认 ----
@@ -210,7 +216,12 @@ export class ScrollPickerObject extends THREE.Group {
   attachPicker(picker) {
     this._picker = picker ?? null;
     if (!picker) return;
-    for (const e of this._entries) picker.addPickable(e.id, e.obj, { kind: 'button', space: 'ui' });
+    for (const e of this._entries) {
+      picker.addPickable(e.id, e.obj, {
+        kind: 'button', space: 'ui',
+        cardObject: typeof e.obj?.hitTestUV === 'function' ? e.obj : null,
+      });
+    }
     for (const [id, btn] of this._buttons) picker.addPickable(id, btn, { kind: 'button', space: 'ui' });
     if (this._bar?.track) picker.addPickable(TRACK_ID, this._bar.track, { kind: 'button', space: 'ui' });
     if (this._bar?.thumb) picker.addPickable(THUMB_ID, this._bar.thumb, { kind: 'button', space: 'ui' });
@@ -240,22 +251,28 @@ export class ScrollPickerObject extends THREE.Group {
     return true;
   }
 
-  /** hover：抬亮 + 弹该候选的 tooltip（内容由 buildItem 给的 tip 决定）。 */
+  /** hover：抬亮 + 弹该候选的 tooltip（内容由 buildItem 给的 tip 决定）。
+   *  kind:'token'（卡面 named/effect 词条命中）同样按 id 找到候选维持抬亮，
+   *  但不再发整卡 tip——词条 tooltip 已由 Picker.hover 发出（全局唯一，不抢）。 */
   onHover(hit, x = 0, y = 0) {
     if (!this._opened) return;
     if (this._barDrag != null) {                 // 滚动条拖拽中：指针驱动滚动
       this._dragScrollTo(this._uiWorldY(x, y));
       return;
     }
-    const entry = hit?.kind === 'button' ? this._entries.find(e => e.id === hit.id) : null;
+    const entry = (hit?.kind === 'button' || hit?.kind === 'token')
+      ? this._entries.find(e => e.id === hit.id) : null;
     if (!entry) { this._setHovered(null); return; }
     this._setHovered(entry);
-    if (entry.tip) this._bus?.emit(EventNames.TOOLTIP_SHOW, { kind: entry.tip.type, payload: entry.tip.payload, x, y });
+    if (entry.tip && hit.kind === 'button') {
+      this._bus?.emit(EventNames.TOOLTIP_SHOW, { kind: entry.tip.type, payload: entry.tip.payload, x, y });
+    }
   }
 
-  /** 点击：候选 = 选取（禁用的忽略）；返回/确认走回调。 */
+  /** 点击：候选 = 选取（禁用的忽略）；返回/确认走回调。token 命中（点在卡面
+   *  词条上）按所在候选的普通点击处理——点词条选卡不别扭，也不许穿透界面。 */
   onClick(hit) {
-    if (!this._opened || hit?.kind !== 'button') return false;
+    if (!this._opened || (hit?.kind !== 'button' && hit?.kind !== 'token')) return false;
     if (this._barDrag != null) { this._barDrag = null; return true; }   // 拖拽松手：只结束拖拽，不当点击
     if (hit.id === BACK_ID) { this.close(); this._onCancel?.(); return true; }
     if (hit.id === CONFIRM_ID) {
@@ -291,9 +308,10 @@ export class ScrollPickerObject extends THREE.Group {
     return true;
   }
 
-  /** 命中是否落在本界面内（宿主据此决定是否吞掉这次点击）。 */
+  /** 命中是否落在本界面内（宿主据此决定是否吞掉这次点击）。token 命中带候选
+   *  同款 id，一并认领（否则点词条会穿透到界面下面的舞台）。 */
   ownsHit(hit) {
-    if (!this._opened || hit?.kind !== 'button') return false;
+    if (!this._opened || (hit?.kind !== 'button' && hit?.kind !== 'token')) return false;
     return hit.id === BACK_ID || hit.id === CONFIRM_ID || this._entries.some(e => e.id === hit.id);
   }
 

@@ -45,6 +45,10 @@ const HP_BAR_HEIGHT = 1.5;
 const SHIELD_FRAME_PAD = 0.45;  // 保护框相对血条的外扩
 const SHIELD_FRAME_COLOR = 0x5aa8ff;
 const SHIELD_POP_DUR = 0.28;    // 数值变更放缩跳动时长（牌库脉冲同语言）
+// 血量条补间（2026-10-09 用户定）：受伤/治疗不做瞬变——先快后慢（cubic-out），
+// 时长随变动幅度走（大伤/大疗看得见过程，小变动快闪即达）
+const HP_ANIM_MIN_MS = 240;
+const HP_ANIM_SPAN_MS = 660;
 // 效果行（血条上方）：行距、背板横向外扩、背板颜色
 const FX_ROW_GAP = 0.4;
 const FX_ROW_PAD = 0.55;
@@ -88,6 +92,8 @@ export class UnitObject extends THREE.Group {
     this._hasArt = false;
     this._artVariant = null; // 形态变体（Boss 转阶段换立绘；取图与重挂由舞台做）
     this._shield = undefined; // undefined=尚未 setUnit（首帧不播跳动）
+    this._hpShown = null;     // null=尚未 setUnit（首帧血条直接落位，不播补间）
+    this._hpAnim = null;
     // 立牌固有偏航：±BOARD_YAW_BIAS，符号按 uniqueID 哈希奇偶（同屏相邻单位左右错开）
     let _h = 0;
     for (let i = 0; i < uniqueID.length; i++) _h = (_h * 31 + uniqueID.charCodeAt(i)) | 0;
@@ -369,10 +375,22 @@ export class UnitObject extends THREE.Group {
     // 效果行（血条上方左对齐纵列）：签名驱动整列重建
     this._syncEffectRows(projection.effects ?? []);
 
-    // 填充条：左锚定按比例缩短
+    // 填充条：左锚定按比例缩短。血量变动走先快后慢补间（时长随幅度）；死亡/首帧
+    // 直接落位。中途再变（多段/连击）从当前显示值续追，感受起点不重置
     const ratio = projection.maxHp > 0 ? Math.max(0, projection.hp / projection.maxHp) : 0;
-    this._hpFill.scale.x = Math.max(ratio, 0.001);
-    this._hpFill.position.x = -HP_BAR_WIDTH / 2 + (HP_BAR_WIDTH * ratio) / 2;
+    if (this._hpShown == null || projection.isDead) {
+      this._hpShown = ratio;
+      this._hpAnim = null;
+      this._applyHpBar(ratio);
+    } else {
+      const delta = Math.abs(ratio - this._hpShown);
+      if (delta > 1e-4) {
+        this._hpAnim = {
+          from: this._hpShown, to: ratio, t: 0,
+          dur: HP_ANIM_MIN_MS + HP_ANIM_SPAN_MS * delta,
+        };
+      }
+    }
     this._hpFill.material.color.set(
       projection.isDead ? 0x444444 : (HP_FILL_COLORS[this.side] ?? 0x4ade80));
     if (!this._hasArt) {
@@ -380,6 +398,13 @@ export class UnitObject extends THREE.Group {
         projection.isDead ? 0x333333 : (SIDE_COLORS[this.side] ?? 0x888888));
     }
     return true;
+  }
+
+  /** 血条填充条落位：左锚定按比例缩短（补间与直接落位共用同一写点）。 */
+  _applyHpBar(ratio) {
+    const r = Math.max(ratio, 0.001);
+    this._hpFill.scale.x = r;
+    this._hpFill.position.x = -HP_BAR_WIDTH / 2 + (HP_BAR_WIDTH * r) / 2;
   }
 
   /**
@@ -528,6 +553,16 @@ export class UnitObject extends THREE.Group {
       }
     }
     if (this._flashT > 0) this._flashT -= dt;
+    // 血量补间推进：cubic-out（先快后慢），走完置空；死亡/新变动由 setUnit 重置
+    if (this._hpAnim) {
+      const a = this._hpAnim;
+      a.t += dt * 1000;
+      const raw = Math.min(a.t / a.dur, 1);
+      const p = 1 - (1 - raw) ** 3;
+      this._hpShown = a.from + (a.to - a.from) * p;
+      this._applyHpBar(this._hpShown);
+      if (raw >= 1) this._hpAnim = null;
+    }
     if (this._shieldPopT > 0) {
       this._shieldPopT -= dt;
       const k = Math.max(this._shieldPopT, 0) / SHIELD_POP_DUR; // 1→0 线性衰减

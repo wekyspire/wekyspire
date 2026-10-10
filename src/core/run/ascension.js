@@ -54,7 +54,7 @@ export function ascensionReady(run) {
 const ABILITY_POOLS = Object.freeze({
   fire: Object.freeze({
     elite: Object.freeze(['pyroBlast', 'fireWard', 'scorchVein', 'fireBlower']),
-    master: Object.freeze(['openerGambit', 'flameSever', 'flameDemonLord', 'sunSwallower']),
+    master: Object.freeze(['openerGambit', 'flameSever', 'emberOut', 'sunSwallower']),
   }),
   body: Object.freeze({
     elite: Object.freeze(['boxer', 'bladeMaster', 'warrior', 'parryFist', 'bladeUnity']),

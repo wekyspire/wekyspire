@@ -110,10 +110,11 @@ export class PlayerTurnInstruction extends BattleInstruction {
           const bonus = ctx.battleState.turnDrawBonus ?? 0;
           ctx.battleState.turnDrawBonus = 0;
           const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room + bonus) - penalty);
-          if (count > 0) {
-            ctx.kernel.submitInstruction(
-              new DrawCardsInstruction({ count, reason: 'turnStart' }), this);
-          }
+          // 回合抽牌指令**无条件提交**（count 0 = 空抽）：「回合抽牌之后再抽一次」类
+          // 效果（润滑油：第二回合开始时抽 4）挂本指令 POST 即得稳定时点，不必新增
+          // 回合阶段。被滞气 veto 的抽牌不触发 POST——滞气 = 一切抽牌禁止，口径自洽。
+          ctx.kernel.submitInstruction(
+            new DrawCardsInstruction({ count, reason: 'turnStart' }), this);
         }
         return false;
       case 3:

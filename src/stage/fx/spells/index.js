@@ -57,7 +57,7 @@ import { siphonCast } from './siphonCast.js';
 import { chantOffCast } from './chantOffCast.js';
 import { sparkSalvo } from './sparkSalvo.js';
 
-export { resolveDamageFx, runDamageBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
+export { resolveDamageFx, runDamageBeat, runDotTickBeat, slashScaleFor, punchScaleFor, fireScaleFor } from './damageFx.js';
 
 // 模板注册表（一文件一模板，id 即登记键）
 const TEMPLATES = {
@@ -135,7 +135,7 @@ const CARD_SPELLS = {
   heavyFistB:     { template: 'fistCast', params: { mode: 'heavy' } },
   heavyFistA:     { template: 'fistCast', params: { mode: 'heavy' } },
   collapseFistS:  { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
-  cannonFist:     { template: 'fistCast', params: { mode: 'heavy' } },
+  punchA:         { template: 'fistCast', params: { mode: 'heavy' } },
   trueFist:       { template: 'fistCast', params: { mode: 'heavy', gatherMs: 520 } },
   tigerFist:      { template: 'fistCast', params: { mode: 'heavy' } },
   fullChargeC:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）

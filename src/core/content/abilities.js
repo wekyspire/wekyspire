@@ -1,6 +1,6 @@
 import { registerAbility } from '../abilities/registry.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { DiscardCardInstruction } from '../instructions/cards.js';
+import { DiscardCardInstruction, DrawCardsInstruction } from '../instructions/cards.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { GainManaInstruction, GainActionPointsInstruction } from '../instructions/resources.js';
@@ -19,21 +19,21 @@ registerAbility({
 });
 
 // 火灵脉体系能力（FIRE_VEIN_CARDS §0）：首次点亮火灵脉时自动授予，
-// 战斗开始获得烈焰亲和3（基础能力给燃烧免税额度，让自焚件（急燃/可燃血液）
-// 的前期代价变得可承受；攻击附烧收归大师能力炎魔）。
+// 战斗开始获得可燃1（2026-10-10 火系大改：烈焰亲和3 → 可燃1——燃烧结算每层
+// 减免 3 + 因燃烧掉血洗入余烬，基础能力从免税额变成余烬经济的启动器）。
 // 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅），
 // 不能照抄战意的直改写法。
 registerAbility({
   id: 'fireVein', name: '火灵脉',
-  description: '战斗开始时，获得烈焰亲和3。',
+  description: '战斗开始时，获得可燃1。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 3,
+      target: ctx.player, effectId: 'flammable', stacks: 1,
     }));
   },
 });
 
-// ---- 刀法体系能力（BODY_CULTIVATION_CARDS §2.5）----
+// ---- 刀子体系能力（BODY_CULTIVATION_CARDS §2.5）----
 registerAbility({
   id: 'bladeMaster', name: '刀客', grade: 'elite',
   description: '你每弃 1 张牌，获得 1 护盾。',
@@ -79,7 +79,7 @@ registerAbility({
 //     顺序反了数值会错。block 基础免伤只留轻掩，这两级能力是格挡免伤的主要来源。
 // ============================================================================
 
-// ---- 火·爆炎（§1.4）----
+// ---- 火·爆炎子体系（§1.4）----
 
 // 精英 **聚爆**：群伤技能只命中一个敌人时，其受 1.5 倍伤害。
 // 判据 = tags:['aoe'] 且存活敌人仅 1 只（aoe 每敌一枚指令，单敌时自然只有一枚命中）。
@@ -116,31 +116,31 @@ registerAbility({
   },
 });
 
-// 精英 **避火术**：战斗开始时，获得烈焰亲和6
+// 精英 **避火术**：战斗开始时，获得烈焰亲和4
 //（基础能力不白送大量烈焰亲和，免税额度集中到精英/大师线上）。
 registerAbility({
   id: 'fireWard', name: '避火术', grade: 'elite',
-  description: '战斗开始时，获得烈焰亲和6。',
+  description: '战斗开始时，获得烈焰亲和4。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 6,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 4,
     }));
   },
 });
 
-// 大师 **避焰决**：战斗开始时，获得烈焰亲和8
-//（精英已 6，大师必须压过其上位的精英，否则阶梯倒挂）。
+// 大师 **避焰决**：战斗开始时，获得烈焰亲和5
+//（精英已 4，大师必须压过其上位的精英，否则阶梯倒挂）。
 registerAbility({
   id: 'flameSever', requires: 'fireWard', name: '避焰决', grade: 'master',
-  description: '战斗开始时，获得烈焰亲和8。',
+  description: '战斗开始时，获得烈焰亲和5。',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameAffinity', stacks: 8,
+      target: ctx.player, effectId: 'flameAffinity', stacks: 5,
     }));
   },
 });
 
-// ---- 火·叠炎（§2.3）----
+// ---- 火·叠炎子体系（§2.3）----
 
 // 精英 **灼脉**：你的每 2 层燃烧为你提供全伤害 +1（PRE 加算，玩火自焚的正收益面）。
 registerAbility({
@@ -156,15 +156,20 @@ registerAbility({
   }],
 });
 
-// 大师 **炎魔**：战斗开始时炎魔1（与火灵脉基础能力送的烈焰亲和3 分线，不叠）。
+// 大师 **烬灭**（2026-10-10 火系大改，替代原「炎魔」大师位——炎魔效果收归炎魔决卡）：
+// 抽到余烬时，抽 1（每张余烬各触发一次——余烬链抽上来即续抽，级联合法；
+// 订阅挂抽牌 POST，抽上来的余烬再触发由后续指令自然承接，无重入）。
 registerAbility({
-  id: 'flameDemonLord', requires: 'scorchVein', name: '炎魔', grade: 'master',
-  description: '战斗开始时，获得炎魔1。',
-  onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddEffectInstruction({
-      target: ctx.player, effectId: 'flameDemon', stacks: 1,
-    }));
-  },
+  id: 'emberOut', requires: 'scorchVein', name: '烬灭', grade: 'master',
+  description: '抽到余烬时，抽 1。',
+  subscriptions: () => [{
+    when: DrawCardsInstruction, phase: 'post',
+    filter: (instr) => (instr.result?.drawn ?? []).some(c => c.defId === 'emberMote'),
+    react: (instr, ctx) => {
+      const n = instr.result.drawn.filter(c => c.defId === 'emberMote').length;
+      ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: n }), instr);
+    },
+  }],
 });
 
 // 精英 **吹火者**：每点溢出魏启赋予所有敌人燃烧2（溢出 = 获取量超出上限被截断的部分；
@@ -205,7 +210,7 @@ registerAbility({
   }],
 });
 
-// ---- 体修·拳（§1.4）----
+// ---- 体修·拳子体系（§1.5）----
 
 // 精英 **拳师**：每回合打出第 5 张牌后，回复 1 AP。
 registerAbility({
@@ -233,10 +238,10 @@ registerAbility({
   },
 });
 
-// 大师 **拳王**：每回合打出第 8 张牌后，回复 1 AP（与拳师独立计数，同持双触发）。
+// 大师 **拳王**：每回合打出第 9 张牌后，回复 1 AP（与拳师独立计数，同持双触发）。
 registerAbility({
   id: 'champion', requires: 'boxer', name: '拳王', grade: 'master',
-  description: '每回合打出第 8 张牌后，回复 1 行动点。',
+  description: '每回合打出第 9 张牌后，回复 1 行动点。',
   subscriptions: () => {
     let count = 0;
     return [
@@ -245,7 +250,7 @@ registerAbility({
         filter: () => true,
         react: (instr, ctx) => {
           count += 1;
-          if (count === 8) {
+          if (count === 9) {
             ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }), instr);
           }
         },
@@ -260,7 +265,7 @@ registerAbility({
 });
 
 
-// ---- 体修·拳/刀补强（BODY_CULTIVATION_CARDS §1.4/§2.5）----
+// ---- 体修·拳/刀子体系补强（BODY_CULTIVATION_CARDS §1.5/§2.5）----
 
 // 精英 **挡拆**：你每打出一张牌，获得 1 护盾（咏唱发动同样过 UseSkillInstruction → 天然计入）。
 registerAbility({
@@ -322,7 +327,7 @@ registerAbility({
   }],
 });
 
-// ---- 体修·拆（§3.4）----
+// ---- 体修·拆子体系（§3.5）----
 
 
 // 精英 **武者**：格挡 ≥3 层时，受攻击总减免 44%（block ×0.67 之后 ×(0.56/0.67)；持有武帝时被覆盖）。

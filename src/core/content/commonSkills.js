@@ -131,7 +131,7 @@ registerSkill({
 });
 
 // ---- 汲取·纯化线（MP 换纳气 + 护盾）----
-// 纯化 C，深度纯化 B（5 盾），A 档极致纯化（纳气2，7护盾）。
+// 纯化 C（2 盾），深度纯化 B（4 盾），A 档极致纯化（纳气2，6护盾）。
 
 // 纯化（C）：1MP，冷却1：纳气2，2护盾。
 registerSkill({
@@ -403,7 +403,8 @@ noonNapCard('noonNapC', 'C', 12, 'noonNapB');
 noonNapCard('noonNapB', 'B', 16, 'noonNapA');
 noonNapCard('noonNapA', 'A', 20);
 
-// 防住！（C/B/A，消耗，0 费，迷你）：10/13/16 护盾。
+// 防住！（B/A，消耗，0 费，迷你）：12/16 护盾（2026-10-10 设计稿修订：撤 C 档、
+// B 12 / A 16）。
 // 一次性大盾——消耗品定位与同阶护盾件（灵力护盾 1MP 6盾 可循环）错位：
 // 不耗蓝、不管冷却，但整场战斗就这一发；迷你 = 计 0 张手牌（捏在手里等时机
 // 不挤容量）。
@@ -421,8 +422,7 @@ const holdOutCard = (id, tier, shield, promotesTo = null) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-holdOutCard('holdOutC', 'C', 10, 'holdOutB');
-holdOutCard('holdOutB', 'B', 13, 'holdOutA');
+holdOutCard('holdOutB', 'B', 12);
 holdOutCard('holdOutA', 'A', 16);
 
 // 瞬间冷却（A，消耗，设计稿未写费用 → 0 费）：选一张手牌，令其冷却5。

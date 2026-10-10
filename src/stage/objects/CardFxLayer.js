@@ -95,7 +95,7 @@ const edgeParam = Fn(([p, hf]) => {
   return s.div(w.add(h).mul(2.0));
 });
 
-const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor]) => {
+const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor, uComets]) => {
   const p = vUv.sub(0.5).mul(uPlane);
   const hf = uCard.mul(0.5);
   const d = sdRoundBox(p, hf, 1.5);
@@ -118,11 +118,12 @@ const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor]) => {
     trail.addAssign(exp(fract(s.sub(ti).add(1.0)).mul(-11.0)).mul(pulse).mul(0.7));
   });
 
-  // 能量配比：rim 呼吸 ~0.16..0.54（压 bloom 阈下，保持牌面可读、暖金不发白），
-  // 拖尾峰值 ~0.85，光点头峰值 ~1.9（唯一稳过 bloom 阈的主光源）
+  // 能量配比：rim 呼吸 ~0.16..0.54（压 bloom 阈下，保持牌面可读、rim 色不发白），
+  // 拖尾峰值 ~0.85，光点头峰值 ~1.9（唯一稳过 bloom 阈的主光源）；
+  // uComets = 绕行光点开关权重（咏唱 1 / 条件金光 0——光点是咏唱的签名造型）
   const energy = rim.mul(breath.mul(0.38).add(0.16))
-    .add(trail.mul(rimProx).mul(0.85))
-    .add(head.mul(1.9));
+    .add(trail.mul(rimProx).mul(0.85).mul(uComets))
+    .add(head.mul(1.9).mul(uComets));
   // 面片边缘衰减窗（断层修复）：rim 的 exp 外溢渐熄但永不严格到 0，
   // 面片边界处残余 ~0.01 能量被硬截断 → 淡淡色彩断层。在外扩带的外半段把能量
   // 平滑压到恰 0（margin = 牌面到面片边的外扩距离；d 在边中点恰 = margin，角部更大，
@@ -233,6 +234,9 @@ export class CardFxLayer extends THREE.Group {
     this._react = null;      // 反应演出时间线 { t, i }（C0 shader 块，见 cardBodyFx.cbfReact）
     this._edgeGlow = null;   // 咏唱流光面片（自定义 shader，惰性创建）
     this._edgeUniforms = null; // 面片 uniforms 句柄（update 推进 uTime/uFade）
+    this._condOn = false;    // 条件金光目标态（与咏唱流光互斥展示，咏唱优先）
+    this._condGlow = null;   // 条件金光面片（同 shader、无绕行光点）
+    this._condUniforms = null;
   }
 
   /**
@@ -349,44 +353,86 @@ export class CardFxLayer extends THREE.Group {
   get coolingMode() { return this._veilMode; }
 
   /** 咏唱激活边缘流光开关（幂等）：呼吸 rimlight + 绕行脉动光点，单面片自定义
-   *  shader（HDR 输出喂 bloom）。点亮有短淡入；时间推进在 update(dt)。 */
+   *  shader（HDR 输出喂 bloom）。点亮有短淡入；时间推进在 update(dt)。
+   *  与条件金光同卡互斥：咏唱激活优先（蓝金双 rim 叠色不可读）。 */
   setEdgeGlow(on) {
     if (on === !!this._edgeGlow) return;
     if (on) {
-      const pw = this._w + EDGE_MARGIN * 2, ph = this._h + EDGE_MARGIN * 2;
-      // TSL uniform() 节点——update 推流点（uTime/uFade `.value`）零改动
-      this._edgeUniforms = {
-        uTime: uniform(this._t),
-        uFade: uniform(0),
-        uCard: uniform(new THREE.Vector2(this._w, this._h)),
-        uPlane: uniform(new THREE.Vector2(pw, ph)),
-        uColor: uniform(new THREE.Color(1.0, 0.9, 0.62)), // 咏唱暖金
-      };
-      const mat = additiveLight(new MeshBasicNodeMaterial({
-        transparent: true,
-        depthWrite: false,
-      }));
-      // colorNode 全量接管输出：rgb 直接 HDR（过 bloom 阈刻意保留），alpha 恒 1
-      mat.colorNode = edgeShade(
-        uv(), this._edgeUniforms.uTime, this._edgeUniforms.uFade,
-        this._edgeUniforms.uCard, this._edgeUniforms.uPlane, this._edgeUniforms.uColor);
-      this._edgeGlow = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
-      // z=0.4：低于手牌扇相邻卡间隔（静息 z=10+n·0.5）——透明队列按中心深度排序，
-      // 凸出 0.6 的旧值让光环排在右侧邻牌（+0.5）之后绘制 = 永远挡住邻牌（
-      // 用户报修）。0.4 < 0.5 → 邻牌盖住本卡时连同光环外溢一起盖住。同时高于牌面
-      // 内层件（veil 0.35），rim 内收带仍可读。
-      this._edgeGlow.position.z = 0.4;
-      this.add(this._edgeGlow);
+      this._setCondMesh(false);
+      ({ mesh: this._edgeGlow, uniforms: this._edgeUniforms } = this._makeEdgeMesh(
+        new THREE.Color(0.58, 0.76, 1.05), 1)); // 咏唱蓝（原暖金让位给条件金光）
     } else {
-      this.remove(this._edgeGlow);
-      this._edgeGlow.geometry.dispose();
-      this._edgeGlow.material.dispose();
-      this._edgeGlow = null;
-      this._edgeUniforms = null;
+      this._disposeEdgeMesh();
+      if (this._condOn) this._setCondMesh(true);
     }
   }
 
   get hasEdgeGlow() { return !!this._edgeGlow; }
+
+  /** 「条件满足」金光开关（幂等）：呼吸感金色 rim、无绕行光点（那是咏唱的签名）。
+   *  驱动源 = 投影 condMet（def.condition 声明的条件加成当前成立）+ 弃牌模式的
+   *  灵活卡标记（sync 侧合流后推这里）；咏唱流光在场时不展示，流光熄灭自动补挂。 */
+  setCondGlow(on) {
+    if (on === !!this._condOn) return;
+    this._condOn = on;
+    if (this._edgeGlow) return;
+    this._setCondMesh(on);
+  }
+
+  get hasCondGlow() { return !!this._condGlow; }
+
+  // 边缘光面片工厂（咏唱流光/条件金光共用）：comets = 绕行光点权重
+  _makeEdgeMesh(color, comets) {
+    const pw = this._w + EDGE_MARGIN * 2, ph = this._h + EDGE_MARGIN * 2;
+    // TSL uniform() 节点——update 推流点（uTime/uFade `.value`）零改动
+    const u = {
+      uTime: uniform(this._t),
+      uFade: uniform(0),
+      uCard: uniform(new THREE.Vector2(this._w, this._h)),
+      uPlane: uniform(new THREE.Vector2(pw, ph)),
+      uColor: uniform(color),
+      uComets: uniform(comets),
+    };
+    const mat = additiveLight(new MeshBasicNodeMaterial({
+      transparent: true,
+      depthWrite: false,
+    }));
+    // colorNode 全量接管输出：rgb 直接 HDR（过 bloom 阈刻意保留），alpha 恒 1
+    mat.colorNode = edgeShade(uv(), u.uTime, u.uFade, u.uCard, u.uPlane, u.uColor, u.uComets);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
+    // z=0.4：低于手牌扇相邻卡间隔（静息 z=10+n·0.5）——透明队列按中心深度排序，
+    // 凸出 0.6 的旧值让光环排在右侧邻牌（+0.5）之后绘制 = 永远挡住邻牌（
+    // 用户报修）。0.4 < 0.5 → 邻牌盖住本卡时连同光环外溢一起盖住。同时高于牌面
+    // 内层件（veil 0.35），rim 内收带仍可读。
+    mesh.position.z = 0.4;
+    this.add(mesh);
+    return { mesh, uniforms: u };
+  }
+
+  _disposeEdgeMesh() {
+    if (!this._edgeGlow) return;
+    this.remove(this._edgeGlow);
+    this._edgeGlow.geometry.dispose();
+    this._edgeGlow.material.dispose();
+    this._edgeGlow = null;
+    this._edgeUniforms = null;
+  }
+
+  _setCondMesh(on) {
+    if (on === !!this._condGlow) return;
+    if (on) {
+      ({ mesh: this._condGlow, uniforms: this._condUniforms } = this._makeEdgeMesh(
+        new THREE.Color(1.0, 0.84, 0.42), 0)); // 呼吸感金光
+    } else {
+      if (this._condGlow) {
+        this.remove(this._condGlow);
+        this._condGlow.geometry.dispose();
+        this._condGlow.material.dispose();
+      }
+      this._condGlow = null;
+      this._condUniforms = null;
+    }
+  }
 
   /** 「将弃」标记（P9 尾弃预告）：红色呼吸描边框 + 暗化盖纱。幂等。呼吸推进在 update(dt)。 */
   setDoomed(on) {
@@ -470,6 +516,7 @@ export class CardFxLayer extends THREE.Group {
   /** 焚毁等接管牌面前：熄灭全部叠加特效（不销毁资源——卡随后整体 dispose）。 */
   clearTransient() {
     this.setEdgeGlow(false);
+    this.setCondGlow(false);
     this.setCooling(null);
     this.setDoomed(false);
     this.setLocked(false);
@@ -547,9 +594,10 @@ export class CardFxLayer extends THREE.Group {
         o.material.opacity = 0.45 + 0.5 * k;
       }
     }
-    if (this._edgeGlow) {
-      this._edgeUniforms.uTime.value = this._t;
-      const f = this._edgeUniforms.uFade;
+    for (const u of [this._edgeUniforms, this._condUniforms]) {
+      if (!u) continue;
+      u.uTime.value = this._t;
+      const f = u.uFade;
       f.value = Math.min(1, f.value + dt * EDGE_FADE_IN); // 点亮淡入
     }
   }

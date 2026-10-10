@@ -548,6 +548,7 @@ export class BattleStage {
     else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
+    this._applyFlexGlows();            // 灵活卡金光（弃牌模式专属提示）
   }
 
   // 立牌纹理补挂：缓存命中才设置，未命中等共享缓存订阅回调统一补

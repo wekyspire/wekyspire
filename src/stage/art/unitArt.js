@@ -63,7 +63,13 @@ const UNIT_ART_FILES = Object.freeze({
   wraithB: 'unit_wraith.png',
   snowwolf: 'unit_snowwolf.png',
   rockPangolin: 'unit_rockPangolin.png',
+  youngRakshasa: 'unit_youngRakshasa.png',
   pyro: 'unit_pyro.png',
+  pangolinKing: 'unit_pangolinKing.png',
+  corruptSource: 'unit_corruptSource.png',
+  rottenRoot: 'unit_rottenRoot.png',
+  rottenRootT: 'unit_rottenRoot.png',
+  thornWeedT: 'unit_thornWeed.png',
   // ==== 第二章（南孚宫）：族底图一张，行为变体复用 ====
   // bigSlime 专属图三轮生成未过验收（构图满幅出画+无白眼），暂复用史莱姆立绘放大——
   // 专属图待重制（ENEMY_ART_LIST 待办）
@@ -137,6 +143,7 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   swampAmbusher: 1.0,
   thornWeed: 0.55,
   thornWeedB: 0.55,
+  thornWeedT: 0.55,
   carrionBeetle: 0.5,
   carrionBeetleB: 0.5,
   staticPuff: 0.55,

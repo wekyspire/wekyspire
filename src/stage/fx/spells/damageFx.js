@@ -147,6 +147,53 @@ export function resolveDamageFx(defId) {
 }
 
 /**
+ * 附级结算特效（燃烧/中毒 tick，2026-10-09）：DoT 每拍伤害的专属命中读法——
+ * 燃烧 = 脚下小火腾起（fireBurst 低档）+ 躯干余烬上升 + 暖灯闪（「火咬一口」）；
+ * 中毒 = 毒液自胸口飞溅坠落（重力下落）+ 病绿蒸气缓升 + 绿灯闪（立牌染绿归
+ * 伤害节拍的 flash，不在此处）。量级随伤害开方轻缩放。fire-and-forget，
+ * 由 units.js _damageHit 经 _fxRunScript 调用，不占节拍时序。
+ */
+export async function runDotTickBeat(ctx, deps, { unit, tag, dealt }) {
+  if (!unit) return;
+  const s = unit._baseScale ?? 1;
+  const k = Math.min(1.6, Math.max(0.7, Math.sqrt((dealt || 1) / 12)));
+  const chest = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
+  const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
+  if (tag === 'burn') {
+    deps.particles?.spawn?.(chest.x, chest.y, {
+      color: 0xff9a4a, count: Math.round(9 * k), speed: 9 * k, size: 0.7, ttl: 0.8,
+      gravity: -14, z: chest.z,
+    });
+    await fireBurst(ctx, deps, {
+      at: feet,
+      scale: 0.55 + 0.25 * k, ms: 300,
+      sparkCount: Math.round(8 * k), sparkSpeed: 12,
+      linger: { count: Math.round(6 * k), speed: 3, ttl: 1.2, size: 0.6, gravity: -6 },
+      lampIntensity: 380 * k,
+    });
+    return;
+  }
+  if (tag === 'poison') {
+    deps.particles?.spawn?.(chest.x, chest.y, {
+      color: 0x7fe06a, count: Math.round(12 * k), speed: 13 * k, size: 0.9, ttl: 0.75,
+      gravity: 30, z: chest.z,
+    });
+    deps.particles?.spawn?.(chest.x, chest.y, {
+      color: 0x9b59d0, count: Math.round(6 * k), speed: 9 * k, size: 0.7, ttl: 0.9,
+      gravity: 20, z: chest.z,
+    });
+    deps.particles?.spawn?.(chest.x, chest.y - 1.2, {
+      color: 0x55803f, count: Math.round(5 * k), speed: 3, size: 1.4, ttl: 1.4,
+      gravity: -6, z: chest.z,
+    });
+    await lampPulse(ctx, deps, {
+      name: 'light:fx0', at: chest, color: [0.45, 0.85, 0.4],
+      peak: 300 * k, attackMs: 70, decayMs: 420,
+    });
+  }
+}
+
+/**
  * 在伤害节拍跑一次命中演出（units.js _damageHit 经 _fxRunScript 调用，
  * fire-and-forget 不占节拍时序）。锚点口径：胸口锚 = 立绘中心（血条同款
  * 3.4×scale），脚边锚 = 落地爆心（火向上烧）。fromX = 攻击来向（拳面镜像）。

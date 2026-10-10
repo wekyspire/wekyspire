@@ -11,7 +11,6 @@
 import { zoneOf, aliveEnemies } from '../state/battleState.js';
 import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { handIndexAtPlay, handLimitOf, effectiveHandCount } from '../skills/helpers.js';
-import { keywordsOf } from '../skills/cardModifiers.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import {
@@ -63,17 +62,6 @@ export function isLastHandCardAtPlay(sctx) {
   return hand.slice(selfIndex + 1).every(c => c.isActivated);
 }
 
-// 【先手】：此牌作为本回合打出的第一张牌（敏捷连击系判据）——
-// 位置不可控变时序可控；每回合天然限触发一次（「第一张」只有一张），数值因此无需下调。
-// 咏唱发动也是一次打出，会抢先手位=真实顺序抉择。
-// 结算读 UseSkill stage 1 捕获（嵌套出牌时母卡已占 pending 坑，不算第一张）；
-// 预览态读实时计数（本回合未出牌且无卡在结算区即成立）。
-export function isFirstPlayThisTurn(sctx) {
-  if (sctx.firstPlayThisTurn != null) return sctx.firstPlayThisTurn;
-  return sctx.battleState.history.turn.played === 0
-    && sctx.battleState.zones.pending.length === 0;
-}
-
 // ---- 指令组合原语（全部返回被提交的指令，便于命中探针/断言）----
 
 // 造成伤害。amount 已是最终数值（攻击卡请先过 attackAmount）。
@@ -100,6 +88,9 @@ export function attackDamage(sctx, base, opts = {}) {
 
 // 群伤原语：对每个存活敌人一枚 aoe 标记攻击（面板/power 逐枚结算）；返回命中敌人数。
 // 体修扫腿/刀组横劈共用（火系 aoeDamage 是「选定敌人最后命中」的局部特化，不复用）。
+// AOE_TAGS 导出给卡面预览共用（resolvedDamageText 同批透传——tags 门控的 PRE 修正
+// 预览与结算同源）。
+export const AOE_TAGS = ['aoe'];
 export function aoeAttack(sctx, base) {
   return aoeAttackProbes(sctx, base).length;
 }
@@ -109,7 +100,7 @@ export function aoeAttack(sctx, base) {
 export function aoeAttackProbes(sctx, base) {
   const probes = [];
   for (const e of aliveEnemies(sctx.battleState)) {
-    probes.push(attackDamage(sctx, base, { target: e, tags: ['aoe'] }));
+    probes.push(attackDamage(sctx, base, { target: e, tags: AOE_TAGS }));
   }
   return probes;
 }
@@ -298,10 +289,9 @@ export function selected(instr) {
 }
 
 // 是否刀法牌（培植/开刃/磨刀系列的作用域判定）。
-// 判据 = 「blade 系列」而非「keywords 含 blade」：碎铁/出鞘等**斩的衍生与处理牌**是
-// 刀法牌（吃到关于刀法牌的一切效果与增益——养刀术/锻刀术/练刀/磨刀系），
-// 但它们的卡面页脚不该多一个 "blade" 词条（关键词是给玩家读的，不是分类标记）。
+// 判据 = **刀子体系**（def.subsystem === 'blade'）：碎铁/出鞘等**斩的衍生与处理牌**
+// 是刀法牌（吃到关于刀法牌的一切效果与增益——养刀术/锻刀术/练刀/磨刀系）；
+// 归属展示走页脚子体系小项，keywords 不再携带分类标记。
 export function isBladeCard(card) {
-  const def = getSkillDefinition(card.defId);
-  return def.series === 'blade' || keywordsOf(card).includes('blade');
+  return getSkillDefinition(card.defId)?.subsystem === 'blade';
 }

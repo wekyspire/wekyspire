@@ -279,7 +279,7 @@ recruitGunnerDef('recruitGunner', 0);
 recruitGunnerDef('recruitGunnerB', 1);
 recruitGunnerDef('recruitGunnerC', 2);
 
-// ---- 南孚妖蝶（节奏骚扰）：出场闪避 2。三拍循环 洗 2 虚无 → 盾 10 → 滞气 1。
+// ---- 南孚妖蝶（节奏骚扰）：出场闪避 2。三拍循环 洗 2 虚无 → 盾 10 → 滞气 3。
 // B：第一拍改为攻 3×3；C：第三拍改为攻 12；D：仅以 1-2 两拍循环。血量 21-29 随机。----
 const NYMPH_FAMILY = new Set(['nymph', 'nymphB', 'nymphC', 'nymphD']);
 function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = {}) {
@@ -315,7 +315,7 @@ function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = 
         }));
       } else {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: actx.player, effectId: 'stall', stacks: 1,
+          target: actx.player, effectId: 'stall', stacks: 3,
         }));
       }
     },
@@ -328,7 +328,7 @@ function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = 
       if (phase === 1) return { kinds: ['defend'], note: '护盾+10' };
       return b3Attack
         ? { kinds: ['attack'], hits: 1, damage: 12 + atk }
-        : { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' };
+        : { kinds: ['debuff'], note: '赋予玩家滞气3（下回合无法抽牌）' };
     },
   });
 }

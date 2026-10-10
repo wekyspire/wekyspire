@@ -148,7 +148,8 @@ export const inputBeats = {
         const i = sel.indexOf(uid);
         if (i >= 0) sel.splice(i, 1);
         else if (sel.length < this._pick.max) sel.push(uid);
-        this.reconcile();   // 同一 request 幂等 → 只刷新选中态与按钮
+        this._syncButtons(this._snapshot);  // 确认键计数（n/N）
+        this._layoutAndTrack();             // 只刷选中态/布局：不做全量 reconcile（见下）
         return;
       }
     }
@@ -223,7 +224,13 @@ export const inputBeats = {
         const ok = this.bridge.intents.endTurn();
         if (!ok) this._endTurnRequested = false;
         this._syncButtons(this._snapshot);
-        this.reconcile();   // 整手立刻压灰、换卡模式退出（不等下一拍 sync）
+        // 只走视觉通道（压灰/按钮/将弃标记），**不做全量 reconcile**：点击时刻的显示
+        // 快照可能落后于模型（离场节拍起拍即推进 zone、飞行未完），全量对账会把在途
+        // 卡翻回 hand（_entering 回飞杀死离场补间的 finish → 保险丝强杀、后续节拍错位；
+        // 连弃+立即结束回合必现）。显示状态唯一推进口 = ANIM_STATE_SYNC 节拍（队列定序）
+        this._closeViewer();
+        this._layoutAndTrack();   // _endTurnRequested 分支立刻整手压灰
+        this._updateDoomMarks();
       }
       return;
     }

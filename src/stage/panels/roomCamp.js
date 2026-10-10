@@ -17,7 +17,7 @@ export function trainingWidgets(w, snap) {
     w.push({ kind: 'button', id: 'train:begin', width: 260, size: 'main', label: '开始训练', action: { action: 'trainingBegin' } });
   } else if (t.pendingUpgrade) {
     // 尾款未清：正常流程在抓牌落地那拍自动弹「模式二选一 → 全屏选卡」；这里只留重入
-    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '还欠一次升级' });
+    w.push({ kind: 'sub', align: 'center', tint: '#e8c85a', text: '选择需要升级的卡牌' });
     w.push({ kind: 'button', id: 'train:resume', width: 260, size: 'main', label: '继续修行…', action: { action: 'trainingUpgradeResume' } });
   } else if (t.choices?.length) {
     // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底

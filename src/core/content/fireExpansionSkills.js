@@ -10,6 +10,7 @@
 
 import { registerSkill } from '../skills/registry.js';
 import { DealDamageInstruction, ApplyDamageInstruction } from '../instructions/combat.js';
+import { aliveEnemies } from '../state/battleState.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import {
@@ -22,7 +23,7 @@ import {
 // （targetMode 缺省 'none'）。
 function sparkCard({ id, name = '火花', tier, damage, hits, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'spark',
+    id, name, type: 'fire', tier, series: 'spark', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -51,7 +52,7 @@ sparkCard({ id: 'ultimateSpark', name: '终极火花', tier: 'S', damage: 5, hit
 // 火种 C：1魏 冷却1——向牌库随机位洗入 3 张「余烬」，抽2（升级：抽3——升级收益
 // = 抽牌加一，不增加洗入余烬数量）。
 registerSkill({
-  id: 'sparkSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember',
+  id: 'sparkSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -68,7 +69,7 @@ registerSkill({
 // 火种 B：1魏 冷却1——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
 // 加抽牌不洗更多余烬）。
 registerSkill({
-  id: 'sparkSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember',
+  id: 'sparkSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -83,7 +84,7 @@ registerSkill({
 
 // 不灭火种 A：0费 冷却1——洗入 3 张余烬并抽 3（潜伏量的即时兑现分岔）。
 registerSkill({
-  id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember',
+  id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -99,7 +100,7 @@ registerSkill({
 // 余烬（衍生牌）：0费即抛——赋予目标燃烧3，打出即焚毁。只经造牌入场。
 // （等阶记 C——衍生牌等阶只是账务口径。）
 registerSkill({
-  id: 'emberMote', name: '余烬', type: 'fire', tier: 'C', series: 'ember',
+  id: 'emberMote', name: '余烬', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -120,7 +121,7 @@ registerSkill({
 // ——低阶一次性防复用，高阶走 FIFO 回库循环。无燃烧打出 = 落空。
 function burnSnapCard({ id, tier, exhaust, promotesTo }) {
   registerSkill({
-    id, name: '燃爆', type: 'fire', tier, series: 'fireControl',
+    id, name: '燃爆', type: 'fire', tier, series: 'fireControl', subsystem: 'blaze',
     cost: { mana: 1, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -150,7 +151,7 @@ burnSnapCard({ id: 'burnSnapA', tier: 'A', exhaust: false });
 // 阶梯：C 10/+3 → B 13/+3 → A 轰灭 13/+4（A 位溢价在伤残层数——延时价值型斩杀铺垫）。
 function blastShockCard({ id, tier, damage, maim, promotesTo }) {
   registerSkill({
-    id, name: '爆裂冲击', type: 'fire', tier, series: 'shock',
+    id, name: '爆裂冲击', type: 'fire', tier, series: 'shock', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -172,7 +173,7 @@ blastShockCard({ id: 'blastShockB', tier: 'B', damage: 13, maim: 3, promotesTo: 
 
 // 轰灭 A：2魏 13伤 + 伤残4（与 B 同伤，伤残 +1 是 A 位溢价——延时价值型斩杀铺垫）。
 registerSkill({
-  id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'A', series: 'shock',
+  id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'A', series: 'shock', subsystem: 'burst',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -195,7 +196,7 @@ registerSkill({
 //  C 位是火路线起始牌组的回蓝件——随开局直发）。
 function flashBurnCard({ id, tier, mana, promotesTo }) {
   registerSkill({
-    id, name: '急燃', type: 'fire', tier, series: 'fever',
+    id, name: '急燃', type: 'fire', tier, series: 'fever', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
@@ -217,7 +218,7 @@ flashBurnCard({ id: 'flashBurnA', tier: 'A', mana: 4 });
 // （自焚流的条件件——基础伤恒 7，档位差全在燃烧加成斜率）。
 function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'selfImmolate',
+    id, name, type: 'fire', tier, series: 'selfImmolate', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -238,27 +239,29 @@ flameEdgeCard({ id: 'redHotBlade', name: '红热焰刃', tier: 'C', bonus: 7, pr
 flameEdgeCard({ id: 'goldHotBlade', name: '金热焰刃', tier: 'B', bonus: 11, promotesTo: 'whiteHotBlade' });
 flameEdgeCard({ id: 'whiteHotBlade', name: '白热焰刃', tier: 'A', bonus: 15 });
 
-// 热浪链 C/B/A（1魏）：8 伤；目标燃烧 ≥5 层时 +8/+12/+16
-// （斩杀/条件爆发——叠炎的「火候到了」一击）。门槛恒 5 不变，档位差全在加成斜率。
+// 热浪链 C/B/A（1魏，深入·爆炎）：4 群伤；敌方燃烧 ≥5 层的敌人额外 +8/+12/+16
+// （2026-10-10 火系大改：单体 8 伤 → 4 群伤逐敌条件加成；自点火系列移出、归爆炎
+// 深入卡——「火候到了」的全场收口）。门槛恒 5，档位差全在加成斜率。
 function heatWaveCard({ id, tier, bonus, promotesTo }) {
   registerSkill({
-    id, name: '热浪', type: 'fire', tier, series: 'ignite',
+    id, name: '热浪', type: 'fire', tier, series: 'heatWave', subsystem: 'burst',
     cost: { mana: 1, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'normal', targetMode: 'enemy',
+    cardMode: 'normal', targetMode: 'none',
     promotesTo,
+    deep: 'burst',
     use(sctx) {
-      const target = enemyTarget(sctx);
-      const hot = (target?.getEffectStacks('burn') ?? 0) >= 5;
-      attackDamage(sctx, hot ? 8 + bonus : 8, { target });
+      for (const e of aliveEnemies(sctx.battleState)) {
+        if (e.isDead()) continue;
+        const hot = e.getEffectStacks('burn') >= 5;
+        attackDamage(sctx, hot ? 4 + bonus : 4, { target: e, tags: ['aoe'] });
+      }
       return true;
     },
-    describe: () => `8伤害；目标/effect{燃烧}不少于5层时，+${bonus}`,
+    describe: () => `4群伤；目标/effect{燃烧}不少于5层时，+${bonus}`,
     battleDescribe: (sctx) => {
-      const stacks = enemyTarget(sctx)?.getEffectStacks('burn') ?? 0;
-      const hot = stacks >= 5;
-      return `${resolvedDamageText(sctx, hot ? 8 + bonus : 8)}`
-        + `；目标/effect{燃烧}不少于5层时，+${bonus}（燃${stacks}/5${hot ? '，已生效' : ''}）`;
+      const hot = aliveEnemies(sctx.battleState).filter(e => e.getEffectStacks('burn') >= 5).length;
+      return `4群伤；目标/effect{燃烧}不少于5层时，+${bonus}（达标敌人${hot}只）`;
     },
   });
 }
@@ -266,27 +269,28 @@ heatWaveCard({ id: 'heatWaveC', tier: 'C', bonus: 8, promotesTo: 'heatWaveB' });
 heatWaveCard({ id: 'heatWaveB', tier: 'B', bonus: 12, promotesTo: 'heatWaveA' });
 heatWaveCard({ id: 'heatWaveA', tier: 'A', bonus: 16 });
 
-// 铲灰链 C/B/A（0费 冷却1）：抽 1 牌；坟墓里有至少 3/2/2 张牌时
-// 再抽 1/1/2（回响烈焰 B 的低阶教学：火系的坟场语言从前期就有踪迹）。
+// 铲灰链 C/B/A（0费 冷却1）：抽 2 牌；坟墓里有至少 4/3/3 张牌时
+// 再抽 2/2/3（2026-10-10 火系大改：自爆炎散卡移入叠炎系列、数值上调——
+// 火系的坟场语言从前期就有踪迹）。
 function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
   registerSkill({
-    id, name: '铲灰', type: 'fire', tier, series: 'fuel',
+    id, name: '铲灰', type: 'fire', tier, series: 'ashRake', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      drawCards(sctx, 1);
+      drawCards(sctx, 2);
       if (sctx.battleState.zones.burnt.length >= threshold) drawCards(sctx, extraDraw);
       return true;
     },
-    describe: () => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
-    battleDescribe: (sctx) => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}（坟墓${sctx.battleState.zones.burnt.length}张）`,
+    describe: () => `抽2；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
+    battleDescribe: (sctx) => `抽2；坟墓不少于${threshold}张牌时，再抽${extraDraw}（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
-ashRakeCard({ id: 'ashRakeC', tier: 'C', threshold: 3, extraDraw: 1, promotesTo: 'ashRakeB' });
-ashRakeCard({ id: 'ashRakeB', tier: 'B', threshold: 2, extraDraw: 1, promotesTo: 'ashRakeA' });
-ashRakeCard({ id: 'ashRakeA', tier: 'A', threshold: 2, extraDraw: 2 });
+ashRakeCard({ id: 'ashRakeC', tier: 'C', threshold: 4, extraDraw: 2, promotesTo: 'ashRakeB' });
+ashRakeCard({ id: 'ashRakeB', tier: 'B', threshold: 3, extraDraw: 2, promotesTo: 'ashRakeA' });
+ashRakeCard({ id: 'ashRakeA', tier: 'A', threshold: 3, extraDraw: 3 });
 
 // ==== 咏唱反甲（熔岩铠甲 B/A）：受攻击给攻击方上燃烧 ====
 // 不再是一次性买盾，点亮期间**每次**被攻击都灼烧攻击者
@@ -295,7 +299,7 @@ ashRakeCard({ id: 'ashRakeA', tier: 'A', threshold: 2, extraDraw: 2 });
 // 不触发；订阅挂卡牌 owner，熄灭自动注销，无回合窗自清（咏唱常驻即反甲常驻）。
 function magmaArmorCard({ id, tier, burn, promotesTo }) {
   registerSkill({
-    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmor',
+    id, name: '熔岩铠甲', type: 'fire', tier, series: 'magmaArmor', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,

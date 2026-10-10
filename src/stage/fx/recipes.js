@@ -116,6 +116,11 @@ export function resolveDamageRecipe(payload = {}) {
     r.knockback = MINOR.knockback;
     r.shakeScale = MINOR.shakeScale;
     r.beatMs = MINOR.beatMs;
+    // DoT tick 专属演出（runDotTickBeat，fire-and-forget）：燃烧 = 脚下小火腾起 +
+    // 上升余烬 + 暖灯闪；中毒 = 毒液飞溅坠落 + 病绿蒸气 + 绿灯闪。中毒另配立牌
+    // 短暂染绿（flash 在 minor 路径的还原时点在节拍末尾——见 units.js）
+    if (tagKey === 'burn' || tagKey === 'poison') r.tick = tagKey;
+    if (tagKey === 'poison') r.flash = 0x4f9a55;
   }
   if (payload.killed) {
     r.shakeBonus = KILL.shakeBonus;

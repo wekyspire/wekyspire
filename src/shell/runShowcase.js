@@ -283,17 +283,21 @@ export function createRunShowcase(ctx) {
     if (!stage?.showcaseItem) return false;
     const pack = p.kind === 'pack';
     const relicPack = p.kind === 'relic';
+    // 卡包/遗物包**直接开包**（全屏三选一，可放弃）——机器出货演出已经把
+    // 「买了什么」交代过，中间再插一张包图特写是多余一跳（2026-10-09 用户定）。
+    // picker 开不起来（无该方法/降级路径）才回落包图特写
+    if (pack || relicPack) {
+      const opened = relicPack
+        ? stage.openShopRelicPackPicker?.()
+        : stage.openShopPackPicker?.();
+      if (opened) return true;   // 舞台级包装（panelHost）自备快照；false=无待开包
+    }
     return !!stage.showcaseItem({
       title: p.name ?? '买到的东西',
       effect: p.effect ?? '',
-      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材就色块）
+      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材时组件烘占位）
       tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
-      // 卡包/遗物包停久一点：看完就**自动开包**（全屏三选一，可放弃）——整条购买链不需要玩家点任何一下
-      autoDismissMs: (pack || relicPack) ? 2100 : 1700,
-      // 卡包：获得演出看完**自动开包**（全屏三选一，可放弃；见 openShopPackPicker）
-      // 遗物包：同理开**遗物三选一**（openShopRelicPackPicker）
-      onDismiss: pack ? () => ctx.panelStage()?.openShopPackPicker?.()
-        : relicPack ? () => ctx.panelStage()?.openShopRelicPackPicker?.() : null,
+      autoDismissMs: 1700,
     });
   }
 
