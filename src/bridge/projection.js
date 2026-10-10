@@ -76,7 +76,6 @@ export const KEYWORD_LABELS = Object.freeze({
   anchored: '封咏', // 咏唱不可主动解除；旧名「锁定」让位给无人战体的锁牌机制
   blood: '卖血',
   mini: '迷你', // 计为 0 张手牌（不占手牌计数，；只管计数，与弃牌无关）
-  blade: '刀法', // 系列标签（此前裸透传英文 blade 到卡面页脚）
 });
 
 export function projectCardFull(battle, rt) {
@@ -88,6 +87,7 @@ export function projectCardFull(battle, rt) {
     tier: def.tier ?? null,
     type: def.type ?? 'normal',
     series: def.series ?? null,
+    subsystem: def.subsystem ?? null, // 子体系归属（页脚小项展示；亲和/成员判定的事实源）
     image: def.image ?? null,
     // 费用徽章统一走有效视图（def ⊕ modifier patch ⊕ legacy 通道，与结算/canUse 同口径）；
     // AP 负值显示钳 0（结算侧同口径免付），X 费原样透传。手牌 sig 含 cost，
@@ -168,7 +168,13 @@ export function projectBattle(battle) {
       // locked（无人战体「解除威胁」）：被锁定的卡——回合结束时仍在手则被焚毁，
       // 离手即免除；不影响任何操作（BattleStage 据此挂四角锁定标记）。
       // 锁定已迁移为内建 `locked` modifier，此处投影派生布尔（stage 零改动）
-      return { ...projectCardFull(battle, rt), usable, blocked, locked: hasCardModifier(rt, 'locked') };
+      // 条件满足金光：def.condition 声明的条件加成此刻成立（蓄满一击手牌数/火墙
+      // 有燃烧等）；仅在卡可用时点亮（冷却中亮 = 噪音）。flexible = 灵活卡标记
+      //（弃牌选卡期间前端给这类卡打金光——弃它 = 触发其灵活效果）。
+      const condMet = usable && !!def?.condition && (() => {
+        try { return !!def.condition(makeSkillCtx(ctx, rt)); } catch { return false; }
+      })();
+      return { ...projectCardFull(battle, rt), usable, blocked, locked: hasCardModifier(rt, 'locked'), condMet, flexible: !!def?.flexible };
     }),
     // 结算区（发动/被跨节拍处理的卡）：仅 id 列表——手牌来源的卡视图已在离手前
     // 的 hand 投影中建好；牌库来源（如斩进阶的宾语转化）无既有卡面，由 presenter

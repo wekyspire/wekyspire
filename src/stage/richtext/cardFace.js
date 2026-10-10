@@ -21,6 +21,7 @@ import { parseRichText } from './parser.js';
 import { layoutRichText } from './layout.js';
 import { drawPlacements, createCanvasMeasurer, defaultDrawIcon } from './texture.js';
 import { getNamedTerm } from '../../core/skills/namedTerms.js';
+import { subsystemLabel } from '../../core/skills/subsystems.js';
 import {
   TIER_COLORS, cardTheme, seriesGlyph, effectLook, namedLook, cardLook,
 } from './appearance.js';
@@ -526,6 +527,9 @@ function chantPrefixedText(card) {
 // 命中即弹 tooltip。卡面因此不必复述词条定义（如「再次打出免费解除」归「咏唱」）。
 function drawFooter(ctx, card) {
   const bits = [];
+  // 子体系归属小项（拳法/刀法/拆法/爆炎/叠炎）——置于词条行首位；体系通用卡无此项
+  const subLabel = subsystemLabel(card.subsystem);
+  if (subLabel) bits.push(subLabel);
   // 咏唱N 已进正文前缀（chantPrefixedText），页脚不重复；其余非普通卡种仍在此标注
   if (card.cardMode && card.cardMode !== 'normal' && card.cardMode !== 'chant') {
     bits.push(card.cardMode);

@@ -27,13 +27,42 @@ registerEffect({
     react: (instr, ctx) => {
       const stacks = unit.getEffectStacks('burn');
       if (stacks <= 0) return;
+      // 燃烧结算减免：烈焰亲和逐层抵 1、可燃每层抵 3（EFFECTS.md 两词条同挂点）
+      const relief = unit.getEffectStacks('flameAffinity')
+        + unit.getEffectStacks('flammable') * 3;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
         source: null, target: unit,
-        amount: Math.max(0, stacks - unit.getEffectStacks('flameAffinity')),
+        amount: Math.max(0, stacks - relief),
         fixed: true, tags: ['burn'], type: 'minor',
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'burn', stacks: -1,
+      }), instr);
+    },
+  }],
+});
+
+// 可燃（EFFECTS.md）：燃烧结算时每层减免 3 伤害；因燃烧受到**生命伤害**时
+//（掉血——护盾吸收的不算）向牌库随机位洗入 1 张余烬。减免在 burn tick 处就地扣
+//（同烈焰亲和口径），本订阅只负责余烬生成。
+registerEffect({
+  id: 'flammable',
+  type: 'buff',
+  stacking: 'count',
+  name: '可燃',
+  description: '燃烧结算时每层减免 3 伤害；因燃烧受到生命伤害时，向牌库洗入 1 张余烬。',
+  icon: '🪵',
+  color: 'orange',
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    filter: (instr) => instr.target === unit
+      && (instr.tags ?? []).includes('burn')
+      && !unit.isDead()
+      && (instr.result?.dealt ?? 0) > 0,
+    react: (instr, ctx) => {
+      ctx.kernel.submitInstruction(new AddCardInstruction({
+        defId: 'emberMote', toZone: 'deck', index: 'random',
       }), instr);
     },
   }],
@@ -313,14 +342,16 @@ registerEffect({
   ],
 });
 
-// 中毒（EFFECTS.md）：回合结束时受到层数点**穿透伤害**（防御与护盾都不减免），
-// 然后层数 -1。与燃烧的区别：回合末结算 + 穿透（燃烧为固定伤害、护盾可挡）。
+// 中毒（EFFECTS.md）：回合结束时受到层数点**固定伤害**（跳过修正与防御，护盾仍可
+// 吸收），然后层数 -1。2026-10-10 改版：穿透 → 固定（简化面向玩家的伤害机理——
+// 穿透整链不参与格挡免伤，护盾也挡不住，读感过重）。与燃烧同为固定伤害，区别在
+// 结算时机（中毒回合末、燃烧回合始）。
 registerEffect({
   id: 'poison',
   type: 'debuff',
   stacking: 'count',
   name: '中毒',
-  description: '回合结束时受到等于层数的穿透伤害，然后层数减少 1。',
+  description: '回合结束时受到等于层数的固定伤害，然后层数减少 1。',
   icon: '☠️',
   color: 'green',
   subscriptions: (unit) => [{
@@ -331,7 +362,7 @@ registerEffect({
       const stacks = unit.getEffectStacks('poison');
       if (stacks <= 0) return;
       ctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: unit, amount: stacks, pierce: true, tags: ['poison'], type: 'minor',
+        source: null, target: unit, amount: stacks, fixed: true, tags: ['poison'], type: 'minor',
       }), instr);
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'poison', stacks: -1,
@@ -643,6 +674,40 @@ registerEffect({
     filter: (instr) => instr.target === unit,
     react: (instr, ctx) => ctx.kernel.veto(instr, 'mountain'),
   }],
+});
+
+// 脆弱如山（EFFECTS.md）：护盾不自动清空（如山同款 veto）；但护盾被打破的那次
+// 结算（本段伤害吃掉护盾且归零）→ 持有者眩晕 1 并失去此效果——持久装甲把
+// 「破盾」变成玩家的奖励拍（持有者空过一拍、护盾回到常规清空节奏）。
+registerEffect({
+  id: 'brittleMountain',
+  type: 'buff',
+  stacking: 'count',
+  name: '脆弱如山',
+  description: '护盾不自动清空。失去所有护盾时眩晕1，并失去此效果。',
+  icon: '🏔️',
+  color: 'gray',
+  subscriptions: (unit) => [
+    {
+      when: ClearShieldInstruction,
+      phase: 'pre',
+      filter: (instr) => instr.target === unit,
+      react: (instr, ctx) => ctx.kernel.veto(instr, 'brittleMountain'),
+    },
+    {
+      when: ApplyDamageInstruction,
+      phase: 'post',
+      filter: (instr) => instr.target === unit
+        && (instr.result?.shieldAbsorbed ?? 0) > 0 && unit.shield <= 0,
+      react: (instr, ctx) => {
+        const stacks = unit.getEffectStacks('brittleMountain');
+        ctx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'stun', stacks: 1 }), instr);
+        if (stacks > 0) ctx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'brittleMountain', stacks: -stacks }), instr);
+      },
+    },
+  ],
 });
 
 // 纯净（EFFECTS.md）：抵消一次负面效果赋予，层数 -1。识别走效果定义的 type

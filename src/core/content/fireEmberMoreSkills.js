@@ -1,5 +1,5 @@
 // 火灵脉·叠炎组合（续）（FIRE_VEIN_CARDS §2.1 后半 + §2.2）。
-// 自焚（自伤换高伤）/ 焰愈（燃烧换恢复）/ 焚烧（燃烧倍增）/ 鬼火（死亡传播）/ 镜燃（获得反哺）
+// 自焚（自伤换高伤）/ 焰愈（燃烧换恢复）/ 焚烧（燃烧倍增）/ 鬼火（死亡传播）/ 业火（焚毁反哺）
 // + 咏唱四连（燃心决 / 取暖系 / 绝炎 / 火焰披风）。
 //
 // 体系语言：燃烧是叠炎组合的资源——自焚把它当代价、焰愈把它当货币、
@@ -7,17 +7,15 @@
 // 绝炎把它变成不可逆的单向棘轮。
 //
 // 口径备忘（设计稿未细写处的实现决定，均已在对应卡内注释）：
-//   * 「获得燃烧时反哺」按本次增加量（AddEffect payload.stacks > 0）等量镜像；
+//   * 「焚毁反哺」（业火）按每次卡牌焚毁事件触发，固定 2 层；
 //   * 「死亡传播」按死亡瞬间的燃烧层数整量传播给其余存活敌人；
 //   * 「免疫消耗和下降」= 全场任何单位的燃烧负层数变更一律 veto。
 
 import { registerSkill } from '../skills/registry.js';
 import { aliveEnemies, allAliveUnits } from '../state/battleState.js';
-import BattleInstruction from '../kernel/BattleInstruction.js';
-import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { DealDamageInstruction, ApplyDamageInstruction, ApplyHealInstruction, GainShieldInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
-import { BurnCardInstruction } from '../instructions/cards.js';
+import { BurnCardInstruction, AddCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { ChantTriggerInstruction } from '../instructions/turn.js';
 import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest, reactFx } from './cardKit.js';
@@ -27,7 +25,7 @@ import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCar
 // 「效果翻倍」buff（自焚卡）：battleState.selfImmolateDouble 置位后伤害与燃烧都 ×2。
 function selfImmolate({ id, name, tier, base, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'selfImmolate',
+    id, name, type: 'fire', tier, series: 'selfImmolate', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -54,7 +52,7 @@ selfImmolate({ id: 'playFireA', name: '玩火', tier: 'A', base: 17 });
 // 自焚 B/A（1AP，B 消耗）：本场战斗中你所有玩火卡牌的效果翻倍。
 function selfImmolateRite({ id, tier, exhaust, promotesTo = null }) {
   registerSkill({
-    id, name: '自焚', type: 'fire', tier, series: 'selfImmolate',
+    id, name: '自焚', type: 'fire', tier, series: 'selfImmolate', subsystem: 'blaze',
     keywords: exhaust ? ['exhaust'] : [],
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
@@ -80,7 +78,7 @@ selfImmolateRite({ id: 'selfImmolateA', tier: 'A', exhaust: false });
 function flameHealSkill({ id, name, tier, base, per, promotesTo = null }) {
   const amountOf = (sctx) => base + sctx.player.getEffectStacks('burn') * per;
   registerSkill({
-    id, name, type: 'fire', tier, series: 'flameHeal',
+    id, name, type: 'fire', tier, series: 'flameHeal', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -114,7 +112,7 @@ flameHealSkill({ id: 'nirvana', name: '涅槃', tier: 'S', base: 10, per: 2 });
 // 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
 const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, mini = false }) => registerSkill({
-  id, name, type: 'fire', tier, series: 'burnDoubler',
+  id, name, type: 'fire', tier, series: 'burnDoubler', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: 1, cooldownTurns: 2 },
   cardMode: 'normal',
@@ -148,7 +146,7 @@ burnDoubler({ id: 'burnBurstStar', name: '星炎', tier: 'S', ap: 1, mult: 3, mi
 // 传播对象 = 其余存活敌人（aliveEnemies 已滤死者，V5 死亡单位不可为目标）；
 // 场上再无其他敌人时传播落空，战斗照常判胜。
 const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => registerSkill({
-  id, name: '鬼火', type: 'fire', tier, series: 'willOWisp',
+  id, name: '鬼火', type: 'fire', tier, series: 'willOWisp', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight,
@@ -178,57 +176,48 @@ const willOWispCard = ({ id, tier, chantWeight, ap, promotesTo = null }) => regi
 willOWispCard({ id: 'willOWispB', tier: 'B', chantWeight: 1, ap: 1, promotesTo: 'willOWispA' });
 willOWispCard({ id: 'willOWispA', tier: 'A', chantWeight: 1, ap: 0 });
 
-// ==== 镜燃系列（§2.1：获得反哺）=================================================
-// 镜燃 C / 业火 A｜自己获得燃烧时，把本次增加的层数等量施加给
-// 随机敌人 / 所有敌人。
-// 口径：「获得」= AddEffect(burn) 落在玩家身上且本次变化量为正
-// （payload.stacks > 0——经 PRE 修饰后的实际生效量；递减 -1 不算获得）；
-// 镜像量按本次增加量等量（设计稿未写数量，镜燃取「镜像」语义）。
-// 敌方身上的燃烧不回灌（filter 限定 target 为玩家），无死循环。
-// spread = { targetText, apply(ctx, stacks, emit) }：目标文案 + 撒布方式
-// （emit(target) 由工厂接线为「向该目标提交等量燃烧」的反应指令）。
-function burnMirror({ id, name, tier, spread }) {
+// ==== 业火系列（§2.1：焚毁反哺）=================================================
+// 业火 B/A｜咏唱1：你的卡牌被焚毁时，向随机敌人（B）/ 所有敌人（A）施加 2 层燃烧。
+// 2026-10-10 火系大改：触发从「获得燃烧」（原镜燃）改为「卡牌焚毁」——与烧却/狂焰/
+// 炼化时代价付掉的每一张牌都变成场上的火。全场只可能焚毁玩家侧的卡（敌方干扰牌
+// 也进玩家牌库），无需再过滤归属。
+function karmaFireCard({ id, tier, spread }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'mirrorBurn',
+    id, name: '业火', type: 'fire', tier, series: 'mirrorBurn', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
-    cardMode: 'chant', chantWeight: 2,
+    cardMode: 'chant', chantWeight: 1,
     use() { return true; },
     activated: {
       subscriptions: (sctx) => [{
-        when: AddEffectInstruction, phase: 'post',
-        filter: (instr) => instr.effectId === 'burn'
-          && instr.target === sctx.player
-          && (instr.payload.stacks ?? 0) > 0,
+        when: BurnCardInstruction, phase: 'post',
+        filter: (instr) => Boolean(instr.result?.card),
         react: (instr, ctx) => {
-          spread.apply(ctx, instr.payload.stacks, (target) =>
-            ctx.kernel.submitInstruction(
-              new AddEffectInstruction({ target, effectId: 'burn', stacks: instr.payload.stacks }),
-              instr));
-          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc', magnitude: instr.payload.stacks });
+          spread.apply(ctx, (target) => ctx.kernel.submitInstruction(
+            new AddEffectInstruction({ target, effectId: 'burn', stacks: 2 }), instr));
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
         },
       }],
     },
-    describe: () => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
-    battleDescribe: (sctx) => `获得/effect{燃烧}时，对${spread.targetText}施加等量/effect{燃烧}`,
+    describe: () => `卡牌焚毁时，对${spread.targetText}施加/effect{燃烧}2`,
+    battleDescribe: () => `卡牌焚毁时，对${spread.targetText}施加/effect{燃烧}2`,
   });
 }
-
-burnMirror({
-  id: 'mirrorBurn', name: '镜燃', tier: 'B',
+karmaFireCard({
+  id: 'mirrorBurn', tier: 'B',
   spread: {
     targetText: '随机敌人',
-    apply: (ctx, stacks, emit) => {
-      const enemy = randomAliveEnemy(ctx); // 走种子 rng（可复现）；无存活敌人返回 null 落空
+    apply: (ctx, emit) => {
+      const enemy = randomAliveEnemy(ctx);
       if (enemy) emit(enemy);
     },
   },
 });
-burnMirror({
-  id: 'karmaFire', name: '业火', tier: 'A',
+karmaFireCard({
+  id: 'karmaFire', tier: 'A',
   spread: {
     targetText: '所有敌人',
-    apply: (ctx, stacks, emit) => {
+    apply: (ctx, emit) => {
       for (const e of aliveEnemies(ctx.battleState)) emit(e);
     },
   },
@@ -241,7 +230,7 @@ burnMirror({
 // 与 exhaust 一起表达「激活即钉死在手」——唯一出口是被焚/弃等离手路径。
 // 触发挂点 = ChantTriggerInstruction POST（「快速咏唱」提前触发复用同一挂载点）。
 registerSkill({
-  id: 'burningHeart', name: '燃心决', type: 'fire', tier: 'A', series: 'fireChant',
+  id: 'burningHeart', name: '燃心决', type: 'fire', tier: 'A', series: 'fireChant', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 0,
@@ -268,7 +257,7 @@ registerSkill({
 // （无存活敌人时循环体为空，静默落空）。层数走自然递减（敌方回合开始跳伤后 -1），
 // 是叠炎体系的慢速群压引擎。
 const scorchChantCard = ({ id, name, tier, ap, stacks, promotesTo }) => registerSkill({
-  id, name, type: 'fire', tier, series: 'fireChant',
+  id, name, type: 'fire', tier, series: 'fireChant', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
@@ -296,7 +285,7 @@ scorchChantCard({ id: 'warmUpA', name: '取暖', tier: 'A', ap: 0, stacks: 3 });
 // 火焰披风 B/A｜3魏启，咏唱1：每回合 P5 若你正在燃烧，获得 4/6 护盾
 //（火灵脉防御位：燃烧从代价转为收入，与可燃血液/焰愈同轴）。只读不消耗燃烧。
 const flameCloakCard = ({ id, tier, shield, promotesTo = null }) => registerSkill({
-  id, name: '火焰披风', type: 'fire', tier, series: 'fireChant',
+  id, name: '火焰披风', type: 'fire', tier, series: 'fireChant', subsystem: 'blaze',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
@@ -321,66 +310,37 @@ const flameCloakCard = ({ id, tier, shield, promotesTo = null }) => registerSkil
 flameCloakCard({ id: 'flameCloakB', tier: 'B', shield: 4, promotesTo: 'flameCloakA' });
 flameCloakCard({ id: 'flameCloakA', tier: 'A', shield: 6 });
 
-// 炼化 B/A｜1AP/0AP，咏唱1（阶差在费用；获得魏启同为 2）：
-// 每回合 P5 选 1 张手牌焚毁，获得 2 魏启。把手牌当柴烧的蓝量引擎——与高热系列（自燃换纳气）并列为
-// 火系两条「每回合变现」轴：高热烧自己，炼化烧手牌。选牌请求走 cardKit 唯一
-// 形状（min/max 1/1）；空手时不发起请求（空集守卫，静默落空）。选到激活态的
-// 咏唱卡也照烧（含引擎自身——烧自己=立即止损，与刀法咏唱的选弃口径一致）。
-class BurnHandForManaInstruction extends BattleInstruction {
-  constructor({ mana = 1, reason = null } = {}, opts = {}) {
-    super(opts);
-    this.mana = mana;
-    this.reason = reason;
-  }
-
-  execute(ctx) {
-    switch (this._stage) {
-      case 0: {
-        const request = buildCardSelectionRequest(ctx, {
-          source: 'hand', min: 1, max: 1, reason: this.reason,
-        });
-        if (!request) return true; // 空手：无事发生
-        this._ask = new AwaitPlayerInputInstruction({ request });
-        ctx.kernel.submitInstruction(this._ask, this);
-        return false;
-      }
-      default: {
-        const ids = this._ask.result?.selection ?? [];
-        for (const id of ids) {
-          ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: id }), this);
-        }
-        if (ids.length > 0) {
-          ctx.kernel.submitInstruction(
-            new GainManaInstruction({ amount: this.mana * ids.length }), this);
-        }
-        return true;
-      }
-    }
-  }
+// 炼化 B/A｜1AP/0AP，咏唱1：每回合 P5 获得 1/2 魏启并洗入 2 张余烬。
+// 2026-10-10 火系大改：不再选牌焚毁（焚毁反哺交给业火），炼化变成余烬经济的
+// 每回合稳定泵——蓝量与余烬双产。
+function smeltChantCard({ id, tier, mana, chantWeight, ap, promotesTo }) {
+  registerSkill({
+    id, name: '炼化', type: 'fire', tier, series: 'fireChant', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'chant', chantWeight,
+    promotesTo,
+    use() { return true; },
+    activated: {
+      subscriptions: (sctx) => [{
+        when: ChantTriggerInstruction, phase: 'post',
+        react: (instr, ctx) => {
+          ctx.kernel.submitInstruction(new GainManaInstruction({ amount: mana }), instr);
+          for (let i = 0; i < 2; i++) {
+            ctx.kernel.submitInstruction(new AddCardInstruction({
+              defId: 'emberMote', toZone: 'deck', index: 'random',
+            }), instr);
+          }
+          reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
+        },
+      }],
+    },
+    describe: () => `获得${mana}魏启，/named{洗入2}/card{emberMote}`,
+    battleDescribe: () => `获得${mana}魏启，/named{洗入2}/card{emberMote}`,
+  });
 }
-const smeltChantCard = ({ id, name, tier, mana, chantWeight, ap, promotesTo }) => registerSkill({
-  id, name, type: 'fire', tier, series: 'fireChant',
-  cost: { mana: 0, actionPoint: ap },
-  charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight,
-  promotesTo,
-  use() { return true; },
-  activated: {
-    subscriptions: (sctx) => [{
-      when: ChantTriggerInstruction, phase: 'post',
-      react: (instr, ctx) => {
-        ctx.kernel.submitInstruction(
-          new BurnHandForManaInstruction({ mana, reason: `${name}：选1张手牌焚毁，获得${mana}魏启` }),
-          instr);
-        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
-      },
-    }],
-  },
-  describe: () => `选1手牌焚毁，获得${mana}魏启`,
-  battleDescribe: (sctx) => `选1手牌焚毁，获得${mana}魏启`,
-});
-smeltChantCard({ id: 'smeltB', name: '炼化', tier: 'B', mana: 2, chantWeight: 1, ap: 1, promotesTo: 'smeltA' });
-smeltChantCard({ id: 'smeltA', name: '炼化', tier: 'A', mana: 2, chantWeight: 1, ap: 0 });
+smeltChantCard({ id: 'smeltB', tier: 'B', mana: 1, chantWeight: 1, ap: 1, promotesTo: 'smeltA' });
+smeltChantCard({ id: 'smeltA', tier: 'A', mana: 2, chantWeight: 1, ap: 0 });
 
 // 绝炎 A｜1AP，咏唱1，任何燃烧层数免疫消耗和下降。
 // 口径：「消耗和下降」统一折算为「燃烧层数减少事件」——全场任何单位（敌我不分）
@@ -389,7 +349,7 @@ smeltChantCard({ id: 'smeltA', name: '炼化', tier: 'A', mana: 2, chantWeight: 
 // 每层燃烧都变成永续持续输出源（代价：自己身上的燃烧同样棘轮化，
 // 需焰愈/防火体系消化）。被 veto 的指令不触发任何 POST，无级联。
 registerSkill({
-  id: 'absoluteFlame', name: '绝炎', type: 'fire', tier: 'A', series: 'fireChant',
+  id: 'absoluteFlame', name: '绝炎', type: 'fire', tier: 'A', series: 'fireChant', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,

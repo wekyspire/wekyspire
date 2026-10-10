@@ -34,7 +34,7 @@ registerSkill({
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'snowwolf', name: '雪狼',
-  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 98 }),
+  createUnit: () => new Enemy({ defId: 'snowwolf', name: '雪狼', maxHp: 108 }),
   act(actx) {
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
@@ -79,12 +79,13 @@ registerEnemy({
 });
 
 // ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
-// 被斩杀），首拍扑咬 23；随后三拍循环：盾15+中毒6 → 盾15+攻10 → 晕眩发呆（破盾窗口）。
+// 被斩杀），首拍扑咬 23；随后三拍循环：盾15+中毒8 → 盾15+攻12 → 晕眩发呆（破盾窗口）。
+//（2026-10-10 加强：中毒固定伤化后 6→8、攻 10→12，对齐 ENEMIES_1.md 新稿）
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
   createUnit: () => {
-    const u = new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 60 });
+    const u = new Enemy({ defId: 'swampAmbusher', name: '沼泽伏击者', maxHp: 69 });
     u.shield = 20; // 战斗开始自带护盾——完整覆盖玩家第一回合
     return u;
   },
@@ -100,12 +101,12 @@ registerEnemy({
     if (phase === 0) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: actx.player, effectId: 'poison', stacks: 6,
+        target: actx.player, effectId: 'poison', stacks: 8,
       }));
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 15 }));
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 10 + atk,
+        source: actx.unit, target: actx.player, amount: 12 + atk,
       }));
     }
     // phase 2：晕眩发呆——不提交任何指令（破盾/回血的喘息拍）
@@ -116,28 +117,29 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 23 + atk, note: '自身开局自带护盾20' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒6' };
-    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 10 + atk, note: '自身护盾15' };
+    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒8' };
+    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 12 + atk, note: '自身护盾15' };
     return { kinds: ['stun'], note: '晕眩（不行动）' };
   },
 });
 
-// ⑳ 碎岩穿山甲（第 1 章精英）：重甲 + 蓄势冲锋——固定防御 3
-//（白板 6 伤拳只磨出 3）；两拍循环：蓄力（盾15 + 蓄势7）→ 冲锋（攻7，
-// 蓄势让每一击都吃满加成）。
+// ⑳ 碎岩穿山甲（第 1 章精英）：重甲 + 蓄势冲锋——固定防御 2；两拍循环：
+// 蓄力（盾15 + 蓄势5）→ 冲锋（攻7，蓄势让每一击都吃满加成）。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'rockPangolin', name: '碎岩穿山甲',
-  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 63 }),
+  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 84 }),
   onBattleStart(ctx, unit) {
-    unit.defense += 3; // 花岗岩甲：固定减伤轨
+    // 花岗岩甲：固定减伤 2 走「防御」效果轨（玩家可见），同 MEFM-1 铁壳口径
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'defense', stacks: 2 }));
   },
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'momentum', stacks: 7,
+        target: unit, effectId: 'momentum', stacks: 5,
       }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -147,10 +149,51 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+7' }
+    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+5' }
     : { kinds: ['attack'], hits: 1,
         damage: 7 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
+});
+
+// ㉑ 幼年罗刹（第 1 章精英；ENEMIES_1.md 2026-10-09 新增，文档 id 栏是模板复制残留）：
+// 惩罚不可控攻击节奏——开局暴怒1（被打就长力量），三拍复读：攻3×3 → 攻3×4+暴怒1
+// → 力量2。高爆发/可控的牌组打起来通顺，蹭刀流会把它喂起来。
+registerEnemy({
+  difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
+  id: 'youngRakshasa', name: '幼年罗刹',
+  createUnit: () => new Enemy({ defId: 'youngRakshasa', name: '幼年罗刹', maxHp: 75 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'rage', stacks: 1 }));
+  },
+  act(actx) {
+    const { unit, player } = actx;
+    const atk = unit.getStat('attack');
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) {
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 3 + atk }));
+      }
+    } else if (beat === 1) {
+      for (let i = 0; i < 4; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 3 + atk }));
+      }
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'rage', stacks: 1 }));
+    } else {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'strength', stacks: 2 }));
+    }
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    const beat = unit.actionIndex % 3;
+    if (beat === 0) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
+    if (beat === 1) return { kinds: ['attack', 'buff'], hits: 4, damage: 3 + atk, note: '暴怒1（打它会喂它力量）' };
+    return { kinds: ['buff'], note: '力量2' };
+  },
 });
 
 // ㉒ 庄园主（章3 精英·召唤主题：大史莱姆退役后接班）——四拍循环：

@@ -438,12 +438,13 @@ registerEnemy({
 
 // 刺刺草：春风——第一次死亡后隔 1 回合以 14 血复苏；两拍循环：藤鞭（攻6）→
 // 分泌毒液（中毒2，不攻击）。血量 17–22 随机（生成器定档）。B 变体从分泌拍起步（错拍出题）。
-function thornWeedDef(id, startBeat = 0) {
+// T 变体：不会复苏（腐败之源的召唤物，无难度元数据 = 不进通配池）。
+function thornWeedDef(id, startBeat = 0, tiny = false) {
   registerEnemy({
-    difficulty: { base: 2, floorMin: 2, floorMax: 16 },
+    ...(tiny ? {} : { difficulty: { base: 2, floorMin: 2, floorMax: 16 } }),
     id, name: '刺刺草',
     createUnit: () => new Enemy({ defId: id, name: '刺刺草', maxHp: 19, actionIndex: startBeat }),
-    ...reviveKit({ times: 1, hp: 14 }),
+    ...(tiny ? {} : reviveKit({ times: 1, hp: 14 })),
     act(actx) {
       const { unit, player } = actx;
       if (unit.actionIndex % 2 === 0) {
@@ -456,13 +457,17 @@ function thornWeedDef(id, startBeat = 0) {
         }));
       }
     },
-    getIntention: (unit) => (unit.actionIndex % 2 === 0
-      ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack'), note: '藤鞭（春风：第一次死亡后复苏）' }
-      : { kinds: ['debuff'], note: '分泌毒液：中毒2（春风：第一次死亡后复苏）' }),
+    getIntention: (unit) => {
+      const revive = tiny ? '' : '（春风：第一次死亡后复苏）';
+      return unit.actionIndex % 2 === 0
+        ? { kinds: ['attack'], hits: 1, damage: 6 + unit.getStat('attack'), note: `藤鞭${revive}` }
+        : { kinds: ['debuff'], note: `分泌毒液：中毒2${revive}` };
+    },
   });
 }
 thornWeedDef('thornWeed');
 thornWeedDef('thornWeedB', 1); // B 类：从第二拍（分泌毒液）起步
+thornWeedDef('thornWeedT', 0, true); // T 类：不会复苏（Boss 召唤物）
 
 // 腐食甲虫：出场自带甲壳2（主级伤害减半/层）。三拍循环：啃食牌库顶1张（不攻击）→
 // 攻8 → 攻8。B 类：首拍获得甲壳1（不攻击），第 2 拍起接正常循环——只配
@@ -651,18 +656,19 @@ buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍
 buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×5
 
 // 腐败根须：会复苏的持续输出位——无限复活（死后 1 回合、固定 11 血；作为场上最后一只
-// 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血。三拍循环：攻5 → 攻2×3 → 蓄势1。
+// 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血。三拍循环：攻5 → 攻2×3 → 蓄势2。
 // B 变体：从第三拍（蓄势）起步，错开群根须的开局输出峰；
-// 无难度元数据 = 不进通配/精英池，只经根须主题战固定槽出场。
-function rottenRootDef(id, startBeat = 0) {
+// T 变体：不会复苏且没有第三拍（腐败之源的召唤物）。
+// 无难度元数据 = 不进通配/精英池，只经根须主题战固定槽/Boss 召唤出场。
+function rottenRootDef(id, startBeat = 0, tiny = false) {
   registerEnemy({
     ...(id === 'rottenRoot' ? { difficulty: { base: 2, floorMin: 2, floorMax: 16 } } : {}),
     id, name: '腐败根须',
     createUnit: () => new Enemy({ defId: id, name: '腐败根须', maxHp: 15, actionIndex: startBeat }),
-    ...reviveKit({ times: Infinity, hp: 11 }),
+    ...(tiny ? {} : reviveKit({ times: Infinity, hp: 11 })),
     act(actx) {
       const { unit, player } = actx;
-      const phase = unit.actionIndex % 3;
+      const phase = unit.actionIndex % (tiny ? 2 : 3);
       if (phase === 0) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
           source: unit, target: player, amount: 5 + unit.getStat('attack'),
@@ -675,22 +681,23 @@ function rottenRootDef(id, startBeat = 0) {
         }
       } else {
         actx.kernel.submitInstruction(new AddEffectInstruction({
-          target: unit, effectId: 'momentum', stacks: 1,
+          target: unit, effectId: 'momentum', stacks: 2,
         }));
       }
     },
     getIntention: (unit) => {
-      const revive = '复苏：死后1回合复活';
+      const revive = tiny ? '' : '复苏：死后1回合复活。';
       const atk = unit.getStat('attack');
-      const phase = unit.actionIndex % 3;
+      const phase = unit.actionIndex % (tiny ? 2 : 3);
       if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 5 + atk, note: revive };
       if (phase === 1) return { kinds: ['attack'], hits: 3, damage: 2 + atk, note: revive };
-      return { kinds: ['buff'], note: `蓄势+1。${revive}` };
+      return { kinds: ['buff'], note: `蓄势+2。${revive}` };
     },
   });
 }
 rottenRootDef('rottenRoot');
 rottenRootDef('rottenRootB', 2);
+rottenRootDef('rottenRootT', 0, true); // T 类：不复苏、无蓄势拍（Boss 召唤物）
 
 // 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。57 血。三拍：攻5 → 攻3×3 → 蓄势3
 //（第三拍是攻3×3 后的蓄力拍，长战渐强）。

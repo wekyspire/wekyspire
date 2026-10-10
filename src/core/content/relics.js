@@ -8,8 +8,7 @@ import { DrawCardsInstruction, AddCardInstruction, MoveCardInstruction, DumpCard
 import { AddEffectInstruction } from '../instructions/effects.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
-import { getSkillDefinition } from '../skills/registry.js';
-import { gainMaxHp, applyBattleModifier } from '../run/prep.js';
+import { gainMaxHp } from '../run/prep.js';
 import { isBossFloor } from '../run/runFlow.js';
 
 // 遗物内容（个体设计见 RELICS.md）。
@@ -19,17 +18,21 @@ import { isBossFloor } from '../run/runFlow.js';
 //   cost     槽位权重 0..3（Σ ≤ relicSlots=3）；0 槽 = 能装备但不花槽
 //   nonSlot  true = **非槽位式遗物**：不进装卸界面、拾起即恒生效（走 activeRelics）
 //   requires 灵脉门禁（抽选池过滤用，与卡包同一口径）：{leino,min} 或 {anyLeino}
-//   acquisition 来源标签 ['draft','shop','event','gurpas']（缺省 draft+shop）；
-//     event = 仅事件获得（如「诸神」恩赐）；gurpas = 仅古尔帕斯之店（SHOP.md §二）
+//   acquisition 来源标签 ['draft','vending','event','gurpas']（缺省 draft+vending：
+//     任意抽取 + 瑞米售货机可售）；event = 仅事件获得（如「诸神」恩赐）；
+//     gurpas = 仅古尔帕斯之店（SHOP.md §二）
 //   onAcquire(run)  拾起时（一次性）；gainMaxHp 同时抬基础值与当前生命
 //   runModifiers(p) 或 {字段: 增量}：run 级数值修正——**从 baseStats 重算**，不增量累加
 //   battleModifiers(p) 或 {字段: 增量}：**本场战斗**修正（生命周期 = 一场战斗；由 PreBattle
-//     折入同一次重算，随 battleState 消失，故不需要任何回滚）。战中会变的修正（霜雪胸针
-//     触发时防御 +3）用 prep.applyBattleModifier(ctx, 字段, 增量) 改。
+//     折入同一次重算，随 battleState 消失，故不需要任何回滚）。战中会变的修正用
+//     prep.applyBattleModifier(ctx, 字段, 增量) 改（防御除外，见上）。
 //   onBattleVictory(run, battle)：战斗**胜利**后的 run 层结算（run 级资源只在这里改——
 //     战斗内订阅不得直写 run 状态）。
 //   onCampRest(run) 营地休整时（非槽位式的常驻钩子）
 //   onBattleStart(ctx) / subscriptions(ctx)：战斗内钩子（仅「已激活」遗物挂载）
+//   战斗级数值修正（maxMana/maxHandSize/…）走 battleModifiers 或 applyBattleModifier
+//   （从 baseStats 重算、随战斗消失）；**防御除外**——防御已效果化（battleRoot），
+//   战中对防御的增减一律 AddEffectInstruction（effectId 'defense'）。
 const COST0 = { cost: 0 };
 
 // ---- 拾起时（均为非槽位式：恒生效，不进装卸界面）----
@@ -237,10 +240,15 @@ registerRelic({
   id: 'lubricant', name: '润滑油', rarity: 'C', cost: 1,
   description: '第二回合开始时，抽 4 牌。',
   flavor: '请正确、正当地使用此物品',
+  // 「回合抽牌之后再抽一次」：挂 P3 回合抽牌指令（reason 'turnStart'）的 POST，
+  // 在自然抽牌（抽到容量）之后追加一枚**独立的** 4 张抽牌——满手也照抽 4（吃超载
+  // 空间）。不并入自然抽牌（turnDrawBonus 会吃容量差额：手满时 bonus 被挤掉）。
+  // P3 指令 count 0 也必发（turn.js），满手时挂点仍在；被滞气 veto 时本效果同样
+  // 不触发（滞气 = 一切抽牌禁止）。
   subscriptions: () => [{
-    when: TurnStartInstruction,
+    when: DrawCardsInstruction,
     phase: 'post',
-    filter: (instr, c) => instr.side === 'player' && c.battleState.turn.count === 2,
+    filter: (instr, c) => instr.reason === 'turnStart' && c.battleState.turn.count === 2,
     react: (instr, c) => c.kernel.submitInstruction(
       new DrawCardsInstruction({ count: 4, reason: 'relic' }), instr),
   }],
@@ -543,7 +551,10 @@ registerRelic({
         used = true;
         c.kernel.submitInstruction(
           new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
-        applyBattleModifier(c, 'defense', 3); // 防御 3（本场战斗修正，随战斗消失）
+        // 防御 3 = 防御效果层（battleRoot 起防御已效果化：战中增减一律 AddEffect，
+        // 直改/applyBattleModifier 写 p.defense 字段无人读 = 死写入）
+        c.kernel.submitInstruction(
+          new AddEffectInstruction({ target: c.player, effectId: 'defense', stacks: 3 }), instr);
         // 格挡 3 = block 效果层（非护盾池）
         c.kernel.submitInstruction(
           new AddEffectInstruction({ target: c.player, effectId: 'block', stacks: 3 }), instr);

@@ -9,7 +9,12 @@ import { AddEffectInstruction } from '../../instructions/effects.js';
 registerEnemy({
   difficulty: { base: 5, floorMin: 23, floorMax: 32 },
   id: 'gargoyle', name: '石像卫士',
-  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34, defense: 2 }),
+  createUnit: () => new Enemy({ defId: 'gargoyle', name: '石像卫士', maxHp: 34 }),
+  onBattleStart(ctx, unit) {
+    // 高防走「防御」效果轨（玩家可见），不再藏面板
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'defense', stacks: 2 }));
+  },
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 0) {
@@ -44,7 +49,12 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 4, floorMin: 23, floorMax: 32 },
   id: 'rockshell', name: '岩甲龟',
-  createUnit: () => new Enemy({ defId: 'rockshell', name: '岩甲龟', maxHp: 30, defense: 1 }),
+  createUnit: () => new Enemy({ defId: 'rockshell', name: '岩甲龟', maxHp: 30 }),
+  onBattleStart(ctx, unit) {
+    // 龟甲减伤走「防御」效果轨（玩家可见）
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'defense', stacks: 1 }));
+  },
   act(actx) {
     if (actx.unit.actionIndex % 2 === 0) {
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 10 }));

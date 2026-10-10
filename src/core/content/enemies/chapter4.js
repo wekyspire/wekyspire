@@ -10,11 +10,15 @@ import { aliveEnemies } from '../../state/battleState.js';
 import { handLimitOf } from '../../skills/helpers.js';
 
 // ㉓ 禁书守卫（章4·终章防线锚）——攻10 → 全体友军盾12 → 攻14 三拍循环。
-// 宫廷守卫的终章上位：数值跨档 + 自身 3 防御面板，群体盾更厚。
+// 宫廷守卫的终章上位：数值跨档 + 自带 3 层「防御」效果（开局上、玩家可见），群体盾更厚。
 registerEnemy({
   difficulty: { base: 8, floorMin: 34, floorMax: 43 },
   id: 'tomeWarden', name: '禁书守卫',
-  createUnit: () => new Enemy({ defId: 'tomeWarden', name: '禁书守卫', maxHp: 40, defense: 3 }),
+  createUnit: () => new Enemy({ defId: 'tomeWarden', name: '禁书守卫', maxHp: 40 }),
+  onBattleStart(ctx, unit) {
+    ctx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'defense', stacks: 3 }));
+  },
   act(actx) {
     const phase = actx.unit.actionIndex % 3;
     if (phase === 1) {

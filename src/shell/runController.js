@@ -662,38 +662,49 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 尾款升级自动链（交互迁移）：模式二选一（对话 overlay；只有一种可用直接定）
   // → 全屏选卡（twoC 多选两张一次完，oneB 单选）。整条链在抓牌落地那拍自动唤起——
   // 面板不再摆模式/升级按钮；overlay 被中途关掉时由面板「继续修行…」重入本链（幂等）。
+  // **单飞锁**：模式对话剧本没有幂等 id，本链在播期间再入（notify 刷面板后的「继续
+  // 修行…」快点击、抓牌落地拍与自动流赛跑）会把**第二份对话剧本**排进共享串行
+  // 队列——陈旧剧本在队列任意时点弹出（实报：升级选卡界面上/离房切幕后「对话再次
+  // 弹出被 cutscene 掩盖」）。锁住重入，等本链落地后再放行。
+  let upgradeFlowBusy = false;
   async function trainingUpgradeFlow() {
+    if (upgradeFlowBusy) return;
     if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;
-    const pending = run.roomData.pendingUpgrade;
-    if (typeof pending !== 'object' || !pending.mode) {
-      const modes = trainUpgradeModes(run);
-      const can2C = modes.twoC.length >= 2;
-      const can1B = modes.oneB.length >= 1;
-      let mode = null;
-      if (can2C && can1B) {
-        await cutscene.play({
-          steps: [{
-            type: 'dialogue',
-            pages: [{
-              speaker: '训练桩',
-              text: '训练还差最后一步——升级卡牌。',
-              choices: [
-                { id: 'twoC', label: '夯实基础', hint: '选择两张C级卡牌升级。' },
-                { id: 'oneB', label: '精益求精', hint: '选择一张B级卡牌升级。' },
-              ],
+    upgradeFlowBusy = true;
+    try {
+      const pending = run.roomData.pendingUpgrade;
+      if (typeof pending !== 'object' || !pending.mode) {
+        const modes = trainUpgradeModes(run);
+        const can2C = modes.twoC.length >= 2;
+        const can1B = modes.oneB.length >= 1;
+        let mode = null;
+        if (can2C && can1B) {
+          await cutscene.play({
+            steps: [{
+              type: 'dialogue',
+              pages: [{
+                speaker: '训练桩',
+                text: '训练还差最后一步——升级卡牌。',
+                choices: [
+                  { id: 'twoC', label: '夯实基础', hint: '选择两张C级卡牌升级。' },
+                  { id: 'oneB', label: '精益求精', hint: '选择一张B级卡牌升级。' },
+                ],
+              }],
+              onChoice: (id) => { mode = id; },
             }],
-            onChoice: (id) => { mode = id; },
-          }],
-        });
-      } else {
-        mode = can2C ? 'twoC' : 'oneB';
+          });
+        } else {
+          mode = can2C ? 'twoC' : 'oneB';
+        }
+        // 对话期间局面可能已变（尾款被别的路径清掉/离房）——落 core 前重查
+        if (!mode || !run.roomData?.pendingUpgrade || run.gameStage !== 'room') return;
+        try { trainUpgradeStart(run, mode); } catch (err) { console.warn('[training]', err.message); return; }
+        notify();
       }
-      // 对话期间局面可能已变（尾款被别的路径清掉/离房）——落 core 前重查
-      if (!mode || !run.roomData?.pendingUpgrade || run.gameStage !== 'room') return;
-      try { trainUpgradeStart(run, mode); } catch (err) { console.warn('[training]', err.message); return; }
-      notify();
+      panelStage()?.openUpgradePicker?.('training');
+    } finally {
+      upgradeFlowBusy = false;
     }
-    panelStage()?.openUpgradePicker?.('training');
   }
   function trainingUpgrade(uniqueID, targetId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.pendingUpgrade) return;

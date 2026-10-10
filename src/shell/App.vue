@@ -268,10 +268,17 @@ onMounted(async () => {
   const RES_H = { native: Infinity, qhd: 1440, fhd: 1080 };
   stageManager.setMaxRenderHeight(RES_H[settings.maxRenderRes] ?? Infinity);
   watch(() => settings.maxRenderRes, (t) => stageManager?.setMaxRenderHeight(RES_H[t] ?? Infinity));
-  fitFrame();
-  window.addEventListener('resize', fitFrame);
-  stageManager.start();
-  void autoStartFromUrl();
+    fitFrame();
+    window.addEventListener('resize', fitFrame);
+    stageManager.start();
+    // 开屏全量 shader 预热（幕后暖场，开始界面背后渲染；?warmup=0 可关）：
+    // 房间首进/机器 zoom-in 的管线编译卡顿在此一次性预付
+    import('../stage/warmup.js').then(
+      ({ runBootWarmup }) => runBootWarmup(stageManager, {
+        whenContent: () => contentPromise ?? loadContent(),
+      }),
+    ).catch(() => {});
+    void autoStartFromUrl();
   // Esc = 游戏内弹出菜单开关（菜单级界面不响应；全局模态弹窗打开时让位，Esc 归弹窗取消）；
   // F9 = 调试面板开关（仅调试模式开着时响应——面板本身在同一条件下才渲染）
   keyHandler = (e) => {

@@ -88,27 +88,32 @@ export function maxRewardTier(run, packId = 'body') {
 }
 
 // 深入卡门禁（设计稿：精英能力解锁子体系卡池，**深入卡仅在该子体系精英能力到手后**
-// 进入奖励池）。卡 def 以 `deep: '<子体系>'` 标注；大师能力不开门禁（门禁只看精英）。
+// 进入奖励池）。卡 def 以 `deep: '<子体系>'` 标注（值必须是合法子系统 id，注册期校验）；
+// 大师能力不开门禁（门禁只看精英）。
 export const DEEP_GATES = Object.freeze({
   burst: Object.freeze(['pyroBlast', 'fireWard']), // 爆炎深入：回响烈焰/背水一战/放手一搏
   fist: Object.freeze(['boxer']),                  // 拳深入：万变拳/假动作/拳压…
   blade: Object.freeze(['bladeMaster']),           // 刀深入：练刀/开刃/斩灭…
   block: Object.freeze(['warrior']),               // 拆深入：架势
-  renew: Object.freeze(['renew']),                 // 生息深入：世界树之心
-  blight: Object.freeze(['blightLord']),           // 瘴毒深入：瘟神附体
-  gale: Object.freeze(['galeFury']),               // 御风深入：天闪
-  wander: Object.freeze(['wanderClouds']),         // 逍遥深入：风行者
+});
+// 大师深入门禁（deepGrade: 'master' 的深入卡，如巨火球术链）：门 = 对应子体系的
+// **大师**能力（elite 大师皆可开精英深入，但大师深入只认大师）。
+export const MASTER_DEEP_GATES = Object.freeze({
+  burst: Object.freeze(['openerGambit']), // 爆炎大师深入：巨火球术/天明火球
+  blaze: Object.freeze(['emberOut']),     // 叠炎大师深入（预留）
 });
 export function deepGateOpen(run, def) {
   if (!def?.deep) return true;
-  return (DEEP_GATES[def.deep] ?? []).some(id => run?.player?.abilities?.includes(id));
+  const gates = def.deepGrade === 'master'
+    ? (MASTER_DEEP_GATES[def.deep] ?? [])
+    : (DEEP_GATES[def.deep] ?? []);
+  return gates.some(id => run?.player?.abilities?.includes(id));
 }
 
 // ---- 牌组门槛与定向亲和（肘击小体系「持有肘击才进卡包、
 // 肘击越多权重越高」的通用落地；def 声明、rewards 解释，内容侧不侵入本文件）----
 //   def.requiresAnyOf = [卡id…]：牌组中不持有其中任一张 → 不入奖励池（牢大/牢大归来/坠机）。
-//   def.affinityCards = [卡id…]：牌组中每持有 1 张，档内权重 +35%（至多计 4 张，
-//   与体系亲和 SERIES_AFFINITY 同参数——同源杠杆，不另立数值）。
+//   def.affinityCards = [卡id…]：牌组中每持有 1 张，档内权重 +35%（至多计 4 张）。
 export function deckGateOpen(run, def) {
   const ids = def?.requiresAnyOf;
   if (!ids?.length) return true;
@@ -116,13 +121,17 @@ export function deckGateOpen(run, def) {
   return ids.some(id => owned.has(id));
 }
 
+// 持卡亲和参数（2026-10-10 用户定：卡包不再做子系统亲和——奖励流不偏向既有构筑，
+// 仅剩 def 显式声明的持卡亲和这一种特殊修正）。
+export const DECK_AFFINITY = Object.freeze({ perCard: 0.35, maxCount: 4 });
+
 /** 持卡亲和乘数：1 + perCard × min(牌组中 affinityCards 卡的张数, maxCount)。 */
 export function deckAffinityWeight(run, def) {
   const ids = def?.affinityCards;
   if (!ids?.length) return 1;
   const want = new Set(ids);
   const n = (run?.player?.deck ?? []).reduce((s, rt) => s + (want.has(rt.defId) ? 1 : 0), 0);
-  return 1 + SERIES_AFFINITY.perCard * Math.min(n, SERIES_AFFINITY.maxCount);
+  return 1 + DECK_AFFINITY.perCard * Math.min(n, DECK_AFFINITY.maxCount);
 }
 
 // 单包卡池：包归属 + 排除 Z/S 与 canSpawnAsReward=false + 深入卡门禁 + 牌组门槛。
@@ -150,9 +159,42 @@ export function commonPool(run, capTier) {
 
 // ---- 等阶分布抽取：先按通道分布表掷等阶档，再档内选卡 ----
 // 档间比例恒等于分布表（在**池内实际存在**的等阶上归一——某等阶池空/被抽空时，
-// 其份额自然摊给其余档）；档内缺省均匀，affinityOf 可选给档内选卡加权（子体系亲和）。
+// 其份额自然摊给其余档）；档内缺省均匀，affinityOf 可选给档内选卡加权（持卡亲和）。
 // 走 run rng，确定性。供战后开包与老虎机卡包奖项共用。
 // table = 通道分布表（REWARD_TIER_TABLE[channel]，见 rewardTierTable）。
+
+// 同包排除：与已入包候选**同一晋升链**（沿 promotesTo 上溯可达集相交——promotesTo
+// 可为数组 = 分叉晋升，取可达集判交）或**同名**的卡不入包——同包出现同链/同名两张
+// = 玩家读感的「重复选项」。
+function chainReachOf(def) {
+  const ids = new Set();
+  const walk = (d) => {
+    if (!d || ids.has(d.id)) return;
+    ids.add(d.id);
+    const next = d.promotesTo;
+    if (!next) return;
+    for (const id of (Array.isArray(next) ? next : [next])) walk(getSkillDefinition(id));
+  };
+  walk(def);
+  return ids;
+}
+
+function chainConflicts(def, picked) {
+  if (def.name === picked.name) return true;
+  const reach = chainReachOf(picked);
+  for (const id of chainReachOf(def)) if (reach.has(id)) return true;
+  return false;
+}
+
+// 取一张后按排除规则清洗剩余池（rollTiered 的 byTier / rollWeighted 的 classes 共用）。
+function dropExcluded(groups, picked) {
+  for (const [g, defs] of groups) {
+    const rest = defs.filter(d => !chainConflicts(d, picked));
+    if (rest.length) groups.set(g, rest);
+    else groups.delete(g);
+  }
+}
+
 export function rollTiered(run, pool, count, table = REWARD_TIER_TABLE.normal, affinityOf = null) {
   const byTier = new Map(); // tier -> 剩余卡
   for (const def of pool) {
@@ -196,6 +238,7 @@ export function rollTiered(run, pool, count, table = REWARD_TIER_TABLE.normal, a
     }
     picks.push(group.splice(i, 1)[0]);
     if (!group.length) byTier.delete(tier); // 档抽空 → 整档移出，后续按剩余档归一
+    dropExcluded(byTier, picks.at(-1)); // 同链/同名不共包
   }
   return picks;
 }
@@ -234,33 +277,9 @@ function rollWeighted(run, defs, weightOf, count, affinityOf = null) {
     }
     picks.push(group.splice(i, 1)[0]);
     if (!group.length) classes.delete(chosenW); // 档抽空 → 整档移出，后续按剩余档归一
+    dropExcluded(classes, picks.at(-1)); // 同链/同名不共包
   }
   return picks;
-}
-
-// ---- 子体系亲和加权（「中期子体系大成」定向探索）----
-// 开包/训练抽卡时，与玩家牌组**同 series** 的卡出率提升：每张同 series 持卡 +35%，
-// 至多计 4 张（峰值 ×2.4——档内 5 卡时目标卡从 20% 提到约 37%，定向但不碾压多样性）。
-// 只作用于体系包抽取的档内选卡；**通用注入不受影响**（injectCommon 不走 rollWeighted）；
-// 无 series 的卡恒 ×1。确定性：亲和计数只读牌组，抽取仍走 run.rng。
-export const SERIES_AFFINITY = Object.freeze({ perCard: 0.35, maxCount: 4 });
-
-/** 牌组的 series 分布（亲和计数器，一次开包算一份共用）。 */
-function seriesCounts(run) {
-  const counts = new Map();
-  for (const rt of run?.player?.deck ?? []) {
-    const s = getSkillDefinition(rt.defId)?.series;
-    if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
-  }
-  return counts;
-}
-
-/** 单卡亲和权重：1 + perCard × min(同 series 持卡数, maxCount)。 */
-export function seriesAffinityWeight(run, def, counts = null) {
-  const series = def?.series;
-  if (!series) return 1;
-  const c = counts ?? seriesCounts(run);
-  return 1 + SERIES_AFFINITY.perCard * Math.min(c.get(series) ?? 0, SERIES_AFFINITY.maxCount);
 }
 
 // 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（维度表里没有的自动隐藏）。
@@ -291,13 +310,13 @@ export function spawnableCardPool(run = null) {
 }
 
 // 包内抽 3 选 1 候选（走 run rng，确定性；不重复；等阶分布按来源通道
-// REWARD_TIER_TABLE，与体系等级脱钩；档内按子体系亲和加权，见 SERIES_AFFINITY）。
+// REWARD_TIER_TABLE，与体系等级脱钩；档内均匀，仅 def 声明的持卡亲和加权——
+// 子系统亲和已撤（2026-10-10 用户定：奖励流不偏向既有构筑，build 选项保持开放））。
 // opts.channel = 'normal'（普通战后/默认）| 'elite'（精英/Boss 战后、老虎机大奖——
 // 该通道才有 A 直出）。
 export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLDER.skillChoiceCount, { channel = 'normal' } = {}) {
-  const counts = seriesCounts(run);
   return rollTiered(run, packCardPool(run, packId, rewardTierCap(channel)), count, rewardTierTable(channel),
-    def => seriesAffinityWeight(run, def, counts) * deckAffinityWeight(run, def))
+    def => deckAffinityWeight(run, def))
     .map(def => def.id);
 }
 
@@ -334,7 +353,10 @@ export function injectCommon(run, choices, channel = 'normal', packId = null) {
   run.commonPity = 0;
   const usedSlots = [];
   const injectOne = () => {
-    const pool = commonPool(run, rewardTierCap(channel)).filter(def => !choices.includes(def.id));
+    // 与既有候选做同链/同名排除（同 id 是其子集）——注入不引入「重复选项」
+    const chosen = choices.map(id => getSkillDefinition(id)).filter(Boolean);
+    const pool = commonPool(run, rewardTierCap(channel))
+      .filter(def => !chosen.some(c => chainConflicts(def, c)));
     if (!pool.length) return -1;
     const free = choices.map((_, i) => i).filter(i => !usedSlots.includes(i));
     if (!free.length) return -1;
@@ -376,7 +398,6 @@ export function chooseRewardPack(run, packId) {
 // 训练房抓牌候选 = 战后三选一 +1（曝光率加码——训练房是
 // 「已解锁卡包并集」的定向窗口，候选多一张让新内容更容易被看见；战后开包不变）。
 export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoiceCount + 1) {
-  const counts = seriesCounts(run);
   const pool = spawnableCardPool(run);
   const table = rewardTierTable('normal');
   // 每（包×等阶）组的卡数：组内均分该等阶的表概率份额
@@ -391,7 +412,7 @@ export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoice
     run, pool,
     weightOf,
     count,
-    def => seriesAffinityWeight(run, def, counts) * deckAffinityWeight(run, def), // 档内亲和（体系 + 持卡，同口径）
+    def => deckAffinityWeight(run, def), // 档内仅持卡亲和（子系统亲和已撤，同 rollSkillChoices）
   ).map(def => def.id); // 先取 id：注入会原地替换元素
   injectCommon(run, picks, 'normal'); // 训练抓牌不展示通用角标，注入结果直接生效
   return picks;

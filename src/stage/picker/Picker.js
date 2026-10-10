@@ -83,8 +83,10 @@ export class Picker {
         if (tokenRegion && (!kinds || kinds.includes('token'))) {
           return { kind: 'token', id: owner.id, region: tokenRegion };
         }
-        // 整卡命中后做 hit map 二级查询（仅卡面面片）
-        if (owner.entry.kind === 'card' && owner.entry.cardObject && hit.uv) {
+        // 整卡命中后做 hit map 二级查询：凡注册时带 cardObject 的 pickable 都查
+        //（战斗手牌 kind:'card' 与全屏选卡候选 kind:'button' 同一条路——此前只认
+        // kind 'card'，选卡界面的卡面 named/effect 热区整类静默失效）
+        if (owner.entry.cardObject && hit.uv) {
           const region = owner.entry.cardObject.hitTestUV({ u: hit.uv.x, v: hit.uv.y });
           if (region) return { kind: 'token', id: owner.id, region };
         }

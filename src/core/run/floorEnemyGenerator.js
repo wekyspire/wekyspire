@@ -142,7 +142,7 @@ const TEMPLATES = [
   { id: 'motherLair', name: '巨蝶巢穴', cost: 13, minFloor: 12, maxFloor: 21, once: true,
     slots: [{ fixed: 'motherNymph' }, { fixed: 'motherNymph' }, { fixed: 'nymphB' }, { fixed: 'nymphC' }] },
   { id: 'bewitch', name: '蛊惑', cost: 12, minFloor: 12, maxFloor: 21, once: true,
-    slots: [{ oneOf: ['corpAssassin', 'corpGuard'] }, { fixed: 'burnBot' }, { fixed: 'nymph' }, { fixed: 'motherNymph' }] },
+    slots: [{ oneOf: ['corpAssassin', 'corpGuard'] }, { fixed: 'soldier' }, { fixed: 'nymph' }, { fixed: 'motherNymph' }] },
   { id: 'drunkHall', name: '醉鬼客厅', minFloor: 23, maxFloor: 30, slots: [{ fixed: 'tippler' }, { fixed: 'tippler' }] },
   { id: 'archiveVault', name: '禁书库', minFloor: 34, maxFloor: 43, slots: [{ fixed: 'tomeWarden' }, { fixed: 'bookWorm' }, { fixed: 'bookWorm' }] },
   { id: 'trio', name: '三人众', minFloor: 12, maxFloor: 43, slots: [{}, {}, {}] },
@@ -172,10 +172,10 @@ const TEMPLATES = [
 
 // Boss 表（Boss 只经 boss 分支出场，永不进通配池）：按楼层定 Boss 身份。
 // 值为数组 = 候选池（rng.pick 抽一），值为字符串 = 固定 Boss。
-// 11 层火主题三候选 / 22 层三题 / 33 层四考 / 44 层终塔双候选（神兵躯壳、怪异的瑞米
+// 11 层五候选 / 22 层三题 / 33 层四考 / 44 层终塔双候选（神兵躯壳、怪异的瑞米
 // ——三者编成方式待定，暂按入池轮换）——设计与缩放口径见 ENEMY_GENERATION.md §4.3。
 const BOSS_OF_FLOOR = Object.freeze({
-  11: ['pyro', 'kardas', 'mefm1'],
+  11: ['pyro', 'kardas', 'mefm1', 'pangolinKing', 'corruptSource'],
   22: ['knightCommander', 'candleWarden', 'bishopMarchand'],
   33: ['gluttonLord', 'intactDrone', 'greenhouseQueen', 'essenceEater'],
   44: ['divineShell', 'weirdRemi'],

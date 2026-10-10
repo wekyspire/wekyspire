@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
-import { resolveDamageFx, runDamageBeat } from '../../fx/spells/index.js';
+import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
 import { resolveEnemyHitFx, runEnemyHitBeat } from '../../fx/spells/enemyHitFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
@@ -233,6 +233,12 @@ export const unitBeats = {
         for (const s of r.sparks) {
           this.particles.spawn(unit.position.x, unit.position.y + 2, { ...s, z: unit.position.z });
         }
+        // DoT tick 专属演出（燃烧/中毒，配方表 r.tick 声明）：fire-and-forget 不占节拍
+        if (r.tick) {
+          this._fxRunScript((c) => runDotTickBeat(c, this._spellDeps(), {
+            unit, tag: r.tick, dealt,
+          }));
+        }
         // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
         const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
         this.particles.spawnText(p.x, p.y, `-${dealt}`, {
@@ -352,7 +358,8 @@ export const unitBeats = {
           if (flashed) unit.restoreColor?.();
           return;
         }
-        if (flashed) unit.restoreColor?.();
+        // minor 路径的 flash 还原在节拍等待之后（此前在首个 await 前还原 = 同帧
+        // 设置同帧还原，染色不可见——中毒 tick 染绿靠这个时点）
         // 附级 tick 的轻痛感（敌方）：短促小幅度压弹——「任何伤害」口径的下半场
         if (unit.side === 'enemy') {
           const amp = 0.035;
@@ -364,9 +371,11 @@ export const unitBeats = {
           });
           await Promise.all([ctx.wait(r.beatMs), flinch, recover ?? Promise.resolve()]);
           unit.setPose({ squash: 1 });
+          if (flashed) unit.restoreColor?.();
           return;
         }
         await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]); // 附级：短节拍即收
+        if (flashed) unit.restoreColor?.();
         return;
       }
       // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍

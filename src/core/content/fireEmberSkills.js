@@ -12,52 +12,54 @@
 //   * 控火系列的「目标」默认玩家指定敌人（cardKit.enemyTarget：指定优先 → 首个存活敌人），
 //     无存活敌人时静默落空（战斗通常已终局，此处仅防御性兜底）。
 
-import { registerSkill } from '../skills/registry.js';
+import { registerSkill, getSkillDefinition } from '../skills/registry.js';
 import { aliveEnemies, unitsOfSide, allAliveUnits } from '../state/battleState.js';
 import { DealDamageInstruction } from '../instructions/combat.js';
 import { AddEffectInstruction } from '../instructions/effects.js';
+import { BurnCardInstruction, TransformCardInstruction } from '../instructions/cards.js';
 import { GainManaInstruction } from '../instructions/resources.js';
 import { applyBattleModifier } from '../run/prep.js';
 import { getEffectDefinition } from '../effects/registry.js';
-import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, resolvedDamageText, requestPoolSelection, selected } from './cardKit.js';
+import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, drawCards, aoeAttack, resolvedDamageText, requestPoolSelection, selected } from './cardKit.js';
 
 // ==== 点火系列（基石：点火 C/B/A）=============================================
-// 点火 C（3伤害 + 燃烧5）已在 skills.js 定义；此处补 B/A 两阶。
-// 伤害走 F1 攻击面板轨，与「点火」同口径；升阶只放大燃烧层数。
+// 点火 C 已在 skills.js 定义；此处补 B/A 两阶。
+// 2026-10-10 火系大改：去伤害去费用（0 费、冷却1），改为「洗入1余烬 + 施加燃烧」
+// ——点火从直伤件变成余烬经济的启动器（燃烧 5/7/9）。
 
-// 点火 B：1AP，冷却1，3 伤害，施加燃烧 7。
+// 点火 B：0费，冷却1，洗入1余烬，施加燃烧 7。
 registerSkill({
-  id: 'igniteB', name: '点火', type: 'fire', tier: 'B', series: 'ignite',
-  cost: { mana: 0, actionPoint: 1 },
+  id: 'igniteB', name: '点火', type: 'fire', tier: 'B', series: 'ignite', subsystem: 'blaze',
+  cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo: 'igniteA',
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true; // 无存活敌人：落空（G2 收尾防御）
-    attackDamage(sctx, 3, { target });
+    addCard(sctx, 'emberMote', { index: 'random' });
     addEffect(sctx, 'burn', 7, target);
     return true;
   },
-  describe: () => '3伤害，赋予/effect{燃烧}7',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}7`,
+  describe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}7',
+  battleDescribe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}7',
 });
 
-// 点火 A：1AP，冷却1，3 伤害，施加燃烧 10（点火链顶点，无晋升）。
+// 点火 A：0费，冷却1，洗入1余烬，施加燃烧 9（点火链顶点，无晋升）。
 registerSkill({
-  id: 'igniteA', name: '点火', type: 'fire', tier: 'A', series: 'ignite',
-  cost: { mana: 0, actionPoint: 1 },
+  id: 'igniteA', name: '点火', type: 'fire', tier: 'A', series: 'ignite', subsystem: 'blaze',
+  cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
-    attackDamage(sctx, 3, { target });
-    addEffect(sctx, 'burn', 10, target);
+    addCard(sctx, 'emberMote', { index: 'random' });
+    addEffect(sctx, 'burn', 9, target);
     return true;
   },
-  describe: () => '3伤害，赋予/effect{燃烧}10',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 3)}，赋予/effect{燃烧}10`,
+  describe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}9',
+  battleDescribe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}9',
 });
 
 // ==== 燃元系列（散卡：燃烧 → 魏启资源）=======================================
@@ -73,7 +75,7 @@ function totalEnemyBurn(sctx) {
 // 随战斗对象一起消失，故**不需要战后回滚**，也不再往 skillRuntime 上挂记账字段。
 function emberOriginCard({ id, tier, ap, promotesTo }) {
   registerSkill({
-    id, name: '燃元', type: 'fire', tier, series: 'ember',
+    id, name: '燃元', type: 'fire', tier, series: 'ember', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -96,7 +98,7 @@ emberOriginCard({ id: 'emberOriginA', tier: 'A', ap: 0 });
 
 // 炼心 A：1AP。每有 4 层（敌方）燃烧，获得 1 魏启（走上限截断管线）。
 registerSkill({
-  id: 'refineHeart', name: '炼心', type: 'fire', tier: 'A', series: 'ember',
+  id: 'refineHeart', name: '炼心', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -121,7 +123,7 @@ registerSkill({
 // A = 0AP（免手续费的提前拍）。
 function heatSurgeCard({ id, tier, ap, exhaust, promotesTo }) {
   registerSkill({
-    id, name: '激热', type: 'fire', tier, series: 'ember',
+    id, name: '激热', type: 'fire', tier, series: 'ember', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -132,7 +134,8 @@ function heatSurgeCard({ id, tier, ap, exhaust, promotesTo }) {
       if (!target) return true;
       const stacks = target.getEffectStacks('burn');
       if (stacks <= 0) return true; // 无燃烧：落空
-      dealDamage(sctx, Math.max(0, stacks - target.getEffectStacks('flameAffinity')),
+      const relief = target.getEffectStacks('flameAffinity') + target.getEffectStacks('flammable') * 3;
+      dealDamage(sctx, Math.max(0, stacks - relief),
         { target, source: null, fixed: true, tags: ['burn'] });
       addEffect(sctx, 'burn', -1, target);
       return true;
@@ -157,7 +160,7 @@ const FIRE_CONTROL_IDS = [];
 // 无 promotesTo（衍生牌、不沉淀，升级无意义）。
 function registerFireControlPair(id, name, tier, mana, targetMode, def) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireControl',
+    id, name, type: 'fire', tier, series: 'fireControl', subsystem: 'blaze',
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', canSpawnAsReward: false, ...def,
     cost: { mana, actionPoint: 0 }, targetMode,
@@ -169,7 +172,7 @@ function registerFireControlPair(id, name, tier, mana, targetMode, def) {
 // 段 0 请求选卡，段 1 addCard 入手（产物真卡，costOverride 不盖——费用即 def）。
 function fireControlFinderCard({ id, name, tier, actionPoint, pool, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireControlFinder',
+    id, name, type: 'fire', tier, series: 'fireControlFinder', subsystem: 'blaze',
     cost: { mana: 0, actionPoint },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -380,29 +383,33 @@ registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
 // ==== 火墙系列（C/B/A：火系的即时格挡补缺）====================================
 // 定位：火系输出碾压、但卡包里**盾牌稀缺**，所有防御都长在自燃转盾上、需要提前铺，
 // 被突袭时一张即时大盾都没有——本系列补这个洞。
-// 设计口径：单卡补洞，不动燃烧框架（火系框架冻结铁律）；「有燃烧再加成」奖励铺过自燃的
-// 火系构筑。数值：**基础低、燃烧加成高**——无燃烧只是 6 盾白板，有燃烧才是火系专属大盾；
-// 全阶 1AP + 冷却 1（彻底 0 开销卡必须谨慎：0 费盾不冷却 = 每回合白嫖盾墙）。
-// 阶梯：6/+5 → 6/+7 → 6/+9。
-function fireWallCard({ id, name, tier, ap, shield, bonus, promotesTo = null }) {
+// 2026-10-10 火系大改：加成判据从「自身燃烧」改为「牌库余烬存量」——火墙读的是
+// 余烬经济（叠炎新资源轴）。护盾基础值三阶分化 6/9/12 + 牌库每张余烬 +2
+//（设计稿当日修订：三阶有区分）。全阶 1AP + 冷却 1（0 费盾不冷却 = 白嫖盾墙）。
+function fireWallCard({ id, tier, base, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'fire', tier, series: 'fireWall',
-    cost: { mana: 0, actionPoint: ap },
+    id, name: '火墙', type: 'fire', tier, series: 'fireWall', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
     promotesTo,
+    // 条件满足金光（视图期判定同结算口径：牌库有余烬即加成成立）
+    condition: (sctx) => sctx.battleState.zones.deck.some(c => c.defId === 'emberMote'),
     use(sctx) {
-      gainShield(sctx, shield + (sctx.player.getEffectStacks('burn') > 0 ? bonus : 0));
+      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMote').length;
+      gainShield(sctx, base + embers * 2);
       return true;
     },
-    describe: () => `护盾${shield}；有/effect{燃烧}时再+${bonus}`,
-    // 无 battleDescribe：条件仅「有燃烧」一条，静态描述即机制
-    // （判定条件简单的卡不做实时读数覆写，防条件被读数吞掉）。
+    describe: () => `护盾${base}，牌库中每有一张/card{emberMote}再+2`,
+    battleDescribe: (sctx) => {
+      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMote').length;
+      return `护盾${base + embers * 2}，牌库中每有一张/card{emberMote}再+2（现有${embers}张）`;
+    },
   });
 }
-fireWallCard({ id: 'fireWallC', name: '火墙', tier: 'C', ap: 1, shield: 6, bonus: 5, promotesTo: 'fireWallB' });
-fireWallCard({ id: 'fireWallB', name: '火墙', tier: 'B', ap: 1, shield: 6, bonus: 7, promotesTo: 'fireWallA' });
-fireWallCard({ id: 'fireWallA', name: '火墙', tier: 'A', ap: 1, shield: 6, bonus: 9 });
+fireWallCard({ id: 'fireWallC', tier: 'C', base: 6, promotesTo: 'fireWallB' });
+fireWallCard({ id: 'fireWallB', tier: 'B', base: 9, promotesTo: 'fireWallA' });
+fireWallCard({ id: 'fireWallA', tier: 'A', base: 12 });
 
 // 控火术：炼 A —— 目标每层燃烧和每层负面效果两两抵消。
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，
@@ -436,7 +443,7 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy',
 // 无终止链；池内候选经请求 overrides 盖 0 费戳，卡面所见即所得），段 1 应答后入手——
 // 0 费走 runtime 费用覆写通道（addCard overrides 盖章，随卡旅行）；手牌满时按 §7.3 降级入牌库。
 registerSkill({
-  id: 'fireControlSupreme', name: '无上控火术', type: 'fire', tier: 'S', series: 'fireControl',
+  id: 'fireControlSupreme', name: '无上控火术', type: 'fire', tier: 'S', series: 'fireControl', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -458,3 +465,121 @@ registerSkill({
   describe: () => '/named{发现}：选一张0费控火术入手',
   battleDescribe: () => '/named{发现}：选一张0费控火术入手',
 });
+
+// ==== 涡轮增压系列（过卡：燃烧产量换抽牌）=======================================
+// 涡轮增压 C/B/A（全链消耗；C 带 1AP）｜抽 3/3/4；**自己诞生以来**全场每产生过
+// 5 层燃烧，此卡多抽 1（2026-10-10 火系大改新系列——设计稿注：卡进战斗后注册
+// 监听计数 AddEffect(burn) 正增量，计数挂在自身 runtime、可序列化）。
+function turboChargerCard({ id, tier, draw, ap = 0, promotesTo = null }) {
+  registerSkill({
+    id, name: '涡轮增压', type: 'fire', tier, series: 'turbo', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: ap },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    subscriptions: (sctx) => [{
+      when: AddEffectInstruction, phase: 'post',
+      filter: (instr) => instr.effectId === 'burn' && (instr.payload.stacks ?? 0) > 0,
+      react: (instr) => {
+        sctx.self.turboBurn = (sctx.self.turboBurn ?? 0) + instr.payload.stacks;
+      },
+    }],
+    use(sctx) {
+      const bonus = Math.floor((sctx.self.turboBurn ?? 0) / 5);
+      drawCards(sctx, draw + bonus);
+      return true;
+    },
+    describe: () => `抽${draw}；每产生过5层/effect{燃烧}，多抽1`,
+    battleDescribe: (sctx) => `抽${draw}；每产生过5层/effect{燃烧}，多抽1（已产生${sctx.self.turboBurn ?? 0}层 → 多抽${Math.floor((sctx.self.turboBurn ?? 0) / 5)}）`,
+  });
+}
+turboChargerCard({ id: 'turboChargerC', tier: 'C', ap: 1, draw: 3, promotesTo: 'turboChargerB' });
+turboChargerCard({ id: 'turboChargerB', tier: 'B', draw: 3, promotesTo: 'turboChargerA' });
+turboChargerCard({ id: 'turboChargerA', tier: 'A', draw: 4 });
+
+// ==== 烧却系列（焚卡：非火系手牌转余烬）=========================================
+// 烧却 C/B/A（全链消耗，0费）｜把手中所有**非火系**卡原地转化为余烬，抽 2/3/4。
+// 转化语言（battle.md §7.3）：身份换、区域/位置延续——异系填充卡在叠炎构筑里
+// 的归宿是变成燃料。自身是火系卡、不在转化集内。
+function burnOffCard({ id, tier, draw, promotesTo = null }) {
+  registerSkill({
+    id, name: '烧却', type: 'fire', tier, series: 'burnOff', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: 0 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: ['exhaust'],
+    promotesTo,
+    use(sctx) {
+      const targets = sctx.battleState.zones.hand.filter(c =>
+        c.uniqueID !== sctx.self.uniqueID && getSkillDefinition(c.defId)?.type !== 'fire');
+      for (const c of targets) {
+        sctx.kernel.submitInstruction(new TransformCardInstruction({
+          uniqueID: c.uniqueID, toDefId: 'emberMote',
+        }));
+      }
+      drawCards(sctx, draw);
+      return true;
+    },
+    describe: () => '手中非火系牌转化为/card{emberMote}，抽' + draw,
+    battleDescribe: (sctx) => {
+      const n = sctx.battleState.zones.hand.filter(c =>
+        c.uniqueID !== sctx.self.uniqueID && getSkillDefinition(c.defId)?.type !== 'fire').length;
+      return `手中非火系牌转化为/card{emberMote}，抽${draw}（可转化${n}张）`;
+    },
+  });
+}
+burnOffCard({ id: 'burnOffC', tier: 'C', draw: 2, promotesTo: 'burnOffB' });
+burnOffCard({ id: 'burnOffB', tier: 'B', draw: 3, promotesTo: 'burnOffA' });
+burnOffCard({ id: 'burnOffA', tier: 'A', draw: 4 });
+
+// ==== 狂焰系列（焚卡换盾）=======================================================
+// 狂焰 C/B/A（1AP，非消耗）｜焚毁所有自由手牌，获得 9/12/15 护盾——烧手牌的
+// 防御镜像（一战的盾版）。已激活咏唱豁免（与一战同口径）。
+function wildfireCard({ id, tier, shield, promotesTo = null }) {
+  registerSkill({
+    id, name: '狂焰', type: 'fire', tier, series: 'wildfire', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    promotesTo,
+    use(sctx) {
+      const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
+      for (const c of hand) {
+        sctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: c.uniqueID }));
+      }
+      if (hand.length > 0) gainShield(sctx, shield);
+      return true;
+    },
+    describe: () => `焚毁所有自由手牌，获得${shield}护盾`,
+    battleDescribe: (sctx) => {
+      const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
+      return `焚毁所有自由手牌，获得${shield}护盾（自由手牌${n}张）`;
+    },
+  });
+}
+wildfireCard({ id: 'wildfireC', tier: 'C', shield: 9, promotesTo: 'wildfireB' });
+wildfireCard({ id: 'wildfireB', tier: 'B', shield: 12, promotesTo: 'wildfireA' });
+wildfireCard({ id: 'wildfireA', tier: 'A', shield: 15 });
+
+// ==== 红云系列（坟墓利用群伤）===================================================
+// 红云 C（消耗）/B/A（1AP）｜7 群伤，坟墓（焚毁区）中每有一张卡，伤害 +1/+1/+2。
+function redCloudCard({ id, tier, per, exhaust = false, promotesTo = null }) {
+  registerSkill({
+    id, name: '红云', type: 'fire', tier, series: 'redCloud', subsystem: 'blaze',
+    cost: { mana: 0, actionPoint: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
+    cardMode: 'normal', targetMode: 'none',
+    keywords: exhaust ? ['exhaust'] : [],
+    promotesTo,
+    use(sctx) {
+      aoeAttack(sctx, 7 + sctx.battleState.zones.burnt.length * per);
+      return true;
+    },
+    describe: () => `7群伤；坟墓中每有一张卡，伤害+${per}`,
+    battleDescribe: (sctx) => `${7 + sctx.battleState.zones.burnt.length * per}群伤（坟墓${sctx.battleState.zones.burnt.length}张，每张+${per}）`,
+  });
+}
+redCloudCard({ id: 'redCloudC', tier: 'C', per: 1, exhaust: true, promotesTo: 'redCloudB' });
+redCloudCard({ id: 'redCloudB', tier: 'B', per: 1, promotesTo: 'redCloudA' });
+redCloudCard({ id: 'redCloudA', tier: 'A', per: 2 });

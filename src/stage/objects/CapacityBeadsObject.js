@@ -139,7 +139,11 @@ export class CapacityBeadsObject extends THREE.Group {
     const halfW = (it) => (it.type === 'mini' ? TICK_W / 2 : BEAD_W / 2);
     const gapBetween = (a, b) => {
       const edge = (a.type === 'mini' || b.type === 'mini') ? TICK_EDGE : BEAD_STEP - BEAD_W;
-      return edge + (ZONE_OF(a.type) !== ZONE_OF(b.type) ? GROUP_GAP : 0);
+      // 蓝珠（咏唱容量占用）与右侧卡牌容量点之间不拉组间隙：蓝珠在玩家读法里属
+      // 容量链，卡牌容量点（占/空皆然）应紧随其后——咏唱居手牌末位时蓝珠与空容量
+      // 珠间会凭空多出一段宽缝（实报）。
+      const capacityChain = a.type === 'chant' || a.type === 'chantOverflow';
+      return edge + (!capacityChain && ZONE_OF(a.type) !== ZONE_OF(b.type) ? GROUP_GAP : 0);
     };
     const advance = (i) => halfW(items[i - 1]) + gapBetween(items[i - 1], items[i]) + halfW(items[i]);
     let width = halfW(items[0]) + halfW(items[items.length - 1]);

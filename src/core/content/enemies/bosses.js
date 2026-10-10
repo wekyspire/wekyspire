@@ -38,16 +38,15 @@ function attachPressureCounter(kernel, unit, owner) {
 // ② 11 层 Boss · 燃焰术士（章1 火主题 Boss 池之一）：
 // 一阶段四拍：盾6+塞2灼伤入牌库 → 燃烧5+攻6 → 攻6+塞1灼伤进手牌 → 重击18。灼伤是状态牌
 // （无法打出，回合结束在手牌中受 2 伤——塞牌库随机位，抽到手上才开始计时）。
-// 转段：第 8 回合起（turn.count > 7）或血量跌至 115 及以下——首拍空转（蓄力），
-// 随后四拍循环：全场燃烧11（含自己）→ 攻9+塞1灼伤进手牌 → 消耗全场燃烧每层回 2 血 → 重击24。
+// 转段：第 8 回合起（turn.count > 7）或血量跌至 122 及以下——首拍空转（蓄力），
+// 随后四拍循环：全场燃烧11（含自己）→ 攻9+塞1灼伤进手牌 → 消耗全场燃烧每层回 3 血 → 重击24。
 // 机智点：它给自己也点燃烧、再靠「消耗燃烧回血」闭环——玩家的叠炎既是在烧它、
 // 也是在给它备血包（引爆窗口 = 燃烧11 刚挂上、回血拍未到的一拍）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  // 血量口径：难度制 v2 固定数值，基础值即实战值——165
-  // （同日再 +10，转段线下移至 105）
-  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 165 }),
+  // 血量口径：难度制 v2 固定数值，基础值即实战值——220（2026-10-09 文档同步）
+  createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 220 }),
   // 多部件（fx Phase 5 首件试点）：本体 + 3 团环绕火球
   // （程序化焰身/光晕/彗尾 sprite + 点光，无美术素材；P2 剧本推 heat 催成狂暴态）
   // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
@@ -67,7 +66,7 @@ registerEnemy({
   },
   act(actx) {
     const { unit, battleState: bs } = actx;
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 115)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 122)) {
       unit._phase2 = true; unit._phaseBeat = 0; // 转段首拍空转（蓄力）
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT）：core 只报 id+标量参数，
       // 内容全在 stage 侧 fx/scripts/bosses/pyro.js；观战端同源重放
@@ -120,7 +119,7 @@ registerEnemy({
       actx.kernel.submitInstruction(new AddCardInstruction({
         defId: 'burnWound', toZone: 'hand', index: 'random' }));
     } else if (beat === 2) {
-      // 消耗全场所有燃烧，每层回复 2 血（自身闭环：烧自己 → 吃回）
+      // 消耗全场所有燃烧，每层回复 3 血（自身闭环：烧自己 → 吃回）
       let total = 0;
       for (const u of [unit, ...aliveEnemies(bs).filter(e => e !== unit), actx.player, ...aliveAllies(bs)]) {
         const s = u.getEffectStacks('burn');
@@ -131,7 +130,7 @@ registerEnemy({
         }
       }
       if (total > 0) {
-        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: total * 2 }));
+        actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: total * 3 }));
       }
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -141,7 +140,7 @@ registerEnemy({
     }
   },
   getIntention: (unit, bs) => {
-    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 115)) {
+    if (!unit._phase2 && (bs.turn.count > 7 || unit.hp <= 122)) {
       return { kinds: ['buff'], note: '二阶段蓄力：下回合起全场点燃' };
     }
     const atk = unit.getStat('attack');
@@ -155,7 +154,7 @@ registerEnemy({
     const beat = (unit._phaseBeat ?? 0) % 4;
     if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧11（含它自己）' };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 9 + atk, note: '塞1张灼伤进手牌' };
-    if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复2血' };
+    if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复3血' };
     return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
   },
 });
@@ -172,7 +171,7 @@ registerEnemy({
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'kardas', name: '卡达斯',
-  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 128 }),
+  createUnit: () => new Enemy({ defId: 'kardas', name: '卡达斯', maxHp: 138 }),
   onBattleStart(ctx, unit) {
     ctx.kernel.submitInstruction(new AddEffectInstruction({
       target: unit, effectId: 'flameDemon', stacks: 1 }));
@@ -232,12 +231,12 @@ registerEnemy({
 // ②″ 11 层 Boss · MEFM-1（章1 火主题 Boss 池之一；
 // lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击免伤）。
 // 一阶段四拍：钩爪发射（伤残1，不造成伤害）→ 攻2×2 → 攻2×4 → 炎魔1+格挡2（积焰）。
-// 转段：血量跌至 100 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
+// 转段：血量跌至 110 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
 // 二阶段：首拍获得炎魔2，随后三拍循环：攻5×3 → 钩爪发射（伤残2）→ 攻5×3（点燃海）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
-  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 168 }),
+  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 205 }),
   onBattleStart(ctx, unit) {
     // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
     ctx.kernel.submitInstruction(new AddEffectInstruction({
@@ -256,7 +255,7 @@ registerEnemy({
     };
     const claw = (stacks) => actx.kernel.submitInstruction(new AddEffectInstruction({
       target: actx.player, effectId: 'maim', stacks }));
-    if (!unit._phase2 && unit.hp < 100) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
+    if (!unit._phase2 && unit.hp < 110) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
       unit._phase2 = true; unit._phaseBeat = 0;
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT，同 pyro）
       actx.presenter?.playScript?.({ script: 'bosses/mefm1P2', unit: unit.uniqueID });
@@ -293,7 +292,7 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
-      if (unit.hp < 100) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
+      if (unit.hp < 110) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
       const beat = unit.actionIndex % 4;
       if (beat === 0) return { kinds: ['debuff'], note: '钩爪发射：赋予伤残1（受到的伤害+1）' };
       if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 2 + atk };
@@ -304,6 +303,155 @@ registerEnemy({
     const b = ((unit._phaseBeat ?? 0) - 1) % 3;
     if (b === 1) return { kinds: ['debuff'], note: '钩爪发射：赋予伤残2（受到的伤害+2）' };
     return { kinds: ['attack'], hits: 3, damage: 5 + atk, note: '点燃海' };
+  },
+});
+
+// ②‴′ 11 层 Boss · 穿山甲王（章1 装甲主题；BOSSES_1.md 2026-10-09 新增）：
+// 简单的无干扰循环，考验玩家启动与输出强度。
+// 一阶段：首拍增强（防御2）；此后**无护盾时**上甲（盾50 + 脆弱如山1——护盾不过夜
+// 但破盾那拍眩晕自罚），有甲则三拍复读：攻12 → 攻3×3 → 荆棘2。装甲循环的节奏账：
+// 破盾 = 换它一拍眩晕（脆弱如山的代价拍），破不动就每拍挨攻。
+// 转段（血量 < 190 的行动拍）：恼怒——净化自身全部效果（预告未知），此后每拍
+// 重击9 + 蓄势5（蓄势 PRE 叠进伤害：9 → 14 → 19…线性加压，必须速杀）。
+registerEnemy({
+  difficulty: { base: 8, floorMin: 11, floorMax: 11 },
+  id: 'pangolinKing', name: '穿山甲王',
+  createUnit: () => new Enemy({ defId: 'pangolinKing', name: '穿山甲王', maxHp: 300 }),
+  act(actx) {
+    const { unit, player } = actx;
+    if (!unit._phase2) {
+      if (unit.hp < 190) { // 转段拍：恼怒（净化全部效果 + 占拍）
+        unit._phase2 = true;
+        unit._beat = 0;
+        for (const instr of purgeEffectInstructions(unit)) {
+          actx.kernel.submitInstruction(instr);
+        }
+        return;
+      }
+      const atk = unit.getStat('attack');
+      if (unit.actionIndex === 0) {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'defense', stacks: 2 }));
+        return;
+      }
+      if (unit.shield <= 0) { // 上甲拍：盾50 + 脆弱如山1
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 50 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'brittleMountain', stacks: 1 }));
+        return;
+      }
+      const beat = (unit._beat ?? 0) % 3; // 装甲插拍不打断三拍复读的位置
+      unit._beat = (unit._beat ?? 0) + 1;
+      if (beat === 0) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 12 + atk }));
+      } else if (beat === 1) {
+        for (let i = 0; i < 3; i++) {
+          actx.kernel.submitInstruction(new DealDamageInstruction({
+            source: unit, target: player, amount: 3 + atk }));
+        }
+      } else {
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: unit, effectId: 'thorns', stacks: 2 }));
+      }
+      return;
+    }
+    // 二阶段：重击9 + 蓄势5 每拍复读（蓄势 PRE 把层数叠进伤害）
+    actx.kernel.submitInstruction(new DealDamageInstruction({
+      source: unit, target: player,
+      amount: 9 + unit.getStat('attack'),
+      tags: ['heavy'],
+    }));
+    actx.kernel.submitInstruction(new AddEffectInstruction({
+      target: unit, effectId: 'momentum', stacks: 5 }));
+  },
+  getIntention: (unit) => {
+    const atk = unit.getStat('attack');
+    if (!unit._phase2 && unit.hp < 190) return { kinds: ['unknown'], note: '恼怒' };
+    if (!unit._phase2) {
+      if (unit.actionIndex === 0) return { kinds: ['buff'], note: '增强：防御2' };
+      if (unit.shield <= 0) return { kinds: ['defend', 'buff'], note: '护盾50，脆弱如山' };
+      const beat = (unit._beat ?? 0) % 3;
+      if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 12 + atk };
+      if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
+      return { kinds: ['buff'], note: '荆棘2' };
+    }
+    return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '重击，蓄势+5' };
+  },
+});
+
+// ②‴″ 11 层 Boss · 腐败之源（章1 召唤干扰流；BOSSES_1.md 2026-10-09 新增）：
+// 首拍不动作（酝酿窗）；四拍循环：
+//   ① 召唤：rottenRootT / thornWeedT 随机补到友军 ≥3（受 maxEnemies 上限约束）；
+//     已有 3 友军 → 改为赋予全员力量3
+//   ② 赋予玩家虚弱1 + 脆弱1
+//   ③ 有友军 → 全友军各回 5 血；无 → 召 1 个
+//   ④ 攻 3×3。
+// 召唤物是 T 变体（不会复苏、根须T 亦无蓄势拍）——可被永久清场，战斗必然收敛；
+// 「杀 Boss 不清场不算胜」维持通用口径（场上还有召唤物就要继续打完）。
+registerEnemy({
+  difficulty: { base: 8, floorMin: 11, floorMax: 11 },
+  id: 'corruptSource', name: '腐败之源',
+  createUnit: () => new Enemy({ defId: 'corruptSource', name: '腐败之源', maxHp: 192 }),
+  act(actx) {
+    const { unit, player, battleState: bs } = actx;
+    if (unit.actionIndex === 0) return; // 首拍：酝酿（不动作）
+    const allies = () => aliveEnemies(bs).filter(e => e !== unit);
+    const cap = bs.config?.maxEnemies ?? 4;
+    const summon = () => actx.kernel.submitInstruction(new UnitSpawnInstruction({
+      unit: getEnemyDefinition(bs.rng.pick(['rottenRootT', 'thornWeedT'])).createUnit(),
+      source: unit,
+    }));
+    const beat = (unit.actionIndex - 1) % 4;
+    if (beat === 0) {
+      if (allies().length >= 3) {
+        for (const e of aliveEnemies(bs)) { // 全员 = 召唤物 + 它自己
+          actx.kernel.submitInstruction(new AddEffectInstruction({
+            target: e, effectId: 'strength', stacks: 3 }));
+        }
+      } else {
+        // 召唤指令异步结算（unit 要到子节点执行才入列），不能 while 重读现势——
+        // 按当前余量一次数清：补到 3 友军，不越过 maxEnemies
+        const n = Math.min(3 - allies().length, cap - aliveEnemies(bs).length);
+        for (let i = 0; i < n; i++) summon();
+      }
+    } else if (beat === 1) {
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: player, effectId: 'weaken', stacks: 1 }));
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: player, effectId: 'fragile', stacks: 1 }));
+    } else if (beat === 2) {
+      if (allies().length > 0) {
+        for (const e of allies()) {
+          actx.kernel.submitInstruction(new ApplyHealInstruction({ target: e, amount: 5 }));
+        }
+      } else if (aliveEnemies(bs).length < cap) {
+        summon();
+      }
+    } else {
+      const atk = unit.getStat('attack');
+      for (let i = 0; i < 3; i++) {
+        actx.kernel.submitInstruction(new DealDamageInstruction({
+          source: unit, target: player, amount: 3 + atk }));
+      }
+    }
+  },
+  getIntention: (unit, bs) => {
+    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '酝酿' };
+    const allies = bs ? bs.enemies.filter(e => !e.isDead() && e !== unit).length : 0;
+    const beat = (unit.actionIndex - 1) % 4;
+    if (beat === 0) {
+      return allies >= 3
+        ? { kinds: ['buff'], note: '全员力量3' }
+        : { kinds: ['unknown'], note: '召唤（腐败根须/刺刺草）' };
+    }
+    if (beat === 1) return { kinds: ['debuff'], note: '虚弱1，脆弱1' };
+    if (beat === 2) {
+      return allies > 0
+        ? { kinds: ['buff'], note: '友军各恢复5血' }
+        : { kinds: ['unknown'], note: '召唤1个' };
+    }
+    return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack') };
   },
 });
 

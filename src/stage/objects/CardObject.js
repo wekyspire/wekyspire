@@ -197,6 +197,11 @@ export class CardObject extends THREE.Group {
 
   get hasActiveGlow() { return this.fx.hasEdgeGlow; }
 
+  /** 「条件满足」金光开关（def.condition 成立 / 弃牌模式下的灵活卡）；幂等门面。 */
+  setCondGlow(on) { this.fx.setCondGlow(on); }
+
+  get hasCondGlow() { return this.fx.hasCondGlow; }
+
   /** 「将弃」标记（P9 尾弃预告，Three 层特效：红色呼吸描边 + 暗化盖纱）。幂等。 */
   setDoomMark(on) { this.fx.setDoomed(on); }
 
