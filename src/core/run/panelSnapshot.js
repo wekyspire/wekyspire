@@ -349,6 +349,19 @@ export function cardRemovalSnapshot(run) {
   };
 }
 
+/**
+ * 卡组 build 视图条目（「卡组」按钮的全屏画廊）：run 牌组原样平铺，array order 即展示序。
+ * 视图 = 应用前口径（cardViewFromDef），战斗内克隆的临时状态（冷却/威力/激活/局内转化）
+ * 一律不进——那些属于战斗牌库查看器（bridge 投影 zones.deck），两者是不同语义的视图。
+ */
+export function deckViewEntries(run) {
+  const p = run.player;
+  return p.deck.map(rt => ({
+    uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
+    view: cardViewFromDef(getSkillDefinition(rt.defId), { player: p }),
+  }));
+}
+
 export function deckUpgradeCards(run) {
   const p = run.player;
   return p.deck.map((rt) => {

@@ -24,6 +24,7 @@ import {
 function sparkCard({ id, name = '火花', tier, damage, hits, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'spark', subsystem: 'burst',
+    image: id === 'sparkS' ? 'sparkStormS' : 'spark',
     cost: { mana: 2, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -40,10 +41,10 @@ function sparkCard({ id, name = '火花', tier, damage, hits, promotesTo = null 
     battleDescribe: (sctx) => `随机${resolvedDamageText(sctx, damage)}×${hits}`,
   });
 }
-sparkCard({ id: 'fireSparkC', tier: 'C', damage: 3, hits: 4, promotesTo: 'fireSparkB' });
-sparkCard({ id: 'fireSparkB', tier: 'B', damage: 4, hits: 4, promotesTo: 'fireSparkA' });
-sparkCard({ id: 'fireSparkA', tier: 'A', damage: 5, hits: 4 });
-sparkCard({ id: 'ultimateSpark', name: '终极火花', tier: 'S', damage: 5, hits: 7 });
+sparkCard({ id: 'sparkC', tier: 'C', damage: 3, hits: 4, promotesTo: 'sparkB' });
+sparkCard({ id: 'sparkB', tier: 'B', damage: 4, hits: 4, promotesTo: 'sparkA' });
+sparkCard({ id: 'sparkA', tier: 'A', damage: 5, hits: 4 });
+sparkCard({ id: 'sparkS', name: '终极火花', tier: 'S', damage: 5, hits: 7 });
 
 // ==== 余烬链：火种 C + 两张 B 分岔 + A 不灭 + 衍生牌余烬 ====
 // 余烬 = 火系的造牌语言：0 费即抛的燃烧施加。造出来的牌吃焚烧翻倍、鬼火传播、
@@ -52,13 +53,13 @@ sparkCard({ id: 'ultimateSpark', name: '终极火花', tier: 'S', damage: 5, hit
 // 火种 C：1魏 冷却1——向牌库随机位洗入 3 张「余烬」，抽2（升级：抽3——升级收益
 // = 抽牌加一，不增加洗入余烬数量）。
 registerSkill({
-  id: 'sparkSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
+  id: 'emberSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'sparkSeedB',
+  promotesTo: 'emberSeedB',
   use(sctx) {
-    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMoteC', { index: 'random' });
     drawCards(sctx, sctx.self.promoted ? 3 : 2);
     return true;
   },
@@ -69,12 +70,12 @@ registerSkill({
 // 火种 B：1魏 冷却1——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
 // 加抽牌不洗更多余烬）。
 registerSkill({
-  id: 'sparkSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember', subsystem: 'blaze',
+  id: 'emberSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMoteC', { index: 'random' });
     drawCards(sctx, sctx.self.promoted ? 4 : 3);
     return true;
   },
@@ -84,12 +85,12 @@ registerSkill({
 
 // 不灭火种 A：0费 冷却1——洗入 3 张余烬并抽 3（潜伏量的即时兑现分岔）。
 registerSkill({
-  id: 'eternalSpark', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
+  id: 'emberEternalA', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
   use(sctx) {
-    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMote', { index: 'random' });
+    for (let i = 0; i < 3; i++) addCard(sctx, 'emberMoteC', { index: 'random' });
     drawCards(sctx, 3);
     return true;
   },
@@ -100,7 +101,7 @@ registerSkill({
 // 余烬（衍生牌）：0费即抛——赋予目标燃烧3，打出即焚毁。只经造牌入场。
 // （等阶记 C——衍生牌等阶只是账务口径。）
 registerSkill({
-  id: 'emberMote', name: '余烬', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
+  id: 'emberMoteC', name: '余烬', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -143,8 +144,8 @@ function burnSnapCard({ id, tier, exhaust, promotesTo }) {
     },
   });
 }
-burnSnapCard({ id: 'burnSnapB', tier: 'B', exhaust: true, promotesTo: 'burnSnapA' });
-burnSnapCard({ id: 'burnSnapA', tier: 'A', exhaust: false });
+burnSnapCard({ id: 'fireControlSnapB', tier: 'B', exhaust: true, promotesTo: 'fireControlSnapA' });
+burnSnapCard({ id: 'fireControlSnapA', tier: 'A', exhaust: false });
 
 // ==== 敌方 debuff 链（爆裂冲击 C/B → 轰灭 A）：伤残放大一切后续伤害 ====
 // 全阶消耗（伤残是延时价值，消耗防长局无限复用同一份伤残）。
@@ -168,12 +169,12 @@ function blastShockCard({ id, tier, damage, maim, promotesTo }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，赋予/effect{伤残}${maim}`,
   });
 }
-blastShockCard({ id: 'blastShockC', tier: 'C', damage: 10, maim: 3, promotesTo: 'blastShockB' });
-blastShockCard({ id: 'blastShockB', tier: 'B', damage: 13, maim: 3, promotesTo: 'doomBlast' });
+blastShockCard({ id: 'shockC', tier: 'C', damage: 10, maim: 3, promotesTo: 'shockB' });
+blastShockCard({ id: 'shockB', tier: 'B', damage: 13, maim: 3, promotesTo: 'shockA' });
 
 // 轰灭 A：2魏 13伤 + 伤残4（与 B 同伤，伤残 +1 是 A 位溢价——延时价值型斩杀铺垫）。
 registerSkill({
-  id: 'doomBlast', name: '轰灭', type: 'fire', tier: 'A', series: 'shock', subsystem: 'burst',
+  id: 'shockA', name: '轰灭', type: 'fire', tier: 'A', series: 'shock', subsystem: 'burst',
   cost: { mana: 2, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -210,9 +211,9 @@ function flashBurnCard({ id, tier, mana, promotesTo }) {
     battleDescribe: () => `获得${mana}魏启，/effect{燃烧}4`,
   });
 }
-flashBurnCard({ id: 'flashBurnC', tier: 'C', mana: 2, promotesTo: 'flashBurnB' });
-flashBurnCard({ id: 'flashBurnB', tier: 'B', mana: 3, promotesTo: 'flashBurnA' });
-flashBurnCard({ id: 'flashBurnA', tier: 'A', mana: 4 });
+flashBurnCard({ id: 'feverC', tier: 'C', mana: 2, promotesTo: 'feverFlashB' });
+flashBurnCard({ id: 'feverFlashB', tier: 'B', mana: 3, promotesTo: 'feverFlashA' });
+flashBurnCard({ id: 'feverFlashA', tier: 'A', mana: 4 });
 
 // 焰刃链 C/B/A：1AP 7 伤；你正在燃烧时 +7/+11/+15
 // （自焚流的条件件——基础伤恒 7，档位差全在燃烧加成斜率）。
@@ -235,9 +236,9 @@ function flameEdgeCard({ id, name, tier, bonus, promotesTo }) {
     },
   });
 }
-flameEdgeCard({ id: 'redHotBlade', name: '红热焰刃', tier: 'C', bonus: 7, promotesTo: 'goldHotBlade' });
-flameEdgeCard({ id: 'goldHotBlade', name: '金热焰刃', tier: 'B', bonus: 11, promotesTo: 'whiteHotBlade' });
-flameEdgeCard({ id: 'whiteHotBlade', name: '白热焰刃', tier: 'A', bonus: 15 });
+flameEdgeCard({ id: 'selfImmolateRedC', name: '红热焰刃', tier: 'C', bonus: 7, promotesTo: 'selfImmolateGoldB' });
+flameEdgeCard({ id: 'selfImmolateGoldB', name: '金热焰刃', tier: 'B', bonus: 11, promotesTo: 'selfImmolateWhiteA' });
+flameEdgeCard({ id: 'selfImmolateWhiteA', name: '白热焰刃', tier: 'A', bonus: 15 });
 
 // 热浪链 C/B/A（1魏，深入·爆炎）：4 群伤；敌方燃烧 ≥5 层的敌人额外 +8/+12/+16
 // （2026-10-10 火系大改：单体 8 伤 → 4 群伤逐敌条件加成；自点火系列移出、归爆炎

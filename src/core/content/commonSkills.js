@@ -135,11 +135,12 @@ registerSkill({
 
 // 纯化（C）：1MP，冷却1：纳气2，2护盾。
 registerSkill({
-  id: 'purify', image: 'purify', name: '纯化', type: 'normal', pack: 'common', tier: 'C',
+  id: 'purifyC', image: 'purify', name: '纯化', type: 'normal', pack: 'common', tier: 'C',
+  series: 'purify',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'deepPurify',
+  promotesTo: 'purifyB',
   use(sctx) {
     sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'naqi', stacks: 2 }));
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 2 }));
@@ -150,11 +151,12 @@ registerSkill({
 
 // 深度纯化（B）：1MP，冷却1：纳气2，4护盾。
 registerSkill({
-  id: 'deepPurify', image: 'purify', name: '深度纯化', type: 'normal', pack: 'common', tier: 'B',
+  id: 'purifyB', image: 'purify', name: '深度纯化', type: 'normal', pack: 'common', tier: 'B',
+  series: 'purify',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'peakPurify',
+  promotesTo: 'purifyA',
   use(sctx) {
     sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'naqi', stacks: 2 }));
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 4 }));
@@ -165,7 +167,8 @@ registerSkill({
 
 // 极致纯化（A）：1MP，冷却1：纳气2，6护盾。
 registerSkill({
-  id: 'peakPurify', image: 'purify', name: '极致纯化', type: 'normal', pack: 'common', tier: 'A',
+  id: 'purifyA', image: 'purify', name: '极致纯化', type: 'normal', pack: 'common', tier: 'A',
+  series: 'purify',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -179,11 +182,12 @@ registerSkill({
 
 // 萃取（C）：3MP，冷却1：纳气4，4护盾。
 registerSkill({
-  id: 'extract', image: 'extract', name: '萃取', type: 'normal', pack: 'common', tier: 'C',
+  id: 'extractC', image: 'extract', name: '萃取', type: 'normal', pack: 'common', tier: 'C',
+  series: 'extract',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'deepExtract',
+  promotesTo: 'extractB',
   use(sctx) {
     sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'naqi', stacks: 4 }));
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 4 }));
@@ -194,11 +198,12 @@ registerSkill({
 
 // 深度萃取（B）：3MP，冷却1：纳气4，6护盾。
 registerSkill({
-  id: 'deepExtract', image: 'extract', name: '深度萃取', type: 'normal', pack: 'common', tier: 'B',
+  id: 'extractB', image: 'extract', name: '深度萃取', type: 'normal', pack: 'common', tier: 'B',
+  series: 'extract',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
-  promotesTo: 'limitExtract',
+  promotesTo: 'extractA',
   use(sctx) {
     sctx.kernel.submitInstruction(new AddEffectInstruction({ target: sctx.player, effectId: 'naqi', stacks: 4 }));
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 6 }));
@@ -209,7 +214,8 @@ registerSkill({
 
 // 极限萃取（A）：3MP，冷却1：纳气5，6护盾。
 registerSkill({
-  id: 'limitExtract', image: 'extract', name: '极限萃取', type: 'normal', pack: 'common', tier: 'A',
+  id: 'extractA', image: 'extract', name: '极限萃取', type: 'normal', pack: 'common', tier: 'A',
+  series: 'extract',
   cost: { mana: 3, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -227,7 +233,8 @@ registerSkill({
 // 压榨（A）：1AP，冷却2：纳气2。
 const drawQiCard = (id, name, tier, cooldown, stacks, promotesTo = null) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
-  image: 'drawQiC',
+  series: 'drawQi',
+  image: 'drawQi',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: cooldown },
   cardMode: 'normal',
@@ -239,14 +246,15 @@ const drawQiCard = (id, name, tier, cooldown, stacks, promotesTo = null) => regi
   describe: () => `/effect{纳气}${stacks}`,
 });
 drawQiCard('drawQiC', '汲取', 'C', 3, 1, 'drawQiB');
-drawQiCard('drawQiB', '汲取', 'B', 2, 1, 'squeezeQi');
-drawQiCard('squeezeQi', '压榨', 'A', 2, 2);
+drawQiCard('drawQiB', '汲取', 'B', 2, 1, 'drawQiA');
+drawQiCard('drawQiA', '压榨', 'A', 2, 2);
 
 // ---- 魏启罐系列（无费用消耗品：纳气 N）----
 // 魏启罐 C 纳气2 / 高级 B 纳气3 / 冉牌 A 纳气4 / 何猥 S 纳气8。
 
 const manaJar = (id, name, tier, stacks) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
+  series: 'manaJar',
   image: 'manaJar',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -258,16 +266,17 @@ const manaJar = (id, name, tier, stacks) => registerSkill({
   },
   describe: () => `/effect{纳气}${stacks}`,
 });
-manaJar('manaJar', '魏启罐', 'C', 2);
-manaJar('manaJarPlus', '高级魏启罐', 'B', 3);
-manaJar('manaJarRoyal', '冉牌魏启罐', 'A', 4);
-manaJar('manaJarLegend', '何猥魏启罐', 'S', 8);
+manaJar('manaJarC', '魏启罐', 'C', 2);
+manaJar('manaJarB', '高级魏启罐', 'B', 3);
+manaJar('manaJarA', '冉牌魏启罐', 'A', 4);
+manaJar('manaJarS', '何猥魏启罐', 'S', 8);
 
 // ---- 激发系列（魏启 → AP 即时转换，消耗）----
 // 激发 B 2魏2AP / 爆发 A 2魏3AP / 充分激发 A 1魏2AP。
 
 const stimulant = (id, name, tier, mana, ap) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
+  series: 'stimulant',
   image: 'stimulant',
   cost: { mana, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -279,15 +288,16 @@ const stimulant = (id, name, tier, mana, ap) => registerSkill({
   },
   describe: () => `获得${ap}行动点`,
 });
-stimulant('stimulant', '激发', 'B', 2, 2);
-stimulant('burstStimulant', '爆发', 'A', 2, 3);
-stimulant('fullStimulant', '充分激发', 'A', 1, 2);
+stimulant('stimulantB', '激发', 'B', 2, 2);
+stimulant('stimulantBurstA', '爆发', 'A', 2, 3);
+stimulant('stimulantFullA', '充分激发', 'A', 1, 2);
 
 // ---- 灵能护盾系列（MP 换纯护盾）----
 // 灵力护盾 C / 灵能护盾 B：1MP，冷却1：6/8 护盾。
 // 通用包的纯防御位——无纳气、无格挡，性价比随等阶拉开。
 const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
+  series: 'psiShield',
   image: 'psiShield',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
@@ -299,8 +309,8 @@ const psiShield = (id, name, tier, shield, promotesTo) => registerSkill({
   },
   describe: () => `${shield}护盾`,
 });
-psiShield('psiShield', '灵力护盾', 'C', 6, 'greaterPsiShield');
-psiShield('greaterPsiShield', '灵能护盾', 'B', 8);
+psiShield('psiShieldC', '灵力护盾', 'C', 6, 'psiShieldB');
+psiShield('psiShieldB', '灵能护盾', 'B', 8);
 
 // ---- §2 散卡 ----
 
@@ -310,7 +320,8 @@ psiShield('greaterPsiShield', '灵能护盾', 'B', 8);
 // 首次命中即把该卡从牌库移入手牌，并注销其余监听（owner 统一，命中后清干净）。
 // 排除自身：杂技收尾同样回库，不能把自己捞回来。
 registerSkill({
-  id: 'acrobatics', image: 'acrobatics', name: '杂技', type: 'normal', pack: 'common', tier: 'A',
+  id: 'acrobaticsA', image: 'acrobatics', name: '杂技', type: 'normal', pack: 'common', tier: 'A',
+  series: 'acrobatics',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -346,7 +357,8 @@ registerSkill({
 // 固有开局直接入手，不占初始抽牌位）。
 const prePreparedCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '早有防备', type: 'normal', pack: 'common', tier,
-  image: 'prePreparedC',
+  series: 'prePrepared',
+  image: 'prePrepared',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -365,7 +377,8 @@ prePreparedCard('prePreparedA', 'A', 12);
 // 盼盼小面包 C/B/A（1AP，消耗）：恢复 3/4/5 生命（即时治疗，走 ApplyHeal 管线）。
 const panpanBreadCard = (id, tier, heal, promotesTo = null) => registerSkill({
   id, name: '盼盼小面包', type: 'normal', pack: 'common', tier,
-  image: 'panpanBreadC',
+  series: 'panpanBread',
+  image: 'panpanBread',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -386,7 +399,8 @@ panpanBreadCard('panpanBreadA', 'A', 5);
 // 清零，见 content/effects.js），与晕眩同在下一回合开始生效：睡这一觉 = 下回合动不了。
 const noonNapCard = (id, tier, mend, promotesTo = null) => registerSkill({
   id, name: '午休', type: 'normal', pack: 'common', tier,
-  image: 'noonNapC',
+  series: 'noonNap',
+  image: 'noonNap',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -410,7 +424,8 @@ noonNapCard('noonNapA', 'A', 20);
 // 不挤容量）。
 const holdOutCard = (id, tier, shield, promotesTo = null) => registerSkill({
   id, name: '防住！', type: 'normal', pack: 'common', tier,
-  image: 'holdOutC',
+  series: 'holdOut',
+  image: 'holdOut',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -428,7 +443,8 @@ holdOutCard('holdOutA', 'A', 16);
 // 瞬间冷却（A，消耗，设计稿未写费用 → 0 费）：选一张手牌，令其冷却5。
 // 结算期选牌两段式（段0请求，段1读应答冷却）；空手则跳过请求。
 registerSkill({
-  id: 'instantCooldown', image: 'instantCooldown', name: '瞬间冷却', type: 'normal', pack: 'common', tier: 'A',
+  id: 'instantCooldownA', image: 'instantCooldown', name: '瞬间冷却', type: 'normal', pack: 'common', tier: 'A',
+  series: 'instantCooldown',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -456,7 +472,8 @@ registerSkill({
 // （提交 ChantTriggerInstruction，与 P5 同一挂载点，激活咏唱卡的触发订阅照常响应）。
 const murmurCard = (id, tier, ap, promotesTo = null) => registerSkill({
   id, name: '念念有词', type: 'normal', pack: 'common', tier,
-  image: 'murmurChantC',
+  series: 'murmurChant',
+  image: 'murmurChant',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -476,7 +493,8 @@ murmurCard('murmurChantB', 'B', 0);
 // 这张「扩容」只给咏唱容量，与火系「膨胀」给手牌上限是两条轨）。
 const expandChantCard = (id, tier, n) => registerSkill({
   id, name: '扩容', type: 'normal', pack: 'common', tier,
-  image: 'expandChantA',
+  series: 'expandChant',
+  image: 'expandChant',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -496,6 +514,7 @@ expandChantCard('expandChantS', 'S', 2);
 // B 高速魏启罐回 2 / A 豪华魏启罐回 3。
 const swiftManaJar = (id, name, tier, amount) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
+  series: 'manaJar',
   image: 'manaJar',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -507,8 +526,8 @@ const swiftManaJar = (id, name, tier, amount) => registerSkill({
   },
   describe: () => `获得${amount}魏启`,
 });
-swiftManaJar('swiftManaJar', '高速魏启罐', 'B', 2);
-swiftManaJar('swiftManaJarPlus', '豪华魏启罐', 'A', 3);
+swiftManaJar('manaJarSwiftB', '高速魏启罐', 'B', 2);
+swiftManaJar('manaJarSwiftPlusA', '豪华魏启罐', 'A', 3);
 
 // ---- HeLiCoPtEr（A，消耗，设计稿未写费用 → 0费）----
 // 「将手中自由牌变换为 0 开销**猛烈肘击**」：逐张 TransformCardInstruction（换绑 defId，
@@ -517,7 +536,8 @@ swiftManaJar('swiftManaJarPlus', '豪华魏启罐', 'A', 3);
 // 只在 bodySkills.js 里定义、不进奖励池）。整套牌因此被肘击稀释——放弃体系协同换
 // 「一手法师肘」的整活构筑（牢大 + HeLiCoPtEr 是设计上的梗组合）。
 registerSkill({
-  id: 'helicopter', image: 'helicopter', name: 'HeLiCoPtEr', type: 'normal', pack: 'common', tier: 'A',
+  id: 'helicopterA', image: 'helicopter', name: 'HeLiCoPtEr', type: 'normal', pack: 'common', tier: 'A',
+  series: 'helicopter',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -530,7 +550,7 @@ registerSkill({
     const hand = [...sctx.battleState.zones.hand].filter(c => !c.isActivated);
     for (const card of hand) {
       sctx.kernel.submitInstruction(
-        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'fierceElbowFree' }),
+        new TransformCardInstruction({ uniqueID: card.uniqueID, toDefId: 'elbowStrikeFierceBFree' }),
       );
     }
     return true;

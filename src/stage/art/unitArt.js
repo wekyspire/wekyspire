@@ -65,15 +65,17 @@ const UNIT_ART_FILES = Object.freeze({
   rockPangolin: 'unit_rockPangolin.png',
   youngRakshasa: 'unit_youngRakshasa.png',
   pyro: 'unit_pyro.png',
+  kardas: 'unit_kardas.png',
   pangolinKing: 'unit_pangolinKing.png',
   corruptSource: 'unit_corruptSource.png',
   rottenRoot: 'unit_rottenRoot.png',
+  rottenRootB: 'unit_rottenRoot.png',
   rottenRootT: 'unit_rottenRoot.png',
+  rottenTreeHeart: 'unit_rottenTreeHeart.png',
   thornWeedT: 'unit_thornWeed.png',
+  mefm1: 'unit_mefm1.png',
   // ==== 第二章（南孚宫）：族底图一张，行为变体复用 ====
-  // bigSlime 专属图三轮生成未过验收（构图满幅出画+无白眼），暂复用史莱姆立绘放大——
-  // 专属图待重制（ENEMY_ART_LIST 待办）
-  bigSlime: 'unit_slime.png',
+  bigSlime: 'unit_bigSlime.png',
   corpAssassin: 'unit_corpAssassin.png',
   corpAssassinB: 'unit_corpAssassin.png',
   corpGuard: 'unit_corpGuard.png',
@@ -106,6 +108,11 @@ const UNIT_ART_FILES = Object.freeze({
   motherNymph: 'unit_motherNymph.png',
   demolitions: 'unit_demolitions.png',
   hunter: 'unit_hunter.png',
+  // 22 层南孚宫 Boss 池（BOSSES 设计 ENEMY_ART_LIST.md P1 立绘要点）
+  knightCommander: 'unit_knightCommander.png',
+  courtSquire: 'unit_courtSquire.png',
+  candleWarden: 'unit_candleWarden.png',
+  bishopMarchand: 'unit_bishopMarchand.png',
 });
 
 // 形态变体（`${defId}:${variant}` → 立牌文件）：Boss 转阶段换立绘（剧本 setArtVariant 触发）。
@@ -161,7 +168,17 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   wraithB: 0.75,
   snowwolf: 0.95,
   rockPangolin: 1.0,
+  youngRakshasa: 0.95,
   pyro: 1.02,
+  // 章1 Boss 池（F11）与腐败家族
+  kardas: 1.2,
+  mefm1: 1.15,
+  pangolinKing: 1.3,
+  corruptSource: 1.05,
+  rottenRoot: 0.55,
+  rottenRootB: 0.55,
+  rottenRootT: 0.55,
+  rottenTreeHeart: 0.9,
   // 第二章（南孚宫）：人形按体格，虫形/机器人压档
   corpAssassin: 0.88,
   corpGuard: 0.85,
@@ -181,6 +198,11 @@ const UNIT_HEIGHT_FACTOR = Object.freeze({
   motherNymph: 0.9,
   demolitions: 0.98,
   hunter: 1.0,
+  // 22 层南孚宫 Boss 池
+  knightCommander: 1.25,
+  courtSquire: 0.65,
+  candleWarden: 1.2,
+  bishopMarchand: 1.2,
 });
 
 export const STANDEE_BASE_HEIGHT = 26; // 世界单位（scale=1 时）

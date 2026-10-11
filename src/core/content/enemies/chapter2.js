@@ -304,7 +304,7 @@ function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = 
       } else if (phase === 0) {
         for (let i = 0; i < 2; i++) {
           actx.kernel.submitInstruction(new AddCardInstruction({
-            defId: 'voidCard', toZone: 'deck', index: 'random',
+            defId: 'voidCardC', toZone: 'deck', index: 'random',
           }));
         }
       } else if (phase === 1) {
@@ -673,7 +673,7 @@ registerEnemy({
     if (phase === 0) {
       for (let i = 0; i < 2; i++) {
         actx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'voidCard', toZone: 'deck', index: 'random',
+          defId: 'voidCardC', toZone: 'deck', index: 'random',
         }));
       }
     } else if (phase === 1) {

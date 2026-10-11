@@ -61,6 +61,14 @@ export function installPanelHost(StageClass, { localActions = {}, allowSource = 
     /** 「粉碎物品」选择界面（老虎机吞噬入口；候选由编排器给，Stage 不读 run）。 */
     openDevourPicker(opts) { return this._pickerKit.openDevourPicker(opts); },
 
+    // ---- 卡组 build 画廊（「卡组」chip 的目标界面；条目由编排器经 core deckViewEntries 下发）----
+    openDeckViewer(entries) {
+      this._closeViewer?.();   // 战斗内与牌堆查看器互斥（Map/Room 无此方法即无害）
+      return this._pickerKit.openDeckViewer(entries);
+    },
+    closeDeckViewer() { this._pickerKit.closeDeckViewer(); },
+    get deckViewerOpen() { return !!this._pickerKit?.deckViewerOpen; },
+
     // ---- 面板动作分流骨架 ----
     // local = 面板本地交互态（开选卡界面…）：舞台自己消化，不惊动 core；
     // grantCard = 得卡标记：摘下被点的卡 → 拆面板 → 播「择卡得卡」飞行（sequencer

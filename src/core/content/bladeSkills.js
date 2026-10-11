@@ -99,13 +99,13 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
 // slow：链首「斩」带慢热（keywords 'slowStart'——开局从头冷却）；
 // 进阶卡只经局内转化获得，转化继承充能状态，无需重复慢热。
 const SLASH_CHAIN = [
-  { id: 'slash', name: '斩', tier: 'C', damage: 17, cd: 3 },
-  { id: 'rockCleave', name: '裂石斩', tier: 'B', damage: 30, cd: 4 },
-  { id: 'goldCleave', name: '削金斩', tier: 'B', damage: 57, cd: 5 },
-  { id: 'mountainCleave', name: '摧山斩', tier: 'A', damage: 108, cd: 6 },
-  { id: 'seaCleave', name: '分海斩', tier: 'A', damage: 205, cd: 7 },
-  { id: 'skyCleave', name: '开天斩', tier: 'S', damage: 390, cd: 8 },
-  { id: 'godCleave', name: '断神斩', tier: 'X', damage: 9999, cd: 9, overwriteDesc: '斩' },
+  { id: 'slashC', name: '斩', tier: 'C', damage: 17, cd: 3 },
+  { id: 'rockCleaveB', name: '裂石斩', tier: 'B', damage: 30, cd: 4 },
+  { id: 'goldCleaveB', name: '削金斩', tier: 'B', damage: 57, cd: 5 },
+  { id: 'mountainCleaveA', name: '摧山斩', tier: 'A', damage: 108, cd: 6 },
+  { id: 'seaCleaveA', name: '分海斩', tier: 'A', damage: 205, cd: 7 },
+  { id: 'skyCleaveS', name: '开天斩', tier: 'S', damage: 390, cd: 8 },
+  { id: 'godCleaveX', name: '断神斩', tier: 'X', damage: 9999, cd: 9, overwriteDesc: '斩' },
 ];
 const SLASH_IDS = new Set(SLASH_CHAIN.map(x => x.id));
 
@@ -177,7 +177,7 @@ function advanceSlashChain(sctx, parentInstr = null) {
 //   直达加速手段。洗入3碎铁是链上每阶共有的效果（设计稿单行表述 + 链条只改
 //   伤害/冷却/等阶）。
 const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = null }, nextId) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: id, subsystem: 'blade',
   keywords: [...(slow ? ['slowStart'] : [])],
   overwriteDesc: overwriteDesc,
   cost: { mana: 0, actionPoint: 2 },
@@ -199,7 +199,7 @@ const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = nu
     // 不覆写的话日志会打出「[削金斩] 30伤」这类名数错位（r22-a2 实报）。
     transformSlashCard(sctx, sctx.self);
     attackDamage(sctx, damage, { skillDefId: id });
-    for (let i = 0; i < 3; i++) addCard(sctx, 'ironShard', { index: 'random' });
+    for (let i = 0; i < 3; i++) addCard(sctx, 'ironShardC', { index: 'random' });
     return true;
   },
   subscriptions: (sctx) => [{
@@ -233,7 +233,7 @@ for (let i = 0; i < SLASH_CHAIN.length; i++) {
 // 【灵活】= 卡级常驻订阅（AddCard 入场随 enterBattle 注册）：弃牌 POST 认
 // result.card（落空的弃牌不计，呼吸同款口径）。
 registerSkill({
-  id: 'ironShard', name: '碎铁', type: 'normal', tier: 'C', series: 'blade', subsystem: 'blade',
+  id: 'ironShardC', name: '碎铁', type: 'normal', tier: 'C', series: 'ironShard', subsystem: 'blade',
   keywords: ['exhaust'],
   flexible: true, // 【灵活】标记：弃牌选卡期间前端打金光（弃它 = 白拿触发）
   cost: { mana: 0, actionPoint: 0 },
@@ -261,8 +261,8 @@ registerSkill({
 // 仍是刀法牌（blade 关键词）——练刀/培植/磨刀系的作用域不变。
 // 阶梯：花刀 C 8选1 → 花刀 B 11选1 → 蔽目花刀 A 14选1；
 // 完美花刀（A，11盾选2）是分叉散卡不进链。
-const cleaveCard = (id, name, tier, shield, picks, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+const cleaveCard = (id, name, tier, shield, picks, promotesTo = null, { series = 'handCleave' } = {}) => registerSkill({
+  id, name, type: 'normal', tier, series, subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
@@ -286,14 +286,14 @@ const cleaveCard = (id, name, tier, shield, picks, promotesTo = null) => registe
   describe: () => `${shield}护盾，选${picks}张手牌丢弃`,
   battleDescribe: (sctx) => `${shield}护盾，选${picks}张手牌丢弃`,
 });
-cleaveCard('flourishC', '花刀', 'C', 8, 1, 'flourishB');
-cleaveCard('flourishB', '花刀', 'B', 11, 1, 'veilCleave');   // id 沿用原二重花刀位
-cleaveCard('veilCleave', '蔽目花刀', 'A', 14, 1);
-cleaveCard('perfectCleave', '完美花刀', 'A', 11, 2);            // 分叉散卡：选 2 弃
+cleaveCard('handCleaveC', '花刀', 'C', 8, 1, 'handCleaveB');
+cleaveCard('handCleaveB', '花刀', 'B', 11, 1, 'handCleaveA');   // id 沿用原二重花刀位
+cleaveCard('handCleaveA', '蔽目花刀', 'A', 14, 1);
+cleaveCard('perfectCleaveA', '完美花刀', 'A', 11, 2, null, { series: 'perfectCleave' });            // 分叉散卡：选 2 弃
 
 // 刀舞系列：丢弃所有手牌，每张 N 护盾（快照打出时点的手牌；弃牌联动的抽牌不进范围）。
 const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'silverDance', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
@@ -312,13 +312,13 @@ const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
     return `丢弃所有手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
   },
 });
-danceCard('bladeDanceC', '刀舞', 'C', 5, 'bladeDanceB');
-danceCard('bladeDanceB', '刀舞', 'B', 7, 'bladeDanceA');
-danceCard('bladeDanceA', '刀舞', 'A', 9);
+danceCard('silverDanceC', '刀舞', 'C', 5, 'silverDanceB');
+danceCard('silverDanceB', '刀舞', 'B', 7, 'silverDanceA');
+danceCard('silverDanceA', '刀舞', 'A', 9);
 
 // 优雅刀舞（分支 A）：只弃「无法打出的」手牌，每张 10 护盾。
 registerSkill({
-  id: 'graceDance', name: '优雅刀舞', type: 'normal', tier: 'A', series: 'blade', subsystem: 'blade',
+  id: 'graceDanceA', name: '优雅刀舞', type: 'normal', tier: 'A', series: 'graceDance', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal',
@@ -339,7 +339,7 @@ registerSkill({
 // ==== 回旋斩系列（牌库末）======================================================
 // 牌库末抽牌（from:'bottom'）：与牌库顶抽牌形成一对规划语言——牌库两头都是取牌口。
 const cycloneCard = (id, name, tier, damage, count, cd, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'cycloneSlash', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: cd === 0 ? { max: Infinity, cooldownTurns: 0 } : { max: 1, cooldownTurns: cd },
   cardMode: 'normal', targetMode: 'enemy',
@@ -363,7 +363,7 @@ cycloneCard('cycloneSlashA', '回旋斩', 'A', 14, 1, 0);   // 机制跃迁：�
 // 阶梯：横劈 C 7 / 强力劈 B 10 / 裂空劈 A 13（带碎铁联动）。
 // ⚠ id 不得撞斩链（S「开天斩」skyCleave——裂空劈不得复用该 id，否则静默覆盖）。
 const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'cleave', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -375,16 +375,16 @@ const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null)
     }
     const landed = damageLandedCount(sctx.self._hitProbes);
     sctx.self._hitProbes = null;
-    for (let i = 0; i < shards * landed; i++) addCard(sctx, 'ironShard', { index: 'random' });
+    for (let i = 0; i < shards * landed; i++) addCard(sctx, 'ironShardC', { index: 'random' });
     return true;
   },
   describe: () => `群伤${damage}${shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''}`,
   battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage, AOE_TAGS).replace('伤害', '')}`
     + (shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''),
 });
-horizontalCleave('cleave', '横劈', 'C', 7, 1, 'powerCleave');
-horizontalCleave('powerCleave', '强力劈', 'B', 10, 1, 'riftCleave');
-horizontalCleave('riftCleave', '裂空劈', 'A', 13, 1);
+horizontalCleave('cleaveC', '横劈', 'C', 7, 1, 'cleaveB');
+horizontalCleave('cleaveB', '强力劈', 'B', 10, 1, 'cleaveA');
+horizontalCleave('cleaveA', '裂空劈', 'A', 13, 1);
 
 // ==== 飞刀系列（邻牌献祭）======================================================
 // 两侧语义统一读「打出那一刻」（handNeighborsAtPlay：结算中自身已离手，按捕获手位
@@ -398,7 +398,7 @@ function bothSidesPresent(sctx) {
 
 // 弃两侧基型（飞刀链 C/B/A）：伤害 + 丢弃两侧牌。
 const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'flyingDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -422,7 +422,7 @@ sideDaggerCard('flyingDaggerA', '飞刀', 'A', 21);
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
 // 对应抽到的牌留手牌末尾。
 registerSkill({
-  id: 'returningDagger', name: '回旋飞刀', type: 'normal', tier: 'B', series: 'blade', subsystem: 'blade',
+  id: 'returningDaggerB', name: '回旋飞刀', type: 'normal', tier: 'B', series: 'returningDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -457,7 +457,7 @@ registerSkill({
 
 // 精致飞刀（B，设计稿未写费用/冷却 → 0费无冷却）：15伤害，仅弃左侧（单侧轻量位）。
 registerSkill({
-  id: 'fineDagger', name: '精致飞刀', type: 'normal', tier: 'B', series: 'blade', subsystem: 'blade',
+  id: 'fineDaggerB', name: '精致飞刀', type: 'normal', tier: 'B', series: 'fineDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -475,7 +475,7 @@ registerSkill({
 // 寻找2牌插入两侧（结算期牌库选牌：段0焚两侧+请求，段1插回原位）。
 // 空牌库时寻找落空，不产生输入请求。
 registerSkill({
-  id: 'perfectDagger', name: '绝灭飞刀', type: 'normal', tier: 'A', series: 'blade', subsystem: 'blade',
+  id: 'perfectDaggerA', name: '绝灭飞刀', type: 'normal', tier: 'A', series: 'perfectDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -517,7 +517,7 @@ registerSkill({
 // 收刃 C/B/A → 藏锋 S：滞气2 + 高伤，0费无消耗无冷却，迷你（计 0 张手牌——
 // 滞气的自反补：卡住自己的牌位但不占手牌容量）。
 const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'storeEdge', subsystem: 'blade',
   keywords: ['mini'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -533,17 +533,17 @@ const sheathCard = (id, name, tier, damage, stall, promotesTo = null) => registe
   describe: () => `/effect{滞气}${stall}，${damage}伤害`,
   battleDescribe: (sctx) => `/effect{滞气}${stall}，${resolvedDamageText(sctx, damage)}`,
 });
-sheathCard('sheatheC', '收刃', 'C', 11, 2, 'sheatheB');
-sheathCard('sheatheB', '收刃', 'B', 15, 2, 'sheatheA');
-sheathCard('sheatheA', '收刃', 'A', 19, 2, 'concealEdge');
-sheathCard('concealEdge', '藏锋', 'S', 62, 3);
+sheathCard('storeEdgeC', '收刃', 'C', 11, 2, 'storeEdgeB');
+sheathCard('storeEdgeB', '收刃', 'B', 15, 2, 'storeEdgeA');
+sheathCard('storeEdgeA', '收刃', 'A', 19, 2, 'storeEdgeS');
+sheathCard('storeEdgeS', '藏锋', 'S', 62, 3);
 
 // ==== 呼吸系列（弃牌回补）======================================================
 // B 消耗 / A 去消耗。打出即获得「呼吸」效果（content/effects.js：弃牌 POST 监听 +
 // 回合末自清，生命周期与效果实例绑定）。换牌（R3）内部走弃牌指令，同样计入；
 // 打出自身不是弃牌（pending→burnt 的消耗路径）。
 const breathCard = (id, name, tier, { exhaust = true, promotesTo = null } = {}) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'breath', subsystem: 'blade',
   ...(exhaust ? { keywords: ['exhaust'] } : {}),
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -563,8 +563,8 @@ breathCard('breathA', '呼吸', 'A', { exhaust: false });
 // 怀念 C/B/A + 归来 S（全链消耗）：纯粹的大过牌——抽 3/4/5（S 带迷你，0 费用栏）。
 // 2026-10-10 改版：原「护盾 + 全手牌速冷」的速冷职责移交真空利刃系列（定向斩冷却），
 // 怀念重做为纯爆发过卡（设计稿归来系列重写）。
-const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = false } = {}) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = false, image = 'reminiscence', series = 'reminiscence' } = {}) => registerSkill({
+  id, name, type: 'normal', tier, series, subsystem: 'blade', image,
   keywords: [...(mini ? ['mini'] : []), 'exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -579,15 +579,15 @@ const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = fals
 });
 reminiscenceCard('reminiscenceC', '怀念', 'C', 3, { promotesTo: 'reminiscenceB' });
 reminiscenceCard('reminiscenceB', '怀念', 'B', 4, { promotesTo: 'reminiscenceA' });
-reminiscenceCard('reminiscenceA', '怀念', 'A', 5, { promotesTo: 'homecoming' });
-reminiscenceCard('homecoming', '归来', 'S', 5, { mini: true });
+reminiscenceCard('reminiscenceA', '怀念', 'A', 5, { promotesTo: 'homecomingS' });
+reminiscenceCard('homecomingS', '归来', 'S', 5, { mini: true, image: 'homecoming', series: 'homecoming' });
 
 // ==== 真空利刃系列（牌库污染换速冷）============================================
 // 利刃 C/B/A + 真空利刃 S：抽牌 + **令斩冷却 N**（定向速冷：SkillCooldownInstruction
 // 对斩链卡直达推进，不等回合扫掠；无斩/斩满充能则静默落空——磨刀同口径）+ 洗入碎铁。
 // 速冷职责自怀念系列移交（2026-10-10 设计稿）。
-const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promotesTo = null }) => registerSkill({
-  id, name, type: 'normal', tier, series: 'vacuumBlade', subsystem: 'blade',
+const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promotesTo = null, image = 'vacuumBlade' }) => registerSkill({
+  id, name, type: 'normal', tier, series: 'vacuumBlade', subsystem: 'blade', image,
   cost: { mana: 0, actionPoint: ap },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
@@ -596,7 +596,7 @@ const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promot
     drawCards(sctx, draw);
     const slash = findSlashCard(sctx);
     if (slash) sctx.kernel.submitInstruction(new SkillCooldownInstruction({ skill: slash, delta: slashCd }));
-    for (let i = 0; i < shards; i++) addCard(sctx, 'ironShard', { index: 'random' });
+    for (let i = 0; i < shards; i++) addCard(sctx, 'ironShardC', { index: 'random' });
     return true;
   },
   describe: () => `抽${draw}，/named{令}/card{slash}/named{冷却}${slashCd}，/named{洗入}${shards}/card{ironShard}`,
@@ -608,7 +608,7 @@ const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promot
 vacuumBladeCard({ id: 'vacuumBladeC', name: '利刃', tier: 'C', draw: 2, slashCd: 2, shards: 2, ap: 1, promotesTo: 'vacuumBladeB' });
 vacuumBladeCard({ id: 'vacuumBladeB', name: '利刃', tier: 'B', draw: 2, slashCd: 2, shards: 2, promotesTo: 'vacuumBladeA' });
 vacuumBladeCard({ id: 'vacuumBladeA', name: '利刃', tier: 'A', draw: 3, slashCd: 2, shards: 2 });
-vacuumBladeCard({ id: 'vacuumBladeS', name: '真空利刃', tier: 'S', draw: 4, slashCd: 5, shards: 3 });
+vacuumBladeCard({ id: 'vacuumBladeS', name: '真空利刃', tier: 'S', draw: 4, slashCd: 5, shards: 3, image: 'vacuumBladeS' });
 
 // ==== 培植系列（养刀，C/B/A 三阶）==============================================
 // 数值漂移暂用 runtime.power 表达（SKILL_DESIGN_PRINCIPLES 的 modifier 系统未落地）：
@@ -618,7 +618,7 @@ vacuumBladeCard({ id: 'vacuumBladeS', name: '真空利刃', tier: 'S', draw: 4, 
 // 伤害 +2/+3/+3（阶差全在咏唱负担）。
 function honeBladeCard({ id, tier, bonus, chantWeight = 1, promotesTo = null }) {
   registerSkill({
-    id, name: '养刀术', type: 'normal', tier, series: 'blade', subsystem: 'blade',
+    id, name: '养刀术', type: 'normal', tier, series: 'honeBlade', subsystem: 'blade',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight,
@@ -649,7 +649,7 @@ honeBladeCard({ id: 'honeBladeA', tier: 'A', bonus: 3, chantWeight: 0 });
 // +1/+1/+2（手牌与牌库一起加——口径同开刃；打出的那张已离手不在区内）。
 function forgingBladeCard({ id, tier, weight, bonus, promotesTo = null }) {
   registerSkill({
-    id, name: '锻刀术', type: 'normal', tier, series: 'blade', subsystem: 'blade',
+    id, name: '锻刀术', type: 'normal', tier, series: 'forgingBlade', subsystem: 'blade',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
@@ -679,34 +679,31 @@ forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 2 });
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术 C/B/A（0费，咏唱3 全阶同担）：咏唱触发（P5）时若手牌少于 2/3/4（物理张数），
-// 斩进阶，此卡焚毁（焚毁先经离手熄灭，激活订阅随 owner 注销）。
-// 条件阈值即阶差；C 档「少于 2」是空手搏命位（P5 在回合抽牌**之后**判定，
-// 库空抽不上牌时才会命中）。
-const edgeBreathCard = ({ id, tier, threshold, promotesTo = null }) => registerSkill({
-  id, name: '含刃术', type: 'normal', tier, series: 'blade', subsystem: 'blade',
-  cost: { mana: 0, actionPoint: 0 },
+// 含刃术 B/A（3AP/2AP，消耗+短暂，咏唱6）：激活后 P5 触发斩进阶，P8 短暂回库
+// （激活态不豁免——filter 只看 zone，回库即熄灭）。每次激活恰一档，回库待再抽再付。
+const edgeBreathCard = ({ id, tier, ap, promotesTo = null }) => registerSkill({
+  id, name: '含刃术', type: 'normal', tier, series: 'edgeBreath', subsystem: 'blade',
+  keywords: ['exhaust', 'transient'],
+  cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
-  cardMode: 'chant', chantWeight: 3,
+  cardMode: 'chant', chantWeight: 6,
   promotesTo,
+  subscriptions: (sctx) => [leaveHandAtTurnEnd(sctx)],
   use() { return true; },
   activated: {
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
-      filter: (instr, ctx) => ctx.battleState.zones.hand.length < threshold,
-      react: (instr, ctx) => {
+      react: (instr) => {
         advanceSlashChain(sctx, instr);
-        ctx.kernel.submitInstruction(
-          new BurnCardInstruction({ uniqueID: sctx.self.uniqueID }), instr);
+        reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
   },
-  describe: () => `手牌少于${threshold}时斩进阶，此卡/named{焚毁}`,
-  battleDescribe: () => `手牌少于${threshold}时斩进阶，此卡/named{焚毁}`,
+  describe: () => '咏唱触发时斩进阶',
+  battleDescribe: () => '咏唱触发时斩进阶',
 });
-edgeBreathCard({ id: 'edgeBreathC', tier: 'C', threshold: 2, promotesTo: 'edgeBreathB' });
-edgeBreathCard({ id: 'edgeBreathB', tier: 'B', threshold: 3, promotesTo: 'edgeBreathA' });
-edgeBreathCard({ id: 'edgeBreathA', tier: 'A', threshold: 4 });
+edgeBreathCard({ id: 'edgeBreathB', tier: 'B', ap: 3, promotesTo: 'edgeBreathA' });
+edgeBreathCard({ id: 'edgeBreathA', tier: 'A', ap: 2 });
 
 // 血激术（C，濒死时斩进阶，此卡焚毁）**暂不实装**——濒死机制未定稿
 // （battle.md §12 留白），待设计确认后补回。
@@ -716,7 +713,7 @@ edgeBreathCard({ id: 'edgeBreathA', tier: 'A', threshold: 4 });
 // 斩已因耗尽在冷却时，抽出的是一张「按新阶冷却中」的刀——它只在牌库冷却，手中只能
 // 靠磨刀/花刀处理，这是出鞘的时机博弈）。无斩可进则无事发生（抽出亦落空）。
 registerSkill({
-  id: 'unsheathe', name: '出鞘', type: 'normal', tier: 'A', series: 'blade', subsystem: 'blade',
+  id: 'unsheatheA', name: '出鞘', type: 'normal', tier: 'A', series: 'unsheathe', subsystem: 'blade',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -742,7 +739,7 @@ registerSkill({
 // 手中加速手段；满充能的刀无处推进、静默落空。
 // 磨刀 C 带【短暂】（回合结束时仍滞留手牌则回牌库）；B/A 无【短暂】（可过夜）。
 const whetCard = (id, name, tier, delta, { promotesTo = null, transient = false } = {}) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade', deep: 'blade',
+  id, name, type: 'normal', tier, series: 'whetstone', subsystem: 'blade', deep: 'blade',
   ...(transient ? { keywords: ['transient'] } : {}),
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
@@ -764,15 +761,15 @@ const whetCard = (id, name, tier, delta, { promotesTo = null, transient = false 
     return `手中刀法牌冷却${delta}${cooling.length > 0 ? `（冷却中${cooling.length}张）` : ''}`;
   },
 });
-whetCard('sharpenC', '磨刀', 'C', 2, { promotesTo: 'sharpenB', transient: true });
-whetCard('sharpenB', '磨刀', 'B', 2, { promotesTo: 'sharpenA' });
-whetCard('sharpenA', '磨刀', 'A', 3);
+whetCard('whetstoneC', '磨刀', 'C', 2, { promotesTo: 'whetstoneB', transient: true });
+whetCard('whetstoneB', '磨刀', 'B', 2, { promotesTo: 'whetstoneA' });
+whetCard('whetstoneA', '磨刀', 'A', 3);
 
 // 开刃（A，设计稿未写费用 → 0费，消耗）：所有刀法牌即刻冷却——手牌与牌库中
 // 的刀充能回满、计时清零（焚毁区的刀已离场不在范围）。deckCraft.test.js 的原型
 // 只作用于手牌，此处按设计稿字面「所有」扩到牌库。直改充能标量与原型同范式。
 registerSkill({
-  id: 'honeEdge', name: '开刃', type: 'normal', tier: 'A', series: 'blade', subsystem: 'blade', deep: 'blade',
+  id: 'honeEdgeA', name: '开刃', type: 'normal', tier: 'A', series: 'honeEdge', subsystem: 'blade', deep: 'blade',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -797,7 +794,7 @@ registerSkill({
 // 内核栈回溯（DFS 路径上的 ActivateSkillInstruction 是否为刀法卡）。
 function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
   registerSkill({
-    id, name: '斩灭', type: 'normal', tier, series: 'blade', subsystem: 'blade', deep: 'blade',
+    id, name: '斩灭', type: 'normal', tier, series: 'annihilatingEdge', subsystem: 'blade', deep: 'blade',
     ...(exhaust ? { keywords: ['exhaust'] } : {}),
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
@@ -833,7 +830,7 @@ annihilatingEdgeCard({ id: 'annihilatingEdgeS', tier: 'S', ap: 1, exhaust: false
 // 把主力斩当废牌丢了两次，R8-A）。
 // 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽完手中无刀时纯白板收场。
 const practiceBladeCard = (id, tier, ap, power, draw, { promotesTo = null } = {}) => registerSkill({
-  id, name: '练刀', type: 'normal', tier, series: 'blade', subsystem: 'blade', deep: 'blade',
+  id, name: '练刀', type: 'normal', tier, series: 'practiceBlade', subsystem: 'blade', deep: 'blade',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -864,8 +861,8 @@ practiceBladeCard('practiceBladeA', 'A', 0, 5, 3);
 // 咏唱1，P5 ：抽 N 牌，选 N 张手牌丢弃（结算期选牌经
 // ChantDrawDiscardInstruction 链式挂在触发指令树下）。设计稿未写费用——刀法 B 按
 // 表头 1AP；刃心是深入分支、同样按 1AP 落地。
-const bladeArtCard = (id, name, tier, n, { deep = false } = {}) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+const bladeArtCard = (id, name, tier, n, { deep = false, series } = {}) => registerSkill({
+  id, name, type: 'normal', tier, series: series ?? id, subsystem: 'blade',
   ...(deep ? { deep: 'blade' } : {}), // 刃心为深入分支（设计稿 §2.4）——刀客到手前不入奖励池
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -884,8 +881,8 @@ const bladeArtCard = (id, name, tier, n, { deep = false } = {}) => registerSkill
   describe: () => `抽${n}牌，选${n}张手牌丢弃`,
   battleDescribe: (sctx) => `抽${n}牌，选${n}张手牌丢弃`,
 });
-bladeArtCard('bladeArt', '刀法', 'B', 1);
-bladeArtCard('bladeHeart', '刃心', 'A', 2, { deep: true });
+bladeArtCard('bladeArtB', '刀法', 'B', 1);
+bladeArtCard('bladeHeartA', '刃心', 'A', 2, { deep: true });
 
 // ==== 散卡 =====================================================================
 
@@ -894,7 +891,7 @@ bladeArtCard('bladeHeart', '刃心', 'A', 2, { deep: true });
 // 「原地」按原手位把抽到的牌插回（升序插回精确复原原次序）。满手/空库时
 // 抽牌按 DrawCards 管线自然截断，换几张补几张。无卡手牌时护盾照发、换牌空转。
 const swapCleaveCard = (id, name, tier, ap, { promotesTo = null, draw = 0 } = {}) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'quickCleave', subsystem: 'blade',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
@@ -950,7 +947,7 @@ swapCleaveCard('quickCleaveA', '快速花刀', 'A', 0, { draw: 1 });
 // 是手牌，牌库碎铁直接进结算）。先快照（手牌+牌库）再逐张打：打出的会离手/离库，
 // 边遍历边打会错位；碎铁自带抽 1 翻上来的新碎铁不在快照内、不打（快照口径同 pending 惯例）。
 const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => registerSkill({
-  id, name: '铁雨', type: 'normal', tier, series: 'blade', subsystem: 'blade', deep: 'blade',
+  id, name: '铁雨', type: 'normal', tier, series: 'ironRain', subsystem: 'blade', deep: 'blade',
   ...(exhaust ? { keywords: ['exhaust'] } : {}),
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -959,8 +956,8 @@ const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => r
   use(sctx) {
     const bs = sctx.battleState;
     const shards = [
-      ...bs.zones.hand.filter(c => c.defId === 'ironShard'),
-      ...bs.zones.deck.filter(c => c.defId === 'ironShard'),
+      ...bs.zones.hand.filter(c => c.defId === 'ironShardC'),
+      ...bs.zones.deck.filter(c => c.defId === 'ironShardC'),
     ];
     for (const shard of shards) {
       sctx.kernel.submitInstruction(new UseSkillInstruction({ skill: shard }));
@@ -970,7 +967,7 @@ const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => r
   describe: () => `打出所有/card{ironShard}（含牌库）${exhaust ? '' : '；可反复打出'}`,
   battleDescribe: (sctx) => {
     const bs = sctx.battleState;
-    const n = [...bs.zones.hand, ...bs.zones.deck].filter(c => c.defId === 'ironShard').length;
+    const n = [...bs.zones.hand, ...bs.zones.deck].filter(c => c.defId === 'ironShardC').length;
     return `打出所有/card{ironShard}（含牌库，共${n}张）`;
   },
 });
@@ -981,7 +978,7 @@ ironRainCard('ironRainA', 'A', { exhaust: false });
 // 斩系列的前排防御位搭档：护盾的同时把牌库里的斩链卡拽上手（无斩则抽不出，
 // 护盾照发——与出鞘的「无斩无事发生」同口径）。
 const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkill({
-  id, name, type: 'normal', tier, series: 'blade', subsystem: 'blade',
+  id, name, type: 'normal', tier, series: 'quickDrawShield', subsystem: 'blade',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -998,6 +995,6 @@ const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkil
   describe: () => `${shield}护盾，/named{抽出}/card{slash}`,
   battleDescribe: (sctx) => `${shield}护盾，/named{抽出}/card{slash}（牌库中${findSlashCard(sctx) ? '有' : '无'}）`,
 });
-quickDrawShieldCard('quickCrossC', '快速横刀', 'C', 6, 'quickCrossB');
-quickDrawShieldCard('quickCrossB', '快速横刀', 'B', 9, 'quickCrossA');
-quickDrawShieldCard('quickCrossA', '快速横刀', 'A', 12);
+quickDrawShieldCard('quickDrawShieldC', '快速横刀', 'C', 6, 'quickDrawShieldB');
+quickDrawShieldCard('quickDrawShieldB', '快速横刀', 'B', 9, 'quickDrawShieldA');
+quickDrawShieldCard('quickDrawShieldA', '快速横刀', 'A', 12);

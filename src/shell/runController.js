@@ -28,7 +28,7 @@ import { createRunContext } from '../core/run/runContext.js';
 import { createRunPresenter } from './runPresenter.js';
 import { ascensionReady, LEINO_DIMENSIONS } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
-import { panelSnapshot } from '../core/run/panelSnapshot.js';
+import { panelSnapshot, deckViewEntries } from '../core/run/panelSnapshot.js';
 import { createRunShowcase } from './runShowcase.js';
 import { settings, persistSettings } from './settings.js';
 import { createRunMachines } from './runMachines.js';
@@ -153,12 +153,16 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       hp: run.player.hp, maxHp: run.player.maxHp,
       relics: equippedRelicViews(),
       remi: remiView(),
+      deckCount: run.player.deck.length,   // 卡组 chip 张数（战斗内由 reconcile 从各区加总接管）
     };
     mapStage?.setStatus(status);
     roomStage?.setStatus(status);   // 场景式休息房：同一份数值推给房间舞台的状态栏/顶端资源行
     // 金币/遗物在顶端资源行（状态栏不再显示）；战斗护盾不跨阶段残留
     battleStage?.topBar.setMoney(run.player.money);
     battleStage?.topBar.setRelics(equippedRelicViews());
+    // 卡组 chip 张数 = run 牌组总量（与画廊条目同源；战斗中 run 牌组恒定，notify 落位即准——
+    // 战斗克隆可能多出遗物加的战斗卡（大剑的斩），那属于牌库面板的战斗口径，不进 build 计数）
+    battleStage?._deckChip?.setCount(run.player.deck.length);
     battleStage?.statusBar.setPlayerShield(0);
     battleStage?.statusBar.setPlayerHp(run.player.hp, run.player.maxHp);
     battleStage?.statusBar.setRemi(remiView());
@@ -787,6 +791,16 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     campChoose: (i) => campChoose(i.option),
     leaveRoom: () => leaveRoom(),
     leaveSlot: () => leaveSlot(),
+    // 卡组 build 画廊（「卡组」chip toggle）：开关是舞台本地交互态（不惊动 core），
+    // 数据经 core 的 deckViewEntries 显式下发（Stage 不读 run）。战斗内敌方回合/
+    // 演出期照常可用——chip 走舞台直达路由，画廊也不在 BattleStage reconcile 的
+    // 关闭视野里（zone 查看器才随 sync 收起）。
+    deckViewToggle: () => {
+      const stage = panelStage();
+      if (!stage) return;
+      if (stage.deckViewerOpen) stage.closeDeckViewer();
+      else stage.openDeckViewer(deckViewEntries(run));
+    },
     ...machines.intents,
     ...cutsceneFlows.intents,
     ...showcase.intents,

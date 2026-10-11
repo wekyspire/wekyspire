@@ -110,7 +110,7 @@ function wraithDef(id, opener) {
         }));
       } else {
         actx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'voidCard', toZone: 'deck', index: 'random',
+          defId: 'voidCardC', toZone: 'deck', index: 'random',
         }));
       }
     },
@@ -127,7 +127,7 @@ wraithDef('wraithA', {
   opener: (actx) => {
     for (let i = 0; i < 4; i++) {
       actx.kernel.submitInstruction(new AddCardInstruction({
-        defId: 'voidCard', toZone: 'deck', index: 'random',
+        defId: 'voidCardC', toZone: 'deck', index: 'random',
       }));
     }
   },

@@ -36,6 +36,7 @@ import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
+import { DeckChipObject, DECK_VIEW_Z } from '../objects/DeckChipObject.js';
 import { CapacityBeadsObject } from '../objects/CapacityBeadsObject.js';
 import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
@@ -365,6 +366,7 @@ export class BattleStage {
       this._bubbles.update(dt);   // 角色自语/对话泡泡（自带冒出→停留→放缩消失时序）
       this._statusBar.update(dt); // 两排资源点 + 双血环的帧过渡
       this._viewer.update(dt);    // 查看器悬浮抬升包络（关闭态为空操作）
+      this._deckChip.update(dt);  // 卡组 chip 的 hover scale 包络
       // 低血常驻渐晕：按显示快照血量每帧推（状态驱动，回升即退）+ 受击脉冲释放
       this._vignette.lowHp(lowHpVignetteLevel(this._snapshot?.player));
       this._vignette.update(dt);
@@ -382,6 +384,14 @@ export class BattleStage {
       this.picker.addPickable(`pile:${key}`, pile, { kind: 'pile', space: 'ui' });
       this.animator.register(`pile:${key}`, pile);
     }
+
+    // 「卡组」chip（build 画廊入口）：牌库堆图标上方。z=DECK_VIEW_Z.CHIP 压过一切模态层
+    // → 奖励面板/全屏选卡/画廊开着时也能按；点击走意图上行（deckViewToggle），
+    // 计数 = run 牌组总量（编排器 syncMapStatus 下发；战斗克隆多出的遗物卡不进 build 口径）。
+    this._deckChip = new DeckChipObject();
+    this._deckChip.position.set(PILE_POSITIONS.deck.x, PILE_POSITIONS.deck.y + 15, DECK_VIEW_Z.CHIP);
+    this.uiScene.add(this._deckChip);
+    this.picker.addPickable('deckChip', this._deckChip, { kind: 'deckChip', space: 'ui' });
 
     // 手牌容量指示条（批次 13，用户定；2026-09-30 序列化改版）：手牌扇**上方**一排——
     // [空咏唱容量]+组隙+[手牌序占用（与手牌卡一一对应）]+组隙+[空手牌容量]；迷你卡 =
@@ -1146,6 +1156,7 @@ export class BattleStage {
 
   _openViewer(zone) {
     this._closeViewer();
+    this._pickerKit?.closeDeckViewer?.(); // 与卡组画廊互斥（对开 = 两层全屏模态叠罗汉）
     const proj = this._snapshot;
     if (!proj) return;
     const list = proj.zones[zone] ?? [];
@@ -1261,6 +1272,7 @@ export class BattleStage {
     this._arrow.dispose();
     this._bubbles.dispose();
     this._statusBar.dispose(); // 含晶粒排/金币/盾徽（随父级销毁）
+    this._deckChip.dispose();
     this._capacityBeads.dispose();
     this._topBar.dispose();
     this.shake.dispose();      // 撤掉震荡那路偏移通道（残留会把下一舞台的相机推歪）

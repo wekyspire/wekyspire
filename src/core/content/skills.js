@@ -26,7 +26,7 @@ export function resolvedDamageText(sctx, base, tags = []) {
 registerSkill({
   // 通用填充卡（拳/盾是全体系起始牌组的填充位，不走体修路线无法升级）；
   // 不进任何奖励池——开包即提升，填充卡不占奖励位（StS Strike 同款）。
-  id: 'punch', name: '拳', type: 'normal', tier: 'C', series: 'punch', subsystem: 'fist',
+  id: 'punchC', name: '拳', type: 'normal', tier: 'C', series: 'punch', subsystem: 'fist', image: 'fastPunch',
   canSpawnAsReward: false,
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -57,12 +57,12 @@ export function enemyTarget(sctx) {
 // ② 获得护盾牌：盾系列 C 位（BODY_CULTIVATION_CARDS §3.1 拆组合·盾系列：1AP 获得 5 护盾）。
 // 无冷却（冷却1 在 B 盾——升阶的阶差）。
 registerSkill({
-  id: 'shieldC', name: '盾', type: 'normal', tier: 'C', series: 'block', subsystem: 'block',
+  id: 'guardC', name: '盾', type: 'normal', tier: 'C', series: 'guard', subsystem: 'block',
   canSpawnAsReward: false, // 通用填充卡，不进奖励池（同拳）
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  promotesTo: 'shieldB',
+  promotesTo: 'guardB',
   use(sctx) {
     sctx.kernel.submitInstruction(new GainShieldInstruction({ target: sctx.player, amount: 5 }));
     return true;
@@ -84,7 +84,7 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     sctx.kernel.submitInstruction(new AddCardInstruction({
-      defId: 'emberMote', toZone: 'deck', index: 'random',
+      defId: 'emberMoteC', toZone: 'deck', index: 'random',
     }));
     sctx.kernel.submitInstruction(new AddEffectInstruction({
       target, effectId: 'burn', stacks: 5,
@@ -99,7 +99,7 @@ registerSkill({
 // 咏唱双态：发动后住手牌持续生效，按咏唱值占手牌压力（咏唱1 = 激活时计 1 张手牌）；
 // 再次打出免费解除并回牌库（压力随离手释放）。
 registerSkill({
-  id: 'focusChant', name: '凝神诀', type: 'normal', tier: 'C', series: 'focusChant',
+  id: 'focusChantC', name: '凝神诀', type: 'normal', tier: 'C', series: 'focusChant',
   cost: { mana: 1, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant',

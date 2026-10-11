@@ -80,7 +80,7 @@ export const bladeCast = {
         return;
       }
 
-      if (mode === 'cleave') {
+      if (mode === 'cleaveC') {
         // 场景级横劈（2026-10-07 用户定：群伤刀 = 场景里劈一次 + 敌人依次受伤——
         // 依次受伤由 core aoe 逐敌伤害拍白送，施术拍只演那一记横贯巨刀光）
         const foes = deps.allEnemies?.() ?? targets;
@@ -117,7 +117,7 @@ export const bladeCast = {
         return;
       }
 
-      if (mode === 'slash') {
+      if (mode === 'slashC') {
         const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 190, scale: 1.3 });
         // 斩的双重读感：冷白核疾射（快到认不出形状）+ 目标身上一记亮斩痕
         // （slashSweep——刀光的「命中」交代；伤害拍还有 slash 变体细痕，两层不重复）

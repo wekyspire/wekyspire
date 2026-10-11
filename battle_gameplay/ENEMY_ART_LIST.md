@@ -18,6 +18,11 @@
 > **体态返修**：rockSnail 朝右 → 源图水平翻转；snowwolf 只有半身、pufferToad 正面照 → 按全身正侧面重生成；`genEnemies.mjs` 的 STYLE/NEGATIVE 已固化「full body + strict side view facing left」（球/墩形怪豁免）。
 >
 > **重制（本节取代上文 genEnemies 批）**：视角改定 **正面站姿、身体与脸微微朝画面左侧**（取代正侧面规格）；画风不符批全部重做。新管线 = 本地 ComfyUI Qwen-Image-2.1，`tools/genUnitArt.mjs` 的 i2i 手绘底图模式（`ref_white/` 白底参考 denoise 0.8；画风文本由 glm-flash 直读参考图提炼），切边 `tools/seedream/key.py`（洪填 + `--erode` 边缘腐蚀 + `--holes` 封闭白腔 + 孤岛去斑；缝隙白斑终修 = 邻色 inpaint）。全部经 glm-flash 对照参考图四维验收（画风/朝向/白边/成色）。章1 怪 12/13 已入库；**怨灵未过**（臂身空隙生成必成躯干封闭腔，六轮未解，保留旧图）。
+>
+> **2026-10-11 章1/章2 补缺批（12/12 全过入库）**：走 `genEnemies.mjs` 三候选 + glm-flash 三选一严苛验收（锚点标尺：「比锚点更精致/鲜艳/3D 感即 FAIL」）。
+> 章1：kardas（电弧干净收束版）、mefm1、pangolinKing（chunky 厚涂版）、corruptSource、rottenRoot（植物性锁死版）、rottenTreeHeart、youngRakshasa。
+> 章2：bigSlime 专属图（构图 50% + 平面白点眼，替代史莱姆复用）、knightCommander（前指手完整长剑版）、courtSquire、candleWarden（兜帽无脸 + 落地钟给足分量）、bishopMarchand。
+> 立姿人形两惯犯与修法：**脚底软投影**（prompt 写 standing on nothing, feet ending on clean pure white background, absolutely no ground shadow）；**武器跑偏**（指向手必须 the whole blade visible from guard to tip）。
 
 ## 0. 通用规格（对齐 STAGE_DESIGN §立牌）
 

@@ -62,7 +62,7 @@ registerEffect({
       && (instr.result?.dealt ?? 0) > 0,
     react: (instr, ctx) => {
       ctx.kernel.submitInstruction(new AddCardInstruction({
-        defId: 'emberMote', toZone: 'deck', index: 'random',
+        defId: 'emberMoteC', toZone: 'deck', index: 'random',
       }), instr);
     },
   }],
@@ -879,7 +879,7 @@ registerEffect({
 // 扩容（EFFECTS.md：「手牌上限提升层数张」）：紧勒的镜像，同走效果轨。
 // 首用：火系「膨胀」。（空系「扩容」给的是咏唱容量 chantCapacity，与本效果不同轨。）
 registerEffect({
-  id: 'expand',
+  id: 'commonExpandA',
   type: 'buff',
   stacking: 'count',
   statModifiers: {
@@ -1192,7 +1192,7 @@ registerEffect({
       const n = instr.result?.gained ?? 0;
       for (let i = 0; i < n; i++) {
         ctx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'voidCard', toZone: 'deck', index: 'random',
+          defId: 'voidCardC', toZone: 'deck', index: 'random',
         }), instr);
       }
     },

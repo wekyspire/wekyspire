@@ -17,7 +17,7 @@ let _slashChainCache = null;
 function slashChain() {
   if (_slashChainCache) return _slashChainCache;
   const order = [];
-  let cur = 'slash';
+  let cur = 'slashC';
   while (cur && !order.includes(cur)) {
     order.push(cur);
     const next = getSkillDefinition(cur)?.battlePromotesTo;
