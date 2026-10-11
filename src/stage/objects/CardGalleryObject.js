@@ -14,16 +14,12 @@ const HALF_UI_W = ((WORLD_HEIGHT * 16) / 9) / 2; // UI pass 固定 16:9 取景�
 const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
 const UI_BOTTOM = UI_CAMERA_LOOK_AT_Y - WORLD_HEIGHT / 2;
 
-const BG_Z = 80;   // 模态层深度：高于手牌扇（静息 z≤15）、图标（z=5）、状态栏（z=6）
-const CARD_Z = BG_Z + 1;
+const BG_Z = 80;   // 模态层深度缺省：高于手牌扇（静息 z≤15）、图标（z=5）、状态栏（z=6）
 
 // 网格安全带：上让标题行、下让提示行；列数穷举取"能放的最大卡"
 const GRID = { top: 29, bottom: -47, gapX: 2, gapY: 2.5, scaleMax: 0.72, marginX: 8 };
 // 悬浮抬升：正交相机下 z 不放大只压层，视觉放大全靠 scale；liftY 让邻卡错开一点
 const HOVER = { scale: 1.25, liftY: 2, liftZ: 5, rate: 10 };
-
-const CARD_ID = (uniqueID) => `viewer:${uniqueID}`;
-const BG_ID = 'viewer:bg';
 
 export class CardGalleryObject extends THREE.Group {
   /**
@@ -32,19 +28,40 @@ export class CardGalleryObject extends THREE.Group {
    *   bakeFace: 卡面烘焙（与战场同一函数，卡面/热区所见即所得）
    *   picker:   拾取器（卡/背板注册进同一拾取协议；可不传=纯展示）
    *   bakeText: 标题烘焙 (text, {fontPx, tint}) => {texture,width,height}，缺省 bakeAutoLine
+   *   idPrefix: 拾取 id 前缀（战斗牌堆查看器 'viewer:' 与 kit 卡组视图 'deckview:' 互不撞车）
+   *   bgZ:      模态层深度（牌堆查看器 80；卡组视图要压过全屏选卡/面板模态 → 170）
    */
-  constructor({ cardWidth, cardHeight, bakeFace, picker = null, bakeText = null } = {}) {
+  constructor({ cardWidth, cardHeight, bakeFace, picker = null, bakeText = null,
+    idPrefix = 'viewer:', bgZ = BG_Z } = {}) {
     super();
     this._cardWidth = cardWidth;
     this._cardHeight = cardHeight;
     this._bakeFace = bakeFace;
     this._picker = picker;
     this._bakeText = bakeText || defaultBakeText;
+    this._idPrefix = idPrefix;
+    this._bgId = `${idPrefix}bg`;
+    this._bgZ = bgZ;
+    this._cardZ = bgZ + 1;
     this._entries = [];      // { id, obj, x, y, baseScale, hovered, t }
     this._texts = [];        // 标题/副标题/提示面片
     this._bg = null;
     this._opened = false;
     this.zone = null;
+  }
+
+  /** 拾取器注入/重连（套件契约：开着时旧拾取器摘牌、新拾取器重新注册）。 */
+  attachPicker(picker = null) {
+    const old = this._picker;
+    if (old === picker) return;
+    this._picker = picker;
+    if (!this._opened) return;
+    old?.removePickable(this._bgId);
+    for (const e of this._entries) old?.removePickable(e.id);
+    this._picker?.addPickable(this._bgId, this._bg, { kind: 'viewer', space: 'ui' });
+    for (const e of this._entries) {
+      this._picker?.addPickable(e.id, e.obj, { kind: 'card', cardObject: e.obj, space: 'ui' });
+    }
   }
 
   get opened() { return this._opened; }
@@ -66,9 +83,9 @@ export class CardGalleryObject extends THREE.Group {
       new THREE.PlaneGeometry(HALF_UI_W * 2, WORLD_HEIGHT),
       new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
     );
-    this._bg.position.set(0, UI_CAMERA_LOOK_AT_Y, BG_Z);
+    this._bg.position.set(0, UI_CAMERA_LOOK_AT_Y, this._bgZ);
     this.add(this._bg);
-    this._picker?.addPickable(BG_ID, this._bg, { kind: 'viewer', space: 'ui' });
+    this._picker?.addPickable(this._bgId, this._bg, { kind: 'viewer', space: 'ui' });
 
     if (title) {
       this._addText(title, { fontPx: 26, tint: '#f2f4fa', y: 31.5 });
@@ -90,7 +107,7 @@ export class CardGalleryObject extends THREE.Group {
       const x = (i % cols - (rowCount - 1) / 2) * stepX;
       const y = centerY + gridH / 2 - this._cardHeight * scale / 2 - row * stepY;
       const obj = new CardObject({
-        uniqueID: CARD_ID(cardProj.uniqueID),
+        uniqueID: `${this._idPrefix}${cardProj.uniqueID}`,
         cardWidth: this._cardWidth, cardHeight: this._cardHeight,
         bakeFace: this._bakeFace,
       });
@@ -108,8 +125,8 @@ export class CardGalleryObject extends THREE.Group {
           obj.fx.setCooling(decayed ? 'decayed' : 'cooling', cardProj.currentCooldown ?? 0, frac);
         }
       }
-      const entry = { id: CARD_ID(cardProj.uniqueID), obj, x, y, baseScale: scale, hovered: false, t: 0 };
-      obj.position.set(x, y, CARD_Z);
+      const entry = { id: `${this._idPrefix}${cardProj.uniqueID}`, obj, x, y, baseScale: scale, hovered: false, t: 0 };
+      obj.position.set(x, y, this._cardZ);
       obj.scale.set(scale, scale, 1);
       this.add(obj);
       this._entries.push(entry);
@@ -123,7 +140,7 @@ export class CardGalleryObject extends THREE.Group {
     if (!this._opened) return;
     this._opened = false;
     this.zone = null;
-    this._picker?.removePickable(BG_ID);
+    this._picker?.removePickable(this._bgId);
     for (const e of this._entries) {
       this._picker?.removePickable(e.id);
       this.remove(e.obj);
@@ -152,7 +169,7 @@ export class CardGalleryObject extends THREE.Group {
       if (!e.hovered && e.t < 1e-3) e.t = 0;
       const s = e.baseScale * (1 + (HOVER.scale - 1) * e.t);
       e.obj.scale.set(s, s, 1);
-      e.obj.position.set(e.x, e.y + HOVER.liftY * e.t, CARD_Z + HOVER.liftZ * e.t);
+      e.obj.position.set(e.x, e.y + HOVER.liftY * e.t, this._cardZ + HOVER.liftZ * e.t);
       e.obj.updateFx(dt); // 盖纱呼吸必需：不走这拍 veil 会停在材质默认 opacity=1 糊满牌面
     }
   }
@@ -209,7 +226,7 @@ export class CardGalleryObject extends THREE.Group {
       new THREE.PlaneGeometry(width / 10, height / 10),
       new THREE.MeshBasicMaterial({ map: texture, transparent: true }),
     );
-    mesh.position.set(0, opts.y, BG_Z + 0.5);
+    mesh.position.set(0, opts.y, this._bgZ + 0.5);
     this.add(mesh);
     this._texts.push(mesh);
   }

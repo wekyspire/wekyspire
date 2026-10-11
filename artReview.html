@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>美术审核页 · artReview</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #07090f; color: #cfd8e3;
+        font: 13px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; }
+      #bar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px;
+        align-items: center; padding: 8px 14px; background: #0b0f18f2; border-bottom: 1px solid #26304a; }
+      #bar h1 { margin: 0 12px 0 0; font: 600 14px/1.4 monospace; color: #e8eef8; }
+      #bar button, #bar select, #bar input { background: #10141f; color: #cfd8e3;
+        border: 1px solid #3a465c; border-radius: 4px; padding: 3px 10px; font: 12px monospace; cursor: pointer; }
+      #bar button.on { background: #274064; color: #fff; border-color: #4a7ec4; }
+      #grid { display: flex; flex-wrap: wrap; gap: 18px; padding: 18px; align-items: flex-start; }
+      .cell { width: 216px; }
+      .cell .head { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+      .cell .key { font: 11px monospace; color: #9fb2cc; word-break: break-all; }
+      .badge { font: 10px monospace; padding: 0 5px; border-radius: 3px; flex: none; }
+      .b-new { background: #1d4d2b; color: #9fe8b0; }
+      .b-mod { background: #4d3a1d; color: #e8cf9f; }
+      .b-r2 { background: #4d1d2a; color: #f0a8b8; }
+      .b-split { background: #1d3d4d; color: #a8dcf0; }
+      .b-proc { background: #44245e; color: #d8b0f5; }
+      .b-art { font: 10px monospace; color: #6f8098; margin-left: auto; }
+      .copy { flex: none; background: #10141f; color: #7f93b3; border: 1px solid #3a465c;
+        border-radius: 3px; padding: 0 5px; font: 11px monospace; cursor: pointer; line-height: 1.5; }
+      .copy:hover { color: #cfe0f5; border-color: #4a7ec4; }
+      .copy.done { color: #9fe8b0; border-color: #3a7e4a; }
+      .raw { width: 216px; height: 108px; object-fit: cover; display: block;
+        border: 1px solid #26304a; border-radius: 3px; background: #000; }
+      /* 本批候选：三选一 */
+      .opt-row { display: flex; gap: 6px; align-items: flex-start; }
+      .opt { cursor: pointer; text-align: center; }
+      .opt .raw { width: 108px; height: 54px; }
+      .opt-cap { font: 10px monospace; color: #7487a3; margin-top: 2px; }
+      .opt.sel .raw { outline: 3px solid #4a7ec4; outline-offset: -1px; }
+      .opt.sel .opt-cap { color: #cfe0f5; font-weight: 600; }
+      #export-box { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; background: #000000d0; }
+      #export-box .panel { background: #0b0f18; border: 1px solid #3a465c; border-radius: 6px; padding: 14px; display: grid; gap: 8px; width: min(720px, 92vw); }
+      #export-box textarea { width: 100%; height: 320px; background: #10141f; color: #cfd8e3; border: 1px solid #3a465c; border-radius: 4px; font: 12px monospace; padding: 8px; box-sizing: border-box; }
+      #export-box .row { display: flex; gap: 8px; justify-content: flex-end; }
+      .face { margin-top: 6px; width: 200px; height: 270px; image-rendering: auto; display: block;
+        border-radius: 8px; box-shadow: 0 4px 18px #000a; cursor: zoom-in; }
+      /* 立牌 */
+      .ucell { position: relative; display: flex; flex-direction: column; align-items: center;
+        justify-content: flex-end; min-width: 190px; padding: 10px 8px 6px; border-radius: 6px; }
+      .ucell img { display: block; object-fit: contain; cursor: zoom-in; }
+      .ucell .key { font: 11px monospace; color: #9fb2cc; margin-top: 6px; }
+      .ucell .fac { font: 10px monospace; color: #5f7290; }
+      #stage-bg-dark { background: #181b22; }
+      #stage-bg-mid { background: #4a4e58; }
+      #stage-bg-white { background: #d8dce4; }
+      #lightbox { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
+        background: #000000e0; cursor: zoom-out; }
+      #lightbox img { max-width: 96vw; max-height: 92vh; }
+      #count { margin-left: auto; font: 12px monospace; color: #7487a3; }
+      #err { color: #ff8890; font: 12px monospace; padding: 8px 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <h1>美术审核</h1>
+      <button id="tab-cards" class="on">卡面</button>
+      <button id="tab-units">敌人立牌</button>
+      <button id="tab-cands">本批候选</button>
+      <button id="tab-names">同名统一</button>
+      <span id="name-filters" style="display:none;gap:6px;align-items:center">
+        <button id="export-name">导出选择</button>
+        <button id="clear-name-sel">清空选择</button>
+      </span>
+      <span id="cand-filters" style="display:none;gap:6px;align-items:center">
+        <button data-f="all" class="on">全部 5</button>
+        <button data-f="r2">返工2 2</button>
+        <button data-f="split">拆名 3</button>
+        <button id="export-sel">导出选择</button>
+        <button id="clear-sel">清空选择</button>
+      </span>
+      <span id="cards-filters" style="display:flex;gap:6px;align-items:center">
+        <button data-f="all" class="on">全部</button>
+        <button data-f="new">新增</button>
+        <button data-f="mod">重做</button>
+        <button data-f="r2">返工2 40</button>
+        <button data-f="proc">程序化</button>
+        <input id="search" placeholder="搜键名…" size="10" />
+      </span>
+      <span id="unit-filters" style="display:none;gap:6px;align-items:center">
+        <button data-m="game" class="on">游戏高度比例</button>
+        <button data-m="equal">等高对比</button>
+        <button data-bg="dark" class="on">深底</button>
+        <button data-bg="mid">灰底</button>
+        <button data-bg="white">白底</button>
+      </span>
+      <span id="count"></span>
+    </div>
+    <div id="err"></div>
+    <div id="grid"></div>
+    <div id="lightbox"><img /></div>
+    <div id="export-box"><div class="panel">
+      <div style="font:600 13px monospace;color:#e8eef8">选择结果（直接粘贴回复）</div>
+      <textarea readonly></textarea>
+      <div class="row"><button id="export-copy">复制</button><button id="export-close">关闭</button></div>
+    </div></div>
+    <script type="module" src="/src/debug/artReview.js"></script>
+  </body>
+</html>

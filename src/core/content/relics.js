@@ -100,7 +100,7 @@ registerRelic({
   description: '战斗开始时，向牌库洗入1张斩。',
   flavor: '一把大剑罢了',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'slash', index: 'random' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'slashC', index: 'random' }));
   },
 });
 
@@ -659,7 +659,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{rapidFire}加入手牌。',
   flavor: '包装盒上还有广告“军警两用枪械，值得信赖”',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'rapidFire', toZone: 'hand' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicRapidC', toZone: 'hand' }));
   },
 });
 
@@ -668,7 +668,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{pointShot}洗入牌库。',
   flavor: '她的配枪',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'pointShot', index: 'random' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicPointC', index: 'random' }));
   },
 });
 
@@ -677,7 +677,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{suppressionFire}洗入牌库。',
   flavor: '另一人的配枪，不过她不在塔内，她撑不了这么久',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'suppressionFire', index: 'random' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicSuppressionC', index: 'random' }));
   },
 });
 
@@ -686,7 +686,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
   flavor: '名字很不错，威力很可观',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'piercingShot', index: 'random' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicPierceC', index: 'random' }));
   },
 });
 
@@ -696,7 +696,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{greatSweep}洗入牌库。',
   flavor: '应该没人抡得动它',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'greatSweep', index: 'random' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicSweepS', index: 'random' }));
   },
 });
 
@@ -707,7 +707,7 @@ registerRelic({
   description: '战斗开始时，将 1 张/card{stealTime}插入牌库底。',
   flavor: '神鸟穿梭于光阴之间',
   onBattleStart(ctx) {
-    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'stealTime' }));
+    ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicStealS' }));
   },
 });
 

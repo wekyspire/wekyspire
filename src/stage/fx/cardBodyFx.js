@@ -67,7 +67,8 @@ const cbfShade = Fn(([base, uDim, uHighlight, uTime]) => {
 });
 
 // 反应配方 mode 词汇（uReactKind 取值）：体系 × 极性。体系归属 = 卡 type
-// （fire/wood/air…）优先，type 'normal' 的体系卡按 series 归宗（刀/拳/格挡）。
+// （fire/wood/air…）优先，type 'normal' 的体系卡按 subsystem 归宗（刀/拳/格挡——
+// 体修 series 已拆链级，桶语义在 subsystem）。
 export const CARD_REACT_MODES = {
   fire: { benefit: 1, backfire: 2 },
   blade: { benefit: 3, backfire: 4 },
@@ -81,7 +82,7 @@ const SERIES_SYSTEM = { blade: 'blade', fist: 'body', block: 'block' };
 export function cardReactMode(cardData, kind) {
   const sys = cardData?.type && cardData.type !== 'normal'
     ? cardData.type
-    : (SERIES_SYSTEM[cardData?.series] ?? 'normal');
+    : (SERIES_SYSTEM[cardData?.subsystem] ?? SERIES_SYSTEM[cardData?.series] ?? 'normal');
   return CARD_REACT_MODES[sys]?.[kind] ?? CARD_REACT_MODES.normal[kind] ?? 9;
 }
 

@@ -37,12 +37,20 @@ const ENEMIES = [
   { id: 'carrionBeetle', prompt: 'a round dark brown beetle, oily sheen, small black eyes' },
   { id: 'diggerMole', prompt: 'a dark brown mole with big gray front claws, pointed snout, small black eyes' },
   { id: 'staticPuff', prompt: 'a pale yellow fluffy ball, blue sparks, small black eyes' },
+  // ==== 第一章补缺：根须家族 + 11 层 Boss 池（ENEMY_ART_LIST.md P0/P1 立绘要点）====
+  { id: 'rottenRoot', prompt: 'a clump of dark brown tangled roots twisted upright into a rough bush shape, a plant not an animal, no creature anatomy, no legs, no fur, pale green sprout tips on a few ends, one small dull eye' },
+  { id: 'rottenTreeHeart', prompt: 'a stout rotten tree stump creature, dark brown-black bark, pale flat cut cross-section on top showing growth rings, one dim warm glow in a crack, one small dull eye' },
+  { id: 'youngRakshasa', prompt: 'a young demon imp standing on two legs, round chubby dark purple-red body, two tiny horns, small claws, angry red eyes, short stubby tail' },
+  { id: 'kardas', prompt: 'a huge four-legged beast, dark red-black massive body, big fangs and heavy front claws, small angry red eyes, pale blue-white electric arcs drawn as clean sharp thin lines with no mist and no glow haze, body occupying seventy percent of frame width, wide white margins' },
+  { id: 'mefm1', prompt: 'a bulky boxy war machine on two stout legs, dull iron-gray armor plates with rusty orange patches, one big round sensor eye on the head, two small vents glowing dull orange on its body, blunt clumsy silhouette, body occupying seventy percent of frame width' },
+  { id: 'pangolinKing', prompt: 'a giant pangolin standing low on all fours, thick layered gray-brown armor like heavy flat stone slabs, chunky thick paint, blunt clumsy shapes, flat matte shading, stylized game art, not realistic, no natural history illustration, huge digging front claws, tiny eyes, pale soft belly, head lowered, body occupying seventy percent of frame width' },
+  { id: 'corruptSource', prompt: 'a huge bloated rotten tree stump, dark brown-black, thick gnarled roots coiled around its base, pale sickly green sap oozing down one side, one small dim yellow eye, body occupying seventy percent of frame width' },
   // 精英
   { id: 'snowwolf', prompt: 'a large white-gray wolf standing, full body, blue shadows, pale blue eyes, snarling open mouth' },
   { id: 'swampAmbusher', prompt: 'a low-slung lurking crocodile, mottled olive and dark teal, long snout, small red eyes' },
   { id: 'rockPangolin', prompt: 'a curled pangolin with gray stone scale armor, brown edges, small black eyes' },
   // ==== 第二章（南孚宫 · ENEMIES_2.md；变体共享族底图，19 族一张）====
-  { id: 'bigSlime', prompt: 'a huge round dark slime blob, blue-black, compact dome silhouette, two small white oval eyes, centered small in frame, body occupying only sixty percent of frame width, wide empty white margins on every side' },
+  { id: 'bigSlime', prompt: 'a large round dark slime blob, blue-black, compact dome silhouette, two small pale white oval eyes drawn as simple flat dots with no dark eye sockets, whole body centered well inside the frame, body width only half of frame width, wide empty white margins on every side, not oversized, not cropped' },
   { id: 'corpAssassin', prompt: 'a lean hooded assassin in a loose baggy dark gray suit, face fully hidden in hood shadow, one short knife held low' },
   { id: 'corpGuard', prompt: 'a stocky security guard in a loose boxy dark navy uniform, matte fabric, small round helmet, a heavy riot baton' },
   { id: 'spy', prompt: 'a lanky spy in a long olive trench coat and narrow brim hat, face completely hidden in deep shadow under the brim, only one tiny pale eye dot visible' },
@@ -62,6 +70,11 @@ const ENEMIES = [
   // 章2 精英
   { id: 'demolitions', prompt: 'a bulky demolition expert in a dark leather apron, bandolier of round black bombs, one lit fuse' },
   { id: 'hunter', prompt: 'a lean hunter mystic in a charcoal long coat, holding a slender long-barreled rifle with a small scope, pale blue dot eyes' },
+  // ==== 第二章补缺：22 层南孚宫 Boss 池（ENEMY_ART_LIST.md P1 立绘要点）====
+  { id: 'knightCommander', prompt: 'a tall palace commander in full plate armor, pale white armor with dull gold trim painted in flat matte slabs, blunt clumsy shapes, round helmet with one tall red feather plume, the pointing gauntlet gripping the long sword with its blade fully extended horizontally forward, the whole blade visible from guard to tip, the other hand empty resting on the waist, upright commanding stance, standing on nothing, feet ending on clean pure white background, absolutely no ground shadow, no reflection, no dagger, no short blade' },
+  { id: 'courtSquire', prompt: 'a small court attendant standing at attention, light white armor with blue trim, short sword at the side, a plain blue tabard on the chest, small round helmet' },
+  { id: 'candleWarden', prompt: 'a warden in a hooded wax-yellow robe with long drips down the front, face fully hidden in hood shadow, holding a small brass candelabra with three lit candles, a tall grandfather clock standing right beside the figure with its round pendulum clearly visible, warm dim candle glow, standing on nothing, feet ending on clean pure white background, absolutely no ground shadow' },
+  { id: 'bishopMarchand', prompt: 'a bishop in a tall pointed mitre hat and long dark red robe with dull gold trim, one hand raised in blessing, the other hand holding a small water vessel, standing upright' },
 ];
 
 async function queuePrompt(promptText, seed) {

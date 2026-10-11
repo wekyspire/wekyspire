@@ -16,7 +16,7 @@ import { BODY_STARTER_DECK } from '../content/bodySkills.js';
 
 // 火路填充偏防御，兜住自焚件（急燃自身燃烧 4）的血线；填充组带一张「情况不对」
 // = 迷你保险（体修走起始组自带；情况不对带迷你词条计 0 张手牌，抽到不卡手）
-const FILLER_FIRE = Object.freeze(['punch', 'punch', 'punch', 'punch', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'shieldC', 'badOmen']);
+const FILLER_FIRE = Object.freeze(['punchC', 'punchC', 'punchC', 'punchC', 'guardC', 'guardC', 'guardC', 'guardC', 'guardC', 'badOmenC']);
 
 export const ROUTES = Object.freeze({
   body: Object.freeze({
@@ -27,7 +27,7 @@ export const ROUTES = Object.freeze({
   fire: Object.freeze({
     id: 'fire', name: '火灵脉', leino: 'fire', ability: 'fireVein', apBonus: 0,
     // 基石三张：火弹术（过牌）/ 点火（叠炎）/ 急燃 C（回蓝）
-    deck: Object.freeze(['igniteC', 'fireBolt', 'flashBurnC', ...FILLER_FIRE]),
+    deck: Object.freeze(['igniteC', 'fireBallC', 'feverC', ...FILLER_FIRE]),
     blurb: '爆发与燃烧',
   }),
 });

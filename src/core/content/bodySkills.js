@@ -27,7 +27,7 @@ import {
 // 拳 C（6 伤）在 skills.js，是全系列链首；此处补 B/A/S 三阶。
 function registerPureFist({ id, name, tier, damage, cost, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'punch', subsystem: 'fist', image: 'fastPunch',
     cost, charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
@@ -49,13 +49,13 @@ registerPureFist({
 // 拳 A（2026-10-10 更名自「炮拳」，id 随名走 punchA）：1AP 12 伤。
 registerPureFist({
   id: 'punchA', name: '拳', tier: 'A', damage: 12,
-  cost: { mana: 0, actionPoint: 1 }, promotesTo: 'trueFist',
+  cost: { mana: 0, actionPoint: 1 }, promotesTo: 'punchS',
 });
 
 // 真拳（真拳系列 S）：0费0AP 15 伤——设计稿明示「无任何资源消耗」，
 // 是全库少见的白嫖伤害位（S 不入包：只走事件投放，D4-c）。
 registerPureFist({
-  id: 'trueFist', name: '真拳', tier: 'S', damage: 15,
+  id: 'punchS', name: '真拳', tier: 'S', damage: 15,
   cost: { mana: 0, actionPoint: 0 },
 });
 
@@ -67,7 +67,7 @@ registerPureFist({
 // 不会自我加速。全链慢热（2026-10-07 定：开局从头冷却）。
 function registerCollapseFist({ id, name, tier, damage, promotesTo = null, cooldownTurns = 7 }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'fierceFist', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns },
     keywords: ['slowStart'],
@@ -93,13 +93,13 @@ function registerCollapseFist({ id, name, tier, damage, promotesTo = null, coold
 }
 
 // 重拳（重拳系列 C）
-registerCollapseFist({ id: 'heavyFistC', name: '重拳', tier: 'C', damage: 20, promotesTo: 'heavyFistB' });
+registerCollapseFist({ id: 'fierceFistC', name: '重拳', tier: 'C', damage: 20, promotesTo: 'fierceFistB' });
 // 重拳（重拳系列 B）
-registerCollapseFist({ id: 'heavyFistB', name: '重拳', tier: 'B', damage: 27, promotesTo: 'heavyFistA' });
+registerCollapseFist({ id: 'fierceFistB', name: '重拳', tier: 'B', damage: 27, promotesTo: 'fierceFistA' });
 // 重拳（重拳系列 A）
-registerCollapseFist({ id: 'heavyFistA', name: '重拳', tier: 'A', damage: 34, promotesTo: 'collapseFistS' });
+registerCollapseFist({ id: 'fierceFistA', name: '重拳', tier: 'A', damage: 34, promotesTo: 'fierceFistS' });
 // 崩拳（重拳系列 S）：更长冷却 + 82 伤害（A 34 × 2.4）
-registerCollapseFist({ id: 'collapseFistS', name: '崩拳', tier: 'S', damage: 82, cooldownTurns: 12 });
+registerCollapseFist({ id: 'fierceFistS', name: '崩拳', tier: 'S', damage: 82, cooldownTurns: 12 });
 
 // ==== 3. 敏捷连击系列（抽牌）====================================================
 // 伤害 + 无条件抽牌的过牌打点（2026-10-10 改版：原「先手抽牌」条件撤销——
@@ -107,7 +107,7 @@ registerCollapseFist({ id: 'collapseFistS', name: '崩拳', tier: 'S', damage: 8
 
 function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'agileCombo', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -123,11 +123,11 @@ function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null })
 }
 
 // 敏捷连击（C）——6 伤，抽 2
-registerAgileCombo({ id: 'agileCombo', name: '敏捷连击', tier: 'C', damage: 6, draw: 2, promotesTo: 'rapidCombo' });
+registerAgileCombo({ id: 'agileComboC', name: '敏捷连击', tier: 'C', damage: 6, draw: 2, promotesTo: 'agileComboB' });
 // 疾速连击（B）——8 伤，抽 2
-registerAgileCombo({ id: 'rapidCombo', name: '疾速连击', tier: 'B', damage: 8, draw: 2, promotesTo: 'stormCombo' });
+registerAgileCombo({ id: 'agileComboB', name: '疾速连击', tier: 'B', damage: 8, draw: 2, promotesTo: 'agileComboA' });
 // 暴风连击（A）——8 伤，抽 3
-registerAgileCombo({ id: 'stormCombo', name: '暴风连击', tier: 'A', damage: 8, draw: 3 });
+registerAgileCombo({ id: 'agileComboA', name: '暴风连击', tier: 'A', damage: 8, draw: 3 });
 
 // ==== 3a. 冲动系列（抽卡：滞气换过牌）===========================================
 // 0 费冷却1——抽 3/4/4，自付滞气 2/2/1（与超越系列同一条滞气经济：透支明天的
@@ -178,9 +178,9 @@ transcendCard({ id: 'transcendA', tier: 'A', ap: 2, stall: 1 });
 // 两条分叉线：伤害线（仿形→豹形→虎形→空形）与抽牌线（蛇形→龙形→虚形）。
 
 // 常规档：基础 9 伤；后手 +bonus 且抽 draw 张（结算读 isLastHandCardAtPlay 出牌时点口径）
-function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null }) {
+function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null, series = 'mimicFistC' }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series, subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -198,19 +198,19 @@ function registerShadowFist({ id, name, tier, bonus, draw = 0, promotesTo = null
 
 // 仿形拳（C）：链首——晋升在此分叉（升级必须提升等阶，C→B 的两个同族成员都是
 // 合法方向；抉择走升级子面板，随机升级随机取）
-registerShadowFist({ id: 'mimicFist', name: '仿形拳', tier: 'C', bonus: 7, promotesTo: ['leopardFist', 'snakeFist'] });
+registerShadowFist({ id: 'mimicFistC', name: '仿形拳', tier: 'C', bonus: 7, promotesTo: ['mimicFistB', 'snakeFistB'] });
 // 豹形拳（B）：伤害线——后手 +12
-registerShadowFist({ id: 'leopardFist', name: '豹形拳', tier: 'B', bonus: 12, promotesTo: 'tigerFist' });
+registerShadowFist({ id: 'mimicFistB', name: '豹形拳', tier: 'B', bonus: 12, promotesTo: 'mimicFistA' });
 // 蛇形拳（B）：抽牌分叉线——后手抽 1
-registerShadowFist({ id: 'snakeFist', name: '蛇形拳', tier: 'B', bonus: 7, draw: 1, promotesTo: 'dragonFist' });
+registerShadowFist({ id: 'snakeFistB', name: '蛇形拳', tier: 'B', bonus: 7, draw: 1, promotesTo: 'snakeFistA', series: 'snakeFist' });
 // 虎形拳（A）：伤害线——后手 +18
-registerShadowFist({ id: 'tigerFist', name: '虎形拳', tier: 'A', bonus: 18 });
+registerShadowFist({ id: 'mimicFistA', name: '虎形拳', tier: 'A', bonus: 18 });
 // 龙形拳（A）：抽牌线——后手抽 2
-registerShadowFist({ id: 'dragonFist', name: '龙形拳', tier: 'A', bonus: 7, draw: 2 });
+registerShadowFist({ id: 'snakeFistA', name: '龙形拳', tier: 'A', bonus: 7, draw: 2, series: 'snakeFist' });
 
 // 虚形拳（S，抽牌线顶点）：无基础伤害——后手：抽7。S 为阶梯外等阶，不设 promotesTo。
 registerSkill({
-  id: 'voidFist', name: '虚形拳', type: 'normal', tier: 'S', series: 'fist', subsystem: 'fist',
+  id: 'voidFistS', name: '虚形拳', type: 'normal', tier: 'S', series: 'voidFist', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'none',
@@ -225,7 +225,7 @@ registerSkill({
 
 // 空形拳（S，伤害线顶点）：无基础伤害——后手：55 伤。
 registerSkill({
-  id: 'emptyFist', name: '空形拳', type: 'normal', tier: 'S', series: 'fist', subsystem: 'fist',
+  id: 'emptyFistS', name: '空形拳', type: 'normal', tier: 'S', series: 'emptyFist', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -242,13 +242,13 @@ registerSkill({
 // 洗入档（C/B/A）：向牌库随机位插入 count 张「瞬击」。
 function registerChargeShuffle({ id, name, tier, count, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'chargeUp', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 2 },
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      for (let i = 0; i < count; i++) addCard(sctx, 'instantStrike', { index: 'random' });
+      for (let i = 0; i < count; i++) addCard(sctx, 'instantStrikeC', { index: 'random' });
       return true;
     },
     describe: () => `/named{洗入${count}}/card{instantStrike}`,
@@ -256,16 +256,16 @@ function registerChargeShuffle({ id, name, tier, count, promotesTo = null }) {
 }
 
 // 蓄力（C）
-registerChargeShuffle({ id: 'chargeUp', name: '蓄力', tier: 'C', count: 2, promotesTo: 'comboStrike' });
+registerChargeShuffle({ id: 'chargeUpC', name: '蓄力', tier: 'C', count: 2, promotesTo: 'chargeUpB' });
 // 连击（B）
-registerChargeShuffle({ id: 'comboStrike', name: '连击', tier: 'B', count: 3, promotesTo: 'quadrupleHit' });
+registerChargeShuffle({ id: 'chargeUpB', name: '连击', tier: 'B', count: 3, promotesTo: 'chargeUpA' });
 // 四重击（A）
-registerChargeShuffle({ id: 'quadrupleHit', name: '四重击', tier: 'A', count: 4 });
+registerChargeShuffle({ id: 'chargeUpA', name: '四重击', tier: 'A', count: 4 });
 
 // 无限连击（A）：1AP 消耗 + 咏唱1——
 // 发动后驻手，每次咏唱触发洗入 3 张瞬击（常驻引擎）；再次打出免费解除，因消耗焚毁离场。
 registerSkill({
-  id: 'endlessCombo', name: '无限连击', type: 'normal', tier: 'A', series: 'fist', subsystem: 'fist',
+  id: 'endlessComboA', name: '无限连击', type: 'normal', tier: 'A', series: 'endlessCombo', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
@@ -275,7 +275,7 @@ registerSkill({
     subscriptions: (sctx) => [{
       when: ChantTriggerInstruction, phase: 'post',
       react: () => {
-        for (let i = 0; i < 3; i++) addCard(sctx, 'instantStrike', { index: 'random' });
+        for (let i = 0; i < 3; i++) addCard(sctx, 'instantStrikeC', { index: 'random' });
         reactFx(sctx, sctx.self, 'benefit', { variant: 'proc' });
       },
     }],
@@ -286,13 +286,13 @@ registerSkill({
 
 // 一瞬千击（S）：1AP 消耗——发现 5 张瞬击（直接进手牌；满手按 §7.3 溢入牌库）。
 registerSkill({
-  id: 'instantThousand', name: '一瞬千击', type: 'normal', tier: 'S', series: 'fist', subsystem: 'fist',
+  id: 'instantThousandS', name: '一瞬千击', type: 'normal', tier: 'S', series: 'instantThousand', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   keywords: ['exhaust'],
   use(sctx) {
-    for (let i = 0; i < 5; i++) addCard(sctx, 'instantStrike', { toZone: 'hand' });
+    for (let i = 0; i < 5; i++) addCard(sctx, 'instantStrikeC', { toZone: 'hand' });
     return true;
   },
   describe: () => '/named{发现}5/card{instantStrike}',
@@ -301,7 +301,7 @@ registerSkill({
 // 瞬击（蓄力系列衍生牌）：0 费即抛——6 伤 + 抽 1，打出即焚毁。
 // 只经造牌指令入场，不入奖励池。等阶记 C（衍生牌的等阶只是账务口径，不进任何池）。
 registerSkill({
-  id: 'instantStrike', name: '瞬击', type: 'normal', tier: 'C', series: 'fist', subsystem: 'fist',
+  id: 'instantStrikeC', name: '瞬击', type: 'normal', tier: 'C', series: 'instantStrike', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
@@ -322,7 +322,7 @@ registerSkill({
 // 持有至少一张「肘击打击位」时进入卡包奖励列表，且持有越多档内权重越高。
 // fierceElbowFree 是局内转化形态（不在牌组），列入只为判定口径统一。
 const ELBOW_STRIKE_IDS = Object.freeze([
-  'elbowStrike', 'fierceElbow', 'strongElbow', 'pureElbow', 'fierceElbowFree',
+  'elbowStrikeC', 'elbowStrikeFierceB', 'elbowStrikeA', 'elbowStrikeS', 'elbowStrikeFierceBFree',
 ]);
 
 // 肘击伤害预览文本（带 elbow 标记）：牢大的翻倍只认 tags 含 elbow 的伤害，
@@ -343,7 +343,7 @@ function elbowDamageText(sctx, base) {
 // 不进奖励池（只经局内转化获得，同碎铁口径）。
 function registerElbow({ id, name, tier, damage, shield = 0, promotesTo = null, ap = 1, spawnable = true }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist',
+    id, name, type: 'normal', tier, series: 'elbowStrike',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 1,
@@ -368,22 +368,22 @@ function registerElbow({ id, name, tier, damage, shield = 0, promotesTo = null, 
 }
 
 // 肘击（C）
-registerElbow({ id: 'elbowStrike', name: '肘击', tier: 'C', damage: 6, promotesTo: 'fierceElbow' });
+registerElbow({ id: 'elbowStrikeC', name: '肘击', tier: 'C', damage: 6, promotesTo: 'elbowStrikeFierceB' });
 // 猛烈肘击（B）——8 伤
-registerElbow({ id: 'fierceElbow', name: '猛烈肘击', tier: 'B', damage: 8, promotesTo: 'strongElbow' });
+registerElbow({ id: 'elbowStrikeFierceB', name: '猛烈肘击', tier: 'B', damage: 8, promotesTo: 'elbowStrikeA' });
 // 强大肘击（A）——8 伤 + 2 盾
-registerElbow({ id: 'strongElbow', name: '强大肘击', tier: 'A', damage: 8, shield: 2, promotesTo: 'pureElbow' });
+registerElbow({ id: 'elbowStrikeA', name: '强大肘击', tier: 'A', damage: 8, shield: 2, promotesTo: 'elbowStrikeS' });
 // 纯粹肘击（S；费用栏留空 → 0 费）
-registerElbow({ id: 'pureElbow', name: '纯粹肘击', tier: 'S', damage: 12, shield: 4, ap: 0 });
+registerElbow({ id: 'elbowStrikeS', name: '纯粹肘击', tier: 'S', damage: 12, shield: 4, ap: 0 });
 // 猛烈肘击·0 费形态：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
 // 的变换目标——同名同形态、只是免费（0AP），且**只经局内转化获得**（不进奖励池/不进抽选）。
-registerElbow({ id: 'fierceElbowFree', name: '猛烈肘击', tier: 'B', damage: 8, ap: 0, spawnable: false });
+registerElbow({ id: 'elbowStrikeFierceBFree', name: '猛烈肘击', tier: 'B', damage: 8, ap: 0, spawnable: false });
 
 // 牢大（B/A）：咏唱1/0——你的肘击卡伤害翻倍。设计稿费用栏留空 → 0 费（代价押在
 // 咏唱手牌压力与构建上；A 档咏唱 0 = 零容量压力）。实现：PRE 修饰 tags 含 elbow 的伤害。
 function elbowMasterCard({ id, tier, weight, promotesTo = null }) {
   registerSkill({
-    id, name: '牢大', type: 'normal', tier, series: 'fist',
+    id, name: '牢大', type: 'normal', tier, series: 'elbowMaster',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
@@ -409,7 +409,7 @@ elbowMasterCard({ id: 'elbowMasterA', tier: 'A', weight: 0 });
 // 牢大归来（B/A，1AP）：发现同等阶肘击（B → 猛烈肘击；A → 强大肘击）。
 function elbowReturnCard({ id, tier, targetId, promotesTo = null }) {
   registerSkill({
-    id, name: '牢大归来', type: 'normal', tier, series: 'fist',
+    id, name: '牢大归来', type: 'normal', tier, series: 'elbowReturn',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -423,13 +423,13 @@ function elbowReturnCard({ id, tier, targetId, promotesTo = null }) {
     describe: () => `/named{发现}同等阶肘击：/card{${targetId}}`,
   });
 }
-elbowReturnCard({ id: 'elbowReturnB', tier: 'B', targetId: 'fierceElbow', promotesTo: 'elbowReturnA' });
-elbowReturnCard({ id: 'elbowReturnA', tier: 'A', targetId: 'strongElbow' });
+elbowReturnCard({ id: 'elbowReturnB', tier: 'B', targetId: 'elbowStrikeFierceB', promotesTo: 'elbowReturnA' });
+elbowReturnCard({ id: 'elbowReturnA', tier: 'A', targetId: 'elbowStrikeA' });
 
 // 坠机（A，消耗，费用栏留空 → 0 费）：你的全部激活的肘击卡变为随机高一阶的体修卡
 // （转化自动熄灭咏唱；体修卡 = 基础包卡，排除深入卡/衍生牌/诅咒。高一阶：C→B→A→S）。
 registerSkill({
-  id: 'crashLanding', name: '坠机', type: 'normal', tier: 'A', series: 'fist',
+  id: 'crashLandingA', name: '坠机', type: 'normal', tier: 'A', series: 'crashLanding',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -473,7 +473,7 @@ function randomBodyCardAbove(sctx, tier) {
 // 频次阶梯 5/5/4/4；B 档起费用栏留空 → 0 费；S 档咏唱0。
 function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'leverage', subsystem: 'fist',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
@@ -499,8 +499,8 @@ function registerPlayCountChant({ id, name, tier, every, ap = 1, weight = 1, pro
 
 registerPlayCountChant({ id: 'leverageC', name: '借力', tier: 'C', every: 5, promotesTo: 'leverageB' });
 registerPlayCountChant({ id: 'leverageB', name: '借力', tier: 'B', every: 5, ap: 0, promotesTo: 'leverageA' });
-registerPlayCountChant({ id: 'leverageA', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'taijiS' });
-registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 3, ap: 0, weight: 0 });
+registerPlayCountChant({ id: 'leverageA', name: '借力', tier: 'A', every: 4, ap: 0, promotesTo: 'leverageS' });
+registerPlayCountChant({ id: 'leverageS', name: '太极', tier: 'S', every: 3, ap: 0, weight: 0 });
 
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage **固定伤害**，
@@ -510,7 +510,7 @@ registerPlayCountChant({ id: 'taijiS', name: '太极', tier: 'S', every: 3, ap: 
 
 function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'novice', subsystem: 'fist',
     cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
@@ -537,10 +537,10 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, p
   });
 }
 
-registerDrawDamageChant({ id: 'masteryC', name: '精通', tier: 'C', damage: 2, weight: 2, promotesTo: 'masteryB' });
-registerDrawDamageChant({ id: 'masteryB', name: '精通', tier: 'B', damage: 2, ap: 0, weight: 2, promotesTo: 'masteryA' });
-registerDrawDamageChant({ id: 'masteryA', name: '精通', tier: 'A', damage: 2, ap: 0, weight: 1, promotesTo: 'peerlessS' });
-registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 3, ap: 0, weight: 0 });
+registerDrawDamageChant({ id: 'noviceC', name: '精通', tier: 'C', damage: 2, weight: 2, promotesTo: 'noviceB' });
+registerDrawDamageChant({ id: 'noviceB', name: '精通', tier: 'B', damage: 2, ap: 0, weight: 2, promotesTo: 'noviceA' });
+registerDrawDamageChant({ id: 'noviceA', name: '精通', tier: 'A', damage: 2, ap: 0, weight: 1, promotesTo: 'noviceS' });
+registerDrawDamageChant({ id: 'noviceS', name: '无双', tier: 'S', damage: 3, ap: 0, weight: 0 });
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 
@@ -551,7 +551,7 @@ registerDrawDamageChant({ id: 'peerlessS', name: '无双', tier: 'S', damage: 3,
 // 张数时按余量截断（buildCardSelectionRequest 的 min/max 收口），空手静默落空。
 function wildFistCard({ id, tier, count, promotesTo = null }) {
   registerSkill({
-    id, name: '万变拳', type: 'normal', tier, series: 'fist', subsystem: 'fist', deep: 'fist',
+    id, name: '万变拳', type: 'normal', tier, series: 'wildFist', subsystem: 'fist', deep: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: 1, cooldownTurns: 2 },
     cardMode: 'normal',
@@ -588,7 +588,7 @@ wildFistCard({ id: 'wildFistS', tier: 'S', count: 2 });
 // 升阶：B 不消耗；升阶方向 = 多抽 + 少污染。过牌换稀释：短期手牌质量提升，
 // 牌库被虚无污染（虚无 0 费打出即焚，白吃一手节奏）。
 const feintCard = ({ id, tier, draw, voids, exhaust = true, promotesTo = null }) => registerSkill({
-  id, name: '假动作', type: 'normal', tier, series: 'fist', subsystem: 'fist', deep: 'fist',
+  id, name: '假动作', type: 'normal', tier, series: 'feint', subsystem: 'fist', deep: 'fist',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -596,7 +596,7 @@ const feintCard = ({ id, tier, draw, voids, exhaust = true, promotesTo = null })
   promotesTo,
   use(sctx) {
     drawCards(sctx, draw);
-    for (let i = 0; i < voids; i++) addCard(sctx, 'voidCard', { index: 'random' });
+    for (let i = 0; i < voids; i++) addCard(sctx, 'voidCardC', { index: 'random' });
     return true;
   },
   describe: () => `抽${draw}牌，/named{洗入}${voids}/card{voidCard}`,
@@ -608,7 +608,7 @@ feintCard({ id: 'feintA', tier: 'A', draw: 3, voids: 1 });
 // 虚无（假动作衍生牌）：0 费无效果消耗牌——纯粹的牌库噪音，只经造牌入场。
 // 等阶记 C（衍生牌的等阶只是账务口径）。
 registerSkill({
-  id: 'voidCard', name: '虚无', type: 'normal', tier: 'C', series: 'fist',
+  id: 'voidCardC', name: '虚无', type: 'normal', tier: 'C', series: 'voidCard',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -637,7 +637,7 @@ registerSkill({
 // （伤害换节奏）。
 function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }) {
   registerSkill({
-    id, name: '狂拳', type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name: '狂拳', type: 'normal', tier, series: 'wildPunch', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -662,7 +662,7 @@ wildPunchCard({ id: 'wildPunchA', tier: 'A', damage: 13, lifeLoss: 2, ap: 2 });
 // 总伤 9/12/16/30）
 function flurryCard({ id, name, tier, damage = 3, hits, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'wildFlurry', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
@@ -675,43 +675,40 @@ function flurryCard({ id, name, tier, damage = 3, hits, promotesTo = null }) {
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}×${hits}`,
   });
 }
-flurryCard({ id: 'wildFlurry', name: '乱拳', tier: 'C', damage: 3, hits: 3, promotesTo: 'rainFist' });
-flurryCard({ id: 'rainFist', name: '雨拳', tier: 'B', damage: 4, hits: 3, promotesTo: 'thousandHands' });
-flurryCard({ id: 'thousandHands', name: '千手', tier: 'A', damage: 4, hits: 4, promotesTo: 'myriadHands' });
-flurryCard({ id: 'myriadHands', name: '万手', tier: 'S', damage: 4, hits: 8 });
+flurryCard({ id: 'wildFlurryC', name: '乱拳', tier: 'C', damage: 3, hits: 3, promotesTo: 'wildFlurryB' });
+flurryCard({ id: 'wildFlurryB', name: '雨拳', tier: 'B', damage: 4, hits: 3, promotesTo: 'wildFlurryA' });
+flurryCard({ id: 'wildFlurryA', name: '千手', tier: 'A', damage: 4, hits: 4, promotesTo: 'wildFlurryS' });
+flurryCard({ id: 'wildFlurryS', name: '万手', tier: 'S', damage: 4, hits: 8 });
 
-// 拳压 C→B→A（拳师深入卡，瞬击下游）：0 费冷却1——6 伤；本回合每打出过 1 张瞬击
-// 伤害 +3/+4/+5（瞬击引擎是溢价来源——无引擎时近白板，故收进深入门禁：
-// 拳师到手前不进任何奖励池。瞬击计数读 history.turn.playedCards 明细）。
-const fistPressCard = ({ id, tier, per, promotesTo = null }) => registerSkill({
-  id, name: '拳压', type: 'normal', tier, series: 'fist', subsystem: 'fist', deep: 'fist',
+// 拳压 C→B→A（拳师深入卡）：0 费冷却1——2/4/6 伤；本回合每打出过 1 牌 +1
+// （计数不含自身：playedCards 在 use() 之后才入账）。收进深入门禁：拳师到手前
+// 不进任何奖励池。
+const fistPressCard = ({ id, tier, base, promotesTo = null }) => registerSkill({
+  id, name: '拳压', type: 'normal', tier, series: 'fistPress', subsystem: 'fist', deep: 'fist',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: 1, cooldownTurns: 1 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo,
   use(sctx) {
-    attackDamage(sctx, 6 + instantStrikesThisTurn(sctx) * per);
+    attackDamage(sctx, base + sctx.battleState.history.turn.played);
     return true;
   },
-  describe: () => `6伤害；本回合每打出过1/card{instantStrike}，+${per}`,
+  describe: () => `${base}伤害；本回合每打出过1牌，+1`,
   battleDescribe: (sctx) => {
-    const n = instantStrikesThisTurn(sctx);
-    return `${resolvedDamageText(sctx, 6 + n * per)}；本回合每打出过1/card{instantStrike}，+${per}（已打出${n}）`;
+    const n = sctx.battleState.history.turn.played;
+    return `${resolvedDamageText(sctx, base + n)}；本回合每打出过1牌，+1（已打出${n}）`;
   },
 });
-fistPressCard({ id: 'fistPressC', tier: 'C', per: 3, promotesTo: 'fistPressB' });
-fistPressCard({ id: 'fistPressB', tier: 'B', per: 4, promotesTo: 'fistPressA' });
-fistPressCard({ id: 'fistPressA', tier: 'A', per: 5 });
-function instantStrikesThisTurn(sctx) {
-  return sctx.battleState.history.turn.playedCards.filter(id => id === 'instantStrike').length;
-}
+fistPressCard({ id: 'fistPressC', tier: 'C', base: 2, promotesTo: 'fistPressB' });
+fistPressCard({ id: 'fistPressB', tier: 'B', base: 4, promotesTo: 'fistPressA' });
+fistPressCard({ id: 'fistPressA', tier: 'A', base: 6 });
 
 // 拆招 C→B→A（手牌补充）：0费 冷却1——抽 1；
 // 自由手牌（未激活咏唱的手牌）不超过 2/3/4 张时再抽 1（清手流的续航资源件）。
 // 发动卡结算时已离手（pending），自由手牌读其余手牌（激活咏唱豁免判定）。
 function counterDrawCard({ id, tier, threshold, extra, promotesTo = null }) {
   registerSkill({
-    id, name: '拆招', type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name: '拆招', type: 'normal', tier, series: 'counterDraw', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: 1, cooldownTurns: 1 },
     cardMode: 'normal',
@@ -737,7 +734,7 @@ counterDrawCard({ id: 'counterDrawA', tier: 'A', threshold: 4, extra: 1 });
 // ——见 battle.md §1 基础约定）。
 function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'fullCharge', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -754,15 +751,15 @@ function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = n
   });
 }
 fullChargeCard({ id: 'fullChargeC', name: '蓄满一击', tier: 'C', base: 6, bonus: 5, threshold: 5, promotesTo: 'fullChargeB' });
-fullChargeCard({ id: 'fullChargeB', name: '蓄满一击', tier: 'B', base: 6, bonus: 8, threshold: 5, promotesTo: 'fullSpirit' });
-fullChargeCard({ id: 'fullSpirit', name: '全神一击', tier: 'A', base: 8, bonus: 11, threshold: 5 });
+fullChargeCard({ id: 'fullChargeB', name: '蓄满一击', tier: 'B', base: 6, bonus: 8, threshold: 5, promotesTo: 'fullChargeA' });
+fullChargeCard({ id: 'fullChargeA', name: '全神一击', tier: 'A', base: 8, bonus: 11, threshold: 5 });
 
 // 变招/混元 B/A/S（弃牌引擎）：咏唱2/2/1——每弃 3/2/2 张牌，抽 1（太极「每打 N 抽 1」
 // 的弃牌镜像；弃牌语言在体修三子系都有：假动作/呼吸/以无胜有）。计数挂
 // skillRuntime（跨回合累积，plain data 可序列化）；S 档咏唱 1 的低容量压力。
 function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = null }) {
   registerSkill({
-    id, name, type: 'normal', tier, series: 'fist', subsystem: 'fist',
+    id, name, type: 'normal', tier, series: 'hunYuanPlus', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 1 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
@@ -784,9 +781,9 @@ function discardEngineChant({ id, name, tier, weight, every = 3, promotesTo = nu
     battleDescribe: (sctx) => `每弃${every}张牌，抽1牌（已弃${sctx.self.discardCount ?? 0}）`,
   });
 }
-discardEngineChant({ id: 'shiftMoveB', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'shiftMoveA' });
-discardEngineChant({ id: 'shiftMoveA', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanS' });
-discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 0, every: 2 });
+discardEngineChant({ id: 'hunYuanPlusB', name: '变招', tier: 'B', weight: 2, every: 3, promotesTo: 'hunYuanPlusA' });
+discardEngineChant({ id: 'hunYuanPlusA', name: '变招', tier: 'A', weight: 2, every: 2, promotesTo: 'hunYuanPlusS' });
+discardEngineChant({ id: 'hunYuanPlusS', name: '混元', tier: 'S', weight: 0, every: 2 });
 
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
 
@@ -795,7 +792,7 @@ discardEngineChant({ id: 'hunYuanS', name: '混元', tier: 'S', weight: 0, every
 // 能力不再追加第二张）；本卡仍可经通用注入抽到（pack: 'common'）。
 function adrenalineCard({ id, tier, draw, promotesTo = null }) {
   registerSkill({
-    id, name: '肾上腺素', type: 'normal', pack: 'common', tier, series: 'fist', subsystem: 'fist',
+    id, name: '肾上腺素', type: 'normal', pack: 'common', tier, series: 'adrenaline', subsystem: 'fist',
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
@@ -819,7 +816,7 @@ adrenalineCard({ id: 'adrenalineA', tier: 'A', draw: 3 });
 // 只弃非激活的手牌。固有保证起手必然上手（详见 namedTerms「固有」）；
 // 不入奖励池：系统级保险卡，定位同衍生牌（瞬击），重复获取会稀释其「起手必有」的确定性。
 registerSkill({
-  id: 'badOmen', image: 'badOmen', name: '情况不对', type: 'normal', tier: 'C',
+  id: 'badOmenC', series: 'badOmen', image: 'badOmen', name: '情况不对', type: 'normal', tier: 'C',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -867,9 +864,9 @@ forgetCard({ id: 'forgetA', tier: 'A', mini: true });
 // 斩不在初始卡组：由开局遗物「大剑」（默认装备、0 槽）在每场战斗开始时洗入 1 张斩
 // ——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([
-  'punch', 'punch', 'punch', 'punch', 'punch',
-  'shieldC', 'shieldC', 'shieldC', 'shieldC',
-  'blockC',
+  'punchC', 'punchC', 'punchC', 'punchC', 'punchC',
+  'guardC', 'guardC', 'guardC', 'guardC',
+  'duckHeadC',
   'adrenalineB',
-  'badOmen',
+  'badOmenC',
 ]);

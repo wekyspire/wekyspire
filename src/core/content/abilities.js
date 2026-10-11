@@ -164,9 +164,9 @@ registerAbility({
   description: '抽到余烬时，抽 1。',
   subscriptions: () => [{
     when: DrawCardsInstruction, phase: 'post',
-    filter: (instr) => (instr.result?.drawn ?? []).some(c => c.defId === 'emberMote'),
+    filter: (instr) => (instr.result?.drawn ?? []).some(c => c.defId === 'emberMoteC'),
     react: (instr, ctx) => {
-      const n = instr.result.drawn.filter(c => c.defId === 'emberMote').length;
+      const n = instr.result.drawn.filter(c => c.defId === 'emberMoteC').length;
       ctx.kernel.submitInstruction(new DrawCardsInstruction({ count: n }), instr);
     },
   }],

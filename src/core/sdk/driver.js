@@ -14,8 +14,8 @@ import {
 // Headless 战斗 SDK：声明式装配 + 出牌驱动 + 断言/追踪助手。
 // 用于测试用例与 agent 调试战斗内容。
 //
-// const d = new BattleDriver({ deck: ['punch', ...], enemies: ['slime'], seed: 7, trace: true });
-// d.start().play('punch').endTurn();
+// const d = new BattleDriver({ deck: ['punchC', ...], enemies: ['slime'], seed: 7, trace: true });
+// d.start().play('punchC').endTurn();
 // d.expect(b => b.verdict === 'victory', '应当胜利');
 export class BattleDriver {
   constructor({

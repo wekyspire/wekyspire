@@ -69,13 +69,17 @@ const TEMPLATES = {
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
 // （起手色参数化）；投射物体系挂各自的 cast 模板（落点爆在伤害拍）。
+// 子体系兜底（series 链级化后的体修三系桶行为——0.11.20 静默回退教训的防回归层）
+const SUBSYSTEM_SPELLS = {
+  blade: { id: 'bladeCast' },   // 刀法：冷白刀光（四模式自动路由）
+  block: { id: 'blockCast' },   // 格挡/架势：光壁/气场
+  fist:  { id: 'fistCast' },    // 体修：拳风破空（四模式）
+};
 const SERIES_SPELLS = {
   ember:         { id: 'emberBurst' },                                   // 余烬系（旧先锋模板整链）
-  blade:         { id: 'bladeCast' },                                    // 刀法：冷白刀光（四模式自动路由）
-  block:         { id: 'blockCast' },                                    // 格挡/架势：光壁/气场（攻击链逐卡走 fistCast）
-  fist:          { id: 'fistCast' },                                     // 体修：拳风破空（四模式）
   punch:         { id: 'fistCast' },                                     // 基石拳同体修
-  fireBall:      { id: 'fireballCast' },                                 // 火球链+蓄热火球
+  fireBall:      { id: 'fireballCast' },                                 // 火球链
+  heatCharged:   { id: 'fireballCast' },                                 // 蓄热火球链（2026-10-11 拆系列）
   firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
   fireRain:      { id: 'fireRainCast', params: { aoe: true } },            // 火雨/火瀑（群伤全体落雨）
   ignite:        { id: 'igniteCast' },                                   // 点火/热浪
@@ -177,10 +181,10 @@ const CARD_SPELLS = {
                     sparks: { color: 0xffe08a, count: 30 } } },
   // ---- 刀法逐卡（2026-10-02 二批）----
   // 横劈链（群伤）：场景级横劈巨刀光（一记扫过敌阵，逐敌命中在伤害拍）
-  cleave:           { template: 'bladeCast', params: { mode: 'cleave' } },
-  powerCleave:      { template: 'bladeCast', params: { mode: 'cleave', cleaveMs: 245,
+  cleave:           { template: 'bladeCast', params: { mode: 'cleaveC' } },
+  powerCleave:      { template: 'bladeCast', params: { mode: 'cleaveC', cleaveMs: 245,
                         spanExtra: 24, cleaveShake: 0.8 } },
-  riftCleave:       { template: 'bladeCast', params: { mode: 'cleave', cleaveMs: 280,
+  riftCleave:       { template: 'bladeCast', params: { mode: 'cleaveC', cleaveMs: 280,
                         spanExtra: 28, cleaveShake: 1.3, moonHot: [4.2, 4.5, 5.4],
                         sweepColor: [0.50, 0.55, 1.10] } },   // 裂空劈（A）：更长更白热偏冷紫 + 大震
   // 飞刀链：小刀错峰连投
@@ -297,9 +301,9 @@ const CARD_SPELLS = {
   // ---- 遗物枪击卡（亮黄白细直弹道——枪火语言：仍走投射物，弹道细直平弧）----
   rapidFire:        { template: 'bladeCast', params: { mode: 'daggers',
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
-  pointShot:        { template: 'bladeCast', params: { mode: 'slash', arcH: 0.15,
+  pointShot:        { template: 'bladeCast', params: { mode: 'slashC', arcH: 0.15,
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
-  piercingShot:     { template: 'bladeCast', params: { mode: 'slash', arcH: 0.10,
+  piercingShot:     { template: 'bladeCast', params: { mode: 'slashC', arcH: 0.10,
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
   // ---- 火系补量（2026-10-06：原 depth/melt 等 15 张零覆盖卡 + 特征卡签名）----
   // 回蓝件（余热/重燃/回响烈焰）：火焰能量回流语言——manaCast 火调（余温收聚）
@@ -399,7 +403,10 @@ export function resolveSpellFx(defId) {
     if (template) return { template, params: { ...(card.params ?? {}) } };
   }
   const def = (() => { try { return getSkillDefinition(defId); } catch { return null; } })();
-  const row = SERIES_SPELLS[def?.series];
+  // 体修 series 已拆链级（2026-10-11 按 SKILL_DESIGN_PRINCIPLES 归位）：刀/拳/格挡的
+  // 体系兜底改走 subsystem；SERIES_SPELLS 链级行（punch 等）照常直查。
+  const row = SERIES_SPELLS[def?.series]
+    ?? SUBSYSTEM_SPELLS[def?.subsystem];
   const template = row ? TEMPLATES[row.id] : null;
   return template ? { template, params: { ...(row?.params ?? {}) } } : null;
 }
@@ -510,7 +517,7 @@ const beamQuad = (p) => () => spellQuad({
 });
 const keyOf = (tag, p) => `${tag}:${(p.color ?? []).join(',')}|${(p.hot ?? []).join(',')}|${(p.ember ?? []).join(',')}|${p.form ?? ''}`;
 const WARM_VARIANTS = new Map([
-  [TEMPLATES.bladeCast, (p) => p.mode === 'cleave'
+  [TEMPLATES.bladeCast, (p) => p.mode === 'cleaveC'
     ? [{ key: `moon:${(p.moonHot ?? []).join(',')}`, mk: moonWarmQuad(p) }]
     : []],
   [TEMPLATES.fistCast, (p) => [{ key: keyOf('qi', p), mk: qiQuad(p) }]],

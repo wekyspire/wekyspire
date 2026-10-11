@@ -15,6 +15,7 @@ from collections import deque
 
 import numpy as np
 from PIL import Image, ImageFilter
+from scipy import ndimage
 
 
 def estimate_bg(rgb: np.ndarray) -> np.ndarray:
@@ -196,7 +197,39 @@ def cut_one(src_path: str, dst_path: str, tol: float, bg_mode: str, luma: float,
     a_im = Image.fromarray(alpha, 'L')
     for _ in range(max(0, erode)):
         a_im = a_im.filter(ImageFilter.MinFilter(3))   # 侵蚀：去底色毛边/halo（可叠多次）
-    a_im = a_im.filter(ImageFilter.GaussianBlur(1.1))  # 羽化边缘
+    # —— 边缘去污 defringe（2026-10-11 用户报白边明显的根治）——
+    # 羽化/抗锯齿的半透明像素 RGB 是「白底×alpha」的预乘色，贴深底就是亮圈。
+    # 对中间 alpha 带（0.15<a<0.995）做去白预乘复原主体原色：rgb' = (rgb-255(1-a))/a，
+    # 再把去污后仍近白的边缘像素（底色残留）alpha 归零。羽化放在去污之后——半透明像素已是主体色。
+    a_arr = np.asarray(a_im).astype(np.float32)
+    edge = (a_arr > 38) & (a_arr < 254)
+    af = a_arr / 255.0
+    rgb_def = (rgb.astype(np.float32) - 255.0 * (1.0 - af[..., None])) / np.maximum(af[..., None], 0.15)
+    rgb = np.where(edge[..., None], np.clip(rgb_def, 0, 255), rgb.astype(np.float32)).astype(np.uint8)
+    luma_edge = rgb.astype(np.float32) @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+    a_arr = np.where(edge & (luma_edge > 232), 0, a_arr).astype(np.uint8)
+    # 幽灵白底填充：alpha=0 区域的 RGB 仍是白底（非预乘管线双线性/mip 会把白渗进轮廓）。
+    # 用最近不透明像素色迭代扩散填满全透明区（10 轮 3x3 邻域已覆盖常见缝隙宽度）。
+    rgb_f = rgb.astype(np.float32)
+    solid = a_arr >= 200
+    fill = rgb_f.copy()
+    known = solid.copy()
+    for _ in range(10):
+        if known.all():
+            break
+        grow = ndimage.binary_dilation(known) & ~known
+        if not grow.any():
+            break
+        ys, xs = np.where(grow)
+        for y, x in zip(ys, xs):
+            ny0, ny1 = max(0, y - 1), min(fill.shape[0], y + 2)
+            nx0, nx1 = max(0, x - 1), min(fill.shape[1], x + 2)
+            win = fill[ny0:ny1, nx0:nx1][known[ny0:ny1, nx0:nx1]]
+            if len(win):
+                fill[y, x] = win.mean(axis=0)
+        known |= grow
+    rgb = fill.astype(np.uint8)
+    a_im = Image.fromarray(a_arr, 'L').filter(ImageFilter.GaussianBlur(0.8))
     rgba = np.dstack([rgb, np.asarray(a_im)])
     out = Image.fromarray(rgba, 'RGBA')
     box = out.split()[-1].getbbox()
@@ -212,10 +245,10 @@ def main():
     ap.add_argument('--src', required=True)
     ap.add_argument('--dst', default='src/assets/stage')
     ap.add_argument('--ids', default=None, help='逗号分隔；缺省处理 src 下全部 png')
-    ap.add_argument('--tol', type=float, default=30)
+    ap.add_argument('--tol', type=float, default=42, help='洪填底色判定距离（抗锯齿过渡带 30-100，太小留白边）')
     ap.add_argument('--luma', type=float, default=190, help='浅色投影杀：亮度≥此值且近中性的连通像素归背景（0=关闭）')
     ap.add_argument('--spread', type=float, default=28, help='投影杀的中性判定色差上限')
-    ap.add_argument('--erode', type=int, default=1, help='侵蚀次数（去毛边/halo，可叠）')
+    ap.add_argument('--erode', type=int, default=2, help='侵蚀次数（去毛边/halo，可叠）')
     ap.add_argument('--kill-enclosed', type=int, default=240, help='封闭亮腔杀：亮+近中性连通块≥此像素数归背景（0=关闭；白眼等小点缀低于门槛幸存）')
     ap.add_argument('--bg', choices=['auto', 'white', 'black'], default='white')
     ap.add_argument('--only-file', default=None, help='单文件模式（与 --out-name 搭配）')

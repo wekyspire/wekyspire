@@ -37,7 +37,7 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true; // 无存活敌人：落空（G2 收尾防御）
-    addCard(sctx, 'emberMote', { index: 'random' });
+    addCard(sctx, 'emberMoteC', { index: 'random' });
     addEffect(sctx, 'burn', 7, target);
     return true;
   },
@@ -54,7 +54,7 @@ registerSkill({
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
-    addCard(sctx, 'emberMote', { index: 'random' });
+    addCard(sctx, 'emberMoteC', { index: 'random' });
     addEffect(sctx, 'burn', 9, target);
     return true;
   },
@@ -98,7 +98,7 @@ emberOriginCard({ id: 'emberOriginA', tier: 'A', ap: 0 });
 
 // 炼心 A：1AP。每有 4 层（敌方）燃烧，获得 1 魏启（走上限截断管线）。
 registerSkill({
-  id: 'refineHeart', name: '炼心', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
+  id: 'emberRefineA', name: '炼心', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -147,9 +147,9 @@ function heatSurgeCard({ id, tier, ap, exhaust, promotesTo }) {
     },
   });
 }
-heatSurgeCard({ id: 'heatSurgeC', tier: 'C', ap: 1, exhaust: true, promotesTo: 'heatSurgeB' });
-heatSurgeCard({ id: 'heatSurgeB', tier: 'B', ap: 1, exhaust: false, promotesTo: 'heatSurgeA' });
-heatSurgeCard({ id: 'heatSurgeA', tier: 'A', ap: 0, exhaust: false });
+heatSurgeCard({ id: 'emberSurgeC', tier: 'C', ap: 1, exhaust: true, promotesTo: 'emberSurgeB' });
+heatSurgeCard({ id: 'emberSurgeB', tier: 'B', ap: 1, exhaust: false, promotesTo: 'emberSurgeA' });
+heatSurgeCard({ id: 'emberSurgeA', tier: 'A', ap: 0, exhaust: false });
 
 // ==== 控火系列（多功能散牌）===================================================
 // 控火术 = 三张找卡（攻杀/守御/杂技 C/B/A）+ 发现制效果卡（不进卡包奖池、不直接掉落；
@@ -193,27 +193,27 @@ function fireControlFinderCard({ id, name, tier, actionPoint, pool, promotesTo =
   });
 }
 
-const FC_POOL_ATTACK_C = ['fireControlBurn', 'fireControlScorch'];
-const FC_POOL_ATTACK_A = [...FC_POOL_ATTACK_C, 'fireControlDetonate'];
-const FC_POOL_GUARD_C = ['fireControlDisturb', 'fireControlHarvest'];
-const FC_POOL_GUARD_A = [...FC_POOL_GUARD_C, 'fireControlShift'];
-const FC_POOL_ACRO_C = ['fireControlGather', 'fireControlSpread'];
-const FC_POOL_ACRO_A = [...FC_POOL_ACRO_C, 'fireControlRefine'];
+const FC_POOL_ATTACK_C = ['fireControlBurnC', 'fireControlScorchB'];
+const FC_POOL_ATTACK_A = [...FC_POOL_ATTACK_C, 'fireControlDetonateA'];
+const FC_POOL_GUARD_C = ['fireControlDisturbC', 'fireControlHarvestB'];
+const FC_POOL_GUARD_A = [...FC_POOL_GUARD_C, 'fireControlShiftA'];
+const FC_POOL_ACRO_C = ['fireControlGatherC', 'fireControlSpreadB'];
+const FC_POOL_ACRO_A = [...FC_POOL_ACRO_C, 'fireControlRefineA'];
 
-fireControlFinderCard({ id: 'fireCtrlAtkC', name: '攻杀控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ATTACK_C, promotesTo: 'fireCtrlAtkB' });
-fireControlFinderCard({ id: 'fireCtrlAtkB', name: '攻杀控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ATTACK_C, promotesTo: 'fireCtrlAtkA' });
-fireControlFinderCard({ id: 'fireCtrlAtkA', name: '攻杀控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ATTACK_A });
+fireControlFinderCard({ id: 'fireControlFinderAtkC', name: '攻杀控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkB' });
+fireControlFinderCard({ id: 'fireControlFinderAtkB', name: '攻杀控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ATTACK_C, promotesTo: 'fireControlFinderAtkA' });
+fireControlFinderCard({ id: 'fireControlFinderAtkA', name: '攻杀控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ATTACK_A });
 
-fireControlFinderCard({ id: 'fireCtrlGuardC', name: '守御控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_GUARD_C, promotesTo: 'fireCtrlGuardB' });
-fireControlFinderCard({ id: 'fireCtrlGuardB', name: '守御控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_GUARD_C, promotesTo: 'fireCtrlGuardA' });
-fireControlFinderCard({ id: 'fireCtrlGuardA', name: '守御控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_GUARD_A });
+fireControlFinderCard({ id: 'fireControlFinderGuardC', name: '守御控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardB' });
+fireControlFinderCard({ id: 'fireControlFinderGuardB', name: '守御控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_GUARD_C, promotesTo: 'fireControlFinderGuardA' });
+fireControlFinderCard({ id: 'fireControlFinderGuardA', name: '守御控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_GUARD_A });
 
-fireControlFinderCard({ id: 'fireCtrlAcroC', name: '杂技控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ACRO_C, promotesTo: 'fireCtrlAcroB' });
-fireControlFinderCard({ id: 'fireCtrlAcroB', name: '杂技控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ACRO_C, promotesTo: 'fireCtrlAcroA' });
-fireControlFinderCard({ id: 'fireCtrlAcroA', name: '杂技控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ACRO_A });
+fireControlFinderCard({ id: 'fireControlFinderAcroC', name: '杂技控火术', tier: 'C', actionPoint: 1, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroB' });
+fireControlFinderCard({ id: 'fireControlFinderAcroB', name: '杂技控火术', tier: 'B', actionPoint: 0, pool: FC_POOL_ACRO_C, promotesTo: 'fireControlFinderAcroA' });
+fireControlFinderCard({ id: 'fireControlFinderAcroA', name: '杂技控火术', tier: 'A', actionPoint: 0, pool: FC_POOL_ACRO_A });
 
 // 控火术：燃 C —— 伤害 12，目标每层燃烧伤害 +1（伤害读数取发动时点层数）。
-registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
+registerFireControlPair('fireControlBurnC', '控火术：燃', 'C', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -231,7 +231,7 @@ registerFireControlPair('fireControlBurn', '控火术：燃', 'C', 2, 'enemy', {
 // 口径：伤害量按生命值实际损失（result.dealt，护盾/防御吸收部分不计）；
 // floor(dealt/2) 的余数丢弃（单次触发不跨攻击累计）；"下次攻击"= 你为来源、目标为
 // 敌方的下一次**主级**伤害结算（附级被动伤害不算「你发动的攻击」）。
-registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy', {
+registerFireControlPair('fireControlScorchB', '控火术：灼', 'B', 2, 'enemy', {
   use(sctx) {
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', window: 'once',
@@ -255,7 +255,7 @@ registerFireControlPair('fireControlScorch', '控火术：灼', 'B', 2, 'enemy',
 // 控火术：散 B —— 消耗目标所有燃烧，叠加到其阵营其它成员上。
 // 口径：多成员时按「传播」语义——每名其它成员各获得全额层数（与鬼火
 // 「其燃烧传播给所有敌人」同语言）。
-registerFireControlPair('fireControlSpread', '控火术：散', 'B', 2, 'enemy', {
+registerFireControlPair('fireControlSpreadB', '控火术：散', 'B', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -275,7 +275,7 @@ registerFireControlPair('fireControlSpread', '控火术：散', 'B', 2, 'enemy',
 });
 
 // 控火术：收 B —— 消耗目标所有燃烧，每 3 层获得 1 魏启（走上限截断管线）。
-registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy', {
+registerFireControlPair('fireControlHarvestB', '控火术：收', 'B', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -296,7 +296,7 @@ registerFireControlPair('fireControlHarvest', '控火术：收', 'B', 2, 'enemy'
 });
 
 // 控火术：扰 C —— 消耗自身所有燃烧，每层获得 3 护盾。
-registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none', {
+registerFireControlPair('fireControlDisturbC', '控火术：扰', 'C', 2, 'none', {
   use(sctx) {
     const stacks = sctx.player.getEffectStacks('burn');
     if (stacks <= 0) return true;
@@ -315,7 +315,7 @@ registerFireControlPair('fireControlDisturb', '控火术：扰', 'C', 2, 'none',
 // （口径："敌人"取敌方全体——与同系列始终用"目标"指代单体的写法相区别；
 // 群伤总量 = 消耗层数总和，tags:['aoe'] 与爆裂术同语言；选定目标恒最后命中
 // ——瑞米跟随软指定，隐藏机制不明说）。
-registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 4, 'enemy', {
+registerFireControlPair('fireControlDetonateA', '控火术：爆', 'A', 4, 'enemy', {
   use(sctx) {
     const chosen = enemyTarget(sctx);
     const enemies = aliveEnemies(sctx.battleState).filter(e => e !== chosen);
@@ -343,7 +343,7 @@ registerFireControlPair('fireControlDetonate', '控火术：爆', 'A', 4, 'enemy
 
 // 控火术：聚 A —— 场上所有燃烧迁移至目标（自身/盟友/其余敌人的燃烧全部转移，
 // 目标自身原有层数保留累加）。
-registerFireControlPair('fireControlGather', '控火术：聚', 'C', 3, 'enemy', {
+registerFireControlPair('fireControlGatherC', '控火术：聚', 'C', 3, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -361,7 +361,7 @@ registerFireControlPair('fireControlGather', '控火术：聚', 'C', 3, 'enemy',
 });
 
 // 控火术：变 A —— 烈焰亲和1，消耗自身所有燃烧，每2层获得烈焰亲和1。
-registerFireControlPair('fireControlShift', '控火术：变', 'A', 2, 'none', {
+registerFireControlPair('fireControlShiftA', '控火术：变', 'A', 2, 'none', {
   use(sctx) {
     addEffect(sctx, 'flameAffinity', 1);
     const stacks = sctx.player.getEffectStacks('burn');
@@ -394,15 +394,15 @@ function fireWallCard({ id, tier, base, promotesTo = null }) {
     cardMode: 'normal',
     promotesTo,
     // 条件满足金光（视图期判定同结算口径：牌库有余烬即加成成立）
-    condition: (sctx) => sctx.battleState.zones.deck.some(c => c.defId === 'emberMote'),
+    condition: (sctx) => sctx.battleState.zones.deck.some(c => c.defId === 'emberMoteC'),
     use(sctx) {
-      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMote').length;
+      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMoteC').length;
       gainShield(sctx, base + embers * 2);
       return true;
     },
     describe: () => `护盾${base}，牌库中每有一张/card{emberMote}再+2`,
     battleDescribe: (sctx) => {
-      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMote').length;
+      const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMoteC').length;
       return `护盾${base + embers * 2}，牌库中每有一张/card{emberMote}再+2（现有${embers}张）`;
     },
   });
@@ -415,7 +415,7 @@ fireWallCard({ id: 'fireWallA', tier: 'A', base: 12 });
 // 口径：负面效果 = type 'debuff' 的效果（燃烧自身是配对主体、block/fireproof 为增益，
 // 三者皆排除）；配对数 = min(燃烧层数, 负面层数总和)；多层 debuff 按效果列表顺序
 // 贪心逐层扣减（先挂者先消）。
-registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy', {
+registerFireControlPair('fireControlRefineA', '控火术：炼', 'A', 2, 'enemy', {
   use(sctx) {
     const target = enemyTarget(sctx);
     if (!target) return true;
@@ -443,7 +443,7 @@ registerFireControlPair('fireControlRefine', '控火术：炼', 'A', 2, 'enemy',
 // 无终止链；池内候选经请求 overrides 盖 0 费戳，卡面所见即所得），段 1 应答后入手——
 // 0 费走 runtime 费用覆写通道（addCard overrides 盖章，随卡旅行）；手牌满时按 §7.3 降级入牌库。
 registerSkill({
-  id: 'fireControlSupreme', name: '无上控火术', type: 'fire', tier: 'S', series: 'fireControl', subsystem: 'blaze',
+  id: 'fireControlS', name: '无上控火术', type: 'fire', tier: 'S', series: 'fireControl', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
@@ -515,7 +515,7 @@ function burnOffCard({ id, tier, draw, promotesTo = null }) {
         c.uniqueID !== sctx.self.uniqueID && getSkillDefinition(c.defId)?.type !== 'fire');
       for (const c of targets) {
         sctx.kernel.submitInstruction(new TransformCardInstruction({
-          uniqueID: c.uniqueID, toDefId: 'emberMote',
+          uniqueID: c.uniqueID, toDefId: 'emberMoteC',
         }));
       }
       drawCards(sctx, draw);

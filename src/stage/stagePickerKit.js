@@ -31,6 +31,8 @@
 import { CardScrollPickerObject } from './objects/CardScrollPickerObject.js';
 import { RelicScrollPickerObject } from './objects/RelicScrollPickerObject.js';
 import { ItemShowcaseObject } from './objects/ItemShowcaseObject.js';
+import { CardGalleryObject } from './objects/CardGalleryObject.js';
+import { DECK_VIEW_Z } from './objects/DeckChipObject.js';
 import { CardObject } from './objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from './objects/cardMetrics.js';
 import { renderRichTextBlock } from './richtext/texture.js';
@@ -117,6 +119,7 @@ export function createStagePickerKit({
   let cardPicker = null;   // 全屏选卡（升级/删除/焚毁/粉碎/卡包三选一共用）
   let relicPicker = null;  // 全屏选遗物（老虎机粉碎遗物入口）
   let showcase = null;     // 获得物特写（遗物/药水/奖励到手时播一次）
+  let deckViewer = null;   // 卡组 build 画廊（「卡组」chip 进；复用 CardGalleryObject）
   let pickerRef = null;    // 最近一次 attachPicker 注入的拾取器（惰性创建时优先用它）
   let bakeCache;           // 本地文本烘焙缓存（undefined = 还没算过；null = node 无 document）
   // 当前界面的「确认 / 取消」出口（按入口切换：同一份界面服务多个入口）
@@ -183,6 +186,26 @@ export function createStagePickerKit({
     relicPicker.attachPicker(pickerNow());
     return relicPicker;
   }
+
+  /**
+   * 惰性建卡组 build 画廊（第四件）：复用 CardGalleryObject（渲染/拾取/悬浮与战斗
+   * 同栈），idPrefix 'deckview:' 与战斗牌堆查看器（'viewer:'）的拾取 id 互不撞车；
+   * bgZ 压过全屏选卡/面板模态（OVERLAY_Z 族）→ 可开在选卡界面**之上**——训练升级/
+   * 卡包三选一/战后选卡时按出来看一眼构筑再关回去（SLOW TODO 的动机场景）。
+   */
+  function ensureDeckViewer() {
+    if (deckViewer) return deckViewer;
+    deckViewer = new CardGalleryObject({
+      cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
+      bakeFace,
+      picker: pickerNow(),
+      idPrefix: 'deckview:', bgZ: DECK_VIEW_Z.GALLERY_BG,
+    });
+    scene()?.add(deckViewer);
+    return deckViewer;
+  }
+
+  function closeDeckViewer() { deckViewer?.close(); }
 
   /**
    * 卡牌升级演出（通用入口，cardUpgradeFlight.js 的宿主侧包装）：原卡金闪变身新卡，
@@ -275,6 +298,10 @@ export function createStagePickerKit({
     // ---- 惰性实例（未创建时 null；宿主/测试据此读界面内部态）----
     get cardPicker() { return cardPicker; },
     get relicPicker() { return relicPicker; },
+    /** 卡组 build 画廊是否开着（chip toggle 的读数源）。 */
+    get deckViewerOpen() { return !!deckViewer?.opened; },
+    /** 卡组画廊实例（未创建时 null；harness/测试读条目数用）。 */
+    get deckViewer() { return deckViewer; },
     /** 特写是否在播（宿主据此吞掉面板输入 / 压暗常驻按钮）。 */
     get showcasing() { return !!showcase?.busy; },
     /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
@@ -286,9 +313,9 @@ export function createStagePickerKit({
      * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
      * （实报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
      */
-    rebakeCards() { cardPicker?.rebakeCards?.(); },
+    rebakeCards() { cardPicker?.rebakeCards?.(); deckViewer?.rebake(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
-    get uiBusy() { return grantBusy || upgradeBusy || burnBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened; },
+    get uiBusy() { return grantBusy || upgradeBusy || burnBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened || !!deckViewer?.opened; },
 
     /** 卡牌升级演出（通用入口）：薄暴露内部 playCardUpgrade（见其注释）。 */
     playCardUpgrade(payload) { return playCardUpgrade(payload); },
@@ -639,6 +666,29 @@ export function createStagePickerKit({
     },
 
     /**
+     * 卡组 build 画廊（「卡组」chip 进）：run 牌组全量平铺（array order 即展示序），
+     * 纯浏览无确认键——点空白处/chip 再点一次关闭。**战斗内不随 sync 关闭**（它不在
+     * BattleStage reconcile 的视野里，敌方回合可常开——「非 cutscene 随时查看」的落点）。
+     * 数据边界：kit 不读 run——条目由编排器经 core 的 deckViewEntries(run) 下发
+     * （{uniqueID, defId, power, view}）；view 缺失（def 未注册等异常）退 defId 占位
+     * 烘焙（与 openDevourPicker 兜底同款），不拦开界面。
+     * @returns 是否打开（恒 true；条目空 = 画廊显示「空空如也」背板）
+     */
+    openDeckViewer(entries = []) {
+      const cards = entries.map(e => {
+        const base = { uniqueID: e.uniqueID, defId: e.defId, power: e.power ?? 0 };
+        return e.view ? { ...base, ...withLabels(e.view) } : base;
+      });
+      const viewer = ensureDeckViewer();
+      viewer.attachPicker(pickerNow());
+      viewer.open(cards, { title: `卡组 · ${cards.length} 张` });
+      return true;
+    },
+
+    /** 关闭卡组画廊（幂等；chip toggle / 切幕清算走这里）。 */
+    closeDeckViewer() { closeDeckViewer(); },
+
+    /**
      * 获得物特写（通用组件：有素材用素材，没有就拿程序化色块代替）。退出回调 `onDismiss`
      * 由 `show()` 的载荷携带（构造期那份是可选统一回调，缺省无动作）；**实例在退出后保持
      * 挂载复用**（惰性建一次，靠内部 in/hold/out 时序收尾），故构造无需参数。
@@ -662,20 +712,27 @@ export function createStagePickerKit({
       showcase?.update(dt);
       cardPicker?.update(dt);
       relicPicker?.update(dt);
+      deckViewer?.update(dt);
     },
 
     /** 滚轮：全屏界面开着才消费（返回是否真的动了；全屏界面是模态，滚轮只作用于它）。 */
     handleWheel(deltaY) {      if (cardPicker?.opened) return cardPicker.scrollBy(deltaY / 100);
       if (relicPicker?.opened) return relicPicker.scrollBy(deltaY / 100);
+      if (deckViewer?.opened) return true;   // 卡组画廊 v1 无滚动：吞掉防下层选卡界面联动
       return false;
     },
 
     /**
-     * hover 路由前言：得卡演出在播 → 吞掉；特写在播 → 吞掉（不弹 tooltip）；
+     * hover 路由前言：卡组画廊开着 = 最高层模态（先于一切，含演出吞点击档——chip
+     * toggle 永远可达）；得卡演出在播 → 吞掉；特写在播 → 吞掉（不弹 tooltip）；
      * 某界面开着 → 转它的 onHover。
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的 hover 逻辑）
      */
     routeHover(hit, x, y) {
+      if (deckViewer?.opened) {
+        deckViewer.setHovered(deckViewer.ownsHit(hit) ? hit.id : null);
+        return true;
+      }
       if (grantBusy || upgradeBusy) return true;
       if (showcase?.busy) return true;
       if (cardPicker?.opened) { cardPicker.onHover(hit, x, y); return true; }
@@ -684,10 +741,15 @@ export function createStagePickerKit({
     },
 
     /**
-     * 点击路由前言：得卡/升级演出在播 → 吞掉；特写在播 → 点任意处退出；某界面开着 → 转它的 onClick。
+     * 点击路由前言：卡组画廊开着 = 最高层模态（点卡保持打开读卡、点其余任意处关闭）；
+     * 得卡/升级演出在播 → 吞掉；特写在播 → 点任意处退出；某界面开着 → 转它的 onClick。
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的点击逻辑）
      */
     routeClick(hit) {
+      if (deckViewer?.opened) {
+        if (!deckViewer.ownsHit(hit)) closeDeckViewer();
+        return true;
+      }
       if (grantBusy || upgradeBusy) return true;
       if (showcase?.busy) { showcase.onClick(hit); return true; }
       if (cardPicker?.opened) { cardPicker.onClick(hit); return true; }
@@ -698,9 +760,10 @@ export function createStagePickerKit({
     /**
      * 按下转发（滚动条拖拽）：点击语义在各舞台是「抬起」判定，而滚动条拖拽
      * 必须从按下那拍开始——宿主 handlePointerDown 里调这里，把按下（含指针坐标）交给
-     * 开着的全屏界面（当前只有选卡界面的滚动条用；其余界面没有按下语义，返回 false）。
+     * 开着的全屏界面（当前只有选卡界面的滚动条用；卡组画廊无按下语义，只吞；其余返回 false）。
      */
     routePointerDown(hit, x, y) {
+      if (deckViewer?.opened) return true;
       if (grantBusy || upgradeBusy) return true;
       if (cardPicker?.opened) return cardPicker.onPointerDown?.(hit, x, y) ?? false;
       if (relicPicker?.opened) return relicPicker.onPointerDown?.(hit, x, y) ?? false;
@@ -714,6 +777,7 @@ export function createStagePickerKit({
     attachPicker(picker = null) {
       pickerRef = picker ?? null;
       for (const inst of [cardPicker, relicPicker, showcase]) inst?.attachPicker?.(picker ?? null);
+      deckViewer?.attachPicker(picker ?? null);
     },
 
     /** 两个选卡/选遗物界面的按钮动作合并查询（契约测试用；都没有则 null）。 */
@@ -734,6 +798,7 @@ export function createStagePickerKit({
       showcase?.clearPending?.();   // 挂起件随切幕弃掉（舞台将死，不得重放）
       if (cardPicker?.opened) cardPicker.close();
       if (relicPicker?.opened) relicPicker.close();
+      if (deckViewer?.opened) deckViewer.close();
     },
 
     /** 释放已创建的实例（宿主 dispose 时调用；未创建的无事发生）。 */
@@ -743,6 +808,7 @@ export function createStagePickerKit({
         scene()?.remove(inst);
         inst.dispose();
       }
+      if (deckViewer) { scene()?.remove(deckViewer); deckViewer.dispose(); deckViewer = null; }
       cardPicker = null;
       relicPicker = null;
       showcase = null;

@@ -95,13 +95,16 @@ export function resolveDamageFx(defId) {
   if (!def) return null;
   // 天斩链（A/S/X）：heavenCleave 在施术拍已实体锁演完整场（压迫+巨刃+光柱+
   // 断裂），伤害拍不再补刀光——避免双斩读感
-  if (def.id === 'godCleave' || def.id === 'skyCleave' || def.id === 'mountainCleave') return null;
+  if (def.id === 'godCleaveX' || def.id === 'skyCleaveS' || def.id === 'mountainCleaveA') return null;
   // 空形拳（S）：命中兑付归 voidStrike（施术拍只有静场蓄意，命中才炸——
   // 后手不成立则本拍根本不存在，静场收于「空」，whiff 即语义）
-  if (def.id === 'emptyFist') return { kind: 'voidStrike' };
-  switch (def.series) {
+  if (def.id === 'emptyFistS') return { kind: 'voidStrike' };
+  // 体修 series 已拆链级：刀/拳/格挡的体系归宗改读 subsystem（火系链级行照常走 series）
+  const seriesKey = def.subsystem === 'blade' || def.subsystem === 'block' || def.subsystem === 'fist'
+    ? def.subsystem : def.series;
+  switch (seriesKey) {
     case 'blade':
-      return { kind: 'slash', variant: slashVariantOf(def) };
+      return { kind: 'slashC', variant: slashVariantOf(def) };
     case 'selfImmolate':   // 焰刃链 + 玩火/焚烧系（火刀近身，焰刃配三档色）
       return {
         kind: 'flameslash',
@@ -113,15 +116,16 @@ export function resolveDamageFx(defId) {
       const name = def.name ?? '';
       const heavy = HEAVY_FIST.test(name);
       const rapid = /连击|乱拳|雨拳|千手|万手|瞬击|快拳/.test(name);
-      return { kind: 'punch', heavy, rapid };
+      return { kind: 'punchC', heavy, rapid };
     }
     case 'block': {        // 格挡系攻击链（掌/腿/破架——体修同源，施术拍已逐卡走 fistCast）
       const name = def.name ?? '';
       const heavy = /摘星|贯心|旋风腿|碎骨|扫堂/.test(name);
       const rapid = /二击|双击/.test(name);
-      return { kind: 'punch', heavy, rapid };
+      return { kind: 'punchC', heavy, rapid };
     }
-    case 'fireBall':       // 火球链 + 蓄热火球链（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
+    case 'fireBall':       // 火球链
+    case 'heatCharged':    // 蓄热火球链（拆系列同款）（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
       return { kind: 'fireburst', proj: 'tracked' };
@@ -132,9 +136,9 @@ export function resolveDamageFx(defId) {
     case 'spark':          // 火花链（乱射：本拍自持投射物——随机弧快弹，抵达才爆）
       return { kind: 'ignition', proj: 'owned' };
     case 'fireControl': {  // 控火术：按 id 分——燃=单体火爆 / 爆=群伤落地 / 破=小火
-      if (def.id === 'fireControlBurn') return { kind: 'fireburst' };
-      if (def.id === 'fireControlDetonate') return { kind: 'fireburst', ground: true };
-      if (def.id === 'burnSnapB' || def.id === 'burnSnapA') return { kind: 'ignition' };
+      if (def.id === 'fireControlBurnC') return { kind: 'fireburst' };
+      if (def.id === 'fireControlDetonateA') return { kind: 'fireburst', ground: true };
+      if (def.id === 'fireControlSnapB' || def.id === 'fireControlSnapA') return { kind: 'ignition' };
       return null;
     }
     case 'burst':          // 爆裂术终止新星（咏唱熄灭的群伤爆发；id 供 AOE 多拍去重）

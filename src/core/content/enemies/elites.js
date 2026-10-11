@@ -274,7 +274,7 @@ registerEnemy({
 // 白色带消耗、黑色是回库的滞留税）。均不入奖励池。
 function timedBombCard({ id, name, cost, note }) {
   registerSkill({
-    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk',
+    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk', image: id,
     cost,
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -298,7 +298,7 @@ timedBombCard({ id: 'blueBomb', name: '蓝色炸弹', cost: { mana: 3, actionPoi
 
 function instantBombCard({ id, name, amount, exhaust }) {
   registerSkill({
-    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk',
+    id, name, type: 'normal', tier: 'Z', series: 'enemyJunk', image: id,
     cost: { mana: 0, actionPoint: 0 },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
@@ -395,7 +395,7 @@ registerEnemy({
       }));
       for (let i = 0; i < 4; i++) {
         actx.kernel.submitInstruction(new AddCardInstruction({
-          defId: 'voidCard', toZone: 'deck', index: 'random',
+          defId: 'voidCardC', toZone: 'deck', index: 'random',
         }));
       }
     }

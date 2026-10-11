@@ -17,7 +17,7 @@ const CARD_RE = /\/card\{([^}]+)\}/g;
 const RESERVED = ['effect', 'named', 'card'];
 
 /**
- * 解析 /card{...} 的参数体：'instantStrike' / 'ironShard, damage=10, tier=B'
+ * 解析 /card{...} 的参数体：'instantStrikeC' / 'ironShard, damage=10, tier=B'
  * → { cardId, params }（params 值恒为字符串；无参数时为 {}）。
  */
 export function parseCardRef(raw) {

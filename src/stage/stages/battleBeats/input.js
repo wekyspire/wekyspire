@@ -18,6 +18,7 @@ export const inputBeats = {
     if (this._viewer.opened) {
       const hit = this.picker.hover(x, y);
       this._syncButtonHover(null);
+      this._syncChipHover(hit);   // chip（z 180）在查看器之上：hover 照常
       // 卡面 token（富文本/S 标）视作仍在悬浮所属卡：画廊抬升不中断（与手牌同语义）
       this._viewer.setHovered(this._viewer.ownsHit(hit) ? hit.id : null);
       this._setOverCard(hit);
@@ -26,6 +27,7 @@ export const inputBeats = {
     // 瞄准模式：卡留手牌不动，箭头从卡牌延伸到指针；掠过存活敌人 → 高亮 + 箭头变色
     if (this._aiming) {
       this._syncButtonHover(null);
+      this._syncChipHover(null);
       const obj = this._views.get(this._aiming.id);
       if (!obj) { this._cancelAiming(); return; } // 卡在瞄准中离场（异常路径）：收尾
       const world = this._worldAt(x, y, ARROW_Z);
@@ -38,6 +40,7 @@ export const inputBeats = {
     }
     if (this._dragging) {
       this._syncButtonHover(null);
+      this._syncChipHover(null);
       const world = this._worldAt(x, y, 30); // 与拖拽卡同深（z=30），防透视视差
       const obj = this._views.get(this._dragging.id);
       if (obj) obj.position.set(world.x, world.y, 30);
@@ -48,6 +51,8 @@ export const inputBeats = {
       return;
     }
     const hit = this.picker.hover(x, y);
+    // chip hover 先于模态路由同步（chip 在一切模态层之上：画廊/面板开着时也照常反馈）
+    this._syncChipHover(hit);
     // 全屏选卡（战后删卡机会）：悬浮交它（候选卡抬起 + 卡面 hover）。
     // ⚠ 必须排在面板之前：选卡界面是**盖在面板之上的全屏层**，交给面板的话候选卡既不抬起
     // 也不弹卡面预览（点击仍走选卡，hover/click 语义会打架）。
@@ -70,6 +75,10 @@ export const inputBeats = {
     this._setButtonHover('main', id === 'btn:main');
     this._setButtonHover('swap', id === 'btn:swap');
   },
+  // 卡组 chip 的 hover 态（与按钮同律：模态/拖拽/瞄准期间喂 null 清空）
+  _syncChipHover(hit) {
+    this._deckChip?.setHovered(hit?.kind === 'deckChip');
+  },
   _setButtonHover(key, on) {
     if (!!this._btnHover[key] === on) return;
     this._btnHover[key] = on;
@@ -79,6 +88,7 @@ export const inputBeats = {
   handlePointerDown(x, y) {
     if (this._viewer.opened) return; // 查看器内无按压语义（抬起时统一判定开/关）
     if (this._pick) return;          // 选卡覆盖层：点按语义在抬起时统一处理（不瞄准/不拖拽）
+    if (this._pickerKit.deckViewerOpen) return; // 卡组画廊模态：无按压语义（防止穿透到卡牌拖拽/瞄准）
     if (this._pickerKit.cardPicker?.opened) {   // 全屏选卡（战后删卡机会）：滚动条拖拽从按下开始
       this._pickerKit.routePointerDown?.(this.picker.pick(x, y), x, y);
       return;
@@ -127,6 +137,12 @@ export const inputBeats = {
   handlePointerUp(x, y) {
     this.scene.updateMatrixWorld(true);
     this.uiScene.updateMatrixWorld(true);
+    // 「卡组」chip：最高层常驻入口——先于一切模态分支（画廊/面板/选卡开着也能按；
+    // 画廊开着时再点一次 = 关闭）。舞台直达路由，不经结算仲裁 → 演出/敌方回合照常可用。
+    if (this.picker.pick(x, y)?.kind === 'deckChip') {
+      this._onIntent?.({ action: 'deckViewToggle' });
+      return;
+    }
     if (this._viewer.opened) {
       // 点卡（或卡面 token）= 读卡，保持打开；点背板/其余任意处关闭
       if (!this._viewer.ownsHit(this.picker.pick(x, y))) this._closeViewer();

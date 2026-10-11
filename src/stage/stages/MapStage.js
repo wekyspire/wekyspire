@@ -4,6 +4,7 @@ import { isBossFloor } from '../../core/run/runFlow.js';
 
 const _v3 = new THREE.Vector3();   // 装卸区坐标换算的复用向量（免逐帧分配）
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
+import { DeckChipObject, DECK_VIEW_Z } from '../objects/DeckChipObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
@@ -142,6 +143,12 @@ export class MapStage {
     this._bubbles = new BubbleLayer();   // 角色对话/思索泡泡（世界锚点，每帧重投影）
     this.uiScene.add(this._bubbles);
     this._bubbleAnchors = new Map();     // key -> { x, y, z }（世界坐标；相机移动时重投影）
+    // 「卡组」chip（build 画廊入口）：右下角（与战斗内牌库堆同角位语言）。z 压过一切
+    // 模态层（面板/全屏选卡/画廊）→ prep 面板与选卡界面开着时也能按；点击走意图上行
+    // （deckViewToggle）。计数经 setStatus（编排器 syncMapStatus 下发）。
+    this._deckChip = new DeckChipObject();
+    this._deckChip.position.set(80, -55, DECK_VIEW_Z.CHIP);
+    this.uiScene.add(this._deckChip);
     this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
     // fx 门面地基（Phase 4）：塔楼目前无可寻址道具，cast 留空表——
     // cutscene 'fx' step 在塔楼层只应做运镜/等待类演出（camera 可用）
@@ -326,11 +333,13 @@ export class MapStage {
     this._panel?.attachPicker?.(this._picker); // 重连时把已有面板重新登记
     this._bindLoadout?.();                     // 装卸区拾取同批重接
     this._pickerKit.attachPicker(this._picker); // 选卡/选遗物/特写一并重连
+    this._picker?.addPickable('deckChip', this._deckChip, { kind: 'deckChip', space: 'ui' });
   }
 
   detachInput() {
     this._panel?.attachPicker?.(null);
     this._pickerKit.attachPicker(null);
+    this._picker?.removePickable?.('deckChip');
     this._picker = null;
     this._downHit = null;
   }
@@ -361,6 +370,7 @@ export class MapStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
+    this._deckChip.setHovered(hit?.kind === 'deckChip'); // chip 在模态层之上：路由前先同步
     if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     this._panel?.onHover?.(hit);
     this._loadout?.onHoverHit?.(hit);                    // 装卸区图标抬升反馈
@@ -389,6 +399,8 @@ export class MapStage {
     const down = this._downHit;
     this._downHit = null;
     if (!down || !hit || down.kind !== hit.kind || down.id !== hit.id) return;
+    // 「卡组」chip：最高层常驻入口——先于模态路由（面板/选卡/画廊开着也能按）
+    if (hit.kind === 'deckChip') { this._onIntent?.({ action: 'deckViewToggle' }); return; }
     if (this._pickerKit.routeClick(hit)) return;   // 特写点任意处退出 / 全屏界面接管
     this._panel?.onClick?.(hit);
   }
@@ -399,13 +411,14 @@ export class MapStage {
    * hp/maxHp 为角色血条（run 快照，战斗外无变化不重烘）；remi 为瑞米区视图
    * （{ present, hp }，编排器压平后透传）。
    */
-  setStatus({ ap, apMax, mana, manaMax, money = null, hp = null, maxHp = null, relics = null, remi = null }) {
+  setStatus({ ap, apMax, mana, manaMax, money = null, hp = null, maxHp = null, relics = null, remi = null, deckCount = null }) {
     this._statusBar.apCoin.setValue(ap, apMax);
     this._statusBar.manaCrystal.setValue(mana, manaMax);
     if (money !== null) this._topBar.setMoney(money);
     if (hp != null && maxHp != null) this._statusBar.setPlayerHp(hp, maxHp);
     if (relics) this._topBar.setRelics(relics);
     if (remi) this._statusBar.setRemi(remi);
+    if (deckCount != null) this._deckChip.setCount(deckCount);
   }
 
   _applyAvatar() {
@@ -422,6 +435,7 @@ export class MapStage {
     this._unsubTick?.();
     this._unsubTick = manager.onTick((dt) => {
       this._statusBar.update(dt);
+      this._deckChip.update(dt);         // 卡组 chip 的 hover scale 包络
       this._loadout?.update(dt);         // 遗物装卸区（容量条缓动/图标抬升/弹回）
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._pickerKit.update(dt);        // 获得物特写（自带 in/hold/out 时序）
@@ -483,6 +497,7 @@ export class MapStage {
     this._removePanel();
     this._bubbles.dispose();
     this._bubbleAnchors.clear();
+    this._deckChip.dispose();    // 卡组 chip（纹理随父级销毁）
     this._pickerKit.dispose();   // 选卡/选遗物/特写（未创建的实例无事发生）
     if (this._slotRoll) {
       this.uiScene.remove(this._slotRoll);

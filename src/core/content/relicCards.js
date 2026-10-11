@@ -11,7 +11,7 @@ import { attackDamage, addEffect, drawCards, resolvedDamageText } from './cardKi
 
 // 〈速射〉：阿罗那 III 战斗开始时加入手牌。
 registerSkill({
-  id: 'rapidFire', name: '速射', type: 'normal', tier: 'C', series: 'relic',
+  id: 'relicRapidC', name: '速射', type: 'normal', tier: 'C', series: 'relic',
   keywords: ['exhaust'],
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -26,14 +26,14 @@ registerSkill({
 
 // 〈点射〉：黑火 H-3 战斗开始时洗入牌库。
 registerSkill({
-  id: 'pointShot', name: '点射', type: 'normal', tier: 'C', series: 'relic',
+  id: 'relicPointC', name: '点射', type: 'normal', tier: 'C', series: 'relic',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
     attackDamage(sctx, 16);
-    drawCards(sctx, 1, { reason: 'pointShot' });
+    drawCards(sctx, 1, { reason: 'relicPointC' });
     return true;
   },
   describe: () => '16伤害，抽1',
@@ -41,14 +41,14 @@ registerSkill({
 
 // 〈压制射击〉：祈祷制度战斗开始时洗入牌库。
 registerSkill({
-  id: 'suppressionFire', name: '压制射击', type: 'normal', tier: 'C', series: 'relic',
+  id: 'relicSuppressionC', name: '压制射击', type: 'normal', tier: 'C', series: 'relic',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   canSpawnAsReward: false,
   use(sctx) {
     for (const e of aliveEnemies(sctx.battleState)) attackDamage(sctx, 19, { target: e, tags: ['aoe'] });
-    drawCards(sctx, 1, { reason: 'suppressionFire' });
+    drawCards(sctx, 1, { reason: 'relicSuppressionC' });
     return true;
   },
   describe: () => '19群伤，抽1',
@@ -56,14 +56,14 @@ registerSkill({
 
 // 〈贯穿射击〉：低语苍鹰 Z 战斗开始时洗入牌库。
 registerSkill({
-  id: 'piercingShot', name: '贯穿射击', type: 'normal', tier: 'C', series: 'relic',
+  id: 'relicPierceC', name: '贯穿射击', type: 'normal', tier: 'C', series: 'relic',
   cost: { mana: 0, actionPoint: 1 },
   charges: { max: 1, cooldownTurns: 3 },
   cardMode: 'normal', targetMode: 'enemy',
   canSpawnAsReward: false,
   use(sctx) {
     attackDamage(sctx, 23, { pierce: true });
-    drawCards(sctx, 1, { reason: 'piercingShot' });
+    drawCards(sctx, 1, { reason: 'relicPierceC' });
     return true;
   },
   describe: () => '23/named{穿透}伤害，抽1',
@@ -72,7 +72,7 @@ registerSkill({
 // 〈盗取时间〉：鸟羽战斗开始时插入牌库底。S 级额外回合：结束本回合，
 // 并立刻开始你的新一回合（跳过一次敌方回合——敌方整段不发生，含其回合开始效果）。
 registerSkill({
-  id: 'stealTime', name: '盗取时间', type: 'normal', tier: 'S', series: 'relic',
+  id: 'relicStealS', name: '盗取时间', type: 'normal', tier: 'S', series: 'relic', image: 'stealTime',
   cost: { mana: 0, actionPoint: 3 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
@@ -90,7 +90,7 @@ registerSkill({
 
 // 〈挥舞〉：戟战斗开始时洗入牌库。
 registerSkill({
-  id: 'greatSweep', name: '挥舞', type: 'normal', tier: 'S', series: 'relic',
+  id: 'relicSweepS', name: '挥舞', type: 'normal', tier: 'S', series: 'relic', image: 'greatSweep',
   cost: { mana: 0, actionPoint: 4 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
