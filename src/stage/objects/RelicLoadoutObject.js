@@ -1,8 +1,9 @@
 // RelicLoadoutObject：战前准备面板的**遗物装卸区**（的交互升级）。
 //
 // 取代旧的「文字行 + 装备/卸下按钮」：
-//   · 遗物显示 = 图标（圆角方块 + 立绘/特征字 + 稀有度描边，烘焙缓存）——hover 出
-//     效果详情（token 热区走全局 tooltip，与顶栏遗物同一契约），图标有抬升反馈；
+//   · 遗物显示 = 图标（有立绘 = 直出立绘无底无框；无立绘 = 方角厚描边底片 +
+//     特征字 + 稀有度描边，烘焙缓存）——hover 出效果详情（token 热区走全局 tooltip，
+//     与顶栏遗物同一契约），图标有抬升反馈；
 //   · 装备/卸下 = **拖拽**：从背囊拖到「已装备」区=装备；从装备区拖回「背囊」=卸下；
 //     拖拽中目标区亮边提示、容量条给出预览填充（放不下变红）；松手在区外=弹回原位；
 //   · 可用遗物（canUse）**点击**即使用（拖拽与点击按 6px 位移阈值区分）；
@@ -32,14 +33,14 @@ const NS_PITCH = 3.4;
 const Z = { content: 1, zone: 0.5, ghost: 40 };
 const DRAG_THRESHOLD = 6;    // px：超过即判拖拽（否则算点击）
 const C = {
-  barTrack: 0x141a2b,       // 容量条底
-  barFill: 0x6f9fd8,        // 容量条填充（淡蓝——金色只留给金钱）
-  barPreview: 0x9cc4ef,     // 拖拽预览填充（更亮一档）
+  barTrack: 0x141414,       // 容量条底
+  barFill: 0xa8a8a8,        // 容量条填充（淡蓝——金色只留给金钱）
+  barPreview: 0xd0d0d0,     // 拖拽预览填充（更亮一档）
   barOver: 0xe85a5a,        // 超上限（红）
-  zoneBorder: 0x39445e,     // 区边框常态
-  zoneGlow: 0x7fb1e8,       // 拖拽悬停亮边
+  zoneBorder: 0x444444,     // 区边框常态
+  zoneGlow: 0xcfcfcf,       // 拖拽悬停亮边
   zoneBad: 0xe85a5a,        // 放不下
-  empty: 0x232b41,
+  empty: 0x232323,
 };
 
 const rarityColor = (r) => RARITY_COLORS[r] ?? RARITY_COLORS.C;
@@ -56,25 +57,25 @@ function iconTexture(relic) {
   const g = c.getContext('2d');
   g.scale(S, S);
   const col = rarityColor(relic.rarity);
-  const r = 26;
-  g.beginPath();
-  g.roundRect(2, 2, W - 4, W - 4, r);
-  g.fillStyle = 'rgba(24, 29, 46, 0.95)';
-  g.fill();
-  g.lineWidth = 3.5;
-  g.strokeStyle = col;
-  g.globalAlpha = 0.9;
-  g.stroke();
-  g.globalAlpha = 1;
   const art = sharedRelicArtCache.get(relic.name ?? '');
   if (art?.width) {
-    const pad = 10;
+    // 有立绘：直出（UI 语言：有素材的遗物展示无底无框）
+    const pad = 6;
     const box = W - pad * 2;
     const k = Math.min(box / art.width, box / art.height);
     const w = art.width * k, h = art.height * k;
     g.drawImage(art, (W - w) / 2, (W - h) / 2, w, h);
   } else {
-    // 无立绘：特征字（def.icon 优先，回落名称首字）
+    // 无立绘：方角厚描边底片 + 特征字（def.icon 优先，回落名称首字）
+    g.beginPath();
+    g.roundRect(2, 2, W - 4, W - 4, 0);
+    g.fillStyle = 'rgba(24, 24, 24, 0.95)';
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = col;
+    g.globalAlpha = 0.9;
+    g.stroke();
+    g.globalAlpha = 1;
     const ch = relic.icon ?? (relic.name ?? '?')[0];
     g.font = `bold 76px "Microsoft YaHei", "PingFang SC", sans-serif`;
     g.textAlign = 'center';
@@ -142,12 +143,12 @@ function barTrackTexture(barW, segs) {
   c.width = Wpx * S; c.height = Hpx * S;
   const g2 = c.getContext('2d');
   g2.scale(S, S);
-  g2.beginPath(); g2.roundRect(1, 1, Wpx - 2, Hpx - 2, 4);
-  g2.fillStyle = '#141a2b'; g2.fill();
-  g2.lineWidth = 1.5; g2.strokeStyle = 'rgba(120,132,164,0.55)'; g2.stroke();
+  g2.beginPath(); g2.roundRect(1, 1, Wpx - 2, Hpx - 2, 0);
+  g2.fillStyle = '#141414'; g2.fill();
+  g2.lineWidth = 3; g2.strokeStyle = 'rgba(140,140,140,0.55)'; g2.stroke();
   for (let i = 1; i < segs; i++) {
     const x = (Wpx * i) / segs;
-    g2.strokeStyle = 'rgba(10,13,22,0.9)';
+    g2.strokeStyle = 'rgba(12,12,12,0.9)';
     g2.lineWidth = 2;
     g2.beginPath(); g2.moveTo(x, 2); g2.lineTo(x, Hpx - 2); g2.stroke();
   }
@@ -157,8 +158,8 @@ function barTrackTexture(barW, segs) {
   return tex;
 }
 
-// drop-target 区的「描边」烘焙（中间全透明、只有圆角边线——拖拽悬停的亮边是描边
-// 不是整区色块，贴合面板扁平细描边风格；颜色由材质运行时调）
+// drop-target 区的「描边」烘焙（中间全透明、只有方角厚边线——拖拽悬停的亮边是描边
+// 不是整区色块，贴合面板扁平厚描边风格；颜色由材质运行时调）
 const _edgeTexCache = new Map();
 function zoneEdgeTexture(w, h) {
   if (typeof document === 'undefined') return null;
@@ -169,9 +170,9 @@ function zoneEdgeTexture(w, h) {
   c.width = Wpx * S; c.height = Hpx * S;
   const g2 = c.getContext('2d');
   g2.scale(S, S);
-  const lw = 2.5;
+  const lw = 3.5;
   g2.beginPath();
-  g2.roundRect(lw / 2 + 0.5, lw / 2 + 0.5, Wpx - lw - 1, Hpx - lw - 1, 9);
+  g2.roundRect(lw / 2 + 0.5, lw / 2 + 0.5, Wpx - lw - 1, Hpx - lw - 1, 0);
   g2.lineWidth = lw;
   g2.strokeStyle = '#ffffff';   // 白线（材质 color 上色）
   g2.stroke();
@@ -278,7 +279,7 @@ export class RelicLoadoutObject extends THREE.Group {
     this._bar = this._makeBar(barW, slots);
     this._bar.group.position.set(-W / 2 + barW / 2, H / 2 - 0.5 - BAR.h / 2, Z.content);
     this.add(this._bar.group);
-    this._barLabel = new TextBlockObject({ bakeText: this._bakeText, fontPx: 13, tint: '#c3cee0' });
+    this._barLabel = new TextBlockObject({ bakeText: this._bakeText, fontPx: 13, tint: '#c2c2c2' });
     this._barLabel.setText(`${slots.used ?? 0}/${slots.total ?? 0}`, { maxWidth: BAR.labelW * 10 });
     this._barLabel.position.set(W / 2 - BAR.labelW / 2 + 0.4, H / 2 - 0.5 - BAR.h / 2, Z.content);
     this.add(this._barLabel);
@@ -297,7 +298,7 @@ export class RelicLoadoutObject extends THREE.Group {
     // —— 无需装备的遗物行（只读）——
     if (ns.length) {
       y -= 0.8;
-      const label = this._label('无需装备的遗物', '#a8c6a0');
+      const label = this._label('无需装备的遗物', '#a8a8a8');
       label.position.set(0, y - LABEL_H / 2, Z.content);
       this.add(label);
       y -= LABEL_H;
@@ -313,7 +314,7 @@ export class RelicLoadoutObject extends THREE.Group {
 
     // —— 操作提示行 ——
     y -= 0.6;
-    const hint = this._label(hasLoadout ? '拖拽图标装卸，金色圆点的遗物可点击使用' : '', '#6f7a92');
+    const hint = this._label(hasLoadout ? '拖拽图标装卸，金色圆点的遗物可点击使用' : '', '#787878');
     hint.position.set(0, y - HINT_H / 2, Z.content);
     this.add(hint);
   }
@@ -321,7 +322,7 @@ export class RelicLoadoutObject extends THREE.Group {
   /** 一个 drop-target 区：边框 + 标题 + 图标网格。返回区底 y。 */
   _buildZone(id, title, topY, items, perRow, rows, W) {
     const zoneH = LABEL_H + PAD + rows * PITCH + PAD;
-    const label = this._label(title, '#8a93b2');
+    const label = this._label(title, '#8f8f8f');
     label.position.set(0, topY - LABEL_H / 2, Z.content);
     this.add(label);
     const zTop = topY - LABEL_H;
@@ -342,7 +343,7 @@ export class RelicLoadoutObject extends THREE.Group {
     });
     // 空区提示字（有 drop target 但没图标时读得出这是个「可放」的地方）
     if (!items.length) {
-      const empty = this._label('（空）', '#5a6379');
+      const empty = this._label('（空）', '#646464');
       empty.position.set(0, zTop - (zoneH - LABEL_H) / 2, Z.content);
       this.add(empty);
     }

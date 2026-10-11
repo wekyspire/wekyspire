@@ -22,8 +22,12 @@ export const blockCast = {
     return async (ctx, deps, notify) => {
       const player = deps.playerUnit?.();
       const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 220, scale: 1.3 });
+      // 前段即放行（2026-10-09 用户定）：卡面闪烁一触发就 notify——增益拍（盾的
+      // 放缩动画/罩体呈现）与起手演出**并行**，盾系手感提速；灯/环余韵后台散尽
+      // （模板协程独立于节拍，notify 只放行队列不杀演出）。
+      notify();
       // 安全网：enemy 目标卡漏映射到本模板时只留起手（防「守势特效打向敌人」误读）
-      if (!player || def?.targetMode === 'enemy') { await flareJob; notify(); return; }
+      if (!player || def?.targetMode === 'enemy') { await flareJob; return; }
 
       if (prm.mode === 'ward') {
         // 身前一亮即止：借 fx 灯池给单位一记柔光（罩子在增益拍接管视觉主体）
@@ -43,7 +47,6 @@ export const blockCast = {
           lamp.intensity = 0;
         }
         await flareJob;
-        notify();
         return;
       }
 
@@ -65,7 +68,6 @@ export const blockCast = {
         });
       });
       await Promise.all([flareJob, ringJob]);
-      notify();
     };
   },
 };

@@ -37,7 +37,7 @@ const FLOOR_FAR_Z = -80;
 const LEFT_WALL_X = -95;
 const LEFT_WALL_TH = 12; // 左墙厚度：必须 > 2 个 shadow texel（2048/400≈5wu/texel），否则 PCF 边缘漏光
 
-const TORCH_LIGHT_BASE = 1150; // 幽火点光基准强度（three 物理光度学，candela；收敛光池只留灯周）
+const TORCH_LIGHT_BASE = 460; // 幽火点光基准强度（2026-10-11 大幅削弱，旧值 1150 晃眼；与 rooms/lighting.js FIRE_BASE 同口径）
 const CHANDELIER_LIGHT_BASE = 800;
 const MOONLIGHT_BASE = 2.2;    // 月光平行光强度（穿窗投影的主角：窗形光池要读得出来）
 const FLAME_RATE = 12;          // 每幽火火焰粒子 /秒
@@ -405,6 +405,7 @@ export function buildDungeon3D() {
     torches.push({
       x: spot.x, y: y + 2.5, z: spot.z + 1,
       light, flame, inner, phase: Math.random() * Math.PI * 2,
+      freq: 0.72 + Math.random() * 0.6,   // 闪烁去同步：每火独立倍频
       intensity: 1, emitterAcc: 0,
     });
   }
@@ -493,6 +494,7 @@ export function buildDungeon3D() {
     torches.push({
       x: spot.x, y: y + 2.5, z: spot.z + 2,
       light, flame, inner, phase: Math.random() * Math.PI * 2,
+      freq: 0.72 + Math.random() * 0.6,   // 闪烁去同步：每火独立倍频
       intensity: 1, emitterAcc: 0,
     });
   }
@@ -518,7 +520,7 @@ export function buildDungeon3D() {
   // 与 rooms/lighting.js 同一处方——本场景是 USE_PCG_ROOMS=false 时的回退，观感须一致）
   // HemisphereLight = 全局环境光，**没有位置也没有衰减**——提亮必然全场均匀洗亮，
   // 只能当保底（暗部不死黑），不能当主光；光照焦点由下方"战场主补光"承担
-  group.add(new THREE.HemisphereLight(desatColor(0x3a4666).getHex(), desatColor(0x232030).getHex(), 1.5));
+  group.add(new THREE.HemisphereLight(desatColor(0x3b3d43).getHex(), desatColor(0x252528).getHex(), 1.5));
   const moonlight = new THREE.DirectionalLight(desatColor(0x9db4ec).getHex(), MOONLIGHT_BASE);
   // position 对平行光只决定**阴影相机的深度原点**（光照方向 = position→target 不变）：
   // 必须沿光轴反向后移足够远，让整面高墙（到 +460）都落在阴影相机近平面之前——
@@ -534,28 +536,29 @@ export function buildDungeon3D() {
   sc.left = -200; sc.right = 200; sc.top = 600; sc.bottom = -120; // 须盖住加高加宽后的左墙+房间
   sc.near = 10; sc.far = 600;
   moonlight.shadow.bias = -0.0015;
-  const fill = new THREE.DirectionalLight(desatColor(0x66779e).getHex(), 0.5);
+  const fill = new THREE.DirectionalLight(desatColor(0x84888f).getHex(), 0.5);
   fill.position.set(30, 60, 200);
   group.add(fill);
   // 月光落地反弹（假 GI 核心）：两处光池各一盏大半径低强度点光，贴地上方朝上打，
   // 把周围柱列/墙面/拱肋当"被月光反弹的二次面"打亮——暗部不死黑，成本=两盏无阴影点光
-  const bounceA = new THREE.PointLight(desatColor(0x8298d4).getHex(), 620, 130, 1.8);
+  const bounceA = new THREE.PointLight(desatColor(0x9ba1a7).getHex(), 620, 130, 1.8);
   bounceA.position.set(-24, FLOOR_Y + 9, -17); // winA 光池（光路 t≈75 落点）
-  const bounceB = new THREE.PointLight(desatColor(0x8298d4).getHex(), 380, 110, 1.8);
+  const bounceB = new THREE.PointLight(desatColor(0x9ba1a7).getHex(), 380, 110, 1.8);
   bounceB.position.set(-24, FLOOR_Y + 9, 20);  // winB 光池
   group.add(bounceA, bounceB);
   // 战场主补光（光照焦点）：悬在战线轴中点上空的大点光，物理衰减让亮度自然
   // 向四周（远墙/近景画外）跌落——战场亮、周围暗，一盏无阴影点光搞定
-  const battleGlow = new THREE.PointLight(desatColor(0x93a5d8).getHex(), 8000, 260, 2.0);
+  const battleGlow = new THREE.PointLight(desatColor(0xb6bac1).getHex(), 8000, 260, 2.0);
   battleGlow.position.set(-4, FLOOR_Y + 60, -22); // battleLine near/far 中点正上方
   group.add(battleGlow);
 
   // ---- 月光浮尘云：常驻噪音浮尘，亮暗由月光 shadow map 真值驱动（moonDust.js）----
-  const beamDir = new THREE.Vector3(0.836, -0.542, 0.09); // 平行光 dir 反推（窗口 → 地板光池）
+  // 光轴方向从真实月灯派生；光柱人口贴轴循环（moonDust.js 头注的扎堆/清空修复）
+  const beamDir = new THREE.Vector3().subVectors(moonlight.target.position, moonlight.position).normalize();
   const moonDust = buildMoonDust({
     beams: [
-      { origin: new THREE.Vector3(LEFT_WALL_X + LEFT_WALL_TH / 2, FLOOR_Y + 41, -25), dir: beamDir, len: 74, radius: 9 },  // winA
-      { origin: new THREE.Vector3(LEFT_WALL_X + LEFT_WALL_TH / 2, FLOOR_Y + 40, 15), dir: beamDir, len: 72, radius: 7 },   // winB
+      { origin: new THREE.Vector3(LEFT_WALL_X + LEFT_WALL_TH / 2, FLOOR_Y + 41, -25), dir: beamDir, height: 41, radius: 9 },  // winA
+      { origin: new THREE.Vector3(LEFT_WALL_X + LEFT_WALL_TH / 2, FLOOR_Y + 40, 15), dir: beamDir, height: 40, radius: 7 },   // winB
     ],
   });
   group.add(moonDust.points);
@@ -580,24 +583,26 @@ export function buildDungeon3D() {
       bn.mesh.rotation.x = 0.05 * Math.sin(time * 0.6 + bn.phase * 1.3);
     }
     for (const t of torches) {
+      const w1 = 11 * t.freq, w2 = 23 * t.freq;
       t.intensity = 1
-        + 0.16 * Math.sin(time * 11 + t.phase)
-        + 0.08 * Math.sin(time * 23 + t.phase * 1.7);
+        + 0.16 * Math.sin(time * w1 + t.phase)
+        + 0.08 * Math.sin(time * w2 + t.phase * 1.7);
       t.light.intensity = TORCH_LIGHT_BASE * t.intensity;
       t.flame.scale.set(
-        1 + 0.12 * Math.sin(time * 17 + t.phase),
-        1 + 0.22 * Math.sin(time * 13 + t.phase * 2.1),
+        1 + 0.12 * Math.sin(time * 17 * t.freq + t.phase),
+        1 + 0.22 * Math.sin(time * 13 * t.freq + t.phase * 2.1),
         1,
       );
-      t.inner.scale.y = 1 + 0.3 * Math.sin(time * 19 + t.phase * 0.7);
+      t.inner.scale.y = 1 + 0.3 * Math.sin(time * 19 * t.freq + t.phase * 0.7);
       if (particles) {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
           t.emitterAcc -= 1;
+          // 火星粒子（2026-10-09 用户定）：尺寸减半以上、亮度适量削减（同 rooms/lighting.js）
           particles.spawn(t.x + (Math.random() - 0.5) * 1.6, t.y + 2.2, {
-            count: 1, z: t.z, color: Math.random() < 0.35 ? 0xcfd8ff : 0x8a9ae8,
+            count: 1, z: t.z, color: Math.random() < 0.35 ? 0x96999e : 0x6c7075,
             speed: 4.2, ttl: 0.6, gravity: 2, // 上浮
-            size: 1.3
+            size: 0.6
           });
         }
       }
@@ -612,14 +617,14 @@ export function buildDungeon3D() {
    * @param {THREE.Color} [out]  复用对象（缺省内部 scratch，调用方勿持有）
    */
   function sampleStandeeTint(pos, out = scratch) {
-    out.setRGB(0.52, 0.55, 0.75); // 冷蓝紫底
+    out.setRGB(0.53, 0.54, 0.57); // 中性冷灰底（黑白主题）
     for (const t of [...torches, chandelierGlow]) {
       const d = Math.hypot(pos.x - t.x, pos.y - t.y);
       const f = t.intensity * Math.max(0, 1 - d / 58);
-      // 蓝紫幽火：b 主导（冷调统一，火光也不许转暖）
-      out.r += 0.16 * f;
+      // 幽火增益：中性灰白（黑白主题）
+      out.r += 0.20 * f;
       out.g += 0.20 * f;
-      out.b += 0.48 * f;
+      out.b += 0.22 * f;
     }
     // 纵深压暗（立牌不参与场景雾，用染色模拟没入黑暗）
     const dim = THREE.MathUtils.clamp(1 - Math.max(0, 8 - pos.z) * 0.008, 0.72, 1);

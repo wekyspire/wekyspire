@@ -67,7 +67,7 @@ const FORTRESS = {
   compositionDecal: null,
   // 雾处方：远墙距相机 ~315，smoothstep  Ramp 压到 ≤0.1 因子；雾色提向环境霾色——
   // 远物融向月夜蓝霭而非纯黑（反馈：远视角过暗、拉近才亮，雾吃亮度是主因）
-  fog: { color: 0x0e1626, near: 250, far: 640 },
+  fog: { color: 0x101318, near: 250, far: 640 },
 };
 
 // ---- 阶段 2 · 宫殿大厅（12-21 层）：空间 -15%，高长窗列，立柱横梁 + 画作旗帜 ----
@@ -126,7 +126,7 @@ const PALACE = {
     { id: 'sconceCandle', x: 24, z: -70 },
   ],
   compositionDecal: null,
-  fog: { color: 0x101a2e, near: 235, far: 600 },
+  fog: { color: 0x121419, near: 235, far: 600 },
 };
 
 // ---- 阶段 3 · 衰败庄园居室（23-32 层）：窗减/渐暗，维护变差，转向书房居室 ----
@@ -179,7 +179,7 @@ const MANOR = {
   ],
   compositionDecal: null,
   // 渐暗：雾收近、色沉（"房间逐渐变暗"）
-  fog: { color: 0x0d1420, near: 205, far: 540 },
+  fog: { color: 0x0f1115, near: 205, far: 540 },
 };
 
 // ---- 阶段 4 · 大图书馆（34-43 层）：无窗，再缩 15%，书柜排架 + 书堆碎石，地面崎岖拥挤 ----
@@ -355,7 +355,7 @@ const MEZZANINE = {
   // 干泉/石盆压中景（花园构图锚）
   guaranteed: [{ id: 'fountainDry', x: -10, z: -30, ry: 0 }],
   compositionDecal: null,
-  fog: { color: 0x14202e, near: 250, far: 620 }, // 月透大窗，雾亮一档
+  fog: { color: 0x14171c, near: 250, far: 620 }, // 月透大窗，雾亮一档
 };
 
 // ============================================================================

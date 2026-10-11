@@ -123,8 +123,8 @@ export class ScrollPickerObject extends THREE.Group {
       new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.9 }),
     ), { y: UI_CAMERA_LOOK_AT_Y, z: Z.BACKDROP });
 
-    this._addText(title, { y: LAYOUT.titleY, fontPx: 22, tint: '#e8eefb', center: true });
-    if (hint) this._addText(hint, { y: LAYOUT.hintY, fontPx: 13, tint: '#9aa3b8', center: true });
+    this._addText(title, { y: LAYOUT.titleY, fontPx: 22, tint: '#f2f2f2', center: true });
+    if (hint) this._addText(hint, { y: LAYOUT.hintY, fontPx: 13, tint: '#a0a0a0', center: true });
 
     // ---- 候选网格（先排位，再按滚动位置摆） ----
     const stepX = itemW + gapX;
@@ -502,7 +502,7 @@ export class ScrollPickerObject extends THREE.Group {
     return mesh;
   }
 
-  _addText(text, { y, fontPx = 16, tint = '#cdd6f4', center = false } = {}) {
+  _addText(text, { y, fontPx = 16, tint = '#d4d4d4', center = false } = {}) {
     if (!text) return null;
     const t = new TextBlockObject({ bakeText: this._bakeText, fontPx, tint });
     // ⚠ maxWidth 的单位是**逻辑像素**（10px/世界单位），不是世界单位——曾经按世界单位传，

@@ -25,7 +25,7 @@ import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { ContinueButtonObject } from '../objects/ContinueButtonObject.js';
 import { MachineMarkerObject } from '../objects/MachineMarkerObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
-import { DeckChipObject, DECK_VIEW_Z } from '../objects/DeckChipObject.js';
+import { DeckChipObject, isDeckChipHit } from '../objects/DeckChipObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { createStagePickerKit } from '../stagePickerKit.js';
@@ -226,11 +226,11 @@ export class RoomStage {
     this._continue.position.set(CONTINUE_POS.x, CONTINUE_POS.y, PANEL_ABOVE_Z + 2);
     this._continue.setEnabled(true);   // 拾取登记在 attachInput（此时可能还没 Picker）
     this.uiScene.add(this._continue);
-    // 「卡组」chip（build 画廊入口）：右下角（继续键下方，与战斗内牌库堆同角位语言）。
+    // 「卡组」chip（build 画廊入口）：顶栏右端槽位（摆位由 TopResourceBarObject 下发）。
     // z 压过一切模态层 → 机器聚焦/停靠面板/全屏选卡/画廊开着时也能按；点击走意图上行
     // （deckViewToggle）。计数经 setStatus（编排器 syncMapStatus 下发）。
     this._deckChip = new DeckChipObject();
-    this._deckChip.position.set(80, -55, DECK_VIEW_Z.CHIP);
+    this._topBar.attachDeckChip(this._deckChip);
     this.uiScene.add(this._deckChip);
 
     if (stageManager) this._picker = new Picker({ stageManager, bus });
@@ -353,7 +353,7 @@ export class RoomStage {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
     const hit = this._picker.hover(x, y);
-    this._deckChip.setHovered(hit?.kind === 'deckChip'); // chip 在模态层之上：路由前先同步
+    this._deckChip.setHovered(isDeckChipHit(hit)); // chip 在模态层之上：路由前先同步
     if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     // 阶段级模态面板（房内进阶的种子包等）在台：hover 全归它，机器/浮标/继续键/停靠面板
     // 一律不亮——模态语义（「种子包只能刷新不能选卡」的病灶之一：
@@ -399,7 +399,7 @@ export class RoomStage {
     const down = this._downHit;
     this._downHit = null;
     // 「卡组」chip：最高层常驻入口——先于机器/模态路由（机器聚焦/面板/选卡/画廊开着也能按）
-    if (hit?.kind === 'deckChip') { this._onIntent?.({ action: 'deckViewToggle' }); return; }
+    if (isDeckChipHit(hit)) { this._onIntent?.({ action: 'deckViewToggle' }); return; }
     // 各机器的 pointerUp 点选（先于面板路由）：安慰奖演出中选一件货
     for (const m of this._machines) if (m.handlePointerUp?.(hit)) return;
     if (this._pickerKit.routeClick(hit)) return;   // 特写点任意处退出 / 全屏界面接管

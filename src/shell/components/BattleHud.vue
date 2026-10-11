@@ -52,10 +52,10 @@ onBeforeUnmount(() => {
 <style scoped>
 .hud { position: fixed; top: 8px; left: 12px; z-index: 20; font-family: sans-serif; pointer-events: none; }
 .turn {
-  color: #ccd; font-size: 13px; background: rgba(0, 0, 0, .45);
-  padding: 4px 10px; border-radius: 4px; display: inline-block;
+  color: #ccc; font-size: 13px; background: rgba(0, 0, 0, .45);
+  padding: 4px 10px; border-radius: 0; display: inline-block;
 }
-.log { margin-top: 8px; max-width: 340px; color: #aab; font-size: 12px; }
+.log { margin-top: 8px; max-width: 340px; color: #aaa; font-size: 12px; }
 .log .log-combat { color: #e8b; }
 .log .log-skill { color: #8ce; }
 </style>

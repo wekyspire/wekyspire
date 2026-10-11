@@ -46,14 +46,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 <style scoped>
 .menu-dialog-mask {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(4, 6, 12, .55);
+  background: rgba(5, 5, 5, .55);
   display: flex; align-items: center; justify-content: center;
   font-family: sans-serif;
 }
 .menu-dialog {
   width: min(420px, 88vw); padding: 20px 26px 18px;
-  background: rgba(8, 11, 18, .97);
-  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角 */
+  background: rgba(10, 10, 10, .97);
+  border: 2px solid #555555; border-radius: 0;   /* UI 语言：方角 + 厚边框 */
   box-shadow: 0 18px 60px rgba(0, 0, 0, .6);
   animation: menu-dialog-in .18s ease-out both;
 }
@@ -62,26 +62,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   to { opacity: 1; transform: none; }
 }
 .menu-dialog-title {
-  margin: 0 0 8px; font-size: 17px; color: #eef4ff; letter-spacing: .06em;
+  margin: 0 0 8px; font-size: 17px; color: #f5f5f5; letter-spacing: .06em;
 }
-.menu-dialog-message { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: #c3cee0; }
+.menu-dialog-message { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: #c2c2c2; }
 .menu-dialog-input {
   width: 100%; box-sizing: border-box; margin-bottom: 14px;
-  padding: 8px 12px; font-size: 14px; color: #eef2ff;
-  background: #131a29; border: 1px solid #3f5f8c; border-radius: 3px; outline: none;
+  padding: 8px 12px; font-size: 14px; color: #ededed;
+  background: #151515; border: 2px solid #8a8a8a; border-radius: 0; outline: none;
 }
-.menu-dialog-input:focus { border-color: #8fb6dd; }
+.menu-dialog-input:focus { border-color: #e0e0e0; }
 .menu-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .menu-dialog-btn {
-  min-width: 88px; padding: 7px 18px; font-size: 14px; cursor: pointer; border-radius: 4px;
+  min-width: 88px; padding: 7px 18px; font-size: 14px; cursor: pointer; border-radius: 0;
   transition: background .15s, border-color .15s;
 }
 .menu-dialog-btn.confirm {
-  background: rgba(52, 84, 126, .95);
-  border: 1px solid #8fb6dd; color: #ffffff;
+  background: rgba(66, 66, 66, .95);
+  border: 2px solid #e0e0e0; color: #ffffff;
 }
 .menu-dialog-btn.cancel {
-  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c; color: #dbe4f4;
+  background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a; color: #e4e4e4;
 }
-.menu-dialog-btn:hover { background: rgba(70, 108, 156, .95); border-color: #a8c9ea; }
+.menu-dialog-btn:hover { background: rgba(84, 84, 84, .95); border-color: #ececec; }
 </style>

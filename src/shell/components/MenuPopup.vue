@@ -35,18 +35,18 @@ const emit = defineEmits(['close']);
   position: relative; /* × 按钮的定位锚 */
   width: max-content; max-width: min(420px, 86vw);
   padding: 10px 36px 10px 22px; text-align: center;
-  background: rgba(8, 11, 18, .94); border: 1px solid #2f3a52; border-radius: 3px;
+  background: rgba(10, 10, 10, .94); border: 2px solid #555555; border-radius: 0;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
 }
-.toast-title { font-size: 15px; color: #eef4ff; }
-.toast-text { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
+.toast-title { font-size: 15px; color: #f5f5f5; }
+.toast-text { font-size: 12px; color: #a0a0a0; margin-top: 4px; }
 .toast-close {
   position: absolute; top: 4px; right: 6px;
   pointer-events: auto; /* 容器级 none 的唯一例外 */
   padding: 2px 6px; font-size: 14px; line-height: 1; cursor: pointer;
-  color: #9aa3c0; background: none; border: none; border-radius: 4px;
+  color: #a0a0a0; background: none; border: none; border-radius: 0;
 }
-.toast-close:hover { color: #ffffff; background: rgba(56, 65, 94, .6); }
+.toast-close:hover { color: #ffffff; background: rgba(70, 70, 70, .6); }
 /* 进入：从屏幕底缘下方升入；消亡：原地纯淡出并脱流（保持居中靠边距而非 transform，
    绝不用 transform 承载消亡位移——那是堆积回落抽搐的另一半根源），
    同伴经 .toast-move 平滑回落 */

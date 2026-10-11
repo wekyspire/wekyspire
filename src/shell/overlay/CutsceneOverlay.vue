@@ -78,17 +78,17 @@ const cgDur = computed(() => {
 .cg.fadeOut { opacity: 0; }
 
 /* 对话框（**黑色半透明 flat 框**，除按钮外不滥用圆角） */
-.dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(4, 6, 14, .55); }
-.dialogue.has-bg { background: rgba(4, 6, 14, .38); }
+.dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(5, 5, 5, .55); }
+.dialogue.has-bg { background: rgba(5, 5, 5, .38); }
 .bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 .box {
   position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
   width: min(720px, 82vw); z-index: 1;
-  background: rgba(6, 8, 14, .82); border: 1px solid #2f3a52; border-radius: 2px; padding: 18px 26px;
+  background: rgba(8, 8, 8, .82); border: 2px solid #555555; border-radius: 0; padding: 18px 26px;
 }
-.speaker { color: #cfe0f5; font-size: 15px; margin-bottom: 8px; }
-.text { color: #e6ecff; font-size: 17px; line-height: 1.7; min-height: 30px; }
-.hint { text-align: right; color: #6a7394; font-size: 12px; margin-top: 10px; }
+.speaker { color: #d4d4d4; font-size: 15px; margin-bottom: 8px; }
+.text { color: #ebebeb; font-size: 17px; line-height: 1.7; min-height: 30px; }
+.hint { text-align: right; color: #757575; font-size: 12px; margin-top: 10px; }
 
 /* 选项按钮（带 choices 的对话页）：整行按钮 + 右侧小字提示；禁用项置灰不可点。
    按钮保留圆角（：除按钮外不滥用圆角），走"白字淡蓝"扁平风格 */
@@ -96,11 +96,11 @@ const cgDur = computed(() => {
 .choices button {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   width: 100%; padding: 11px 16px; text-align: left; cursor: pointer;
-  background: rgba(18, 24, 38, .92); color: #dfe9f8;
-  border: 1px solid #33507a; border-radius: 4px;
+  background: rgba(22, 22, 22, .92); color: #e8e8e8;
+  border: 2px solid #606060; border-radius: 0;
   font: 600 15px/1.4 sans-serif; transition: background .12s ease, border-color .12s ease;
 }
-.choices button:hover:not(:disabled) { background: rgba(34, 48, 74, .95); border-color: #4d78ad; }
+.choices button:hover:not(:disabled) { background: rgba(48, 48, 48, .95); border-color: #9a9a9a; }
 .choices button:disabled { opacity: .42; cursor: default; }
-.choices .hint2 { color: #8d97b5; font-size: 12px; font-weight: 400; }
+.choices .hint2 { color: #8f8f8f; font-size: 12px; font-weight: 400; }
 </style>

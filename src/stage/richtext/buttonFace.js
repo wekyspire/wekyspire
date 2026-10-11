@@ -1,17 +1,17 @@
-// 按钮牌面烘焙：扁平矩形底 + 淡蓝描边 + 白字（的 UI 风格：
-// **白字淡蓝按钮、扁平化**——不要纵向渐变自体发光、不要金色描边大字）。
+// 按钮牌面烘焙：扁平矩形底 + 灰描边 + 白字（的 UI 风格：
+// **黑白主题：黑底白字灰描边、扁平化**——不要纵向渐变自体发光、不要金色描边大字）。
 // 与 bakeCardFace 同契约：返回 { texture, hitRegions, width, height }，
 // width/height 为排版局部坐标（10px/wu 约定，与牌面一致），texture 内部 scale 倍分辨率。
 // 仅浏览器可用（需真实 canvas）；单测由 BattleStage 回退到注入的 bakeLabel。
 
 import * as THREE from 'three';
 
-// 三态主题（全扁平，无渐变）：enabled 深底白字淡蓝边 / active（悬停·激活）淡蓝底白字 /
-// disabled 深灰。金色只留给**金钱相关内容**（金额文本），按钮一律走这套冷色。
+// 三态主题（全扁平，无渐变）：enabled 黑底白字灰边 / active（悬停·激活）亮灰底白字 /
+// disabled 深灰。金色只留给**金钱相关内容**（金额文本），按钮一律走这套无彩色。
 const THEMES = {
-  enabled: { fill: 'rgba(16, 22, 34, 0.92)', border: '#3f5f8c', text: '#e8eefb', sub: '#9fb4d0' },
-  active: { fill: 'rgba(52, 84, 126, 0.95)', border: '#8fb6dd', text: '#ffffff', sub: '#dce8f6' },
-  disabled: { fill: 'rgba(20, 22, 28, 0.85)', border: '#39414f', text: '#6f7789', sub: '#5d6474' },
+  enabled: { fill: 'rgba(20, 20, 20, 0.92)', border: '#8a8a8a', text: '#f2f2f2', sub: '#a8a8a8' },
+  active: { fill: 'rgba(66, 66, 66, 0.95)', border: '#e0e0e0', text: '#ffffff', sub: '#dedede' },
+  disabled: { fill: 'rgba(20, 20, 20, 0.85)', border: '#4a4a4a', text: '#737373', sub: '#616161' },
 };
 
 /**
@@ -29,11 +29,11 @@ export function bakeButtonFace(data, { width = 150, height = 60, scale = 2, labe
   ctx.scale(scale, scale);
 
   const theme = !enabled ? THEMES.disabled : (active ? THEMES.active : THEMES.enabled);
-  const r = Math.min(5, height / 6);   // 按钮保留小圆角（"除按钮外不滥用圆角"）
-  roundRect(ctx, 2, 2, width - 4, height - 4, r);
+  // UI 语言（quest_prompts/UI_LANGUAGE.md）：方角 + 厚描边（踏实，不纤弱）
+  roundRect(ctx, 3, 3, width - 6, height - 6, 0);
   ctx.fillStyle = theme.fill;          // 扁平平涂（无渐变 = 无自体发光）
   ctx.fill();
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 3;
   ctx.strokeStyle = theme.border;
   ctx.stroke();
 

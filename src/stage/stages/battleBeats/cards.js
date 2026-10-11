@@ -210,9 +210,12 @@ export const cardBeats = {
     const id = payload?.skill?.uniqueID;
     const view = id != null ? this._views.get(id) : null;
     if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
-    // 卡费消耗粒子（资源消耗汇聚特效）：从资源图标爆散 → 汇聚到此卡边缘 →
-    // 汇聚抵达后才起飞发动（DRAIN_FLIGHT_MS 编排延迟）。费用读定义/覆写口径
-    // （PRE 修饰的实付偏差只影响粒子数量级，装饰可接受；X 费取当前读数）
+    // 卡费消耗演出（fx/gpu/resourceDrainFx.js 方案 A）：光珠从资源图标弧线飞进
+    // 费用徽章——**节拍权威 = 光珠真到达 promise**（playCardCost 返回 done），
+    // 卡牌起飞由 projectile 完结时刻发送，不再估算；无宿主（headless 等无 uiScene）
+    // 退回 DRAIN_FLIGHT_MS 固定编排延迟。费用读定义/覆写口径（PRE 修饰的实付偏差
+    // 只影响装饰数量级；X 费取当前读数）
+    let drainWait = null;   // Promise | null
     let drainDelay = 0;
     if (this._drainFx) {
       const ov = payload?.skill?.costOverride;
@@ -221,59 +224,68 @@ export const cardBeats = {
       const mana = rawMana === 'X' ? (this._resources?.mana.current ?? 0) : +rawMana || 0;
       const ap = rawAp === 'X' ? (this._resources?.ap.current ?? 0) : +rawAp || 0;
       if (mana > 0 || ap > 0) {
-        this._drainFx.playCardCost({ mana, ap, cardView: view });
-        drainDelay = DRAIN_FLIGHT_MS;
-        // 徽章辉光：粒子抵达时点亮 → 衰减，与汇聚组成
-        // 「能量注入开销标」的闭环。mask 位置已在 _setBakedFace 随卡面烘进 C0 链
-        // （costBadges），这里只推强度；与卡牌位移演出正交，直推 uniform。
-        const body = view?.fx?.body;
-        if (body?.costBadges?.length) {
-          gsap.fromTo(body.uCostGlow, { value: 1 }, {
-            value: 0, duration: 1.1, delay: DRAIN_FLIGHT_MS / 1000,
-            ease: 'power2.out', overwrite: 'auto',
-          });
-        }
+        const res = this._drainFx.playCardCost({ mana, ap, cardView: view });
+        drainWait = res?.done ?? null;
+        if (!drainWait) drainDelay = DRAIN_FLIGHT_MS;
       }
     }
     this._displayCard = { id };
-    this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
-      durationMs: 70,
-      delayMs: drainDelay,
-      onComplete: () => {
-        // 卡面收尾（节拍完成时刻执行——held 分流/弹簧收养都以 notify 时点为准）
-        const settle = () => {
-          this._displayCard = null;
-          finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
-          if (this._views.has(id)) {
-            if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
-              this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
-              this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
-            }
-            // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
+    const onArrived = () => {
+      // 卡面收尾（节拍完成时刻执行——held 分流/弹簧收养都以 notify 时点为准）
+      const settle = () => {
+        this._displayCard = null;
+        finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
+        if (this._views.has(id)) {
+          if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
+            this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
+            this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
           }
-        };
-        // 施术演出模板接管停留窗期间，卡必须停在展示位：held 分流与 springs.release
-        // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
-        // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
-        // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
-        // 根治：命中模板即刻摘弹簧目标 + 预置 held——布局/状态语义本就允许展示期持 held
-        // （_setCardZone 的 held 守卫只挡「解除停留」，不挡提前进入），settle 幂等收尾。
-        if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
-          this.model.setZone(id, 'held');
-          this.springs.release(id);
+          // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
         }
-        // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
-        // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
-        // 全程 hold）。未命中 = BASE 现行为（100ms 停留窗），零回归。
-        const spell = this._runSpellFx(payload, view, settle);
-        if (!spell) {
-          this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
-            delayMs: 100,
-            onComplete: settle,
+      };
+      // 施术演出模板接管停留窗期间，卡必须停在展示位：held 分流与 springs.release
+      // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
+      // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
+      // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
+      // 根治：命中模板即刻摘弹簧目标 + 预置 held——布局/状态语义本就允许展示期持 held
+      // （_setCardZone 的 held 守卫只挡「解除停留」，不挡提前进入），settle 幂等收尾。
+      if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
+        this.model.setZone(id, 'held');
+        this.springs.release(id);
+      }
+      // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
+      // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
+      // 全程 hold）。未命中 = BASE 现行为（短停留窗），零回归。
+      const spell = this._runSpellFx(payload, view, settle);
+      if (!spell) {
+        this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
+          delayMs: 60,
+          onComplete: settle,
+        });
+      }
+    };
+    if (drainWait) {
+      // 光珠真到达 → 起飞（落地拍同步点亮徽章辉光）
+      drainWait.then(() => {
+        if (this._disposed) { finish(); return; }   // 幽灵守卫：飞行中被拆台直接落拍
+        const body = view?.fx?.body;
+        if (body?.costBadges?.length) {
+          gsap.fromTo(body.uCostGlow, { value: 1 }, {
+            value: 0, duration: 0.8, ease: 'power2.out', overwrite: 'auto',
           });
         }
-      },
-    });
+        this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
+          durationMs: 70,
+          onComplete: onArrived,
+        });
+      });
+    } else {
+      this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
+        durationMs: 70,
+        delayMs: drainDelay,
+        onComplete: onArrived,
+      });
+    }
   },
   /**
    * 施术演出发起（fx/spells 模板系统的舞台接线）：装 deps 服务袋（世界场景/

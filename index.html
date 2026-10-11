@@ -22,26 +22,26 @@
       #boot-shell {
         position: fixed; inset: 0; z-index: 100;
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-        background: #05070d;
+        background: #060606;
         font-family: 'Microsoft YaHei', Arial, sans-serif;
         transition: opacity .3s ease;
       }
       #boot-shell.bye { opacity: 0; pointer-events: none; }
-      #boot-title { font-size: 20px; font-weight: bold;letter-spacing: 10px; color: #eef4ff; }
+      #boot-title { font-size: 20px; font-weight: bold;letter-spacing: 10px; color: #f5f5f5; }
       #boot-bar {
         width: min(380px, 62%); height: 8px; border-radius: 2px;
-        background: #131a29; border: 3px solid #2f3a52; overflow: hidden;
+        background: #151515; border: 3px solid #555555; overflow: hidden;
       }
-      #boot-fill { height: 100%; width: 0%; background: #4d78ad; transition: width .15s ease; }
-      #boot-text { font-size: 13px; color: #c3cee0; letter-spacing: 1px; }
-      #boot-sub { font-size: 12px; color: #7d87a8; min-height: 16px; letter-spacing: .5px; }
+      #boot-fill { height: 100%; width: 0%; background: #9a9a9a; transition: width .15s ease; }
+      #boot-text { font-size: 13px; color: #c2c2c2; letter-spacing: 1px; }
+      #boot-sub { font-size: 12px; color: #8a8a8a; min-height: 16px; letter-spacing: .5px; }
       #boot-fail { display: none; flex-direction: column; align-items: center; gap: 10px; margin-top: 6px; }
       #boot-fail-text { font-size: 13px; color: #ff8f88; text-align: center; line-height: 1.7; }
       #boot-retry {
         padding: 6px 26px; font-size: 14px; cursor: pointer; border-radius: 4px;
-        background: rgba(16, 22, 34, .92); color: #eaf1fb; border: 1px solid #3f5f8c;
+        background: rgba(20, 20, 20, .92); color: #f2f2f2; border: 1px solid #8a8a8a;
       }
-      #boot-retry:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+      #boot-retry:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
     </style>
   </head>
   <body>
@@ -119,7 +119,7 @@
             sub.style.display = 'none';
             retryBtn.style.display = 'none';
             failText.innerHTML = html;
-            failText.style.color = '#c3cee0';
+            failText.style.color = '#c2c2c2';
             failBox.style.display = 'flex';
           },
           // 揭幕：淡出后摘除（App 的开始界面上位）

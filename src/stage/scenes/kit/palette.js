@@ -9,20 +9,20 @@
 import * as THREE from 'three';
 
 const THEMES = {
-  // 地牢（现行基调：冷调蓝白紫，石材蓝灰泛紫 + 蓝紫/冷白幽火）
+  // 地牢（现行基调：黑白灰暗——灯与幽火走中性灰白，颜色交给材质反差；月光链轻蓝在 lighting.js）
   dungeon: {
     floor: 0x404042,     // 石板地面
     slab: 0x48484a,      // 错位石板（略亮一档）
     wall: 0x404042,      // 墙面
     brick: 0x48484a,     // 砖块补丁
-    stone: 0x3a415c,     // 柱/框/扶壁（蓝灰泛紫）
-    rock: 0x3d4358,      // 碎石
-    iron: 0x4a4e64,      // 铁件
+    stone: 0x3f4046,     // 柱/框/扶壁（中性冷灰）
+    rock: 0x404248,      // 碎石（中性冷灰）
+    iron: 0x4c4e55,      // 铁件（中性冷灰）
     bannerRed: 0x5a4f40, // 破幡·暗红
     bannerBlue: 0x3a5a6e,// 破幡·青绿
-    night: 0x060a1a,     // 夜空/暗槽色
-    flameCore: 0xeef2ff, // 幽火内焰（冷白）
-    fireLight: 0x7474a0, // 火光颜色（点光参数，非表面色）
+    night: 0x07080c,     // 夜空/暗槽色（中性暗）
+    flameCore: 0xf0f1f3, // 幽火内焰（中性白）
+    fireLight: 0x8f9096, // 火光颜色（点光参数，非表面色；中性灰白）
     // ---- 道具库新增（冷调低饱和） ----
     wood: 0x54483a,
     woodDark: 0x3f362c,
@@ -44,7 +44,7 @@ const THEMES = {
     potionBlue: 0x46628a,
     machineRed: 0xa8262c, // 老虎机外壳正红（稍偏暗、纯度高，对标可乐机——全库唯一的例外色，
                           // 故意跳出'冷调低饱和'：赌具要跳出来）
-    ember: 0x9aa8d8,     // 余烬/火星粒子
+    ember: 0xa8aab0,     // 余烬/火星粒子（中性灰白）
     // ---- CATALOG2 增补（塔身物件多样化；仍守冷调低饱和） ----
     bread: 0x8a795a,
     cheese: 0x9c8d62,
@@ -52,7 +52,7 @@ const THEMES = {
     copper: 0x7c5a48,
     silver: 0x9aa4b2,
     herb: 0x5d7a5e,
-    glowCyan: 0x9ad8e8,  // 幽光青：晶簇/微光蘑菇专用
+    glowCyan: 0xb8bfc2,  // 幽光：晶簇/微光蘑菇专用（黑白主题：柔白）
     wine: 0x4e2c38,
     parchment: 0x9c9278,
   },

@@ -31,7 +31,7 @@ import { runScript } from '../script.js';
 import { uniform, uv } from 'three/tsl';
 import { spellQuad, linearColor, warmSpellQuad as warmVariant, compileWarmSpellQuads } from './blocks.js';
 import { moonWarmQuad } from './moonArc.js';
-import { punchShade, slashShade, projectileShade, ringFlashShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
+import { punchShade, slashShade, projectileShade, crystalShade, ringFlashShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
 import { emberBurst } from './emberBurst.js';
 import { castFlare } from './castFlare.js';
 import { fireballCast } from './fireballCast.js';
@@ -118,6 +118,9 @@ const SERIES_SPELLS = {
                      color: [0.45, 0.70, 1.25], hot: [0.90, 1.08, 1.45], core: 0x6fa8ff } },
   silence:       { id: 'silenceCast' },                                  // 沉默：骤冷压暗（逐张熄光在 CHANT_TOGGLED 拍）
 };
+
+// 行动力金珠色组（AP 获得语言——肾上腺素/激发/超越共用；回蓝走 manaCast 缺省魏启蓝）
+const AP_GOLD = { color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060 };
 
 // 逐卡覆写（defId → { template, params }）：换模板或微调参数（同体系内单卡变体）。
 const CARD_SPELLS = {
@@ -279,25 +282,28 @@ const CARD_SPELLS = {
                         color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
   hunYuanS:         { template: 'blockCast', params: {
                         color: [0.90, 0.92, 1.02], hot: [1.25, 1.25, 1.30], core: 0xe8ecf4 } },
-  // ---- 经济卡（无 series，逐卡挂 manaCast；魏启蓝 / 行动力黄）----
-  extract:          { template: 'manaCast', params: { from: 'enemy' } },
-  deepExtract:      { template: 'manaCast', params: { from: 'enemy', streams: 5 } },
-  limitExtract:     { template: 'manaCast', params: { from: 'enemy', streams: 6, size: 2.0 } },
-  drawQiC:           { template: 'manaCast', params: { from: 'around' } },
-  drawQiB:       { template: 'manaCast', params: { from: 'around' } },
-  squeezeQi:        { template: 'manaCast', params: { from: 'around', streams: 6, projMs: 260 } },
-  manaJar:          { template: 'manaCast', params: { from: 'card' } },
-  manaJarPlus:      { template: 'manaCast', params: { from: 'card' } },
-  manaJarRoyal:     { template: 'manaCast', params: { from: 'card', streams: 5 } },
-  manaJarLegend:    { template: 'manaCast', params: { from: 'card', streams: 6, size: 2.0 } },
-  swiftManaJar:     { template: 'manaCast', params: { from: 'card', projMs: 240 } },
-  swiftManaJarPlus: { template: 'manaCast', params: { from: 'card', projMs: 240, streams: 5 } },
-  stimulant:        { template: 'manaCast', params: { from: 'card',                       // 兴奋剂：行动力黄
-                      color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060 } },
-  burstStimulant:   { template: 'manaCast', params: { from: 'card',
-                      color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060, streams: 5 } },
-  fullStimulant:    { template: 'manaCast', params: { from: 'card',
-                      color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060, streams: 5 } },
+  // ---- 经济卡（资源获得通用语言，2026-10-09 用户定：复用肾上腺素 manaCast——
+  // 回蓝 = 魏启蓝**晶片**（shape:'crystal'，异形资源粒），回AP = 金色光珠；
+  // from 三态按卡语义：纳气族（汲取/萃取）=汇(around) / 罐与针剂=饮(card)。
+  // ⚠ 键 = 卡真 id（0.11.20 改名后旧键 extract/manaJar/stimulant…曾整批静默失配）----
+  extractC:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8 } },
+  extractB:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8, streams: 5 } },
+  extractA:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 5.4, streams: 6 } },
+  drawQiC:           { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8 } },
+  drawQiB:           { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8 } },
+  drawQiA:           { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8, streams: 6, projMs: 260 } },
+  manaJarC:          { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 4.8 } },
+  manaJarB:          { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 4.8, streams: 5 } },
+  manaJarA:          { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 4.8, streams: 6 } },
+  manaJarS:          { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 5.4, streams: 6 } },
+  manaJarSwiftB:     { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 4.8, projMs: 240 } },
+  manaJarSwiftPlusA: { template: 'manaCast', params: { from: 'card', shape: 'crystal', size: 4.8, projMs: 240, streams: 5 } },
+  stimulantB:        { template: 'manaCast', params: { from: 'card', ...AP_GOLD } },               // 激发：行动力金珠
+  stimulantBurstA:   { template: 'manaCast', params: { from: 'card', ...AP_GOLD, streams: 5 } },   // 爆发
+  stimulantFullA:    { template: 'manaCast', params: { from: 'card', ...AP_GOLD, streams: 5 } },   // 充分激发
+  transcendC:        { template: 'manaCast', params: { from: 'card', ...AP_GOLD, streams: 3 } },   // 超越：滞气换行动力
+  transcendB:        { template: 'manaCast', params: { from: 'card', ...AP_GOLD, streams: 4 } },
+  transcendA:        { template: 'manaCast', params: { from: 'card', ...AP_GOLD, streams: 5 } },
   // ---- 遗物枪击卡（亮黄白细直弹道——枪火语言：仍走投射物，弹道细直平弧）----
   rapidFire:        { template: 'bladeCast', params: { mode: 'daggers',
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
@@ -385,11 +391,9 @@ const CARD_SPELLS = {
   // 万变拳（S 选两卡免费发动）/ 坠机（A 肘击升阶）：选牌 UI 主场——短起手分调
   wildFistS:       { template: 'castFlare', params: { flareColor: 0xf2e7d2, ms: 280, scale: 1.55 } },
   crashLanding:    { template: 'castFlare', params: { flareColor: 0xd8dce8, ms: 260, scale: 1.5 } },
-  // 肾上腺素（AP+抽牌）：能量入体 = manaCast AP 黄（与兴奋剂同语言）
-  adrenalineA:     { template: 'manaCast', params: { from: 'card', streams: 3,
-                     color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060 } },
-  adrenalineB:     { template: 'manaCast', params: { from: 'card', streams: 3,
-                     color: [1.10, 0.88, 0.30], hot: [1.35, 1.15, 0.60], core: 0xf0d060 } },
+  // 肾上腺素（AP+抽牌）：能量入体 = manaCast AP 金珠（通用资源获得语言的基准件）
+  adrenalineA:     { template: 'manaCast', params: { from: 'card', streams: 3, ...AP_GOLD } },
+  adrenalineB:     { template: 'manaCast', params: { from: 'card', streams: 3, ...AP_GOLD } },
 };
 
 /**
@@ -487,6 +491,10 @@ const projQuad = (p) => () => spellQuad({
   shade: projectileShade(uv(), uniform(5.0), linearColor(p.color), linearColor(p.hot)),
   width: 2.4, height: 2.4, name: 'warm:proj',
 });
+const crystalQuad = (p) => () => spellQuad({
+  shade: crystalShade(uv(), uniform(5.0), linearColor(p.color), linearColor(p.hot)),
+  width: 2.4, height: 2.4, name: 'warm:crystal',
+});
 const fireOrbQuad = (p) => () => spellQuad({
   shade: fireOrbShade(uv(), uniform(5.0), linearColor(p.color), linearColor(p.hot), uniform(1.7)),
   width: 2.4, height: 2.4, name: 'warm:fireOrb',
@@ -525,7 +533,9 @@ const WARM_VARIANTS = new Map([
   [TEMPLATES.igniteCast, (p) => [{ key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }]],
   [TEMPLATES.fuelCast, (p) => [{ key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }]],
   [TEMPLATES.manaCast, (p) => [
-    p.fire ? { key: keyOf('fireOrb', p), mk: fireOrbQuad(p) } : { key: keyOf('proj', p), mk: projQuad(p) },
+    p.fire ? { key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }
+      : p.shape === 'crystal' ? { key: keyOf('crystal', p), mk: crystalQuad(p) }
+      : { key: keyOf('proj', p), mk: projQuad(p) },
     { key: keyOf('ring', p), mk: ringQuad(p) }]],
   [TEMPLATES.chargeUpCast, (p) => [{ key: keyOf('proj', p), mk: projQuad(p) }, { key: keyOf('ring', p), mk: ringQuad(p) }]],
   [TEMPLATES.sparkSalvo, (p) => [{ key: keyOf('fireOrb', p), mk: fireOrbQuad(p) }]],

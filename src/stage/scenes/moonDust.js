@@ -10,6 +10,15 @@
 // 地面光池天然对齐，不再有"浮尘位置和光束对不上"的错位；阴影区尘埃仍有微弱
 // 底色，兼作全场环境浮尘（暗部空气感）。
 //
+// 两段人口（2026-10-11 修复「光柱粒子扎堆/清空」）：
+//   · 环境尘：均匀填满房间体积，垂直下落 + 盒内回绕（旧逻辑不变）；
+//   · 光柱尘：**贴光轴循环**——仍按竖直落差下落（视觉仍是尘埃缓降），但水平位随
+//     降高跟踪斜光轴（W = dir/|dir.y| 每单位降高的水平推进），截面内慢速公转，
+//     落到底回绕回窗顶。旧版光柱人口只做出生点偏置、之后垂直坠落——斜柱的水平
+//     截移率 ~1.5 单位/单位降高，垂直车道几单位降高就穿出光柱：整柱粒子进房数十秒
+//     内集体漏光、之后每周期只有个位数百分比在柱内（「有的光柱扎堆、有的全空」
+//     的病灶）。贴轴循环让光柱密度恒定，真值裁切只发生在截面边缘（wander 溢出）。
+//
 // ⚠ 点精灵的 WebGPU 落地形态（与旧 GLSL 的结构性差异，记录在案）：
 //   WebGPU 的 point-list 拓扑恒为 1 像素、没有 gl_PointSize——r185 官方口径：
 //   PointsNodeMaterial 配 THREE.Points 时 sizeNode 无效。官方替代式 = 单个
@@ -20,10 +29,6 @@
 //   补偿透视除法；片元 uv() 即旧 gl_PointCoord。故 `points` 键承载的是
 //   Sprite（调用点只 add / 置 visible / 透传 update，对象类型无感）。
 //
-// 密度策略：大部分均匀填满房间体积（环境尘），小部分偏向两条月光柱体积 spawn
-// （保证光柱内密度——wander 漂出真实光柱的粒子会被 shadow 采样自动调暗，
-// 光束边缘因此是"真值裁切"而非参数近似）。
-//
 // CPU 侧每帧只推进 uTime + 同步 shadow uniform，零属性回写。
 // node 单测可建（无 document 依赖；shadow map 缺席时 points 不渲染，不报错）。
 
@@ -31,11 +36,11 @@ import * as THREE from 'three';
 import { PointsNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, texture, varying, uv, instancedBufferAttribute, select,
-  vec2, vec3, vec4, float, mix, fract, floor, sin, dot, length, smoothstep, oneMinus,
-  modelWorldMatrix,
+  vec2, vec3, vec4, float, mix, fract, sin, cos, dot, length, smoothstep, oneMinus,
+  floor, cross, modelWorldMatrix,
 } from 'three/tsl';
 
-// 浮尘体积盒（世界坐标）：罩住大厅可活动区 + 两扇窗到光池的光柱空间
+// 浮尘体积盒（世界坐标）：罩住大厅可活动区 + 两扇窗到光池的光柱空间（环境人口用）
 const VOL_MIN = new THREE.Vector3(-88, -28, -78);
 const VOL_MAX = new THREE.Vector3(85, 48, 38);
 
@@ -72,40 +77,48 @@ const modPos = Fn(([x, y]) => x.sub(y.mul(floor(x.div(y)))));
  * 建月光浮尘云。
  * @param {object} options
  *   count: 总粒子数（ambient + beam 两段人口）
- *   beamRatio: 偏向光柱体积的粒子占比（保证光柱内密度）
- *   beams: [{ origin:Vector3, dir:Vector3(单位), len, radius }] 光柱体积描述
+ *   beamRatio: 光柱人口的粒子占比（光柱内密度保证）
+ *   beams: [{ origin:Vector3(窗顶心，光柱起点), dir:Vector3(单位，光行进方向),
+ *            height: 竖直落差（origin.y 到地板), radius: 截面半径 }]
  * @returns { points, uniforms, update(dt, light) }
  *   points = THREE.Sprite（InstancedBufferGeometry 载体，见头注）；update 每帧
  *   推进时间并同步月光 shadow uniform；shadow map 未就绪时隐藏不渲染。
  */
 export function buildMoonDust({ count = 1500, beamRatio = 0.4, beams = [] } = {}) {
-  const positions = new Float32Array(count * 3);
+  const positions = new Float32Array(count * 3);   // 环境人口体积位（beam 粒子存出生占位）
   const seeds = new Float32Array(count);
+  // 光柱人口的逐粒参数。⚠ 顶点缓冲数上限 8（WebGPU 管线验证）：position/uv/aOrigin/
+  // aSeed 已占 4，beam 数据只许再开 2 个属性——截面基 U/V 与两个随机相位全部
+  // shader 侧派生（U=normalize(−wz,0,wx)=normalize(cross(dir,up))、V=cross(dir,U)，
+  // 与 JS 侧烘焙逐式同值；y0Frac/ang0 由 aSeed 取 fract 派生，fall 已有同款先例）。
+  const beamTop = new Float32Array(count * 3);      // 光柱顶点（窗心）
+  const beamB = new Float32Array(count * 4);        // (wx, wz, height, r；环境人口 height=-1)
   const spanX = VOL_MAX.x - VOL_MIN.x;
   const spanY = VOL_MAX.y - VOL_MIN.y;
   const spanZ = VOL_MAX.z - VOL_MIN.z;
   const beamCount = Math.floor(count * beamRatio);
-  const up = new THREE.Vector3(0, 1, 0);
-  const u = new THREE.Vector3();
-  const v = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
     seeds[i] = Math.random() * 1000;
-    if (i < beamCount && beams.length > 0) {
-      // 光柱人口：沿光轴随机 t + 垂直圆盘随机偏移（wander 漂出光柱的由 shadow 采样调暗）
-      const beam = beams[Math.floor(Math.random() * beams.length)];
-      u.crossVectors(beam.dir, up).normalize();
-      v.crossVectors(beam.dir, u).normalize();
-      const t = 3 + Math.random() * beam.len;
-      const ang = Math.random() * Math.PI * 2;
+    const beam = i < beamCount ? beams[Math.floor(Math.random() * beams.length)] : null;
+    if (beam && beams.length > 0) {
+      // 出生占位沿光轴（shader 会接管；截面基在 GPU 侧重导）
       const r = beam.radius * Math.sqrt(Math.random());
-      positions[i * 3] = beam.origin.x + beam.dir.x * t + (u.x * Math.cos(ang) + v.x * Math.sin(ang)) * r;
-      positions[i * 3 + 1] = beam.origin.y + beam.dir.y * t + (u.y * Math.cos(ang) + v.y * Math.sin(ang)) * r;
-      positions[i * 3 + 2] = beam.origin.z + beam.dir.z * t + (u.z * Math.cos(ang) + v.z * Math.sin(ang)) * r;
+      const ang = Math.random() * Math.PI * 2;
+      const drop = Math.random() * beam.height;
+      // 每单位**降高**的水平推进 = −dir/dir.y（dir.y<0，降高时沿光行进方向横移）
+      const wx = -beam.dir.x / beam.dir.y, wz = -beam.dir.z / beam.dir.y;
+      positions[i * 3] = beam.origin.x + wx * drop + Math.cos(ang) * r;
+      positions[i * 3 + 1] = beam.origin.y - drop;
+      positions[i * 3 + 2] = beam.origin.z + wz * drop + Math.sin(ang) * r;
+      beamTop[i * 3] = beam.origin.x; beamTop[i * 3 + 1] = beam.origin.y; beamTop[i * 3 + 2] = beam.origin.z;
+      beamB[i * 4] = wx; beamB[i * 4 + 1] = wz;
+      beamB[i * 4 + 2] = beam.height; beamB[i * 4 + 3] = r;
     } else {
       // 环境人口：均匀填满房间体积（阴影区只留极暗底色）
       positions[i * 3] = VOL_MIN.x + Math.random() * spanX;
       positions[i * 3 + 1] = VOL_MIN.y + Math.random() * spanY;
       positions[i * 3 + 2] = VOL_MIN.z + Math.random() * spanZ;
+      beamB[i * 4 + 2] = -1;                        // 环境人口标记
     }
   }
   // 点精灵底四边形（角点 ±0.5 / uv 0..1）：一实例一粒，4 顶点
@@ -116,29 +129,53 @@ export function buildMoonDust({ count = 1500, beamRatio = 0.4, beams = [] } = {}
   geometry.setAttribute('uv', quad.attributes.uv);
   geometry.setAttribute('aOrigin', new THREE.InstancedBufferAttribute(positions, 3));
   geometry.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 1));
+  geometry.setAttribute('aBeamTop', new THREE.InstancedBufferAttribute(beamTop, 3));
+  geometry.setAttribute('aBeamB', new THREE.InstancedBufferAttribute(beamB, 4));
   geometry.instanceCount = count;
 
   // ---- uniforms：TSL uniform() 节点（`.value` 推值口径不变）----
   const uTime = uniform(0);
-  const uSize = uniform(1.05);   // 点径基准（世界单位）
+  const uSize = uniform(0.63);   // 点径基准（世界单位；2026-10-11 用户定缩小 40%，旧 1.05）
   const uVolMin = uniform(VOL_MIN);
   const uVolSpan = uniform(VOL_MAX.clone().sub(VOL_MIN));
   const uShadowMatrix = uniform(new THREE.Matrix4()); // light.shadow.matrix（世界 → shadow UV/深度 [0,1]）
-  const uLit = uniform(new THREE.Color(0xcfe0ff).multiplyScalar(1.7));  // 被月光照亮：亮冷蓝
+  // 单颗亮度：粒子缩小 40%（uSize 1.05→0.63，面积 ~36%）后抬亮补偿可读性
+  const uLit = uniform(new THREE.Color(0xcfe0ff).multiplyScalar(2.2));  // 被月光照亮：亮冷蓝
   const uDark = uniform(new THREE.Color(0x16203c).multiplyScalar(0.5)); // 阴影区：极暗（加色混合下近不可见）
   const uBias = uniform(0.002);
 
-  // ---- 顶点侧（无控制流 = 纯表达式）----
+  // ---- 顶点侧（无控制流 = 纯表达式；beam/ambient 两路径 select 二选一）----
   const aOrigin = instancedBufferAttribute(geometry.attributes.aOrigin, 'vec3');
   const aSeed = instancedBufferAttribute(geometry.attributes.aSeed, 'float');
+  const aBeamTop = instancedBufferAttribute(geometry.attributes.aBeamTop, 'vec3');
+  const aBeamB = instancedBufferAttribute(geometry.attributes.aBeamB, 'vec4');
 
   // 缓慢下落（逐粒速度差）+ 盒内回绕（GLSL 语义 mod，见 modPos 注）
   const fall = float(0.35).add(fract(aSeed.mul(17.31)).mul(0.75));
-  const base = vec3(
+  // 光柱路径：竖直落差 dY（贴轴）+ 截面慢公转（角速 0.13 rad/s，全周转 ~48s）。
+  // 截面基从 (wx,wz) 重导（与 JS 侧旧烘焙逐式同值）：dir = normalize(wx,-1,wz)，
+  // U = normalize(cross(dir,up)) = normalize(-wz,0,wx)，V = cross(dir,U)。
+  const height = aBeamB.z;
+  const isBeam = height.greaterThan(0.0);
+  const y0Frac = fract(aSeed.mul(11.13));
+  const ang0 = fract(aSeed.mul(23.17)).mul(6.2831853);
+  const dY = modPos(y0Frac.mul(height).sub(uTime.mul(fall)), height);
+  const phi = ang0.add(uTime.mul(0.13));
+  const beamW = vec3(aBeamB.x, float(-1.0), aBeamB.y);       // 每单位降高的水平推进
+  const uBasis = vec3(aBeamB.y.negate(), float(0.0), aBeamB.x).normalize();
+  const vBasis = cross(beamW.normalize(), uBasis);
+  const rOrb = aBeamB.w;
+  const beamPos = aBeamTop
+    .add(beamW.mul(dY))
+    .add(uBasis.mul(rOrb).mul(cos(phi)))
+    .add(vBasis.mul(rOrb).mul(sin(phi)));
+  // 环境路径：体积盒内垂直下落回绕
+  const ambientPos = vec3(
     aOrigin.x,
     uVolMin.y.add(modPos(aOrigin.y.sub(uVolMin.y).sub(uTime.mul(fall)), uVolSpan.y)),
     aOrigin.z);
-  // 值噪声三轴漂移（错频，幅度 ~3.2 世界单位）
+  const base = select(isBeam, beamPos, ambientPos);
+  // 值噪声三轴漂移（错频，幅度 ~3.2 世界单位；光柱人口的溢出由 shadow 真值调暗）
   const np = base.mul(0.08).add(vec3(aSeed.mul(91.7)));
   const wander = vec3(
     vnoise3(np.add(uTime.mul(0.11))),
@@ -152,7 +189,7 @@ export function buildMoonDust({ count = 1500, beamRatio = 0.4, beams = [] } = {}
   // vWorld / vTwinkle 走 varying（粒子中心的量，四角共享同一值 = 旧点精灵 varying 语义）
   const vWorld = varying(modelWorldMatrix.mul(vec4(drift, 1.0)).xyz, 'vWorld');
   const vTwinkle = varying(
-    float(0.55).add(vnoise3(vec3(aSeed.mul(47.3)).add(uTime.mul(0.6))).mul(0.45)),
+    float(0.65).add(vnoise3(vec3(aSeed.mul(47.3)).add(uTime.mul(0.6))).mul(0.4)),
     'vTwinkle');
 
   // shadow 深度纹理：硬件比较采样（r185 shadow 管线给 depthTexture 配

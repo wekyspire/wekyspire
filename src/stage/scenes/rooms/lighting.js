@@ -8,8 +8,9 @@ import { P, desatColor } from '../kit/index.js';
 import { FLOOR_Y } from '../dungeon3D.js';
 import { LEFT_WALL_X } from './walls.js';
 
-// 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）
-const FIRE_BASE = 1150;
+// 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）。
+// 2026-10-11 用户定大幅削弱：旧值 1150 晃眼，砍到 4 成（亮度层级仍交给中央光池）。
+const FIRE_BASE = 460;
 
 // ---- 灯光去饱和（tonemap 后场景过饱和且偏蓝）----
 // 处方在 kit 的 `desatColor`（保持亮度、压饱和度、冷色额外多去一档）。**每个建灯处都过一遍**：
@@ -24,6 +25,9 @@ const desatRGB = (t) => {
 // 火：保留更多暖色倾向（幽火仍是幽火，只是不再偏紫）
 const desatFire = (c) => desatColor(c, { k: 0.35, cap: 0.45 }).getHex();
 const FLAME_RATE = 12; // 每火火焰粒子 /秒（同 dungeon3D）
+
+// 确定性 0..1 hash（火光相位/频率散开用；坐标派生 → 同布局重放一致）
+const hash01 = (n) => { const s = Math.sin(n) * 43758.5453; return s - Math.floor(s); };
 
 /**
  * 月光平行光（唯一投影光）的 shadow 配置——dungeon3D 多轮调试实录直接继承：
@@ -50,25 +54,25 @@ export const LIGHTING_PRESETS = {
   // 亮度交给局部光池（月光束/战火/战场补光 glow 5200@195 只罩战场），远墙可见性交给雾处方。
   // 单开诊断截图见 tmp/diag-*.png。
   moon: {
-    hemi: [0x3a4666, 0x232030, 1.1],
+    hemi: [0x3b3d43, 0x252528, 1.1],
     moon: 2.2,
     fill: 0.12,
     bounce: [[140, 105], [100, 90]],
-    battleGlow: [0x93a5d8, 5200, 195],
-    centerFill: [0x8a9ac8, 3400, 170],
+    battleGlow: [0xb6bac1, 5200, 195],   // 战场主补光：中性灰白（黑白主题）
+    centerFill: [0xa8acb3, 3400, 170],
     fire: { base: FIRE_BASE * 0.5, dist: 140, cap: 12 },
-    tint: { base: [0.52, 0.55, 0.75], fireGain: [0.16, 0.20, 0.48], radius: 58 },
+    tint: { base: [0.53, 0.54, 0.57], fireGain: [0.20, 0.20, 0.22], radius: 58 },
   },
   // 火把主导（1-2 章基调）：月光弱（小窗/无窗），火点光扛场景亮度（仍冷调幽火，暖橙禁用）
   torch: {
-    hemi: [0x3a4666, 0x232030, 1.0],
+    hemi: [0x3b3d43, 0x252528, 1.0],
     moon: 0.9, // 窄高窗进光量比旧小窗大，月光略抬让光束可读（火仍是主角）
     fill: 0.12,
     bounce: [[120, 100], [90, 90]],
-    battleGlow: [0x93a5d8, 5200, 195],
-    centerFill: [0x8a9ac8, 3800, 170],
+    battleGlow: [0xb6bac1, 5200, 195],   // 战场主补光：中性灰白（黑白主题）
+    centerFill: [0xa8acb3, 3800, 170],
     fire: { base: FIRE_BASE * 0.56, dist: 145, cap: 14 },
-    tint: { base: [0.5, 0.53, 0.72], fireGain: [0.18, 0.22, 0.5], radius: 64 },
+    tint: { base: [0.52, 0.53, 0.56], fireGain: [0.21, 0.21, 0.23], radius: 64 },
   },
   // 赌厅（休息房·老虎机/银行机）：**外围光再压一档、亮度靠中央光撑**。
   // 处方读法：吊灯暖金光池（centerFill）是全场主亮源 → 机器/彩灯灯池（lamp）是第二层 →
@@ -194,16 +198,16 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
     group.add(rim, rim.target);
   }
 
-  const fill = new THREE.DirectionalLight(desat(0x66779e), preset.fill);
+  const fill = new THREE.DirectionalLight(desat(0x84888f), preset.fill);
   fill.position.set(30, 60, 200);
   group.add(fill);
 
   // 月光落地反弹（假 GI）：两处光池点光——位置离开墙面（贴墙会把挂饰打得过艳，
   // "unlit 壁画刺眼"的病灶），向房间中线收，只打地板光池
   const [bounceA, bounceB] = preset.bounce;
-  const pA = new THREE.PointLight(desat(0x8298d4), bounceA[0], bounceA[1], 1.8);
+  const pA = new THREE.PointLight(desat(0x9ba1a7), bounceA[0], bounceA[1], 1.8);
   pA.position.set(-10, FLOOR_Y + 6, -12);
-  const pB = new THREE.PointLight(desat(0x8298d4), bounceB[0], bounceB[1], 1.8);
+  const pB = new THREE.PointLight(desat(0x9ba1a7), bounceB[0], bounceB[1], 1.8);
   pB.position.set(-10, FLOOR_Y + 6, 16);
   group.add(pA, pB);
 
@@ -257,14 +261,20 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   }
 
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
+  // 闪烁去同步（2026-10-11 用户定）：旧版所有火共用同一对频率（11/23 rad/s），相位又
+  // 派生自网格化坐标（量化后容易撞车）——全场读感是齐闪。每火改带**频率倍率 + hash
+  // 相位**（确定性：由坐标派生，同布局重放一致）。
   const torches = [];
   for (const a of fireAnchors.slice(0, preset.fire.cap)) {
     const light = new THREE.PointLight(desatFire(P.fireLight), preset.fire.base, preset.fire.dist, 1.8);
     light.position.set(a.x, a.y + 3, a.z + 2);
     group.add(light);
+    const seed = a.x * 7.13 + a.z * 3.71;
+    const freq = 0.72 + hash01(seed) * 0.6;   // 0.72~1.32 倍频：彻底打散齐闪节奏
     torches.push({
       x: a.x, y: a.y, z: a.z, light,
-      phase: (a.x * 7.13 + a.z * 3.71) % (Math.PI * 2), // 确定性相位（由坐标派生）
+      phase: hash01(seed + 13.7) * Math.PI * 2,
+      w1: 11 * freq, w2: 23 * freq,
       intensity: 1, emitterAcc: 0,
     });
   }
@@ -359,16 +369,19 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
 
     for (const t of torches) {
       t.intensity = 1
-        + 0.16 * Math.sin(time * 11 + t.phase)
-        + 0.08 * Math.sin(time * 23 + t.phase * 1.7);
+        + 0.16 * Math.sin(time * t.w1 + t.phase)
+        + 0.08 * Math.sin(time * t.w2 + t.phase * 1.7);
       t.light.intensity = preset.fire.base * t.intensity * periph * mood.fireGain;
       if (particles) {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
           t.emitterAcc -= 1;
+          // 火星粒子（2026-10-09 用户定）：尺寸减半以上、亮度适量削减（加色+bloom
+          // 偏移下原 0xd8dadd/0x9ba1a7 过曝刺眼）
           particles.spawn(t.x + (Math.random() - 0.5) * 1.6, t.y + 2.2, {
-            count: 1, z: t.z, color: Math.random() < 0.35 ? 0xcfd8ff : 0x8a9ae8,
-            speed: 4.2, ttl: 0.6, gravity: 2, size: 1.3,
+            count: 1, z: t.z, color: Math.random() < 0.35 ? 0x96999e : 0x6c7075,
+            speed: 4.2, ttl: 0.6, gravity: 2,
+            size: 0.6,
           });
         }
       }

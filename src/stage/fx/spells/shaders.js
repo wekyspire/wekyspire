@@ -120,6 +120,31 @@ export const projectileShade = Fn(([vUv, uProgress, uColor, uHot]) => {
 });
 
 /**
+ * 晶片（回蓝语汇的资源形状——与 projectileShade 光珠同族异形，2026-10-09）：
+ *  · 形状 = 长菱晶粒（x 长轴四向收锐），中线亮脊（内棱面全反射）+ 随 uProgress
+ *    掠过长轴的棱面火彩（飞行中的晶体反光扫动）；
+ *  · 边缘熄灭 mask（直边穿帮铁律）；热核脊推 HDR 过阈起晕（bloom 代劳辉光）；
+ *  · 4 参纪律同 projectileShade（vUv / uProgress / uColor / uHot）。
+ */
+export const crystalShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  const x = p.x;   // 长轴（飞行向拉伸后 = 破空晶针）
+  // 长菱形场：1 中心 → 0 棱缘 → 负外部（y 权重高 = 长宽比 ~2.2:1）
+  const d = float(1.0).sub(abs(x).mul(2.05)).sub(abs(p.y).mul(4.6));
+  const body = smoothstep(0.0, 0.4, d);
+  const quench = smoothstep(0.0, 0.18, d);
+  const spine = exp(p.y.mul(p.y).mul(-150.0)).mul(smoothstep(0.05, 0.5, d));
+  const gxd = x.sub(uProgress.mul(2.6).sub(1.3));
+  const glint = exp(gxd.mul(gxd).mul(-70.0)).mul(smoothstep(0.05, 0.55, d));
+  const flick = sin(uProgress.mul(53.0)).mul(0.10).add(0.90);
+  const hotSum = spine.add(glint).mul(flick);
+  const rgb = uColor.mul(body).mul(quench)
+    .add(uColor.mul(glint).mul(0.8))
+    .add(uHot.mul(hotSum).mul(2.2));
+  return vec4(rgb, float(1.0));
+});
+
+/**
  * 落点冲击闪光：宽晕 + 热核 + 扩张冲击环（uProgress = 爆发进度 0..1，环随进度
  * 扩张读「冲击波」）。4 参纪律（见 projectileShade 头注）。内孔压暗（halo 在
  * r<0.5 渐灭、热核保留）——环与核之间留出暗隙，环读「环」不读「脚下 一滩光」。

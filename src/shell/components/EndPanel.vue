@@ -20,16 +20,16 @@ const IS_PROD = import.meta.env.PROD;
 <style scoped>
 .panel {
   position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 20;
-  background: rgba(8, 11, 18, .94); border: 1px solid #2f3a52; border-radius: 3px;
-  padding: 26px 44px; color: #dbe4f4; font-family: sans-serif; text-align: center;
+  background: rgba(10, 10, 10, .94); border: 2px solid #555555; border-radius: 0;
+  padding: 26px 44px; color: #e4e4e4; font-family: sans-serif; text-align: center;
 }
-h2 { margin: 0 0 10px; font-size: 28px; color: #eef4ff; }
-h2.victory { color: #cfe6ff; }   /* 扁平冷色（金色只留金钱相关内容） */
+h2 { margin: 0 0 10px; font-size: 28px; color: #f5f5f5; }
+h2.victory { color: #efefef; }   /* 扁平冷色（金色只留金钱相关内容） */
 h2.defeat { color: #ff8f88; }
-p { color: #9aa3c0; font-size: 13px; }
+p { color: #a0a0a0; font-size: 13px; }
 button {
-  margin-top: 12px; padding: 8px 26px; background: rgba(16, 22, 34, .92); color: #eaf1fb;
-  border: 1px solid #3f5f8c; border-radius: 4px; cursor: pointer; font-size: 15px;
+  margin-top: 12px; padding: 8px 26px; background: rgba(20, 20, 20, .92); color: #f2f2f2;
+  border: 2px solid #8a8a8a; border-radius: 0; cursor: pointer; font-size: 15px;
 }
-button:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+button:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
 </style>

@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.start-screen { position: absolute; inset: 0; overflow: hidden; color: #eef7ff; }
+.start-screen { position: absolute; inset: 0; overflow: hidden; color: #efefef; }
 /* 背景图常驻；黑色遮罩用伪元素实现，透明度走 transition（可被打断平滑续接） */
 /* 肉鸽模式 = 远景（重度模糊 + 去色压暗，接近纯黑）；故事模式 = 近景（清晰 + 轻微放大） */
 .bg {
@@ -227,20 +227,20 @@ onBeforeUnmount(() => {
 .btn-slot { height: 50px; }
 .save-slot { height: 88px; }
 .save-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.save-title { font-size: 12px; letter-spacing: 3px; color: #7d87a8; }
-.save-empty { font-size: 13px; color: #5d6584; padding: 4px 0; }
+.save-title { font-size: 12px; letter-spacing: 3px; color: #8a8a8a; }
+.save-empty { font-size: 13px; color: #6a6a6a; padding: 4px 0; }
 /* 标题：白字（不再金色发光大字——用户定 的扁平风格） */
 .title {
-  margin: 0; font-size: 54px; letter-spacing: 8px; color: #eef4ff;
+  margin: 0; font-size: 54px; letter-spacing: 8px; color: #f5f5f5;
   text-shadow: 0 2px 10px rgba(0, 0, 0, .55);
 }
 .subtitle { font-size: 24px; letter-spacing: 4px; color: #ff7b23; vertical-align: super; }
 .dev-banner { font-size: 22px; font-weight: bold; color: #ff6b63; letter-spacing: 4px; }
 
 .main-btn-story {
-  font-family: inherit; font-size: 18px; color: #eaf1fb; cursor: pointer;
-  padding: 10px 44px; border-radius: 5px;
-  background: rgba(212, 60, 0, 0.92); border: 1px solid #da7e5a;
+  font-family: inherit; font-size: 18px; color: #f2f2f2; cursor: pointer;
+  padding: 10px 44px; border-radius: 0;
+  background: rgba(212, 60, 0, 0.92); border: 2px solid #da7e5a;
   transition: background .15s, border-color .15s, transform .15s;
 }
 
@@ -248,28 +248,28 @@ onBeforeUnmount(() => {
 
 /* 主按钮：白字 + 淡蓝描边 + 深底（扁平，无渐变发光） */
 .main-btn-rogue, .continue-btn {
-  font-family: inherit; font-size: 18px; color: #eaf1fb; cursor: pointer;
-  padding: 10px 44px; border-radius: 5px;
-  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c;
+  font-family: inherit; font-size: 18px; color: #f2f2f2; cursor: pointer;
+  padding: 10px 44px; border-radius: 0;
+  background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a;
   transition: background .15s, border-color .15s, transform .15s;
 }
 
-.main-btn-rogue:hover, .continue-btn:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+.main-btn-rogue:hover, .continue-btn:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
 /* 开局路线（D2）：小芯片一排，扁平深底白字；选中吃体系色描边 */
 .route-row { display: flex; gap: 10px; }
 .route-chip {
-  font-family: inherit; font-size: 14px; color: #c3cee0; cursor: pointer;
-  padding: 6px 18px; border-radius: 4px;
-  background: rgba(16, 22, 34, .92); border: 1px solid #3f5f8c;
+  font-family: inherit; font-size: 14px; color: #c2c2c2; cursor: pointer;
+  padding: 6px 18px; border-radius: 0;
+  background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a;
   transition: background .15s, border-color .15s, color .15s;
 }
-.route-chip:hover { background: rgba(52, 84, 126, .95); }
-.route-chip.on { background: rgba(30, 42, 64, .95); }
-.route-blurb { font-size: 12px; color: #9aa3c0; min-height: 16px; }
+.route-chip:hover { background: rgba(66, 66, 66, .95); }
+.route-chip.on { background: rgba(42, 42, 42, .95); }
+.route-blurb { font-size: 12px; color: #a0a0a0; min-height: 16px; }
 .continue-btn { font-size: 14px; padding: 7px 30px; }
-.save-info { font-size: 12px; color: #9aa3c0; margin-top: 4px; }
-.story-toggle { margin-top: 14px; color: #eaf1fb; font-size: 14px; display: flex; gap: 8px; align-items: center; }
-.story-toggle input { accent-color: #4d78ad; width: 15px; height: 15px; cursor: pointer; }
+.save-info { font-size: 12px; color: #a0a0a0; margin-top: 4px; }
+.story-toggle { margin-top: 14px; color: #f2f2f2; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.story-toggle input { accent-color: #9a9a9a; width: 15px; height: 15px; cursor: pointer; }
 .story-toggle label { cursor: pointer; }
 .swing-fade-enter-active, .swing-fade-leave-active { transition: opacity .35s ease, transform .35s ease; }
 .swing-fade-enter-from { opacity: 0; transform: translateY(14px); }
