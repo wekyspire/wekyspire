@@ -63,8 +63,8 @@ registerSkill({
     drawCards(sctx, sctx.self.promoted ? 3 : 2);
     return true;
   },
-  describe: () => '/named{洗入3}/card{emberMote}，抽2（升级后抽3）',
-  battleDescribe: (sctx) => `/named{洗入3}/card{emberMote}，抽${sctx.self.promoted ? 3 : 2}`,
+  describe: () => '/named{洗入3}/card{emberMoteC}，抽2（升级后抽3）',
+  battleDescribe: (sctx) => `/named{洗入3}/card{emberMoteC}，抽${sctx.self.promoted ? 3 : 2}`,
 });
 
 // 火种 B：1魏 冷却1——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
@@ -79,8 +79,8 @@ registerSkill({
     drawCards(sctx, sctx.self.promoted ? 4 : 3);
     return true;
   },
-  describe: () => '/named{洗入3}/card{emberMote}，抽3（升级后抽4）',
-  battleDescribe: (sctx) => `/named{洗入3}/card{emberMote}，抽${sctx.self.promoted ? 4 : 3}`,
+  describe: () => '/named{洗入3}/card{emberMoteC}，抽3（升级后抽4）',
+  battleDescribe: (sctx) => `/named{洗入3}/card{emberMoteC}，抽${sctx.self.promoted ? 4 : 3}`,
 });
 
 // 不灭火种 A：0费 冷却1——洗入 3 张余烬并抽 3（潜伏量的即时兑现分岔）。
@@ -94,8 +94,8 @@ registerSkill({
     drawCards(sctx, 3);
     return true;
   },
-  describe: () => '/named{洗入3}/card{emberMote}，抽3',
-  battleDescribe: () => '/named{洗入3}/card{emberMote}，抽3',
+  describe: () => '/named{洗入3}/card{emberMoteC}，抽3',
+  battleDescribe: () => '/named{洗入3}/card{emberMoteC}，抽3',
 });
 
 // 余烬（衍生牌）：0费即抛——赋予目标燃烧3，打出即焚毁。只经造牌入场。

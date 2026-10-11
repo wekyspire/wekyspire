@@ -220,8 +220,8 @@ const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = nu
       ]);
     },
   }],
-  describe: () => overwriteDesc || `${damage}伤害，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
-  battleDescribe: (sctx) => overwriteDesc || `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShard}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
+  describe: () => overwriteDesc || `${damage}伤害，/named{洗入3}/card{ironShardC}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
+  battleDescribe: (sctx) => overwriteDesc || `${resolvedDamageText(sctx, damage)}，/named{洗入3}/card{ironShardC}${slow ? '，/named{慢热}' : ''}，/named{斩}`,
 });
 for (let i = 0; i < SLASH_CHAIN.length; i++) {
   slashCard(SLASH_CHAIN[i], SLASH_CHAIN[i + 1]?.id);
@@ -378,9 +378,9 @@ const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null)
     for (let i = 0; i < shards * landed; i++) addCard(sctx, 'ironShardC', { index: 'random' });
     return true;
   },
-  describe: () => `群伤${damage}${shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''}`,
+  describe: () => `群伤${damage}${shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShardC}` : ''}`,
   battleDescribe: (sctx) => `群伤${resolvedDamageText(sctx, damage, AOE_TAGS).replace('伤害', '')}`
-    + (shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShard}` : ''),
+    + (shards > 0 ? `，/named{命中}：/named{洗入}/card{ironShardC}` : ''),
 });
 horizontalCleave('cleaveC', '横劈', 'C', 7, 1, 'cleaveB');
 horizontalCleave('cleaveB', '强力劈', 'B', 10, 1, 'cleaveA');
@@ -599,10 +599,10 @@ const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promot
     for (let i = 0; i < shards; i++) addCard(sctx, 'ironShardC', { index: 'random' });
     return true;
   },
-  describe: () => `抽${draw}，/named{令}/card{slash}/named{冷却}${slashCd}，/named{洗入}${shards}/card{ironShard}`,
+  describe: () => `抽${draw}，/named{令}/card{slashC}/named{冷却}${slashCd}，/named{洗入}${shards}/card{ironShardC}`,
   battleDescribe: (sctx) => {
     const slash = findSlashCard(sctx);
-    return `抽${draw}，/named{令}/card{slash}/named{冷却}${slashCd}${slash && slash.currentCooldown > 0 ? `（斩冷却中${slash.currentCooldown}）` : ''}，/named{洗入}${shards}/card{ironShard}`;
+    return `抽${draw}，/named{令}/card{slashC}/named{冷却}${slashCd}${slash && slash.currentCooldown > 0 ? `（斩冷却中${slash.currentCooldown}）` : ''}，/named{洗入}${shards}/card{ironShardC}`;
   },
 });
 vacuumBladeCard({ id: 'vacuumBladeC', name: '利刃', tier: 'C', draw: 2, slashCd: 2, shards: 2, ap: 1, promotesTo: 'vacuumBladeB' });
@@ -964,11 +964,11 @@ const ironRainCard = (id, tier, { promotesTo = null, exhaust = true } = {}) => r
     }
     return true;
   },
-  describe: () => `打出所有/card{ironShard}（含牌库）${exhaust ? '' : '；可反复打出'}`,
+  describe: () => `打出所有/card{ironShardC}（含牌库）${exhaust ? '' : '；可反复打出'}`,
   battleDescribe: (sctx) => {
     const bs = sctx.battleState;
     const n = [...bs.zones.hand, ...bs.zones.deck].filter(c => c.defId === 'ironShardC').length;
-    return `打出所有/card{ironShard}（含牌库，共${n}张）`;
+    return `打出所有/card{ironShardC}（含牌库，共${n}张）`;
   },
 });
 ironRainCard('ironRainB', 'B', { promotesTo: 'ironRainA' });
@@ -992,8 +992,8 @@ const quickDrawShieldCard = (id, name, tier, shield, promotesTo) => registerSkil
     }
     return true;
   },
-  describe: () => `${shield}护盾，/named{抽出}/card{slash}`,
-  battleDescribe: (sctx) => `${shield}护盾，/named{抽出}/card{slash}（牌库中${findSlashCard(sctx) ? '有' : '无'}）`,
+  describe: () => `${shield}护盾，/named{抽出}/card{slashC}`,
+  battleDescribe: (sctx) => `${shield}护盾，/named{抽出}/card{slashC}（牌库中${findSlashCard(sctx) ? '有' : '无'}）`,
 });
 quickDrawShieldCard('quickDrawShieldC', '快速横刀', 'C', 6, 'quickDrawShieldB');
 quickDrawShieldCard('quickDrawShieldB', '快速横刀', 'B', 9, 'quickDrawShieldA');

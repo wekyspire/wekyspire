@@ -76,7 +76,7 @@ function cardsModel({ cardIds = [], params }) {
 
 // relic：遗物效果预览（面板遗物行 / 顶端资源栏遗物槽 hover）。标题带稀有度与槽位
 // （购物与装卸都要看这两个数），正文即效果描述。**正文是富文本**：遗物效果里常
-// 引用具体卡牌（如「将 1 张/card{rapidFire}加入手牌」），渲染成卡名 + 系列徽章并
+// 引用具体卡牌（如「将 1 张/card{relicRapidC}加入手牌」），渲染成卡名 + 系列徽章并
 // 支持 hover 弹整卡预览（markup 标记交给 TooltipOverlay → RichTextInline）。
 function relicModel({ relicId }) {
   if (relicId == null || !hasRelic(relicId)) return { title: `[relic] ${relicId}`, body: '' };
