@@ -14,6 +14,7 @@
 
 import * as THREE from 'three';
 import { sharedUiArtCache } from '../art/bubbleArt.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 export const DECK_VIEW_Z = Object.freeze({
   GALLERY_BG: 170,   // 卡组画廊背板（stagePickerKit 的 CardGalleryObject bgZ）
@@ -169,7 +170,7 @@ function defaultBakeIcon(count, hovered, iconImg = null) {
   ctx.strokeStyle = P.badgeBorder;
   ctx.stroke();
   ctx.fillStyle = P.count;
-  ctx.font = 'bold 23px sans-serif';
+  ctx.font = `23px ${UI_FONT}`;
   ctx.fillText(String(count ?? 0), bx + bw / 2, by + bh / 2 + 1);
 
   const texture = new THREE.CanvasTexture(canvas);

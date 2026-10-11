@@ -23,6 +23,7 @@ import {
   sin, dot, length, exp, step, smoothstep, oneMinus,
 } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：veil/edgeGlow 的 colorNode 必须挂 Node 材质
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const VEIL_LERP = 7;       // 覆盖高度收敛速率（/s——拍数推进时前沿平滑爬行的动画）
 const PULSE_OPACITY = 0.55;
@@ -649,7 +650,7 @@ function bakeChipTexture(n) {
   const g = canvas.getContext('2d');
   const text = String(n);
   const fontPx = text.length >= 2 ? 66 : 88;
-  g.font = `bold ${fontPx}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  g.font = `${fontPx}px ${UI_FONT}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = '#eef3fd';

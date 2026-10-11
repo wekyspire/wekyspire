@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { parseRichText } from './parser.js';
 import { layoutRichText, DEFAULT_TEXT_STYLE } from './layout.js';
 import { effectLook, namedLook, cardLook } from './appearance.js';
+import { UI_FONT_BODY } from './uiFont.js';
 
 export { DEFAULT_TEXT_STYLE };
 
@@ -21,7 +22,7 @@ export function createCanvasMeasurer(style = {}) {
   const ctx = canvas.getContext('2d');
   return (text) => {
     const weight = st.fontWeight && st.fontWeight !== 'normal' ? `${st.fontWeight} ` : '';
-    ctx.font = `${weight}${st.fontSize}px sans-serif`;
+    ctx.font = `${weight}${st.fontSize}px ${st.fontFamily ?? UI_FONT_BODY}`;
     return ctx.measureText(text).width;
   };
 }
@@ -89,7 +90,8 @@ export function renderRichTextBlock(text, options = {}) {
  */
 export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawIcon, offsetX = 0, offsetY = 0, textStroke = null }) {
   const st = { ...DEFAULT_TEXT_STYLE, ...(style || {}) };
-  const glyphFont = (s) => `${s.fontWeight && s.fontWeight !== 'normal' ? `${s.fontWeight} ` : ''}${s.fontSize}px sans-serif`;
+  // 字族取块级 style.fontFamily（per-glyph 无字族切换需求），缺省正文字族
+  const glyphFont = (s) => `${s.fontWeight && s.fontWeight !== 'normal' ? `${s.fontWeight} ` : ''}${s.fontSize}px ${st.fontFamily ?? UI_FONT_BODY}`;
   if (textStroke) {
     ctx.lineJoin = 'round';
     ctx.lineWidth = textStroke.width ?? 3;
@@ -128,7 +130,7 @@ export function defaultDrawIcon(ctx, { iconType, name, x, y, size }) {
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.font = `bold ${Math.round(size * 0.62)}px sans-serif`;
+    ctx.font = `${Math.round(size * 0.62)}px ${UI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';

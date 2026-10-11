@@ -54,7 +54,7 @@ const cgDur = computed(() => {
 
 <style scoped>
 /* host：激活期间全屏吸收一切点击 = 阻塞语义 */
-.host { position: fixed; inset: 0; z-index: 100; pointer-events: auto; font-family: sans-serif; }
+.host { position: fixed; inset: 0; z-index: 100; pointer-events: auto; }
 
 /* fade 层：用 animation 而非 transition（元素挂载即终值时 transition 不会触发）；
    fill-mode forwards 保持终态，播放器在 step.ms 后推进下一步 */
@@ -98,7 +98,7 @@ const cgDur = computed(() => {
   width: 100%; padding: 11px 16px; text-align: left; cursor: pointer;
   background: rgba(22, 22, 22, .92); color: #e8e8e8;
   border: 2px solid #606060; border-radius: 0;
-  font: 600 15px/1.4 sans-serif; transition: background .12s ease, border-color .12s ease;
+  font: 600 15px/1.4 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif; transition: background .12s ease, border-color .12s ease;
 }
 .choices button:hover:not(:disabled) { background: rgba(48, 48, 48, .95); border-color: #9a9a9a; }
 .choices button:disabled { opacity: .42; cursor: default; }

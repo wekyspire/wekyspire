@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 import { DECK_VIEW_Z } from './DeckChipObject.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const SLOT = 4.0;   // 单个遗物槽边长（世界单位）
 const GAP = 0.9;    // 槽间距
@@ -291,7 +292,7 @@ function bakeRelicSlot(relic, sizePx) {
     ctx.stroke();
     const glyph = relic.icon || (relic.name ?? '?').slice(0, 1);
     ctx.fillStyle = '#e0e0e0';
-    ctx.font = `bold ${W * 0.42}px sans-serif`;
+    ctx.font = `${W * 0.42}px ${UI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(glyph, W / 2, W * 0.46);
@@ -299,7 +300,7 @@ function bakeRelicSlot(relic, sizePx) {
   // 剩余次数角标（右下）
   if (relic.usesLeft != null) {
     ctx.fillStyle = '#ffd75e';
-    ctx.font = `bold ${W * 0.2}px sans-serif`;
+    ctx.font = `${W * 0.2}px ${UI_FONT}`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`${relic.usesLeft}`, W * 0.92, W * 0.95);

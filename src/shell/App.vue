@@ -80,12 +80,20 @@ function startAssetPreload() {
     if (!contentReady.value) loadContent().catch(() => {});
   };
   startCloudNoiseBake(); // 云噪声 3D 纹理烘焙与美术下载并行（分片让出主线程，不占加载门）
+  // UI 字体门（UI_LANGUAGE.md 字体章）：canvas 烘焙必须在 WenDaoChaoHei 就绪后发生——
+  // 字体未到就烘会把系统兜底字体烙进纹理（整场游戏不刷新）。失败不拦门（兜底字体可读）。
+  // 只载 Regular——文道潮黑只此一款字重，bold 会触发合成加粗把字挤成团（全线禁叠 bold）。
+  const fontReady = Promise.all([
+    document.fonts.load('16px "WenDaoChaoHei"', '魏启尖塔'),
+    document.fonts.load('16px "SourceHanTC"', '魏启尖塔'),
+  ]).catch(() => {});
   preloadAllArt({
     onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
     // stats 的计数字段叫 done——映射回 loaded（字节进度条的分母语义）
     onStats: (s) => window.__bootShell?.progress({ ...s, loaded: s.done }),
-  }).then((r) => {
+  }).then(async (r) => {
     if (r.failed > 0) { window.__bootShell?.failed(r.failed); return; }   // 卡住：只给重试
+    await fontReady;
     assetsReady.value = true;
   });
 }

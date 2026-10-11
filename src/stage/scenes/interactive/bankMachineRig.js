@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { P, shade } from '../kit/index.js';
+import { UI_FONT } from '../../richtext/uiFont.js';
 
 const TINT = {
   deposit: P.glowCyan,
@@ -27,11 +28,11 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
     let fontPx = H * 0.44;
-    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.font = `${fontPx}px ${UI_FONT}`;
     const tw = ctx.measureText(text).width;
     const maxW = W * 0.82;
     if (tw > maxW) fontPx = Math.max(24, fontPx * (maxW / tw));
-    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.font = `${fontPx}px ${UI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';

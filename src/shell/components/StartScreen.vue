@@ -232,10 +232,11 @@ onBeforeUnmount(() => {
 /* 标题：白字（不再金色发光大字——用户定 的扁平风格） */
 .title {
   margin: 0; font-size: 54px; letter-spacing: 8px; color: #f5f5f5;
+  font-family: var(--font-display);
   text-shadow: 0 2px 10px rgba(0, 0, 0, .55);
 }
 .subtitle { font-size: 24px; letter-spacing: 4px; color: #ff7b23; vertical-align: super; }
-.dev-banner { font-size: 22px; font-weight: bold; color: #ff6b63; letter-spacing: 4px; }
+.dev-banner { font-size: 22px; color: #ff6b63; letter-spacing: 4px; }
 
 .main-btn-story {
   font-family: inherit; font-size: 18px; color: #f2f2f2; cursor: pointer;

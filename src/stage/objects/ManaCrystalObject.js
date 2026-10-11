@@ -16,6 +16,7 @@
 
 import * as THREE from 'three';
 import { HighlightFX, ScalePop } from './highlightFX.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const NUM_TINT = '#8ecdf5';    // 概念图浅蓝数字（常态/高亮主题色）
 const INSUFFICIENT_TINT = '#b8383f'; // 不足态暗红（覆盖高亮）
@@ -253,7 +254,7 @@ function defaultBake() {
 // 一条陡斜线自左下贯穿至右上（概念图的"3/3"排布，非行内斜杠）。
 // 字符以 color（缺省白）烘焙——调用方可用材质 tint 换主题色（不足态暗红）。
 // 返回逻辑像素尺寸（调用方按 ppw/numHeight 换算面片）。
-export function bakeFraction(topText = '', botText = '', { color = '#ffffff', bold = true } = {}) {
+export function bakeFraction(topText = '', botText = '', { color = '#ffffff', bold = false } = {}) {
   const P = 10;   // 全局 px/wu 约定
   const F = 34;   // 字号 px
   const S = 3;    // 超采样
@@ -275,7 +276,7 @@ export function bakeFraction(topText = '', botText = '', { color = '#ffffff', bo
   ctx.lineTo(W * 0.78, H * 0.10);
   ctx.stroke();
   // 对角阶梯的两个数字
-  ctx.font = `${bold ? 'bold ' : ''}${F}px sans-serif`;
+  ctx.font = `${F}px ${UI_FONT}`;
   ctx.fillStyle = color;
   ctx.fillText(topText, W * 0.32, H * 0.30);
   ctx.fillText(botText, W * 0.68, H * 0.72);

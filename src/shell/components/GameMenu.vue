@@ -85,7 +85,7 @@ const QUALITY_TIERS = [
   position: fixed; inset: 0; z-index: 30;
   background: rgba(5, 5, 5, .62);
   display: flex; align-items: center; justify-content: center;
-  font-family: sans-serif;
+ 
 }
 .menu {
   width: 340px; background: rgba(10, 10, 10, .96);

@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { renderRichTextBlock } from '../richtext/texture.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const SPRITE_DEFAULTS = Object.freeze({
   vx: 0,
@@ -85,7 +86,7 @@ export function createFloatFx({ maxSprites = 64, pixelsPerWorld = 10 } = {}) {
    * @param {object} options  fontSize/color/fontWeight（烘焙样式，px）+ 物理参数
    */
   function spawnText(x, y, text, options = {}) {
-    const { fontSize = 32, color = '#ffffff', fontWeight = 'bold', ...physics } = options;
+    const { fontSize = 32, color = '#ffffff', fontWeight = 'normal', ...physics } = options;
     const { texture, width, height } = bakeText(text, { fontSize, color, fontWeight });
     const rec = spawnSprite(x, y, {
       texture,
@@ -145,7 +146,7 @@ function bakeText(text, { fontSize, color, fontWeight }) {
     return { texture, width: 1, height: 1 };
   }
   return renderRichTextBlock(text, {
-    style: { fontSize, color, fontWeight, lineHeight: Math.ceil(fontSize * 1.3) }, // 行高随字号，防大字号裁剪
+    style: { fontSize, color, fontWeight, lineHeight: Math.ceil(fontSize * 1.3), fontFamily: UI_FONT }, // 行高随字号，防大字号裁剪
     scale: 2,
   });
 }

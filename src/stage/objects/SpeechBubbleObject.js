@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { sharedUiArtCache, BUBBLE_ART } from '../art/bubbleArt.js';
+import { UI_FONT_BODY } from '../richtext/uiFont.js';
 
 // 两张图共用同一主椭圆（实测自 512×512 素材）：中心/半轴（归一化到图宽）
 const ELLIPSE = { cx: 0.506, cy: 0.462, rx: 0.365, ry: 0.187 };
@@ -72,7 +73,7 @@ function bakeBoxedText(text, { boxW, boxH, color = '#141821', stroke = null }) {
   canvas.height = Math.max(1, Math.round(boxH * S));
   const ctx = canvas.getContext('2d');
   ctx.scale(S, S);
-  const fontOf = (px) => `bold ${px}px sans-serif`;
+  const fontOf = (px) => `${px}px ${UI_FONT_BODY}`;
   const meas = document.createElement('canvas').getContext('2d');
   let fontPx = Math.min(30, Math.max(12, Math.round(boxH * 0.52)));
   let lines = [text];

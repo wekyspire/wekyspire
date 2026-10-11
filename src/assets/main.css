@@ -2,7 +2,11 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-family: 'SourceHanTC', 'Microsoft YaHei', Arial, sans-serif;
+}
+:root {
+  /* 展示字族（标题/大数字）：与 stage/richtext/uiFont.js 的 UI_FONT 同源 */
+  --font-display: 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif;
   /* 游戏画布锁定 16:9 居中，窗口非 16:9 时边缘铺黑（取景框见 shell/App.vue #game-frame） */
   background-color: #000;
 }

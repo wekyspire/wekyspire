@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import { TextBlockObject } from './TextBlockObject.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 import { RARITY_COLORS } from './RelicScrollPickerObject.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 // ---- 观感常量（世界单位；面板内宽 ≈ 22.6wu，行 4 枚图标）----
 const ICON = 3.9;            // 图标边长
@@ -77,7 +78,7 @@ function iconTexture(relic) {
     g.stroke();
     g.globalAlpha = 1;
     const ch = relic.icon ?? (relic.name ?? '?')[0];
-    g.font = `bold 76px "Microsoft YaHei", "PingFang SC", sans-serif`;
+    g.font = `76px ${UI_FONT}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillStyle = col;
@@ -93,7 +94,7 @@ function iconTexture(relic) {
     g.strokeStyle = 'rgba(0,0,0,0.55)';
     g.stroke();
     if (relic.usesLeft != null) {
-      g.font = 'bold 13px sans-serif';
+      g.font = `13px ${UI_FONT}`;
       g.fillStyle = '#ffd75e';
       g.textAlign = 'right';
       g.fillText(`×${relic.usesLeft}`, W - 32, 24);
