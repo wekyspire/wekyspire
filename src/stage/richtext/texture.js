@@ -56,7 +56,7 @@ export function renderRichTextBlock(text, options = {}) {
   const measure = options.measure || createCanvasMeasurer(options.style);
 
   // 行内引用的外观解析缺省接 appearance.js（与卡面正文同一份口径）：
-  // 不接的话 `/card{rapidFire}` 会退化成「● rapidFire」——原始 id + 兜底圆点徽章，
+  // 不接的话 `/card{relicRapidC}` 会退化成「● rapidFire」——原始 id + 兜底圆点徽章，
   // 这正是"卡面正文认得 markup、面板/特写文字不认得"的老毛病。显式传参仍可覆盖。
   const layout = layoutRichText(parseRichText(text), {
     resolveEffect: (name) => { const { color } = effectLook(name); return color ? { color } : {}; },

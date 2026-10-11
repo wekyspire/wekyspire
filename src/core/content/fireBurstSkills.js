@@ -1048,10 +1048,10 @@ function douseFlameCard({ id, tier, ap, promotesTo = null }) {
       }
       return true;
     },
-    describe: () => '驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMote}',
+    describe: () => '驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMoteC}',
     battleDescribe: (sctx) => {
       const stacks = sctx.player.getEffectStacks('burn');
-      return `驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMote}（当前${stacks}层 → 洗入${Math.floor(stacks / 4)}张）`;
+      return `驱散自身/effect{燃烧}，每4层/named{洗入1}/card{emberMoteC}（当前${stacks}层 → 洗入${Math.floor(stacks / 4)}张）`;
     },
   });
 }

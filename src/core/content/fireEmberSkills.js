@@ -41,8 +41,8 @@ registerSkill({
     addEffect(sctx, 'burn', 7, target);
     return true;
   },
-  describe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}7',
-  battleDescribe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}7',
+  describe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}7',
+  battleDescribe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}7',
 });
 
 // 点火 A：0费，冷却1，洗入1余烬，施加燃烧 9（点火链顶点，无晋升）。
@@ -58,8 +58,8 @@ registerSkill({
     addEffect(sctx, 'burn', 9, target);
     return true;
   },
-  describe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}9',
-  battleDescribe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}9',
+  describe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}9',
+  battleDescribe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}9',
 });
 
 // ==== 燃元系列（散卡：燃烧 → 魏启资源）=======================================
@@ -400,10 +400,10 @@ function fireWallCard({ id, tier, base, promotesTo = null }) {
       gainShield(sctx, base + embers * 2);
       return true;
     },
-    describe: () => `护盾${base}，牌库中每有一张/card{emberMote}再+2`,
+    describe: () => `护盾${base}，牌库中每有一张/card{emberMoteC}再+2`,
     battleDescribe: (sctx) => {
       const embers = sctx.battleState.zones.deck.filter(c => c.defId === 'emberMoteC').length;
-      return `护盾${base + embers * 2}，牌库中每有一张/card{emberMote}再+2（现有${embers}张）`;
+      return `护盾${base + embers * 2}，牌库中每有一张/card{emberMoteC}再+2（现有${embers}张）`;
     },
   });
 }
@@ -521,11 +521,11 @@ function burnOffCard({ id, tier, draw, promotesTo = null }) {
       drawCards(sctx, draw);
       return true;
     },
-    describe: () => '手中非火系牌转化为/card{emberMote}，抽' + draw,
+    describe: () => '手中非火系牌转化为/card{emberMoteC}，抽' + draw,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.hand.filter(c =>
         c.uniqueID !== sctx.self.uniqueID && getSkillDefinition(c.defId)?.type !== 'fire').length;
-      return `手中非火系牌转化为/card{emberMote}，抽${draw}（可转化${n}张）`;
+      return `手中非火系牌转化为/card{emberMoteC}，抽${draw}（可转化${n}张）`;
     },
   });
 }

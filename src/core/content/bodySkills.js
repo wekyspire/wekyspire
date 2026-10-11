@@ -251,7 +251,7 @@ function registerChargeShuffle({ id, name, tier, count, promotesTo = null }) {
       for (let i = 0; i < count; i++) addCard(sctx, 'instantStrikeC', { index: 'random' });
       return true;
     },
-    describe: () => `/named{洗入${count}}/card{instantStrike}`,
+    describe: () => `/named{洗入${count}}/card{instantStrikeC}`,
   });
 }
 
@@ -280,8 +280,8 @@ registerSkill({
       },
     }],
   },
-  describe: () => '/named{洗入3}/card{instantStrike}',
-  battleDescribe: (sctx) => '/named{洗入3}/card{instantStrike}',
+  describe: () => '/named{洗入3}/card{instantStrikeC}',
+  battleDescribe: (sctx) => '/named{洗入3}/card{instantStrikeC}',
 });
 
 // 一瞬千击（S）：1AP 消耗——发现 5 张瞬击（直接进手牌；满手按 §7.3 溢入牌库）。
@@ -295,7 +295,7 @@ registerSkill({
     for (let i = 0; i < 5; i++) addCard(sctx, 'instantStrikeC', { toZone: 'hand' });
     return true;
   },
-  describe: () => '/named{发现}5/card{instantStrike}',
+  describe: () => '/named{发现}5/card{instantStrikeC}',
 });
 
 // 瞬击（蓄力系列衍生牌）：0 费即抛——6 伤 + 抽 1，打出即焚毁。
@@ -599,7 +599,7 @@ const feintCard = ({ id, tier, draw, voids, exhaust = true, promotesTo = null })
     for (let i = 0; i < voids; i++) addCard(sctx, 'voidCardC', { index: 'random' });
     return true;
   },
-  describe: () => `抽${draw}牌，/named{洗入}${voids}/card{voidCard}`,
+  describe: () => `抽${draw}牌，/named{洗入}${voids}/card{voidCardC}`,
 });
 feintCard({ id: 'feintC', tier: 'C', draw: 2, voids: 2, promotesTo: 'feintB' });
 feintCard({ id: 'feintB', tier: 'B', draw: 3, voids: 2, exhaust: false, promotesTo: 'feintA' });

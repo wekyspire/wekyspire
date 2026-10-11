@@ -335,8 +335,8 @@ function smeltChantCard({ id, tier, mana, chantWeight, ap, promotesTo }) {
         },
       }],
     },
-    describe: () => `获得${mana}魏启，/named{洗入2}/card{emberMote}`,
-    battleDescribe: () => `获得${mana}魏启，/named{洗入2}/card{emberMote}`,
+    describe: () => `获得${mana}魏启，/named{洗入2}/card{emberMoteC}`,
+    battleDescribe: () => `获得${mana}魏启，/named{洗入2}/card{emberMoteC}`,
   });
 }
 smeltChantCard({ id: 'fireChantSmeltB', tier: 'B', mana: 1, chantWeight: 1, ap: 1, promotesTo: 'fireChantSmeltA' });

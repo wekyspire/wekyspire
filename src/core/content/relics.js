@@ -656,7 +656,7 @@ registerRelic({
 
 registerRelic({
   id: 'aronaIII', name: '阿罗那 III', rarity: 'C', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，将 1 张/card{rapidFire}加入手牌。',
+  description: '战斗开始时，将 1 张/card{relicRapidC}加入手牌。',
   flavor: '包装盒上还有广告“军警两用枪械，值得信赖”',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicRapidC', toZone: 'hand' }));
@@ -665,7 +665,7 @@ registerRelic({
 
 registerRelic({
   id: 'blackFireH3', name: '黑火 H-3', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，将 1 张/card{pointShot}洗入牌库。',
+  description: '战斗开始时，将 1 张/card{relicPointC}洗入牌库。',
   flavor: '她的配枪',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicPointC', index: 'random' }));
@@ -674,7 +674,7 @@ registerRelic({
 
 registerRelic({
   id: 'prayerSystem', name: '祈祷制度', rarity: 'B', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，将 1 张/card{suppressionFire}洗入牌库。',
+  description: '战斗开始时，将 1 张/card{relicSuppressionC}洗入牌库。',
   flavor: '另一人的配枪，不过她不在塔内，她撑不了这么久',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicSuppressionC', index: 'random' }));
@@ -683,7 +683,7 @@ registerRelic({
 
 registerRelic({
   id: 'whisperEagleZ', name: '低语苍鹰 Z', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，将 1 张/card{piercingShot}洗入牌库。',
+  description: '战斗开始时，将 1 张/card{relicPierceC}洗入牌库。',
   flavor: '名字很不错，威力很可观',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicPierceC', index: 'random' }));
@@ -693,7 +693,7 @@ registerRelic({
 // 戟：稿未标稀有度，按同槽位旧件（海神戟）记 A。〈挥舞〉：S 级 4AP，101伤害，纯净1。
 registerRelic({
   id: 'halberd', name: '戟', rarity: 'A', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
-  description: '战斗开始时，将 1 张/card{greatSweep}洗入牌库。',
+  description: '战斗开始时，将 1 张/card{relicSweepS}洗入牌库。',
   flavor: '应该没人抡得动它',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicSweepS', index: 'random' }));
@@ -704,7 +704,7 @@ registerRelic({
 // 〈盗取时间〉：S 级 3AP，结束回合并立刻开始你的新一回合（跳过一次敌方回合）。
 registerRelic({
   id: 'birdFeather', name: '鸟羽', cost: 1, acquisition: ['event'],
-  description: '战斗开始时，将 1 张/card{stealTime}插入牌库底。',
+  description: '战斗开始时，将 1 张/card{relicStealS}插入牌库底。',
   flavor: '神鸟穿梭于光阴之间',
   onBattleStart(ctx) {
     ctx.kernel.submitInstruction(new AddCardInstruction({ defId: 'relicStealS' }));

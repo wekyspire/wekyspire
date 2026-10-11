@@ -555,7 +555,7 @@ registerSkill({
     }
     return true;
   },
-  describe: () => '将手中/named{自由}牌变换为0开销/card{fierceElbowFree}',
-  battleDescribe: (sctx) => '将手中/named{自由}牌变换为0开销/card{fierceElbowFree}'
+  describe: () => '将手中/named{自由}牌变换为0开销/card{elbowStrikeFierceB}',
+  battleDescribe: (sctx) => '将手中/named{自由}牌变换为0开销/card{elbowStrikeFierceB}'
     + `（当前可变换${sctx.battleState.zones.hand.filter(c => !c.isActivated).length}张）`,
 });

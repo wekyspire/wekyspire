@@ -91,8 +91,8 @@ registerSkill({
     }));
     return true;
   },
-  describe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}5',
-  battleDescribe: () => '/named{洗入1}/card{emberMote}，赋予/effect{燃烧}5',
+  describe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}5',
+  battleDescribe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}5',
 });
 
 // ④ 咏唱牌：每个玩家回合开始回复 1 点魏启（验证 activated 生命周期 + WAIT 回合）。
