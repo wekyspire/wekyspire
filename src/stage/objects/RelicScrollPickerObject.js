@@ -17,7 +17,7 @@ import { sharedRelicArtCache } from '../art/relicArt.js';
 
 /** 稀有度色（遗物 UI 的唯一来源）：C 灰蓝 / B 青 / A 紫 / S 金。 */
 export const RARITY_COLORS = Object.freeze({
-  C: '#8d97b5', B: '#6fb3c8', A: '#a98ad8', S: '#ffd75e',
+  C: '#8f8f8f', B: '#6fb3c8', A: '#a98ad8', S: '#ffd75e',
 });
 const rarityColor = (r) => RARITY_COLORS[r] ?? RARITY_COLORS.C;
 
@@ -60,7 +60,7 @@ class RelicTile extends THREE.Group {
     name.placeLeftTop(TEXT_X, TILE.h / 2 - ART.top - ART.size - 1.2);
     name.position.z = 0.06;
     this.add(name);
-    this._desc = new TextBlockObject({ bakeText, fontPx: 20, tint: '#9aa3b8' });
+    this._desc = new TextBlockObject({ bakeText, fontPx: 20, tint: '#a0a0a0' });
     this._desc.setText(relic.desc ?? '', { maxWidth: (TILE.w - 2.0) * 10 });
     this._desc.placeLeftTop(TEXT_X, TILE.h / 2 - ART.top - ART.size - 3.8);
     this._desc.position.z = 0.06;

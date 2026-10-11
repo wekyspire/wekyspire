@@ -55,7 +55,7 @@ const T_STRIDE = 12;  // 每类型行 12 vec4：
 //  r8: color.rgb, alpha
 //  r9: colorEnd.rgb, heat
 //  r10: radial（径向爆散初速）, ageHeat（随年龄衰减的亮度增益）, —, —
-//  r11: softness（sprite 径向衰减指数）, sizeMode（1 = 尺寸斜坡按年龄，0 = 按 progress）, alphaMode（1 = 淡入+淡出，0 = 只淡出）, —（只许尾部追加——L1 分块纪律）
+//  r11: softness（sprite 径向衰减指数）, sizeMode（1 = 尺寸斜坡按年龄，0 = 按 progress）, alphaMode（1 = 淡入+淡出，0 = 只淡出）, arriveGain（目的地近端收敛增益；0 = 8）
 const A_STRIDE = 2;   // 每锚点 2 vec4：
 //  a0: type(0 线段/1 矩形/2 圆), alive, p0.x, p0.y
 //  a1: p0.z, p1.x, p1.y, p1.z
@@ -287,13 +287,15 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
               distV.assign(length(toT));
               If(P1.y.lessThan(0.5), () => {
                 // 汇聚：steerDelay 后 ramp 渐入。arrival 行为——目标速度取
-                // min(steerK, dist×8)：远端恒 steerK 巡航，近端线性减速指数收敛，
+                // min(steerK, dist×arriveGain)：远端恒 steerK 巡航，近端线性减速指数收敛，
                 // 根治「恒定速率冲过目标点再被拉回」的绕目标震荡（// 验收：粒子在卡缘反复抖动——60fps 下 steerK120 一帧 2 单位，
-                // arriveR 2.4 的死亡球被一步跨过）。gain 8 = 收敛时间常数 ~0.13s。
+                // arriveR 2.4 的死亡球被一步跨过）。gain 缺省 8 = 收敛时间常数 ~0.13s，
+                // 高速汇聚类（资源扣费）按类型抬高。
                 const dirN = toT.div(max(distV, 1e-4));
                 const ageSec = age.mul(ttlA);
                 const ramp = clamp(ageSec.sub(r5.z).div(max(r5.w, 0.001)), 0.0, 1.0);
-                const targetSpeed = min(r6.x, distV.mul(8.0));
+                const gain = max(tS.element(base.add(int(11))).w, 8.0);
+                const targetSpeed = min(r6.x, distV.mul(gain));
                 velV.assign(mix(velV, dirN.mul(targetSpeed), clamp(ramp.mul(3.0), 0.0, 1.0)));
                 // 侧向弯曲：垂直分量随汇聚进度衰减（弧线轨迹；平面近似，
                 // 目的地特效主战场是 UI/面板平面，z 向弯曲留给后续 3D 化）
@@ -652,7 +654,8 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
       put(8, rd.color[0], rd.color[1], rd.color[2], rd.alpha);
       put(9, rd.colorEnd[0], rd.colorEnd[1], rd.colorEnd[2], rd.heat);
       put(10, s.radial, rd.ageHeat ?? 0, 0, 0);
-      put(11, rd.softness ?? 1, rd.sizeMode === 'age' ? 1 : 0, rd.alphaMode === 'in' ? 1 : 0, 0);
+      put(11, rd.softness ?? 1, rd.sizeMode === 'age' ? 1 : 0, rd.alphaMode === 'in' ? 1 : 0,
+        dst?.arriveGain ?? 0);
     }
     tAttr.needsUpdate = true;
   }

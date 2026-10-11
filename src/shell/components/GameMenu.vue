@@ -83,33 +83,33 @@ const QUALITY_TIERS = [
 <style scoped>
 .backdrop {
   position: fixed; inset: 0; z-index: 30;
-  background: rgba(4, 6, 14, .62);
+  background: rgba(5, 5, 5, .62);
   display: flex; align-items: center; justify-content: center;
   font-family: sans-serif;
 }
 .menu {
-  width: 340px; background: rgba(8, 11, 18, .96);
-  border: 1px solid #2f3a52; border-radius: 3px;   /* 扁平：面板不做大圆角 */
-  padding: 22px 26px; color: #dbe4f4;
+  width: 340px; background: rgba(10, 10, 10, .96);
+  border: 2px solid #555555; border-radius: 0;   /* UI 语言：方角 + 厚边框 */
+  padding: 22px 26px; color: #e4e4e4;
 }
-h2 { margin: 0 0 14px; font-size: 22px; color: #eef4ff; text-align: center; }
+h2 { margin: 0 0 14px; font-size: 22px; color: #f5f5f5; text-align: center; }
 .section { margin: 14px 0; }
-.section .title { font-size: 12px; color: #7d87a8; margin-bottom: 6px; }
+.section .title { font-size: 12px; color: #8a8a8a; margin-bottom: 6px; }
 .row { font-size: 14px; padding: 3px 0; }
-.row.dim { color: #9aa3c0; font-size: 12px; }
+.row.dim { color: #a0a0a0; font-size: 12px; }
 .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.toggle input { accent-color: #4d78ad; width: 15px; height: 15px; cursor: pointer; }
+.toggle input { accent-color: #9a9a9a; width: 15px; height: 15px; cursor: pointer; }
 .quality { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
 .qlabel { flex: 1; }
 .seg { display: flex; gap: 4px; }
 .seg button { flex: none; width: 42px; padding: 4px 0; font-size: 13px; }
-.seg button.on { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; color: #fff; }
+.seg button.on { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; color: #fff; }
 .actions { display: flex; gap: 10px; margin-top: 18px; }
 button {
-  flex: 1; padding: 9px 0; font-size: 15px; cursor: pointer; border-radius: 4px;
-  background: rgba(16, 22, 34, .92); color: #eaf1fb; border: 1px solid #3f5f8c;
+  flex: 1; padding: 9px 0; font-size: 15px; cursor: pointer; border-radius: 0;
+  background: rgba(20, 20, 20, .92); color: #f2f2f2; border: 2px solid #8a8a8a;
 }
-button:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
-button.primary { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; color: #fff; }
-.hint { margin-top: 12px; text-align: center; font-size: 11px; color: #626c8f; }
+button:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
+button.primary { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; color: #fff; }
+.hint { margin-top: 12px; text-align: center; font-size: 11px; color: #6e6e6e; }
 </style>

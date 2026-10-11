@@ -30,8 +30,8 @@ import {
 import { buildTowerClouds, CLOUD_PRESETS } from './towerClouds.js';
 
 // ---- 调参位（浏览器验收后收紧）----
-export const SKY_TOP = 0x7e93ad;       // 天顶：灰蓝（阴雪天空）
-export const SKY_BOTTOM = 0x59626a;    // 低空/雾色：暗板岩灰（远地/远云/穹面三处同源
+export const SKY_TOP = 0x82909e;       // 天顶：灰（阴雪天空，留一丝蓝）
+export const SKY_BOTTOM = 0x5c6169;    // 低空/雾色：暗板岩灰（远地/远云/穹面三处同源
                                        // 融成一条暗雾带——用户定雾就要暗，不要亮辉光）
 export const FOG_DENSITY = 0.015;      // 指数雾密度：~50 单位能见度（50 处融 ~47%，
                                        // 120 处 ~98%）——塔身约半透雾感、雪原远端全融天
@@ -304,15 +304,15 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
 
   // ---- 光照：雪夜，两半球环境光（上灰蓝天空 / 下偏白雪地反光）+ 弱冷平行光做雪丘体积 ----
-  const hemi = new THREE.HemisphereLight(0x8fa3bd, 0xd8dde2, 0.1);
+  const hemi = new THREE.HemisphereLight(0x8e939b, 0xdadcde, 0.09);
   group.add(hemi);
-  const rim = new THREE.DirectionalLight(0xbfd0e0, 0.2);
+  const rim = new THREE.DirectionalLight(0xc7cad0, 0.19);
   rim.position.set(-60, 90, -40); // 塔后上方逆光侧（只给雪原造型，贴图塔不受光）
   group.add(rim);
 
   // 中心静态光（central）：一层/塔基专属——固定不打光到高层，塔底的「门厅灯」。
   // 位置与强度是用户调参位，别在 setAnchorY 里动它。
-  const central = new THREE.PointLight(0xe6f0f8, 2, 300, 0.5);
+  const central = new THREE.PointLight(0xe9ebed, 2, 300, 0.5);
   central.name = 'centralLight';
   central.position.set(TOWER_X-9, TOWER_BASE_Y+5, TOWER_Z+7);
   group.add(central);
@@ -320,7 +320,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   // 层跟随光（track）：随相机锚点爬升的独立光源——塔是世界固定的，decay 2 的点光
   // 钉死塔基在高层衰减殆尽，当前层的塔身/雪面要它来补（setAnchorY 抬到锚点上方 5，
   // 与 central 同偏移同色温，跨层光照观感一致）。
-  const track = new THREE.PointLight(0xe6f0f8, 50, 300, 2);
+  const track = new THREE.PointLight(0xe9ebed, 50, 300, 2);
   track.name = 'floorTrackLight';
   track.position.set(TOWER_X-2, TOWER_BASE_Y+3, TOWER_Z+3);
   group.add(track);
@@ -345,7 +345,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
     }
     fieldGeo.computeVertexNormals();
   }
-  const fieldMat = new THREE.MeshStandardMaterial({ color: 0xe6ecf2, roughness: 0.92, metalness: 0 });
+  const fieldMat = new THREE.MeshStandardMaterial({ color: 0xe3e5e7, roughness: 0.92, metalness: 0 });
   const field = new THREE.Mesh(fieldGeo, fieldMat);
   field.name = 'snowfield';
   field.position.y = GROUND_BASE_Y;

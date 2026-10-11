@@ -352,10 +352,10 @@ html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
 #stage-canvas { display: block; position: absolute; inset: 0; }
 .menu-fab {
   position: fixed; top: 14px; right: 14px; z-index: 25;
-  padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 4px;
-  background: rgba(16, 22, 34, .9); color: #eaf1fb; border: 1px solid #3f5f8c;
+  padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 0;
+  background: rgba(20, 20, 20, .9); color: #f2f2f2; border: 2px solid #8a8a8a;
 }
-.menu-fab:hover { background: rgba(52, 84, 126, .95); border-color: #8fb6dd; }
+.menu-fab:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
 /* 调试入口与「菜单」并排（menu-fab 是 right:14px，这里让到它左边） */
 .debug-fab { right: 84px; color: #ffd479; border-color: #8c7a3f; }
 .debug-fab:hover { border-color: #ffd479; }

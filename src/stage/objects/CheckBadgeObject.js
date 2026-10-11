@@ -51,11 +51,11 @@ function defaultBakeBadge(size) {
   const ctx = canvas.getContext('2d');
   ctx.scale(S, S);
   const r = size / 2;
-  // 底盘：淡蓝圆 + 深色描边（外描边让徽标在任意卡图上都有边界）——UI 走冷色扁平风格，
+  // 底盘：灰圆 + 深色描边（外描边让徽标在任意卡图上都有边界）——UI 黑白主题，
   // 金色只留给金钱相关内容
   ctx.beginPath();
   ctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
-  ctx.fillStyle = '#7fa9d4';
+  ctx.fillStyle = '#c8c8c8';
   ctx.fill();
   ctx.lineWidth = Math.max(1.5, size * 0.05);
   ctx.strokeStyle = 'rgba(28, 22, 6, 0.92)';

@@ -95,13 +95,13 @@ function onLeave() {
   display: flex; align-items: center; gap: 10px; /* 图标 + 版本行同一行 */
 }
 .toggle-icon {
-  width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid #3f5f8c; color: #dbe4f4;
+  width: 34px; height: 34px; border-radius: 0;
+  border: none; color: #e4e4e4;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; cursor: pointer; user-select: none;
-  background: rgba(20, 24, 44, .55); transition: background .2s;
+  background: transparent; transition: color .2s;
 }
-.toggle-icon:hover { background: rgba(52, 84, 126, .85); }
+.toggle-icon:hover { background: rgba(66, 66, 66, .85); }
 /* 版本 + 日期：白色普通字体（不带粗体/描边），与图标垂直居中 */
 .version-line {
   color: #fff; font-weight: 400; font-size: 13px; letter-spacing: .5px;
@@ -111,18 +111,18 @@ function onLeave() {
 .changelog-content {
   position: absolute; left: 0; bottom: 44px;
   width: 340px; max-height: 62vh; overflow-y: auto;
-  background: rgba(8, 11, 18, .96); border: 1px solid #2f3a52; border-radius: 3px;
-  padding: 14px 18px; color: #c3cee0; font-size: 13px; line-height: 1.6;
+  background: rgba(10, 10, 10, .96); border: 2px solid #555555; border-radius: 0;
+  padding: 14px 18px; color: #c2c2c2; font-size: 13px; line-height: 1.6;
   opacity: 1; transform: translateY(0); transition: opacity .25s, transform .25s;
 }
 .changelog-content.hidden {
   opacity: 0; transform: translateY(8px); pointer-events: none;
 }
-.changelog-content-inner h2 { margin: 0 0 8px; font-size: 16px; color: #eef4ff; }
-.md-body :deep(h3) { margin: 12px 0 4px; font-size: 14px; color: #e8eefb; }
-.md-body :deep(h4) { margin: 10px 0 2px; font-size: 13px; color: #9fc0e8; }
+.changelog-content-inner h2 { margin: 0 0 8px; font-size: 16px; color: #f5f5f5; }
+.md-body :deep(h3) { margin: 12px 0 4px; font-size: 14px; color: #f2f2f2; }
+.md-body :deep(h4) { margin: 10px 0 2px; font-size: 13px; color: #b8b8b8; }
 .md-body :deep(ul) { margin: 4px 0; padding-left: 18px; }
-.md-body :deep(p) { margin: 4px 0; color: #9aa3c0; }
+.md-body :deep(p) { margin: 4px 0; color: #a0a0a0; }
 .error { color: #ff7875; }
-.empty { color: #9aa3c0; }
+.empty { color: #a0a0a0; }
 </style>

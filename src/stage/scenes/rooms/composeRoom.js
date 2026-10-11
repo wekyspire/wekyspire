@@ -943,15 +943,16 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
       .map(h => ({ sill: h.y0, top: h.y1, u0: h.u0, u1: h.u1 })),
   ];
   if (beamRects.length) {
-    const beamDir = new THREE.Vector3(0.836, -0.542, 0.09); // 平行光 dir 反推（窗口→地板光池）
+    // 光轴方向从真实月灯派生（position→target；光柱浮尘贴轴循环，见 moonDust.js 头注）
+    const beamDir = new THREE.Vector3()
+      .subVectors(lighting.moonlight.target.position, lighting.moonlight.position).normalize();
     moonDust = buildMoonDust({
-      beams: beamRects.map(w => {
-        const h = w.top - w.sill;
-        return {
-          origin: new THREE.Vector3(FLOOR_X0 + 0.5, FLOOR_Y + w.sill + h * 0.8, (w.u0 + w.u1) / 2),
-          dir: beamDir, len: h * 1.45, radius: (w.u1 - w.u0) * 0.39,
-        };
-      }),
+      beams: beamRects.map(w => ({
+        origin: new THREE.Vector3(FLOOR_X0 + 0.5, FLOOR_Y + w.top, (w.u0 + w.u1) / 2),  // 窗顶心（光柱起点）
+        dir: beamDir,
+        height: w.top,                                     // 竖直落差：窗顶 → 地板
+        radius: (w.u1 - w.u0) * 0.39,
+      })),
     });
     group.add(moonDust.points);
   }

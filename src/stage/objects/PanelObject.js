@@ -198,7 +198,7 @@ export class PanelObject extends THREE.Group {
         const text = new TextBlockObject({
           bakeText: this._bakeText,
           fontPx: w.kind === 'title' ? f.title : (w.kind === 'sub' ? f.sub : f.text),
-          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#e8eefb' : '#c3cee0')),
+          tint: dock ? '#ffffff' : (w.tint ?? (w.kind === 'title' ? '#f2f2f2' : '#c2c2c2')),
         });
         text.setText(w.text ?? '', { maxWidth: innerW });
         // 等比收进行框：烘焙高度由字号决定（fontPx×1.4），可能高于行高，不收敛会压到下一行
@@ -234,7 +234,7 @@ export class PanelObject extends THREE.Group {
     if (!this._backdrop) {
       this._backdrop = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
-        new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: this._overrideOpacity ?? 0.86 }),
+        new THREE.MeshBasicMaterial({ color: 0x0a0a0a, transparent: true, opacity: this._overrideOpacity ?? 0.86 }),
       );
       this.add(this._backdrop);
     }
@@ -341,7 +341,7 @@ export class PanelObject extends THREE.Group {
   _addBackdrop() {
     const bg = new THREE.Mesh(
       new THREE.PlaneGeometry(HALF_UI_W * 2, WORLD_HEIGHT),
-      new THREE.MeshBasicMaterial({ color: 0x0a0b10, transparent: true, opacity: 0.86 }),
+      new THREE.MeshBasicMaterial({ color: 0x0a0a0a, transparent: true, opacity: 0.86 }),
     );
     bg.position.set(0, 0, Z.BACKDROP); // 局部原点即取景带中心
     this.add(bg);

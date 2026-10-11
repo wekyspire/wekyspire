@@ -89,9 +89,9 @@ export class CardGalleryObject extends THREE.Group {
 
     if (title) {
       this._addText(title, { fontPx: 26, tint: '#f2f4fa', y: 31.5 });
-      this._addText(subtitle, { fontPx: 14, tint: '#9aa3b8', y: 27.5 });
+      this._addText(subtitle, { fontPx: 14, tint: '#a0a0a0', y: 27.5 });
     }
-    this._addText(hint, { fontPx: 13, tint: '#77809a', y: UI_BOTTOM + 2.6 });
+    this._addText(hint, { fontPx: 13, tint: '#7a7a7a', y: UI_BOTTOM + 2.6 });
 
     const list = cards ?? [];
     if (!list.length) return;

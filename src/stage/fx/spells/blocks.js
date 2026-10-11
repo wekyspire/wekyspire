@@ -20,7 +20,7 @@ import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
-import { slashShade, darkSlashShade, projectileShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
+import { slashShade, darkSlashShade, projectileShade, crystalShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
@@ -68,8 +68,9 @@ export async function cardFlare(ctx, deps, {
 } = {}) {
   const view = deps.cardView;
   if (!view?.fx?.pulse) return;
-  view.fx.pulse({ color, durationMs: ms, scale });
-  await ctx.wait(Math.round(ms * 0.6));   // 起手不必等脉冲收尾——亮起来就够了
+  // 闪烁时长砍半（2026-10-09 用户定）：ms 仍是模板档位语义，实际 pulse = ms×0.5
+  view.fx.pulse({ color, durationMs: ms * 0.5, scale });
+  await ctx.wait(Math.max(40, Math.round(ms * 0.25)));   // 亮起来就够——不等收尾
 }
 
 /** 施术面片（shader 主笔件的公共装配）：Node 材质 + colorNode + 层级纪律一把装好。
@@ -139,6 +140,8 @@ export async function arcProjectile(ctx, deps, {
                   // 高频摆会走样成抖直线——<1 换成少而大的甩（窜天猴的慢摆S弯）
   fire = false,   // 火系投射物：换 fireOrbShade（fbm 火面+头尾不对称+破边）——
                   // 平滑高斯「发光团」不够审美线（2026-10-06 审计）
+  shape = 'orb',  // 能量形状：'orb' = projectileShade 光珠（缺省）；'crystal' =
+                  // crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）
 } = {}) {
   let arrive = null;
   if (track) {
@@ -165,7 +168,9 @@ export async function arcProjectile(ctx, deps, {
   const { quad, release } = spellQuad({
     shade: fire
       ? fireOrbShade(uv(), uPhase, uColor, uHot, uSeed)
-      : projectileShade(uv(), uPhase, uColor, uHot),
+      : shape === 'crystal'
+        ? crystalShade(uv(), uPhase, uColor, uHot)
+        : projectileShade(uv(), uPhase, uColor, uHot),
     width: size, height: size, name: 'spellFx:projectile',
   });
   quad.position.set(from.x, from.y, from.z ?? 0);

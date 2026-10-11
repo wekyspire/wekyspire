@@ -1,4 +1,4 @@
-# AGENTS.md — 魏启尖塔（weiqi-chaos）
+# AGENTS.md — 魏启尖塔（wekyspire）
 
 > 面向 AI 编码代理的项目导览。项目注释与文档主语言为**中文**，新代码与文档沿用中文注释。
 
@@ -8,10 +8,10 @@
 
 ## 技术栈与配置
 
-- **构建**：Vite 4 + `@vitejs/plugin-vue`（`vite.config.js`）。路径别名：`@` → `src/`、`@assets` → `src/assets`。`base` 由环境变量 `VITE_BASE` 控制，缺省 `./`。dev 端口 **5177**。
+- **构建**：Vite 4 + `@vitejs/plugin-vue`（`vite.config.js`）。路径别名：`@` → `src/`、`@assets` → `src/assets`。`base` 由环境变量 `VITE_BASE` 控制，缺省 `./`。dev 端口 **5177**（allowedHosts 只放 `wekyspire-dev.hineven.site` 公网验收口）。
 - **框架**：Vue 3（组合式 API，`<script setup>`）+ vue-router + mitt。
-- **渲染**：Three.js（共享单个全屏 `<canvas>`）+ GSAP（补间）。
-- **测试**：Vitest（node 环境）。入口 `index.html` → `src/shell/main.js`；`src/debug/main.js` 是遗留调试页，非正式入口。
+- **渲染**：three **WebGPURenderer**（WebGPU / TSL 管线，已全量迁移，无 WebGL 回退——`quest_prompts/WEBGPU_MIGRATION.md`）+ GSAP（补间）。共享单个全屏 `<canvas>`。
+- **入口**：`index.html` → `src/shell/main.js`；根目录的 `debug.html` / `*Gallery.html` 是调试与视觉验收页；`src/debug/main.js` 是遗留调试页，非正式入口。
 
 ## 常用命令
 
@@ -21,98 +21,70 @@ npm run dev        # 开发服务器（localhost:5177）
 npm run build      # 产出 dist/
 node tmp/smoke-*.mjs   # headless 冒烟脚本（逻辑改动的快速自验）
 node tools/saveForge.mjs --out t2 --floor 2 --room campTraining   # 造调试存档（见「调试模式」节）
-npm test           # vitest（存量；维护已暂停，见「测试」节）
+npm test           # 随机自对弈 fuzz（见「测试」节）
 ```
 
-不要用 dev 服务器验证**编译/逻辑**错误——改完跑相关冒烟脚本即可。**浏览器行为**如今 agent 也能自验：
-`tools/browserHarness.mjs` 走真显卡（60fps，见「浏览器调试 harness」节），配 `tools/saveForge.mjs`
-造档起跑，常见流程（房间/幕间/选卡/战斗）都能脚本化跑通；手感与审美仍由用户验收。
+不要用 dev 服务器验证**编译/逻辑**错误——改完跑相关冒烟脚本即可。**浏览器行为**用 `tools/browserHarness.mjs`（真显卡，见下节）脚本化自验；手感与审美仍由用户验收。
 
 ## headless 试玩与直播观战（dev 工具，不进构建产物）
 
-- `tools/headlessPlay.mjs` — LLM/脚本可玩的**文本界面**（replay 式会话：`tmp/playtests/<名>.json` = `{seed, actions}`，每次调用全量重放 + 执行新动作，成功才入档）。引擎入口 `tools/playSession.mjs`，实现按职责拆在 `tools/session/`（engine/render/format/addressing/files）。
-  - **两种建档**：`new <种子>`（从零开局）｜ **`load <存档名|路径.json>`**（从存档快照起跑，2026-09-21 加）——层数/卡组/遗物/能力/灵脉/体修等级/房内现场原样恢复，等于在文本界面里接着打一个调好的构筑，不用每次重造档或开浏览器。存档名解析到 `tmp/saves/<名>.json`；带路径分隔符或 `.json` 后缀按路径读，**调试面板「存档」页导出的 JSON 可直接喂进来**。
-  - 恢复原语是 core 的 `src/core/run/saveRestore.js`（`restoreRunFromSave`，浏览器读档与 headless 共用同一份，两边局面必然一致）；`debugMode` 档恢复房内/进阶现场，真实档维持「检查点 = prep」。
-- `tools/broadcast.mjs` — **直播中继**（只读观察会话文件 + HTTP/SSE 推流，零新依赖）：把动画指令描述符推给浏览器、由本地 sequencer 重建播放，观战页因此复用 `BattleStage`/`BattleHud`/`TooltipOverlay` 全套真实渲染。观战页 `http://localhost:5177/watch.html?port=5199&session=<名>`（默认端口 5199），会话索引 `http://127.0.0.1:5199/`。
+- `tools/headlessPlay.mjs` — LLM/脚本可玩的**文本界面**（replay 式会话：`tmp/playtests/<名>.json` = `{seed, actions}`，每次调用全量重放 + 执行新动作，成功才入档）。引擎入口 `tools/playSession.mjs`，实现拆在 `tools/session/`。
+  - 两种建档：`new <种子>`（从零开局）｜ `load <存档名|路径.json>`（从存档快照起跑）——层数/卡组/遗物/能力/灵脉/体修等级/房内现场原样恢复。存档名解析到 `tmp/saves/<名>.json`；调试面板「存档」页导出的 JSON 可直接喂进来。
+  - 恢复原语 = core 的 `src/core/run/saveRestore.js`（`restoreRunFromSave`，浏览器读档与 headless 共用）；`debugMode` 档恢复房内/进阶现场，真实档维持「检查点 = prep」。
+- `tools/broadcast.mjs` — **直播中继**（只读观察会话文件 + HTTP/SSE 推流，零新依赖）：把动画指令描述符推给浏览器、由本地 sequencer 重建播放，观战页复用 `BattleStage`/`BattleHud`/`TooltipOverlay` 全套真实渲染。观战页 `watch.html?port=5199&session=<名>`，会话索引 `http://127.0.0.1:5199/`。
 - 契约层：`src/bridge/wire.js`（指令描述符 ↔ 重建）、`src/bridge/remoteBridge.js`、`src/core/anim/sequencer.js`（指令的可选 `wire` 字段）、`src/bridge/stateSync.js`（标脏/补同步调度器）。
 - **公网观战**：`https://wekyspire.hineven.site/watch.html`。链路 = 服务器观战页 → Apache 反代 `/relay/`（`flushpackets=on` 是 SSE 必备）→ SSH 反向隧道 `ssh -N -R 127.0.0.1:5199:127.0.0.1:5199 hineven.site` → 本机 `node tools/broadcast.mjs --origin https://wekyspire.hineven.site`。观战页在非 localhost 主机下自动走同源 `/relay`。
 
 ## 调试模式与存档制作器（dev 工具）
 
-**调试模式** = 游戏内一块 Vue 浮层面板，把 run 当表拨：层数/资源/卡组/遗物/灵脉/房间/战斗一击即改，改完立刻在真实前后端链路上看到结果。它取代了旧的「无敌模式」（无敌成了面板里的一项：无敌效果开关 / 发一张 GM 卡「一拳」`onePunch`）。
+**调试模式** = 游戏内一块 Vue 浮层面板，把 run 当表拨：层数/资源/卡组/遗物/灵脉/房间/战斗一击即改。
 
-- **入口**：开始界面复选框「调试模式（仅调试用）」（持久化到 `settings.debugMode`）｜游戏内 **F9** 或右上角「调试」按钮开合面板｜URL `?debug=1` 强制开启。新开局勾选时开局直发一张「一拳」。
-- **存档槽**：调试局只写 `wekyspire:save:debug`（`saves.modeOf(run)` 统一归一）；**真实槽永不被污染**。兜底安全网：普通局里从面板改了任何状态 → 该局立即转为调试局（含 toast 告知）。
-- **分层**：core 原语 `src/core/debug/ops.js`（run 级）、`src/core/debug/battleOps.js`（战斗内，**全部走既有指令**：秒杀走正式伤害/死亡/胜利链）；Shell 门面 `src/shell/runDebug.js`（`ctrl.debug.*`，负责"改完之后前端怎么刷新"）；UI `src/shell/components/DebugOverlay.vue`（只画界面，读写都经门面）。加新调试能力：core 原语 → 门面 `act(...)` 包一层 → 面板加控件。
-- **边界（有意为之）**：战斗中禁止改牌组/遗物/跳层（战场按旧牌组装配，`promoteCard` 还会原地改战斗中的同一批 runtime）→ 面板置灰并提示「先秒杀/硬重置」；写 `?debug=1` 时代码照常进构建产物，但没有开关时面板与热键都不存在。
+- **入口**：开始界面复选框（持久化 `settings.debugMode`）｜游戏内 **F9** 或「调试」按钮｜URL `?debug=1` 强制开启。
+- **存档槽**：调试局只写 `wekyspire:save:debug`；**真实槽永不被污染**。兜底：普通局里从面板改了任何状态 → 该局立即转为调试局（toast 告知）。
+- **分层**：core 原语 `src/core/debug/ops.js`（run 级）、`src/core/debug/battleOps.js`（战斗内，全部走既有指令——秒杀走正式伤害/死亡/胜利链）→ 门面 `src/shell/runDebug.js`（`ctrl.debug.*`，负责改完之后前端怎么刷新）→ UI `src/shell/components/DebugOverlay.vue`（只画界面）。加新调试能力：core 原语 → 门面包一层 → 面板加控件。
+- **边界（有意为之）**：战斗中禁止改牌组/遗物/跳层（战场按旧牌组装配）→ 面板置灰提示「先秒杀/硬重置」；`?debug=1` 代码进构建产物但无开关时面板与热键不存在。
 
-**存档制作器** `tools/saveForge.mjs` —— 造出任意状态的合法存档，浏览器一步起跑（零新依赖）：
+**存档制作器** `tools/saveForge.mjs` —— 声明式造任意状态的合法存档，浏览器一步起跑：
 
 ```bash
-# ① 声明式造档（spec 文件或命令行 flag；亦可 --from-session 把 headless 会话现场转成存档）
-node tools/saveForge.mjs --spec tmp/specs/t2.json
 node tools/saveForge.mjs --out t2 --floor 2 --room campTraining --hp 40 --money 300 \
      --training 1 --leino fire=2 --add-card onePunch --relic frostBrooch
-node tools/saveForge.mjs --from-session r20-a1-2 --out 现场1
-# ② 浏览器从该状态起跑（真实前后端；dev 中间件把 tmp/saves/ 挂在 /debug-saves/）
-#    http://localhost:5177/?debug=1&save=t2
+node tools/saveForge.mjs --from-session r20-a1-2 --out 现场1   # headless 会话现场转存档
+# 浏览器起跑（dev 中间件把 tmp/saves/ 挂在 /debug-saves/）：
+# http://localhost:5177/?debug=1&save=t2
 ```
 
-- spec 字段与守卫：见文件头注释；**一切经 core 真实构造函数与守卫**（`createRun`/`grantRelic`/`refreshRunModifiers`/调试原语），产出必然是游戏自己认可的状态（不会因手写缺字段造出假 bug）。`debugMode: true` 的档会额外恢复 `gameStage/currentRoom/roomData/encounter`（真实档仍维持"检查点 = prep"旧语义）。
-- 两个易踩的坑（工具已守卫，知道即可）：① **`player.bodyLevel` 与 `player.leino.body` 是同一个字段**（体修等级）——同时写且不一致会直接报错；② 上限类 `max*` 字段会**先于** `hp/mana/actionPoints` 落地（否则当前值会被旧上限裁掉，写 `hp:70/maxHp:70` 会造出 65/70）。
-- 面板「存档」页可导出当前局面 JSON / 粘贴导入重开 / 重载当前局面（重建舞台）——调试中把现场回传或复现同一状态都靠它。
+- 一切经 core 真实构造函数与守卫（`createRun`/`grantRelic`/`refreshRunModifiers`/调试原语），产出必然是游戏自己认可的状态。spec 字段见文件头注释。
+- 两个已守卫的坑：① `player.bodyLevel` 与 `player.leino.body` 是**同一字段**，同写不一致直接报错；② 上限类 `max*` 字段先于 `hp/mana/actionPoints` 落地（否则当前值被旧上限裁掉）。
+- 面板「存档」页可导出当前局面 JSON / 粘贴导入重开 / 重载当前局面。
 
-**快速复现 bug 的闭环（推荐姿势）**：
-
-```
-① headless 走到现场   node tools/headlessPlay.mjs <会话> <动作…>
-② 转成存档            node tools/saveForge.mjs --from-session <会话> --out repro1
-③ 浏览器一步起跑       http://localhost:5177/?debug=1&save=repro1   （或 Playwright goto 一次）
-④ 面板/F9 微调 + 观察 → 导出存档 JSON 回传
-```
-
-⚠ 别再为了看某个房间/某层状态去"Playwright 逐层打过去"：直接用 saveForge 造档 + 一次 goto 就是那个现场。
+**快速复现 bug 的闭环（推荐姿势）**：① headless 走到现场 → ② `saveForge --from-session` 转存档 → ③ 浏览器 `?debug=1&save=<名>` 一步起跑 → ④ 面板微调 + 观察 → 导出 JSON 回传。别为了看某个房间状态逐层 Playwright 爬塔。
 
 ## 浏览器调试 harness（GPU，dev 工具）
 
-`tools/browserHarness.mjs` = 真显卡的 Playwright 封装 + 本项目常用助手，**写浏览器验证脚本一律用它**。
+`tools/browserHarness.mjs` = 真显卡的 Playwright 封装，**写浏览器验证脚本一律用它**。
 
-- **性能事实（2026-09-19 实测）**：慢的唯一原因是老 harness（`tmp/play/harness.mjs`）里那几行
-  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`（软件渲染）——实测 **1.9 fps**。
-  去掉后同一个 headless Chromium 在这台机器上 **60 fps**（ANGLE / NVIDIA RTX 3090 + D3D11；
-  **无头也有真 GPU**，不需要开窗口）。所以：**不要**再加任何 `--use-gl / --use-angle` 开关，
-  只保留防降帧那几条（harness 已内置）。
-- **驱动姿势**：60fps 下演出按**真实时间**播完，所以等的是真实条件——
-  `h.waitFor(() => 页面内表达式)` / `h.waitRoom()` / `h.waitCutsceneEnd()` / `h.waitStage('room')`。
-  `pump()`（手动泵 tick）是软渲染时代的产物，新脚本不要再写。
-- **常用口子**：`h.goto('?debug=1&save=<名>')` 起跑 ｜ `h.state()` 后台状态速览 ｜ `h.log()` 调试面板回执 ｜
-  `h.dbgCall('setFloor', 6)` 直接调调试门面 ｜ `h.clickObject('training')` 点房间 3D 交互物 ｜
-  `h.clickPanelBtn('train:begin')` 点面板按钮 ｜ `h.clickPanelCard(i)` 点面板卡阵 ｜
-  `h.cutsceneChoice('火灵脉')` / `h.cutsceneAdvance()` 推幕间 ｜ `h.clickPickerCard(i)` +
-  `h.clickPickerConfirm()` 全屏选卡 ｜ `h.shot('名字')` 截图 ｜ `h.fps()` 自查帧率与 WebGL 后端（确诊是否又跑回软渲染）。
-- **面板层次坑**：场景房的 dock 操纵条（`rs._panel`）与阶段模态面板（`rs._stagePanel`）会**同时存在**
-  （进阶期间 dock 仍挂着过时内容）——harness 的点击助手一律**优先阶段模态**；自己写页面内表达式时也要注意。
-- **演出期输入/读数坑（2026-09-22 踩过）**：战斗开场等长演出链按真实时间播，期间点击会被输入仲裁
-  **静默吞掉**（按钮显示 enabled 也照吞），且快照只在 sync 节拍推进——积压期读 `_snapshot.turn`
-  永远是旧值。操作前先等演出落定（固定 `waitForTimeout` 数秒，或 `waitFor` 一个快照条件，如
-  `turn.side === 'enemy'`），别拿 `waitIdleFrames` 当"演出播完"用——它只数 rAF 帧不管队列。
-- **自检**：`node tools/browserHarness.mjs --check [--save 名] [--headed]` —— 起一次、报帧率/WebGL/现场状态，
-  落一张截图到 `tmp/play/harness-check.png`。
-- 参考脚本：`tmp/play/check-train-real.mjs`（从存档起跑，真时间走完「训练桩 → 房内进阶 → 种子包 → 抓牌 → 尾款升级」全流程，约 16 秒）。
+- **性能事实**：慢的唯一原因是软渲染开关（`--use-gl=angle --use-angle=swiftshader` 之类 = 1.9fps）。去掉后同一无头 Chromium 在本机 **60fps**（无头也有真 GPU）。**不要**再加任何 `--use-gl / --use-angle` 开关。
+- 60fps 下演出按**真实时间**播完——等的是真实条件：`h.waitFor(页面内表达式)` / `h.waitRoom()` / `h.waitCutsceneEnd()` / `h.waitStage('room')`。`pump()`（手动泵 tick）已废弃，新脚本不写。
+- 常用口子：`h.goto('?debug=1&save=<名>')` 起跑 ｜ `h.state()` 状态速览 ｜ `h.log()` 面板回执 ｜ `h.dbgCall('setFloor', 6)` 调调试门面 ｜ `h.clickObject('training')` 点 3D 交互物 ｜ `h.clickPanelBtn('train:begin')` / `h.clickPanelCard(i)` ｜ `h.cutsceneChoice('火灵脉')` / `h.cutsceneAdvance()` ｜ `h.clickPickerCard(i)` + `h.clickPickerConfirm()` ｜ `h.shot('名字')` ｜ `h.fps()` 自查帧率与后端。
+- **面板层次坑**：场景房的 dock 操纵条（`rs._panel`）与阶段模态面板（`rs._stagePanel`）会**同时存在**——点击助手一律优先阶段模态；自写页面内表达式同理。
+- **演出期输入/读数坑**：长演出链期间点击会被输入仲裁**静默吞掉**（按钮 enabled 也照吞），快照只在 sync 节拍推进（积压期读 `_snapshot.turn` 永远是旧值）。操作前等演出落定（`waitFor` 快照条件），`waitIdleFrames` 只数 rAF 帧不管队列、不是「演出播完」。
+- **自检**：`node tools/browserHarness.mjs --check [--save 名] [--headed]`——报帧率/WebGL/现场状态 + 截图 `tmp/play/harness-check.png`。
+- 参考脚本：`tmp/play/check-train-real.mjs`。
 
 ## 分支、协作与部署
 
-- **上游仓库 = `https://github.com/wekyspire/wekyspire`**（remote 名 `wekyspire`，`master` 为唯一主干）。旧 `Hineven/wekyspire` 只是历史个人仓库（保留为 remote `hineven-origin`），不是交付目标。
-- **多人并行：每人一条自己的长期开发分支 `<名字>-dev`**（如 `hineven-dev`），都推到 `wekyspire`；功能完成后开 PR 合进 `master`（**不要直接推 master**）。开工前先 `git fetch wekyspire && git merge wekyspire/master`（长期分支落后是冲突的主要来源）。合并冲突以**自己 dev 分支的实现为准**（冲突方是别人正在维护的模块时先沟通）。
-- **线上站点由服务器 cron 部署**：`/usr/local/bin/wekyspire-deploy.sh`（每 5 分钟拉 `origin master` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。**要上线的新内容必须先合进 `master`**。Apache 性能配置（2026-09-30 加载链批）：HTTP/2 + brotli 文本压缩（webp/美术包**不压**）+ hash 产物 `immutable` 一年 / `index.html`·`artpack-manifest.js` `no-cache`——都在 `/etc/httpd/conf.d/wekyspire.conf`（改动前先 `cp` 备份 `.bak.*`，`apachectl configtest` 过了再 `systemctl reload httpd`）。国内网络拉不动 GitHub 时，可直接把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传到站点目录，产物等价。
-- **GitHub Pages workflow 已在上游删除**——不要再加回；推上去只会触发必然失败的 job。
+- **上游仓库 = `https://github.com/wekyspire/wekyspire`**（remote 名 `wekyspire`，`master` 为唯一主干）。旧 `Hineven/wekyspire` 只是历史个人仓库（remote `hineven-origin`），不是交付目标。
+- **多人并行：每人一条长期开发分支 `<名字>-dev`**，都推到 `wekyspire`；功能完成后开 PR 合进 `master`（**不要直接推 master**）。开工前先 `git fetch wekyspire && git merge wekyspire/master`。合并冲突以**自己 dev 分支的实现为准**（冲突方是别人正在维护的模块时先沟通）。
+- **线上站点由服务器 cron 部署**：`/usr/local/bin/wekyspire-deploy.sh`（每 5 分钟拉 `origin master` → `VITE_BASE=/ npm run build` → rsync 到 `/var/www/html/wekyspire`）。**要上线的内容必须先合进 `master`**。Apache 性能配置（HTTP/2 + brotli、hash 产物 `immutable`、`index.html`/`artpack-manifest.js` `no-cache`）在 `/etc/httpd/conf.d/wekyspire.conf`（改动前 `cp` 备份，`apachectl configtest` 过了再 `systemctl reload httpd`）。国内网络拉不动 GitHub 时可把本地 `dist/`（`MSYS_NO_PATHCONV=1 VITE_BASE=/ npx vite build`）tar 上传，产物等价。
+- **GitHub Pages workflow 已删除**——不要再加回；推上去只会触发必然失败的 job。
 - 仓库根 `dist/` 是构建产物（gitignore），不要手改。
 
 ## 版本与 changelog
 
-- 玩家可见更新日志 = `public/changelog.md`（开始界面「更新日志」弹层直接读它）。一条版本 = `## YYYY.M.D [Alpha X.Y.Z]` + `- 签名：Hineven` + 小节；新条目**加在文件最上方**，并把 `package.json` 的 `version` 同步改掉（两者必须一致——**vite.config.js 构建期已自动校验**：不一致直接构建失败；开始界面版本行的编号/日期也由此注入，日期 = changelog 顶部条目日期，不是当天日期）。
-- **版本号纪律（2026-09-18 用户定）：只有「大更新」才升中版本号（X.Y.0）**——限五类：成体系重构、全新底层机制、大规模视觉效果更新、全新系统加入、大主题成批内容加入。除此之外（数值平衡调整、新卡补簇、流程改版、bug 修复、文案精简……）**一律只升修订号**（0.8.3 → 0.8.4）。
-- **写得短（红线：整条版本正文 ≤150 字，超线即违规）**：归纳 2~3 条，只写玩家能感知的变化（新内容 / 体验手感 / 修好的明显 bug）。不逐条罗列 commit、不写内部术语（模块名/架构词）、不贴代码参数。小节用「新增 / 改进与修复 / 已知问题」这类朴素词，空小节不留壳。
+- 玩家可见更新日志 = `public/changelog.md`。一条版本 = `## YYYY.M.D [Alpha X.Y.Z]` + `- 签名：Hineven` + 小节；新条目**加在最上方**，`package.json` 的 `version` 同步改（**构建期自动校验**，不一致直接失败；开始界面版本行由此注入，日期 = changelog 顶部条目日期）。
+- **版本号纪律：只有「大更新」才升中版本号**——限五类：成体系重构、全新底层机制、大规模视觉效果更新、全新系统加入、大主题成批内容加入。**「大规模视觉效果更新」门槛（2026-10-11 用户定）= 几乎所有视觉资产的美术重置，或全新视觉维度的加入（如场景级破坏交互）**；卡面批量重绘/特效翻新按修订号走。其余（数值平衡、新卡补簇、流程改版、bug 修复、文案精简……）**一律只升修订号**。
+- **写得短（红线：整条版本正文 ≤150 字）**：归纳 2~3 条，只写玩家能感知的变化；不逐条罗列 commit、不写内部术语、不贴参数。小节用「新增 / 改进与修复 / 已知问题」，空小节不留壳。
 
 ## 架构：四层单向依赖
 
@@ -126,24 +98,23 @@ src/
 └── shell/       # Vue 薄壳：场景编排、Vue 浮层、存档、设置
 ```
 
-### 场景层级
-
-三层场景（菜单纯 Vue / 塔楼 MapStage / 战斗+房间 Three 化）、`gameStage → PANEL_BUILDERS` 面板映射的权威说明在 `README.md`「场景层级」。此处只记两条实现铁律：仍由 Vue 渲染的只有对话 / cutscene / tooltip / `BattleHud`（战斗日志/回合数）与菜单层组件；**幕间黑幕是独立一层**（`sceneWipe.js` + `SceneWipeOverlay.vue`，z 压过内容层）——黑幕的目的地可以是任何东西（3D 舞台或一段 cutscene 内容），wipe 在全黑中点调下一步的 `preStage()` 让内容幕后就位。
+三层场景（菜单纯 Vue / 塔楼 MapStage / 战斗+房间 Three 化）、`gameStage → PANEL_BUILDERS` 面板映射的权威说明在 `README.md`「场景层级」。两条实现铁律：仍由 Vue 渲染的只有对话 / cutscene / tooltip / `BattleHud` 与菜单层组件；**幕间黑幕是独立一层**（`sceneWipe.js` + `SceneWipeOverlay.vue`，z 压过内容层）——黑幕目的地可以是任何东西，wipe 在全黑中点调下一步的 `preStage()` 让内容幕后就位。
 
 ### Core（`src/core/`）
 
 - **`kernel/`** — `BattleKernel`：指令树 DFS 泵 + 订阅注册表 + 取消三动词（veto/abort/inspect）。订阅 `{when, phase('pre'|'post'), filter, window('battle'|'turn'|'once'), priority, react, owner}`。铁律：POST 反应作为已完成节点的子节点提交；被 veto 的节点不触发任何 POST；取消入口只在内核。
-- **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位尾插，下回合起参战，敌方意图 kinds 含 'summon'）。
+- **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位尾插，下回合起参战，敌方意图 kinds 含 'summon'）/ cardMods（卡牌 modifier 挂载/移除）。
 - **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/burnt/pending）、种子 rng、`skillRuntime`（定义/运行时分离）。初始值常量：`PLAYER_BASE_HP / PLAYER_BASE_MONEY / PLAYER_BASE_AP`（禁止裸数字）。
-- **`flow/battle.js`** — 战斗装配：`createBattle/startBattle/playerUseSkill/playerEndTurn/respondInput`。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
-- **`run/`** — run 层状态机：`runFlow.js`（createRun/enterBattle/finishBattle/advanceFloor…）、`runDriver.js`（headless 整局 SDK，自动应答/自动开包）、`rewards.js` / `ascension.js` / `prep.js` / `promotion.js`（局外晋升）、`rooms/`（campTraining/event/slotMachine/bank/shop/gurpas/training）。**玩法细则不在本文件**——卡包门禁与开包分布、进阶节奏与跳过补偿见 `battle_gameplay/RUN_DESIGN.md`，老虎机/银行/恶魔 roll 见 `SLOT_MACHINE.md`，商店见 `SHOP.md`。实现侧口径：开包等阶分布与 S 直出白名单的事实源是 `rewards.js` 的 `PACK_TIER_TABLE`/`S_SPAWN_WHITELIST`；房间产出挂 `run.slotPending`/`shopPending`/`pendingDebuffs`，未处理完不许离房。**模式分野（2026-09-28 用户定）**：`run.storyMode` —— 故事模式 = 肉鸽骨架 + 瑞米（战斗盟友 `assembleBattle` / 营地游荡 / 状态栏瑞米区 / 果实养成与苹果节拍）+ 故事事件与幕间剧本；肉鸽（无尽）模式**无瑞米**，老虎机 special 小资源恒为训练次数。事件 `mode: 'story'|'endless'` 门控见 `core/run/rooms/event.js`；幕间剧本 storyMode 门控见 `cutscenePlayer.js`。
-  - **事件系统**：事件 = 对话 + 选项 + 逻辑，定义进 `core/events/registry.js`，内容在 `core/content/events/`（一文件一事件，`content/events.js` 显式装配；字段 `{id,name,art,mode,weight,requires,pages,choices,resolve}`）；抽取确定性、记 `run.roomData.eventId`（同次不重抽）。**效果由 `resolve` 直接调 `core/run/runEffects.js` 原语**（原语负责改 run + 记 log + 声明表现意图），`resolve` 只返回结果页——Shell 对「事件做了什么」一无所知，加新效果不必改编排器。run 级表现走 `createRunContext` 的 `presenter.showcase` → `shell/runPresenter.js` 排队、runController 在**退出切幕之后**统一 `drain()`（获得演出排揭幕后，否则被黑幕吞半截）。剧情分支记忆 = `run.eventFlags`。
-  - **遗物系统**：字段契约 = `rarity`(C/B/A/S) / `cost`(槽位**权重** 0–3，Σ ≤ relicSlots) / `nonSlot`(非槽位式拾起恒生效) / `requires`(灵脉门禁) / `acquisition`(来源标签，`gurpas`/`event` = 只走该渠道) / `onAcquire` / `onCampRest` / `runModifiers`(**从 `player.baseStats` 重算，不增量累加**——增量会逐战叠加) / `onBattleStart` / `subscriptions`。一局内遗物唯一（池空兜底件除外）。**抽选一律走 `core/relics/draft.js`**（稀有度权重 + 门禁 + 已拥有排除 + 兜底集中于此），老虎机/商店/事件/Boss 掉落不得各自随机。遗物个体设计见 `battle_gameplay/RELICS.md`。
+- **`flow/battle.js`** — 战斗装配。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
+- **`run/`** — run 层状态机：`runFlow.js`、`runDriver.js`（headless 整局 SDK）、`rewards.js` / `ascension.js` / `prep.js` / `promotion.js`（局外晋升）、`rooms/`、`runEffects.js`（内容改 run 的唯一入口原语）。**玩法细则不在本文件**——卡包门禁与开包分布见 `RUN_DESIGN.md`，等阶分布事实源 = `rewards.js` 的 `PACK_TIER_TABLE`/`S_SPAWN_WHITELIST`；老虎机/银行/恶魔 roll 见 `SLOT_MACHINE.md`，商店见 `SHOP.md`。房间产出挂 `run.slotPending`/`shopPending`/`pendingDebuffs`，未处理完不许离房。
+  - **模式分野**：`run.storyMode` —— 故事模式 = 肉鸽骨架 + 瑞米（战斗盟友/营地游荡/状态栏瑞米区/果实养成）+ 故事事件与幕间剧本；肉鸽（无尽）模式**无瑞米**，老虎机 special 小资源恒为训练次数。事件 `mode` 门控见 `core/run/rooms/event.js`；幕间剧本门控见 `cutscenePlayer.js`。
+  - **事件系统**：事件 = 对话 + 选项 + 逻辑，定义进 `core/events/registry.js`，内容在 `core/content/events/`（一文件一事件，显式装配）。**效果由 `resolve` 直接调 `runEffects.js` 原语**，`resolve` 只返回结果页——Shell 对「事件做了什么」一无所知。剧情分支记忆 = `run.eventFlags`。
+  - **遗物系统**：字段契约 = `rarity`(C/B/A/S) / `cost`(槽位权重 0–3，Σ ≤ relicSlots) / `nonSlot` / `requires` / `acquisition` / `onAcquire` / `onCampRest` / `runModifiers`(**从 `player.baseStats` 重算，不增量累加**) / `onBattleStart` / `subscriptions`。一局内遗物唯一。**抽选一律走 `core/relics/draft.js`**，不得各自随机。
+- **卡牌 modifier（`core/skills/cardModifiers.js`）** — 可挂载的卡牌修正，设计定稿 `quest_prompts/CARD_MODIFIERS.md`。要点：卡实例 `modifiers:[{modId,source,data}]`（存储序即优先级）；**有效卡视图 = def ⊕ patch fold 纯函数派生**（keywords 增删 / cost / cooldown；单条内 set→add→min→max；X 费免疫、无冷却卡以 0 为基；legacy 费用通道折视图末端）；费用/词条/冷却读点已全部换视图，**禁止直改字段的旁路**。行为面 `onAttach`/`onDetach`/`subscriptions`（`onDraw`/`turnEndInHand` 是糖）+ `mutesHand`/`unplayable` 旗标；订阅 owner = `uniqueID:mod:<modId>`，移除序 = 先注销订阅再 onDetach。作用域 = 落点即作用域（战斗克隆丢弃 / run 牌组持久，克隆与存档已深拷贝）。内建 `locked` = 焚毁烙印（**不拦出牌**，回合末仍在手则焚毁）。run 级挂载原语 = `runEffects.attachCardModifier/detachCardModifier`。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 产出同构注册表：skills/abilities/enemies/allies/relics/effects/events/cardModifiers。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
-- **卡牌 modifier（`core/skills/cardModifiers.js`，2026-10-08）** — 可挂载的卡牌修正：卡实例 `modifiers:[{modId,source,data}]`（存储序即优先级），**有效卡视图 = def ⊕ patch fold 纯函数派生**（域：keywords 增删 / cost / cooldown；单条内操作序 set→add→min→max；X 费种免疫、无冷却卡以 0 为基；legacy 三费用通道折进视图末端）。费用/词条/冷却读点已全部换视图（canUseSkill、结算消耗、烘焙投影、exhaust/固有/mini 等），**禁止再开直改字段的旁路**。行为面：`onAttach`/`onDetach`/`subscriptions`（`onDraw`/`turnEndInHand` 是编译糖）+ `mutesHand`/`unplayable` 旗标；订阅 owner = `uniqueID:mod:<modId>`，移除序 = **先注销订阅再 onDetach**。作用域 = 落点即作用域（战斗克隆丢弃、run 牌组持久；`cloneSkillRuntime`/存档已深拷贝）。内建 `locked` = 焚毁烙印（原 `card.locked` 布尔已迁移；**不拦出牌**）。设计定稿 `quest_prompts/CARD_MODIFIERS.md`。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。
 - **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。
-- **`content/`** — 最小内容实现（技能/敌人/能力/遗物/效果/盟友/事件）。技能设计意图见 `skills/SKILL_DESIGN_PRINCIPLES.md`。晋升链分离：**局外晋升**（营地/训练场 `promotion.js`）走 `promotesTo`，**局内转化链**（斩系列打出后进阶）走 `battlePromotesTo`——两者互不可见。
+- **`content/`** — 内容实现（技能/敌人/能力/遗物/效果/盟友/事件/诅咒卡）。技能设计意图见 `skills/SKILL_DESIGN_PRINCIPLES.md`。晋升链分离：**局外晋升**（`promotion.js`）走 `promotesTo`，**局内转化链**走 `battlePromotesTo`——两者互不可见。
 
 ### Bridge（`src/bridge/`）
 
@@ -152,94 +123,87 @@ src/
 ### Stage（`src/stage/`）
 
 - **StageManager**：舞台切换/resize/渲染循环。世界相机基准机位构造时落一次（`cameraBase`/`restoreBaseCamera()` 供借机位舞台还原）；`CAMERA_ZOOM 0.79` 只缩世界相机距离，布局坐标不动。
-- **后处理层 `stage/post/`（2026-09-26 结构大更新 Phase 0）**：全屏 pass 唯一事实源 `passes.js`（VERT/FRAG_BRIGHT/FRAG_BLUR/FRAG_FINAL/`GLSL_TONE_LIB`/`TONE_MODES`/`applyToneMapping` + `makeFullScreenPass` 三帮手）、`bloomChain.js`（bright→半分辨率 H/V blur 三段）、`uiComposer.js`（**uiScene 后处理链**：卡牌/UI → HalfFloat RT(MSAA×4) → bloom → 终段 tone map，premultiplied 盖回屏幕）。体积月光 `scenes/volumetricMoon.js` 与 uiComposer 共享同一套 pass 实现（阈值 1.45 等约定只有一份）。**RT 合成两条铁律**：① 终段 premultiplied（RT 里 rgb 本就是预乘色、alpha 是真覆盖率，与直渲逐像素等价）；② **uiScene 加法发光件一律 `additiveLight()`**（rgb 加算照旧、alpha 不占地）——普通 AdditiveBlending 会让光斑在 RT 里「占地」挡世界，新发光 UI 不改混合就会踩。HDR 创作约定：内容色 ≤1，发光件乘算推过 1.45 阈值才进 bloom（咏唱流光是首个受益件）。**bloom offset 通道（`fx/bloomOffset.js`，2026-09-26 用户定的根治方案）**：起晕强度可**主动声明**而不必拉爆 HDR——FX 件挂 `BLOOM_LAYER`(7) + 材质接 `bloomPassFlag`（共享 uniform 实例），composer 在主渲后把相机层切到该层清黑重渲一遍得偏移 RT（世界链**共享场景深度纹理**，遮挡正确；uiScene 独立深度），bright 段阈值判定前把 R 通道加和进亮度。注意 offset 只放大「已有颜色」的起晕权重（黑像素无晕）；内建材质补丁（unitBodyFx）经 `glslBloomOffsetWrite` 在 `dithering_fragment` 后覆写最终输出。开关：`settings.fxPost`（菜单「辉光特效」，默认开）→ `stageManager.setUiPostProcessing`，关掉回旧直渲；`?uipost=0` 强制关。**月光链质量档（2026-09-30 iGPU 带宽优化）**：march 每像素 ≈ STEPS×4 次深度采样是共享内存 iGPU 的带宽怪兽——`?moonq=half|low`（缺省 high）调 march/EMA 链分辨率（0.5/0.375，步数不砍——砍步数会欠采样窄光带致光柱能量腰斩）；`composer.setQuality({scale,steps})` 运行时可调（自动降档落点）。菜单「设置 → 渲染性能」三档（settings.renderQuality 持久化 → App watch → StageManager.setRenderQuality，在场舞台即时生效/新舞台建 composer 时取；URL ?moonq= 优先于持久化档，排障口径）。偏移 pass 有**写入件门控**：场景无可见 BLOOM_LAYER 件时整段跳过只清黑（空闲房省全场 depth 预填重渲）。
-- **单位特效固定层级（2026-09-26 结构大更新；用户定 4 层 L0 本体/L1 贴体/L2 笼罩/L3 表意，四层已全落）**：统一宿主 = `fx/unitFxLayer.js` 的 **UnitFxLayer**（UnitObject 构造时自建，对位 CardFxLayer）：持有 L0 补丁记录 + L1–L3 分组（挂 **billboard 子组**）+ overlay 槽位池（key→句柄，幂等 `overlay()`/`setLevel()`/`clear()`）+ 常驻推进 uTime（多 uniform 共用一钟，不许单 aura 占钟）+ 统一 dispose。**悬挂点铁律（用户验收出的系统性修正）：采样本体纹理/剪影的 sheet 件挂 `_standee`**（bodyFlames/stasisShell——姿态通道 squash/widen/lean/呼吸打在 _standee 上，挂 billboard 分组会在位移动画时与本体脱锚），**世界向粒子/sprite 才挂 L 分组**；**脚下水平假透视件（目标金环/护盾地环等椭圆环）挂 `_rig`**（2026-10-02 用户指正的老问题：yaw 对准后椭圆长轴才与立牌底边平行，固定世界朝向读感歪斜；rig 只 yaw 不 pitch 故仍贴地；不挂 _standee 是不吃姿态通道。2026-10-07 层级重构：UnitObject 分 `_rig`（yaw 统领层：status 血条/盾/效果行/意图 + 地面件）与 `_billboard`（倾倒轴：standee/裂半/L1-L3 分组）——死亡倾倒只转 billboard，status 与「?」意图不随尸体倒平）。**L0 本体层** = `fx/unitBodyFx.js`，onBeforeCompile 挂单位 `_body` 材质（**每单位独立实例，无族单例复位负担**），单 program 多 uniform（uBurn/uPoison/uCalm，片元内固定顺序合成 = 上层天然读下层输出），着色链抽成 `GLSL_BODY_FX` 共享件（**返回 vec4：rgb=色、a=bloom 偏移量**——白炙段干净白 + offset 起晕，不拉爆 HDR）；BattleStage 入场 `compileAsync` 预热（编译卡顿 715ms 教训）。燃烧 L0 = 纸张式烧灼：平滑 fbm 碳化场（⚠ **smoothstep 一律正向写法**——反边形式语义是「x 低时为 1」，曾把碳化盖到噪声低区导致覆盖响应全盘反转）+ 碳化缘火线 + 火星点（**cell 内随机抖动破格点阵**）+ **retain mask**（中频 fbm 划斑驳保留岛，高热段岛内乘算合成保原纹理）+ 层数境界映射（recipes `levelOf`：3 层局部碳化 / 30 层烧透橙红 / 60 层白炙）。**L1 贴体层** sprite/sheet 叠层：`bodyFlames.js` 环身舔舐火（共享本体几何 + 采样立绘 alpha：体内底旺火 + 剪影外溢带舔火，前后两层 z ±0.3 环绕；level 抬火舌高度；簇式独立小火 quad 方案已废弃——「三坨火焰」廉价感教训）/`vaporPlumes.js` 毒雾（哑光阈下）。**L2 笼罩层**（z 0.80，需下层状态的壳罩件）：`stasisShell.js` 凝滞壳 = **同源重算参考实现**——采样同一张立绘 map + include `GLSL_BODY_FX` + **共享本体 uniform 实例**，零 RT 复现下层燃烧/中毒着色（真邻域采样才懒建 RT）；setArt 换几何/map 后到都靠 tick 自愈重绑。`shieldDome.js` 护盾罩（2026-10-02）：**盾量是标量不是效果，驱动不走 aura 配方**——`UnitObject.setUnit` 按投影盾量直推 level（盾越厚罩缘越凝实越亮，HDR 过阈起辉），生命周期四态 = pulse（获得扫光「画出」罩体：稳态项乘 swept 掩码只在扫锋已过处显现）/ hit（伤害节拍 units.js 直触发：着弹点闪 + 涟漪）/ vanish（回合清零蒸发上升）/ shatter（打破爆闪溃散，伤害节拍触发、演完 onGone 自清槽位）；罩面竖片挂 _standee + 地环挂 _rig。⚠ 生命周期 uniform 闲置值必须为**中性**（hitEnv/shFlash 这类包络在 uHit=0/uShatter=0 时要输出 0 不是 1——`(1-x)²`/`oneMinus(smoothstep(0,…))` 形在闲置态恒亮，实测白罩/亮斑病根），包络一律 `sin(clamp(x)·π)` 或双 smoothstep 夹峰。**L3 表意层**（z 0.95）：`stunStars.js` 眩晕星。状态入口唯一 = AuraHost + `recipes.js` 的 `UNIT_AURA_THEMES`（**层级/槽位/建件器/levelOf 声明式主题表**，aura def 是纯「槽位导演」——enter/update/exit 只推 level 标量不管建件；diff 驱动铁律不动；**存续 aura 强度追层数走 `def.update`**；火焰亲和经 `bodyCalm` 标记每拍直推 uCalm——BattleStage 每 sync 用本批新建 def 调 update，闭包常新，亲和后到也生效）。aura 补间两条纪律：`overwrite:'auto'` + `onInterrupt` 同落地。**赋予/消除过渡演出（2026-09-26 用户定，四效果全配）**：统一手法 = `enterDur`/`exitDur` 拉长的 level 斜坡驱动各件 shader/tick **派生造型**（不许只做透明度渐变）——燃烧 = 碳化面扩张收缩；凝滞 = 结晶前锋自下而上扫掠（前锋挂 HDR 冰蓝亮线，退出反向 = 解冻，front 归一系数与 `levelOf` 稳态值耦合、改动要同步）；中毒 = 浸润前锋自脚底漫升 + 前锋渗色亮带 + 毒雾逐股浮现；眩晕 = 星星逐颗 back-out 弹入 + 转速渐入（**变速旋转用积分相位**，`t*speed*k` 乘式会跳相）。**tick 件容错纪律**：`UnitObject.update` 逐件 try/catch + 就地摘除病灶件（vaporPlumes 事故——异常逃出 update 打断 rAF 主循环，画面冻结但 gsap 独立补间继续推 uniform，数据断言全绿视觉已死；验收必须查 tick 活性如 uTime 推进，不能只信 uniform 读数）。
-- **粒子池 v2（`fx/gpu/`，2026-09-28 落地；设计定稿 `quest_prompts/PARTICLE_SYSTEM_V2.md`）**：WebGPU compute 粒子底座，唯一 GPU 粒子事实源（WebGL2 时代的 GPGPU 池 gpuParticles.js 已删；CPU 池 `particles/ParticleSystem.js` 已标 deprecated——存量一次性爆发逐个迁 GPU burst 后退役，新特效一律走 GPU 池）。**CPU/GPU 分工铁律（2026-10-07 用户定）**：**默认一律走 GPU 池**（含一次性爆发 burst、常驻发射、风暴/汇聚等一切场影响——同一场影响是 GPU 池的战略目的）；CPU 门面 floatFx（`fx/floatFx.js`，经 `particles` 组合门面暴露）**只许**承接同时满足两个条件的粒子：①（需要 per-粒子独立纹理/文本，或行为特别复杂）且 ② 总量十几个以内——两条都成立才许走 CPU，其余一律 GPU 池；新特效违反此边界用 floatFx（尤其点粒子 `spawnEmitter`）即违规。floatFx 的点粒子发射器（`spawnEmitter`）已于 2026-10-07 **全量迁 GPU**：`particles.spawnEmitter` 经 burstFacade 转接 `gpu/ambientMotes.js`——**每发射器一个 uber 类型**（rate=1×rateScale 承载 handle.rate、spawnPos 逐帧同步、spread 盒抖动近似圆盘/zJitter、outward 走 radial），全走类型行既有字段零新 shader；floatFx 点粒子机械已删、只剩飘字/贴图。⚠ TSL 两个坑（当日在该件实测）：**uniform(数组) 不支持**（Float32Array/对象数组/array-of-uniforms 都会让 NodeBuilder 抛「Uniform "null" not implemented」，且该错同步抛在帧内**打死 rAF**——数据读数全绿画面冻死）；storage 表 CPU 写 needsUpdate 后 compute 侧读回仍全零。结构 = `particlePool.js`（池本体：16384 粒子上限 / 32 类型行 ×12 vec4 / 32 锚点槽；pass 链 = customTick 前置 → uber update（spawn+积分+目的地转向一体，kind 标志排除 custom 段）→ custom pass → present，单次 `renderer.compute` 提交保序；**alive 计数** = u32×32 atomic buffer（环形覆盖净零记账）+ 节流读回 + `onDrained` 驱动效果生命周期）+ `particleTypes.js`（`defineParticleType` 懒注册分配连续段，Σcap 超池容抛错；uber 参数块 spawn/render/destination 全默认值化；destination = 锚点寻的模块：domainMode 四态填充/均布/边缘、steerDelay/Ramp/K 转向、endMode 四种终结、progressMode 双口径）。复杂粒子走 **custom 类型通道**：`custom.build(ctx) → {update, tick?, api?}`，首个实例 = `burnSparks.js` 燃烧火星（燃烧图集发射 = `burnEmission.js` 压缩列 + rejection 采样，与本体着色共用 `unitBodyFxBurnEmission` 场函数）。空间分流：世界池 + UI 池两实例（⚠ PointsNodeMaterial 对**正交相机不做尺寸衰减**——UI 池 uProj11 须补 `proj[5]×半高`）。渲染着色三件套照旧：additiveLight + bloom offset + BLOOM_LAYER；风场 `wind.js` 所有类型经 windK 响应同一阵风。资源消耗汇聚特效 = `resourceDrainFx.js`（魏启/AP 扣费爆散→汇聚卡面**费用徽章**+徽章辉光 C0 通道 `cardBodyFx.uCostGlow` 拉爆 HDR 由 bloom 代劳，徽章位置单一事实源 = `cardFace.costBadgeUvs`；锚点**每帧 moveAnchor 跟随卡牌**（卡飞展示位不脱节）、跟随仅 1s 防追进牌库；费用归属链：core 消耗指令带 `sourceSkillId` → ANIM_SKILL_USED 先于 ANIM_RESOURCE 入队，`_skillDisplay` 预测费用起跑、`_resourceBeat` 兜底非卡来源）。destination 汇聚是 **arrival 行为**（目标速度 min(steerK, dist×8)，恒定速率会冲过目标点震荡）；**UI 池关 depthTest**（粒子与卡面同平面会被恰好压住）。探针纪律：alive 读回有数百 ms 延迟，**截图时点锚用 monkey-patch 演出函数记 performance.now()**；渲染可见性用 A/B 差分（同机位开关两帧 diff）。
-- **场景件**：`scenes/`（skydome、dungeon3D、volumetricMoon 等）、**场景素材管线** `scenes/kit/`（propKit 契约：palette/共享材质/图元修饰器/撒布/合并，产出代理禁改）与 `scenes/props/`（道具资产库，一文件一资产，显式登记）、**房型 PCG** `scenes/rooms/`（`walls.js`/`floor.js` 程序化墙地、`wallSkin.js` 墙体皮肤体素柱（皮肤带内基底盒不砌、暗腔背板挡光）、`terrain.js` heightmap 管线（单位占位 control 保证战场水平铁律）、`composeRoom.js` 红线法摆放器（keepout 由 battleLine+slots 派生）、`lighting.js` 布光预设、`presets.js` 爬塔四阶段风格流 fortress/palace/manor/library + boss/mezzanine、`index.js getRoomScene`）。
-- **施术演出模板系统（`fx/spells/`，2026-10-01 铺量）**：卡牌特效 TA 管线三层——基础块 SDK `blocks.js`（cardFlare / arcProjectile / impactBurst / slashSweep / punchImpact / fireBurst / lightPillar / **dreadVeil / screenFlash**，块纪律：shader 主笔几何辅助、自建对象 onKill 自收、灯只借 light:fx0/fx1 池）；一文件一模板的**动画逻辑生成器**（`build(params)` 返回 async 协程；notify 时机三档：小卡全程演完 / 大卡主体落定即放行余烬后台散 / 实体锁强卡（heavenCleave A/S/X 斩）全 hold——sequencer 串行化即实体锁）；决议链 `index.js`（`CARD_SPELLS[defId]` 逐卡覆写 → `SERIES_SPELLS[series]` 体系行 `{ id, params }` → null = BASE 零回归）。**命中本体在伤害节拍**：`damageFx.js` 的 `resolveDamageFx` + `runDamageBeat`（挂 `_damageHit` 经 `_fxRunScript` fire-and-forget）——伤害量/攻击来向/卡名方向语义（斩竖劈横刀舞连击随机）只在伤害节拍有真值，多段伤害逐拍触发 = 连击/乱拳密集命中白送；kind 词汇 = slash/flameslash/punch/fireburst/nova/ignition。**投掷物从主角手上起飞**（deps.playerAnchor，2026-10-01 用户定）不从卡尖。**场景参数演出（天斩 v2 同日扩权）**：deps 补 `camera`（CameraDirector——fov 谓压迫用 `flyTo({...basePose, fov: base+Δ})`、收尾 `flyHome`，onKill 必兜底）与 `markCleaveSplit`（断裂标记 → 死亡节拍 `_unitCleaveSplitBeat`：立牌半宽几何+半幅 UV 裂成两半——⚠ 全宽几何裁 UV 会拉伸重叠成糊，两轮实测）；压暗/白闪走 **uiScene 顶层覆盖面**（DamageVignette 同机制）不改 post 参数（零管线重建）；`ScreenShake.sustain(level)` 持续微震通道（模板收尾/onKill 必归零——残留会把相机永久推歪）。TSL shader 纪律（`shaders.js` 头注，实测坑全集）：颜色一律烘**常量 vec3 节点**（Color 型 uniform 的彩色层跨会话非确定失显）、项式**平铺 add**（mul 参数内嵌 add 的项整项归零）、smoothstep 正向、发光面片带**边缘熄灭 mask**（直边穿帮）且环扩张上限与掩码起点留余量（掩码会掐死扩张中的环）。调参画布：`?spelldebug=hold` 定格面片中段（拳 0.75 / 火 0.65 取环半径峰值，避开辉光峰值取证）。**验证纪律**：实体锁卡串行占队 → 连打时节拍起点有秒级队列背压，断言一律**事件锚定**（等条件）不写定长 sleep。**群伤施术拍目标口径（2026-10-07）**：`deps.targets()` 按 `payload.target` 只给**选中敌**——AOE 卡（裂空劈/火瀑）要敌阵全员走 `deps.allEnemies()`（模板以 `aoe`/`from:'all'` 参数声明）；场景级群伤只演一记（bladeCast `cleave` 模式横贯巨刀光），逐敌命中交代在伤害拍。**火系共享特效原语 `fireBlocks.js`**：`burnSeed`（赋予燃烧 = 焰种点种）/ `burnSiphon`（消耗燃烧 = 火滴汇聚一点小闪即熄——火源归一/燃爆/灭火/熔毁共用，配 `siphonCast` 模板三参 `from/to`）；赋予/消耗燃烧的新卡优先复用这两个件。**span 画布加宽纪律**（拳/刀命中冲出 quad 直边的根治）：quad 宽 ×`PUNCH_QUAD_SPAN`/`SLASH_QUAD_SPAN` + shader 内坐标补偿保形（`x = p.x×SPAN`）+ 边缘熄灭 mask 贴在**真** quad 边缘——形状世界尺寸不变，只是画布变大。
-- **咏唱场景演出（`fx/chantSceneFx.js` 主题槽化，2026-10-07 重构）**：咏唱激活把战场推向体系氛围（fireHeat = 暖调+余烬+火龙卷绕身；qiFlow = 贴身气流，声明式不染全场）。**快照对账驱动**（hand 里 isActivated → 主题注册表 → 包络目标），注册表 = `THEMES` 主题表 + `SERIES_ROW`/`CARD_ROW` 两行。**双持合成（用户定）**：同一条 promotesTo 进阶链只取最强；不同链同主题强度叠加（cap 1）；不同主题并存复合——每主题一条槽（各自建/拆件、各自包络），全场输出（mood/tint/染灯）由基值 + 全部活槽**逐帧重算复合**，槽全退尽才一次性写回基值（基值快照首槽建立时捕获一次）。绕身 orbit 按 `kind` 分派：`qi` = qiOrbit / `fire` = fireWhirlOrbit——**fireWhirlOrbit 是双段实例**（施术爆发段 `FIRE_WHIRL_ORBIT` / 咏唱常驻段 `FIRE_WHIRL_ORBIT_CHANT`——同一池类型只有一组 anchor/level uniform，两路同开会互相覆写）；粒子型施术的预热 = `warmSpellFx` 里 `setTypeActive(...,1)+rateScale 0` 预激活（首个 compute 提交即编译管线）。
-- **布光两处方**：环境光总量压在 hemi~1.0/fill~0.12（逐项单开不亮叠加洗成牛奶蓝），亮度交给局部光池；所有灯色与单位染色底过 kit 的 `desatColor`（保持亮度、冷色多去一档）。调参先在 `roomGallery.html` 的 knob A/B 再焙入。
-- **对象**：`objects/`（CardObject、UnitObject、ZonePileObject、TargetingArrowObject、**ItemShowcaseObject** 公共获得演出（`Stage.showcaseItem`；`skippable:true` 双出口）、**SpeechBubbleObject/BubbleLayer** 头顶泡泡（放 uiScene 恒定屏幕尺寸）、PanelObject（锚定/模态/dock 形态）、ButtonObject、TextBlockObject、ScrollPickerObject 全屏选择骨架、CardScrollPicker/RelicScrollPicker、SlotRollObject 等）。**卡牌变换演出走 `fx/cardTransform.js`**（模式注册表 `CARD_TRANSFORM_MODES`，默认 charReveal = 焦化→燃烧尾迹→白光新脸的双前锋 wipe；**双脸难题 = 预烘焙新脸 + 叠层双纹理同屏渲染，落幕一刻才 `applyBakedFace`**——调用点不许先 setCard；在途演出挂 `view._transformCancel`，dispose/startBurn/二次变换掐死）。
-- **休息阶段 Three 化**：`stages/RoomStage.js` = 与塔楼/战斗并列的第三舞台。`runController` 在 `restRecipeFor(roomType)` 有配方时（slot→casino、campTraining→camp、shop→shop）经幕间黑幕切房间 PCG 场景；离开再黑幕回塔楼；没配方的房走塔楼层 + 占位面板。**机器逻辑按机器下沉到 `stage/machines/`**（每台机器一个模块：rig 创建/取景覆盖/面板 builder/专属拾取/快照同步/义务门，`machines/index.js` 登记一行，数组顺序 = 义务门优先级）——**加新机器只改 machines/**。房间内通用机制：点机器相机推近才弹操纵 UI；**dock 面板一律不给「返回房间」键**（退出口 = 点面板外拉远）；hover 反馈只在全景（聚焦时不响应）；交互物浮标 y 必须落在 `FLOOR_Y`；「继续前进」在奖励没领完时压暗 + 思索泡泡提示（判据 `RoomStage._pendingRoomDuty()`）。进房/离房节拍：进房 `roomScenePending` 置位不推塔楼面板；离房黑幕中点执行 `completeRoom + notify`。**训练/老虎机交互全 overlay 化（2026-09-28）**：训练房面板只留「开始训练/抓一张新卡…/继续修行…」（欠尾款时）——抓牌四选一当场开全屏 picker（返回 = 放弃），抓到卡后**自动**弹模式二选一对话（单模式可用直接定）→ 自动开多选选卡（twoC 一次选 2 张）→ 逐张变身演出上行，壳层链 = `runController.trainingUpgradeFlow` + kit `openTrainingDrawPicker/openUpgradePicker`，core 两拍 API（`trainDrawChoices/trainDraw/trainUpgradeStart/trainUpgrade`）不动。老虎机场景路径面板**只留拉杆一枚按钮**（价格在按钮上，免费显示「免费 ×N」；非场景兜底路径保留全按钮）——领奖/选奖全在 overlay：产出特写由 `runShowcase.maybeShowSlotPrize` 在 **notify 链尾**自动唤起（播成功才记已播 + `stage.uiBusy` 守卫，下拍重试），「跳过」= 放弃、dismiss 后按奖项接 picker/升级 overlay/直接收下。**特写必须等转轮落定**（2026-09-28）：core 先行结算，slotPending 在开拍时就挂上——闸门 = `slot.anim`（转轮在播）为真就不弹，落定那拍 slotFinish 的 notify 再唤起；sequencer 保险丝只杀指令不清 `slot.anim`，故 spin 自带同 ms 兜底定时器走正常 settle（emit 幂等），否则闸门永锁。吞噬进度首满弹一次教学对话（`settings.slotDevourTutored`，生涯一次，电平触发挂在 notify 链尾，演出忙/产出待领会自动让位下拍）。**恶魔 roll 同款口径**：场景路径面板一个指引字都不留（`demonRollWidgets` 的 sceneChoice 分支是空的），规则由 `runController.maybeNarrateDemonRoll` 的对话讲；**词条兑现全演出化（2026-09-30）**——拍序列 = 词条特写 → 逐张**卡牌焚毁演出**（`cardBurnFlight`：不在场景的卡中央亮相后燃尽、选卡确认摘卡**原地燃尽**——C0 吞蚀视觉与战斗同源；core `chooseDemonDebuff` 返回被焚卡）→ 金币 → 附赠 offer 自动开全屏选卡（返回/关闭 = 放弃，`takeBankOffer` 消费），银行面板不再摆 offer 按钮——生涯首次「支付代价的时候到了。转动恶魔轮盘，然后选一个诅咒承受。」，之后每次一句「你知道该干什么。」（`settings.demonRollTutored`）。⚠ **让位必须带重试**（600ms 自来重试直到讲出或局面翻篇）：上一发词条→金币特写没收完时 uiBusy 为真，而恶魔 roll 挂着期间玩家可能一个 notify 都不再产生——纯让位会把首遇解说永久吞掉。**房间活物朝向按素材逐个标**（2026-09-28）：`RoomUnitObject` 的 art 表条目可写 `{file, facing}`——facing 是该立绘**固有的成脸朝向**（+1 面右 / -1 面左，缺省 +1），镜像翻面 = 逻辑朝向 × facing；同一单位不同立绘可能朝不同方向（瑞米 front 面左 / back 面右），标错就是「屁股朝前走」。
-- **选卡/选遗物/获得特写三件套 + 卡组画廊统一走 `stage/stagePickerKit.js`**：`createStagePickerKit({uiScene,getPicker,bakeFace,bus,onIntent})` 惰性持有实例 + 统一 source 表（camp/training/bankUpgrade/bankBurn/slot/gurpasRemove/bossRemove 七源并集）。**全屏选卡界面必须拿到 kit 的 `bakeFace` + `bakeText`**（缺了 = 候选卡隐身，hover 预览却正常）。这些界面一律画在当前活动舞台的 uiScene（`panelStage() = battleStage ?? roomStage ?? mapStage`——只有活动舞台会被渲染）。**选卡多选（2026-09-28）**：`open({multi, picks, minPicks})`——`minPicks` 缺省 = `picks`（恰好 N 张），传入即 M..N 区间；确认键自动带进度「（n/N）」、未达下界压暗；多选选中件右上角挂 picker 自有的**序号角标**（点选顺序，位置/可见性随 `_applyScroll`，别往 entry.obj 上挂子件——局部缩放不一致）。**picker 候选件的 fx 收敛靠宿主 tick（2026-09-28 病根）**：选中高亮/禁用压暗是 C0 shader 档，`setVisualState` 只设目标值、收敛在 `updateFx(dt)`——宿主舞台必须每帧 `pickerKit.update(dt)`（它顺带给 picker 候选件 updateFx；BattleStage 一度漏接，选卡界面高亮永远停在 0）。**卡组 build 画廊（2026-10-09 第四件）**：`deckViewer` 复用 `CardGalleryObject`（`idPrefix:'deckview:'`、`bgZ:170` 压过 OVERLAY_Z 族 → 可开在选卡/奖励面板**之上**，点卡读卡/点空白关/chip 再点关）；入口 = 三舞台常驻 `DeckChipObject`（右下角，z 180 压过画廊本身，hover 重烘亮色 + scale 包络），点击上报意图 `deckViewToggle` → runController 调 `deckViewEntries(run)` 下发（Stage/kit 均不读 run）。**战斗内不随 sync 关闭**（不在 BattleStage `_closeViewer` 的视野里，敌方回合可常开）；chip 走舞台直达路由（先于一切模态分支判定）→ 演出期/结算积压期照常可点，唯一挡它的是 cutscene/wipe 的 DOM 层。视图 = run 牌组 array order 平铺、应用前口径（战斗克隆的临时状态——冷却/威力/激活/局内转化/遗物加的战斗卡——一律不进，那是战斗牌库查看器 `zones.deck` 的语义）；chip 张数 = run 牌组总量，统一由 `syncMapStatus` 下发（战斗内恒定）。
-- **切幕器与 cutscene 播放器分离**：黑幕目的地可以是任何东西（3D 舞台或一段 cutscene）。wipe 在全黑中点调下一步的 `preStage()`（内容幕后就位）；紧跟 wipe 的对话在揭幕段就挂上；cutscene 退出回舞台也走切幕（`runController.exitSceneAfterCutscene(beforeSwap)`）。
-- **战斗→奖励→塔楼节拍**：战斗终局**先落战后奖励、不切幕**——奖励 overlay 画在战斗舞台 uiScene（面板模态吞掉拖牌/瞄准/战场点击）；领取/跳过后才切幕，黑幕中点 `swapBattleToMap()`，揭幕后楼层 clear 动画 → 战后剧本 → 进房演出。`App.vue` 的 `activeStage()` 在战斗舞台存活期间由它接管指针。
-- **面板与数据流**：休息面板快照→widget 映射在 `stage/panels/`（`index.js` 只装配 `PANEL_BUILDERS` + 转发；builder 按域居 prep/reward/ascension/shop/room 各文件，共享件在 shared.js）。**数据下行唯一通道 = `core/run/panelSnapshot.js` 纯函数**（Stage 不得拉取 run 状态）；**意图上行 = `runController.dispatchPanelIntent`**（Stage 只上报「谁被点了」）。3D 源 tooltip 常驻转发器 = `shell/tooltipForward.js`；tooltip 内容契约除 effect/relic/card/named/intention/shift 外还有 **`item`**（`{title,body,tint}` 通用文本）。cutscene dialogue step 支持选项与 `step.bg` 幕间 CG。验收：`uiGallery.html` / `roomGallery.html` / `propGallery.html` 浏览器视觉门（调参 knob 见各页）。
+- **后处理层 `stage/post/`**：全屏 pass 唯一事实源 `passes.js`（VERT/FRAG_*/`GLSL_TONE_LIB`/`makeFullScreenPass`），`bloomChain.js`（bright→半分辨率 H/V blur 三段）、`uiComposer.js`（uiScene 后处理链：卡牌/UI → HalfFloat RT(MSAA×4) → bloom → tone map，premultiplied 盖回屏幕）。**RT 合成两条铁律**：① 终段 premultiplied（与直渲逐像素等价）；② uiScene 加法发光件一律 `additiveLight()`（普通 AdditiveBlending 会让光斑在 RT 里「占地」挡世界）。HDR 约定：内容色 ≤1，发光件乘算推过阈值才进 bloom。**bloom offset 通道（`fx/bloomOffset.js`）**：FX 件挂 `BLOOM_LAYER`(7) + 材质接 `bloomPassFlag`，composer 主渲后清黑重渲该层得偏移 RT（共享场景深度，遮挡正确），bright 段判定前把 R 通道加进亮度——起晕可声明而不必拉爆 HDR。开关 `settings.fxPost`（`?uipost=0` 强制关）。**月光链质量档**：`?moonq=half|low` / `settings.renderQuality` 三档调 march/EMA 链分辨率（步数不砍）；偏移 pass 有写入件门控（无可见 BLOOM_LAYER 件整段跳过）。
+- **单位特效四层（`fx/unitFxLayer.js` 的 UnitFxLayer 统一宿主，对位 CardFxLayer）**：L0 本体（`unitBodyFx.js` 挂 `_body` 材质，单 program 多 uniform）／L1 贴体 sprite 叠层／L2 笼罩壳罩件／L3 表意件，L1–L3 分组挂 billboard 子组。**悬挂点铁律**：采样本体纹理的 sheet 件挂 `_standee`（吃姿态通道、不与本体脱锚）；世界向粒子/sprite 挂 L 分组；脚下水平假透视件（椭圆环）挂 `_rig`（yaw 对准后长轴与立牌底边平行）。UnitObject 分 `_rig`（yaw 层：status 血条/盾/效果行/意图 + 地面件）与 `_billboard`（倾倒轴：standee/裂半/L1-L3）——死亡倾倒只转 billboard。**状态入口唯一** = AuraHost + `recipes.js` 的 `UNIT_AURA_THEMES`（声明式主题表，diff 驱动，enter/update/exit 只推 level 标量）。纪律：赋予/消除过渡演出拉长 level 斜坡驱动**派生造型**（不许只做透明度渐变）；生命周期 uniform 闲置值必须**中性**（包络用 `sin(clamp(x)·π)` 或双 smoothstep 夹峰，`(1-x)²` 形闲置态恒亮）；变速旋转用积分相位；`UnitObject.update` 逐件 try/catch 就地摘除病灶件；aura 补间 `overwrite:'auto'` + `onInterrupt` 同落地。
+- **粒子池 v2（`fx/gpu/`，设计 `quest_prompts/PARTICLE_SYSTEM_V2.md`）**：WebGPU compute 粒子底座，**唯一 GPU 粒子事实源**（WebGL 时代 GPGPU 池与 CPU 池均已删除）。结构 = `particlePool.js`（池本体：类型行 + 锚点槽 + pass 链 + alive 计数 + `onDrained` 生命周期）+ `particleTypes.js`（`defineParticleType` 懒注册）+ custom 类型通道（`custom.build(ctx)`）+ 风场 `wind.js`。**CPU/GPU 分工铁律：默认一律走 GPU 池**（含一次性爆发、常驻发射、场影响）；CPU 门面 floatFx **只许**承接同时满足「需要 per-粒子独立纹理/文本或行为特别复杂」且「总量十几个以内」的粒子——飘字/贴图之外新增点粒子发射一律走 GPU（`particles.spawnEmitter` 经 `ambientMotes.js` uber 类型转接）。⚠ TSL 两坑：uniform(数组) 不支持（抛错且同步打死 rAF）；storage 表 CPU 写 needsUpdate 后 compute 侧读回仍全零。渲染三件套照旧：additiveLight + bloom offset + BLOOM_LAYER；UI 池关 depthTest（正交相机不衰减尺寸，uProj11 须补 `proj[5]×半高`）。destination 汇聚是 arrival 行为（目标速度 `min(steerK, dist×8)`）；资源汇聚特效 = `resourceDrainFx.js`。
+- **场景件**：`scenes/`（skydome、dungeon3D、volumetricMoon 等）、**素材管线** `scenes/kit/`（propKit 契约：palette/共享材质/撒布/合并，产出代理禁改）与 `scenes/props/`（一文件一资产，显式登记）、**房型 PCG** `scenes/rooms/`（程序化墙地/墙体皮肤/heightmap（单位占位 control 保证战场水平） /`composeRoom.js` 红线法摆放/布光预设/四阶段风格流 presets + boss/mezzanine/`index.js getRoomScene`）。
+- **施术演出模板系统（`fx/spells/`）**：三层——基础块 SDK `blocks.js`（块纪律：shader 主笔几何辅助、自建对象 onKill 自收、灯只借 light:fx0/fx1 池）；一文件一模板的动画逻辑生成器（`build(params)` 返回 async 协程；notify 时机三档：小卡演完放行 / 大卡主体落定即放行 / 实体锁全 hold）；决议链 `index.js`（`CARD_SPELLS[defId]` 逐卡覆写 → `SERIES_SPELLS[series]` 体系行 → BASE 零回归）。**命中本体在伤害节拍**（`damageFx.js`：伤害量/攻击来向/卡名方向语义只在伤害节拍有真值，多段伤害逐拍触发）。**投掷物从主角手上起飞**（deps.playerAnchor）。场景参数演出：deps 补 `camera`（fov 压迫、onKill 必 `flyHome`）与 `markCleaveSplit`（立牌断裂：半宽几何+半幅 UV）；压暗/白闪走 uiScene 顶层覆盖面不改 post；`ScreenShake.sustain(level)` 收尾/onKill 必归零。**群伤拍目标口径**：AOE 卡要敌阵全员走 `deps.allEnemies()`（模板以 `aoe`/`from:'all'` 声明），逐敌命中交代在伤害拍。火系共享原语 `fireBlocks.js`（`burnSeed`/`burnSiphon`）。**span 画布加宽纪律**：命中冲出 quad 直边的根治 = quad 宽 ×SPAN + shader 内坐标补偿保形 + 边缘熄灭 mask 贴真边缘。TSL 纪律全集见 `spells/shaders.js` 头注（颜色烘常量 vec3、项式平铺 add、smoothstep 正向、发光面片带边缘熄灭）。**验证纪律**：断言一律**事件锚定**不写定长 sleep；调参画布 `?spelldebug=hold`。
+- **咏唱场景演出（`fx/chantSceneFx.js` 主题槽化）**：咏唱激活把战场推向体系氛围。**快照对账驱动**（hand 里 isActivated → 主题注册表 → 包络目标），注册表 = `THEMES` 主题表 + `SERIES_ROW`/`CARD_ROW` 两行，加新体系一行。**双持合成**：同链只取最强；不同链同主题叠加（cap 1）；不同主题并存复合（每主题一条槽，全场输出由基值 + 全部活槽逐帧重算复合）；绕身 orbit 按 kind 分派。粒子型施术预热 = `warmSpellFx` 预激活（首个 compute 提交即编译管线）。
+- **布光两处方**：环境光总量压在 hemi~1.0/fill~0.12，亮度交给局部光池；灯色与单位染色底过 kit 的 `desatColor`。调参先在 `roomGallery.html` 的 knob A/B 再焙入。
+- **对象 `objects/`**：CardObject、UnitObject、ZonePileObject、TargetingArrowObject、ItemShowcaseObject（公共获得演出，`skippable:true` 双出口）、SpeechBubbleObject/BubbleLayer（uiScene 恒定屏幕尺寸）、PanelObject、ScrollPickerObject 骨架、CardScrollPicker/RelicScrollPicker、SlotRollObject 等。**卡牌变换演出走 `fx/cardTransform.js`**（模式注册表；**双脸难题 = 预烘焙新脸 + 叠层双纹理，落幕一刻才 `applyBakedFace`**——调用点不许先 setCard）。
+- **休息阶段 Three 化**：`stages/RoomStage.js` 与塔楼/战斗并列。`runController` 在 `restRecipeFor(roomType)` 有配方时经幕间黑幕切房间 PCG 场景。**机器逻辑按机器下沉 `stage/machines/`**（rig/面板 builder/专属拾取/快照同步/义务门，`machines/index.js` 登记一行，数组序 = 义务门优先级）——**加新机器只改 machines/**。房内通用：点机器相机推近才弹操纵 UI；**dock 面板一律不给「返回房间」键**（退出口 = 点面板外拉远）；hover 反馈只在全景；交互物浮标 y 落 `FLOOR_Y`；「继续前进」在奖励没领完时压暗 + 思索泡泡。**训练/老虎机/银行交互全 overlay 化**：场景路径面板只留主按钮；产出特写在 notify 链尾自动唤起（闸门 = 演出忙/待领会自动让位**带重试**——纯让位会把解说永久吞掉）；特写必须等转轮落定；生涯首次教学走 `settings.*Tutored` 电平触发。**恶魔 roll 词条兑现全演出化**：词条特写 → 逐张卡牌焚毁（`cardBurnFlight`，选卡确认原地燃尽）→ 金币 → 附赠 offer 自动开全屏选卡。**房间活物朝向按素材逐个标**：RoomUnitObject art 表条目 `{file, facing}`（+1 面右 / -1 面左），镜像 = 逻辑朝向 × facing。
+- **选卡/选遗物/获得特写统一走 `stage/stagePickerKit.js`**：`bakeFace` + `bakeText` 必须带上（缺了 = 候选卡隐身）；画在当前活动舞台的 uiScene。多选 `open({multi, picks, minPicks})`；选中件序号角标是 picker 自有子件；**picker 候选件的 fx 收敛靠宿主 tick**——活动舞台必须每帧 `pickerKit.update(dt)`。
+- **切幕器与 cutscene 播放器分离**：黑幕目的地可以是任何东西；紧跟 wipe 的对话在揭幕段挂上；cutscene 退出回舞台也走切幕。
+- **战斗→奖励→塔楼节拍**：战斗终局**先落战后奖励、不切幕**（奖励 overlay 画在战斗舞台 uiScene）；领取/跳过后黑幕中点 `swapBattleToMap()`，揭幕后楼层 clear 动画 → 战后剧本 → 进房演出。`App.vue` 的 `activeStage()` 在战斗舞台存活期间由它接管指针。
+- **面板与数据流**：快照→widget 映射在 `stage/panels/`。**数据下行唯一通道 = `core/run/panelSnapshot.js` 纯函数**（Stage 不得拉取 run 状态）；**意图上行 = `runController.dispatchPanelIntent`**。3D 源 tooltip 常驻转发器 = `shell/tooltipForward.js`；tooltip 内容契约：effect/relic/card/named/intention/shift/item（`{title,body,tint}` 通用文本）。视觉验收：`uiGallery.html` / `roomGallery.html` / `propGallery.html`。
 
 ### 富文本（文本层唯一事实源）
 
-文本里可写行内 markup：`/card{卡id, k=v}`（**卡间引用一律用 id**，改名不失配）、`/named{术语}`、`/effect{效果名}`、`/红绿蓝紫色名{文本}`。解析器 = `stage/richtext/parser.js`（纯函数，token 流），**外观解析唯一事实源 = `stage/richtext/appearance.js`**（`effectLook` / `namedLook` / `cardLook` + 色表 + `cardTheme` / `seriesGlyph`）——所有渲染环境都必须接它，否则引用会退化成「● 原始 id」。
-
-三个渲染环境，同一份 token/外观口径：
+行内 markup：`/card{卡id, k=v}`（卡间引用一律用 id）、`/named{术语}`、`/effect{效果名}`、`/红绿蓝紫色名{文本}`。解析器 = `stage/richtext/parser.js`，**外观解析唯一事实源 = `stage/richtext/appearance.js`**——所有渲染环境必须接它，否则引用退化成「● 原始 id」。
 
 | 环境 | 入口 | 交互 |
 |---|---|---|
-| 卡面烘焙 | `richtext/cardFace.js` `bakeCardFace` | ✅ 随纹理成对返回 `hitRegions`——CardObject 3D 拾取 / CardFacePreview DOM 命中（同一 `hitTestRegions`）→ hover 弹整卡预览/术语（**老约定，只此一处**） |
-| 3D 单行文本 | `objects/textBakers.js` `bakeRichLine`（走 `renderRichTextBlock`） | ❌ 只出图（面板行/特写/状态栏只要"印对"） |
-| DOM 浮层正文 | `richtext/inline.js` `inlineSegments` → `shell/components/RichTextInline.vue` | ❌ 纯呈现（**tooltip 内不做 hover**，见下） |
+| 卡面烘焙 | `richtext/cardFace.js` `bakeCardFace` | ✅ 随纹理返回 `hitRegions`（3D 拾取与 DOM 预览共用）——**引用热区只保留在卡面** |
+| 3D 单行文本 | `objects/textBakers.js` `bakeAutoLine` | ❌ 只出图 |
+| DOM 浮层正文 | `richtext/inline.js` → `RichTextInline.vue` | ❌ 纯呈现 |
 
-- **auto 烘焙（默认口径）**：`bakeAutoLine` = 含 markup 走 `bakeRichLine`，否则**原样走 `bakeBoldText`**（纯文本行零回归）。它是 `TextBlockObject` 的缺省烘焙，面板 / 获得特写 `ItemShowcaseObject` / 房间 dock 操纵条 / 卡牌画廊都用它——**加新文本面直接用它，别自己写烘焙**。
-- `hasMarkup(text)` 是「走富文本还是纯文本」的唯一判据（3D auto 烘焙与 tooltip 正文同源）；tooltip 模型里 `markup: true` 即由它产生（`tooltip.js` 的 relic/effect/named/item）。
-- **tooltip 内不做 hover（用户 2026-09-19 定，勿再引入）**：tooltip 全局唯一、随叫随到，正文里的引用只**渲染**（特征色 + 图标 + 系列字形徽章），不弹嵌套浮层。理由：`tooltipShow` 换 token 即换内容，热区一旦在指针底下消失就会触发 leave → 还原 → 再进入的**自激振荡**（当年因此放弃）；要做得稳就得引入嵌套槽位、指针分层、双向宽限期三套机制，复杂度不划算。带热区的引用只保留在**卡面**上（那里引用就印在卡面里，不存在"内容被替换"的问题）。
-- `.tooltip` 整体 `pointer-events: none`（含整卡预览）——这是"嵌套 hover 一层即止"的实现方式，也是浮层不抢指针、可随叫随到的前提。
+- `bakeAutoLine` = 含 markup 走 `bakeRichLine`，否则原样走 `bakeBoldText`（纯文本行零回归）。面板/获得特写/dock 操纵条/画廊的缺省烘焙，**加新文本面直接用它**。
+- **tooltip 内不做 hover（用户定，勿再引入）**：tooltip 全局唯一、正文里的引用只渲染不弹嵌套浮层（自激振荡问题，复杂度不划算）。`.tooltip` 整体 `pointer-events: none`（含整卡预览）。
 
 ### Shell（`src/shell/`）
 
-- `App.vue` — 三层场景编排 + canvas 生命周期 + 全局 toast（`provide('showMenuPopup')`）+ 指针路由（battle→BattleStage，其余→MapStage）。
-- `runController.js` — run 层唯一编排器：Vue 薄壳与 core run 状态机之间的唯一通道；run 经 `reactive()` 暴露；读档恢复在此（存档语义 = prep 检查点）。**分域拆分**：编排器本体只剩战局装配/舞台生命周期/奖励与房间迁移/存档；交互域抽成同构工厂模块（`create*(ctx)`，ctx 引用晚绑定箭头闭包）——`shell/runShowcase.js` = 到手演出编排；`shell/runMachines.js` = 房间机器流（意图→core 调用→notify→附带演出）；`shell/runCutsceneFlows.js` = 幕间流（随机事件 + 进阶）。**意图上行表驱动**：`dispatchPanelIntent` = 本地表 + 三域 intents 合并，未知 action 静默忽略——加新机器/幕间在对应域模块加方法 + intents 登记，主体不再生长。
-- `saves.js`（两模式隔离）、`settings.js`、`audio.js`、`tooltip.js`。
-- `components/`（剩余 Vue 组件）：菜单层（StartScreen/GameMenu/EndPanel/MenuDialog·MenuPopup/ChangeLog）、`BattleHud`（战斗日志/回合数）、`TooltipOverlay`/`CardFacePreview`、静态启动壳（**index.html 内联**的加载门：标题/进度条/失败重试/GPU 门在 JS 到达前已上色——白屏根治；进度字节优先、stats 计数字段是 `done` 映射回 `loaded`；Vue 侧只留 assetsReady 状态机，经 `window.__bootShell` 推进度、`__bootRetry` 接重试；watch.html 有同款瘦身壳，改视觉两处同步）。
-- `overlay/`：cutscene 播放器 `cutscenePlayer.js` + 内容层 `CutsceneOverlay.vue` + 切幕层 `sceneWipe.js`/`SceneWipeOverlay.vue` + 剧本 `scripts.js` + 事件图 `eventArt.js`（真素材丢 `src/assets/images/events/<art>.webp` 自动顶替）。
+- `App.vue` — 三层场景编排 + canvas 生命周期 + 全局 toast + 指针路由（battle→BattleStage，其余→MapStage）。
+- `runController.js` — run 层唯一编排器（Vue 薄壳与 core run 状态机之间的唯一通道）。**分域拆分**：编排器本体只剩战局装配/舞台生命周期/奖励与房间迁移/存档；交互域抽成同构工厂模块（`create*(ctx)`，ctx 晚绑定箭头闭包）——`runShowcase.js`（到手演出）、`runMachines.js`（房间机器流）、`runCutsceneFlows.js`（幕间流）。**意图上行表驱动**：`dispatchPanelIntent` = 本地表 + 三域 intents 合并，未知 action 静默忽略。
+- `saves.js`（两模式隔离 + 调试槽）、`settings.js`、`audio.js`、`tooltip.js`。
+- `components/`（剩余 Vue 组件）：菜单层、`BattleHud`、`TooltipOverlay`/`CardFacePreview`、静态启动壳（**index.html 内联**的加载门——白屏根治；watch.html 有同款瘦身壳，改视觉两处同步）。
+- `overlay/`：cutscene 播放器 + 内容层 + 切幕层 + 剧本 + 事件图。
 
 ## 测试
 
-- **测试维护暂停（用户定，提速优先）**：新改动不再新增/同步测试，不以 `npm test` 全绿为验收门槛——存量测试失效属预期，不要为其花工时。逻辑改动跑 `node tmp/smoke-*.mjs` 冒烟自验；浏览器行为由用户验收。本条优先级高于本文件其它与测试相关的描述。
-- 若确需写测试：只测后端结算逻辑、程序骨干（gameflow/状态机）与基础设施（加载卸载/订阅退订/绘制同步竞态）；**不测视觉样式与演出参数**（颜色/曲线/粒子/时长——必然反复调整，断言即炸）。战斗测试用 `BattleDriver`/`RunDriver` 驱动真实结算，不 mock Core；断言注册表内容先 `import '../src/core/content/index.js'` 触发登记。
-- `tmp/` 是一次性产物（冒烟脚本、Playwright 截图、试玩会话），无需维护。
+- **`npm test` = 随机自对弈 fuzz**（`tools/fuzz/battleFuzz.mjs`）：真实 Core 全链路自对弈 + 不变量断言 + 超时保险丝（保险丝计数 == 0 是最强信号）——**逻辑/架构改动的回归门**。`npm run test:fuzz`（150 局）/ `test:browser`（浏览器版）。
+- 逻辑改动另跑 `node tmp/smoke-*.mjs` 冒烟自验（一次性脚本，无需维护）。
+- **内容不写测试**：视觉样式与演出参数（颜色/曲线/粒子/时长）必然反复调整，断言即炸；数值平衡交试玩验证。若确需写测试：只测结算逻辑与程序骨干，用 `BattleDriver`/`RunDriver` 驱动真实结算、不 mock Core；断言注册表内容先 import `content/index.js` 触发登记。
+- `tmp/` 是一次性产物（冒烟、截图、试玩会话），无需维护。
 
 ## 代码约定（踩坑备忘）
 
-- 编辑前先读文件，不破坏无关逻辑；重构时删除废弃旧代码（含 CSS、未用函数）。
-- 可抽离的共用逻辑尽量抽离，避免重复。
+- 编辑前先读文件，不破坏无关逻辑；重构时删除废弃旧代码（含 CSS、未用函数）。可抽离的共用逻辑尽量抽离。
 - Core 状态只放 id/slug + 标量（可序列化），定义引用一律经注册表反查。
-- **卡牌 id 命名口径（2026-10-11 用户定，取代 10-02 版）**：**卡面阅读以中文名为准，英文 id 仅作索引标签无任何语义承诺**。非 Z 卡 id 一律 = `series + [中缀] + 阶`（`xxxC/xxxB/xxxA(/xxxS)`，无下划线）：同 series+阶 唯一时裸写（`punchC`）；同系列并行链撞阶时插语义中缀（`fireBallBarrageA`、`fireControlFinderAtkC`）；变体孪生卡（Unbound/Free 同名同阶）尾加变体词（`burstCUnbound`）；链内异名卡（如崩拳 S）**不再**用独立语义 id，直接 `series+S`（`fierceFistS`）。Z 卡（tier `'Z'`）单英文单词。美术键（`artKeys.js` 的值、`genCardScenes` 的键）与卡 id 是**两个命名空间**——卡 id 改名不动美术键；**美术分配只认中文名**（同名同图/异名异图，等阶变体图只服务同名阶）；**同进阶链构图必须大体一致（家族设计语言，标杆 = 斩系列；各家族基准与图片编辑工作流见 `battle_gameplay/CARD_ART.md` 一·六节）**。注意撞名：效果 `endure`/`breath`、能力 `fireWard` 与卡牌同名不同物；敌人招式 id 与房型预设 id 也是独立命名空间。
-- **series = 晋升链级**（2026-10-11 按 SKILL_DESIGN_PRINCIPLES 文档定义归位，用户裁定）：series = 一个晋升链一个名字（与链级美术键同名，如 `endure`/`duckHead`/`punch`），**不再是体系桶**（`fist`/`blade`/`block` 旧桶已全部拆链）。体系桶语义由 `subsystem` 承载（见下条）。防回归层：施术决议 `SERIES_SPELLS[series] ?? SUBSYSTEM_SPELLS[subsystem]`（spells/index.js）、伤害拍与卡面着色同款 subsystem 兜底（damageFx/cardBodyFx）——改 series 值必须核对这四处 + `chantSceneFx` + `cardArtCache` 系列回落层。历史教训：0.11.20 曾把 14 个 series 误改链首 id 漏同步消费方致 8 体系施术静默回退 BASE。
-- **subsystem 是子体系一等字段**（2026-10-10 规范化，定义 `core/skills/subsystems.js`，准则见 SKILL_DESIGN_PRINCIPLES）：主体系内的紧密交互组（拳/刀/拆/爆炎/叠炎），与 series（链族/视觉族）分属两层不得混用。消费方 = 成员判定（`cardKit.isBladeCard`）、深入卡门禁（`def.deep` 必须存合法 subsystem id，注册期校验）、卡面页脚归属小项（`cardFace.js` + projection 的 `subsystem` 字段）。keywords 不再携带分类标记。卡包子体系亲和已于 2026-10-10 撤除（试玩反馈：奖励流不偏向既有构筑，build 选项保持开放；仅剩 `def.affinityCards` 持卡亲和——`rewards.js deckAffinityWeight`）。
-- 牌库顶 = 数组 index 0（FIFO：顶抽底还，**无弃牌堆、无重洗**；弃牌/打出/换牌等非消耗离手卡一律回牌库底 = 数组尾）；牌的 zone 不显式存储，用 `zoneOf/moveCard` 反查，数组是唯一事实源。
-- **pending 结算区惯例**：结算中的卡（主语或宾语）在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手（hand→pending，静默裸 moveCard），收尾落位；对发动卡的引用以 `sctx.self` + 出牌时点捕获（`sctx.handIndexAtPlay`，经 `helpers.handIndexAtPlay/handNeighborsAtPlay` 读）为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来「离场→跨节拍处理→落位」机制按同一惯例书写：先入 pending、末段 `zoneOf` 校验后落位，落地指令对「目标不在预期区」静默落空（`DiscardCardInstruction` 为范式）。
-- **PRE/POST 反应纪律**：PRE 只做 payload 修饰（`setPayload`）或 veto，世界变更（改 zone/资源/生命）一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（替代效应，每事件至多一次），其次 POST 追加。PRE 内提交「自身资源记账」类子指令合法；PRE 禁的是与被观察指令操作同一 zone/资源的变更指令。
-- 伤害/面板修正三段式：`amount = 基础值 + getStat(面板)` → `payload = PRE 修饰流水线(amount)` → `execute(payload)`（固定公式：减防御→护盾吸收→minHp 地板）。PRE 流水线顺序敏感（priority 降序 + 注册序），不做固定乘区。
-- 效果订阅由 `AddEffectInstruction` 在首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；咏唱双态（无槽）：发动=付费回手点亮，再次打出=免费解除并按特性离场，任何离手路径由指令层统一熄灭；**咏唱冷却一律自终止起算**（`deactivateChant` 单点锚定——激活/持续激活不计时，含弃/焚/沉默熄灭在内的一切终止路径都锚定；冷却门只挡未激活的再发动，解除打出恒放行）；**咏唱的 POST 触发订阅一旦产出效果必须调 `reactFx(sctx, sctx.self, 'benefit', ...)` 给自卡打反馈**（proc=周期触发 / charge=资源蓄放；副作用代价用 backfire）——触发无卡面动画 = 玩家看不见引擎在转（太极抽牌实报）；PRE 纯修饰型（武术姿态/火焰眷顾类）与自焚离场型（含刃术）不打；咏唱压力走手牌上限加权口径（激活咏唱按 chantWeight 计多张，发动合法性 = 激活后加权数 ≤ player.maxHandSize）。
+- **卡牌 id 命名（2026-10-11 定）**：**卡面阅读以中文名为准，英文 id 仅作索引标签无任何语义承诺**。非 Z 卡 id = `series + [中缀] + 阶`（`xxxC/xxxB/xxxA(/xxxS)`，无下划线）：series+阶 唯一裸写（`punchC`）；并行链撞阶加语义中缀（`fireBallBarrageA`）；Unbound/Free 变体孪生尾加变体词；链内异名 S 直接 `series+S`（`fierceFistS`）。Z 卡单英文单词。美术键、效果 id、能力 id、敌人招式 id、房型预设 id 与卡 id 是**独立命名空间**——卡 id 改名不动美术键；美术分配只认中文名（同名同图/异名异图）。
+- **series 是无等阶家族名**（如 `fireWhirl`/`blade`/`block`）：禁止带等阶后缀、禁止照搬链首卡 id。消费方 = `spells/index.js`、`spells/damageFx.js`、`chantSceneFx.js`、core 检索、奖励亲和、`cardArtCache` 回落层——改任一侧 series 值必须全量核对所有消费方。
+- 牌库顶 = 数组 index 0（FIFO：顶抽底还，**无弃牌堆、无重洗**；非消耗离手卡一律回牌库底 = 数组尾）；zone 不显式存储，`zoneOf/moveCard` 反查。
+- **pending 结算区惯例**：结算中的卡在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手，收尾落位；对发动卡的引用以 `sctx.self` + `handIndexAtPlay` 为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来跨节拍机制同惯例：先入 pending、末段 `zoneOf` 校验落位，落地指令对「目标不在预期区」静默落空。
+- **PRE/POST 反应纪律**：PRE 只做 payload 修饰或 veto，世界变更一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（每事件至多一次），其次 POST 追加。PRE 禁与被观察指令操作同一 zone/资源的变更指令。
+- 伤害/面板修正三段式：`amount = 基础值 + getStat(面板)` → `payload = PRE 修饰流水线` → `execute`（减防御→护盾吸收→minHp 地板）。流水线顺序敏感，不做固定乘区。
+- 效果订阅由 `AddEffectInstruction` 首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；**咏唱冷却一律自终止起算**（`deactivateChant` 单点锚定，一切终止路径都锚定）；**咏唱的 POST 触发一旦产出效果必须 `reactFx(sctx, sctx.self, 'benefit', ...)` 打反馈**（触发无卡面动画 = 玩家看不见）；PRE 纯修饰型与自焚离场型不打；咏唱压力走手牌上限加权口径。
 - 卡牌计数器放 `skillRuntime`，不藏闭包；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
-- **设计稿术语口径（防臆测乌龙）**：实现设计文档里的卡面效果语言前，先按既定主语约定读稿——**裸写「效果X N」（如「燃烧3」「格挡2」）= 赋予自己**效果 X N 层；**「赋予效果X / 目标获得X」= 赋予卡牌目标**（通常是敌人）。**术语不理解务必查权威文档**：效果规则查 `battle_gameplay/skills/EFFECTS.md`、机制词查 `core/skills/namedTerms.js`（NAMED）与对应体系设计稿——**禁止凭语感臆测**；NAMED 已定义的语义与写法（含尾缀数字参数如 `衰败2`）必须照办，不得自创同义写法。**查不到定义的术语 = 不实现**，向用户上报待定义。
-- **卡面手牌数口径（2026-09-20 用户定）**：卡面写「手牌 / N 张手牌 / 每张手牌」一律按**裸张数**实现（手牌区张数，激活咏唱算 1 张）——**不加权**，不得顺手用 `effectiveHandCount`。只有明写「手牌压力」「超载」「咏唱容量」（named 术语）的效果才走加权口径；「抽满手牌」类按容量填满的表述属容量语义（`drawToHandLimit`），不属数量计数。总纲见 `battle_gameplay/battle.md` §1 基础约定。
-- **卡牌设计元逻辑（2026-09-21 用户定，设计第一标准）**：① **交互紧密**——卡的边缘应指向其他卡而非只指向战场；自检：每张新卡至少改变两张以上既有卡的价值，自给自足的孤卡即设计缺陷。② **机制统一**——体系内共用少量机制动词做参数化组合，不为单卡发明一次性机制；统一是**体系内**的统一，各体系的资源与机制抽象各有特色，不跨体系照搬。③ **描述简单可归纳**——一行说清一张卡是①②的自然结果，不是文风目标。④ 设计稿用**陈述式**：只写当前设计，修订纪事与定价论证归 commit，不归文档。
-- **新卡数值意识（设计铁律）**：设计新卡必须先做数值对标——与同阶基础卡、其他体系的同类功能卡逐项比（盾对盾、伤对伤、抽对抽），确认落在既有包络内再写定义，**不许凭感觉给数**。**彻底 0 开销卡（0AP+0 魏启+无冷却）必须谨慎**——免费即每回合白嫖，默认冷却 1 起步。条件加成卡的拆分口径：**基础值对标同阶白板、加成值才是体系溢价**，无条件部分不许比同阶白板强。
-- 卡面描述双轨：`describe`（应用前，无战斗上下文，纯文本）/ `battleDescribe`（结算中，数字按实时局面）。
-  **battleDescribe 铁律（2026-10-07 用户定，已犯三四次的复发项）**：战斗卡面**不许**用「计算结果摘要」顶替原始机制叙述——低信息密度的结果串（如「烈焰亲和4（消耗燃烧6）」）会彻底覆盖卡的核心机制（「每2层获得1」），玩家失去阅读规则的途径。正确写法 = **完整保留 describe 的机制句式，把其中的数值换算成实时值**，当前局面/状态以括注补充（`回复11生命；每层燃烧，+1（燃烧6）`）。条件子句（「正在燃烧时+7」「坟墓≥3张再抽1」）与比率规则（「每N层/每打出1张+X」）一律不许从战斗面消失。写新 battleDescribe 自检：把 describe 的每个子句与 battle 文本逐条对照，任一机制子句无对应表述即为违规。
-- **UI 风格：扁平 / 白字 / 淡蓝按钮**：按钮与面板走"深底 + 白字 + 淡蓝细描边"（`richtext/buttonFace.js` 的 THEMES 是唯一事实源——**无渐变、无自体发光**），面板不大圆角（按钮可小圆角，其余 ≤4px）；**金色只留给金钱相关内容**，标题与提示用白 `#e8eefb` / 淡蓝灰 `#c3cee0`。对话框 = 黑色半透明扁平框。内容语义色（稀有度 `RARITY_COLORS`、灵脉维度色、敌人名红）不受此约束。
-- **公共"获得演出"三件套**：任何"到手一拍"都应走 `Stage.showcaseItem(payload)`（`skippable: true` + `onSkip/onDismiss` 表示可放弃）；无素材的 key 由组件程序化占位。新增获得路径不要绕过它自画 UI。
-- **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词（消耗/固有/短暂/锁定/缓启）走徽章与页脚词条行（`cardFace.js` 的 `drawFooter`），**不要在 `describe`/`battleDescribe` 里复述**（如「冷却8」「消耗。」）。咏唱卡的「咏唱N：」前缀由渲染层自动加（`chantPrefixedText`），**激活前后文案不变**。
-- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（含特征色 + tooltip 描述，名称可带尾缀数字参数），卡面 markup 用 `/named{术语}`；机制本体写进 def 字段/订阅，不要把长机制文本摊在卡面上。**词条双轨**（2026-09-18 定）：`describe` = 玩家版（短文案）；`agent` = headless/LLM 版（「幼稚园模式」程序化细则——触发时机/判定口径/不生效情形写全，防 agent 误读规则），headless 的 `terms` 视图读 agent 版（`listNamedTerms({ agent: true })`）；新词条两版都要写。
-- **卡间引用走 `/card{卡id, k=v, ...}`**：卡面文本提及另一张卡一律用 id 引用（改名不失配），hover 热区弹**整卡预览**；不要写「卡名」裸文本。
-- **任何文本都可能带 markup**：遗物/效果/卡牌描述里的 `/card{}` `/named{}` `/effect{}` 在**所有**渲染面（卡面、面板行、获得特写、状态栏、tooltip 正文）都要渲染成图标 + 特征色名称。做法是用 `textBakers.bakeAutoLine`（3D）/`RichTextInline`（DOM），**别自己写烘焙、别在文案里裸写卡名**；如果某个面印出了 `/xxx{`，就是那处没接 `richtext/appearance.js` 的解析器（详见 Stage 节「富文本」）。**引用的热区只保留在卡面上**，tooltip 正文里不做 hover（用户 2026-09-19 定）。
-- **卡牌威力提升（power）一律走 `cardKit.gainPower(sctx, card, n)`**，不要裸改 `card.power += n`：它还发 `presenter.cardPowerUp` → `ANIM_CARD_POWER_UP` 公共节拍——「这张牌状态变了」玩家要看得见。
-- **手牌弹簧弃管必须「离手即摘」**：卡离开手牌（展示毕待离场/弃/焚/迁移/视图销毁）时**立刻** `springs.release(id)`，绝不能等下一次重算兜底——空窗期里 idle 的卡会被弹簧从展示位拉回手牌锚点（「打出 → 飞回手牌 → 再飞牌库」病灶已多次回归）。
-- **焚卡演出必须覆盖非手牌来源（2026-09-28）**：牌库/卡组里的卡视图停在牌库堆锚点 `visible=false` 且**永不烘面**——对它直接 `_burnOut` 等于原地烧一张隐形空白卡（腐食甲虫啃牌库顶「吃卡没感觉」的病根）。链路：`presenter.cardBurnt` 代投影 `cardView`（同 cardAdded/cardShowcased），`BattleStage._departureBeat` 对「视图不可见 + 有 cardView」的焚卡先 `setCard` 烘面显形、飞中央展示位 (0,4,50) 320ms 落定再接 `_burnOut`；手牌卡维持原地烧。core 焚卡保持单节拍原子指令，不入 pending。
-- **单位行动姿态走 `_pose` 通道（2026-09-22）**：攻击突进（`_damageHit` 内编排：蓄势后拉→发力突进，锋尖抵近帧=受击演出起点；主角不摆——其反馈由卡牌演出承担）/ 防御蜷缩 / 增强拔起 / 削弱佝偻（`_poseBeat`，配 `UNIT_POSES` 表）。姿态字段（lean/squash/widen）在 `UnitObject.update` 与呼吸每帧合成，**别直接改 standee.scale**（会被呼吸覆盖）；节拍收尾经 onKill 归零硬化（同步假 tween 路径无 onUpdate）。效果姿态只在**获得/叠层**（`payload.delta > 0`）时摆——燃烧 tick 衰减等走旧通用脉冲。受击击退方向 = **远离伤害源**（旧版恒 +x 只对了敌方）；**盟友受击是生动版**：冲击击退 → 后撤小跳×2（y 弧线+步进递减+后仰渐回）→ 跳回槽位（同 `_damageHit` 击退分支）。**瑞米冲撞（2026-09-28 用户定，核心陪伴角色专属演出）**：它的补刀在 core 是附级（不吃加成/不触发受击响应），通用突进按 type 把它挡了——`_damageHit` 按 `src._defId === 'remi'` 特判放行并升级配方（补击退+暖白闪+保底震荡 1.2）：蹲伏蓄势 170ms → 全距离冲刺 200ms（低跳弧+前扑，留 4.2 身位）→ 撞击帧（撞扁）→ 高弧后弹 200ms + 低弧回家 240ms。跳弧基准 = `src.position.y`（slotTransform 的地板高，别裸写 0）。
-- **刀法牌 = `series: 'blade'`**（`cardKit.isBladeCard`：series 命中**或** keywords 含 blade）——碎铁/出鞘这类"斩的衍生与处理牌"也算刀法牌，吃养刀术/锻刀术/练刀/砺刀系效果；它们 keywords 不带 `blade`。
-- `.trae/rules/project_rules.md` 关于 `backendGameState/displayGameState`、`animationSequencer.js` 的描述是**旧架构**残留——以本文件与 README 为准。
+- **设计稿术语口径**：裸写「效果X N」= 赋予自己；「赋予效果X / 目标获得X」= 赋予卡牌目标。术语不理解务必查权威文档：效果规则查 `battle_gameplay/skills/EFFECTS.md`、机制词查 `core/skills/namedTerms.js` 与体系设计稿——**禁止凭语感臆测**；NAMED 已定义的语义必须照办。**查不到定义的术语 = 不实现**，向用户上报待定义。
+- **卡面手牌数口径**：卡面写「手牌 / N 张手牌」一律按**裸张数**（激活咏唱算 1 张），不加权；只有明写「手牌压力」「超载」「咏唱容量」（named 术语）才走加权口径；「抽满手牌」类属容量语义（`drawToHandLimit`）。
+- **卡牌设计元逻辑（设计第一标准）**：① 交互紧密（每张新卡至少改变两张以上既有卡的价值，孤卡即缺陷）；② 机制统一（体系内共用少量机制动词参数化组合，不跨体系照搬）；③ 描述简单可归纳；④ 设计稿用**陈述式**（只写当前设计，论证归 commit）。
+- **新卡数值意识**：先与同阶基础卡、同类功能卡逐项对标，落在既有包络内再写；**彻底 0 开销卡（0AP+0蓝+无冷却）默认冷却 1 起步**；条件加成卡 = 基础值对标白板、加成值才是体系溢价。
+- **卡面描述双轨**：`describe`（应用前，无战斗上下文）/ `battleDescribe`（结算中，数字按实时局面）。**battleDescribe 铁律**：战斗卡面**不许**用「计算结果摘要」顶替原始机制叙述——完整保留机制句式、数值换算成实时值、局面以括注补充；条件子句与比率规则一律不许从战斗面消失。自检：describe 每个子句与战斗文本逐条对照。
+- **UI 风格：方角 + 厚边框 + 黑白主题**（2026-10-11 用户定，定义文档 = `quest_prompts/UI_LANGUAGE.md`）：一切 UI 铬件 0 圆角 + 厚描边（3D ≈3 逻辑 px / DOM 2px）、配色无彩（黑底白/灰阶，hover 灰阶提亮；`richtext/buttonFace.js` THEMES 按钮唯一事实源——无渐变无自体发光）；**icon 类按钮无底无框**（纯带 alpha 图标）；**有素材的展示物直出素材**（遗物展示不画底片边框，无素材回落方角厚框占位）；**金色只留给金钱相关**；内容语义色不受此约束。
+- **公共获得演出三件套**：任何「到手一拍」走 `Stage.showcaseItem(payload)`（`skippable:true` + onSkip/onDismiss 可放弃）；无素材 key 程序化占位；新增获得路径不要绕过它自画 UI。
+- **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词走徽章与页脚词条行，**不复述**在 describe/battleDescribe；咏唱前缀由渲染层自动加。
+- **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（特征色 + tooltip），卡面 markup 用 `/named{术语}`；**词条双轨**：`describe` 玩家版 / `agent` headless-LLM 版（触发时机/判定口径/不生效情形写全），headless 的 `terms` 视图读 agent 版，新词条两版都要写。
+- **卡间引用走 `/card{卡id}`**：hover 热区弹整卡预览；不写卡名裸文本。
+- **任何文本都可能带 markup**：遗物/效果/卡牌描述里的 markup 在**所有**渲染面都要渲染成图标 + 特征色（用 `bakeAutoLine`/`RichTextInline`，别自己写烘焙）；哪面印出 `/xxx{` 就是那处没接解析器。
+- **卡牌威力提升一律走 `cardKit.gainPower(sctx, card, n)`**（发公共节拍），不裸改 `card.power`。
+- **手牌弹簧弃管「离手即摘」**：卡离开手牌立刻 `springs.release(id)`，绝不能等重算兜底（空窗期 idle 卡会被弹簧拉回手牌锚点——已多次回归）。
+- **焚卡演出必须覆盖非手牌来源**：牌库里的卡视图 `visible=false` 永不烘面——直接 `_burnOut` = 烧隐形空白。链路：`presenter.cardBurnt` 代投影 `cardView`，`BattleStage._departureBeat` 对不可见卡先 `setCard` 烘面显形、飞中央展示位落定再 `_burnOut`。core 焚卡保持单节拍原子。
+- **单位行动姿态走 `_pose` 通道**：姿态字段在 `UnitObject.update` 每帧合成，**别直接改 standee.scale**（被呼吸覆盖）；效果姿态只在获得/叠层时摆；受击击退方向 = 远离伤害源；瑞米补刀按 `src._defId === 'remi'` 特判升级配方。
+- **刀法牌 = `series: 'blade'` 或 keywords 含 blade**（`cardKit.isBladeCard`）；碎铁/出鞘等衍生处理牌也算。
+- `.trae/rules/project_rules.md` 是旧架构残留——以本文件与 README 为准。
 
 ## 权威设计文档
 
 - `README.md` — 场景层级总纲与数据系统说明。
-- `battle_gameplay/` — 战斗与 run 层设计总纲，存放核心的权威设计文档的目录：`battle.md`（战斗总则/结算时序公理/数值基准）、`RUN_DESIGN.md`（核心循环/养成/卡包/进阶/奖励房）、`REWARD.md`（卡包等阶分布/通用注入/训练抓牌的调参表）、`SLOT_MACHINE.md`（老虎机/银行/恶魔 roll）、`SHOP.md`（售货机/古尔帕斯之店）、`RELICS.md`（遗物个体设计）、`REMI.md`、`ENEMIES_1.md`/`ENEMY_GENERATION.md`（敌人）。
-- `battle_gameplay/skills/` — 各体系卡牌权威设计文档 + `EFFECTS.md` 权威效果目录；`SKILL_DESIGN_PRINCIPLES.md` 在 `src/core/skills/` 下。
-- `quest_prompts/` — 重构与实现设计文档（THREE_REFACTOR_PLAN / STAGE_DESIGN / SCENE_* / THREE_UI_MIGRATION 等）。
+- `battle_gameplay/` — 战斗与 run 层设计总纲：`battle.md`（战斗总则/结算时序/数值基准）、`RUN_DESIGN.md`、`REWARD.md`、`SLOT_MACHINE.md`、`SHOP.md`、`RELICS.md`、`REMI.md`、`ENEMIES_1/2.md`、`ENEMY_GENERATION.md`、`BOSSES_1/2/4.md`、`ENEMY_ART_LIST.md` 等。
+- `battle_gameplay/skills/` — 各体系卡牌设计稿 + `EFFECTS.md` 效果目录；`SKILL_DESIGN_PRINCIPLES.md` 在 `src/core/skills/` 下。
+- `quest_prompts/` — 重构与实现设计文档（WEBGPU_MIGRATION / PARTICLE_SYSTEM_V2 / **CARD_MODIFIERS** / THREE_REFACTOR_PLAN / STAGE_DESIGN / SCENE_* 等）。
 - `handoffs/` — 历史交接记录（含关键约定，注意核对时效）。
 
 ## 安全注意事项
 
-- `tools/seedream/` 是美术素材生成管线（火山引擎方舟 API）：`ARK_API_KEY` 经环境变量传入，**不要**把密钥写进代码或提交。
-- `tools/compress_art.py` 是美术压缩管线（PIL）：`src/assets` 下 PNG 原位转 WebP（立绘 q90 保 alpha、插画/背景 q85，删原件）；素材解析层按去扩展名查表，png/webp 混放透明切换——新素材丢进 assets 后跑一次即可。
+- 美术素材生成与压缩管线在 `tools/`（genEnemies/genCardArt 等与 `compress_art.py`）：API 密钥经环境变量传入，**不要**写进代码或提交；`compress_art.py` 把 `src/assets` 下 PNG 原位转 WebP（素材解析层按去扩展名查表，png/webp 混放透明切换）。
 - 存档存于浏览器 localStorage（`saves.js`），不涉及服务端凭据；仓库无后端、无数据库——引入新的网络请求或远程依赖须说明理由。

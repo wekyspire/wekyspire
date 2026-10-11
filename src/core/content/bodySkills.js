@@ -167,8 +167,9 @@ const transcendCard = ({ id, tier, ap, stall, promotesTo = null }) => registerSk
     addEffect(sctx, 'stall', stall);
     return true;
   },
-  describe: () => `获得${ap}/effect{行动点}，/effect{滞气}${stall}`,
-  battleDescribe: (sctx) => `获得${ap}/effect{行动点}，/effect{滞气}${stall}${sctx.player.getEffectStacks('stall') > 0 ? '（已滞气中）' : ''}`,
+  // 行动点是资源不是效果——卡面写纯文本（/effect{} 只留给效果注册表里的词条）
+  describe: () => `获得${ap}行动点，/effect{滞气}${stall}`,
+  battleDescribe: (sctx) => `获得${ap}行动点，/effect{滞气}${stall}${sctx.player.getEffectStacks('stall') > 0 ? '（已滞气中）' : ''}`,
 });
 transcendCard({ id: 'transcendC', tier: 'C', ap: 1, stall: 2, promotesTo: 'transcendB' });
 transcendCard({ id: 'transcendB', tier: 'B', ap: 2, stall: 2, promotesTo: 'transcendA' });

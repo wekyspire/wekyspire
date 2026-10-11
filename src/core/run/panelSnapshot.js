@@ -15,7 +15,7 @@
 
 import { getEnemyDefinition } from '../enemies/registry.js';
 import { getRelicDefinition } from '../relics/registry.js';
-import { getSkillDefinition } from '../skills/registry.js';
+import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { cardViewFromDef } from '../skills/cardView.js';
 import { isBossFloor, FLOORS_PER_CHAPTER } from './runFlow.js';
 import { PACKS } from './rewards.js';
@@ -358,7 +358,9 @@ export function deckViewEntries(run) {
   const p = run.player;
   return p.deck.map(rt => ({
     uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
-    view: cardViewFromDef(getSkillDefinition(rt.defId), { player: p }),
+    // def 未注册（如大改名前的旧档残留 id）退 null view → 画廊按 defId 占位烘焙，
+    // 不拦开界面（与 stagePickerKit 的兜底契约一致）
+    view: hasSkill(rt.defId) ? cardViewFromDef(getSkillDefinition(rt.defId), { player: p }) : null,
   }));
 }
 

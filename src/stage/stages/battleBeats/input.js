@@ -1,5 +1,6 @@
 // 指针输入域（BattleStage 原型混入，this = BattleStage 宿主）：
 import { setCardShiftDown } from '../../objects/CardObject.js';
+import { isDeckChipHit } from '../../objects/DeckChipObject.js';
 // hover/拖拽/瞄准/Shift 详情/滚轮 + 目标池与判定。App.vue 指针路由进 handlePointer*；
 // 输入态存宿主字段（_hoveredCardId/_dragging/_aiming/_shiftDown 等），与视图/同步域共享。
 
@@ -77,7 +78,7 @@ export const inputBeats = {
   },
   // 卡组 chip 的 hover 态（与按钮同律：模态/拖拽/瞄准期间喂 null 清空）
   _syncChipHover(hit) {
-    this._deckChip?.setHovered(hit?.kind === 'deckChip');
+    this._deckChip?.setHovered(isDeckChipHit(hit));
   },
   _setButtonHover(key, on) {
     if (!!this._btnHover[key] === on) return;
@@ -139,7 +140,7 @@ export const inputBeats = {
     this.uiScene.updateMatrixWorld(true);
     // 「卡组」chip：最高层常驻入口——先于一切模态分支（画廊/面板/选卡开着也能按；
     // 画廊开着时再点一次 = 关闭）。舞台直达路由，不经结算仲裁 → 演出/敌方回合照常可用。
-    if (this.picker.pick(x, y)?.kind === 'deckChip') {
+    if (isDeckChipHit(this.picker.pick(x, y))) {
       this._onIntent?.({ action: 'deckViewToggle' });
       return;
     }

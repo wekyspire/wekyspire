@@ -36,7 +36,7 @@ import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
 import { BubbleLayer } from '../objects/BubbleLayer.js';
 import { ZonePileObject } from '../objects/ZonePileObject.js';
-import { DeckChipObject, DECK_VIEW_Z } from '../objects/DeckChipObject.js';
+import { DeckChipObject, isDeckChipHit } from '../objects/DeckChipObject.js';
 import { CapacityBeadsObject } from '../objects/CapacityBeadsObject.js';
 import { CardGalleryObject } from '../objects/CardGalleryObject.js';
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
@@ -385,11 +385,11 @@ export class BattleStage {
       this.animator.register(`pile:${key}`, pile);
     }
 
-    // 「卡组」chip（build 画廊入口）：牌库堆图标上方。z=DECK_VIEW_Z.CHIP 压过一切模态层
-    // → 奖励面板/全屏选卡/画廊开着时也能按；点击走意图上行（deckViewToggle），
+    // 「卡组」chip（build 画廊入口）：顶栏右端槽位（摆位在 _topBar 创建后经
+    // attachDeckChip 下发）。z=DECK_VIEW_Z.CHIP 压过一切模态层 → 奖励面板/全屏选卡/
+    // 画廊开着时也能按；点击走意图上行（deckViewToggle），
     // 计数 = run 牌组总量（编排器 syncMapStatus 下发；战斗克隆多出的遗物卡不进 build 口径）。
     this._deckChip = new DeckChipObject();
-    this._deckChip.position.set(PILE_POSITIONS.deck.x, PILE_POSITIONS.deck.y + 15, DECK_VIEW_Z.CHIP);
     this.uiScene.add(this._deckChip);
     this.picker.addPickable('deckChip', this._deckChip, { kind: 'deckChip', space: 'ui' });
 
@@ -467,12 +467,17 @@ export class BattleStage {
     this.uiScene.add(this._statusBar);
     // 顶端居中资源行（金币数值 + 遗物槽；与地图层同物同位，runController 喂值）
     this._topBar = new TopResourceBarObject({ bakeLabel: this._bakeLabel, picker: this.picker });
+    this._topBar.attachDeckChip(this._deckChip);
     this.uiScene.add(this._topBar);
     this._resources = { ap: this._statusBar.apCoin, mana: this._statusBar.manaCrystal };
-    // 资源消耗汇聚特效（fx/gpu/resourceDrainFx.js；池缺位时 null，调用点静默跳过）
+    // 资源消耗汇聚特效（fx/gpu/resourceDrainFx.js；池缺位时 null，调用点静默跳过）。
+    // host = 光珠宿主：uiScene 挂面片 + 舞台寿命剧本口（节拍由光珠真到达驱动）
     this._drainFx = createResourceDrainFx(this.particles2Ui, {
       manaPos: () => this._resources.mana.getWorldPosition(new THREE.Vector3()),
       apPos: () => this._resources.ap.getWorldPosition(new THREE.Vector3()),
+    }, {
+      uiScene: this.uiScene,
+      runScript: (body) => this._fxRunScript(body),
     });
     this._applyAvatar(); // 立绘缓存可能已就绪（预取/上一场预热；未就绪则订阅回调 _applyUnitArt 补挂）
 

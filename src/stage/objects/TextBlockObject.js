@@ -16,7 +16,7 @@ export class TextBlockObject extends THREE.Mesh {
    *   bakeText: (text, {fontPx, tint, maxWidth}) => {texture,width,height}
    *   fontPx / tint: 缺省样式
    */
-  constructor({ bakeText = null, fontPx = 16, tint = '#cdd6f4' } = {}) {
+  constructor({ bakeText = null, fontPx = 16, tint = '#d4d4d4' } = {}) {
     super(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true }),

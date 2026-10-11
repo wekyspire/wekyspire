@@ -16,9 +16,13 @@ export const manaCast = {
     streams: 4, size: 4.2, projMs: 300, staggerMs: 65,
     pillar: false,
     fire: false,             // 火调行（重燃/余热/回响烈焰）：流股走 fireOrbShade 火面核
+    shape: 'orb',            // 能量形状（2026-10-09 通用资源获得语言）：'orb' 光珠（缺省，
+                             // AP 金珠/肾上腺素同款）；'crystal' 晶片（回蓝——魏启蓝异形粒）
   },
   build(p) {
     const prm = { ...this.defaults, ...p };
+    // 晶片自带 ~2.2:1 长宽比，外拉伸降档（orb 的 2.2 会拉成过长的针）
+    const stretch = prm.shape === 'crystal' ? 1.6 : 2.2;
     return async (ctx, deps, notify) => {
       const to = deps.playerAnchor?.();
       const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 230, scale: 1.35 });
@@ -56,7 +60,8 @@ export const manaCast = {
           await arcProjectile(c, deps, {
             from, to,
             color: prm.color, hot: prm.hot, size: prm.size, fire: prm.fire,
-            ms: prm.projMs, arcH: 3.2, stretch: 2.2, lampIntensity: 0,
+            shape: prm.shape,
+            ms: prm.projMs, arcH: 3.2, stretch, lampIntensity: 0,
             trail: { color: prm.core, count: 1, ttl: 0.3, speed: 3, size: 0.65 },
           });
         });

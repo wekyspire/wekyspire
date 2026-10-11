@@ -410,9 +410,9 @@ export function buildTowerClouds({
     uStepSize: uniform(params.stepSize),   // raymarch 步长（世界单位）
     uMaxSteps: uniform(params.steps),      // 步数上限（调参位）
     uHaze: uniform(params.haze),           // 距离雾化系数：远云融进天空（防 RT 结果与雾带脱节）
-    uSkyTop: uniform(new THREE.Color(0x7e93ad)),    // 与 towerWilderness SKY_TOP 同源（JS 侧覆盖）
-    uSkyBottom: uniform(new THREE.Color(0x59626a)), // 同 SKY_BOTTOM
-    uFogColor: uniform(new THREE.Color(0x59626a)),  // 场景雾色（towerWilderness 共享 FogExp2.color 实例）
+    uSkyTop: uniform(new THREE.Color(0x82909e)),    // 与 towerWilderness SKY_TOP 同源（JS 侧覆盖）
+    uSkyBottom: uniform(new THREE.Color(0x5c6169)), // 同 SKY_BOTTOM
+    uFogColor: uniform(new THREE.Color(0x5c6169)),  // 场景雾色（towerWilderness 共享 FogExp2.color 实例）
     uSunDir: uniform(sunDir.clone().normalize()),   // 月/日光方向（world，指向光源）
     uSunAmt: uniform(params.sun),          // 银边强度
     uRayA: uniform(new THREE.Vector3(0, 0, -1)),    // 四角世界射线（底左/底右/顶左/顶右）

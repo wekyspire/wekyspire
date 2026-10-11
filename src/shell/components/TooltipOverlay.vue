@@ -39,12 +39,12 @@ const s = tooltipState;
 <style scoped>
 .tooltip {
   position: fixed; z-index: 45; max-width: 260px;
-  background: rgba(8, 11, 18, .95); border: 1px solid #2f3a52; border-radius: 3px;
-  padding: 8px 12px; color: #dde; font-size: 13px; line-height: 1.5;
+  background: rgba(10, 10, 10, .95); border: 2px solid #555555; border-radius: 0;
+  padding: 8px 12px; color: #ddd; font-size: 13px; line-height: 1.5;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
   pointer-events: none;
 }
-.tooltip b { color: #eef4ff; }
+.tooltip b { color: #f5f5f5; }
 /* 正文允许 \n 分段（如遗物铭刻 flavor 接在效果描述后） */
 .tip-body { white-space: pre-line; }
 /* 整卡预览宿主：去 max-width 文本约束，卡宽固定 200（与 tooltip.js CARD_PREVIEW_SIZE 同步） */

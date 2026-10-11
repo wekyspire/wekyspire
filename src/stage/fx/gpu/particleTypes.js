@@ -11,7 +11,7 @@
 //     name, space: 'world' | 'ui', cap,
 //     kind: 'uber' | 'custom',
 //     spawn: { rate, ttl, ttlJit, vel, velJit, spread, gravity, drag, windK },
-//     destination: null | { domainMode, steerDelay, steerRamp, steerK, arriveR, curveK },
+//     destination: null | { domainMode, steerDelay, steerRamp, steerK, arriveR, curveK, arriveGain },
 //     endMode: 0 ttl | 1 arrive | 2 ttlOrArrive | 3 lingerAfterArrive,
 //     progressMode: 0 ageProgress | 1 distanceProgress,
 //     render: { size, sizeEndK, sizeMode, color, colorEnd, alpha, heat },
@@ -26,6 +26,8 @@
 //   steerK      汇聚速度（单位/秒）
 //   arriveR     到达半径（endMode 1/2 死、3 驻留的判定距离）
 //   curveK      侧向弯曲系数（初速垂直分量随汇聚进度衰减 → 弧线轨迹）
+//   arriveGain  近端收敛增益（目标速度 = min(steerK, dist×gain)；缺省 8——
+//               时间常数 ~0.13s，高速汇聚类按需抬高）
 // spawn.radial：径向爆散初速（随机方向匀速爆开；与 vel 锥形基准叠加）
 // 运行时锚点（出生锚/目的锚）不进类型行静态段——burst/持续发射调用时指定，
 // 出生帧盖进粒子 payload（多 burst 并发指向不同锚点互不惊扰）。

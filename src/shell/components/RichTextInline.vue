@@ -45,7 +45,7 @@ const segments = computed(() => inlineSegments(props.text));
   line-height: 13px;
   text-align: center;
   border: 1px solid currentColor;
-  border-radius: 2px;
+  border-radius: 0;
   opacity: .9;
 }
 </style>
