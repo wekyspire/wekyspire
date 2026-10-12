@@ -21,6 +21,7 @@ import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
 import SceneWipeOverlay from './overlay/SceneWipeOverlay.vue';
+import { createSceneWipe } from './overlay/sceneWipe.js';
 import DebugOverlay from './components/DebugOverlay.vue';
 import { debugUi, toggleDebugPanel } from './debugState.js';
 import { settings } from './settings.js';
@@ -80,12 +81,20 @@ function startAssetPreload() {
     if (!contentReady.value) loadContent().catch(() => {});
   };
   startCloudNoiseBake(); // 云噪声 3D 纹理烘焙与美术下载并行（分片让出主线程，不占加载门）
+  // UI 字体门（UI_LANGUAGE.md 字体章）：canvas 烘焙必须在 WenDaoChaoHei 就绪后发生——
+  // 字体未到就烘会把系统兜底字体烙进纹理（整场游戏不刷新）。失败不拦门（兜底字体可读）。
+  // 只载 Regular——文道潮黑只此一款字重，bold 会触发合成加粗把字挤成团（全线禁叠 bold）。
+  const fontReady = Promise.all([
+    document.fonts.load('16px "WenDaoChaoHei"', '魏启尖塔'),
+    document.fonts.load('16px "SourceHanTC"', '魏启尖塔'),
+  ]).catch(() => {});
   preloadAllArt({
     onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
     // stats 的计数字段叫 done——映射回 loaded（字节进度条的分母语义）
     onStats: (s) => window.__bootShell?.progress({ ...s, loaded: s.done }),
-  }).then((r) => {
+  }).then(async (r) => {
     if (r.failed > 0) { window.__bootShell?.failed(r.failed); return; }   // 卡住：只给重试
+    await fontReady;
     assetsReady.value = true;
   });
 }
@@ -126,6 +135,10 @@ function dismissMenuToast(id) {
   menuToasts.value = menuToasts.value.filter(t => t.id !== id);
 }
 
+// 菜单级切幕器：开始游戏/再来一局的「菜单 → 塔楼」转场由它走（游戏内转场仍走 ctrl.sceneWipe）
+const menuWipe = createSceneWipe();
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function newGame({ storyMode = false, loadSave = null, debugMode = false, route = 'body' } = {}) {
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
@@ -138,6 +151,8 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   mapStage.attachInput({ stageManager, bus: ctrl.value.animBus });
   detachTooltipForward = attachTooltipForwarding(ctrl.value.animBus);
   mapStage.setFloor(ctrl.value.run.floor, ctrl.value.run.totalFloors);
+  mapStage.setRoomTable(ctrl.value.run.roomTable);   // 房间表静态整局：建局推一次（标尺花纹/hover 房型）
+  mapStage.snapCameraToFloor();   // 读档起跑：相机直接锚到存档层（不播"从 1 层爬上来"的假爬升）
   stageManager.setStage(mapStage);
   phase.value = 'game';
   menuOpen.value = false;
@@ -148,8 +163,19 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   window.__shell = { ctrl, stageManager, newGame };
 }
 
-function onStart({ storyMode, loadSave, debugMode, route }) {
-  newGame({ storyMode, loadSave, debugMode, route });
+function onStart(opts = {}) {
+  // 切幕进入（用户 2026-10-09 定）：黑幕盖满后才换台建局，揭幕即塔楼——不再闪切。
+  // 菜单期没有 ctrl（其切幕层随 ctrl 渲染），故用 App 自持的 menuWipe 走完整段；
+  // 覆盖期间 host 吸收一切点击，开始键天然防连点。
+  menuWipe.begin();
+  wait(16)                       // 屏外落位一帧后再起过渡（同 cutscenePlayer 的 wipe 节拍）
+    .then(() => { menuWipe.toCover(); return wait(menuWipe.state.coverMs); })
+    .then(() => {
+      newGame(opts);             // 全黑中点：建局/摆层/换舞台
+      menuWipe.reveal();
+      return wait(menuWipe.state.revealMs + 80);
+    })
+    .then(() => menuWipe.end());
 }
 
 /** 调试面板的「重载局面/导入 JSON」：以给定快照重开一局（调试面板发起 → 恒为调试局）。 */
@@ -309,6 +335,7 @@ onBeforeUnmount(() => {
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
       @wheel="onWheel"
+      @contextmenu.prevent
     ></canvas>
     <!-- 加载门 = index.html 静态启动壳（assetsReady 时已揭幕退场）；
          菜单级：开始界面（含 changelog 弹层） -->
@@ -317,7 +344,7 @@ onBeforeUnmount(() => {
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
       <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
       <BattleHud v-if="stage === 'battle'" :ctrl="ctrl" />
-      <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="newGame" />
+      <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="onStart" />
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>
       <!-- 调试面板入口（仅调试模式）：F9 或点这里开合；面板 z 压过幕间层，卡住时也能用 -->
@@ -333,6 +360,8 @@ onBeforeUnmount(() => {
            一段 cutscene——所以它自占一层、盖在内容之上（切幕开始 → 目的地就位 → 切幕结束） -->
       <SceneWipeOverlay :wipe="ctrl.sceneWipe" />
     </template>
+    <!-- 菜单级切幕层：开始游戏/再来一局的进塔转场（与 ctrl.sceneWipe 永不同期激活） -->
+    <SceneWipeOverlay :wipe="menuWipe" />
     <!-- 菜单级全局 toast 提示（两 phase 均可用，无阻塞，3s 自然消亡 / × 手动关闭） -->
     <MenuPopup :toasts="menuToasts" @close="dismissMenuToast" />
     <!-- 菜单级全局模态弹窗（confirm / confirmCancel / input，语义见 menuDialog.js） -->
@@ -343,7 +372,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+:root {
+  /* 展示字族（标题/按钮/大数字）：与 stage/richtext/uiFont.js 的 UI_FONT 同源 */
+  --font-display: 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif;
+}
 html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+body {
+  /* 正文字族（与 uiFont.js 的 UI_FONT_BODY 同源） */
+  font-family: 'SourceHanTC', 'Microsoft YaHei', Arial, sans-serif;
+}
 #game-frame {
   /* transform 使本框成为内部 position:fixed 后代的包含块：全部 UI 锁定 16:9 编排 */
   position: absolute; background: #000;
@@ -353,9 +390,11 @@ html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
 .menu-fab {
   position: fixed; top: 14px; right: 14px; z-index: 25;
   padding: 5px 16px; font-size: 13px; cursor: pointer; border-radius: 0;
+  font-family: var(--font-display);
   background: rgba(20, 20, 20, .9); color: #f2f2f2; border: 2px solid #8a8a8a;
+  transition: filter .15s;
 }
-.menu-fab:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
+.menu-fab:hover { filter: brightness(.72); }
 /* 调试入口与「菜单」并排（menu-fab 是 right:14px，这里让到它左边） */
 .debug-fab { right: 84px; color: #ffd479; border-color: #8c7a3f; }
 .debug-fab:hover { border-color: #ffd479; }

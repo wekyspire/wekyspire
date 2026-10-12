@@ -215,6 +215,8 @@ export const syncBeats = {
   // burnt zone 不参与——焚毁节拍销毁视图/出册后不再重生（未来"焚毁区捞回"机制
   // 到来时由其专属节拍重建）。快照各 zone 与 held 都没有的注册卡 = 上游丢节拍的
   // 绊线（warn + 收尸），正常流程不应触达。
+  // zone 写入只有一扇门：model.setZone → card-zone 事件 → _cardZoneDoor 做视图
+  // 随动（spring 让位/摘拾取/入场弧标记）。节拍侧直写同样过这扇门。
   _syncCardZones(proj) {
     const lists = {
       hand: proj.hand.map(c => c.uniqueID),
@@ -224,18 +226,14 @@ export const syncBeats = {
     for (const [zone, ids] of Object.entries(lists)) {
       for (const id of ids) {
         present.add(id);
-        this._setCardZone(id, zone);
+        this._ensureView(id);
+        this.model.setZone(id, zone);
       }
     }
-    // 结算区（pending，发动中的卡）：模型标 'held'（展示位停留，不回手牌锚点）——
-    // 纯标签直写（同 _skillDisplay 的 held 分支），不走 _setCardZone 的隐形停车分支
+    // 结算区（pending，发动中的卡）：模型标 'held'（展示位停留，不回手牌锚点）
     for (const id of proj.pending ?? []) {
       present.add(id);
-      if (this.model.getZone(id) !== 'held') {
-        this.model.setZone(id, 'held');
-        this.springs.release(id); // 离手即摘弹簧目标：不被拉回手牌锚点
-        this.picker.removePickable(id);
-      }
+      this.model.setZone(id, 'held');
     }
     for (const id of this.model.cards.keys()) {
       if (present.has(id) || this.model.getZone(id) === 'held') continue;
@@ -244,26 +242,20 @@ export const syncBeats = {
       this.model.removeCard(id);
     }
   },
-  // zone 迁移：模型推进（状态权威）+ 视图随动。进牌库 = 隐形停车 +
-  // 摘除拾取；进手牌的显形与烘面在 _syncCardContents（惰性）。
-  _setCardZone(id, zone) {
-    // 'held'（展示毕待离场）是 hand 的显示位精化：sync 对账不得解除停留，
-    // 解除只属于离场节拍（届时写入真正的去向 zone）或咏唱回手节拍
-    // （ANIM_CHANT_TOGGLED——卡结算后回手牌，非离场）——否则折返跟踪复活
-    if (this.model.getZone(id) === 'held' && zone === 'hand') return;
-    const change = this.model.setZone(id, zone);
-    const view = this._ensureView(id);
-    if (!change) return;
-    if (zone !== 'hand') {
-      // 离手即摘弹簧目标（同 _skillDisplay 的 held 分支）：目标表只在 sync 节拍
-      // 重算，不即刻摘除的话空窗期 idle 卡会被拉回手牌锚点（回归病灶）
-      this.springs.release(id);
-      view.visible = false;
-      this.picker.removePickable(id);
-    } else if (change.from !== 'held') {
-      // 入场（牌库 → 手牌）：标记待飞——锚点在 _layoutAndTrack 算出后起飞
-      this._entering.add(id);
+  // zone 单门（card-zone 事件的视图随动）：所有 zone 迁移——sync 对账与节拍直写
+  // ——都经 model.setZone 触发此处，副作用只有一份。
+  //   → hand：deck 来源标记入场弧（锚点由其后的 _layoutAndTrack 算出再起飞）；
+  //     held 来源不发弧（弹簧从展示位收养滑回）。
+  //   → 非 hand：离手即摘弹簧目标 + 摘拾取。可见性归租借方（飞行 settle 停车/烘面
+  //     显形），此门不碰——离场飞行需要途中可见。
+  _cardZoneDoor(id, from, to) {
+    if (this._disposed) return;
+    if (to === 'hand') {
+      if (from === 'deck') this._entering.add(id);
+      return;
     }
+    this.springs.release(id);
+    this.picker.removePickable(id);
   },
   // 视图惰性建：停在牌库 pile 锚点（scale 0.5、隐形）——抽牌"从牌库长开飞入"
   // 的入场视觉由其后的跟踪补间天然给出；牌库中的卡永不烘面（省 canvas）。
@@ -313,9 +305,9 @@ export const syncBeats = {
           this._transformFx(id, card);
         } else {
           view.setCard(card);
-          // 威力提升 → 金色脉冲（non-blocking，不进动画队列）
+          // 威力提升 → 金色流扫脉冲（non-blocking，不进动画队列）
           if (entry.prevPower != null && (card.power ?? 0) > entry.prevPower) {
-            this._pulseCard(id, 0xffd34c);
+            this._pulseCard(id, 0xffd34c, { mode: 2, intensity: 1.15 });
           }
         }
       }

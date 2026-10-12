@@ -1,10 +1,16 @@
 // StageAnimator（§4.5）：旧 utils/animator.js 的 three 版重写。
-// 注册表 uniqueID → { object3D, state, currentTweens }，状态机契约保留：
-//   idle      待命，无动画，保持现有变换不变
-//   tracking  锚点跟踪：锚点（LayoutEngine）变化时平滑归位（如手牌）
-//   animating 执行指令动画中（打出/抽取/移动…）
-//   dragging  被玩家拖拽中（休整阶段换序等）
-// 无外部干预时状态只会自动回落 idle；进入其他状态必须显式调用。
+// 注册表 uniqueID → { object3D, state, currentTweens }。两态模型（2026-10-11 统一）：
+//   free（idle）    无租约——常驻驱动权归 HandSprings（朝 zone 静止位收敛）
+//   leased（animating | dragging）指令动画/玩家拖拽临时租借；租约结束
+//                    （onComplete 或被顶杀）自动回落 free，弹簧从当前姿态零速收养
+// zone 是所有权记录：卡「属于哪里」只看 DisplayModel 的 zone；animator 只回答
+// 「此刻谁在驾驶它」。手持卡的全部平滑归位由弹簧层承担（旧 tracking 归位补间
+// 与之职责重叠，已删）。
+//
+// 完成契约（杀不死）：gsap kill 不放 onComplete，而节拍的 finish / await 链挂在
+// onComplete 上——被顶杀的补间若吞掉回调，等待方挂死等保险丝。故 onInterrupt
+// 缺省取 onComplete（落地语义：被顶杀的动画就地硬化终态并回执）；需要区分
+// 「正常完成/被杀」的调用方显式传 onInterrupt。
 //
 // tween 工厂可注入（缺省 gsap timeline），node 单测用同步假 tween 验证状态机。
 // 完成回调链：BattleStage 在 animate() 的 onComplete 里回发 animation-instruction-finished。
@@ -13,13 +19,10 @@ import gsap from 'gsap';
 
 export const ANIMATOR_STATES = Object.freeze({
   IDLE: 'idle',
-  TRACKING: 'tracking',
   ANIMATING: 'animating',
   DRAGGING: 'dragging',
 });
 
-const TRACKING_DURATION_MS = 300;
-const TRACKING_EASE = 'power1.out';
 const DEFAULT_EASE = 'power2.out';
 
 // 默认 tween：一条 timeline 同步推 position/scale/rotation，返回可 kill 句柄
@@ -65,11 +68,9 @@ export function gsapTween(object3D, to, { durationMs, ease = DEFAULT_EASE, onCom
 export class StageAnimator {
   /**
    * @param {object} options
-   *   layoutEngine: LayoutEngine   tracking 状态的锚点来源
    *   tween: (object3D, to, opts) => { kill() }   缺省 gsap 实现
    */
-  constructor({ layoutEngine = null, tween = gsapTween } = {}) {
-    this._layout = layoutEngine;
+  constructor({ tween = gsapTween } = {}) {
     this._tween = tween;
     this._registry = new Map(); // id -> { object3D, state, tweens: [] }
   }
@@ -103,27 +104,11 @@ export class StageAnimator {
     entry.state = ANIMATOR_STATES.DRAGGING;
   }
 
-  /** 进入锚点跟踪，并立即向当前锚点归位一次。 */
-  enterTracking(id, { durationMs = TRACKING_DURATION_MS } = {}) {
-    const entry = this._registry.get(id);
-    if (!entry) return;
-    this._killTweens(id);
-    entry.state = ANIMATOR_STATES.TRACKING;
-    this._trackToAnchor(id, durationMs);
-  }
-
-  /** 布局变化后重放所有 tracking 元素的归位（由 BattleStage 在重排后调用）。 */
-  syncTracking({ durationMs = TRACKING_DURATION_MS } = {}) {
-    for (const [id, entry] of this._registry) {
-      if (entry.state === ANIMATOR_STATES.TRACKING) this._trackToAnchor(id, durationMs);
-    }
-  }
-
   /**
-   * 指令动画：推到指定变换。进入 animating，完成后自动回落 idle。
+   * 指令动画：推到指定变换。进入 animating（租约），完成后自动回落 idle。
    * @returns 完成回调在 opts.onComplete
-   * opts.onInterrupt：补间被**他杀**（同 id 新动画/状态切换/unregister）时触发——
-   *   gsap kill 不放 onComplete，等待方（fx 剧本协程）靠它收拍，不许挂死。
+   * opts.onInterrupt：补间被**他杀**（同 id 新动画/状态切换/unregister）时触发；
+   *   缺省取 onComplete（完成契约杀不死——见文件头）
    */
   animate(id, to, opts = {}) {
     const entry = this._registry.get(id);
@@ -135,7 +120,7 @@ export class StageAnimator {
     this._killTweens(id);
     entry.state = ANIMATOR_STATES.ANIMATING;
     const { onInterrupt = null, ...tweenOpts } = opts;
-    const record = { handle: null, onInterrupt, done: false };
+    const record = { handle: null, onInterrupt: onInterrupt ?? opts.onComplete ?? null, done: false };
     const handle = this._tween(entry.object3D, to, {
       ...tweenOpts,
       onComplete: () => {
@@ -151,19 +136,13 @@ export class StageAnimator {
     return handle;
   }
 
-  /** 指令动画：推到命名锚点 / 显式锚点。 */
-  animateToAnchor(id, anchor, opts = {}) {
-    const target = typeof anchor === 'string' ? this._layout?.getNamedAnchor(anchor) : anchor;
-    if (!target) return null;
-    return this.animate(id, target, opts);
-  }
-
   /**
    * 自定义演出动画：补间一个进度代理 t∈[0,1]，逐帧回调 onUpdate(t)——
-   * 曲线飞行/淡入淡出等自管轨迹的动画由此表达，同时保持状态机语义
-   * （ANIMATING 期间布局跟踪让位，完成后自动回落 idle，kill 走注册表）。
+   * 曲线飞行/淡入淡出等自管轨迹的动画由此表达，同时保持租约语义
+   * （ANIMATING 期间弹簧让位，完成后自动回落 idle，kill 走注册表）。
    * onUpdate 只在真 gsap 下逐帧触发；同步测试 tween 至少保证 onComplete
    * （调用方在 onComplete 里硬化终态，使无 onUpdate 的路径也能落位）。
+   * onInterrupt 缺省取 onComplete（完成契约杀不死——见文件头）。
    */
   animateCustom(id, { durationMs = 300, ease, delayMs = 0, onUpdate = null, onComplete = null, onInterrupt = null } = {}) {
     const entry = this._registry.get(id);
@@ -174,7 +153,7 @@ export class StageAnimator {
     this._killTweens(id);
     entry.state = ANIMATOR_STATES.ANIMATING;
     const proxy = { t: 0 };
-    const record = { handle: null, onInterrupt, done: false };
+    const record = { handle: null, onInterrupt: onInterrupt ?? onComplete, done: false };
     const handle = this._tween(proxy, { t: 1 }, {
       durationMs, ease, delayMs, onUpdate,
       onComplete: () => {
@@ -188,18 +167,6 @@ export class StageAnimator {
     record.handle = handle;
     if (!record.done) entry.tweens.push(record);
     return handle;
-  }
-
-  _trackToAnchor(id, durationMs) {
-    const entry = this._registry.get(id);
-    const anchor = this._layout?.getAnchor(id);
-    if (!entry || !anchor) return;
-    // 锚点是布局产物，带元数据（containerKey 等）——只取变换键喂给 tween，
-    // 不把整个对象透传（元数据键会被补间到物体上，gsap 报 Missing plugin）
-    const handle = this._tween(entry.object3D, {
-      x: anchor.x, y: anchor.y, z: anchor.z, scale: anchor.scale, rotation: anchor.rotation,
-    }, { durationMs, ease: TRACKING_EASE });
-    entry.tweens.push({ handle, onInterrupt: null, done: false });
   }
 
   // 他杀补间：kill 句柄后回发 onInterrupt——gsap kill 不放 onComplete，

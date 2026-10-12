@@ -25,6 +25,7 @@ import { subsystemLabel } from '../../core/skills/subsystems.js';
 import {
   TIER_COLORS, cardTheme, seriesGlyph, effectLook, namedLook, cardLook,
 } from './appearance.js';
+import { UI_FONT, UI_FONT_BODY } from './uiFont.js';
 
 // 牌面图标绘制器：effect 有 emoji 图标画 emoji（与效果行/tooltip 同一视觉语言），
 // 无图标或非 effect 回落通用徽章
@@ -32,7 +33,7 @@ function drawCardIcon(ctx, { iconType, name, x, y, size }) {
   if (iconType === 'effect') {
     const { icon } = effectLook(name);
     if (icon) {
-      ctx.font = `${Math.round(size * 0.85)}px sans-serif`;
+      ctx.font = `${Math.round(size * 0.85)}px ${UI_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(icon, x + size / 2, y + size / 2 + size * 0.05);
@@ -55,7 +56,7 @@ const TIER_FRAME = Object.freeze({
   Z: { width: 3.5, inner: false },
 });
 
-const BODY_FONT = { fontSize: 17, lineHeight: 23, iconSize: 18, iconGap: 2, color: '#dde1ec' };
+const BODY_FONT = { fontSize: 17, lineHeight: 23, iconSize: 18, iconGap: 2, color: '#f4f6fb' };
 const BODY_MAX_WIDTH = CARD_FACE_SIZE.width - 24;
 const BODY_TOP_PLAIN = 56;          // 无卡图时正文区顶
 const ART_RECT = { x: 12, y: 46, w: 176, h: 88 };
@@ -210,14 +211,21 @@ function drawFrame(ctx, card) {
   const frame = TIER_FRAME[tier] || TIER_FRAME.D;
   const theme = cardTheme(card);
 
-  // 底板：深色底混入灵脉主题色（固定浓度——品阶浓度差已随「主题只认灵脉」废除），
-  // 顶部提亮、底部压暗的纵向渐变
-  const themeT = 0.22;
+  // 等阶明度阶（2026-10-11 用户定 A 方案）：低阶边框压哑、高阶满色起箔——
+  // 稀有度靠整卡「亮度温度」余光可读，菱形徽章退为确认件。
+  const TIER_DIM = { D: 0.38, C: 0.24, B: 0.10, A: 0, S: 0 };
+  const TIER_WASH = { D: 0.03, C: 0.05, B: 0.07, A: 0.10, S: 0.13 };
+  const frameTheme = mixHex(theme, '#0c0e14', TIER_DIM[tier] ?? 0.24);
+
+  // 底板：深色底混入灵脉主题色（固定浓度——品阶浓度差已随「主题只认灵脉」废除）。
+  // 浓度压到 0.10：主题色相只作底味、不抬明度——浅主题（通用灰 #e8e6e0）混入过多
+  // 会把底板洗成中灰、白字对比度全丢（2026-10-11 用户验收）。边框/饰钉仍用全浓度主题色。
+  const themeT = 0.10;
   roundedRect(ctx, 1, 1, W - 2, H - 2, 10);
-  ctx.fillStyle = mixHex('#232634', theme, themeT);
+  ctx.fillStyle = mixHex('#1e2029', theme, themeT);
   ctx.fill();
   const wash = ctx.createLinearGradient(0, 0, 0, H);
-  wash.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+  wash.addColorStop(0, `rgba(255, 255, 255, ${TIER_WASH[tier] ?? 0.05})`);
   wash.addColorStop(0.42, 'rgba(0, 0, 0, 0)');
   wash.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
   ctx.fillStyle = wash;
@@ -228,30 +236,33 @@ function drawFrame(ctx, card) {
 
   // 正文区内衬
   roundedRect(ctx, 8, 50, W - 16, H - 92, 6);
-  ctx.fillStyle = mixHex('#1a1c26', theme, themeT * 0.5);
+  ctx.fillStyle = mixHex('#14151c', theme, themeT * 0.5);
   ctx.fill();
 
-  // 边框：灵脉主题色，粗细随等阶；B 及以上加细内描边，描边走主题色箔金渐变
-  // （色相属灵脉，等阶只体现在宽度与是否有内描边）
+  // 边框双色分工（2026-10-11 用户定 C 方案）：外框 = 灵脉主题色（体系色相，粗细随等阶、
+  // 明度随 TIER_DIM），内描边与四边饰钉 = 等阶色——等阶从一颗徽章扩成整圈副色，
+  // S 红与火红的撞衫从位置上解开（S=火系时外框红、内圈亮红箔依然分得开）。
   roundedRect(ctx, 1 + frame.width / 2, 1 + frame.width / 2, W - 2 - frame.width, H - 2 - frame.width, 9);
   ctx.lineWidth = frame.width;
-  ctx.strokeStyle = borderStyle(ctx, tier, theme, W, H);
+  ctx.strokeStyle = borderStyle(ctx, tier, frameTheme, W, H);
   ctx.stroke();
-  if (frame.inner) {
-    roundedRect(ctx, 4 + frame.width, 4 + frame.width, W - 8 - frame.width * 2, H - 8 - frame.width * 2, 7);
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-  }
+  // 内描边：全等阶都给，等阶色（B 以上的箔感由 borderStyle 转移到外框，内圈恒细恒亮）
+  roundedRect(ctx, 4 + frame.width, 4 + frame.width, W - 8 - frame.width * 2, H - 8 - frame.width * 2, 7);
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = tColor;
+  ctx.globalAlpha = 0.85;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
   // 最外圈发丝线（提亮轮廓，灵脉色）
   ctx.save();
   ctx.globalAlpha = 0.45;
   roundedRect(ctx, 0.5, 0.5, W - 1, H - 1, 10.5);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = theme;
+  ctx.strokeStyle = frameTheme;
   ctx.stroke();
   ctx.restore();
-  // 四边中点饰钉（灵脉色小菱形）
-  drawEdgeStuds(ctx, theme);
+  // 四边中点饰钉（等阶色小菱形）
+  drawEdgeStuds(ctx, tColor);
   // 特殊词条顶部彩条：居中、长 = 卡宽 1/4、每条厚随边框线、
   // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。多词条**从上往下堆叠全数显示**
   // （首条在框带内，后续依次下探；三词条 S 卡堆高 ~20px，仍在标题带之上）。画在饰钉
@@ -325,7 +336,7 @@ function drawTierBadge(ctx, cx, cy, tier, color) {
   ctx.lineWidth = 1.2;
   ctx.strokeStyle = '#10121a';
   ctx.stroke();
-  ctx.font = 'bold 12px sans-serif';
+  ctx.font = `12px ${UI_FONT}`;
   ctx.fillStyle = '#10121a';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -336,7 +347,7 @@ function drawTierBadge(ctx, cx, cy, tier, color) {
 function drawHeader(ctx, card, manaCrystal) {
   const theme = cardTheme(card);
   // 名称（左移让出等阶标记）
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = `22px ${UI_FONT}`;
   ctx.fillStyle = '#f2f4fa';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
@@ -344,7 +355,7 @@ function drawHeader(ctx, card, manaCrystal) {
   // 威力
   if (card.power) {
     const nameW = ctx.measureText(card.name ?? '').width;
-    ctx.font = '16px sans-serif';
+    ctx.font = `16px ${UI_FONT}`;
     ctx.fillStyle = '#e8a03c';
     ctx.fillText(`威${card.power > 0 ? '+' : ''}${card.power}`, 34 + nameW, 27);
   }
@@ -438,7 +449,7 @@ function drawCostBadge(ctx, cx, cy, value, kind, crystalImg) {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.stroke();
   }
-  ctx.font = 'bold 14px sans-serif';
+  ctx.font = `14px ${UI_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -500,7 +511,7 @@ function drawArtPlaceholder(ctx, card) {
   ctx.fill();
   ctx.save();
   ctx.globalAlpha = 0.5;
-  ctx.font = 'bold 46px sans-serif';
+  ctx.font = `46px ${UI_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = mixHex(theme, '#ffffff', 0.28);
@@ -539,7 +550,7 @@ function drawFooter(ctx, card) {
   if (card.charges && card.charges.cooldownTurns > 0) bits.push(`冷却${card.charges.cooldownTurns}`);
   else if (card.charges && card.charges.max !== Infinity && card.charges.max > 1) bits.push(`充能${card.charges.max}`);
   if (bits.length === 0) return [];
-  ctx.font = '13px sans-serif';
+  ctx.font = `13px ${UI_FONT_BODY}`;
   ctx.fillStyle = cardTheme(card);
   ctx.textBaseline = 'middle';
   const y = CARD_FACE_SIZE.height - 18;
@@ -578,7 +589,7 @@ function drawShiftBadge(ctx) {
   ctx.lineWidth = 1.4;
   ctx.strokeStyle = '#7ab8ff';
   ctx.stroke();
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = `16px ${UI_FONT}`;
   ctx.fillStyle = '#9ecdf7';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

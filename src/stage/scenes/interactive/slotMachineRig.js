@@ -15,17 +15,51 @@
 // 纯 Stage 层：不读 Core、不读 Bridge；输入只有「拉杆时给定的结果」（调用方从 Core 拿）。
 
 import * as THREE from 'three';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { Fn, uniform, uv, vec2, vec3, oneMinus, smoothstep, mix, sin } from 'three/tsl';
 import { P, familyMaterial } from '../kit/index.js';
 import { sharedPropArtCache } from '../../art/propArt.js';
+import { UI_FONT } from '../../richtext/uiFont.js';
 
 const Z = Math.PI * 2;
 const FLAP_DUR = 0.44;   // 翻牌一次（上叶折下 + 新叶落下）的时长（秒）
 
 // rig 内部临时量（避免逐帧分配）：只在同一次 update 内使用，不得跨调用持有
-const TMP_RED = new THREE.Color(P.potionRed);
-const TMP_WARM = new THREE.Color(0x3d2c10);   // 粉碎口 hover 的暗腔暖金（低强度，只透一层底光）
 const TMP_M4 = new THREE.Matrix4();
 const TMP_V3 = new THREE.Vector3();
+
+// ---- 粉碎口「口内炉火」（2026-10-12 用户定：可粉碎时口的闪烁要明显得多）----
+// 喉腔（box，有 uv）换 node 材质：进度满 = 口里一炉压着的火在喘——双频呼吸（主频
+// 慢喘 + 高频细颤）+ 热区随呼吸涨缩，橙金 HDR 峰值推过 bloom 阈值起晕；hover = 整口
+// 提亮 + 口缘金描边（非 ready 时也亮描边 = 「这口是活的」弱提示）；粉碎瞬间 = 冲白红。
+// 纪律：色全烘常量字面量（管线缓存坑）；smoothstep 一律正向（反边形式曾把碳化盖反）；
+// Fn 参数 4 支标量 uniform，rig 每帧推值。
+const mawGlow = Fn(([uTime, uReady, uHover, uFlash]) => {
+  const flick = sin(uTime.mul(4.6)).mul(0.5).add(0.5)                  // 主呼吸 0..1
+    .mul(sin(uTime.mul(11.3)).mul(0.3).add(0.7));                      // 高频细颤调制 0.7..1
+  const r = uv().sub(0.5).mul(vec2(1.6, 2.4)).length();                // 宽口椭圆半径
+  const heat = oneMinus(smoothstep(flick.mul(0.2).add(0.1), flick.mul(0.35).add(1.05), r))
+    .mul(uReady);
+  const core = mix(vec3(0.5, 0.07, 0.02), vec3(2.3, 0.75, 0.16), heat.mul(heat))
+    .mul(uReady.mul(flick.mul(0.5).add(0.75)).add(uHover.mul(2.6)));   // 炉心随呼吸、hover 整体提亮
+  const rim = smoothstep(0.42, 0.7, r).mul(oneMinus(smoothstep(0.78, 0.95, r)))
+    .mul(vec3(2.6, 1.9, 0.7))
+    .mul(uReady.mul(0.9).add(uHover.mul(1.2)).mul(flick.mul(0.3).add(0.7))); // 口缘描边（hover 恒亮一层）
+  return mix(vec3(0.016, 0.024, 0.055).add(core).add(rim), vec3(2.8, 0.6, 0.35), uFlash);
+});
+
+// 口外光晕（挂在拾取代理面片上，additive）：ready = 暖光随炉火同频呼吸、从口缘向四周
+// 软衰减（房间尺度可见的「这口在烧」）；hover = 提亮转亮金（未就绪也亮 = 可点暗示）；
+// 粉碎瞬间 = 红白爆闪。共享喉腔那四支 uniform（同一 rig 实例同拍呼吸）。
+const mawHalo = Fn(([uTime, uReady, uHover, uFlash]) => {
+  const flick = sin(uTime.mul(4.6)).mul(0.5).add(0.5)
+    .mul(sin(uTime.mul(11.3)).mul(0.3).add(0.7));
+  const r = uv().sub(0.5).mul(2.0).length();
+  const fall = oneMinus(smoothstep(0.1, 0.98, r));
+  const warm = mix(vec3(1.3, 0.35, 0.06), vec3(1.8, 1.15, 0.35), uHover);
+  const k = fall.mul(uReady.mul(flick.mul(0.55).add(0.45)).add(uHover.mul(0.5)));
+  return warm.mul(k).add(uFlash.mul(fall).mul(vec3(2.4, 0.5, 0.25)));
+});
 
 // 档位 → 灯效/抖动强度（细节是可调参数：先给一版手感，视觉门里再调）
 const TIER_FX = {
@@ -188,16 +222,31 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     counterTex.anisotropy = 4;
     counter.material = new THREE.MeshBasicMaterial({ map: counterTex });
   }
-  if (throat) throat.material = new THREE.MeshBasicMaterial({ color: P.night });
   if (jaw) jaw.material = new THREE.MeshBasicMaterial({ color: brighten(P.gold, 0.7) });
-  // 粉碎口拾取代理：隐形面板罩住整个投料口、凸出机身最前沿——金牙锯齿稀疏、暗腔凹陷，
-  // 直接拾取会被机身热区按角度截胡（同恶魔词条转轮代理的思路）。可见性 0 但 visible=true
-  // （Picker 会滤掉 invisible 对象）。
+  // 喉腔换「口内炉火」node 材质（uniform 句柄随本 rig 实例，update 每帧推值）
+  const uMawTime = uniform(0), uMawReady = uniform(0), uMawHover = uniform(0), uMawFlash = uniform(0);
+  if (throat) {
+    const mawMat = new MeshBasicNodeMaterial();
+    mawMat.colorNode = mawGlow(uMawTime, uMawReady, uMawHover, uMawFlash);
+    throat.material = mawMat;
+  }
+  // 粉碎口拾取代理 + 「口外光晕」宿主：面板罩住整个投料口、凸出机身最前沿——金牙锯齿
+  // 稀疏、暗腔凹陷，直接拾取会被机身热区按角度截胡（同恶魔词条转轮代理的思路）。
+  // 面片本身就是光晕（mawHalo additive 暖光）：全景机位下口的投影只有十来个像素，
+  // 口内炉火再旺也读不出——光晕把「这口在烧/可以点」的信号放大到房间尺度。
+  // visible=true（Picker 会滤掉 invisible 对象）；未就绪未悬停时输出纯黑 = 视觉隐身。
   let mawProxy = null;
   if (throat) {
     mawProxy = new THREE.Mesh(
-      new THREE.PlaneGeometry((crusher.mawW ?? 1.4) * 1.06, (crusher.mawH ?? 0.68) * 1.35),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      new THREE.PlaneGeometry((crusher.mawW ?? 1.4) * 1.5, (crusher.mawH ?? 0.68) * 2.4),
+      (() => {
+        const haloMat = new MeshBasicNodeMaterial();
+        haloMat.colorNode = mawHalo(uMawTime, uMawReady, uMawHover, uMawFlash);
+        haloMat.transparent = true;
+        haloMat.blending = THREE.AdditiveBlending;
+        haloMat.depthWrite = false;
+        return haloMat;
+      })(),
     );
     mawProxy.name = 'slotMawProxy';
     mawProxy.position.set(crusher.mawX ?? 0, crusher.mawY ?? 2.4, (crusher.mawZ ?? 1.3) + 0.22);
@@ -228,7 +277,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       ctx.translate(bx + w / 2, mid);
       ctx.scale(1, Math.max(0.002, scale));
       ctx.translate(-(bx + w / 2), -mid);
-      ctx.font = `bold ${size}px sans-serif`;
+      ctx.font = `${size}px ${UI_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
@@ -268,7 +317,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     ctx.fillStyle = '#090c12';
     ctx.fillRect(0, 0, W, H);
     const cw = 104; const chh = 118; const cy = (H - chh) / 2;
-    ctx.font = 'bold 46px sans-serif';
+    ctx.font = `46px ${UI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(180,192,220,0.42)';
@@ -361,6 +410,18 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     o.material.emissive = new THREE.Color(0x000000);
     leverParts.push({ mesh: o, base });
   });
+  // 拉杆拾取代理：细杆小球直接射线太难命中——罩一个隐形热区盒（挂在机身上不随拉下旋转，
+  // 热区只管静止态的"可点暗示"；opacity 0 而非 visible:false，Picker 滤 invisible）
+  let leverProxy = null;
+  if (lever) {
+    leverProxy = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 2.6, 1.0),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    leverProxy.position.copy(lever.position).add(new THREE.Vector3(0.3, 1.0, 0));
+    leverProxy.name = 'leverProxy';
+    body.add(leverProxy);
+  }
   let leverFlash = 0;
   const basePos = body.position.clone();   // 机器由 composeRoom 定位——抖动只能在基准位附近
   const baseScale = body.scale.x || 1;
@@ -390,6 +451,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crushFx: null,       // { t, seconds, flash }：粉碎演出
     mawHover: 0,         // 粉碎口 hover 高亮权重（0..1，向 mawHoverTarget 收敛）
     mawHoverTarget: 0,
+    leverHover: 0,       // 拉杆 hover 权重（0..1，向 leverHoverTarget 收敛）
+    leverHoverTarget: 0,
   };
 
   // ---- 彩灯：常态呼吸 + 灯效（InstancedMesh + instanceColor，逐实例写色）----
@@ -618,7 +681,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     // ---- 拉杆：快速拉下 → 缓慢弹起（弹性回位）；悬停/拉下时闪光提示 ----
     leverFlash = Math.max(0, leverFlash - dt * 2.2);
     if (lever) {
-      const wantFlash = st.pulling || st.hover > 0.5 ? 1 : 0;
+      st.leverHover += (st.leverHoverTarget - st.leverHover) * Math.min(1, dt * 9);
+      const wantFlash = st.pulling || st.hover > 0.5 || st.leverHover > 0.05 ? 1 : 0;
       leverFlash = Math.max(leverFlash, wantFlash * Math.min(1, dt * 6 + leverFlash));
       if (st.pulling) {
         st.leverAngle += (-1.05 - st.leverAngle) * Math.min(1, dt * 16);
@@ -630,6 +694,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         st.leverAngle = -1.05 * (1 - e) + overshoot * (1 - e);
       }
       lever.rotation.z = st.leverAngle
+        - 0.16 * st.leverHover   // hover 预示下压（可拉暗示；拉下态 st.pulling 的角度远压过它）
         + (st.spinEnergy > 0.001 ? Math.sin(st.t * 47) * 0.03 * st.spinEnergy : 0);  // 转轮带着拨杆共振
       // 闪光：朝冷白插值（拉下瞬间最亮）
       for (const lp of leverParts) {
@@ -691,26 +756,24 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       if (d.flip >= 1) d.flipping = false;
       redrawCounter();
     }
-    // ---- 粉碎口外观：进度满 → 金牙/面板脉动发亮；hover → 金牙/喉腔提亮（可点暗示）；
-    //      粉碎瞬间 → 口内闪红 ----
-    const readyK = st.devour?.ready && !st.crushFx ? 1 : 0;
+    // ---- 粉碎口外观：进度满 → 喉腔「口内炉火」呼吸 + 金牙/面板脉动发亮；hover →
+    //      整口提亮（可点暗示）；粉碎瞬间 → 口内冲白红。喉腔走 mawGlow shader
+    //      （uniform 每帧推值，ready 平滑爬升避免满格瞬间跳变）----
     st.mawHover += (st.mawHoverTarget - st.mawHover) * Math.min(1, dt * 10);
+    const readyK = st.devour?.ready && !st.crushFx ? 1 : 0;
+    uMawTime.value = st.t;
+    uMawReady.value += (readyK - uMawReady.value) * Math.min(1, dt * 3);
+    uMawHover.value = st.mawHover;
+    uMawFlash.value = st.crushFx?.flash ?? 0;
     if (jaw?.material) {
       const flash = st.crushFx?.flash ?? 0;
       // 闪白克制一点：咬合瞬间 ×3.4 已足够进 bloom 亮部通道，×7 会把上下牙糊成一坨白
-      const k = 0.7 + readyK * (1.5 + 1.1 * Math.sin(st.t * 5.2)) + st.mawHover * 1.6 + flash * 3.4;
+      const k = 0.7 + uMawReady.value * (1.6 + 1.35 * Math.sin(st.t * 5.2)) + st.mawHover * 2.4 + flash * 3.4;
       jaw.material.color.copy(brighten(P.gold, k));
-    }
-    if (throat?.material) {
-      const flash = Math.min(1, st.crushFx?.flash ?? 0);
-      // hover 暗腔透出一层暖金（读作"口里在发亮"），粉碎闪红叠加在其上
-      throat.material.color.copy(P.night)
-        .lerp(TMP_WARM, st.mawHover * 0.55)
-        .lerp(TMP_RED, flash);
     }
     if (counter?.material) {
       // 面板整体亮度乘子（贴图 × color）：满格时脉动——HDR 乘到 >1 才进 bloom 亮部通道
-      counter.material.color.setScalar(1 + readyK * (0.3 + 0.25 * Math.sin(st.t * 6.1)));
+      counter.material.color.setScalar(1 + uMawReady.value * (0.45 + 0.4 * Math.sin(st.t * 6.1)));
     }
     // ---- 粉碎演出推进：咬合（jaw 绕口心上下收放）+ 金币抛物 ----
     if (st.crushFx) {
@@ -724,7 +787,6 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       if (c.t >= c.seconds) {
         st.crushFx = null;
         if (jaw) jaw.scale.y = 1;
-        if (throat?.material) throat.material.color.copy(P.night);
       }
     }
     if (coinMesh?.visible) {
@@ -769,6 +831,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crusherTargets: () => [mawProxy ?? throat].filter(Boolean),
     /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */
     demonTargets: () => reels.filter(Boolean),
+    /** 拉杆热区（隐形代理盒）：点 = 拉杆一次（同面板「拉杆」按钮）。 */
+    leverTargets: () => [leverProxy].filter(Boolean),
+    /** 拉杆 hover 反馈（预示下压 + 提亮）；能否真拉由机器模块按快照门控后传入。 */
+    setLeverHover(on) { st.leverHoverTarget = on ? 1 : 0; },
     /** 热区 → 语义名（宿主派发意图用）：'crusher' = 投料口，'counter' = 计数器。 */
     pickNameOf: (obj) => {
       if (obj === mawProxy || obj === throat || obj === jaw) return 'crusher';

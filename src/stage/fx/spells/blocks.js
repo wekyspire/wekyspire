@@ -69,7 +69,8 @@ export async function cardFlare(ctx, deps, {
   const view = deps.cardView;
   if (!view?.fx?.pulse) return;
   // 闪烁时长砍半（2026-10-09 用户定）：ms 仍是模板档位语义，实际 pulse = ms×0.5
-  view.fx.pulse({ color, durationMs: ms * 0.5, scale });
+  // intensity 1.2：施术起手的环锋乘算过 bloom 阈（辉光一吻），区别于冷却 tick 的阈下指示
+  view.fx.pulse({ color, durationMs: ms * 0.5, scale, intensity: 1.2 });
   await ctx.wait(Math.max(40, Math.round(ms * 0.25)));   // 亮起来就够——不等收尾
 }
 

@@ -1,6 +1,6 @@
 <template>
-  <div class="start-screen">
-    
+  <div class="start-screen" :style="{ '--grit': `url(${GRIT_URL})` }">
+
     <!-- 背景常驻同一元素：模式切换只换 class（blur 渐清 + zoom 渐近，暗示距离上靠近），
     transition 被打断时也能平滑续接，支持快速反复切换 -->
     <div class="bg" :class="{ story: isStory }" :style="{ backgroundImage: `url(${startBg})` }"></div>
@@ -59,6 +59,8 @@
 <script setup>
 import { ref, computed, watch, inject, onMounted, onBeforeUnmount } from 'vue';
 import ChangeLog from './ChangeLog.vue';
+// 粗粝纹理（public/ui/grit256.png）：经 --grit CSS 变量喂给按钮填充，base 安全
+const GRIT_URL = `${import.meta.env.BASE_URL}ui/grit256.png`;
 import { settings, persistSettings, setDebugMode } from '../settings';
 import { showMenuDialog } from '../menuDialog';
 import { readSave } from '../saves';
@@ -111,14 +113,14 @@ const isDebug = computed(() => settings.debugMode === true);
 const save = computed(() => (isStory.value ? props.saves.story
   : (isDebug.value ? debugSave.value : props.saves.infinite)));
 // Story mode不能选择重新开始游戏，进入尖塔即为开始游戏
-const canContinue = computed(() => !!save.value && !isStory); // readSave 版本不符已归 null，此处只判有无
+const canContinue = computed(() => !!save.value && !isStory.value); // readSave 版本不符已归 null，此处只判有无
 const saveText = computed(() => {
   const s = save.value;
   if (!s || !canContinue.value) return '';
   const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
   const suffix = s.gameStage === 'end' ? '（已通关）' : '';
-  const tag = s.debugMode ? '调试局 · ' : '';
-  return `存档：${tag}第 ${s.floor}/${s.totalFloors} 层${suffix}${when ? ' · ' + when : ''}`;
+  const tag = s.debugMode ? '调试局 ' : '';
+  return `存档：${tag}第 ${s.floor}/${s.totalFloors} 层${suffix}${when ? ' ' + when : ''}`;
 });
 // 存档块 key 含模式：切模式时与标题/主按钮同一节奏切入切出，而非原地不动
 const saveKey = computed(() => {
@@ -223,48 +225,59 @@ onBeforeUnmount(() => {
 }
 /* 定高槽位：内容在槽内垂直居中，两模式切换/存档有无均不改变槽高 */
 .slot { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.title-slot { height: 78px; }
+/* 标题槽带招牌斜切（挂容器不挂 h1：避免与 swing-fade 的 transform 互盖） */
+.title-slot { height: 78px; transform: skewX(-8deg); }
 .btn-slot { height: 50px; }
 .save-slot { height: 88px; }
 .save-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .save-title { font-size: 12px; letter-spacing: 3px; color: #8a8a8a; }
 .save-empty { font-size: 13px; color: #6a6a6a; padding: 4px 0; }
-/* 标题：白字（不再金色发光大字——用户定 的扁平风格） */
+/* 标题：白字扁平（无发光无投影），字族走标题黑体 */
 .title {
-  margin: 0; font-size: 54px; letter-spacing: 8px; color: #f5f5f5;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, .55);
+  margin: 0; font-size: 54px; letter-spacing: 8px; color: #f2f2f2;
+  font-family: var(--font-display);
+  font-weight: unset;
 }
 .subtitle { font-size: 24px; letter-spacing: 4px; color: #ff7b23; vertical-align: super; }
-.dev-banner { font-size: 22px; font-weight: bold; color: #ff6b63; letter-spacing: 4px; }
+.dev-banner { font-size: 22px; color: #ff6b63; letter-spacing: 4px; font-family: var(--font-display); }
 
+/* 按钮通用：标题字族 + 相对定位（承载粗粝纹理叠层）；hover 一律压暗（UI 语言） */
+.main-btn-story, .main-btn-rogue, .continue-btn, .route-chip {
+  position: relative; overflow: hidden;
+  font-family: var(--font-display);
+  transition: filter .15s, border-color .15s, color .15s;
+}
+.main-btn-story::after, .main-btn-rogue::after, .continue-btn::after, .route-chip::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--grit); background-size: 256px 256px;
+  opacity: .13; mix-blend-mode: screen;
+}
+.main-btn-story:hover, .main-btn-rogue:hover, .continue-btn:hover, .route-chip:hover {
+  filter: brightness(.72);
+}
+
+/* 故事主按钮 = 特别按钮橙色强调（UI 语言白名单） */
 .main-btn-story {
-  font-family: inherit; font-size: 18px; color: #f2f2f2; cursor: pointer;
+  font-size: 18px; color: #f2f2f2; cursor: pointer;
   padding: 10px 44px; border-radius: 0;
   background: rgba(212, 60, 0, 0.92); border: 2px solid #da7e5a;
-  transition: background .15s, border-color .15s, transform .15s;
 }
 
-.main-btn-story:hover, .continue-btn:hover { background: rgba(252, 135, 25, 0.95); }
-
-/* 主按钮：白字 + 淡蓝描边 + 深底（扁平，无渐变发光） */
+/* 主按钮：近黑底 + 白字 + 灰阶厚描边 */
 .main-btn-rogue, .continue-btn {
-  font-family: inherit; font-size: 18px; color: #f2f2f2; cursor: pointer;
+  font-size: 18px; color: #f2f2f2; cursor: pointer;
   padding: 10px 44px; border-radius: 0;
   background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a;
-  transition: background .15s, border-color .15s, transform .15s;
 }
 
-.main-btn-rogue:hover, .continue-btn:hover { background: rgba(66, 66, 66, .95); border-color: #e0e0e0; }
-/* 开局路线（D2）：小芯片一排，扁平深底白字；选中吃体系色描边 */
+/* 开局路线（D2）：小芯片一排，深底白字；选中吃体系色描边（语义色白名单） */
 .route-row { display: flex; gap: 10px; }
 .route-chip {
-  font-family: inherit; font-size: 14px; color: #c2c2c2; cursor: pointer;
+  font-size: 14px; color: #c2c2c2; cursor: pointer;
   padding: 6px 18px; border-radius: 0;
   background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a;
-  transition: background .15s, border-color .15s, color .15s;
 }
-.route-chip:hover { background: rgba(66, 66, 66, .95); }
-.route-chip.on { background: rgba(42, 42, 42, .95); }
+.route-chip.on { background: rgba(10, 10, 10, .95); }
 .route-blurb { font-size: 12px; color: #a0a0a0; min-height: 16px; }
 .continue-btn { font-size: 14px; padding: 7px 30px; }
 .save-info { font-size: 12px; color: #a0a0a0; margin-top: 4px; }

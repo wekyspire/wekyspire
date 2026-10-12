@@ -6,6 +6,12 @@ const _v3 = new THREE.Vector3();   // 装卸区坐标换算的复用向量（免
 import { PlayerStatusObject, PLAYER_STATUS_POS } from '../objects/PlayerStatusObject.js';
 import { DeckChipObject, isDeckChipHit } from '../objects/DeckChipObject.js';
 import { TopResourceBarObject } from '../objects/TopResourceBarObject.js';
+import { RelicSlotMeterObject } from '../objects/RelicSlotMeterObject.js';
+import { TowerRulerObject } from '../objects/TowerRulerObject.js';
+import { EnemyPreviewObject } from '../objects/EnemyPreviewObject.js';
+import { FloorChromeObject } from '../objects/FloorChromeObject.js';
+import { createParticlePool } from '../fx/gpu/particlePool.js';
+import { ZoneFrameObject } from '../objects/ZoneFrameObject.js';
 import { UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { PanelObject, PANEL_ABOVE_Z } from '../objects/PanelObject.js';
 import { SlotRollObject } from '../objects/SlotRollObject.js';
@@ -22,6 +28,7 @@ import { sharedTowerArtCache } from '../art/towerArt.js';
 import { buildTowerWilderness, towerFacingY, towerCameraPose, towerStormLevel, TOWER_X, TOWER_Z, TOWER_BASE_Y } from '../scenes/towerWilderness.js';
 import { Cast } from '../fx/cast.js';
 import { runScript } from '../fx/script.js';
+import { EventNames } from '../../bridge/events.js';
 
 // 快照 kind → builder/形态 的共享表在 panels/index.js（战斗层战后奖励面板共用同一份）
 
@@ -149,12 +156,50 @@ export class MapStage {
     this._deckChip = new DeckChipObject();
     this._topBar.attachDeckChip(this._deckChip);
     this.uiScene.add(this._deckChip);
+    // ---- 战前准备阶段 chrome（仅 prep 可见；详见 _syncPrepChrome）----
+    // 槽位条：顶部资源行右随从头（粗粝加载条风味）；刻度尺：塔左缘本章楼层条（逐帧锚定）。
+    this._slotMeter = new RelicSlotMeterObject({ bakeText: null });
+    this._slotMeter.visible = false;
+    this.uiScene.add(this._slotMeter);
+    this._ruler = new TowerRulerObject();
+    this.uiScene.add(this._ruler);
+    // 常驻逐层楼层牌（世界 billboard，塔左缘悬空）：塔钉→短横→悬空层号；敌人预告挂当前层牌。
+    // 显隐/缩放由「取景高度离各层锚点几个层距」帧驱动（靠近淡入微放大、远去淡出微缩小），
+    // 未登陆层压 0——爬升/跨层跳转不需要任何排期动画。
+    this._floorChrome = new FloorChromeObject({ unitArt: this._unitArt });
+    this.scene.add(this._floorChrome);
+    this._floorChrome.configure({
+      gap: FLOOR_GAP,
+      baseY: TOWER_BASE_Y,
+      anchorFor: (f) => {
+        const halfW = (FLOOR_GAP * MODULE_ASPECT) / 2;
+        this._tower.updateWorldMatrix(true, false);
+        // 左探 1.8wu：让开本章刻度尺竖带（右缘 0.7wu + 最长刻度 ~9.2wu，UI 口径 ≈ 71px
+        // ≈ 世界 1.16wu）+ 钉半宽与余隙——两件都锚塔左缘，不挪就重叠
+        _v3.set(-halfW - 1.8, (f - 0.5) * FLOOR_GAP, 0.9);
+        this._tower.localToWorld(_v3);
+        return { x: _v3.x, y: _v3.y, z: _v3.z };
+      },
+    });
+    this._enemyPreview = this._floorChrome.preview;   // 拾取/hover 的引用口（归 chrome 所有）
+    // 顶栏遗物交互态（prep 限定）：按下候选 → 点击=用/卸 / 超阈值拖拽=拖回背包卸下
+    this._topBarPress = null;
+    this._topBarDrag = null;
+    this._topBarHoverIdx = -1;   // 顶栏遗物 hover 抬升（-1 = 无）
+    // 拖放/装卸的区域高亮框（src=出处淡蓝灰 / dst=落点亮白，落定 flash）与在途飞行 icon
+    this._frameSrc = new ZoneFrameObject();
+    this._frameDst = new ZoneFrameObject();
+    this.uiScene.add(this._frameSrc, this._frameDst);
+    this._relicFlights = new Set();
     this._sm = null;         // StageManager（attachInput 注入：世界→UI 空间换算用）
     // fx 门面地基（Phase 4）：塔楼目前无可寻址道具，cast 留空表——
     // cutscene 'fx' step 在塔楼层只应做运镜/等待类演出（camera 可用）
     this._cast = new Cast();
     this._fxScripts = new Set(); // 在途剧本协程（dispose 统一 kill）
     this._fxDisposeHooks = new Set(); // 舞台寿命钩子（剧本常驻效果收尾，dispose 统一回调）
+    // 世界 GPU 粒子池（楼层通过演出的灰；与 BattleStage 同例懒建于 onEnter——
+    // 构造时还没拿到 stageManager._renderer）。非 WebGPU 后端恒 null，演出静默降级
+    this._fxPool = null;
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
     this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
@@ -194,6 +239,7 @@ export class MapStage {
     this._snap = snap;
     this._renderPanel();
     this._syncCardArtSub();
+    this._syncPrepChrome();
   }
 
   /** 用当前快照 + 面板本地态重绘（setPanel 与本地交互共用同一入口）。 */
@@ -228,7 +274,212 @@ export class MapStage {
         const w = sm.screenToWorld(sx, sy, gz, sm.uiCamera);   // 返回普通 {x,y}
         return lo.worldToLocal(new THREE.Vector3(w.x, w.y, gz));
       },
+      // 装备落点 = 顶栏窄条背板矩形（实时换算进装卸区局部坐标；窄条随内容变宽，每拍重取）
+      getDropRectLocal: () => {
+        const lo = this._loadout;
+        if (!lo) return null;
+        const r = this._topBar.stripWorldRect();
+        lo.updateWorldMatrix(true, false);
+        const a = lo.worldToLocal(new THREE.Vector3(r.x0, r.y0, 0));
+        const b = lo.worldToLocal(new THREE.Vector3(r.x1, r.y1, 0));
+        return {
+          x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x),
+          y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y),
+        };
+      },
+      // 装备演出钩子：背囊 icon 飞向顶栏槽位 + 顶栏落点框落定闪（意图照旧先行）
+      onEquipFx: (info) => this._onRelicEquipFx(info),
+      // 拖向顶栏期间：落点框挂窄条（over 呼吸 / 放不下染红；null = 收起）
+      setDropFrame: (st) => this._setDropFrameFx(st),
     });
+  }
+
+  /** 战前准备 chrome 同步：槽位条/敌人预告（含引出线）只在 prep 阶段可见并吃快照；其余阶段隐藏。 */
+  _syncPrepChrome() {
+    const snap = this._snap;
+    const prep = snap?.kind === 'prep';
+    this._slotMeter.visible = !!prep;
+    this._floorChrome.setPrepVisible(!!prep);
+    if (prep) {
+      this._slotMeter.setSlots(snap.relicSlots?.used ?? 0, snap.relicSlots?.total ?? 1);
+      this._floorChrome.setEncounter(snap.encounter ?? [], { boss: !!snap.atBossFloor, floor: snap.floor });
+    }
+  }
+
+  // ---- 遗物装卸演出（prep 限定）----
+  // ghost 飞行：顶栏槽位 ↔ 背囊区双向（点击/拖放共用）。意图上行不等飞行落定——
+  // 快照重建与飞行 ghost 互不依赖（ghost 共享槽位纹理，只弃材质不碰纹理）。
+
+  /** 遗物 icon 飞行（弧线 + 缩小 + 微倾）。ghost 复用传入件（拖拽落点）或新建（点击路径）。 */
+  _flyRelicGhost({ ghost = null, map = null, color = 0x1c1c1c, size = 4.0, from = null, to = null, dur = 0.3, arc = 0.8, onDone = null }) {
+    let g = ghost;
+    if (!g) {
+      if (!from) return null;
+      g = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size),
+        new THREE.MeshBasicMaterial({ transparent: true, fog: false, depthTest: false }),
+      );
+      if (map) g.material.map = map; else g.material.color.set(color);
+      g.position.set(from.x, from.y, 60);
+      g.scale.setScalar(0.85);
+      this.uiScene.add(g);
+      gsap.to(g.scale, { x: 1, y: 1, duration: 0.14, ease: 'back.out(2.5)' });
+    }
+    this._relicFlights.add(g);
+    if (!to) {   // 无落点（面板未开等）：原地淡出
+      g.userData.tw = gsap.to(g.material, {
+        opacity: 0, duration: 0.2,
+        onComplete: () => this._disposeRelicGhost(g, onDone),
+      });
+      return g;
+    }
+    const sx = g.position.x, sy = g.position.y;
+    const t = { k: 0 };
+    g.userData.tw = gsap.to(t, {
+      k: 1, duration: dur, ease: 'power1.inOut',
+      onUpdate: () => {
+        g.position.x = sx + (to.x - sx) * t.k;
+        g.position.y = sy + (to.y - sy) * t.k + Math.sin(t.k * Math.PI) * arc;
+        g.scale.setScalar(1 - t.k * 0.4);
+        g.rotation.z = (t.k - 0.5) * 0.3;
+      },
+      onComplete: () => this._disposeRelicGhost(g, onDone),
+    });
+    return g;
+  }
+
+  _disposeRelicGhost(g, onDone) {
+    this._relicFlights.delete(g);
+    this.uiScene.remove(g);
+    g.geometry.dispose();
+    g.material.dispose();   // map 归槽位/图标缓存共享，只弃材质
+    onDone?.();
+  }
+
+  /** 顶栏遗物行的下一个槽位中心（装备飞行落点 = 新槽将出现的位置）。 */
+  _topBarNextSlotPos() {
+    const row = this._topBar.relicRow.children;
+    if (row.length) {
+      const p = row[row.length - 1].getWorldPosition(new THREE.Vector3());
+      return { x: p.x + 4.9, y: p.y };   // SLOT 4.0 + GAP 0.9（顶栏布局常量）
+    }
+    const r = this._topBar.stripWorldRect();
+    return { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 };
+  }
+
+  /** 背囊点击/拖拽装备：icon 从面板飞顶栏 + 窄条落点框落定闪。
+   *  拖拽落定的 ghost 由调用方移交（ghost 参数）：换父到 uiScene 后接力飞行，
+   *  不原地弃置+新建（原地重生会多一次「诞生弹跳」，读感像多出一个粒子）。 */
+  _onRelicEquipFx({ relic, fromLocal, size, map, ghost = null }) {
+    const lo = this._loadout;
+    if (!lo) return;
+    const from = lo.localToWorld(new THREE.Vector3(fromLocal.x, fromLocal.y, fromLocal.z ?? 1));
+    if (ghost) {
+      ghost.removeFromParent();
+      ghost.position.set(from.x, from.y, 60);
+      this.uiScene.add(ghost);
+    }
+    this._flyRelicGhost({ ghost, map, size: size ?? 4.0, from, to: this._topBarNextSlotPos(), dur: 0.34, arc: 0.9 });
+    const strip = this._topBar.stripWorldRect();
+    this._frameDst.setRect(strip);
+    this._frameDst.show({});
+    this._frameDst.flashThenHide(0.42);
+  }
+
+  /** 背囊拖向顶栏期间的落点框状态（null 收起；over 呼吸；放不下染红）。 */
+  _setDropFrameFx(st) {
+    if (!st) { this._frameDst.setActive(false); this._frameDst.hide(); return; }
+    this._bus?.emit(EventNames.TOOLTIP_HIDE, {});   // 拖拽中悬停 tooltip 让位（幂等）
+    // 无条件重摆：框可能还带着上一条链的落点矩形（快速连拖时旧框未隐完）
+    this._frameDst.setRect(this._topBar.stripWorldRect());
+    if (!this._frameDst.visible) {
+      this._frameDst.show({ color: st.valid ? 0xcfe0f4 : 0xe85a5a });
+    } else {
+      this._frameDst.setColor(st.valid ? 0xcfe0f4 : 0xe85a5a);
+    }
+    this._frameDst.setActive(st.over);
+  }
+
+  /** 顶栏遗物 hover 抬升（按压件让位按下回缩）。 */
+  _setTopBarHover(idx) {
+    if (idx === this._topBarHoverIdx) return;
+    const prev = this._topBarHoverIdx;
+    this._topBarHoverIdx = idx;
+    const setScale = (i, v) => {
+      if (i < 0 || i === this._topBarPress?.index) return;
+      const slot = this._topBar.relicRow.children[i];
+      if (slot) gsap.to(slot.scale, { x: v, y: v, duration: 0.16, ease: 'power2.out', overwrite: 'auto' });
+    };
+    setScale(prev, 1);
+    setScale(idx, 1.08);
+  }
+
+  // ---- 顶栏遗物拖拽卸下（prep 限定；卸下方向的另一半在 RelicLoadoutObject）----
+  // 按下候选超 6px 阈值 → 起拖（ghost 直挂 uiScene）；拖动中悬停背囊区 → 背囊区亮边；
+  // 松手在背囊区上 → 上行 unequip，否则 ghost 丢弃（顶栏槽位签名驱动重建，无需弹回）。
+
+  _topBarPointerMove(x, y) {
+    const press = this._topBarPress;
+    if (!this._topBarDrag) {
+      if (!press || Math.hypot(x - press.x, y - press.y) < 6) return;
+      const slot = this._topBar.relicRow.children[press.index];
+      const srcMat = slot?.userData?.tileMap;
+      if (!srcMat) { this._topBarPress = null; return; }
+      const ghost = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.6, 4.6),
+        new THREE.MeshBasicMaterial({ map: srcMat.map ?? null, transparent: true, opacity: 0.92 }),
+      );
+      if (!srcMat.map) ghost.material.color.set(0x1c1c1c);
+      ghost.position.z = 60;   // 压过面板/窄条的一切
+      this.uiScene.add(ghost);
+      const sp = slot.getWorldPosition(new THREE.Vector3());
+      this._topBarDrag = { relicId: press.relicId, index: press.index, ghost, from: { x: sp.x, y: sp.y } };
+      this._bus?.emit(EventNames.TOOLTIP_HIDE, {});   // 拖拽中悬停 tooltip 让位（盖住 ghost/框）
+      srcMat.opacity = 0.35;   // 原位退亮（弹回语义由签名重建承担，这里只表达"离位"）
+      this._topBarDrag.slotMat = srcMat;
+      // 槽位回缩归位（按下回缩让位给拖拽 ghost）
+      gsap.to(slot.scale, { x: 1, y: 1, duration: 0.14, ease: 'power2.out', overwrite: 'auto' });
+      // ghost 弹出
+      ghost.scale.setScalar(0.6);
+      gsap.to(ghost.scale, { x: 1, y: 1, duration: 0.2, ease: 'back.out(2)' });
+      // 区域框：src=槽位（淡蓝灰出处标记）/ dst=背囊区（落点）
+      this._frameSrc.setRect({ x0: sp.x - 2, x1: sp.x + 2, y0: sp.y - 2, y1: sp.y + 2 });
+      this._frameSrc.show({ color: 0x9db4d8 });
+      const bag = this._loadout?.bagZoneRectWorld?.() ?? null;
+      if (bag) { this._frameDst.setRect(bag); this._frameDst.show({}); }
+    }
+    const drag = this._topBarDrag;
+    const w = this._sm?.screenToWorld(x, y, drag.ghost.position.z, this._sm.uiCamera);
+    if (!w) return;
+    drag.ghost.position.x = w.x;
+    drag.ghost.position.y = w.y;
+    const r = this._loadout?.bagZoneRectWorld?.() ?? null;
+    const over = !!r && w.x >= r.x0 && w.x <= r.x1 && w.y >= r.y0 && w.y <= r.y1;
+    this._loadout?.setBagGlow(over);
+    if (this._frameDst.visible) this._frameDst.setActive(over);   // 拖悬呼吸
+  }
+
+  /** 拖拽收尾：pos={x,y} 松手落点；null = 中断（detachInput 等），不上行。 */
+  _endTopBarDrag(pos) {
+    const drag = this._topBarDrag;
+    this._topBarDrag = null;
+    this._loadout?.setBagGlow(false);
+    this._frameDst.setActive(false);
+    this._frameSrc.hide();
+    if (!drag) { this._frameDst.hide(); return; }
+    const w = pos ? this._sm?.screenToWorld(pos.x, pos.y, drag.ghost.position.z, this._sm.uiCamera) : null;
+    const r = this._loadout?.bagZoneRectWorld?.() ?? null;
+    const over = !!r && !!w && w.x >= r.x0 && w.x <= r.x1 && w.y >= r.y0 && w.y <= r.y1;
+    if (over) {
+      // 落定：ghost 飞入背囊区中心 + 落点框确认闪；意图立即上行（飞行纯演出）
+      this._frameDst.flashThenHide(0.3);
+      this._flyRelicGhost({ ghost: drag.ghost, to: { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 }, dur: 0.22, arc: 0.3 });
+      this._onIntent?.({ action: 'unequip', relicId: drag.relicId });
+      return;
+    }
+    // 落空：ghost 飞回原槽位，落定后原位复亮
+    this._frameDst.hide();
+    this._flyRelicGhost({ ghost: drag.ghost, to: drag.from, dur: 0.24, arc: 0.25, onDone: () => { drag.slotMat.opacity = 1; } });
   }
 
   // ---- 角色对话/思索泡泡（通用接口）----
@@ -267,8 +518,13 @@ export class MapStage {
     }
   }
 
-  // ---- 老虎机转轮（演出即闸门）----
-  // 快照里出现新的 spinning 就播一次；播完上报 slotAnimDone（runController 据此
+  /** 槽位条摆位：钉在顶栏窄条右缘外、纵对齐窄条中心（条体半宽 6.5 = BAR.w/2）。 */
+  _anchorSlotMeter() {
+    const r = this._topBar.stripWorldRect();
+    this._slotMeter.position.set(r.x1 + 1.6 + 6.5, (r.y0 + r.y1) / 2, 8);
+  }
+
+  // ---- 老虎机转轮（演出即闸门）----  // 快照里出现新的 spinning 就播一次；播完上报 slotAnimDone（runController 据此
   // 揭示结果并推进 sequencer 队列）。演出态本身不进快照（裁决：播放进度留 Stage）。
   _syncSlotRoll() {
     const spinning = this._snap?.slot?.spinning ?? null;
@@ -320,6 +576,7 @@ export class MapStage {
     this._panel = null;
     this._loadout = null;
     this._syncCardArtSub();
+    this._syncPrepChrome();   // 面板卸下 = 离开 prep → 槽位条/敌人预告隐藏
   }
 
   // ---- 输入通道 ----
@@ -334,14 +591,25 @@ export class MapStage {
     this._bindLoadout?.();                     // 装卸区拾取同批重接
     this._pickerKit.attachPicker(this._picker); // 选卡/选遗物/特写一并重连
     this._picker?.addPickable('deckChip', this._deckChip, { kind: 'deckChip', space: 'ui' });
+    this._topBar.attachPicker(this._picker);   // 顶栏遗物槽（hover tooltip + prep 点击/拖拽卸下）
+    this._ruler.attachPicker(this._picker);    // 刻度尺 hover 浮层号
+    this._enemyPreview.attachPicker(this._picker);
   }
 
   detachInput() {
     this._panel?.attachPicker?.(null);
     this._pickerKit.attachPicker(null);
     this._picker?.removePickable?.('deckChip');
+    this._topBar.attachPicker(null);
+    this._ruler.attachPicker(null);
+    this._enemyPreview.attachPicker(null);
     this._picker = null;
     this._downHit = null;
+    this._topBarPress = null;
+    this._topBarHoverIdx = -1;
+    this._frameSrc.hide();
+    this._frameDst.hide();
+    this._endTopBarDrag(null);   // 拖拽中途断输入：ghost 飞回原位，不上行卸下
   }
 
   get picker() { return this._picker; }
@@ -358,6 +626,7 @@ export class MapStage {
 
   /** 指针移动：hover 拾取（Picker 内部发 tooltip:*）+ 面板悬浮态。 */
   handlePointerMove(x, y) {
+    this._lastPointer = { x, y };   // 滚轮门控要知道指针悬在哪（App 只转 deltaY）
     // 鼠标视差目标：画布相对像素 → 归一化 [-1,1]（x 右、y 上）。绝对位置驱动，
     // 鼠标静止时偏移保持，无需持续移动
     const el = this._sm?._renderer?.domElement;
@@ -365,28 +634,111 @@ export class MapStage {
       this._mouseTarget.x = (x / el.clientWidth) * 2 - 1;
       this._mouseTarget.y = 1 - (y / el.clientHeight) * 2;
     }
+    // 刻度尺指针临近源：屏幕 px → UI 平面坐标（正交相机下 z 平面取 0 即等值）
+    const rulerPt = this._sm?.screenToWorld?.(x, y, 0, this._sm.uiCamera) ?? null;
+    // 顶栏遗物拖拽/按下候选（prep 卸下方向）：吞掉常规 hover
+    if (this._topBarDrag || this._topBarPress) { this._ruler.setPointer(null); this._topBarPointerMove(x, y); return; }
     // 遗物装卸区拖拽中/按下候选：吞掉常规 hover（tooltip 不抢、面板 hover 停更）
-    if (this._loadout?.wantsPointer()) { this._loadout.onMove(x, y); return; }
+    if (this._loadout?.wantsPointer()) { this._ruler.setPointer(null); this._loadout.onMove(x, y); return; }
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
+    this.scene.updateMatrixWorld(true);   // 敌人预告已迁入世界场景（billboard 拾取要世界矩阵）
     const hit = this._picker.hover(x, y);
     this._deckChip.setHovered(isDeckChipHit(hit)); // chip 在模态层之上：路由前先同步
-    if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
+    this._ruler.setHover(TowerRulerObject.floorOfPickId(hit?.id));
+    this._ruler.setPointer(rulerPt);
+    this._enemyPreview.setHover(EnemyPreviewObject.indexOfPickId(hit?.id));
+    const tm = /^topbar:relic:(\d+):/.exec(hit?.id ?? '');   // 顶栏遗物 hover 抬升
+    this._setTopBarHover(tm ? Number(tm[1]) : -1);
+    if (this._pickerKit.routeHover(hit, x, y)) { this._ruler.setPointer(null); return; }   // 特写吞掉 hover / 全屏界面接管
     this._panel?.onHover?.(hit);
     this._loadout?.onHoverHit?.(hit);                    // 装卸区图标抬升反馈
+  }
+
+  /** 滚轮本地消费钩子（panelHost 转发）：指针悬在刻度尺竖带内 → 本章楼层浏览。 */
+  _handleStageWheel(deltaY) {
+    const p = this._lastPointer;
+    if (!p || !this._sm) return false;
+    const ui = this._sm.screenToWorld(p.x, p.y, 0, this._sm.uiCamera);
+    if (ui && this._ruler.containsPoint(ui)) { this._ruler.addWheel(deltaY); return true; }
+    return false;
   }
 
   /** 按压：只记录命中，交互一律在抬起时判定（与 BattleStage 的查看器同律）。 */
   handlePointerDown(x, y) {
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
+    this.scene.updateMatrixWorld(true);
     this._downHit = this._picker.pick(x, y);
     if (this._loadout?.onDown?.(this._downHit, x, y)) return;  // 遗物图标按下（候选拖拽/点击）
     this._pickerKit.routePointerDown?.(this._downHit, x, y);   // 滚动条拖拽从按下开始
+    // 顶栏遗物（prep 限定）：按下候选——点击=用/卸（抬起判定），超阈值移动=拖回背包卸下
+    this._topBarPress = null;
+    if (this._snap?.kind === 'prep') {
+      const m = /^topbar:relic:(\d+):(.+)$/.exec(this._downHit?.id ?? '');
+      if (m) {
+        this._topBarPress = { index: Number(m[1]), relicId: m[2], x, y };
+        // 按下回缩（点击确认感的前半拍；抬起弹回）
+        const slot = this._topBar.relicRow.children[Number(m[1])];
+        if (slot) gsap.to(slot.scale, { x: 0.92, y: 0.92, duration: 0.1, ease: 'power2.in', overwrite: 'auto' });
+      }
+    }
   }
 
   /** 抬起：按压与抬起命中一致才算一次点击（防拖出/误触）。 */
   handlePointerUp(x, y) {
+    // 顶栏遗物拖拽收尾（prep 卸下）：落在背囊区上才上行卸下
+    if (this._topBarDrag) {
+      this._endTopBarDrag({ x, y });
+      this._topBarPress = null;
+      this._downHit = null;
+      return;
+    }
+    // 顶栏遗物点击（prep 限定）：可用即用，否则卸下——无需拖拽的快速路径
+    if (this._topBarPress) {
+      const press = this._topBarPress;
+      this._topBarPress = null;
+      this._downHit = null;
+      this.uiScene.updateMatrixWorld(true);
+      this.scene.updateMatrixWorld(true);
+      const hit = this._picker?.pick(x, y);
+      const slot = this._topBar.relicRow.children[press.index];
+      // 按下回缩弹回（仍在悬停位则回到抬升态）
+      if (slot) gsap.to(slot.scale, {
+        x: this._topBarHoverIdx === press.index ? 1.08 : 1,
+        y: this._topBarHoverIdx === press.index ? 1.08 : 1,
+        duration: 0.18, ease: 'back.out(2.5)', overwrite: 'auto',
+      });
+      if (hit?.id === `topbar:relic:${press.index}:${press.relicId}`) {
+        const r = (this._snap?.relics ?? []).find(v => v.id === press.relicId);
+        if (r && r.canUse) {
+          // 使用：槽位弹跳确认（效果本身由 core/演出链交代）
+          if (slot) {
+            gsap.timeline()
+              .to(slot.scale, { x: 1.24, y: 1.24, duration: 0.09, ease: 'power2.out' })
+              .to(slot.scale, { x: 1, y: 1, duration: 0.22, ease: 'back.out(2.2)' });
+          }
+          this._onIntent?.({ action: 'useRelic', relicId: r.id });
+        } else if (r && slot) {
+          // 卸下：icon 从槽位飞入背囊区中心 + 背囊区落定闪
+          const srcMat = slot.userData?.tileMap;
+          const from = slot.getWorldPosition(new THREE.Vector3());
+          const bag = this._loadout?.bagZoneRectWorld?.() ?? null;
+          this._flyRelicGhost({
+            map: srcMat?.map ?? null, color: 0x1c1c1c, size: 4.0, from,
+            to: bag ? { x: (bag.x0 + bag.x1) / 2, y: (bag.y0 + bag.y1) / 2 } : null,
+            dur: 0.3, arc: 0.7,
+          });
+          if (bag) {
+            this._frameDst.setRect(bag);
+            this._frameDst.show({});
+            this._frameDst.flashThenHide(0.38);
+          }
+          this._onIntent?.({ action: 'unequip', relicId: r.id });
+        }
+      }
+      return;
+    }
     // 装卸区在拖拽/按下候选状态：自己收尾（拖放/点击使用/弹回），不走按钮的 down/up 同位判定
     if (this._loadout?.wantsPointer()) {
       this._loadout.onUp(x, y);
@@ -395,6 +747,7 @@ export class MapStage {
     }
     if (!this._picker) return;
     this.uiScene.updateMatrixWorld(true);
+    this.scene.updateMatrixWorld(true);
     const hit = this._picker.pick(x, y);
     const down = this._downHit;
     this._downHit = null;
@@ -433,13 +786,36 @@ export class MapStage {
   // 帧驱动：状态栏整体过渡（资源点颜色渐变/弹跳 + 双血环弧长/低量脉动）
   onEnter(manager) {
     this._unsubTick?.();
+    // 世界 GPU 池懒建（幂等；renderer 在 manager 上）
+    if (!this._fxPool && manager?._renderer) {
+      this._fxPool = createParticlePool(manager._renderer, { space: 'world', name: 'mapWorldFx' });
+      if (this._fxPool) this.scene.add(this._fxPool.points);
+    }
     this._unsubTick = manager.onTick((dt) => {
+      this._fxPool?.update(dt);            // 世界 GPU 粒子（楼层通过的灰）
       this._statusBar.update(dt);
       this._deckChip.update(dt);         // 卡组 chip 的 hover scale 包络
       this._loadout?.update(dt);         // 遗物装卸区（容量条缓动/图标抬升/弹回）
       this._slotRoll?.update(dt * 1000); // dt 秒 → 转轮用毫秒
       this._pickerKit.update(dt);        // 获得物特写（自带 in/hold/out 时序）
       this._panel?.update(dt);            // 休息面板卡阵的 fx（hover 高亮收敛）
+      this._slotMeter.update(dt);         // 槽位条填充缓动/脉冲（隐藏时同样无害推进）
+      // 取景高度 = 楼层牌显隐的唯一驱动（爬升 tween 写 _basePose，视差不参与——
+      // 否则鼠标一晃楼层牌就呼吸）；刻度尺锚 = 塔左缘在取景高度的 UI 投影（lookAt 点
+      // 恒投同一屏位，锚定天然稳定；当前层刻度自动居中在楼层牌同高）
+      const focusY = this._basePose?.lookAt.y ?? this._floorAnchorY(this._floorState?.floor ?? 1);
+      this._floorChrome.setFocusY(focusY);
+      this._floorChrome.update(dt, this._mgr?.camera);
+      {
+        const halfW = (FLOOR_GAP * MODULE_ASPECT) / 2;
+        this._tower.updateWorldMatrix(true, false);
+        _v3.set(-halfW, focusY - TOWER_BASE_Y, 0.9);
+        this._tower.localToWorld(_v3);
+        const ui = this._sm?.worldToUI(_v3.x, _v3.y, _v3.z);
+        if (ui) this._ruler.setAnchor(ui.x - 0.7, ui.y);
+      }
+      this._ruler.update(dt);             // 刻度尺亮浪/滚动/长度弹性
+      if (this._slotMeter.visible) this._anchorSlotMeter();   // 随从顶栏窄条右缘（内容变宽即跟随）
       this._wilderness?.update(dt);      // 荒原环境（雪花 GPU 推进）
       this._followBubbles();             // 泡泡跟随世界锚点（相机移动也要跟）
       this._bubbles.update(dt);
@@ -456,10 +832,22 @@ export class MapStage {
   onExit() {
     this._unsubTick?.();
     this._unsubTick = null;
+    this._floorChrome.cancelClear(); // 在途楼层通过演出：离场即收（灰粒子随池续存无妨）
     this._settleRise(); // 爬升中退场（如玩家爬升期间点进战斗）：停表 + 补回执，再还相机
     // 还原世界相机基准机位（塔楼层专属机位不外泄到战斗/房间层）
     this._mgr?.restoreBaseCamera?.();
     this._mgr = null;
+  }
+
+  /**
+   * 楼层通过演出（战后回塔楼那一拍）：clearFx = { floor, enemies:[{defId,name}], boss }。
+   * 残影崩解与相机爬升同拍起跑（调用方与 arriveFloor 同指令）。池缺位时只演面片崩解。
+   */
+  playFloorClear(clearFx) {
+    if (!clearFx?.enemies?.length || !this._floorChrome) return null;
+    return this._floorChrome.playClear(clearFx.floor, clearFx.enemies, {
+      boss: !!clearFx.boss, pool: this._fxPool,
+    });
   }
 
   // fx 服务门面（cutscene 'fx' step 的统一入口）：塔楼无可寻址道具（cast 为空表），
@@ -505,13 +893,28 @@ export class MapStage {
       this._slotRoll = null;
     }
     this.detachInput();
+    this._frameSrc.dispose();
+    this._frameDst.dispose();
+    for (const g of this._relicFlights) {   // 在途飞行 ghost 统一收尾
+      g.userData.tw?.kill();
+      gsap.killTweensOf(g.scale);
+      this.uiScene.remove(g);
+      g.geometry.dispose();
+      g.material.dispose();
+    }
+    this._relicFlights.clear();
+    this._slotMeter.dispose();      // 槽位条（grit 纹理/轨道烘焙）
+    this._ruler.dispose();          // 刻度尺（刻度材质/层号文本）
+    this._floorChrome.dispose();    // 层链 chrome（层号烘焙/引出线/敌人预告一并释放）
     for (const child of [...this._tower.children]) { // 塔身层块（与 setFloor 重建同律）
-      child.geometry.dispose();
-      child.material.dispose();
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
       this._tower.remove(child);
     }
     this._wilderness?.dispose(); // 荒原环境（天空穹/雪原/雪花/灯光，几何材质统一释放）
     this._wilderness = null;
+    this._fxPool?.dispose();   // 世界 GPU 池（灰烬段/present 件）
+    this._fxPool = null;
     this.scene.fog = null;
     this._statusBar.dispose();
     this._topBar.dispose();
@@ -534,17 +937,22 @@ export class MapStage {
   // 其余白（贴图原色）。当前层金 tint 已移除（「到层」改由相机
   // 爬升表达，等美术资源到位后再做更多动画）。贴图缺席（headless/首拍加载中）为
   // 纯色块层。受光材质（Lambert）吃荒原灯组，与雪原同一套光照。
+  /** 房间表推入（run.roomTable 静态整局）——标尺花纹与 hover 房型的数据源；建局时推一次。 */
+  setRoomTable(table) {
+    this._ruler.setRoomTable(table);
+  }
+
   setFloor(floor, totalFloors) {
     this._floorState = { floor, totalFloors };
     if (this._cameraFloor == null) this._cameraFloor = floor; // 首次落位初始化，之后只由 arriveFloor 推进
     for (const child of [...this._tower.children]) {
-      child.geometry.dispose();
-      child.material.dispose();
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
       this._tower.remove(child);
     }
     const w = FLOOR_GAP * MODULE_ASPECT;
     for (let f = 1; f <= totalFloors; f++) {
-      const color = isBossFloor(f) ? 0x8a3548 : 0xffffff;
+      const color = 0xffffff;
       const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(w, FLOOR_GAP),
         new THREE.MeshLambertMaterial({
@@ -555,6 +963,14 @@ export class MapStage {
       plane.position.set(0, (f - 0.5) * FLOOR_GAP, 0); // 层 f 中心 = 塔基 + (f-0.5)×层高（层 1 坐在塔基线上）
       this._tower.add(plane);
     }
+    // 相机还在旧层 = 爬升待播（战后换台先摆新层模块，arriveFloor 随后才爬）：
+    // 标尺呈现按兵不动（defer）——亮浪/当前层/回中全留给抵达的 animate 拍，
+    // 否则静默预推进会吃掉亮浪，预收敛的 scroll 撞上爬升 tween 的绝对驱动 = 条带瞬移跳变
+    this._ruler.setFloor(floor, totalFloors, { defer: this._cameraFloor !== floor });
+    this._floorChrome.setFloor(floor, totalFloors); // 当前层指针（预告挂点）
+    // 登陆水位线：仅「相机已在本层」时推进——arriveFloor 的爬升起点会调到这里，
+    // 那时相机还在旧层，不核销（途经层不提前亮相）；核销在爬升回执/开机落位里
+    if (this._cameraFloor === floor) this._floorChrome.markLanded(floor);
   }
 
   /** 层锚点世界 y：层 f 模块中心（塔基 + (f-1)×层高 + 半层）。 */
@@ -577,6 +993,16 @@ export class MapStage {
   /** 相机当前锚定的层（战后/房间退出据此判断是否需要爬升）。 */
   get cameraFloor() { return this._cameraFloor; }
 
+  /** 开机落位：读档起跑把相机直接锚到存档层（读档没有"从 1 层爬上来"的事实，
+   *  不播爬升；新开局面层 1 时与构造缺省一致，幂等）。 */
+  snapCameraToFloor() {
+    const f = this._floorState?.floor ?? 1;
+    this._cameraFloor = f;
+    this._ruler.setFloor(f, this._floorState?.totalFloors); // 直落路径：标尺一并核销（跳层/读档不经爬升拍）
+    this._floorChrome.markLanded(f);   // 直落路径的登陆核销（读档/调试跳层不经爬升回执）
+    if (this._mgr) this._applyAnchorPose(f);
+  }
+
   /** 爬升收口：停表 + 补回执。gsap kill 不触发 onComplete——待回执的 sequencer
    *  指令（awaitFloorArrive 的 ANIMATION_INSTRUCTION_FINISHED）若不手动补，会卡到
    *  保险丝强杀才出队，堵住排在后面的战斗/剧本节拍（5s 慢爬 + 爬升中可备战进战斗
@@ -590,11 +1016,13 @@ export class MapStage {
     done?.();
   }
 
-  // 塔楼抵达动画（重做）：相机从上一层锚点沿塔身上升到当前层，
-  // 替代原「当前层高亮块自下而上长出」。由 run sequencer 指令驱动（onDone = 回执
-  // 句柄）；duration 可缩（测试）。默认 5s 慢爬（：爬升期间玩家已可备战操作，
-  // 慢速更有攀爬感）；FLOOR_ARRIVE_MS=6000 的队列兜底宽于默认时长 1s。
+  // 塔楼抵达动画：相机从上一层锚点沿塔身上升到当前层。楼层牌/刻度尺无需排期——
+  // 楼层牌靠取景高度的邻近显隐自然淡入淡出（登陆水位线挡住未登陆层），刻度尺同拍亮浪。
+  // 由 run sequencer 指令驱动（onDone = 回执句柄）；duration 可缩（测试）。默认 5s 慢爬
+  // （爬升期间玩家已可备战操作，慢速更有攀爬感）；FLOOR_ARRIVE_MS=6000 的队列兜底宽于默认时长 1s。
   arriveFloor(floor, totalFloors, { onDone = null, duration = 5 } = {}) {
+    const climbing = this._cameraFloor !== floor && !!this._mgr;
+    this._ruler.setFloor(floor, totalFloors, { animate: climbing });
     this.setFloor(floor, totalFloors); // 幂等落位（doSwap 已 setFloor 时等同重放）
     // 同层直落（本层有房间的战后路径 floor 不变）或无相机可动：立即回执，
     // 不空转 5 秒白占队列节拍
@@ -609,7 +1037,8 @@ export class MapStage {
     this._cameraFloor = floor;
     this._settleRise(); // 串行队列下理论不可达，防御上一段未收的爬升
     const proxy = { k: 0 };
-    this._riseDone = onDone;
+    const finish = () => { this._floorChrome.markLanded(floor); onDone?.(); };
+    this._riseDone = finish;
     this._riseTween = gsap.to(proxy, {
       k: 1, duration, ease: 'power2.inOut',
       onUpdate: () => {
@@ -623,8 +1052,11 @@ export class MapStage {
         this._wilderness?.setStormLevel(
           towerStormLevel(fromFloor) * (1 - proxy.k) + towerStormLevel(floor) * proxy.k,
           fromFloor + (floor - fromFloor) * proxy.k);
+        // 刻度尺游标与爬升同一补间（同 duration/ease 逐帧直写）——原 dt·8 指数收敛与
+        // power2.inOut 的 5s 节奏脱节（起步拖尾、收尾追不上）
+        this._ruler.setScrollFloat(fromFloor + (floor - fromFloor) * proxy.k);
       },
-      onComplete: () => { this._riseTween = null; this._riseDone = null; onDone?.(); },
+      onComplete: () => { this._riseTween = null; this._riseDone = null; finish(); },
     });
   }
 

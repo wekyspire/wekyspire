@@ -6,7 +6,7 @@
 // 本文件只做装配与转发——各域实现在同目录：
 //   shared.js     共享小件（标签映射 / DIM_META / ROOM_META / 通用按钮 / 产出文案）
 //   prep.js       战前准备    reward.js    战后奖励    ascension.js 进阶事件
-//   roomCamp.js   营地·训练场 roomSlot.js  老虎机/银行机 roomGurpas.js 古尔帕斯之店
+//   roomCamp.js   营地&训练场 roomSlot.js  老虎机/银行机 roomGurpas.js 古尔帕斯之店
 //   shop.js       售货机        room.js     房间分发器
 
 import { DIM_META, slotPrizeText } from './shared.js';

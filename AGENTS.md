@@ -106,7 +106,7 @@ src/
 - **`instructions/`** — 指令族：`BattleInstruction` 三返回值 `true/false/WAIT`，payload 白名单（`setPayload` 越界抛错）。combat / resources / effects / cards / skill / turn / battleRoot / input / aiAct / units（战斗中生成单位尾插，下回合起参战，敌方意图 kinds 含 'summon'）/ cardMods（卡牌 modifier 挂载/移除）。
 - **`state/`** — 纯对象状态：`Unit`（hp/shield/effects/`getStat` 读轨/`uniqueID`/side）、`Player`（run 级，跨战斗存活）、`AIUnit→Enemy/Ally`、`runState`/`battleState` 两层拆分、zones（hand/deck/burnt/pending）、种子 rng、`skillRuntime`（定义/运行时分离）。初始值常量：`PLAYER_BASE_HP / PLAYER_BASE_MONEY / PLAYER_BASE_AP`（禁止裸数字）。
 - **`flow/battle.js`** — 战斗装配。终局 abort 的是 TurnLoop 而非根节点，战后清理在树内执行。
-- **`run/`** — run 层状态机：`runFlow.js`、`runDriver.js`（headless 整局 SDK）、`rewards.js` / `ascension.js` / `prep.js` / `promotion.js`（局外晋升）、`rooms/`、`runEffects.js`（内容改 run 的唯一入口原语）。**玩法细则不在本文件**——卡包门禁与开包分布见 `RUN_DESIGN.md`，等阶分布事实源 = `rewards.js` 的 `PACK_TIER_TABLE`/`S_SPAWN_WHITELIST`；老虎机/银行/恶魔 roll 见 `SLOT_MACHINE.md`，商店见 `SHOP.md`。房间产出挂 `run.slotPending`/`shopPending`/`pendingDebuffs`，未处理完不许离房。
+- **`run/`** — run 层状态机：`runFlow.js`、`runDriver.js`（headless 整局 SDK）、`rewards.js` / `ascension.js` / `prep.js` / `promotion.js`（局外晋升）、`rooms/`、`runEffects.js`（内容改 run 的唯一入口原语）。**玩法细则不在本文件**——卡包门禁与开包分布见 `RUN_DESIGN.md`，等阶分布事实源 = `rewards.js` 的 `PACK_TIER_TABLE`/`S_SPAWN_WHITELIST`；老虎机/银行/恶魔 roll 见 `SLOT_MACHINE.md`，商店见 `SHOP.md`。房间产出挂 `run.slotPending`/`shopPending`/`pendingDebuffs`，未处理完不许离房。**房间表开局定死**：`run.roomTable`（`buildRoomTable(seed)` 走独立派生 rng，不消耗 run.rng 主账本）= 同种子同塔，消费走 `roomOf(run, floor)`（勿再直接调 `roomOfFloor` 现场掷）；小标尺房型线头符号与 hover 文案读此表。
   - **模式分野**：`run.storyMode` —— 故事模式 = 肉鸽骨架 + 瑞米（战斗盟友/营地游荡/状态栏瑞米区/果实养成）+ 故事事件与幕间剧本；肉鸽（无尽）模式**无瑞米**，老虎机 special 小资源恒为训练次数。事件 `mode` 门控见 `core/run/rooms/event.js`；幕间剧本门控见 `cutscenePlayer.js`。
   - **事件系统**：事件 = 对话 + 选项 + 逻辑，定义进 `core/events/registry.js`，内容在 `core/content/events/`（一文件一事件，显式装配）。**效果由 `resolve` 直接调 `runEffects.js` 原语**，`resolve` 只返回结果页——Shell 对「事件做了什么」一无所知。剧情分支记忆 = `run.eventFlags`。
   - **遗物系统**：字段契约 = `rarity`(C/B/A/S) / `cost`(槽位权重 0–3，Σ ≤ relicSlots) / `nonSlot` / `requires` / `acquisition` / `onAcquire` / `onCampRest` / `runModifiers`(**从 `player.baseStats` 重算，不增量累加**) / `onBattleStart` / `subscriptions`。一局内遗物唯一。**抽选一律走 `core/relics/draft.js`**，不得各自随机。
@@ -189,8 +189,8 @@ src/
 - **卡间引用走 `/card{卡id}`**：hover 热区弹整卡预览；不写卡名裸文本。
 - **任何文本都可能带 markup**：遗物/效果/卡牌描述里的 markup 在**所有**渲染面都要渲染成图标 + 特征色（用 `bakeAutoLine`/`RichTextInline`，别自己写烘焙）；哪面印出 `/xxx{` 就是那处没接解析器。
 - **卡牌威力提升一律走 `cardKit.gainPower(sctx, card, n)`**（发公共节拍），不裸改 `card.power`。
-- **手牌弹簧弃管「离手即摘」**：卡离开手牌立刻 `springs.release(id)`，绝不能等重算兜底（空窗期 idle 卡会被弹簧拉回手牌锚点——已多次回归）。
-- **焚卡演出必须覆盖非手牌来源**：牌库里的卡视图 `visible=false` 永不烘面——直接 `_burnOut` = 烧隐形空白。链路：`presenter.cardBurnt` 代投影 `cardView`，`BattleStage._departureBeat` 对不可见卡先 `setCard` 烘面显形、飞中央展示位落定再 `_burnOut`。core 焚卡保持单节拍原子。
+- **卡牌两态模型（2026-10-11 统一）**：zone 是所有权记录，`model.setZone` 是**唯一写入门**——card-zone 事件 → `_cardZoneDoor`（摘弹簧目标/摘拾取/deck→hand 标记入场弧），别再手写第二份副作用。animator 两态 = free（idle，HandSprings 朝 zone 静止位收敛）/ leased（animating|dragging），租约结束（onComplete **或被顶杀**——onInterrupt 缺省取 onComplete）自动回落 free 由弹簧零速收养；离手摘弹簧随 zone 门自动发生，手改 `springs.release` 只在绕过 zone 写的旁路（不该存在）里需要。
+- **焚卡演出必须覆盖非手牌来源**：牌库里的卡视图 `visible=false` 永不烘面——直接 `_burnOut` = 烧隐形空白。链路：`presenter.cardBurnt` 代投影 `cardView`，`BattleStage._departureBeat` 对不可见卡先 `setCard` 烘面显形、飞中央展示位落定再 `_burnOut`。core 焚卡保持单节拍原子。**run 层删卡（2026-10-12 全覆盖）**：一切从牌组删卡的界面（Boss 奖励/进阶反哺/古尔帕斯/老虎机吞噬/银行自选焚毁/恶魔词条）确认时统一「摘卡原地燃尽、演完才上行意图」——来源表条目标 `burn: true` 或 `openDevourPicker` 的 confirmHook，底层都是 `stagePickerKit.playCardBurn`（cardBurnFlight）；新删卡点照此接，不许静默删。
 - **单位行动姿态走 `_pose` 通道**：姿态字段在 `UnitObject.update` 每帧合成，**别直接改 standee.scale**（被呼吸覆盖）；效果姿态只在获得/叠层时摆；受击击退方向 = 远离伤害源；瑞米补刀按 `src._defId === 'remi'` 特判升级配方。
 - **刀法牌 = `series: 'blade'` 或 keywords 含 blade**（`cardKit.isBladeCard`）；碎铁/出鞘等衍生处理牌也算。
 - `.trae/rules/project_rules.md` 是旧架构残留——以本文件与 README 为准。

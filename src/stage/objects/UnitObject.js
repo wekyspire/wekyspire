@@ -28,6 +28,7 @@ import { UnitFxLayer } from '../fx/unitFxLayer.js';
 import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -731,7 +732,7 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
     : null;
   // 先量宽再开正式画布（canvas 定宽后改尺寸会重置绘制状态）
   const mctx = document.createElement('canvas').getContext('2d');
-  mctx.font = `bold ${fontPx}px sans-serif`;
+  mctx.font = `${fontPx}px ${UI_FONT}`;
   const textW = attackText ? mctx.measureText(attackText).width : 0;
   const W = kinds.length * H + (kinds.length - 1) * gap + (attackText ? gap + textW : 0);
 
@@ -747,7 +748,7 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
     x += H + gap;
   }
   if (attackText) {
-    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.font = `${fontPx}px ${UI_FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -882,7 +883,7 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
     }
     default: {
       // 未知：白粗体 ?
-      ctx.font = `bold ${s * 0.8}px sans-serif`;
+      ctx.font = `${s * 0.8}px ${UI_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
@@ -968,7 +969,7 @@ function drawEffectGlyph(ctx, effect, x, y, s) {
   ctx.lineWidth = Math.max(1.4, s * 0.06);
   ctx.strokeStyle = effect?.type === 'debuff' ? '#c86a8a' : '#6aa57a';
   ctx.stroke();
-  ctx.font = `bold ${s * 0.44}px sans-serif`;
+  ctx.font = `${s * 0.44}px ${UI_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#e8ecf4';

@@ -8,7 +8,8 @@
 //        法线混合压暗牌面（「这张牌暂时不可用/要离开」的沉下去感）
 //   C2 标记层 z 0.40~0.50 —— chip 冷却拍数水印（0.40）、lock 锁定四角括号（0.44）、
 //        doom 将弃描框（0.50）：表意件，低透明度/描边，不发光
-//   C3 发光层 z 0.40~3.0 —— pulse 一次性加色脉冲（0.45）、edge 咏唱流光（0.40，
+//   C3 发光层 z 0.40~3.0 —— pulse 一次性加色脉冲（0.45，TSL shader 三模式能量面片）、
+//        edge 咏唱流光（0.40，
 //        低于手牌扇相邻卡 z 间隔 0.5：邻牌盖得住光环；HDR 直出 >1.45 阈喂 bloom）、
 //        transform 变换叠层（3.0，fx/cardTransform.js
 //        自管生命周期）；HDR 约定：内容色 ≤1，发光件乘算过阈
@@ -23,9 +24,11 @@ import {
   sin, dot, length, exp, step, smoothstep, oneMinus,
 } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：veil/edgeGlow 的 colorNode 必须挂 Node 材质
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const VEIL_LERP = 7;       // 覆盖高度收敛速率（/s——拍数推进时前沿平滑爬行的动画）
-const PULSE_OPACITY = 0.55;
+// 脉冲面片外扩边距（冲击环越过牌边的余韵空间；边缘熄灭窗贴真面片边缘防断层）
+const PULSE_MARGIN = 4;
 // 冷却拍数水印：牌面中央低透明度平面白字（平面型水印，
 // 驳回大号发光 counter 与色块徽章两版）
 const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
@@ -209,6 +212,85 @@ const veilShade = Fn(([vUv, uTime, uFrac, uMode, uCard]) => {
   return vec4(col, min(alpha, 0.92));
 });
 
+// ---- 一次性加色脉冲 shader（2026-10-09 重做，替代纯色半透明方块）----
+// 单 shader + scalar uniform 组驱动三种能量演出（控制量打包：uVecA = [prog, mode, intensity, seed]，
+// uVecB = [cardW, cardH, reach, 0]——r185 实测 Fn 参数 ≤4 才安全，超参会整体猝死）：
+//   mode 0 涌动（默认）：能量自卡心涌出——冲击波亮环外扩（外锋锐/内尾拖、环宽随行渐阔）、
+//     中心注能闪、边框共振（环越过牌边时逐片元「充电」，与环位天然相位锁定）、环带闪点；
+//   mode 1 汇聚：能量向卡心内坍——环自牌缘加速收缩 + 末段中心迸发（负向/压制语义：衰败/挤压）；
+//   mode 2 流扫：对角丝质流光带（≈42°）easeInOut 扫全程 + 尾随淡回波 + 随行闪点（镀金/晋升语义）。
+// 包络/环程全由 uProg（0→1）在 shader 内驱动，JS 只推进度；旧 scale 参数折算环程系数 uReach。
+// HDR 纪律：环锋/闪点/迸发峰可乘算过 1.45 bloom 阈（uIntensity 推），填充能量压阈下（亮面卡不洗白）。
+// 沿带闪点：cell 内随机抖动破格点阵；prox = 片元到带的标量距离（高斯窗内才亮）
+const sparkleAlong = Fn(([p, prox, uProg, uSeed]) => {
+  const cellUv = p.mul(0.42);
+  const cid = floor(cellUv);
+  const h1 = vHash(cid.add(uSeed));
+  const h2 = vHash(cid.add(vec2(7.3, 3.1).add(uSeed)));
+  const cp = fract(cellUv).sub(vec2(0.25, 0.25).add(vec2(h1, h2).mul(0.5)));
+  const dot_ = oneMinus(smoothstep(0.0, 0.16, length(cp)));
+  const tw = sin(uProg.mul(26.0).add(h1.mul(39.0)).add(uSeed)).mul(0.5).add(0.5);
+  return dot_.mul(step(0.72, h1)).mul(tw.mul(tw)).mul(exp(prox.mul(prox).mul(-0.09)));
+});
+
+const pulseShade = Fn(([vUv, uVecA, uColor, uVecB]) => {
+  const uProg = uVecA.x, uMode = uVecA.y, uIntensity = uVecA.z, uSeed = uVecA.w;
+  const uCard = uVecB.xy, uReach = uVecB.z;
+  const uPlane = uCard.add(PULSE_MARGIN * 2);   // 面片 = 牌面 + 双边距（标量广播）
+  const p = vUv.sub(0.5).mul(uPlane);
+  const hf = uCard.mul(0.5);
+  const sd = sdRoundBox(p, hf, 1.5);
+  const dist = length(p);
+  const diag = length(hf);
+
+  // 模式 0 涌动：环程 = easeOutCubic 进度 × 半对角线 × 环程系数
+  const ringR0 = oneMinus(pow(oneMinus(uProg), 3.0)).mul(diag).mul(uReach);
+  const dd0 = dist.sub(ringR0);
+  const sig0 = float(1.05).add(uProg.mul(1.7));
+  const band0 = exp(dd0.mul(dd0).mul(-1.0).div(
+    select(dd0.greaterThan(0.0), sig0.mul(0.55), sig0.mul(1.2)).pow(2.0))); // 外锋锐、内尾拖
+  const env0 = smoothstep(0.0, 0.07, uProg).mul(pow(oneMinus(uProg), 1.35));
+  const flash0 = exp(dist.mul(-0.30)).mul(pow(oneMinus(uProg), 3.0)).mul(0.9);  // 中心注能闪
+  const rim0 = band0.mul(exp(abs(sd).mul(-0.9))).mul(0.8);                     // 边框共振
+  const spark0 = sparkleAlong(p, dd0, uProg, uSeed).mul(1.9);
+  const e0 = band0.mul(1.35).add(flash0).add(rim0).add(spark0).mul(env0);
+
+  // 模式 1 汇聚：环自牌缘内坍（(1-p)² 加速），末段中心迸发
+  const ringR1 = pow(oneMinus(uProg), 2.0).mul(diag).mul(min(uReach, 1.0));
+  const dd1 = dist.sub(ringR1);
+  const sig1 = float(0.95).add(uProg.mul(1.1));
+  const band1 = exp(dd1.mul(dd1).mul(-1.0).div(sig1.mul(sig1)));
+  const env1 = smoothstep(0.0, 0.06, uProg)
+    .mul(oneMinus(uProg.mul(0.30)))
+    .mul(oneMinus(smoothstep(0.90, 1.0, uProg)));
+  const burst1 = exp(dist.mul(-0.42))
+    .mul(smoothstep(0.62, 0.92, uProg))
+    .mul(oneMinus(smoothstep(0.92, 1.0, uProg))).mul(1.35);
+  const spark1 = sparkleAlong(p, dd1, uProg, uSeed).mul(1.5);
+  const e1 = band1.mul(1.15).add(burst1).add(spark1).mul(env1);
+
+  // 模式 2 流扫：对角亮带 easeInOut 扫全程；丝质条纹沿带向调制（方向烘归一化常量）
+  const sAlong = dot(p, vec2(0.7413, 0.6712));
+  const sPerp = dot(p, vec2(-0.6712, 0.7413));
+  const sb2 = mix(diag.mul(-1.15), diag.mul(1.15), smoothstep(0.0, 1.0, uProg));
+  const dd2 = sAlong.sub(sb2);
+  const band2 = exp(dd2.mul(dd2).mul(-0.0868));              // σ=2.4（-1/(2σ²)）
+  const echo2 = exp(dd2.add(5.5).pow(2.0).mul(-0.22)).mul(0.35); // 尾随淡回波（σ≈1.5）
+  const silk = sin(sPerp.mul(9.5)).mul(0.12)
+    .add(sin(sPerp.mul(23.0).add(uSeed)).mul(0.08)).add(0.80);
+  const env2 = smoothstep(0.0, 0.14, uProg).mul(oneMinus(smoothstep(0.78, 1.0, uProg)));
+  const spark2 = sparkleAlong(p, dd2.mul(0.8), uProg, uSeed).mul(1.6);
+  const e2 = band2.mul(silk).add(echo2).mul(1.15).add(spark2).mul(env2);
+
+  const energy = select(uMode.lessThan(0.5), e0, select(uMode.lessThan(1.5), e1, e2));
+  // 形状窗：卡内全量；卡外溢出带 exp 衰减（环/共振越过牌边的余韵）；
+  // 面片边缘窗把能量在外半 margin 压到恰 0（防硬截断色彩断层，同 edgeShade 纪律；
+  // 1.6/3.8 = PULSE_MARGIN×0.4/0.95）
+  const shape = select(sd.lessThan(0.0), float(1.0), exp(max(sd, 0.0).mul(-1.15)));
+  const edgeFade = oneMinus(smoothstep(1.6, 3.8, sd));
+  return vec4(uColor.mul(energy).mul(uIntensity).mul(shape).mul(edgeFade), 1.0);
+});
+
 export class CardFxLayer extends THREE.Group {
   constructor({ width = 20, height = 27, faceMaterial = null } = {}) {
     super();
@@ -229,8 +311,9 @@ export class CardFxLayer extends THREE.Group {
     this._chipN = null;      // 水印当前数字（重烘判据）
     this._doom = null;       // 将弃特效组（暗化盖纱 + 四边描框，惰性创建）
     this._lock = null;       // 锁定特效组（四角瞄准括号，惰性创建）
-    this._pulse = null;      // 脉冲平面
-    this._pulseTl = null;    // { elapsed, duration, scale } | null
+    this._pulse = null;      // 脉冲面片（TSL shader，惰性创建）
+    this._pulseTl = null;    // { elapsed, duration } | null
+    this._pulseUniforms = null; // uVecA[prog,mode,intensity,seed] / uColor / uVecB[cardW,cardH,reach,-]
     this._react = null;      // 反应演出时间线 { t, i }（C0 shader 块，见 cardBodyFx.cbfReact）
     this._edgeGlow = null;   // 咏唱流光面片（自定义 shader，惰性创建）
     this._edgeUniforms = null; // 面片 uniforms 句柄（update 推进 uTime/uFade）
@@ -251,26 +334,40 @@ export class CardFxLayer extends THREE.Group {
     this._react = { t: 0, i: Math.max(0.2, intensity) };
   }
 
-  /** 一次性加色闪光（冷却推进/衰败反向/威力提升）。重触发即重置时间线（新脉冲顶掉旧脉冲）。 */
-  pulse({ color = 0xffffff, durationMs = 220, scale = 1.2 } = {}) {
+  /**
+   * 一次性加色脉冲（冷却推进/衰败反向/威力提升/施术起手）。
+   * mode：0 涌动（默认）| 1 汇聚（负向/压制）| 2 流扫（镀金/晋升）；
+   * intensity：HDR 强度（环锋/闪点乘算过 1.45 bloom 阈）；scale 折算环程系数（兼容旧口径）。
+   * 包络在 shader 内由 uProg 驱动；重触发即重置时间线（新脉冲顶掉旧脉冲）。
+   */
+  pulse({ color = 0xffffff, durationMs = 220, scale = 1.2, mode = 0, intensity = 1 } = {}) {
     if (!this._pulse) {
+      this._pulseUniforms = {
+        uVecA: uniform(new THREE.Vector4(0, 0, 1, 0)),          // prog/mode/intensity/seed
+        uColor: uniform(new THREE.Color(0xffffff)),
+        uVecB: uniform(new THREE.Vector4(this._w, this._h, 1, 0)), // cardW/cardH/reach/-
+      };
       // 加法光不占地（uiScene RT 合成约定，passes.js 铁律②）
-      const mat = additiveLight(new THREE.MeshBasicMaterial({
-        transparent: true, opacity: PULSE_OPACITY, depthWrite: false,
+      const mat = additiveLight(new MeshBasicNodeMaterial({
+        transparent: true, depthWrite: false,
       }));
-      this._pulse = new THREE.Mesh(new THREE.PlaneGeometry(this._w * 1.06, this._h * 1.06), mat);
+      mat.colorNode = pulseShade(
+        uv(), this._pulseUniforms.uVecA, this._pulseUniforms.uColor, this._pulseUniforms.uVecB);
+      this._pulse = new THREE.Mesh(
+        new THREE.PlaneGeometry(this._w + PULSE_MARGIN * 2, this._h + PULSE_MARGIN * 2), mat);
       this._pulse.position.z = 0.45;
       this._pulse.visible = false;
       this.add(this._pulse);
     }
-    this._pulse.material.color.set(color);
-    this._pulse.material.opacity = PULSE_OPACITY; // 重触发重置（update 里会随时间衰减）
-    this._pulseTl = { elapsed: 0, duration: Math.max(0.001, durationMs / 1000), scale };
-    this._pulse.scale.set(scale, scale, 1);
+    const u = this._pulseUniforms;
+    u.uColor.value.set(color);
+    u.uVecA.value.set(0, mode, intensity, Math.random() * 97.0);
+    u.uVecB.value.z = 0.55 + 0.45 * scale;   // 旧 scale 口径 → 环程系数
+    this._pulseTl = { elapsed: 0, duration: Math.max(0.001, durationMs / 1000) };
     this._pulse.visible = true;
   }
 
-  get pulseColor() { return this._pulse?.material.color.getHex() ?? null; }
+  get pulseColor() { return this._pulseUniforms?.uColor.value.getHex() ?? null; }
   get pulseVisible() { return !!this._pulse?.visible; }
 
   /**
@@ -522,6 +619,7 @@ export class CardFxLayer extends THREE.Group {
     this.setLocked(false);
     if (this._pulse) this._pulse.visible = false;
     this._pulseTl = null;
+    if (this._pulseUniforms) this._pulseUniforms.uVecA.value.x = 0;
     this._react = null;
     if (this.body) { this.body.uReact.value = 0; this.body.uReactKind.value = 0; }
   }
@@ -558,14 +656,11 @@ export class CardFxLayer extends THREE.Group {
     if (this._pulse?.visible && this._pulseTl) {
       this._pulseTl.elapsed += dt;
       const k = Math.min(this._pulseTl.elapsed / this._pulseTl.duration, 1);
-      const s = this._pulseTl.scale + (1 - this._pulseTl.scale) * k; // scale→1 回程
-      this._pulse.scale.set(s, s, 1);
-      // 不透明度随时间衰减（(1-k)^1.6）：闪光应「一闪即灭」。不衰减会在咏唱激活的
-      // 放缩段把整卡洗白（亮面卡 + 0.55 恒亮加色 + bloom = 牌面短暂消失）
-      this._pulse.material.opacity = PULSE_OPACITY * (1 - k) ** 1.6;
+      this._pulseUniforms.uVecA.value.x = k;  // 包络/环程全在 shader 内由 uProg 驱动
       if (k >= 1) {
         this._pulse.visible = false;
         this._pulseTl = null;
+        this._pulseUniforms.uVecA.value.x = 0;
       }
     }
     if (this._veil) {
@@ -618,6 +713,7 @@ export class CardFxLayer extends THREE.Group {
       this._pulse.geometry.dispose();
       this._pulse.material.dispose();
       this._pulse = null;
+      this._pulseUniforms = null;
     }
     if (this._veil) {
       this.remove(this._veil);
@@ -649,7 +745,7 @@ function bakeChipTexture(n) {
   const g = canvas.getContext('2d');
   const text = String(n);
   const fontPx = text.length >= 2 ? 66 : 88;
-  g.font = `bold ${fontPx}px "Segoe UI", "Microsoft YaHei", sans-serif`;
+  g.font = `${fontPx}px ${UI_FONT}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = '#eef3fd';

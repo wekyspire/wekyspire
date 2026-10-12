@@ -53,6 +53,8 @@ def main() -> int:
                     help="孤岛去斑阈值：与主体（含 2px 邻接带）不相连、<=N 像素的**任意颜色**"
                          "连通域清除——轮廓外飞溅点/漆斑常是中灰而非纯白（2026-09-22 验收实测）")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--no-crop", action="store_true",
+                    help="不裁包围盒、保留原画布（遗物等按 1024² 留白惯例入库的素材用）")
     args = ap.parse_args()
 
     src = Path(args.src)
@@ -152,14 +154,15 @@ def main() -> int:
                 for x, y in pts:
                     px[x, y] = (0, 0, 0, 0)
 
-    # 自动裁掉全透明边距（留 2% 边距），立牌纹理更紧凑
-    bbox = img.getbbox()
-    if bbox:
-        mx = round(w * 0.02)
-        my = round(h * 0.02)
-        bbox = (max(0, bbox[0] - mx), max(0, bbox[1] - my),
-                min(w, bbox[2] + mx), min(h, bbox[3] + my))
-        img = img.crop(bbox)
+    # 自动裁掉全透明边距（留 2% 边距），立牌纹理更紧凑；--no-crop 时保留原画布
+    if not args.no_crop:
+        bbox = img.getbbox()
+        if bbox:
+            mx = round(w * 0.02)
+            my = round(h * 0.02)
+            bbox = (max(0, bbox[0] - mx), max(0, bbox[1] - my),
+                    min(w, bbox[2] + mx), min(h, bbox[3] + my))
+            img = img.crop(bbox)
 
     img.save(out)
     print(f"-> {out}（{img.width}x{img.height}）")

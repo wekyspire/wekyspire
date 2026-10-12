@@ -1,9 +1,12 @@
-// 粗体数字烘焙（白字 + 深描边的手写粗体感，概念图语言）：血量 / 护盾盾值共用。
+// 数字/短文本烘焙：血量 / 护盾盾值共用。
+// 描边纪律（2026-10-11 用户定）：文道潮黑本体即粗，描边只给发丝级（fontPx×0.07），
+// 且与粗体互斥——合成 bold 已全线禁用，描边不再承担「仿粗」职责。
 // 逻辑像素按全局 10px/世界单位 约定（width/height 即世界尺寸 ×10）；
 // node 无 document 不走此路径（各控件注入 baker 兜底）。
 import * as THREE from 'three';
 import { renderRichTextBlock } from '../richtext/texture.js';
 import { hasMarkup } from '../richtext/inline.js';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 /**
  * @param {string} text
@@ -15,7 +18,7 @@ import { hasMarkup } from '../richtext/inline.js';
 export function bakeBoldText(text, { fontPx = 20, tint = '#ffffff', stroke = 'rgba(5, 7, 12, 0.85)', italic = false } = {}) {
   const S = 4; // 超采样（1080p 下面片近 60px 高，S=3 已接近 1:1，提到 4 留足余量）
   const meas = document.createElement('canvas').getContext('2d');
-  meas.font = `${italic ? 'italic ' : ''}bold ${fontPx * S}px sans-serif`;
+  meas.font = `${italic ? 'italic ' : ''}${fontPx * S}px ${UI_FONT}`;
   const tw = Math.ceil(meas.measureText(text).width / S) + 6;
   const th = Math.ceil(fontPx * 1.4);
   const canvas = document.createElement('canvas');
@@ -23,10 +26,10 @@ export function bakeBoldText(text, { fontPx = 20, tint = '#ffffff', stroke = 'rg
   canvas.height = th * S;
   const ctx = canvas.getContext('2d');
   ctx.scale(S, S);
-  ctx.font = `${italic ? 'italic ' : ''}bold ${fontPx}px sans-serif`;
+  ctx.font = `${italic ? 'italic ' : ''}${fontPx}px ${UI_FONT}`;
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(3, fontPx * 0.2);
+  ctx.lineWidth = Math.max(1.2, fontPx * 0.07);
   ctx.strokeStyle = stroke;
   ctx.strokeText(text, 3, th / 2);
   ctx.fillStyle = tint;
@@ -47,7 +50,7 @@ export function bakeBoldText(text, { fontPx = 20, tint = '#ffffff', stroke = 'rg
  *   （hitRegions 只有消费方接了 Picker 才用得上；单行烘焙的调用方一般忽略）
  */
 export function bakeRichLine(text, {
-  fontPx = 16, tint = '#ffffff', strokeWidth = 0, bold = true, maxWidth = 4000, scale = 3,
+  fontPx = 16, tint = '#ffffff', strokeWidth = 0, bold = false, maxWidth = 4000, scale = 3,
 } = {}) {
   return renderRichTextBlock(text, {
     maxWidth,
@@ -79,6 +82,6 @@ export function bakeAutoLine(text, opts = {}) {
   const { fontPx, tint, bold, maxWidth, scale, strokeWidth } = opts;
   return bakeRichLine(text, {
     fontPx, tint, bold, maxWidth, scale,
-    strokeWidth: strokeWidth ?? Math.max(3, (fontPx ?? 16) * 0.2),
+    strokeWidth: strokeWidth ?? Math.max(1.2, (fontPx ?? 16) * 0.07),
   });
 }

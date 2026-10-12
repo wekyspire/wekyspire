@@ -5,7 +5,7 @@
 //
 // 语义：存档 = 检查点。**真实档**落盘只在 prep，恢复后必处 prep；**调试档**（造档工具产出 /
 // 面板导出）要能从"房内 / 进阶中"接着跑，故额外恢复 gameStage/currentRoom/roomData/encounter。
-import { advanceFloor } from './runFlow.js';
+import { advanceFloor, buildRoomTable } from './runFlow.js';
 import { cloneModifiers } from '../skills/cardModifiers.js';
 
 export function restoreRunFromSave(run, save) {
@@ -13,6 +13,9 @@ export function restoreRunFromSave(run, save) {
   // rng 状态直存直取：回放 advanceFloor 不消耗 run.rng（遭遇用派生种子），
   // 若不恢复状态，读档后的房间派发会偏离活局时间线（旧档无此字段=维持回放语义）
   if (save.rngState != null) run.rng.setState(save.rngState);
+  // 房间表：存档带（同种子同塔的现场事实）直接用；旧档无此字段按种子重导——
+  // 表只裁决「未来层」的派发（已到层的房早消费完了），重导对旧档无副作用
+  run.roomTable = save.roomTable ? [...save.roomTable] : buildRoomTable(run.seed, run.totalFloors);
   if (save.route) run.route = save.route; // 开局路线（旧档无此字段 → 'body'：旧局全是体修开局）
   else run.route = run.route ?? 'body';
   const p = run.player;
@@ -70,6 +73,8 @@ export function restoreRunFromSave(run, save) {
       run.gameStage = 'room';
       run.currentRoom = save.currentRoom;
       run.roomData = save.roomData ? JSON.parse(JSON.stringify(save.roomData)) : null;
+      // 房内现场 > 房间表：旧档房内现场是旧派发口径的既成事实，表向它对齐（只改本层）
+      if (run.roomTable) run.roomTable[run.floor] = save.currentRoom;
     } else {
       run.gameStage = save.gameStage === 'end' ? 'end' : 'prep';
       run.currentRoom = null;

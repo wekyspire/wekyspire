@@ -1,7 +1,9 @@
-// 战前准备面板（塔楼层）：层数 / 敌人预告 / 遗物装卸（图标 + 拖拽 + 容量条）/ 进入战斗。
+// 战前准备面板（塔楼层）：删卡机会 / 背囊遗物栏（点击或拖装）/ 进入战斗。
+// 层数与敌人预告不在面板内——层数在塔身层数牌与右缘刻度尺，敌人预告在左半屏大立牌
+// （EnemyPreviewObject）；槽容量读数在顶部资源行旁的槽位条（RelicSlotMeterObject）。
 import { RelicLoadoutObject, relicLoadoutSpec } from '../objects/RelicLoadoutObject.js';
 
-/** 战前准备（塔楼层）：层数 / 敌人预告 / 遗物装卸（交互升级）/ 进入战斗。 */
+/** 战前准备（塔楼层）。 */
 export function buildPrepPanel(snap) {
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战前准备' });
@@ -13,30 +15,13 @@ export function buildPrepPanel(snap) {
       action: { action: 'openUpgradePicker', source: 'bossRemove', local: true },
     });
   }
-  w.push({ kind: 'text', text: `层数 ${snap.floor} / ${snap.totalFloors}` });
-  w.push({
-    kind: 'text',
-    text: snap.atBossFloor ? `本层即 Boss！` : `距 Boss 层 ${snap.toBoss} 层`,
-    tint: snap.atBossFloor ? '#ff7875' : undefined,
-  });
 
-  w.push({ kind: 'gap' });
-  w.push({ kind: 'sub', text: '下层敌人预告', tint: '#8a93b2' });
-  if (!snap.encounter?.length) w.push({ kind: 'text', text: '（无）', tint: '#77809a' });
-  for (const e of snap.encounter ?? []) {
-    w.push({ kind: 'text', text: e.name, tint: '#f08080' });
-  }
-
-  // —— 遗物装卸区（custom widget）：图标 + hover 详情 + 拖拽装卸 + 槽容量 point bar ——
-  // 意图仍走 equip/unequip/useRelic（与旧按钮同一条链）；「槽位 N/M」并入容量条读数。
-  w.push({ kind: 'gap' });
-  w.push({ kind: 'sub', text: '遗物', tint: '#8a93b2' });
+  // —— 背囊遗物栏（custom widget）：点击装备 / 拖到顶栏装备；顶栏点击卸下 ——
   w.push({
     kind: 'custom',
     height: relicLoadoutSpec(snap.relics, snap.relicSlots).height,
     build: (panel) => new RelicLoadoutObject({
       relics: snap.relics ?? [],
-      slots: snap.relicSlots ?? { used: 0, total: 0 },
       fireIntent: (a) => panel.fireIntent(a),
       bakeText: panel._bakeText ?? null,
     }),

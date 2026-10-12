@@ -93,7 +93,7 @@ function submit() {
 
     <section v-if="runState" class="run">
       <div class="title">
-        第 {{ runState.floor }}/{{ runState.totalFloors }} 层 · {{ runState.stageCn }}
+        第 {{ runState.floor }}/{{ runState.totalFloors }} 层 {{ runState.stageCn }}
         <span v-if="runState.result" class="tag">{{ runState.result === 'victory' ? '登顶' : '战败' }}</span>
       </div>
       <div class="hpbar"><i :style="{ width: hpPct + '%' }"></i><span>HP {{ runState.hp }}/{{ runState.maxHp }}</span></div>

@@ -50,7 +50,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.hud { position: fixed; top: 8px; left: 12px; z-index: 20; font-family: sans-serif; pointer-events: none; }
+.hud { position: fixed; top: 8px; left: 12px; z-index: 20; pointer-events: none; }
 .turn {
   color: #ccc; font-size: 13px; background: rgba(0, 0, 0, .45);
   padding: 4px 10px; border-radius: 0; display: inline-block;

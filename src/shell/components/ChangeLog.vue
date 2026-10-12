@@ -101,10 +101,11 @@ function onLeave() {
   font-size: 18px; cursor: pointer; user-select: none;
   background: transparent; transition: color .2s;
 }
-.toggle-icon:hover { background: rgba(66, 66, 66, .85); }
-/* 版本 + 日期：白色普通字体（不带粗体/描边），与图标垂直居中 */
+.toggle-icon:hover { background: rgba(0, 0, 0, .55); }
+/* 版本 + 日期：标题字族，与图标垂直居中 */
 .version-line {
-  color: #fff; font-weight: 400; font-size: 13px; letter-spacing: .5px;
+  color: #f2f2f2; font-weight: 400; font-size: 13px; letter-spacing: .5px;
+  font-family: var(--font-display);
   user-select: none; white-space: nowrap;
 }
 /* 面板自图标**向上**展开：版本行占了图标右侧，向下展开会压住它 */
@@ -118,9 +119,9 @@ function onLeave() {
 .changelog-content.hidden {
   opacity: 0; transform: translateY(8px); pointer-events: none;
 }
-.changelog-content-inner h2 { margin: 0 0 8px; font-size: 16px; color: #f5f5f5; }
-.md-body :deep(h3) { margin: 12px 0 4px; font-size: 14px; color: #f2f2f2; }
-.md-body :deep(h4) { margin: 10px 0 2px; font-size: 13px; color: #b8b8b8; }
+.changelog-content-inner h2 { margin: 0 0 8px; font-size: 16px; color: #f2f2f2; font-family: var(--font-display); }
+.md-body :deep(h3) { margin: 12px 0 4px; font-size: 14px; color: #f2f2f2; font-family: var(--font-display); }
+.md-body :deep(h4) { margin: 10px 0 2px; font-size: 13px; color: #b8b8b8; font-family: var(--font-display); }
 .md-body :deep(ul) { margin: 4px 0; padding-left: 18px; }
 .md-body :deep(p) { margin: 4px 0; color: #a0a0a0; }
 .error { color: #ff7875; }

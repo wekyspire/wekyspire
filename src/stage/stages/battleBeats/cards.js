@@ -48,9 +48,9 @@ export const cardBeats = {
       }
       return this._burnOut(id, view, finish);
     }
-    // 回手牌（宾语转化归位/牌库抽卡）：交还手牌跟踪层——_entering 标记待飞，
-    // 锚点算出后从当前位（中央展示位）补间飞回扇形（咏唱回手 ANIM_CHANT_TOGGLED
-    // 同款 held→hand 放行路径：sync 对账的 held 守卫不解除停留，须由本节拍直写）
+    // 回手牌（宾语转化归位）：zone 过单门翻 hand（弹簧目标资格恢复），另发
+    // 入场弧标记——从当前展示位弧线飞回扇形（锚点由其后的 _layoutAndTrack 算出）；
+    // held→hand 的弹簧收养是兜底路径（咏唱回手等无 cardMoved 事件的迁移走它）
     if (type === EventNames.ANIM_CARD_MOVED && payload?.toZone === 'hand') {
       this.model.setZone(id, 'hand');
       this._entering.add(id);
@@ -237,8 +237,7 @@ export const cardBeats = {
         finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
         if (this._views.has(id)) {
           if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
-            this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手）
-            this.springs.release(id); // 离手即摘弹簧目标：空窗期 idle 卡不得被拉回手牌（回归病灶）
+            this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手；单门摘弹簧+拾取）
           }
           // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
         }
@@ -247,11 +246,10 @@ export const cardBeats = {
       // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
       // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
       // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
-      // 根治：命中模板即刻摘弹簧目标 + 预置 held——布局/状态语义本就允许展示期持 held
-      // （_setCardZone 的 held 守卫只挡「解除停留」，不挡提前进入），settle 幂等收尾。
+      // 根治：命中模板即刻预置 held（zone 过单门，摘弹簧目标+摘拾取），settle 幂等收尾
+      // ——held = 静止位在展示位的 zone，弹簧目标资格只认 hand。
       if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
         this.model.setZone(id, 'held');
-        this.springs.release(id);
       }
       // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
       // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡

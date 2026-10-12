@@ -48,7 +48,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   position: fixed; inset: 0; z-index: 60;
   background: rgba(5, 5, 5, .55);
   display: flex; align-items: center; justify-content: center;
-  font-family: sans-serif;
 }
 .menu-dialog {
   width: min(420px, 88vw); padding: 20px 26px 18px;
@@ -62,7 +61,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
   to { opacity: 1; transform: none; }
 }
 .menu-dialog-title {
-  margin: 0 0 8px; font-size: 17px; color: #f5f5f5; letter-spacing: .06em;
+  margin: 0 0 8px; font-size: 17px; color: #f2f2f2; letter-spacing: .06em;
+  font-family: var(--font-display);
 }
 .menu-dialog-message { margin: 0 0 14px; font-size: 13px; line-height: 1.6; color: #c2c2c2; }
 .menu-dialog-input {
@@ -74,7 +74,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 .menu-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .menu-dialog-btn {
   min-width: 88px; padding: 7px 18px; font-size: 14px; cursor: pointer; border-radius: 0;
-  transition: background .15s, border-color .15s;
+  font-family: var(--font-display);
+  transition: filter .15s, border-color .15s;
 }
 .menu-dialog-btn.confirm {
   background: rgba(66, 66, 66, .95);
@@ -83,5 +84,5 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 .menu-dialog-btn.cancel {
   background: rgba(20, 20, 20, .92); border: 2px solid #8a8a8a; color: #e4e4e4;
 }
-.menu-dialog-btn:hover { background: rgba(84, 84, 84, .95); border-color: #ececec; }
+.menu-dialog-btn:hover { filter: brightness(.72); }
 </style>

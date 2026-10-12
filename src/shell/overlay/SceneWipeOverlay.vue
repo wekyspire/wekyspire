@@ -13,6 +13,10 @@ const dur = computed(() => {
   if (s.value.phase === 'reveal') return s.value.revealMs ?? SCENE_TRANSITION_MS.reveal;
   return 0;
 });
+// 瑞米涂鸦（UI_LANGUAGE.md 加载涂鸦章）：加载界面与幕间黑屏共用同款序列帧。
+// 只在 cover（全黑盖满）段挂上——enter/reveal 滑动期间不露头；
+// 挂载/摘除都在全黑瞬时完成，用户看不见跳变。
+const REMI_URL = `${import.meta.env.BASE_URL}ui/remi_loader.png`;
 </script>
 
 <template>
@@ -23,6 +27,8 @@ const dur = computed(() => {
          cover  实体盖满全屏：[-30vw, 100vw]（此中点换景/内容就位）
          reveal 完全移出左侧：[-130vw, 0]（目的地自右缘露出） -->
     <div class="wipe" :class="s.phase" :style="{ transitionDuration: dur + 'ms' }"></div>
+    <!-- 瑞米涂鸦：全黑段右下角走路（与加载界面同一条 12 帧 sprite） -->
+    <div v-if="s.phase === 'cover'" class="remi" :style="{ backgroundImage: `url('${REMI_URL}')` }"></div>
   </div>
 </template>
 
@@ -45,4 +51,14 @@ const dur = computed(() => {
   transition-property: transform;
   transition-timing-function: cubic-bezier(.15, .55, .3, .97);
 }
+/* 尺寸/帧数与 index.html 加载壳同源（12 帧 × 105px 宽，steps 逐帧跳）；
+   cover 段开始即挂载，remi-in 淡入衔接黑幕扫过右缘的时刻 */
+.remi {
+  position: absolute; right: 16px; bottom: 12px;
+  width: 105px; height: 61px; pointer-events: none;
+  background-position: left top; background-repeat: no-repeat; background-size: 1260px 61px;
+  animation: remi-in .25s ease, remi-walk 1s steps(12) infinite;
+}
+@keyframes remi-walk { to { background-position-x: -1260px; } }
+@keyframes remi-in { from { opacity: 0; } }
 </style>

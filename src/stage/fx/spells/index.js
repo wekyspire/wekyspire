@@ -258,7 +258,7 @@ const CARD_SPELLS = {
   shatterHitB:      { template: 'fistCast', params: { mode: 'strike' } },
   shatterHead:      { template: 'fistCast', params: { mode: 'heavy' } },
   endureB:       { template: 'fistCast', params: { mode: 'strike' } },
-  // ---- 体修·非拳件（2026-10-02 核心卡批：series 'fist' 的兜底拳风对这些卡是语义错配）----
+  // ---- 体修：非拳件（2026-10-02 核心卡批：series 'fist' 的兜底拳风对这些卡是语义错配）----
   // 蓄力链（洗入瞬击）：气团数 = 洗入数；一瞬千击 toHand（发现 5 张直接进手）
   chargeUp:         { template: 'chargeUpCast', params: { count: 2 } },
   comboStrike:      { template: 'chargeUpCast', params: { count: 3 } },
@@ -307,9 +307,9 @@ const CARD_SPELLS = {
   // ---- 遗物枪击卡（亮黄白细直弹道——枪火语言：仍走投射物，弹道细直平弧）----
   rapidFire:        { template: 'bladeCast', params: { mode: 'daggers',
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
-  pointShot:        { template: 'bladeCast', params: { mode: 'slashC', arcH: 0.15,
+  pointShot:        { template: 'bladeCast', params: { mode: 'slash', arcH: 0.15,
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
-  piercingShot:     { template: 'bladeCast', params: { mode: 'slashC', arcH: 0.10,
+  piercingShot:     { template: 'bladeCast', params: { mode: 'slash', arcH: 0.10,
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
   // ---- 火系补量（2026-10-06：原 depth/melt 等 15 张零覆盖卡 + 特征卡签名）----
   // 回蓝件（余热/重燃/回响烈焰）：火焰能量回流语言——manaCast 火调（余温收聚）

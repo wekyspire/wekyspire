@@ -1,4 +1,4 @@
-// 房型配方层 · 命名配方：爬塔四阶段风格流 + Boss 房 + 隔层特殊房。
+// 房型配方层 命名配方：爬塔四阶段风格流 + Boss 房 + 隔层特殊房。
 //   阶段1（1-10 层，boss1 前）fortress：现状风格加强版——年久失修的杂乱要塞，地面起伏更大，
 //     倾斜柱/大块坍塌岩（breaker）多。
 //   阶段2（12-21 层）palace：空间缩小 15%（room.scale 0.85），左墙多扇高长窗，
@@ -292,7 +292,7 @@ const BOSS = {
   fog: { color: 0x160a12, near: 185, far: 560 },
 };
 
-// ---- 隔层 · 月光花园（boss4 与研究层之间，不计层数）：整排高窄窗 + 平整地面 + 小花园 ----
+// ---- 隔层 月光花园（boss4 与研究层之间，不计层数）：整排高窄窗 + 平整地面 + 小花园 ----
 const MEZZANINE = {
   id: 'mezzanine',
   theme: 'dungeon',
@@ -465,7 +465,7 @@ const CASINO = {
 };
 
 // ============================================================================
-// 营地 · 训练场（休息房 ）：**第一间"非机器"场景式休息房**。
+// 营地 & 训练场（休息房 ）：**第一间"非机器"场景式休息房**。
 //   · 两个交互物 = 房间的两个部分：**篝火（营地）** 与 **训练桩（训练场）**——
 //     点谁推近看谁，各自的操纵面板下沿停靠（RoomStage 按 interactives 的 name 分发）。
 //   · 布光走 `camp` 预设：火光主导（火是主角，盏数多/基数高）+ 一道高窗月光做冷暖对比。
@@ -686,7 +686,7 @@ export const RECIPES = Object.freeze({
   fortress: FORTRESS, palace: PALACE, manor: MANOR, library: LIBRARY,
   boss: BOSS, mezzanine: MEZZANINE,
   casino: CASINO,   // 休息房（老虎机 / 银行机）
-  camp: CAMP,       // 休息房（营地 · 训练场）
+  camp: CAMP,       // 休息房（营地 & 训练场）
   shop: SHOP,       // 休息房（瑞米维护的售货机：商店房）
 });
 
@@ -695,7 +695,7 @@ export const RECIPES = Object.freeze({
  */
 export const REST_RECIPES = Object.freeze({
   slot: 'casino',           // 老虎机 + 银行机同处一室（SLOT_MACHINE.md：二者成对出现）
-  campTraining: 'camp',     // 营地 · 训练场合并房（篝火 = 营地、训练桩 = 训练）
+  campTraining: 'camp',     // 营地 & 训练场合并房（篝火 = 营地、训练桩 = 训练）
   shop: 'shop',             // 商店房（SHOP.md §一：瑞米维护的售货机）
 });
 

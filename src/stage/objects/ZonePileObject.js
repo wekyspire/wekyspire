@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import gsap from 'gsap';
+import { UI_FONT } from '../richtext/uiFont.js';
 
 const ICON_LAYOUT = { width: 100, height: 120 }; // 10x12 世界单位 × 10px（icon 型小图标）
 
@@ -109,10 +110,10 @@ function defaultBakeIcon(label, count, color) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#aab';
-  ctx.font = '14px sans-serif';
+  ctx.font = `14px ${UI_FONT}`;
   ctx.fillText(label, W / 2, 20);
   ctx.fillStyle = '#f2f4fa';
-  ctx.font = 'bold 36px sans-serif';
+  ctx.font = `36px ${UI_FONT}`;
   ctx.fillText(String(count), W / 2, H / 2 + 16);
 
   const texture = new THREE.CanvasTexture(canvas);

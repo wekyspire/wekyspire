@@ -194,7 +194,7 @@ export function roomSnapshot(run, extra = {}) {
   const upgradeCards = deckUpgradeCards(run);
   snap.cardRemoval = cardRemovalSnapshot(run);
 
-  // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地·训练场合并房）共用
+  // 训练部分：'training'（旧单房，兼容保留）与 'campTraining'（营地&训练场合并房）共用
   if (room === 'training' || room === 'campTraining') {
     const choices = run.roomData?.drawChoices ?? null;
     const pending = run.roomData?.pendingUpgrade;   // {mode, remaining}

@@ -84,23 +84,26 @@ const UPGRADE_SOURCES = {
   },
   gurpasRemove: {
     cards: (s) => s?.gurpas?.removeCards,   // 删卡服务：整副牌组（不限等阶）
+    burn: true,   // 确认 = 摘下选中卡原地燃尽（删卡也是失去，与焚毁同一演出语言）再上行意图
     intent: (uniqueID) => ({ action: 'gurpasRemove', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
     tips: false,   // 删卡界面不弹卡牌 tooltip——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
     cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
+    burn: true,   // 同 gurpasRemove：确认时原地燃尽
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
-    tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
+    tips: false,   // 同 gurpasRemove：删卡不弹卡牌 tooltip
   },
   ascensionRemove: {
     // 跳过进阶的删卡反哺：与 Boss 奖励同一计数器/同一结算，
     // 仅文案不同——title 用户钦定「删一张卡」；「取消」只收起界面（不删也行）。
     cards: (s) => s?.cardRemoval?.removeCards,
+    burn: true,   // 同 gurpasRemove：确认时原地燃尽
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',
-    tips: false,   // 同 gurpasRemove：删卡不弹 tooltip
+    tips: false,   // 同 gurpasRemove：删卡不弹卡牌 tooltip
   },
 };
 
@@ -646,22 +649,34 @@ export function createStagePickerKit({
       confirmFn = (ids) => onPick?.(ids[0]);
       cancelFn = null;
       picker.attachPicker(pickerNow());
+      const entries = cards.map((c) => {
+        let view = c.view ?? null;
+        if (!view) {
+          try {
+            const def = getSkillDefinition(c.defId);
+            if (def) view = withLabels(cardViewFromDef(def));
+          } catch { /* 未注册等异常：退回 defId 占位烘焙，不拦开界面 */ }
+        }
+        return { uniqueID: c.uniqueID, defId: c.defId, view, enabled: c.enabled !== false };
+      });
       picker.open({
         title: '粉碎哪张卡牌？',
         hint: '粉碎诅咒卡牌另有奖赏',
-        cards: cards.map((c) => {
-          let view = c.view ?? null;
-          if (!view) {
-            try {
-              const def = getSkillDefinition(c.defId);
-              if (def) view = withLabels(cardViewFromDef(def));
-            } catch { /* 未注册等异常：退回 defId 占位烘焙，不拦开界面 */ }
-          }
-          return { uniqueID: c.uniqueID, defId: c.defId, view, enabled: c.enabled !== false };
-        }),
+        cards: entries,
         confirmLabel: '确认粉碎',
         tips: false,
       });
+      // 确认 = 摘下选中卡原地燃尽（吞蚀视觉与 C0 同源），烧完才结算——卡先烧、状态后变
+      picker.confirmHook = (ids) => {
+        const c = entries.find(x => x.uniqueID === ids[0]) ?? null;
+        const entry = c ? picker.takeEntry(ids[0]) : null;
+        picker.close();
+        playCardBurn({
+          card: entry?.obj ?? null,
+          defId: c?.defId ?? null, view: c?.view ?? null,
+          onDone: () => onPick?.(ids[0]),
+        });
+      };
       return true;
     },
 

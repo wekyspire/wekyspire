@@ -301,7 +301,7 @@ function reloadCurrent() {
       <div v-else-if="tab === 'flow'" class="pane">
         <div class="row">
           <span class="k">进房</span>
-          <button @click="dbg.enterRoom('campTraining')">营地·训练场</button>
+          <button @click="dbg.enterRoom('campTraining')">营地&训练场</button>
           <button @click="dbg.enterRoom('slot')">老虎机</button>
           <button @click="dbg.enterRoom('shop')">售货机</button>
           <button @click="dbg.enterRoom('gurpas')">古尔帕斯</button>

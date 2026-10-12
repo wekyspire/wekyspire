@@ -262,7 +262,7 @@ try {
 
   const equipped = run.player.equippedRelics.length;
   console.log(`已写入 ${path.relative(ROOT, file)}`);
-  console.log(`  第 ${run.floor}/${run.totalFloors} 层 · ${run.gameStage}${run.currentRoom ? ' · ' + run.currentRoom : ''}`
+  console.log(`  第 ${run.floor}/${run.totalFloors} 层 ${run.gameStage}${run.currentRoom ? ' · ' + run.currentRoom : ''}`
     + ` · 卡组 ${run.player.deck.length} 张 · 遗物 ${run.player.relics.length} 件（装备 ${equipped}）`
     + ` · HP ${run.player.hp}/${run.player.maxHp} · 金 ${run.player.money}`);
   console.log(`浏览器起跑： http://localhost:5177/?debug=1&save=${name}`);

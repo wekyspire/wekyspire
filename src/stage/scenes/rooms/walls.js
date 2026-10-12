@@ -1,4 +1,4 @@
-// 房型配方层 · 程序化砌墙（CATALOG L2 的墙身层）：bay 分段 + 尖拱开洞 + 砖面细节。
+// 房型配方层 程序化砌墙（CATALOG L2 的墙身层）：bay 分段 + 尖拱开洞 + 砖面细节。
 // 纯 kit 图元（顶点色管线），与道具同一 mergeStatic 合批口径；
 // 立面装饰（wallStructure/wallDecor 道具挂墙）由 composeRoom 的 L2 摆放器在墙身之上进行。
 //

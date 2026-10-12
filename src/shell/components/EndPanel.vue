@@ -21,7 +21,7 @@ const IS_PROD = import.meta.env.PROD;
 .panel {
   position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 20;
   background: rgba(10, 10, 10, .94); border: 2px solid #555555; border-radius: 0;
-  padding: 26px 44px; color: #e4e4e4; font-family: sans-serif; text-align: center;
+  padding: 26px 44px; color: #e4e4e4; text-align: center;
 }
 h2 { margin: 0 0 10px; font-size: 28px; color: #f5f5f5; }
 h2.victory { color: #efefef; }   /* 扁平冷色（金色只留金钱相关内容） */

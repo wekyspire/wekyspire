@@ -85,7 +85,7 @@ if (argv[0] === 'load') {
   fs.writeFileSync(file, JSON.stringify({ seed: save.seed, save, saveName: save.name, actions: [] }, null, 2));
   const stage = save.debugMode ? `调试档（${save.gameStage ?? 'prep'}${save.currentRoom ? ' · ' + save.currentRoom : ''}）` : '真实档（检查点=prep）';
   console.log(`已建档 ${sessionName}（从存档「${save.name}」起跑）`);
-  console.log(`  第 ${save.floor}/${save.totalFloors ?? '?'} 层 · ${stage} · 卡组 ${save.player.deck.length} 张 `
+  console.log(`  第 ${save.floor}/${save.totalFloors ?? '?'} 层 ${stage} · 卡组 ${save.player.deck.length} 张 `
     + `· 能力 ${save.player.abilities.length} 项 · 遗物 ${save.player.relics.length} 件 · HP ${save.player.hp}/${save.player.maxHp}`);
   console.log(`下一步：node tools/headlessPlay.mjs ${sessionName} state ｜ 战斗动作会自动开战（也可先 fight）`);
   process.exit(0);

@@ -1,4 +1,4 @@
-// 房型配方层 · 布光预设（SCENE_TASKS T3.3）：torch / moon / boss-rim 三预设。
+// 房型配方层 布光预设（SCENE_TASKS T3.3）：torch / moon / boss-rim 三预设。
 // 铁律（CATALOG §6）：光源资产只声明"有火"，光参数全部集中在此——资产禁私设 PointLight。
 // 基础结构移植 dungeon3D 已调好的光参（半球保底 + 唯一投影主光 + 战线主补光 + 假反弹），
 // 预设差异 = 主光来源/强度配比/染色口径。火点光由 composeRoom 收集的 fireAnchors 生成。
@@ -99,7 +99,7 @@ export const LIGHTING_PRESETS = {
     focus: { color: 0xffdcae, base: 1000, dist: 70, offset: 14, dim: 0.72, rise: 3.2, lift: 0.08 },
     tint: { base: [0.6, 0.5, 0.54], fireGain: [0.28, 0.21, 0.32], radius: 60 },
   },
-  // 营地·训练场（休息房 ）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
+  // 营地&训练场（休息房 ）：**火光主导的暖调**——与赌厅"中央暖金吊灯撑亮度"不同，
   // 这里的光源是地上的篝火/火盆（火点光基数更高、罩得更远、盏数更多），环境光压到最低
   // （"暗处围着火"的营地感），再留一道高窗月光做冷暖对比。
   camp: {

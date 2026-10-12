@@ -314,7 +314,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
   font-size: 11px; padding: 1px 7px; border-radius: 4px;
   background: #26406b; color: #bfd4ff;
 }
-.moment-title { font-weight: 600; color: #f0f4ff; }
+.moment-title { color: #f0f4ff; }
 .moment-cands { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
 .cand { display: flex; align-items: baseline; gap: 6px; padding: 2px 6px; border-radius: 4px; background: #131a2b; color: #8d9ab5; }
 .cand.taken { background: #24402c; color: #d6ffe4; outline: 1px solid #3f7a52; }

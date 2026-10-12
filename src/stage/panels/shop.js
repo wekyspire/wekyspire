@@ -22,8 +22,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
       });
       return w;
     }
-    // packName = 快照侧显示名（panelSnapshot 的 PACKS 表，不裸露 id——夜测 r6路8
-    // 实报「卡包 · body」泄漏内部 id；缺字段时退 packId 兜底）
+    // packName = 快照侧显示名（panelSnapshot 的 PACKS 表，不裸露 id）
     w.push({ kind: 'title', text: `${shop.pending.packName ?? shop.pending.packId}卡包`, align: 'center' });
     w.push({
       kind: 'button', id: 'shop:openPack', width: 300, size: 'main',

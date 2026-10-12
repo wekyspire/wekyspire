@@ -1,4 +1,4 @@
-# 场景道具批量生产 · flash 派发总指令
+# 场景道具批量生产 flash 派发总指令
 
 > 使用方式：P1（propKit 落地）完成后，把本文全文作为 flash 的初始指令粘贴即可。
 > flash 是调度者（orchestrator），不亲自建模；资产由它派发的并行 subagent 生产。

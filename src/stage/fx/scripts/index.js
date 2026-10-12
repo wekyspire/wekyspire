@@ -20,6 +20,8 @@
 import { registerPyroScripts } from './bosses/pyro.js';
 import { registerKardasScripts } from './bosses/kardas.js';
 import { registerMefm1Scripts } from './bosses/mefm1.js';
+import { registerPangolinKingScripts } from './bosses/pangolinKing.js';
+import { registerCorruptSourceScripts } from './bosses/corruptSource.js';
 import { registerEnemyActScript } from './enemyAct.js';
 
 const REG = new Map();
@@ -37,4 +39,6 @@ export function hasScript(id) { return REG.has(id); }
 registerPyroScripts(registerScript);
 registerKardasScripts(registerScript);
 registerMefm1Scripts(registerScript);
+registerPangolinKingScripts(registerScript);
+registerCorruptSourceScripts(registerScript);
 registerEnemyActScript(registerScript);

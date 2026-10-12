@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { P, shade } from '../kit/index.js';
 import { bakeBoldText } from '../../objects/textBakers.js';
 import { goodsArtTexture } from '../../art/goodsArt.js';
+import { UI_FONT } from '../../richtext/uiFont.js';
 
 // 货品种类 → 无美术时的占位色/字（与 shop.js 的 kind 口径一致：potion/apple/relic/pack）
 const KIND_TINT = {
@@ -54,12 +55,12 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /** 单行文本，超宽自动降字号（价格/名称都不许溢出货盘）。 */
-function fitText(ctx, text, { fontPx, maxW, weight = 'bold' }) {
+function fitText(ctx, text, { fontPx, maxW, weight = 'normal' }) {
   let px = fontPx;
-  ctx.font = `${weight} ${px}px sans-serif`;
+  ctx.font = `${weight} ${px}px ${UI_FONT}`;
   while (px > 10 && ctx.measureText(text).width > maxW) {
     px -= 1;
-    ctx.font = `${weight} ${px}px sans-serif`;
+    ctx.font = `${weight} ${px}px ${UI_FONT}`;
   }
   return px;
 }

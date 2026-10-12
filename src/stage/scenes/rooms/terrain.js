@@ -1,4 +1,4 @@
-// 房型配方层 · 地形分区 v2（heightmap 管线，取代矩形分区）：
+// 房型配方层 地形分区 v2（heightmap 管线，取代矩形分区）：
 //   perlin 值噪声 fbm 高度场 → 单位占位 control（keepout 距离场 blend，站位区强制归零）
 //   → 分类图（高台/低谷/平坦量化 + 连通域 + 分区 flatten）→ 裂缝 carving（ridge 噪声窄带）
 //   → 靠墙斜坡 carve → 0.5 量化 → 体素柱几何（kit 顶点色合批口径）。

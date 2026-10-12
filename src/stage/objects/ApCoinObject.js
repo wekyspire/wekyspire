@@ -88,7 +88,7 @@ export class ApCoinObject extends THREE.Group {
     this._sig = sig;
     // 概念图对角分式（白字烘焙 + tint）；node 走注入 baker 兜底
     const baked = typeof document !== 'undefined'
-      ? bakeFraction(String(current), String(max), { color: '#ffffff', bold: true })
+      ? bakeFraction(String(current), String(max), { color: '#ffffff' })
       : this._bakeLabel(sig);
     const old = this._numMaterial.map;
     this._numMaterial.map = baked.texture;

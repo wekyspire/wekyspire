@@ -5,6 +5,7 @@
 // 仅浏览器可用（需真实 canvas）；单测由 BattleStage 回退到注入的 bakeLabel。
 
 import * as THREE from 'three';
+import { UI_FONT } from './uiFont.js';
 
 // 三态主题（全扁平，无渐变）：enabled 黑底白字灰边 / active（悬停·激活）亮灰底白字 /
 // disabled 深灰。金色只留给**金钱相关内容**（金额文本），按钮一律走这套无彩色。
@@ -40,10 +41,10 @@ export function bakeButtonFace(data, { width = 150, height = 60, scale = 2, labe
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const paint = (text, x, y, fontPx, fallbackColor) => {
-    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.font = `${fontPx}px ${UI_FONT}`;
     // 主标签走 labelStyle（白字黑边）；副标签沿用主题色，只补一层黑描边
     ctx.lineJoin = 'round';
-    ctx.lineWidth = labelStyle?.strokeWidth ?? Math.max(2, fontPx * 0.16);
+    ctx.lineWidth = labelStyle?.strokeWidth ?? Math.max(1.2, fontPx * 0.07); // 发丝级（与粗体互斥，见 textBakers 头注）
     ctx.strokeStyle = labelStyle?.stroke ?? 'rgba(0,0,0,0.85)';
     ctx.fillStyle = labelStyle ? (labelStyle.color ?? '#ffffff') : fallbackColor;
     ctx.strokeText(text, x, y);
