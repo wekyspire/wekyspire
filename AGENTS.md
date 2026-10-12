@@ -185,6 +185,7 @@ src/
 - **UI 风格：方角 + 厚边框 + 黑白主题**（2026-10-11 用户定，定义文档 = `quest_prompts/UI_LANGUAGE.md`）：一切 UI 铬件 0 圆角 + 厚描边（3D ≈3 逻辑 px / DOM 2px）、配色无彩（黑底白/灰阶，hover 灰阶提亮；`richtext/buttonFace.js` THEMES 按钮唯一事实源——无渐变无自体发光）；**icon 类按钮无底无框**（纯带 alpha 图标）；**有素材的展示物直出素材**（遗物展示不画底片边框，无素材回落方角厚框占位）；**金色只留给金钱相关**；内容语义色不受此约束。
 - **公共获得演出三件套**：任何「到手一拍」走 `Stage.showcaseItem(payload)`（`skippable:true` + onSkip/onDismiss 可放弃）；无素材 key 程序化占位；新增获得路径不要绕过它自画 UI。
 - **卡面文本只写效果语言**：费用/等阶/充能/冷却/关键词走徽章与页脚词条行，**不复述**在 describe/battleDescribe；咏唱前缀由渲染层自动加。
+- **少用「·」类分隔符（2026-10-12 用户定）**：玩家可见文本（卡面/UI 文案/tooltip/意图）与项目文档都少用间隔号等分隔符，优先写成正常语句；并列枚举用「、」。
 - **通用机制词走 named 术语**：跨卡复用的机制关键词定义在 `core/skills/namedTerms.js`（特征色 + tooltip），卡面 markup 用 `/named{术语}`；**词条双轨**：`describe` 玩家版 / `agent` headless-LLM 版（触发时机/判定口径/不生效情形写全），headless 的 `terms` 视图读 agent 版，新词条两版都要写。
 - **卡间引用走 `/card{卡id}`**：hover 热区弹整卡预览；不写卡名裸文本。
 - **任何文本都可能带 markup**：遗物/效果/卡牌描述里的 markup 在**所有**渲染面都要渲染成图标 + 特征色（用 `bakeAutoLine`/`RichTextInline`，别自己写烘焙）；哪面印出 `/xxx{` 就是那处没接解析器。
