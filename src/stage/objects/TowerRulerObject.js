@@ -17,12 +17,13 @@ import { isEliteFloor } from '../../core/run/floorEnemyGenerator.js';
 import { isShopFloor } from '../../core/run/rooms/shop.js';
 import { GURPAS_FLOOR } from '../../core/run/rooms/gurpas.js';
 import { UI_FONT, UI_FONT_BODY } from '../richtext/uiFont.js';
+import { lerp } from 'three/src/math/MathUtils.js';
 
 const LEN = { normal: 2.0, mid: 3.2, boss: 4.6, current: 6.2 };   // 刻度长（wu）
 const COL = { normal: 0xc4c4c4, mid: 0xdcdcdc, boss: 0xe85a5a, elite: 0xeda24e, current: 0xf2f2f2 };
 // 当前层 HDR 基色（分量略过 bloom 阈值 1.45 起辉——uiScene 终段过 bloom 链；无辉光档退化为纯白）
 const COL_CURRENT_HDR = [1.62, 1.78, 2.24];
-const TICK_H = 0.26;              // 刻度线粗（wu；雪地背景上再细就消失——2026-10-11 实测）
+const TICK_H = 0.4;              // 刻度线粗（wu；雪地背景上再细就消失——2026-10-11 实测）
 const TICK_PLANE_H = TICK_H * 4;  // 刻度面片高（纹理上方是线、下方挂软阴影）
 const OPACITY = { idle: 0.72, hover: 0.95, current: 0.98 };
 const SPACING = 3.3;              // 刻度纵向间距（wu）
@@ -60,11 +61,11 @@ function tickTexture() {
 // 与颜色通道正交（Boss 红/精英橙/当前层 HDR 照旧），透明底共享烘焙、随刻度色同步。
 const GLYPH_GAP = 0.35;         // 符号与线尖的间隙（wu）
 const GLYPH_DEF = {             // wu = 符号面片边长（按视觉重量配平；刻度间距 3.3wu 内不打架）
-  slot: { draw: 'diamond', wu: 1.15 },
-  event: { draw: 'question', wu: 1.25 },
-  campTraining: { draw: 'triangle', wu: 1.15 },
-  shop: { draw: 'square', wu: 1.05 },
-  gurpas: { draw: 'star', wu: 1.30 },
+  slot: { draw: 'diamond', wu: 2.15 },
+  event: { draw: 'question', wu: 2.25 },
+  campTraining: { draw: 'triangle', wu: 2.15 },
+  shop: { draw: 'square', wu: 2.05 },
+  gurpas: { draw: 'star', wu: 2.30 },
 };
 const _glyphTexCache = new Map();
 function glyphTexture(kind) {
@@ -343,7 +344,7 @@ export class TowerRulerObject extends THREE.Group {
     if (key === this._bubbleKey) return;
     this._bubbleKey = key;
     const S = 3, pad = 9, gap = 4, tailW = 7, tailH = 11;
-    const l1 = `${f} 层${f === this._floor ? ' · 当前' : ''}`;
+    const l1 = `第 ${f} 层`;
     const { text: l2, tint } = this._descOf(f);
     const c = document.createElement('canvas');
     const g = c.getContext('2d');
@@ -414,11 +415,14 @@ export class TowerRulerObject extends THREE.Group {
     this._scroll += (this._scrollT - this._scroll) * Math.min(1, dt * 8);
     // 亮浪：head 骑 scroll 游标（爬升 tween 逐帧直写）——途经层随相机点亮，落定那拍
     // 目标层触发抵达闪光（旧实现 head 按 26 层/秒自跑，单层爬升开场即闪完，与相机脱节）
+    var currFloorSoft = this._floor;
     if (this._sweep) {
       const s = this._sweep;
       const dir = Math.sign(s.to - s.from) || 1;
       const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
       s.head = Math.max(lo, Math.min(hi, this._scroll));
+      // currFloorSoft：随相机推进的浮点楼层数，负责柔和的攀升动画
+      currFloorSoft = s.head;
       const arrived = dir > 0 ? s.head >= s.to - 0.02 : s.head <= s.to + 0.02;
       // 落定帧目标层视同已过（arrived 的 epsilon 比「head 爬到 to」早两帧，不补吃不到脉冲）
       const headEff = arrived ? s.to : s.head;
@@ -447,10 +451,12 @@ export class TowerRulerObject extends THREE.Group {
         zoomT = k * k * (3 - 2 * k);
       }
       t.zoom += (zoomT - t.zoom) * Math.min(1, dt * PROX.speed);
-      const cur = t.floor === this._floor;
+      const curT0 = Math.min(Math.abs(currFloorSoft - t.floor), 1.0);
+      const curT = curT0 * curT0 * (3 - 2 * curT0);
       const hov = t.floor === this._hoverFloor;
       const grown = t.baseLen * (1 + PROX.len * t.zoom + (hov ? 0.45 : 0));
-      const lenT = cur ? Math.max(LEN.current, grown) : grown;
+      const curLenTMin = lerp(LEN.current, t.baseLen, curT);
+      const lenT = Math.max(curLenTMin, grown);
       t.len += (lenT - t.len) * Math.min(1, dt * 10);
       if (Math.abs(t.len - t.mesh.scale.x) > 0.005) {
         t.mesh.scale.x = t.len;
@@ -464,9 +470,10 @@ export class TowerRulerObject extends THREE.Group {
       // 指针临近局部抬起；当前层保底可读（浏览态仍认得自己在哪）；hover 单根最强
       const edge = 1 - _smooth(WIN_H - EDGE_FADE, WIN_H, Math.abs(ty));
       let v = Math.max(edge, t.zoom * edge, this._overview * OVERVIEW.v);
-      if (cur) v = Math.max(v, 0.6);
+      v = Math.max(v, lerp(0.6, 0, curT));  // 当前层的明度包络（越接近当前层下限越亮）
       if (hov) v = Math.max(v, 0.95);
-      const opT = Math.min(1, v) * (cur ? OPACITY.current : hov ? OPACITY.hover : OPACITY.idle);
+      const curMinOpacity = lerp(OPACITY.current, OPACITY.idle, curT);
+      const opT = Math.min(1, v) * Math.max(curMinOpacity, hov ? OPACITY.hover : OPACITY.idle);
       if (Math.abs(opT - t.op) > 0.002) {
         t.op += (opT - t.op) * Math.min(1, dt * 12);
         t.mesh.material.opacity = t.op;
@@ -479,6 +486,7 @@ export class TowerRulerObject extends THREE.Group {
       } else if (t.bright > 0) {
         t.bright = Math.max(0, t.bright - dt * 2.2);
       }
+      const cur = curT < 0.5;
       if (cur) {
         // 当前层：HDR 白（略过 bloom 阈值起辉）；亮浪途经再按 bright 加亮
         const c = t.mesh.material.color;

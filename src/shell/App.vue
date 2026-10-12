@@ -17,6 +17,7 @@ import MenuPopup from './components/MenuPopup.vue';
 import MenuDialog from './components/MenuDialog.vue';
 import TooltipOverlay from './components/TooltipOverlay.vue';
 import { fitGameFrame } from './frame.js';
+import { stopMusic, playWind, duckWind, stopWind, preloadAudio } from './audio.js';
 import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
@@ -88,13 +89,23 @@ function startAssetPreload() {
     document.fonts.load('16px "WenDaoChaoHei"', '魏启尖塔'),
     document.fonts.load('16px "SourceHanTC"', '魏启尖塔'),
   ]).catch(() => {});
+  // 音频与美术并行预载，两路统计合并进同一条进度（音频失败不拦门：静音开局可玩，美术才卡死）
+  let artS = null, audS = null;
+  const emitProgress = () => {
+    const done = (artS?.done ?? 0) + (audS?.done ?? 0);
+    window.__bootShell?.progress({
+      ...(artS ?? {}), loaded: done, done,
+      total: (artS?.total ?? 0) + (audS?.total ?? 0),
+      loadedBytes: (artS?.loadedBytes ?? 0) + (audS?.loadedBytes ?? 0),
+      totalBytes: (artS?.totalBytes ?? 0) + (audS?.totalBytes ?? 0),
+    });
+  };
+  const audioPreload = preloadAudio({ onStats: (s) => { audS = s; emitProgress(); } });
   preloadAllArt({
-    onProgress: (loaded, total) => window.__bootShell?.progress({ loaded, total }),
-    // stats 的计数字段叫 done——映射回 loaded（字节进度条的分母语义）
-    onStats: (s) => window.__bootShell?.progress({ ...s, loaded: s.done }),
+    onStats: (s) => { artS = s; emitProgress(); },   // stats 的计数字段叫 done——映射回 loaded（字节进度条的分母语义）
   }).then(async (r) => {
     if (r.failed > 0) { window.__bootShell?.failed(r.failed); return; }   // 卡住：只给重试
-    await fontReady;
+    await Promise.all([fontReady, audioPreload]);
     assetsReady.value = true;
   });
 }
@@ -154,6 +165,8 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   mapStage.setRoomTable(ctrl.value.run.roomTable);   // 房间表静态整局：建局推一次（标尺花纹/hover 房型）
   mapStage.snapCameraToFloor();   // 读档起跑：相机直接锚到存档层（不播"从 1 层爬上来"的假爬升）
   stageManager.setStage(mapStage);
+  playWind();   // 塔楼风声床随局起跑（黑幕期淡入；已在播则不动）
+  duckWind(1);  // 上一局可能停在战斗压暗态
   phase.value = 'game';
   menuOpen.value = false;
   // 调试档可能是"房内现场"（造档工具产出）：补一次进房派发（幂等：已在房内则只刷演出）
@@ -215,6 +228,8 @@ async function autoStartFromUrl() {
 }
 
 function toTitle() {
+  stopMusic(); // 无尽模式回主菜单没有标题曲兜底，战斗 BGM 在此收掉（故事模式由 StartScreen 换轨）
+  stopWind();  // 风声床只随局存在
   ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
   detachTooltipForward = null;

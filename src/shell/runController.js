@@ -25,6 +25,7 @@ import { campOptions, campRest, campRecoverRemi, campLocked as campGateLocked } 
 import { SLOT, devourReady } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { createRunContext } from '../core/run/runContext.js';
+import { playMusic, stopMusic, duckWind } from './audio.js';
 import { createRunPresenter } from './runPresenter.js';
 import { ascensionReady, LEINO_DIMENSIONS } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
@@ -428,6 +429,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         battleStage.setPanelIntentHandler?.(dispatchPanelIntent);
         battleStage.setRunSequencer?.(runSequencer);   // 得卡演出的指令化挂点（与切幕/清层串行）
         stageManager.setStage(battleStage);
+        playMusic('battleCh1'); // 战斗 BGM 随换场起跑（黑幕期淡入）；新章曲目登记进 audio.js TRACKS 后按 run.floor 选
+        duckWind(0);            // 塔楼风声床压暗（不切源，回塔续播）
       }
       bridge.start();
       // 黑幕后直接应用首帧投影：战斗演出指令排在队列中的 wipe 指令之后，揭幕前
@@ -466,6 +469,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       };
     }
     finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
+    if (result !== 'victory') stopMusic({ fadeOut: 2 }); // 战败即收战斗曲；胜利留到回塔（swapBattleToMap）再收
     battleBridge = null;
     // 状态栏提前同步（实报）：原来只有链条末尾的 notify 会刷状态栏，
     // 于是爬塔动画播完才看到战后的血量/金币。这里在战斗舞台上先把状态推上去。
@@ -546,6 +550,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
       roomStage.setRunSequencer(runSequencer);   // 得卡演出的指令化挂点（与离房切幕串行）
       stageManager.setStage(roomStage);
+      duckWind(0);   // 休息房不算塔楼层：进房压暗（未来房间专属 BGM 也挂这个节拍）
       syncMapStatus();   // 状态栏/资源行进房先落位（不等 notify）
       roomScenePending = false;   // 场景已就位：抑制交给 roomStage 这个条件接管
     };
@@ -561,8 +566,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    */
   function enterRoomPresentation() {
     if (run.gameStage !== 'room') return;
-    if (run.currentRoom === 'event') { void cutsceneFlows.playEventScene(); return; }
-    void maybeEnterRestScene();
+    if (run.currentRoom === 'event') { void cutsceneFlows.playEventScene(); return; }   // 事件房风声由幕间流压暗
+    // 无配方房（古尔帕斯）：留在塔楼画面 + 面板，但也不算塔楼层——同样压暗；
+    // 有配方房的压暗在 enterRestRoomScene 换台那拍
+    void maybeEnterRestScene().then((entered) => { if (!entered) duckWind(0); });
   }
 
   /** 有配方且当前不在房间场景时进入（幂等：并发/重复调用只切一次）。 */
@@ -583,6 +590,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    * （它的 uiScene 上挂着奖励面板，一并回收）。
    */
   function swapBattleToMap() {
+    stopMusic(); // 战斗 BGM 收到此（胜利线；战败已在 endBattle 收过，幂等）
+    duckWind(1); // 回塔：风声床恢复全量
     if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors); // 塔楼先摆到新层；抵达动画随后播
     // 先释放战斗舞台、**后**换台：BattleStage 无 onExit，全部清理在 dispose——其中
     // shake.dispose 会把相机回基位。此前先 setStage 后 dispose，塔楼机位（onEnter 刚摆）
@@ -597,6 +606,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
 
   /** 把房间舞台换回塔楼（不排幕）：奖励/进阶等"多段演出"共用同一段换台代码。 */
   function swapRoomToMap() {
+    duckWind(1); // 回塔楼画面即恢复风声（无配方房离开时 roomStage 本就为空，此调用同样覆盖）
     if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors);
     // 先释放房间舞台、后换台（同 swapBattleToMap）：dispose→onExit 的基准机位还原
     // 不得晚于塔楼 onEnter 的新机位——此前顺序反了，只靠随后的爬升 tween 逐帧覆写
@@ -620,6 +630,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    * 调试跳层可能发生在切幕中途，闸不放开后续动作会被静默吞掉。
    */
   function swapAnyToMap() {
+    duckWind(1); // 回塔楼画面即恢复风声（调试硬重置可能发生在战斗压暗态）
     battleStage?.dispose(); battleStage = null;
     roomStage?.dispose(); roomStage = null;
     battlePending = false;

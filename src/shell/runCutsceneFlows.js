@@ -19,6 +19,7 @@ import { getAbilityDefinition } from '../core/abilities/registry.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { DIM_META } from '../stage/panels/index.js';
 import { eventArtUrlNamed } from './overlay/eventArt.js';
+import { duckWind } from './audio.js';
 
 export function createRunCutsceneFlows(ctx) {
   const { run, runCtx, runPresenter, cutscene, showcase, lifecycle } = ctx;
@@ -37,6 +38,7 @@ export function createRunCutsceneFlows(ctx) {
     if (eventPlaying || run.roomData?.eventResolved) return false;
     eventPlaying = true;
     try {
+      duckWind(0);   // 事件房不算塔楼层：幕间期间风声压暗（finally 恢复，正常/异常出口同覆盖）
       const view = eventView(run, runCtx);      // 确定性抽事件（记进 roomData，重绘不重抽）
       const bg = eventArtUrlNamed(view.art ?? view.id, view.name);
       let res = null;
@@ -80,6 +82,7 @@ export function createRunCutsceneFlows(ctx) {
       return false;
     } finally {
       eventPlaying = false;
+      duckWind(1);   // 出事件房（含切幕出场/兜底离房）即恢复塔楼风声
       ctx.setRoomScenePending(false);
       // 未结算就退出（异常/无选择）→ 事件房还在：把面板（安全阀）还给塔楼层，别让玩家卡死
       if (run.gameStage === 'room' && run.currentRoom === 'event') ctx.notify();
