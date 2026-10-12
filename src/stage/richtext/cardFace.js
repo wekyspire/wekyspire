@@ -211,6 +211,12 @@ function drawFrame(ctx, card) {
   const frame = TIER_FRAME[tier] || TIER_FRAME.D;
   const theme = cardTheme(card);
 
+  // 等阶明度阶（2026-10-11 用户定 A 方案）：低阶边框压哑、高阶满色起箔——
+  // 稀有度靠整卡「亮度温度」余光可读，菱形徽章退为确认件。
+  const TIER_DIM = { D: 0.38, C: 0.24, B: 0.10, A: 0, S: 0 };
+  const TIER_WASH = { D: 0.03, C: 0.05, B: 0.07, A: 0.10, S: 0.13 };
+  const frameTheme = mixHex(theme, '#0c0e14', TIER_DIM[tier] ?? 0.24);
+
   // 底板：深色底混入灵脉主题色（固定浓度——品阶浓度差已随「主题只认灵脉」废除）。
   // 浓度压到 0.10：主题色相只作底味、不抬明度——浅主题（通用灰 #e8e6e0）混入过多
   // 会把底板洗成中灰、白字对比度全丢（2026-10-11 用户验收）。边框/饰钉仍用全浓度主题色。
@@ -219,7 +225,7 @@ function drawFrame(ctx, card) {
   ctx.fillStyle = mixHex('#1e2029', theme, themeT);
   ctx.fill();
   const wash = ctx.createLinearGradient(0, 0, 0, H);
-  wash.addColorStop(0, 'rgba(255, 255, 255, 0.05)');
+  wash.addColorStop(0, `rgba(255, 255, 255, ${TIER_WASH[tier] ?? 0.05})`);
   wash.addColorStop(0.42, 'rgba(0, 0, 0, 0)');
   wash.addColorStop(1, 'rgba(0, 0, 0, 0.24)');
   ctx.fillStyle = wash;
@@ -233,27 +239,30 @@ function drawFrame(ctx, card) {
   ctx.fillStyle = mixHex('#14151c', theme, themeT * 0.5);
   ctx.fill();
 
-  // 边框：灵脉主题色，粗细随等阶；B 及以上加细内描边，描边走主题色箔金渐变
-  // （色相属灵脉，等阶只体现在宽度与是否有内描边）
+  // 边框双色分工（2026-10-11 用户定 C 方案）：外框 = 灵脉主题色（体系色相，粗细随等阶、
+  // 明度随 TIER_DIM），内描边与四边饰钉 = 等阶色——等阶从一颗徽章扩成整圈副色，
+  // S 红与火红的撞衫从位置上解开（S=火系时外框红、内圈亮红箔依然分得开）。
   roundedRect(ctx, 1 + frame.width / 2, 1 + frame.width / 2, W - 2 - frame.width, H - 2 - frame.width, 9);
   ctx.lineWidth = frame.width;
-  ctx.strokeStyle = borderStyle(ctx, tier, theme, W, H);
+  ctx.strokeStyle = borderStyle(ctx, tier, frameTheme, W, H);
   ctx.stroke();
-  if (frame.inner) {
-    roundedRect(ctx, 4 + frame.width, 4 + frame.width, W - 8 - frame.width * 2, H - 8 - frame.width * 2, 7);
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-  }
+  // 内描边：全等阶都给，等阶色（B 以上的箔感由 borderStyle 转移到外框，内圈恒细恒亮）
+  roundedRect(ctx, 4 + frame.width, 4 + frame.width, W - 8 - frame.width * 2, H - 8 - frame.width * 2, 7);
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = tColor;
+  ctx.globalAlpha = 0.85;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
   // 最外圈发丝线（提亮轮廓，灵脉色）
   ctx.save();
   ctx.globalAlpha = 0.45;
   roundedRect(ctx, 0.5, 0.5, W - 1, H - 1, 10.5);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = theme;
+  ctx.strokeStyle = frameTheme;
   ctx.stroke();
   ctx.restore();
-  // 四边中点饰钉（灵脉色小菱形）
-  drawEdgeStuds(ctx, theme);
+  // 四边中点饰钉（等阶色小菱形）
+  drawEdgeStuds(ctx, tColor);
   // 特殊词条顶部彩条：居中、长 = 卡宽 1/4、每条厚随边框线、
   // 卡边界内 2~3px——叠在顶边框带上读作「描边彩缺」。多词条**从上往下堆叠全数显示**
   // （首条在框带内，后续依次下探；三词条 S 卡堆高 ~20px，仍在标题带之上）。画在饰钉

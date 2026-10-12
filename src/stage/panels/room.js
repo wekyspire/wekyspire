@@ -7,12 +7,12 @@ import { slotWidgets, bankWidgets } from './roomSlot.js';
 import { gurpasWidgets } from './roomGurpas.js';
 import { buildShopPanel } from './shop.js';
 
-/** 奖励房（模态）：合并房（营地·训练场）/ 老虎机 / 古尔帕斯之店 / 事件房 / 商店房。 */
+/** 奖励房（模态）：合并房（营地&训练场）/ 老虎机 / 古尔帕斯之店 / 事件房 / 商店房。 */
 export function buildRoomPanel(snap) {
   const w = [];
   roomHeader(w, snap);
 
-  // 合并房（营地 · 训练场）：训练必做且先于篝火；训练抉择中优先占屏，营地组在下方仍会给锁定行
+  // 合并房（营地 & 训练场）：训练必做且先于篝火；训练抉择中优先占屏，营地组在下方仍会给锁定行
   if (snap.room === 'campTraining') {
     trainingWidgets(w, snap);
     campWidgets(w, snap);

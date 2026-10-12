@@ -12,6 +12,13 @@ import { punchScaleFor } from './damageFx.js';
 export const ENEMY_HIT_SPELLS = Object.freeze({
 });
 
+// 逐敌专属命中 beat（Boss 主题化，2026-10-09）：defId → async (ctx, deps, {fx, unit, dealt, fromX})。
+// fx.tier 仍是三档决议（normal/rapid/heavy），Boss beat 只换视觉皮（palette + garnish），
+// 共享底座是导出的 enemyImpactBeat。注册口给 fx/scripts/bosses/ 一文件一 Boss
+// （内容归属原则）；未注册 = 三式通配。注册随 BattleStage 模块加载发生，早于任何战斗。
+const ENEMY_HIT_BEATS = new Map();
+export function registerEnemyHitBeat(defId, fn) { ENEMY_HIT_BEATS.set(defId, fn); }
+
 // 重击内容数据标签（DealDamageInstruction tags）：敌方 def 的 act 里提交伤害时
 // 带上即入重击档——意图 note 里的「重击」文案不进演出判定（文案解析脆）。
 export const HEAVY_TAG = 'heavy';
@@ -37,16 +44,17 @@ export function resolveEnemyHitFx(stage, payload, dealt, intention = null) {
   const defId = payload.source.defId ?? null;
   const override = ENEMY_HIT_SPELLS[defId];
   if (override === 'none') return null;
-  if (override) return { tier: override.tier ?? 'normal', ...override };
+  if (override) return { tier: override.tier ?? 'normal', beat: ENEMY_HIT_BEATS.get(defId), ...override };
 
   const tags = payload?.tags ?? [];
-  if (tags.includes(HEAVY_TAG)) return { tier: 'heavy' };
+  const beat = ENEMY_HIT_BEATS.get(defId);
+  if (tags.includes(HEAVY_TAG)) return { tier: 'heavy', beat };
 
   // 意图口径（主判据）：重击 = 预告伤害够大；连击 = 意图 hits ≥ 2
   if (typeof intention?.damage === 'number' && intention.damage >= HEAVY_INTENT_FALLBACK) {
-    return { tier: 'heavy' };
+    return { tier: 'heavy', beat };
   }
-  if ((intention?.hits ?? 0) >= 2) return { tier: 'rapid' };
+  if ((intention?.hits ?? 0) >= 2) return { tier: 'rapid', beat };
 
   // 意图缺失兜底：同源连拍记账（窗内第 2 拍起 = 连击式）
   const now = performance.now();
@@ -56,8 +64,8 @@ export function resolveEnemyHitFx(stage, payload, dealt, intention = null) {
   const inWindow = last != null && now - last.t <= RAPID_WINDOW_MS;
   stage._enemyHitRecent.set(srcId, { t: now, n: inWindow ? last.n + 1 : 1 });
 
-  if (inWindow && last.n >= 1) return { tier: 'rapid' };
-  return { tier: 'normal' };
+  if (inWindow && last.n >= 1) return { tier: 'rapid', beat };
+  return { tier: 'normal', beat };
 }
 
 // 三式配方：量级对齐玩家拳（punchImpact 同款下限口径）——敌侧立牌远、玩家侧
@@ -71,35 +79,51 @@ const ENEMY_HIT_TIERS = Object.freeze({
 /**
  * 跑一次敌方命中演出（units.js _damageHit 经 _fxRunScript 调用，fire-and-forget
  * 不占节拍时序——突进/击退/红闪等受击既有演出照常并行）。
+ * fx.beat（Boss 主题注册）优先；缺省走三式通配。
  */
-export async function runEnemyHitBeat(ctx, deps, { fx, unit, dealt, fromX = null }) {
+export async function runEnemyHitBeat(ctx, deps, args) {
+  const { fx, unit } = args;
   if (!fx || !unit) return;
+  if (fx.beat) { await fx.beat(ctx, deps, args); return; }
+  await enemyImpactBeat(ctx, deps, args);
+}
+
+/**
+ * 三式通用配方（Boss 主题 beat 的共享底座）：punchImpact 主体 + 重击段（震屏/落地尘/
+ * 暖闪）。pal 覆盖档位默认（palette/量级），garnish = 命中瞬间的主题附加粒子
+ * （重击/普击分别给），都在 punchImpact 之前起跑（fire-and-forget 叠在冲击上）。
+ */
+export async function enemyImpactBeat(ctx, deps, { fx, unit, dealt, fromX = null, pal = {}, garnish = null }) {
   const t = ENEMY_HIT_TIERS[fx.tier] ?? ENEMY_HIT_TIERS.normal;
   const s = unit._baseScale ?? 1;
   const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
   const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
   const heavy = fx.tier === 'heavy';
+  if (garnish) {
+    try { garnish(ctx, deps, { unit, at, heavy, dealt, s }); } catch { /* 主题附加件失败不拦冲击主体 */ }
+  }
   await punchImpact(ctx, deps, {
     at, dir,
-    scale: Math.max(t.scaleK * punchScaleFor(dealt, heavy), 0.9),
-    ms: t.ms,
-    color: heavy ? [1.0, 0.44, 0.22] : [1.0, 0.62, 0.30],
-    hot: heavy ? [1.25, 0.72, 0.42] : [1.15, 0.85, 0.52],
-    rim: [0.95, 0.62, 0.40],
-    sparkColor: heavy ? 0xff8a4a : 0xe8a860,
-    sparkCount: t.sparkCount, sparkSpeed: heavy ? 24 : 16,
-    lampIntensity: t.lampIntensity,
+    scale: Math.max((pal.scaleK ?? t.scaleK) * punchScaleFor(dealt, heavy), 0.9),
+    ms: pal.ms ?? t.ms,
+    color: pal.color ?? (heavy ? [1.0, 0.44, 0.22] : [1.0, 0.62, 0.30]),
+    hot: pal.hot ?? (heavy ? [1.25, 0.72, 0.42] : [1.15, 0.85, 0.52]),
+    rim: pal.rim ?? [0.95, 0.62, 0.40],
+    sparkColor: pal.sparkColor ?? (heavy ? 0xff8a4a : 0xe8a860),
+    sparkCount: pal.sparkCount ?? t.sparkCount,
+    sparkSpeed: pal.sparkSpeed ?? (heavy ? 24 : 16),
+    lampIntensity: pal.lampIntensity ?? t.lampIntensity,
   });
   if (heavy) {
     // 重击的「地动山摇」：震屏 + 落地尘 + 轻微暖闪（比玩家重拳的量级收一档）
     const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
     deps.particles?.spawn?.(feet.x, feet.y, {
-      color: 0xb8a98c, count: 14, speed: 10, size: 1.1, ttl: 0.9, gravity: -10, z: feet.z,
+      color: pal.dustColor ?? 0xb8a98c, count: 14, speed: 10, size: 1.1, ttl: 0.9, gravity: -10, z: feet.z,
     });
-    deps.shake?.impulse?.(1.5);
+    deps.shake?.impulse?.(pal.shakeK ?? 1.5);
     deps.shake?.sustain?.(0.45);
     ctx.onKill(() => deps.shake?.sustain?.(0));
-    ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.18, ms: 200, color: 0xffd8b0 }));
+    ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.18, ms: 200, color: pal.flashColor ?? 0xffd8b0 }));
     await ctx.wait(320);
     deps.shake?.sustain?.(0);
   }

@@ -33,8 +33,11 @@ export function installPanelHost(StageClass, { localActions = {}, allowSource = 
     get uiBusy() { return this._pickerKit.uiBusy; },
     get cardPicker() { return this._pickerKit.cardPicker; },
     get relicPicker() { return this._pickerKit.relicPicker; },
-    /** 滚轮：选卡界面优先消费（全屏界面，滚轮只作用于它）。 */
-    handleWheel(deltaY) { return this._pickerKit.handleWheel(deltaY); },
+    /** 滚轮：舞台本地消费钩子（_handleStageWheel 返真即拦截）优先，其次选卡界面滚动。 */
+    handleWheel(deltaY) {
+      if (this._handleStageWheel?.(deltaY)) return true;
+      return this._pickerKit.handleWheel(deltaY);
+    },
 
     openUpgradePicker(source, opts) {
       if (allowSource && !allowSource(source)) return false;

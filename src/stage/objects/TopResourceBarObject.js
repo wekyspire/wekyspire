@@ -17,6 +17,7 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../StageManager.js';
 import { sharedRelicArtCache } from '../art/relicArt.js';
 import { DECK_VIEW_Z } from './DeckChipObject.js';
 import { UI_FONT } from '../richtext/uiFont.js';
+import { deferDisposeTexture } from '../deferredDispose.js';
 
 const SLOT = 4.0;   // 单个遗物槽边长（世界单位）
 const GAP = 0.9;    // 槽间距
@@ -75,6 +76,20 @@ export class TopResourceBarObject extends THREE.Group {
 
   get relicRow() { return this._relicRow; }
 
+  /** 窄条背板的世界矩形（uiScene 坐标 {x0,x1,y0,y1}）——prep 的遗物拖放落点与槽位条摆位用。 */
+  stripWorldRect() {
+    this.updateWorldMatrix(true, false);
+    const p = this.getWorldPosition(new THREE.Vector3());
+    const w = this._strip.geometry.parameters.width;
+    const h = this._strip.geometry.parameters.height;
+    return { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - h / 2, y1: p.y + h / 2 };
+  }
+
+  /** 窄条右缘 x（uiScene 坐标）——槽位条等随从件的摆位锚。 */
+  get stripRightX() {
+    return this.position.x + this._strip.geometry.parameters.width / 2;
+  }
+
   /**
    * 卡组按钮入列（右端槽位）：本体由宿主舞台挂 uiScene（z=DECK_VIEW_Z.CHIP 压过
    * 一切模态层的铁律不变），本栏只在每次布局时下发 x/y 摆位、并按其尺寸预留槽宽。
@@ -125,7 +140,7 @@ export class TopResourceBarObject extends THREE.Group {
       this._stripMaterial.map = baked;
       this._stripMaterial.color.set(0xffffff);
       this._stripMaterial.needsUpdate = true;
-      old?.dispose?.();
+      deferDisposeTexture(old);
     } else {
       this._stripMaterial.color.set(0x111111);
       this._stripMaterial.opacity = 0.9;
@@ -142,7 +157,7 @@ export class TopResourceBarObject extends THREE.Group {
     this._moneyMaterial.map = texture;
     this._moneyMaterial.color.set(0xffffff);
     this._moneyMaterial.needsUpdate = true;
-    old?.dispose?.();
+    deferDisposeTexture(old);
     this._moneyWidth = width / this._ppw;
     this._moneyLabel.geometry.dispose();
     this._moneyLabel.geometry = new THREE.PlaneGeometry(this._moneyWidth, height / this._ppw);
@@ -199,10 +214,10 @@ export class TopResourceBarObject extends THREE.Group {
     for (const id of this._slotPickIds) this._picker?.removePickable(id);
     this._slotPickIds = [];
     this._strip.geometry.dispose();
-    this._stripMaterial.map?.dispose?.();
+    deferDisposeTexture(this._stripMaterial.map);
     this._stripMaterial.dispose();
     this._moneyLabel.geometry.dispose();
-    this._moneyMaterial.map?.dispose?.();
+    deferDisposeTexture(this._moneyMaterial.map);
     this._moneyMaterial.dispose();
     for (const child of [...this._relicRow.children]) disposeSubtree(child);
   }
@@ -231,11 +246,13 @@ function bakeStrip(w, h, ppw) {
   return texture;
 }
 
-// 子树释放（几何/材质/贴图；遗物槽是 Group→tile Mesh 两级）
+// 子树释放（几何/材质/贴图；遗物槽是 Group→tile Mesh 两级）。
+// 贴图走延迟销毁：在飞/已排队的 submit 仍可能引用它（WebGPU 无驱动的引用计数兜底，
+// 直销毁 = GPUValidationError「Destroyed texture used in a submit」）。
 function disposeSubtree(root) {
   root.traverse((o) => {
     o.geometry?.dispose?.();
-    o.material?.map?.dispose?.();
+    deferDisposeTexture(o.material?.map);
     o.material?.dispose?.();
   });
   root.parent?.remove(root);

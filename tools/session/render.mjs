@@ -25,7 +25,7 @@ export function render(S) {
   const run = S.run;
   const p = run.player;
   const L = [];
-  const head = `【魏启尖塔 · headless】第 ${run.floor}/${run.totalFloors} 层 · ${stageCn(run.gameStage)}`
+  const head = `【魏启尖塔 · headless】第 ${run.floor}/${run.totalFloors} 层 ${stageCn(run.gameStage)}`
     + (run.result ? `（${run.result === 'victory' ? '登顶成功' : '战败'}）` : '');
   L.push(`═══ ${head} ═══`);
   const apNote = p.actionPoints > p.maxActionPoints

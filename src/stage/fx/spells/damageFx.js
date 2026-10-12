@@ -104,7 +104,7 @@ export function resolveDamageFx(defId) {
     ? def.subsystem : def.series;
   switch (seriesKey) {
     case 'blade':
-      return { kind: 'slashC', variant: slashVariantOf(def) };
+      return { kind: 'slash', variant: slashVariantOf(def) };
     case 'selfImmolate':   // 焰刃链 + 玩火/焚烧系（火刀近身，焰刃配三档色）
       return {
         kind: 'flameslash',
@@ -116,13 +116,13 @@ export function resolveDamageFx(defId) {
       const name = def.name ?? '';
       const heavy = HEAVY_FIST.test(name);
       const rapid = /连击|乱拳|雨拳|千手|万手|瞬击|快拳/.test(name);
-      return { kind: 'punchC', heavy, rapid };
+      return { kind: 'punch', heavy, rapid };
     }
     case 'block': {        // 格挡系攻击链（掌/腿/破架——体修同源，施术拍已逐卡走 fistCast）
       const name = def.name ?? '';
       const heavy = /摘星|贯心|旋风腿|碎骨|扫堂/.test(name);
       const rapid = /二击|双击/.test(name);
-      return { kind: 'punchC', heavy, rapid };
+      return { kind: 'punch', heavy, rapid };
     }
     case 'fireBall':       // 火球链
     case 'heatCharged':    // 蓄热火球链（拆系列同款）（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）

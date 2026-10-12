@@ -68,16 +68,27 @@ const FLOOR_ARRIVE_MS = 6000; // 抵达指令保险丝：≥ 爬升动画时长�
  *
  * 单列为可测函数：endBattle 走真实 BattleStage（要 canvas），headless 下无法整链驱动。
  */
-export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms = FLOOR_ARRIVE_MS } = {}) {
+export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms = FLOOR_ARRIVE_MS, clearFx = null } = {}) {
   return new Promise((resolve) => {
     let settled = false;
     const settle = () => { if (settled) return; settled = true; resolve(); };
     sequencer.enqueueInstruction({
       meta: { event: 'tower:floor-arrive', floor },
       durationMs: ms,
-      start: ({ id, emit }) => mapStage.arriveFloor(floor, totalFloors, {
-        onDone: () => { emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id }); settle(); },
-      }),
+      start: ({ id, emit }) => {
+        // 楼层通过：刚清掉那层的敌人残影崩解——与爬升同拍起跑。回执 = 爬升落定
+        // **且**残影视觉落定（不含灰尾）——本层有房间时相机不爬（同层直落），
+        // 这道闸保证「房间切幕」排在崩解演完之后，演出不会被切走
+        const clearHandle = clearFx ? mapStage.playFloorClear(clearFx) : null;
+        let climbDone = false, clearDone = !clearHandle;
+        const tryFinish = () => {
+          if (!climbDone || !clearDone) return;
+          emit(EventNames.ANIMATION_INSTRUCTION_FINISHED, { id });
+          settle();
+        };
+        mapStage.arriveFloor(floor, totalFloors, { onDone: () => { climbDone = true; tryFinish(); } });
+        clearHandle?.visualDone?.then(() => { clearDone = true; tryFinish(); });
+      },
     });
     setTimeout(settle, ms + 200);
   });
@@ -384,6 +395,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // ---- 战斗 ----
   // 进场：战前剧本（如 preBoss）→ 幕间转场（全黑中点切舞台 + 预载）→ 战斗
   let battlePending = false; // 防重入：转场 pending 期间连点「进入战斗」只开一场
+  let pendingClearFx = null; // 楼层通过素材（endBattle 胜利时捕获；afterRewardToFloor 消费即清）
   function startBattle() {
     if (battlePending || run.gameStage !== 'prep') return;
     battlePending = true;
@@ -440,6 +452,19 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   // 领完/跳过奖励后（claimReward → afterRewardToFloor）才切幕，并在**黑幕中点**把舞台
   // 换成塔楼层、播"楼层 clear（当前层高亮块长出）"动画。
   function endBattle(result, bridge) {
+    // 楼层通过演出的素材捕获（必须在 finishBattle 之前——此后 encounter/楼层语义翻篇）：
+    // 胜利才演；编成名称反查定义表（encounter 元素可能是缩放描述符或裸 id）
+    if (result === 'victory') {
+      const defIdOf = (e) => (typeof e === 'string' ? e : e?.defId);
+      pendingClearFx = {
+        floor: run.floor,
+        boss: isBossFloor(run.floor),
+        enemies: (run.encounter ?? []).map(e => {
+          const id = defIdOf(e);
+          return { defId: id, name: (typeof e === 'object' && e?.name) || getEnemyDefinition(id)?.name || id };
+        }).filter(e => e.defId),
+      };
+    }
     finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
     battleBridge = null;
     // 状态栏提前同步（实报）：原来只有链条末尾的 notify 会刷状态栏，
@@ -457,10 +482,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     //    揭幕露出的是塔楼（此前战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）
     if (stageManager) await cutscene.sceneTransition(swapBattleToMap);
     else swapBattleToMap();
-    // ② 楼层 clear：当前层高亮块自下而上长出（同一队列串行，黑幕已揭）
+    // ② 楼层通过：刚清掉那层的敌人残影逐个开裂→灰暗→崩解成灰（与爬升同拍起跑；
+    //    本层有房间时 floor 未推进、相机原地不动——残影在静止取景里完整演完）
     if (stageManager && mapStage) {
+      const clearFx = pendingClearFx;
+      pendingClearFx = null;
       await awaitFloorArrive(runSequencer, mapStage, {
-        floor: run.floor, totalFloors: run.totalFloors,
+        floor: run.floor, totalFloors: run.totalFloors, clearFx,
       });
     }
     // ③ 战后剧本（Boss 层 = postBoss）→ 幕间退出也切幕（cutscene 与场景同待遇）

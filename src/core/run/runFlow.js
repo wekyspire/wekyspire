@@ -1,4 +1,5 @@
 import { createRunState } from '../state/runState.js';
+import { createRng } from '../state/rng.js';
 import { createBattle } from '../flow/battle.js';
 import { spawnEnemy } from './floorEnemyGenerator.js';
 import { getAllyDefinition } from '../allies/registry.js';
@@ -49,7 +50,7 @@ export function deriveBattleSeed(seed, floor) {
 }
 
 // 奖励房派发（§1/§4；**营地与训练场合并为同一房**）。
-// 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地·训练场合并房**（二者总是一起出现，
+// 规则：原「训练层 4N-2」与「Boss 前保底层」统一为**营地&训练场合并房**（二者总是一起出现，
 // 固定不随机）；商店层（4/8、15/19…）整层是**商店房**（售货机摆在固定位置）；
 // 其余自由楼层只在**事件 / 老虎机**之间随机——不再单独出营地。
 // 后果（有意为之）：回复来源集中在合并层（2/6/10/14/18/21/26/30/32/34/38/42/43）。
@@ -59,6 +60,22 @@ export function roomOfFloor(floor, rng) {
   if (floor === GURPAS_FLOOR) return 'gurpas';   // 古尔帕斯之店：35 层固定（SHOP.md §二）
   if (isShopFloor(floor)) return 'shop';         // 瑞米售货机：整层商店房（SHOP.md §一）
   return rng.pick(['slot', 'event']);
+}
+
+// 塔楼房间表：开局按种子一次定死（同种子同塔），小标尺据此向玩家展示房型——
+// 房间是路径级战略信息，到层才掷等于对玩家藏牌。
+// 派生流独立于 run.rng：房间表不消耗奖励主账本（否则读档重导会推歪后续奖励序列）。
+const ROOM_TABLE_SALT = 0x5F3A9C17;
+export function buildRoomTable(seed, totalFloors = TOTAL_FLOORS) {
+  const rng = createRng(deriveBattleSeed(seed, ROOM_TABLE_SALT));
+  const table = new Array(totalFloors + 1).fill(null);
+  for (let f = 1; f <= totalFloors; f++) table[f] = roomOfFloor(f, rng);
+  return table;
+}
+
+/** 本层房型（消费口径）：优先房间表；无表（手写 fixture/旧档兜底）维持旧现场随机。 */
+export function roomOf(run, floor) {
+  return run.roomTable?.[floor] ?? roomOfFloor(floor, run.rng);
 }
 
 // 遭遇生成：floorEnemyGenerator 按楼层分段池 + HP/攻击缩放产出可序列化描述符。
@@ -74,6 +91,7 @@ export { generateEncounter }; // 转发保旧引用兼容（直接 import 自 ru
 export function createRun({ seed = 1, profile = null, player = null, totalFloors = TOTAL_FLOORS, route = 'body' } = {}) {
   const run = createRunState({ seed, profile, player });
   run.totalFloors = totalFloors;
+  run.roomTable = buildRoomTable(seed, totalFloors); // 房间表开局定死（同种子同塔）
   run.encounter = generateEncounter(run);
   if (route) applyRoute(run, route);
   return run;
@@ -160,7 +178,7 @@ export function completeRewards(run) {
   expectStage(run, 'reward');
   if (!isRewardsClaimed(run)) throw new Error('战后奖励尚未领取，不能离开 reward 阶段');
   run.rewards = null;
-  run.currentRoom = roomOfFloor(run.floor, run.rng);
+  run.currentRoom = roomOf(run, run.floor);
   if (run.currentRoom) {
     run.gameStage = 'room';
     // 售货机与房间**并存**（不占房间名额）：商店层进房时把当层货架掷好（按楼层缓存）

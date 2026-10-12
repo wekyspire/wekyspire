@@ -316,11 +316,15 @@ export function createSlotMachine(ctx) {
     focusOf: () => ({ fracH: 0.88, bottom: 0.26, pad: 0.92, subject: slotSubject }),
     panel: (name, snap) => buildSlotPanel(snap, { sceneChoice: true }),
 
-    /** 老虎机正面的**投料口/计数器**热区（rig 给的可点件）：点它就是"粉碎物品"入口。 */
+    /** 老虎机正面的**投料口/计数器**热区（rig 给的可点件）：点它就是"粉碎物品"入口；
+     *  **拉杆**热区：点 = 拉一次（同面板「拉杆」按钮，走同一条 spin 意图）。 */
     registerPickables() {
       const slotRig = ctx.rigs().get('slot');
       (slotRig?.crusherTargets?.() ?? []).forEach((obj, i) => {
         ctx.addPickable(`room:crusher:${i}`, obj, { kind: 'machine' });
+      });
+      (slotRig?.leverTargets?.() ?? []).forEach((obj) => {
+        ctx.addPickable('room:lever', obj, { kind: 'machine' });
       });
     },
 
@@ -351,12 +355,21 @@ export function createSlotMachine(ctx) {
       return true;
     },
 
-    /** 吞掉型点击：恶魔词条（转轮热区）+ 投料口。 */
+    /** 吞掉型点击：恶魔词条（转轮热区）+ 投料口 + 拉杆。 */
     handleClick(hit) {
       // 恶魔 roll 选择阶段：点**转轮本身**即承受那根盘对应的词条（转出来的就是诅咒）
       if (hit?.kind === 'token' && demon?.phase === 'choose' && hit.id?.startsWith('room:demon:')) {
         const pick = demon.picks?.find(p => p.id === hit.id);
         if (pick) ctx.intent({ action: 'bankPick', id: pick.optionId });
+        return true;
+      }
+      // 拉杆：与面板「拉杆」按钮同一条 spin 意图（可用性与按钮同一口径门控；
+      // 恶魔 roll 挂着 = 拉杆锁定——core 同款守卫，这里只吞掉不解释）
+      if (hit?.id === 'room:lever') {
+        if (ctx.snap()?.bank?.pendingRoll) return true;
+        const s = ctx.snap()?.slot ?? {};
+        if (s.canSpin && !s.spinning) ctx.intent({ action: 'spin' });
+        else if (ctx.focused() !== 'slot') ctx.focusMachine('slot');   // 拉不了：先怼脸（面板按钮同态禁用）
         return true;
       }
       // 投料口：进度满 = 直接进"粉碎物品"链（对话 → 选卡/遗物）；没满就先聚焦机器（看得出还差几次）
@@ -374,9 +387,17 @@ export function createSlotMachine(ctx) {
     },
 
     /** 通知型 hover：粉碎口热区 → 金牙/喉腔提亮（聚焦怼脸时整机 hover 反馈已关，
-     *  口的「可点」暗示走这条——RoomStage 对机器模块的原样 hover 转发）。 */
+     *  口的「可点」暗示走这条——RoomStage 对机器模块的原样 hover 转发）。
+     *  粉碎口与拉杆同一条纪律：只在"真点得动"时给预示（吞噬进度没满不亮，
+     *  免得暗示出不存在的能力）。 */
     hover(hit) {
-      ctx.rigs().get('slot')?.setCrusherHover?.(!!hit?.id?.startsWith?.('room:crusher:'));
+      const rig = ctx.rigs().get('slot');
+      const crusherHot = !!hit?.id?.startsWith?.('room:crusher:') && !!rig?.devourReady?.();
+      rig?.setCrusherHover?.(crusherHot);
+      const s = ctx.snap()?.slot ?? {};
+      const leverOk = hit?.id === 'room:lever'
+        && !!s.canSpin && !s.spinning && !ctx.snap()?.bank?.pendingRoll;
+      rig?.setLeverHover?.(leverOk);
     },
 
     /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'，

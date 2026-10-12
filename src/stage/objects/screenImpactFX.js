@@ -7,8 +7,8 @@
 //   │   与运镜天然可叠加：震荡震它的，flyTo 飞它的，两路各写各的数据、互不覆盖。
 //   └─ DamageVignette：视角边缘压暗压红渐晕（uiScene 顶层覆盖面，径向渐变贴图：
 //       中心全透明，边角暗红）。两层：①受击脉冲（友军受伤时播，峰值随烈度、指数
-//       释放）②低血常驻档（hp ≤ 20% 状态驱动，慢呼吸起伏、不随释放消退——
-//       BattleStage 每帧按快照血量推 lowHp；受击脉冲叠加其上）。
+//       释放）②低血常驻档（hp ≤ 40% 起渐入、越低越浓，浅层慢呼吸、深层双搏心跳，
+//       不随释放消退——BattleStage 每帧按快照血量推 lowHp；受击脉冲叠加其上）。
 //
 // 烈度口径（damageSeverity）：生命值伤害全值 + 护盾吸收 ×0.2——护盾受击严重度低
 // ，震荡/渐晕强度都吃同一口径，演出与结算同源不漂移。
@@ -34,25 +34,39 @@ const VIGNETTE_PEAK_BASE = 0.12;     // 轻击渐晕几乎不可感（压暗是�
 const VIGNETTE_PEAK_PER_SEVERITY = 0.024;
 const VIGNETTE_PEAK_MAX = 0.85;
 const VIGNETTE_RELEASE_TAU = 0.45;   // 指数释放时间常数（秒）：峰值后约 0.3s 肉眼可感
-// 低血常驻档（状态驱动，不随释放衰减）：hp 跌破阈值起、越低越浓（到地板值封顶），
-// 慢呼吸起伏——读「持续的危险状态」而非静止贴图。受击脉冲叠加其上（和封顶）
-const LOW_HP_THRESHOLD = 0.20;       // 血量占比阈值（20% 以下起）
-const LOW_HP_FLOOR = 0.06;           // 到此占比常驻档拉满
-const LOW_HP_PEAK = 0.30;            // 常驻档满值透明度（要压得住屏、又不糊视野）
-const LOW_HP_BREATH_RATE = 2.0;      // 呼吸角频率（rad/s）
-const LOW_HP_BREATH_DEPTH = 0.12;    // 呼吸深度（±12%）
+// 低血常驻档（状态驱动，不随释放衰减）：hp 跌破阈值（40%）即起、按 smoothstep 由淡
+// 入浓（到地板值封顶）；层次感 = 浅层只有慢呼吸压暗、深层才挂「lub-dub」双搏心跳
+// （心率/搏深随档位抬升——变速脉冲用积分相位，换档不跳相）。受击脉冲叠加其上（和封顶）
+const LOW_HP_THRESHOLD = 0.40;       // 血量占比阈值（40% 以下开始逐步压暗）
+const LOW_HP_FLOOR = 0.08;           // 到此占比常驻档拉满
+const LOW_HP_PEAK = 0.32;            // 常驻档满值透明度（要压得住屏、又不糊视野）
+const LOW_HP_BREATH_RATE = 2.0;      // 慢呼吸角频率（rad/s，浅层的主载波）
+const LOW_HP_BREATH_DEPTH = 0.10;    // 慢呼吸深度（±10%）
+const LOW_HP_BEAT_IN = 0.30;         // 心跳淡入档（level 低于此无心跳 ≈ hp>28%）
+const LOW_HP_BEAT_FULL = 0.80;       // 心跳满幅档（≈ hp<14%）
+const LOW_HP_BEAT_RATE_MIN = 0.95;   // 心率下限（Hz ≈ 57 BPM，随 level 线性抬升）
+const LOW_HP_BEAT_RATE_MAX = 1.80;   // 心率上限（Hz ≈ 108 BPM）
+const LOW_HP_BEAT_DEPTH = 0.50;      // 心跳搏动深度（相对基础浓度向上涌 +50%）
 
 /** 血量占比 → 低血常驻档强度（0..1）；player 投影缺省/满血返回 0。 */
 export function lowHpVignetteLevel(player) {
   if (!player || !(player.maxHp > 0)) return 0;
   const ratio = Math.max(0, player.hp) / player.maxHp;
-  const t = (LOW_HP_THRESHOLD - ratio) / (LOW_HP_THRESHOLD - LOW_HP_FLOOR);
-  return Math.min(1, Math.max(0, t));
+  const t = Math.min(1, Math.max(0, (LOW_HP_THRESHOLD - ratio) / (LOW_HP_THRESHOLD - LOW_HP_FLOOR)));
+  return t * t * (3 - 2 * t);  // smoothstep：入档平缓、越深越陡（压力分层）
 }
 
 /** 受击烈度：生命值伤害全值 + 护盾吸收 ×0.2。震荡与渐晕共用的唯一口径。 */
 export function damageSeverity(dealt, shieldAbsorbed) {
   return Math.max(0, (dealt ?? 0)) + Math.max(0, (shieldAbsorbed ?? 0)) * SHIELD_SEVERITY_FACTOR;
+}
+
+// 「lub-dub」双搏波形：主搏（lub）强而锐、次搏（dub）弱而钝；相位回绕处（0/1）主搏连续
+function heartbeatWave(phase) {
+  const g = (x, c, w) => Math.exp(-((x - c) * (x - c)) / (2 * w * w));
+  const lub = g(phase, 0, 0.045) + g(phase, 1, 0.045);
+  const dub = 0.55 * g(phase, 0.24, 0.06);
+  return Math.min(1, lub + dub);
 }
 
 export class ScreenShake {
@@ -150,6 +164,7 @@ export class DamageVignette {
     this._opacity = 0;   // 当前透明度（测试断言口）
     this._low = 0;       // 低血常驻档强度（0..1，状态驱动——由持有方每帧推）
     this._clock = 0;     // 常驻档呼吸钟
+    this._beatPhase = 0; // 心跳相位（积分推进——心率随档变化，乘式会跳相）
 
     // 覆盖面：正交 UI 视界整幅（16:9 假定下世界宽 ≈177.8；宽高各放 18% 余量防裁边），
     // 挂 uiCamera 可见 z 区间顶端 + 显式 renderOrder——必须盖过查看器（z=80）等一切前景
@@ -189,9 +204,16 @@ export class DamageVignette {
 
   update(dt) {
     this._clock += dt;
-    // 常驻档：慢呼吸起伏；与受击脉冲相加后封顶（低血时受击 = 泛红骤深，读得出叠加）
-    const low = this._low * LOW_HP_PEAK
-      * (1 - LOW_HP_BREATH_DEPTH + LOW_HP_BREATH_DEPTH * Math.sin(this._clock * LOW_HP_BREATH_RATE));
+    const level = this._low;
+    // 心跳档位包络：低于淡入档无心跳（浅层只剩慢呼吸压暗），心率随档位抬升
+    const ampT = Math.min(1, Math.max(0, (level - LOW_HP_BEAT_IN) / (LOW_HP_BEAT_FULL - LOW_HP_BEAT_IN)));
+    const beatAmp = ampT * ampT * (3 - 2 * ampT);
+    const beatRate = LOW_HP_BEAT_RATE_MIN + (LOW_HP_BEAT_RATE_MAX - LOW_HP_BEAT_RATE_MIN) * level;
+    this._beatPhase = (this._beatPhase + dt * beatRate) % 1;
+    const breath = LOW_HP_BREATH_DEPTH * Math.sin(this._clock * LOW_HP_BREATH_RATE);
+    const beat = beatAmp * LOW_HP_BEAT_DEPTH * heartbeatWave(this._beatPhase);
+    // 常驻档：慢呼吸 ± 起伏 + 心跳向上涌；与受击脉冲相加后封顶（低血时受击 = 泛红骤深）
+    const low = level * LOW_HP_PEAK * (1 + breath + beat);
     if (this._peak <= 0) {
       this._opacity = low;   // 脉冲收尽：只剩常驻档（或全关）
     } else {

@@ -236,6 +236,29 @@ export class RoomStage {
     if (stageManager) this._picker = new Picker({ stageManager, bus });
     if (snap) this.setPanel(snap);
     this._registerPickables();   // 机器/浮标/继续按钮先登记（面板的按钮随面板建时登记）
+
+    // 黑幕内预热（2026-10-12 由开屏暖场迁入）：构造点就在幕间黑幕中点（sceneTransition
+    // 的 atCover）——整房管线在此预付：compileAsync 一次走全渲染树；两拍后再收一轮
+    // 已就绪纹理的 GPU 上传（画牌/转轮纹理解码晚于建房，首绘上传正是 zoom-in 卡顿的
+    // 另一半）。fire-and-forget：黑幕只遮「已开始的编译」，不等待编译完成。
+    this._warmTimers = [];
+    const warmRenderer = stageManager?._renderer;
+    if (warmRenderer?.compileAsync) {
+      warmRenderer.compileAsync(this.scene, stageManager.camera).catch(() => { /* 续 */ });
+      const warmTextures = () => {
+        try {
+          const seen = new Set();
+          this.scene.traverse((o) => {
+            const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+            for (const m of mats) {
+              const t = m?.map;
+              if (t?.image && !seen.has(t)) { seen.add(t); warmRenderer.initTexture?.(t); }
+            }
+          });
+        } catch { /* 场景拆除竞态：跳过即可 */ }
+      };
+      this._warmTimers.push(setTimeout(warmTextures, 400), setTimeout(warmTextures, 1200));
+    }
   }
 
   // ================= 对外 API（与 MapStage 同名同义，宿主代码可共用）=================
@@ -439,6 +462,8 @@ export class RoomStage {
 
   dispose() {
     this.onExit();
+    for (const t of this._warmTimers ?? []) clearTimeout(t);   // 未触发的预热拍随舞台拆除作废
+    this._warmTimers = null;
     this._unsubArt?.();
     this._unsubArt = null;
     this._unsubUnitArt?.();
@@ -570,6 +595,9 @@ export class RoomStage {
       return;
     }
     if (hit.id === this._continue.pickId) {
+      // 营地&训练房的防误触口径（2026-10-12 用户定）：聚焦机器时点继续 = 只退焦，
+      // 不收房——玩家正盯着训练桩/篝火看，那一击多半是想去碰机器而不是想走。
+      if (this._campContinueGated() && this._focused) { this._focusMachine(null); return; }
       // 「继续前进」的**义务门**（**由各机器模块自报**：恶魔 roll / 卡包待选 / 强绑抓牌是硬拦，
       // 营地的休整是软提示——第一次点继续只给一句提示泡泡，**再点一次即离房**）。
       // 先问各机器是否接管这次点击（拉回镜头提示 / 播离房安慰奖），都没接管才真的离房。
@@ -590,6 +618,11 @@ export class RoomStage {
    */
   _pendingRoomDuty() {
     return this._machines.some(m => m.pendingDuty?.(this._snap));
+  }
+
+  /** 营地&训练房的继续键防误触口径适用判定（训练未开始不显示 / 聚焦态只退焦）。 */
+  _campContinueGated() {
+    return this._snap?.room === 'campTraining' || this._snap?.room === 'training';
   }
 
   /** 世界锚点 → UI 空间（泡泡/文字挂在物件上方）。 */
@@ -828,6 +861,9 @@ export class RoomStage {
       this._pickerKit.uiBusy ? 0.18
         : (this._pendingRoomDuty() ? 0.4 : 1),
     );
+    // 营地&训练房：训练未开始整枚继续键不显示（防误触——压暗仍会被点中，不如不存在；
+    // 隐形即不可拾取，Picker 的 visibleUp 防线）。开始训练后亮起（尾款升级仍走压暗+硬拦）。
+    this._continue.visible = !(this._campContinueGated() && !this._snap?.training?.started);
     this._continue.update(dt);
     this._pickerKit.update(dt);
     this._panel?.update(dt);       // dock 面板卡阵 fx

@@ -104,11 +104,13 @@ function genericPulseBeat(stage, payload, finish, targetPre = null) {
 // ---- 咏唱族 ----
 
 function chantToggledBeat(stage, payload, finish) {
-  // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担；
-  // 独有职责 = 解除 held 停留位（卡结算后回手牌——sync 对账的 held 守卫不解禁，
-  // 结算期选牌（强制换）路径卡会停在展示位，须由本专属节拍放行回扇形）。
+  // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担。
+  // 回手放行不归本节拍——zone 单门（model.setZone → card-zone）在 sync 对账把卡
+  // 翻回 hand 时弹簧自动收养滑回扇形；解除打出（on:false 'played'）的卡随后由
+  // CARD_MOVED 离场节拍接管，本节拍不碰跟踪层（曾经在此直写 hand+_entering，
+  // 与离场飞行对撞是「解除咏唱回手闪烁」bug 的根因，2026-10-11 删）。
   // 发动点亮且卡带激活能力（载荷 anim 描述符，core 按 def.activated 判定）时，
-  // 先在展示位播激活演出再放行——「这张卡被点亮了」要看得见。
+  // 在展示位播激活演出——「这张卡被点亮了」要看得见。
   const id = payload?.skill?.uniqueID ?? null;
   // 沉默熄灭（'silenced'）：被摁灭的咏唱从卡面升起一缕体系色残光，沿屏幕拉向
   // 主角（拖拽减速 + 淡出 = 被吸走收进盾里）——每张独立成拍，sequencer 串行
@@ -131,16 +133,9 @@ function chantToggledBeat(stage, payload, finish) {
       });
     }
   }
-  const release = () => {
-    if (id != null && stage.model.getZone(id) === 'held' && stage._views.has(id)) {
-      stage.model.setZone(id, 'hand');
-      stage._entering.add(id); // 从展示位飞回扇形锚点
-    }
-  };
   if (payload?.on && payload?.anim) {
-    return stage._chantActivateBeat(id, payload.anim, () => { release(); finish(); });
+    return stage._chantActivateBeat(id, payload.anim, finish);
   }
-  release();
   return finish();
 }
 
@@ -154,7 +149,8 @@ function cooldownTickBeat(stage, payload, finish) {
   const id = payload?.skill?.uniqueID ?? null;
   const view = id != null ? stage._views.get(id) : null;
   if (view?.visible) {
-    stage._pulseCard(id, delta < 0 ? 0xc87070 : 0x66ff99);
+    // 正向冷却推进 = 涌动（能量涌出）；反向衰败 = 汇聚（能量被抽走内坍）
+    stage._pulseCard(id, delta < 0 ? 0xc87070 : 0x66ff99, { mode: delta < 0 ? 1 : 0, intensity: 0.9 });
   } else if (delta > 0) {
     stage._pulseDeckPile(0x66ff99); // 反向（衰败）只可能在手牌，无退路需求
   }

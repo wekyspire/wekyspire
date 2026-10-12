@@ -31,9 +31,9 @@ const QUALITY_TIERS = [
       <h2>菜单</h2>
 
       <div class="section">
-        <div class="title">存档（层首/终局自动记录）</div>
+        <div class="title">存档</div>
         <template v-if="save">
-          <div class="row">第 {{ save.floor }} / {{ save.totalFloors }} 层 · {{ savedAtText }}</div>
+          <div class="row">第 {{ save.floor }} / {{ save.totalFloors }} 层 {{ savedAtText }}</div>
           <div class="row dim">金币 {{ save.player.money }} ｜ 卡组 {{ save.player.deck.length }} 张<span v-if="resultText"> ｜ {{ resultText }}</span></div>
         </template>
         <div v-else class="row dim">暂无存档</div>
@@ -47,10 +47,10 @@ const QUALITY_TIERS = [
         </label>
         <label class="row toggle">
           <input type="checkbox" :checked="settings.fxPost" @change="toggleFxPost()" />
-          辉光特效（卡牌/UI 发光；低档设备可关）
+          辉光特效
         </label>
         <div class="row quality">
-          <span class="qlabel">渲染性能</span>
+          <span class="qlabel">渲染质量</span>
           <div class="seg">
             <button v-for="opt in QUALITY_TIERS" :key="opt.id"
               :class="{ on: settings.renderQuality === opt.id }" @click="setRenderQuality(opt.id)">
@@ -58,7 +58,7 @@ const QUALITY_TIERS = [
             </button>
           </div>
         </div>
-        <div class="row dim">降低体积光分辨率换取帧率（低档设备建议「低」）</div>
+        <div class="row dim">降低渲染质量可以改善卡顿</div>
         <div class="row quality">
           <span class="qlabel">最大渲染分辨率</span>
           <div class="seg">
@@ -68,7 +68,6 @@ const QUALITY_TIERS = [
             </button>
           </div>
         </div>
-        <div class="row dim">4K/高倍屏可降——画布缩小渲染后平滑放大，显著提帧</div>
       </div>
 
       <div class="actions">

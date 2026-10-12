@@ -117,7 +117,7 @@ export const bladeCast = {
         return;
       }
 
-      if (mode === 'slashC') {
+      if (mode === 'slash') {
         const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 190, scale: 1.3 });
         // 斩的双重读感：冷白核疾射（快到认不出形状）+ 目标身上一记亮斩痕
         // （slashSweep——刀光的「命中」交代；伤害拍还有 slash 变体细痕，两层不重复）

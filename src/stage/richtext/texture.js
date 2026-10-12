@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { parseRichText } from './parser.js';
 import { layoutRichText, DEFAULT_TEXT_STYLE } from './layout.js';
 import { effectLook, namedLook, cardLook } from './appearance.js';
-import { UI_FONT_BODY } from './uiFont.js';
+import { UI_FONT, UI_FONT_BODY } from './uiFont.js';
 
 export { DEFAULT_TEXT_STYLE };
 

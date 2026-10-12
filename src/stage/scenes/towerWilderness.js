@@ -200,6 +200,7 @@ function buildSnowfall({ count = 4800 } = {}) {
   const stretch = mix(1.0, clamp(uStretch.mul(speed).mul(0.14).add(1.0), 1.0, 3.5), uStormAmt);
   const vStretch = varying(stretch, 'vStretch');
   const vDepth = varying(cameraViewMatrix.mul(vec4(wp, 1.0)).z.negate(), 'vDepth'); // 视深（片元雾衰减）
+  const vWorldY = varying(wp.y, 'vWorldY');   // 世界高度（片元近地面衰减：雪片落近雪原变暗变透明）
 
   const material = new MeshBasicNodeMaterial({
     transparent: true,
@@ -225,7 +226,11 @@ function buildSnowfall({ count = 4800 } = {}) {
     // 近机淡出：盒随相机锚点平移（相机在盒内），贴脸雪片按屏幕比例放大到巨幅
     // 且可能跨近裁剪面拉花（"泼水"）——5~14 单位内平滑隐去
     a = a.mul(tslSmoothstep(5.0, 14.0, vDepth));
-    material.colorNode = vec4(0.75, 0.77, 0.8, a);
+    // 近地面衰减：雪片落近雪原（GROUND_BASE_Y）变暗变透明——亮雪片压在暗雪原上
+    // 会糊成一片白噪，落地带 0.8→7 单位内渐隐、色彩同步压暗
+    const gFade = tslSmoothstep(float(GROUND_BASE_Y + 0.8), float(GROUND_BASE_Y + 7.0), vWorldY);
+    const dim = mix(0.3, 1.0, gFade);
+    material.colorNode = vec4(vec3(0.75, 0.77, 0.8).mul(dim), a.mul(gFade));
   }
 
   const object = new THREE.Mesh(geometry, material);
@@ -304,23 +309,25 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
 
   // ---- 光照：雪夜，两半球环境光（上灰蓝天空 / 下偏白雪地反光）+ 弱冷平行光做雪丘体积 ----
-  const hemi = new THREE.HemisphereLight(0x8e939b, 0xdadcde, 0.09);
+  // 败塔氛围定稿（2026-10-09）：全场景压暗、只留天空相对亮——雪原与塔身吃进光量
+  // 大幅削减（反照率不动，破坏性更新禁），悬空白字层号在暗底上自然 outstanding。
+  const hemi = new THREE.HemisphereLight(0x848b96, 0x9aa0a8, 0.045);
   group.add(hemi);
-  const rim = new THREE.DirectionalLight(0xc7cad0, 0.19);
+  const rim = new THREE.DirectionalLight(0xc7cad0, 0.09);
   rim.position.set(-60, 90, -40); // 塔后上方逆光侧（只给雪原造型，贴图塔不受光）
   group.add(rim);
 
   // 中心静态光（central）：一层/塔基专属——固定不打光到高层，塔底的「门厅灯」。
   // 位置与强度是用户调参位，别在 setAnchorY 里动它。
-  const central = new THREE.PointLight(0xe9ebed, 2, 300, 0.5);
+  const central = new THREE.PointLight(0xe9ebed, 0.8, 300, 0.5);
   central.name = 'centralLight';
   central.position.set(TOWER_X-9, TOWER_BASE_Y+5, TOWER_Z+7);
   group.add(central);
 
   // 层跟随光（track）：随相机锚点爬升的独立光源——塔是世界固定的，decay 2 的点光
   // 钉死塔基在高层衰减殆尽，当前层的塔身/雪面要它来补（setAnchorY 抬到锚点上方 5，
-  // 与 central 同偏移同色温，跨层光照观感一致）。
-  const track = new THREE.PointLight(0xe9ebed, 50, 300, 2);
+  // 与 central 同偏移同色温，跨层光照观感一致）。压暗定稿后强度同步削弱（50 → 13）。
+  const track = new THREE.PointLight(0xe9ebed, 13, 300, 2);
   track.name = 'floorTrackLight';
   track.position.set(TOWER_X-2, TOWER_BASE_Y+3, TOWER_Z+3);
   group.add(track);

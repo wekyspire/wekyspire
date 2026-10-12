@@ -16,6 +16,9 @@
 // 美术口径：mefm1 暂无立绘（占位色块），全部效果按立牌体量派生、不依赖贴图内容。
 import * as THREE from 'three';
 import { duelPose } from '../../camera.js';
+import { arcProjectile } from '../../spells/blocks.js';
+import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
+import { registerEnemyAct } from '../enemyAct.js';
 
 // 电火花纹理：横向拉长的白蓝炽核 + 尾迹（与 pyro 余烬拖影同构、换色温——冷电 vs 热火）
 let _sparkTex = null;
@@ -103,9 +106,10 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
   });
 
   // —— 告警红灯（跟随点光，故障段正弦扫射；停机段熄灭；点火段换橙色熔炉光起燃）——
-  // 从舞台光池借（light:fx1）：演出中途 add 灯 = 全场景着色器重编译（实测 1.2s 冻帧，
-  // 09-24）；池灯入场即在场景里，这里只挪位/换色/推强度（重挂到单位不触发重编译）
-  const alarm = cast.get('light:fx1');
+  // 从舞台光池借（light:fx0）：常驻灯统一走 fx0——瞬态灯脉冲（punchImpact 的
+  // lampPulse）走 fx1，借同一盏会在转段后把熔炉灯拽去命中点。池灯入场即在场景里，
+  // 重挂到单位不触发重编译（add 灯 = 全场景着色器重编译，实测 1.2s 冻帧，09-24）
+  const alarm = cast.get('light:fx0');
   if (alarm) {
     alarm.color.set(0xff3a3a);
     alarm.distance = H * 5;
@@ -221,6 +225,64 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
   unit.restoreColor?.();
 }
 
+// —— 命中 beat（钢铁电蚀主题，2026-10-09 补齐）：弹链/普攻都是金属撞击的
+// 白蓝电火花（不是血肉撞击），多段连发时读成「挨了一梭子」。共享底座
+// enemyImpactBeat，garnish 复用本文件的 burstSparks（电火花 + 拖影）。
+async function mefm1HitBeat(ctx, deps, args) {
+  const rapid = args.fx.tier === 'rapid';
+  await enemyImpactBeat(ctx, deps, {
+    ...args,
+    pal: {
+      color: rapid ? [0.62, 0.72, 0.86] : [0.72, 0.78, 0.88],
+      hot: rapid ? [0.85, 0.95, 1.2] : [0.9, 0.95, 1.15],
+      rim: [0.6, 0.78, 1.05],
+      sparkColor: 0xbfe0ff,
+      flashColor: 0xcfe4ff,
+    },
+    garnish: (c2, d, { at, heavy: hv }) => {
+      burstSparks(d.particles, at.x, at.y - 7, at.z ?? 0, 14, hv ? 12 : 7);   // uy - H/2 抵消内部 +H/2 偏移
+    },
+  });
+}
+
+// —— 起手 beat：钩爪拍（赋予伤残，无伤害）= 钩爪发射——钢蓝钩爪弹从机体胸口
+// 划弧飞向玩家，抵达炸一撮电火花（伤残的「被抓烂」读感）；积焰/点火拍（buff）=
+// 排焰口喷一口橙火（P2 常驻排焰的预告版）。攻击拍静默（弹链命中 beat 已是语言）。
+async function mefm1Act({ ctx, deps, unit, player, kinds }) {
+  if (kinds.includes('attack')) return;
+  const H = unit._standeeHeight ?? 22;
+  const from = { x: unit.position.x, y: unit.position.y + H * 0.5, z: unit.position.z };
+  if (kinds.includes('debuff')) {
+    await arcProjectile(ctx, deps, {
+      from, to: player ? {
+        x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z,
+      } : null,
+      color: [0.55, 0.65, 0.8], hot: [0.85, 0.95, 1.25],
+      size: 1.35, ms: 380, arcH: 3.2, stretch: 1.35,
+      lampIntensity: 380,
+      trail: { color: 0x9ecbff, speed: 4, size: 0.5, ttl: 0.22 },
+    });
+    if (player) {
+      const px = player.position.x, py = player.position.y + 3.4 * (player._baseScale ?? 1);
+      burstSparks(deps.particles, px, py - H * 0.5, player.position.z, H, 10);
+    }
+    return;
+  }
+  if (kinds.includes('buff')) {
+    // 排焰 puff：两侧排焰口喷两口橙火星上扬 + 一记钢色闪
+    const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
+    for (const dx of [-H * 0.3, H * 0.34]) {
+      deps.particles?.spawn?.(ux + dx, uy + H * 0.4, {
+        color: 0xff8a3a, count: 9, speed: 4, vby: 9, size: 1.1, ttl: 0.8, gravity: 5, z: uz + 0.5,
+      });
+    }
+    unit.flash?.(0x9ecbff);
+    await ctx.wait(340);
+  }
+}
+
 export function registerMefm1Scripts(register) {
   register('bosses/mefm1P2', mefm1P2);
+  registerEnemyHitBeat('mefm1', mefm1HitBeat);
+  registerEnemyAct('mefm1', mefm1Act);
 }

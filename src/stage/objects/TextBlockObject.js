@@ -19,7 +19,7 @@ export class TextBlockObject extends THREE.Mesh {
   constructor({ bakeText = null, fontPx = 16, tint = '#d4d4d4' } = {}) {
     super(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ transparent: true }),
+      new THREE.MeshBasicMaterial({ transparent: true, fog: false }),   // 文本不产大气衰减（世界场景内亦不雾）
     );
     this._bakeText = bakeText || defaultBakeText;
     this._fontPx = fontPx;

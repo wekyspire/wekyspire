@@ -96,6 +96,7 @@ export function createRunDebug(ctx) {
     // 舞台归一：战斗/房间舞台全拆，塔楼摆到新层（同一份「落到 prep」语义）
     ctx.swapAnyToMap?.();
     ctx.mapStage?.setFloor?.(run.floor, run.totalFloors);
+    ctx.mapStage?.snapCameraToFloor?.();   // 跳层是传送不是爬升：相机/标尺一并直落
     return msg;
   });
   const nextFloor = () => setFloor(run.floor + 1);

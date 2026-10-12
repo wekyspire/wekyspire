@@ -56,6 +56,8 @@ export function snapshotRun(run) {
     // 见 runController.restoreFromSave 的 debugMode 分支）
     currentRoom: run.currentRoom ?? null,
     roomData: run.roomData ? JSON.parse(JSON.stringify(run.roomData)) : null,
+    // 塔楼房间表（开局定死的种子事实）：旧档无此字段 → 读档按种子重导（saveRestore）
+    roomTable: run.roomTable ? [...run.roomTable] : null,
     // 本层遭遇（描述符数组）：调试档据此复现指定的敌人编成；真实档读档时由
     // advanceFloor 按 seed+floor 重新确定性生成，故旧档没有此字段也不影响
     encounter: run.encounter ? run.encounter.map(e => (e && typeof e === 'object' ? { ...e } : e)) : null,

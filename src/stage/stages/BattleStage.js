@@ -193,7 +193,7 @@ export class BattleStage {
     // 咏唱无槽区：咏唱卡住手牌扇形（激活态 = isActivated 边缘流光），与普通卡同布局。
     this.layout.setNamedAnchor('deck', PILE_POSITIONS.deck);
 
-    this.animator = new StageAnimator({ layoutEngine: this.layout, tween });
+    this.animator = new StageAnimator({ tween });
     // 手牌/咏唱静息姿态的弹簧跟随层：布局锚点只当目标，逐帧软收敛（见 HandSprings）
     this.springs = new HandSprings({ animator: this.animator });
     // FX tween（overlay 脉冲等不进注册表、不阻塞队列的小动画）：与 animator 同源可注入
@@ -206,6 +206,10 @@ export class BattleStage {
     // BattleStage 只是它的战斗视图。此处未注入则自建（单场测试/headless 用）。
     this.model = displayModel ?? new DisplayModel();
     this.model.beginBattle(); // 战斗边界：卡牌面按场清空（模型本身跨场存活）
+    // zone 单门：模型每次 zone 迁移（sync 对账与节拍直写）都在此做视图随动
+    // （battleBeats/sync.js 的 _cardZoneDoor）——副作用只有一份，无第二扇门
+    this._onCardZone = ({ id, from, to }) => this._cardZoneDoor(id, from, to);
+    this.model.on('card-zone', this._onCardZone);
     this._views = new Map();  // uniqueID -> CardObject（模型卡条目的 three 视图）
     this._units = new Map();   // uniqueID -> UnitObject
     this._swordArtRank = -1;   // 大剑立绘 latch（PLAYER_SWORD_TIERS 下标）：场内只升不降——
@@ -813,11 +817,13 @@ export class BattleStage {
     // 瞄准中的卡视作"被撑开"对象：位置不变但抬升放大、两侧排开（瞄准时不响应 hover 切换）
     const spreadId = this._pick ? null : (this._aiming?.id ?? this._hoveredCardId);
     this.layout.layoutHand('hand', orderedHand, spreadId);
-    // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）
+    // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）。
+    // 目标资格 = zone 'hand'（held=展示位停留 / deck=牌库停车都不发目标——所有权
+    // 由 zone 记录，弹簧只认领手牌）
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
-      if (a && this.model.getZone(id) !== 'held') targets.set(id, a);
+      if (a && this.model.getZone(id) === 'hand') targets.set(id, a);
     }
     // 选卡覆盖层（手牌来源）：把候选的目标锚点换成网格位——同一批 CardObject 直接
     // "飞"进界面，不渲染副本；关闭时 targets 自然回到手牌扇形
@@ -833,10 +839,11 @@ export class BattleStage {
     this.springs.setTargets(targets);
     for (const [id, view] of this._views) {
       const zone = this.model.getZone(id);
-      // 入场飞行（牌库/坟堆 → 手牌/咏唱）：弧线飞入 + 淡入 + 倾转落座；
-      // 起手多张按手牌序级联（delayMs 递增）。飞行中状态为 ANIMATING（弹簧让位），
-      // 落定后弹簧从落点零速收养，自然滑入扇形锚点
-      if (this._entering.has(id) && onStage.has(id)) {
+      // 入场飞行（牌库 → 手牌）：弧线飞入 + 淡入 + 倾转落座；起手多张按手牌序级联
+      // （delayMs 递增）。飞行中是租约（弹簧让位），落定/被顶杀后弹簧收养滑入扇形。
+      // `_entering` 只由 zone 单门在 deck→hand 时写入，同一 _applySnapshot 内此处
+      // 消费（锚点已算好）；zone 判据是门的不变式——非 hand 的卡不发入场弧
+      if (this._entering.has(id) && onStage.has(id) && zone === 'hand') {
         this._entering.delete(id);
         const anchor = this.layout.getAnchor(id);
         if (anchor) {
@@ -1037,14 +1044,14 @@ export class BattleStage {
 
   /** 手牌被上限挡下：整手牌红色脉冲 + 骑士头顶**思索泡泡**自语。 */
   _handPressureHint(text = HAND_FULL_LINE) {
-    for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03 });
+    for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03, mode: 1, intensity: 0.9 });
     const proj = this._snapshot;
     if (!proj?.player) return;
     this.say(proj.player.uniqueID, { text, kind: 'thought', duration: 2.8, tint: 0xe8ecfa });
   }
 
-  _pulseCard(id, color) {
-    this._views.get(id)?.fx.pulse({ color }); // 特效层时间线，回程由每帧 updateFx 推进
+  _pulseCard(id, color, opts = {}) {
+    this._views.get(id)?.fx.pulse({ color, ...opts }); // 特效层时间线，回程由每帧 updateFx 推进
   }
 
   // 牌库图标脉冲（库中卡冷却节拍的落点）。⚠ 反馈必须在 UI 空间：粒子层挂在世界场景，
@@ -1250,6 +1257,7 @@ export class BattleStage {
     this._removePanel();
     this._pickerKit.dispose();   // 全屏选卡界面（_removePanel 只 close，真正释放在这里）
     this._disposed = true; // 幽灵守卫先行（退订前到达的排队事件也不再处理）
+    this.model.off('card-zone', this._onCardZone); // zone 单门退订（模型跨场存活，不带走到下一场）
     for (const h of this._fxScripts) h.kill(); // 在途演出协程统一取消（结构化取消，promise 必达）
     this._fxScripts.clear();
     for (const auras of this._unitAuras.values()) auras.dispose(); // 常驻 aura 全瞬收

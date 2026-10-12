@@ -29,7 +29,6 @@ const emit = defineEmits(['close']);
   position: fixed; bottom: 22px; left: 0; right: 0;
   z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 8px;
   pointer-events: none;
-  font-family: sans-serif;
 }
 .toast {
   position: relative; /* × 按钮的定位锚 */
@@ -38,7 +37,7 @@ const emit = defineEmits(['close']);
   background: rgba(10, 10, 10, .94); border: 2px solid #555555; border-radius: 0;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
 }
-.toast-title { font-size: 15px; color: #f5f5f5; }
+.toast-title { font-size: 15px; color: #f2f2f2; font-family: var(--font-display); }
 .toast-text { font-size: 12px; color: #a0a0a0; margin-top: 4px; }
 .toast-close {
   position: absolute; top: 4px; right: 6px;
@@ -46,7 +45,7 @@ const emit = defineEmits(['close']);
   padding: 2px 6px; font-size: 14px; line-height: 1; cursor: pointer;
   color: #a0a0a0; background: none; border: none; border-radius: 0;
 }
-.toast-close:hover { color: #ffffff; background: rgba(70, 70, 70, .6); }
+.toast-close:hover { color: #ffffff; }
 /* 进入：从屏幕底缘下方升入；消亡：原地纯淡出并脱流（保持居中靠边距而非 transform，
    绝不用 transform 承载消亡位移——那是堆积回落抽搐的另一半根源），
    同伴经 .toast-move 平滑回落 */

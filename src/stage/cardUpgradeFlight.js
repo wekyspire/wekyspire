@@ -100,7 +100,7 @@ export function playCardUpgradeFlight({
 
     // ② 上冲蓄势：金闪（盖住接下来的换面瞬间）+ 放缩冲峰
     function surge() {
-      card.fx.pulse({ color: UPGRADE_GOLD, durationMs: CARD_UPGRADE_TIMING.surgeMs + 160, scale: 1.5 });
+      card.fx.pulse({ color: UPGRADE_GOLD, durationMs: CARD_UPGRADE_TIMING.surgeMs + 160, scale: 1.5, mode: 2, intensity: 1.25 });
       const s0 = card.scale.x || 1;
       tweens.push(gsap.to(card.scale, {
         x: s0 * 1.32, y: s0 * 1.32,
@@ -112,7 +112,7 @@ export function playCardUpgradeFlight({
     // ③ 换面 + 回稳：峰值瞬间原卡变新卡（第二道金闪掩盖切换），下落回亮相缩放
     function swap() {
       card.setCard(toCard);
-      card.fx.pulse({ color: UPGRADE_GOLD, durationMs: CARD_UPGRADE_TIMING.swapMs + 120, scale: 1.5 });
+      card.fx.pulse({ color: UPGRADE_GOLD, durationMs: CARD_UPGRADE_TIMING.swapMs + 120, scale: 1.5, mode: 2, intensity: 1.25 });
       const s0 = card.scale.x || 1;
       tweens.push(gsap.to(card.scale, {
         x: showcaseScale, y: showcaseScale,

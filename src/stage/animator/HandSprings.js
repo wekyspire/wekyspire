@@ -1,13 +1,14 @@
-// HandSprings：手牌/咏唱静息姿态的弹簧跟随层（软约束 + 惯量）。
+// HandSprings：卡牌静止位的唯一常驻驱动（软约束 + 惯量）——两态模型中的 free 态。
 // 动机：悬停重排若用目标补间（kill 旧 + 起新）驱动，指针快速扫过时反复重启、
 // 速度不连续，观感生硬；改为每帧向布局锚点收敛的二阶弹簧——目标突变时速度
 // 天然连续，邻牌呈波浪式跟动，悬停提拉/挤开自带惯量感。
 //
-// 让位规则：仅接管 animator 状态为 idle/tracking 的注册对象；指令动画
-// （animating：入场飞行/发动展示/脉冲等）与拖拽（dragging）期间完全让位，
-// 期间对象被别处驱动。重新获得资格时从 object3D 当前姿态零速收养——承接落定
-// 姿态 → 平滑滑向锚点，故 enterTracking/syncTracking 归位补间对本层管理的卡
-// 全部不再需要。
+// 让位规则：仅接管 animator 状态为 idle（free）的注册对象；租约中
+// （animating：入场飞行/发动展示/离场飞行等指令动画；dragging：拖拽）完全
+// 让位，期间对象被租借方驱动。租约结束（onComplete 或被顶杀）自动回落
+// free，本层从 object3D 当前姿态零速收养——承接落定/中断姿态 → 平滑滑向
+// 锚点，卡在任何时刻都有所有者，不存在无人驾驶的僵尸态。
+// 目标表由宿主 _layoutAndTrack 整表替换（只对 zone='hand' 的卡发目标）。
 //
 // 半隐式欧拉 + 固定子步积分：帧率无关、长帧截断防瞬移。由宿主逐帧 update(dt)；
 // node 测试手动步进即可确定性地推进到收敛。
@@ -46,7 +47,7 @@ export class HandSprings {
       const tgt = this._targets.get(id);
       if (!tgt) { this._items.delete(id); continue; } // 已离场：交给离场节拍/销毁
       const st = this._animator.getState?.(id);
-      if (st !== 'idle' && st !== 'tracking') { item.driven = false; continue; } // 动画/拖拽让位
+      if (st !== 'idle') { item.driven = false; continue; } // 租约中（指令动画/拖拽）让位
       const obj = this._animator.getObject?.(id);
       if (!obj) { this._items.delete(id); continue; }
 

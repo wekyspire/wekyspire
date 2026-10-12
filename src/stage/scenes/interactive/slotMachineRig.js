@@ -410,6 +410,18 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     o.material.emissive = new THREE.Color(0x000000);
     leverParts.push({ mesh: o, base });
   });
+  // 拉杆拾取代理：细杆小球直接射线太难命中——罩一个隐形热区盒（挂在机身上不随拉下旋转，
+  // 热区只管静止态的"可点暗示"；opacity 0 而非 visible:false，Picker 滤 invisible）
+  let leverProxy = null;
+  if (lever) {
+    leverProxy = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 2.6, 1.0),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    );
+    leverProxy.position.copy(lever.position).add(new THREE.Vector3(0.3, 1.0, 0));
+    leverProxy.name = 'leverProxy';
+    body.add(leverProxy);
+  }
   let leverFlash = 0;
   const basePos = body.position.clone();   // 机器由 composeRoom 定位——抖动只能在基准位附近
   const baseScale = body.scale.x || 1;
@@ -439,6 +451,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crushFx: null,       // { t, seconds, flash }：粉碎演出
     mawHover: 0,         // 粉碎口 hover 高亮权重（0..1，向 mawHoverTarget 收敛）
     mawHoverTarget: 0,
+    leverHover: 0,       // 拉杆 hover 权重（0..1，向 leverHoverTarget 收敛）
+    leverHoverTarget: 0,
   };
 
   // ---- 彩灯：常态呼吸 + 灯效（InstancedMesh + instanceColor，逐实例写色）----
@@ -667,7 +681,8 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     // ---- 拉杆：快速拉下 → 缓慢弹起（弹性回位）；悬停/拉下时闪光提示 ----
     leverFlash = Math.max(0, leverFlash - dt * 2.2);
     if (lever) {
-      const wantFlash = st.pulling || st.hover > 0.5 ? 1 : 0;
+      st.leverHover += (st.leverHoverTarget - st.leverHover) * Math.min(1, dt * 9);
+      const wantFlash = st.pulling || st.hover > 0.5 || st.leverHover > 0.05 ? 1 : 0;
       leverFlash = Math.max(leverFlash, wantFlash * Math.min(1, dt * 6 + leverFlash));
       if (st.pulling) {
         st.leverAngle += (-1.05 - st.leverAngle) * Math.min(1, dt * 16);
@@ -679,6 +694,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         st.leverAngle = -1.05 * (1 - e) + overshoot * (1 - e);
       }
       lever.rotation.z = st.leverAngle
+        - 0.16 * st.leverHover   // hover 预示下压（可拉暗示；拉下态 st.pulling 的角度远压过它）
         + (st.spinEnergy > 0.001 ? Math.sin(st.t * 47) * 0.03 * st.spinEnergy : 0);  // 转轮带着拨杆共振
       // 闪光：朝冷白插值（拉下瞬间最亮）
       for (const lp of leverParts) {
@@ -815,6 +831,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crusherTargets: () => [mawProxy ?? throat].filter(Boolean),
     /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */
     demonTargets: () => reels.filter(Boolean),
+    /** 拉杆热区（隐形代理盒）：点 = 拉杆一次（同面板「拉杆」按钮）。 */
+    leverTargets: () => [leverProxy].filter(Boolean),
+    /** 拉杆 hover 反馈（预示下压 + 提亮）；能否真拉由机器模块按快照门控后传入。 */
+    setLeverHover(on) { st.leverHoverTarget = on ? 1 : 0; },
     /** 热区 → 语义名（宿主派发意图用）：'crusher' = 投料口，'counter' = 计数器。 */
     pickNameOf: (obj) => {
       if (obj === mawProxy || obj === throat || obj === jaw) return 'crusher';

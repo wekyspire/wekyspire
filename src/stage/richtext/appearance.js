@@ -37,8 +37,9 @@ const LEINO_THEME = Object.freeze({
   wood: '#4aa56e',  // 木
   air: '#7ad0e8',   // 风
 });
-// 通用灰卡（pack='common'）：偏白主题色——与所有体系卡拉开距离，且区分方式同样是主题色
-const COMMON_THEME = '#e8e6e0';
+// 通用灰卡（pack='common'）：中灰主题色——靠「无彩色」与体系卡拉开距离。
+// 不许太亮：近白边框会让最普通的卡在一手牌里最抢眼（2026-10-11 用户验收，自 #e8e6e0 压暗）
+const COMMON_THEME = '#9a9da6';
 // series（技能家族）→ 灵脉归口：新体系内容落定后在此补一行；未归口回落类型色
 const SERIES_LEINO = Object.freeze({
   fist: 'body', block: 'body', blade: 'body', punch: 'body', focusChant: 'body',

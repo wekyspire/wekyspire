@@ -6,8 +6,12 @@
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
 import { arcProjectile } from '../spells/blocks.js';
 
-// 自带 act 剧本编排的 Boss（转段 playScript 等）：通用起手会与之叠播，跳过
-const SKIP_ACT_FX = new Set(['pyro', 'kardas', 'mefm1']);
+// 逐敌专属起手（Boss 主题化，2026-10-09）：defId → async ({ctx, deps, args, unit, player, kinds})。
+// 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
+// 该拍已有别的演出语言——转段剧本/命中 beat）。注册口给 fx/scripts/bosses/
+// 一文件一 Boss（内容归属原则），替代旧的 SKIP_ACT_FX 整体跳过名单。
+const ENEMY_ACT_BEATS = new Map();
+export function registerEnemyAct(defId, fn) { ENEMY_ACT_BEATS.set(defId, fn); }
 
 // 咒击式（赋予削弱）：暗紫咒弹从施法者胸口划弧飞向玩家，抵达小爆——
 // 削弱系（虚弱/中毒/塞牌）的「被下咒」读感主体，后续玩家佝偻姿态接续
@@ -46,11 +50,14 @@ export function registerEnemyActScript(registerScript) {
   registerScript('enemyAct', async ({ ctx, args, cast, particles, shake, unitById, scene, uiScene }) => {
     const unit = unitById(args?.unit);
     if (!unit || unit._dead) return;
-    if (SKIP_ACT_FX.has(unit._defId)) return;
     const kinds = args?.kinds ?? [];
+    const deps = { scene, uiScene, particles, cast, shake };
+    // Boss 专属起手优先（内容归属：fx/scripts/bosses/ 注册）——attack 拍通常也由
+    // Boss beat 自己静默吞掉（起手 = 突进 + 命中主题 beat）
+    const custom = ENEMY_ACT_BEATS.get(unit._defId);
+    if (custom && await custom({ ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds }) !== 'generic') return;
     // 攻击类（含攻击+buff/debuff 混合拍）：起手 = 突进，不叠加施法演出
     if (kinds.includes('attack')) return;
-    const deps = { scene, uiScene, particles, cast, shake };
     if (kinds.includes('debuff')) {
       await curseShot(ctx, deps, { unit, player: cast.get('role:player') ?? null });
       return;

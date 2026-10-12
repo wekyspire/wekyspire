@@ -204,7 +204,7 @@ const SHOWCASE_SAMPLES = {
   relic: {},
   relicReal: {   // 走真遗物定义（名称/描述/立绘全真）——遗物特写的验收样本
     title: '山泉壶',
-    desc: '遗物 · C 级 · 非槽位式',
+    desc: '遗物 C 级 非槽位式',
     effect: '休息处休息时，额外恢复5点血。',
     artKey: '山泉壶',
     tint: 0x8d97b5,

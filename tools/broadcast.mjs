@@ -222,7 +222,7 @@ function momentFor(S, action, index) {
     t: 'moment', index, action, outcome,
     floor: run.floor, totalFloors: run.totalFloors,
     stage: run.gameStage, stageCn: stageCn(run.gameStage),
-    title: battleResult ? `第 ${run.floor} 层 · 战斗结果` : `第 ${run.floor} 层 · ${STAGE_TITLE[run.gameStage] ?? run.gameStage}`,
+    title: battleResult ? `第 ${run.floor} 层 战斗结果` : `第 ${run.floor} 层 ${STAGE_TITLE[run.gameStage] ?? run.gameStage}`,
     lines: outcome.split('；').filter(Boolean),
     candidates: null, card: null,
   };

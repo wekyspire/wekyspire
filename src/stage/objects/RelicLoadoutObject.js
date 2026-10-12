@@ -1,20 +1,18 @@
-// RelicLoadoutObject：战前准备面板的**遗物装卸区**（的交互升级）。
+// RelicLoadoutObject：战前准备面板的**背囊遗物栏**（纯背包——已装备的在顶部资源行，
+// 面板内不再设「已装备」区与容量条；容量条上移成顶部槽位条 RelicSlotMeterObject）。
 //
-// 取代旧的「文字行 + 装备/卸下按钮」：
 //   · 遗物显示 = 图标（有立绘 = 直出立绘无底无框；无立绘 = 方角厚描边底片 +
 //     特征字 + 稀有度描边，烘焙缓存）——hover 出效果详情（token 热区走全局 tooltip，
 //     与顶栏遗物同一契约），图标有抬升反馈；
-//   · 装备/卸下 = **拖拽**：从背囊拖到「已装备」区=装备；从装备区拖回「背囊」=卸下；
-//     拖拽中目标区亮边提示、容量条给出预览填充（放不下变红）；松手在区外=弹回原位；
-//   · 可用遗物（canUse）**点击**即使用（拖拽与点击按 6px 位移阈值区分）；
-//   · 槽容量 = point bar：按槽位总数分段的横条，Σcost 填充动画（缓动 + 到位脉冲），
-//     拖拽预览时以更亮的填充展示「将要占用」，超出上限的部分染红。
+//   · 装备 = **点击**（超容量不放行，给摇头+染红反馈）或**拖拽到顶部资源行**
+//     （落点矩形由宿主经 bindStage 的 getDropRectLocal 实时供给，松手在外=弹回原位）；
+//   · 卸下 = 顶部资源行点击/拖回本区（宿主 MapStage 侧实现，bagZoneRectWorld 供落点判定）；
+//   · 恒生效（非槽位式）遗物行只读。
 //
 // 面板内布局（局部坐标，y 向上，原点在组中心；顶部 = +H/2）：
-//   容量条（条 + N/M 读数）→ 已装备区（drop target）→ 背囊区（drop target）
-//   → 恒生效行（不占槽，只读）→ 操作提示行。
+//   背囊区（drop target 反向上行用）→ 恒生效行（不占槽，只读）→ 操作提示行。
 // 宿主契约（MapStage 侧接线，见 _bindLoadout）：
-//   bindStage({ picker, screenToLocal }) + 指针三事件（onDown/onMove/onUp）+ update(dt)。
+//   bindStage({ picker, screenToLocal, getDropRectLocal }) + 指针三事件 + update(dt)。
 // 纯 node 退化：无 document → 图标回落色块、文本回落 TextBlockObject 占位烘焙。
 import * as THREE from 'three';
 import { TextBlockObject } from './TextBlockObject.js';
@@ -26,7 +24,6 @@ import { UI_FONT } from '../richtext/uiFont.js';
 const ICON = 3.9;            // 图标边长
 const PITCH = 4.55;          // 图标间距（列/行同距）
 const PAD = 0.7;             // 区内边距
-const BAR = { h: 2.1, labelW: 4.6, gap: 0.9 };   // 容量条 + 读数
 const LABEL_H = 1.7;         // 区标题行高
 const HINT_H = 1.7;          // 底部操作提示行高
 const NS_ICON = 2.9;         // 恒生效行小图标
@@ -34,13 +31,8 @@ const NS_PITCH = 3.4;
 const Z = { content: 1, zone: 0.5, ghost: 40 };
 const DRAG_THRESHOLD = 6;    // px：超过即判拖拽（否则算点击）
 const C = {
-  barTrack: 0x141414,       // 容量条底
-  barFill: 0xa8a8a8,        // 容量条填充（淡蓝——金色只留给金钱）
-  barPreview: 0xd0d0d0,     // 拖拽预览填充（更亮一档）
-  barOver: 0xe85a5a,        // 超上限（红）
-  zoneBorder: 0x444444,     // 区边框常态
   zoneGlow: 0xcfcfcf,       // 拖拽悬停亮边
-  zoneBad: 0xe85a5a,        // 放不下
+  zoneBad: 0xe85a5a,        // 放不下/不可装备（语义红）
   empty: 0x232323,
 };
 
@@ -50,7 +42,7 @@ const rarityColor = (r) => RARITY_COLORS[r] ?? RARITY_COLORS.C;
 const _iconCache = new Map();
 function iconTexture(relic) {
   if (typeof document === 'undefined') return null;
-  const key = `${relic.id}|${relic.usesLeft ?? ''}|${relic.canUse ? 1 : 0}`;
+  const key = `${relic.id}|${relic.canUse ? 1 : 0}`;
   if (_iconCache.has(key)) return _iconCache.get(key);
   const S = 3, W = 160;
   const c = document.createElement('canvas');
@@ -84,22 +76,6 @@ function iconTexture(relic) {
     g.fillStyle = col;
     g.fillText(ch, W / 2, W / 2 + 4);
   }
-  // 可用遗物：金色小角标（点击使用——提示行说明）
-  if (relic.canUse) {
-    g.beginPath();
-    g.arc(W - 20, 20, 7, 0, Math.PI * 2);
-    g.fillStyle = '#ffd75e';
-    g.fill();
-    g.lineWidth = 2;
-    g.strokeStyle = 'rgba(0,0,0,0.55)';
-    g.stroke();
-    if (relic.usesLeft != null) {
-      g.font = `13px ${UI_FONT}`;
-      g.fillStyle = '#ffd75e';
-      g.textAlign = 'right';
-      g.fillText(`×${relic.usesLeft}`, W - 32, 24);
-    }
-  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -112,20 +88,13 @@ function iconTexture(relic) {
  * 面板 builder 用：按遗物清单算出区段高度（px，PanelObject custom widget 的 height 口径）。
  * 与 RelicLoadoutObject 内部布局同源（同一套常量推导），不会漂。
  */
-export function relicLoadoutSpec(relics, slots, widthWu = 22.6) {
+export function relicLoadoutSpec(relics, _slots, widthWu = 22.6) {
   const perRow = Math.max(1, Math.floor((widthWu - PAD * 2) / PITCH));
-  const eq = (relics ?? []).filter(r => !r.nonSlot && r.equipped).length;
   const bag = (relics ?? []).filter(r => !r.nonSlot && !r.equipped).length;
   const ns = (relics ?? []).filter(r => r.nonSlot).length;
-  const hasLoadout = eq + bag > 0;
-  const eqRows = Math.max(1, Math.ceil(eq / perRow));
   const bagRows = Math.max(1, Math.ceil(bag / perRow));
   const nsRows = Math.max(1, Math.ceil(ns / Math.max(1, Math.floor((widthWu - PAD * 2) / NS_PITCH))));
-  let h = BAR.h + 1.0;                                        // 容量条 + 上下留白
-  if (hasLoadout) {
-    h += LABEL_H + PAD + eqRows * PITCH + PAD;                 // 已装备区
-    h += 0.8 + LABEL_H + PAD + bagRows * PITCH + PAD;          // 背囊区
-  }
+  let h = LABEL_H + PAD + bagRows * PITCH + PAD;                 // 背囊区
   if (ns) h += 0.8 + LABEL_H + nsRows * NS_PITCH;
   h += 0.6 + HINT_H;
   return { height: Math.round(h * 10) };
@@ -133,34 +102,7 @@ export function relicLoadoutSpec(relics, slots, widthWu = 22.6) {
 
 let _seq = 0;
 
-// 容量条底板烘焙（按 宽×段数 缓存——面板重建不重烘；node 无 document 回落 null）
-const _barTexCache = new Map();
-function barTrackTexture(barW, segs) {
-  if (typeof document === 'undefined') return null;
-  const key = `${Math.round(barW * 10)}|${segs}`;
-  if (_barTexCache.has(key)) return _barTexCache.get(key);
-  const S = 3, Wpx = Math.round(barW * 20), Hpx = 10;
-  const c = document.createElement('canvas');
-  c.width = Wpx * S; c.height = Hpx * S;
-  const g2 = c.getContext('2d');
-  g2.scale(S, S);
-  g2.beginPath(); g2.roundRect(1, 1, Wpx - 2, Hpx - 2, 0);
-  g2.fillStyle = '#141414'; g2.fill();
-  g2.lineWidth = 3; g2.strokeStyle = 'rgba(140,140,140,0.55)'; g2.stroke();
-  for (let i = 1; i < segs; i++) {
-    const x = (Wpx * i) / segs;
-    g2.strokeStyle = 'rgba(12,12,12,0.9)';
-    g2.lineWidth = 2;
-    g2.beginPath(); g2.moveTo(x, 2); g2.lineTo(x, Hpx - 2); g2.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  _barTexCache.set(key, tex);
-  return tex;
-}
-
-// drop-target 区的「描边」烘焙（中间全透明、只有方角厚边线——拖拽悬停的亮边是描边
-// 不是整区色块，贴合面板扁平厚描边风格；颜色由材质运行时调）
+// drop-target 区的「描边」烘焙（中间全透明、只有方角厚边线；颜色由材质运行时调）
 const _edgeTexCache = new Map();
 function zoneEdgeTexture(w, h) {
   if (typeof document === 'undefined') return null;
@@ -186,12 +128,12 @@ function zoneEdgeTexture(w, h) {
 export class RelicLoadoutObject extends THREE.Group {
   /**
    * @param {object} opts
-   *   relics / slots（{used,total}）：prep 快照原样
-   *   fireIntent(action)：上行意图（equip/unequip/useRelic——与旧按钮同一条链）
+   *   relics（prep 快照原样——本对象只取其中「背囊 = 槽位式且未装备」与「恒生效」两组）/
+   *   fireIntent(action)：上行意图（equip——与旧按钮同一条链）
    *   bakeText：文本烘焙（面板注入；缺省 TextBlockObject 自带）
    *   widthWu：区内宽（anchored 面板内宽 22.6）
    */
-  constructor({ relics = [], slots = { used: 0, total: 0 }, fireIntent = null, bakeText = null, widthWu = 22.6 } = {}) {
+  constructor({ relics = [], fireIntent = null, bakeText = null, widthWu = 22.6 } = {}) {
     super();
     this.name = 'relicLoadout';
     this._uid = ++_seq;
@@ -200,19 +142,14 @@ export class RelicLoadoutObject extends THREE.Group {
     this._widthWu = widthWu;
     this._picker = null;
     this._screenToLocal = null;
+    this._getDropRectLocal = null;
     this._pickIds = [];
-    this._icons = new Map();     // pickId -> { relic, zone, group, mat, lift, liftT }
-    this._zones = [];            // { id, x0, x1, y0, y1, border, glow, glowT, glowCol }
+    this._icons = new Map();     // pickId -> { relic, zone, group, mat, mesh, lift, liftT, denyT, pid }
+    this._zone = null;           // 背囊区 { x0,x1,y0,y1, border, glow, glowT }
     this._drag = null;           // 拖拽态（见 onMove）
     this._press = null;          // 按下候选（阈值内 = 点击）
     this._spring = null;         // 弹回动画
-    this._fill = 0;              // 容量条当前填充（0..1 视觉值）
-    this._fillTarget = 0;
-    this._preview = 0;           // 拖拽预览填充（0..1）
-    this._previewTarget = 0;
-    this._previewBad = false;
-    this._pop = 0;               // 到位脉冲计时
-    this._buildStatic(relics, slots);
+    this._buildStatic(relics);
     // 立绘晚到补烘（PropArtCache 契约）：图标首烘若赶上立绘未解码，特征字占位会被
     // 模块缓存固化——订阅任意加载完成事件，复查占位图标，就绪即作废缓存重烘。
     this._unsubArt = sharedRelicArtCache.addOnLoad(() => this._refreshArtIcons());
@@ -240,61 +177,58 @@ export class RelicLoadoutObject extends THREE.Group {
   /** 指针事件是否应由本对象接管（拖拽中或按下候选未决）。 */
   wantsPointer() { return !!(this._drag || this._press); }
 
-  /** 宿主接线（MapStage._bindLoadout）：拾取器 + 屏幕→局部坐标换算。 */
-  bindStage({ picker = null, screenToLocal = null } = {}) {
+  /** 宿主接线（MapStage._bindLoadout）：拾取器 + 屏幕→局部坐标换算 +
+   *  装备落点矩形（顶部资源行遗物区，返回本对象局部坐标 {x0,x1,y0,y1} 或 null）+
+   *  演出钩子：onEquipFx（装备飞行起点）/ setDropFrame（顶栏落点框状态，null=收起）。 */
+  bindStage({ picker = null, screenToLocal = null, getDropRectLocal = null, onEquipFx = null, setDropFrame = null } = {}) {
     this._picker = picker ?? null;
     this._screenToLocal = screenToLocal ?? null;
+    this._getDropRectLocal = getDropRectLocal ?? null;
+    this._onEquipFx = onEquipFx ?? null;
+    this._setDropFrame = setDropFrame ?? null;
     this._registerPickables();
     return this;
   }
 
+  /** 背囊区矩形（uiScene 世界坐标 {x0,x1,y0,y1}）——顶栏拖回「卸下」的落点判定用。 */
+  bagZoneRectWorld() {
+    const z = this._zone;
+    if (!z) return null;
+    this.updateWorldMatrix(true, false);
+    const a = this.localToWorld(new THREE.Vector3(z.x0, z.y0, 0));
+    const b = this.localToWorld(new THREE.Vector3(z.x1, z.y1, 0));
+    return {
+      x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x),
+      y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y),
+    };
+  }
+
   // ================= 布局 =================
 
-  _buildStatic(relics, slots) {
-    this._slots = slots;
+  _buildStatic(relics) {
     for (const child of [...this.children]) this._disposeChild(child);
     this._icons.clear();
     this._pickIds = [];
-    this._zones = [];
+    this._zone = null;
 
     const W = this._widthWu;
     const perRow = Math.max(1, Math.floor((W - PAD * 2) / PITCH));
-    const eq = (relics ?? []).filter(r => !r.nonSlot && r.equipped);
     const bag = (relics ?? []).filter(r => !r.nonSlot && !r.equipped);
     const ns = (relics ?? []).filter(r => r.nonSlot);
-    const hasLoadout = eq.length + bag.length > 0;
 
     // 总高（与 relicLoadoutSpec 同式）
-    const eqRows = Math.max(1, Math.ceil(eq.length / perRow));
     const bagRows = Math.max(1, Math.ceil(bag.length / perRow));
     const nsRows = Math.max(1, Math.ceil(ns.length / Math.max(1, Math.floor((W - PAD * 2) / NS_PITCH))));
-    let h = BAR.h + 1.0;
-    if (hasLoadout) h += LABEL_H + PAD + eqRows * PITCH + PAD + 0.8 + LABEL_H + PAD + bagRows * PITCH + PAD;
+    let h = LABEL_H + PAD + bagRows * PITCH + PAD;
     if (ns.length) h += 0.8 + LABEL_H + nsRows * NS_PITCH;
     h += 0.6 + HINT_H;
     const H = h;
     this._H = H;
 
-    // —— 容量条（顶）——
-    const barW = W - BAR.labelW - BAR.gap;
-    this._bar = this._makeBar(barW, slots);
-    this._bar.group.position.set(-W / 2 + barW / 2, H / 2 - 0.5 - BAR.h / 2, Z.content);
-    this.add(this._bar.group);
-    this._barLabel = new TextBlockObject({ bakeText: this._bakeText, fontPx: 13, tint: '#c2c2c2' });
-    this._barLabel.setText(`${slots.used ?? 0}/${slots.total ?? 0}`, { maxWidth: BAR.labelW * 10 });
-    this._barLabel.position.set(W / 2 - BAR.labelW / 2 + 0.4, H / 2 - 0.5 - BAR.h / 2, Z.content);
-    this.add(this._barLabel);
-    this._fillTarget = slots.total > 0 ? (slots.used ?? 0) / slots.total : 0;
-    this._fill = this._fillTarget;   // 首帧直接到位（重开面板不播填充）
+    let y = H / 2;
 
-    let y = H / 2 - 0.5 - BAR.h - 0.5;
-
-    // —— 已装备区 / 背囊区（drop target）——
-    if (hasLoadout) {
-      y = this._buildZone('eq', '已装备', y, eq, perRow, eqRows, W);
-      y -= 0.8;
-      y = this._buildZone('bag', '背囊', y, bag, perRow, bagRows, W);
-    }
+    // —— 背囊区（装备源；卸下方向的 drop target）——
+    y = this._buildBagZone(y, bag, perRow, bagRows, W);
 
     // —— 无需装备的遗物行（只读）——
     if (ns.length) {
@@ -315,19 +249,18 @@ export class RelicLoadoutObject extends THREE.Group {
 
     // —— 操作提示行 ——
     y -= 0.6;
-    const hint = this._label(hasLoadout ? '拖拽图标装卸，金色圆点的遗物可点击使用' : '', '#787878');
+    const hint = this._label('点击装备，或拖到顶部遗物行', '#787878');
     hint.position.set(0, y - HINT_H / 2, Z.content);
     this.add(hint);
   }
 
-  /** 一个 drop-target 区：边框 + 标题 + 图标网格。返回区底 y。 */
-  _buildZone(id, title, topY, items, perRow, rows, W) {
+  /** 背囊区：边框（卸下落点亮边）+ 标题 + 图标网格。返回区底 y。 */
+  _buildBagZone(topY, items, perRow, rows, W) {
     const zoneH = LABEL_H + PAD + rows * PITCH + PAD;
-    const label = this._label(title, '#8f8f8f');
+    const label = this._label('背包', '#8f8f8f');
     label.position.set(0, topY - LABEL_H / 2, Z.content);
     this.add(label);
     const zTop = topY - LABEL_H;
-    // 区描边（悬停亮边；圆角白线烘焙 × 材质上色，中间透明）
     const edgeTex = zoneEdgeTexture(W - 0.15, zoneH - LABEL_H - 0.15);
     const border = new THREE.Mesh(
       new THREE.PlaneGeometry(W - 0.15, zoneH - LABEL_H - 0.15),
@@ -338,18 +271,18 @@ export class RelicLoadoutObject extends THREE.Group {
     );
     border.position.set(0, zTop - (zoneH - LABEL_H) / 2, Z.zone);
     this.add(border);
-    this._zones.push({
-      id, x0: -W / 2, x1: W / 2, y0: zTop - (zoneH - LABEL_H), y1: zTop,
-      border, glow: 0, glowT: 0, glowCol: new THREE.Color(C.zoneGlow),
-    });
-    // 空区提示字（有 drop target 但没图标时读得出这是个「可放」的地方）
+    this._zone = {
+      x0: -W / 2, x1: W / 2, y0: zTop - (zoneH - LABEL_H), y1: zTop,
+      border, glow: 0, glowT: 0,
+    };
+    // 空区提示字（读得出这是个「可放回来」的地方）
     if (!items.length) {
       const empty = this._label('（空）', '#646464');
       empty.position.set(0, zTop - (zoneH - LABEL_H) / 2, Z.content);
       this.add(empty);
     }
     items.forEach((r, i) => {
-      const g = this._makeIcon(r, id, ICON);
+      const g = this._makeIcon(r, 'bag', ICON);
       const col = i % perRow, row = Math.floor(i / perRow);
       const rowW = Math.min(items.length - row * perRow, perRow);
       const x0 = -((rowW - 1) * PITCH) / 2;    // 每行居中（末行不满时也居中）
@@ -376,39 +309,10 @@ export class RelicLoadoutObject extends THREE.Group {
     const pid = `prepRelic:${zone}:${this._uid}:${relic.id}`;
     g.userData.token = { type: 'relic', payload: { relicId: relic.id } };  // hover → 全局 tooltip
     g.userData.relicLoadout = { relic, zone, size, baseY: null };
-    const entry = { relic, zone, group: g, mat, mesh, lift: 0, liftT: 0, pid };
+    const entry = { relic, zone, group: g, mat, mesh, lift: 0, liftT: 0, denyT: 0, pid };
     this._icons.set(pid, entry);
     this._pickIds.push(pid);
     return g;
-  }
-
-  /** 容量条：底板（分段刻度烘焙，缓存）+ 实填充 + 预览填充。 */
-  _makeBar(barW, slots) {
-    const group = new THREE.Group();
-    const segs = Math.max(1, slots.total ?? 1);
-    const track = new THREE.Mesh(
-      new THREE.PlaneGeometry(barW, BAR.h),
-      new THREE.MeshBasicMaterial({ transparent: true, color: C.barTrack, opacity: 0.95 }),
-    );
-    group.add(track);
-    const tex = barTrackTexture(barW, segs);
-    if (tex) {
-      track.material.map = tex;
-      track.material.color.set(0xffffff);
-      track.material.needsUpdate = true;
-    }
-    // 实填充（宽度随 fill 缩放；锚左）
-    const mkFill = (color, opacity) => {
-      const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(barW - 0.24, BAR.h - 0.3),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity }),
-      );
-      m.position.z = 0.1;
-      m.scale.x = 0.001;
-      group.add(m);
-      return m;
-    };
-    return { group, track, w: barW - 0.24, fill: mkFill(C.barFill, 0.95), preview: mkFill(C.barPreview, 0.55) };
   }
 
   // ================= 拾取 =================
@@ -425,6 +329,7 @@ export class RelicLoadoutObject extends THREE.Group {
   onDown(hit, x, y) {
     const entry = hit?.id ? this._icons.get(hit.id) : null;
     if (!entry) { this._press = null; return false; }
+    if (entry.zone !== 'bag') { this._press = null; return false; }  // 恒生效行只读（hover tooltip 仍走 picker）
     this._press = { entry, id: hit.id, x, y };
     return true;
   }
@@ -445,13 +350,19 @@ export class RelicLoadoutObject extends THREE.Group {
     this._press = null;
     if (this._drag) { this._endDrag(x, y); return true; }
     if (!press) return false;
-    // 点击（无拖拽且位移仍小）：可用遗物点击使用；其余给一个轻微抬升回应
+    // 点击（无拖拽且位移仍小）：背囊件点击 = 快捷装备；超容量不放行（core 会抛错）给摇头反馈
     if (Math.hypot(x - press.x, y - press.y) > DRAG_THRESHOLD * 2.5) return true;
     const { entry } = press;
-    if (entry.relic.canUse) {
-      this._fireIntent?.({ action: 'useRelic', relicId: entry.relic.id });
+    if (entry.relic.canEquip) {
+      this._onEquipFx?.({   // 装备飞行起点（宿主 MapStage 播 icon 飞向顶栏槽位）
+        relic: entry.relic,
+        fromLocal: entry.group.position.clone(),
+        size: entry.group.userData.relicLoadout.size,
+        map: entry.mat.map ?? null,
+      });
+      this._fireIntent?.({ action: 'equip', relicId: entry.relic.id });
     } else {
-      entry.liftT = 0.35;   // 小弹一下（无功能的图标也有「摸到了」的反馈）
+      entry.denyT = 0.4;   // 摇头 + 染红（update 里推进）
     }
     return true;
   }
@@ -473,11 +384,12 @@ export class RelicLoadoutObject extends THREE.Group {
     ghost.position.z = Z.ghost;
     this.add(ghost);
     this._drag = {
-      entry, ghost, from: entry.zone,
+      entry, ghost,
       origin: entry.group.position.clone(),
-      overZone: null, valid: false,
+      overTarget: false, valid: false,
     };
     entry.mat.opacity = 0.35;    // 原位退亮（占位）
+    this._setDropFrame?.({ over: false, valid: !!entry.relic.canEquip });   // 顶栏落点框亮起
     this._dragMove(x, y);
   }
 
@@ -487,43 +399,38 @@ export class RelicLoadoutObject extends THREE.Group {
     const p = this._screenToLocal(x, y, Z.ghost);
     drag.ghost.position.x = p.x;
     drag.ghost.position.y = p.y;
-    // 落点判定（局部坐标 vs 区框）
-    let over = null;
-    for (const z of this._zones) {
-      if (p.x >= z.x0 && p.x <= z.x1 && p.y >= z.y0 && p.y <= z.y1) { over = z; break; }
-    }
-    drag.overZone = over;
-    // 拖的是背囊件 → 目标必须是装备区；拖的是装备件 → 目标必须是背囊
-    const wantZone = drag.from === 'bag' ? 'eq' : 'bag';
-    const valid = !!over && over.id === wantZone
-      && (drag.from === 'eq' || drag.entry.relic.canEquip);   // 装备方向要过槽位判定
-    drag.valid = valid;
-    // 容量条预览：装备方向给「将要占用」，放不下整段染红
-    if (drag.from === 'bag' && over?.id === 'eq') {
-      const total = Math.max(1, this._slotsTotal);
-      this._previewTarget = Math.min(1, (this._slotsUsed + drag.entry.relic.cost) / total);
-      this._previewBad = !drag.entry.relic.canEquip;
-    } else {
-      this._previewTarget = 0;
-      this._previewBad = false;
-    }
+    // 落点判定：宿主供的装备落点矩形（顶部资源行遗物区，本对象局部坐标）
+    const rect = this._getDropRectLocal?.() ?? null;
+    const over = !!rect && p.x >= rect.x0 && p.x <= rect.x1 && p.y >= rect.y0 && p.y <= rect.y1;
+    drag.overTarget = over;
+    drag.valid = over && !!drag.entry.relic.canEquip;
+    // 拖到落点上但放不下：ghost 染红预告（落点框同步吃红）
+    drag.ghost.material.color.set(over && !drag.entry.relic.canEquip ? 0xe85a5a : 0xffffff);
+    this._setDropFrame?.({ over, valid: !!drag.entry.relic.canEquip });
   }
 
   _endDrag(x, y) {
     const drag = this._drag;
     this._drag = null;
-    this._previewTarget = 0;
-    this._previewBad = false;
     if (!drag) return;
+    this._setDropFrame?.(null);   // 落点框收起（落定闪由宿主在 onEquipFx 里播）
     drag.entry.mat.opacity = 1;
     if (drag.valid) {
-      this.remove(drag.ghost);
-      drag.ghost.geometry.dispose();
-      const action = drag.from === 'bag'
-        ? { action: 'equip', relicId: drag.entry.relic.id }
-        : { action: 'unequip', relicId: drag.entry.relic.id };
-      this._pop = 0.32;   // 容量条到位脉冲（意图上行 → 快照回来 → fill 追目标）
-      this._fireIntent?.(action);
+      // 拖拽 ghost 直接移交宿主接力飞行（不原地弃置+新建——否则落点上多一次「诞生弹跳」）
+      if (this._onEquipFx) {
+        this._onEquipFx({
+          relic: drag.entry.relic,
+          fromLocal: drag.ghost.position.clone(),
+          size: drag.entry.group.userData.relicLoadout.size,
+          map: drag.entry.mat.map ?? null,
+          ghost: drag.ghost,
+        });
+      } else {
+        this.remove(drag.ghost);
+        drag.ghost.geometry.dispose();
+        drag.ghost.material.dispose();
+      }
+      this._fireIntent?.({ action: 'equip', relicId: drag.entry.relic.id });
       return;
     }
     // 无效落点：弹回原位（180ms 缓动，update 里推进）
@@ -535,35 +442,17 @@ export class RelicLoadoutObject extends THREE.Group {
     if (!this._drag) return;
     const drag = this._drag;
     this._drag = null;
+    this._setDropFrame?.(null);
     drag.entry.mat.opacity = 1;
     this.remove(drag.ghost);
     drag.ghost.geometry.dispose();
-    this._previewTarget = 0;
-    this._press = null;
+    drag.ghost.material.dispose();
   }
 
   // ================= 帧驱动 =================
 
   update(dt) {
-    // 容量条：填充缓动 + 预览 + 到位脉冲（y 方向一记小弹）
-    const k = Math.min(1, dt * 9);
-    this._fill += (this._fillTarget - this._fill) * k;
-    this._preview += (this._previewTarget - this._preview) * Math.min(1, dt * 14);
-    this._bar.fill.scale.x = Math.max(0.001, this._fill);
-    this._bar.preview.scale.x = Math.max(0.001, this._preview);
-    this._bar.preview.material.color.set(this._previewBad ? C.barOver : C.barPreview);
-    // 填充锚左：缩放后平移半宽 ×(1-scale)/…——用 position.x 修正（几何中心缩放会向两侧收）
-    const w = this._bar.w;
-    this._bar.fill.position.x = (-w + w * this._bar.fill.scale.x) / 2;
-    this._bar.preview.position.x = (-w + w * this._bar.preview.scale.x) / 2;
-    if (this._pop > 0) {
-      this._pop = Math.max(0, this._pop - dt);
-      const s = 1 + 0.5 * Math.sin((this._pop / 0.32) * Math.PI) * 0.28;
-      this._bar.group.scale.set(1, s, 1);
-    } else if (this._bar.group.scale.y !== 1) {
-      this._bar.group.scale.y = 1;
-    }
-    // 图标抬升（hover/点击回应）：y 偏移 + 微放大
+    // 图标抬升（hover 反馈）：y 偏移 + 微放大
     for (const [, e] of this._icons) {
       e.lift += (e.liftT - e.lift) * Math.min(1, dt * 12);
       const base = e.group.userData.relicLoadout.baseY ??= e.group.position.y;
@@ -572,15 +461,24 @@ export class RelicLoadoutObject extends THREE.Group {
         e.mesh.scale.setScalar(1 + e.lift * 0.09);
         e.mesh.position.y = e.lift * 0.25;
       }
+      // 拒绝反馈（超容量点击）：左右摇头 + 染红渐退
+      if (e.denyT > 0) {
+        e.denyT = Math.max(0, e.denyT - dt);
+        const k = e.denyT / 0.4;
+        const baseX = e.group.userData.relicLoadout.baseX ??= e.group.position.x;
+        e.group.position.x = baseX + Math.sin(e.denyT * 40) * 0.09 * k;
+        e.mat.color.setRGB(1, 1 - 0.55 * k, 1 - 0.55 * k);
+        if (e.denyT === 0) {
+          e.mat.color.setRGB(1, 1, 1);
+          e.group.position.x = e.group.userData.relicLoadout.baseX;
+        }
+      }
     }
-    // 区亮边
-    for (const z of this._zones) {
-      const want = this._drag && this._drag.overZone === z
-        ? (this._drag.valid ? 1 : 0.8) : 0;
-      z.glow += (want - z.glow) * Math.min(1, dt * 14);
+    // 背囊区亮边（顶栏拖回时宿主经 setBagGlow 推目标）
+    if (this._zone) {
+      const z = this._zone;
+      z.glow += (z.glowT - z.glow) * Math.min(1, dt * 14);
       z.border.material.opacity = z.glow * 0.9;
-      z.border.material.color.copy(z.glowCol);
-      if (this._drag && this._drag.overZone === z && !this._drag.valid) z.border.material.color.set(C.zoneBad);
       z.border.scale.set(1 + z.glow * 0.012, 1 + z.glow * 0.03, 1);
     }
     // 弹回动画
@@ -594,10 +492,14 @@ export class RelicLoadoutObject extends THREE.Group {
       if (sp.t >= 1) {
         this.remove(sp.ghost);
         sp.ghost.geometry.dispose();
+        sp.ghost.material.dispose();
         this._spring = null;
       }
     }
   }
+
+  /** 宿主侧顶栏拖拽悬停本区时的亮边目标值（0/1）。 */
+  setBagGlow(on) { if (this._zone) this._zone.glowT = on ? 1 : 0; }
 
   dispose() {
     this._unsubArt?.();   // 退订加载监听（防幽灵面板）
@@ -605,6 +507,7 @@ export class RelicLoadoutObject extends THREE.Group {
     if (this._spring) {
       this.remove(this._spring.ghost);
       this._spring.ghost.geometry.dispose();
+      this._spring.ghost.material.dispose();
       this._spring = null;
     }
     for (const id of this._pickIds) this._picker?.removePickable(id);
@@ -614,7 +517,7 @@ export class RelicLoadoutObject extends THREE.Group {
   }
 
   _disposeChild(child) {
-    // 几何与材质随清场释放；贴图（图标/条底）归模块级缓存跨面板复用，不随实例销毁
+    // 几何与材质随清场释放；贴图（图标/区边）归模块级缓存跨面板复用，不随实例销毁
     child.traverse?.((o) => {
       o.geometry?.dispose();
       if (o !== child) o.material?.dispose?.();
@@ -623,8 +526,4 @@ export class RelicLoadoutObject extends THREE.Group {
     child.dispose?.();   // TextBlockObject 等自带完整释放
     child.parent?.remove(child);
   }
-
-  // 快照值（容量预览用；buildStatic 时记录）
-  get _slotsUsed() { return this._slots?.used ?? 0; }
-  get _slotsTotal() { return this._slots?.total ?? 0; }
 }

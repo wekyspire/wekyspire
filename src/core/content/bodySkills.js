@@ -1,4 +1,4 @@
-// 体修·拳组合（BODY_CULTIVATION_CARDS §1：过牌体系）。
+// 体修：拳组合（BODY_CULTIVATION_CARDS §1：过牌体系）。
 // 刀组合见 bladeSkills.js、拆组合见 blockSkills.js——三子体系分文件维护。
 // 设计约定：
 //   * 体修卡全走 AP（无魏启），type 'normal'（体修灰卡面）；
@@ -376,7 +376,7 @@ registerElbow({ id: 'elbowStrikeFierceB', name: '猛烈肘击', tier: 'B', damag
 registerElbow({ id: 'elbowStrikeA', name: '强大肘击', tier: 'A', damage: 8, shield: 2, promotesTo: 'elbowStrikeS' });
 // 纯粹肘击（S；费用栏留空 → 0 费）
 registerElbow({ id: 'elbowStrikeS', name: '纯粹肘击', tier: 'S', damage: 12, shield: 4, ap: 0 });
-// 猛烈肘击·0 费形态：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
+// 猛烈肘击 0 费形态：HeLiCoPtEr（COMMON_CARDS「将所有手牌变换为0开销猛烈肘击」）
 // 的变换目标——同名同形态、只是免费（0AP），且**只经局内转化获得**（不进奖励池/不进抽选）。
 registerElbow({ id: 'elbowStrikeFierceBFree', name: '猛烈肘击', tier: 'B', damage: 8, ap: 0, spawnable: false });
 

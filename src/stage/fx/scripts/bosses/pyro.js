@@ -17,6 +17,9 @@ import { materialOf } from '../../../scenes/kit/materials.js';
 import { desatColor } from '../../../scenes/kit/palette.js';
 import { duelPose, viewHeightOf } from '../../camera.js';
 import { attachCharBurn, resetCharBurn } from '../../charBurn.js';
+import { arcProjectile } from '../../spells/blocks.js';
+import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
+import { registerEnemyAct } from '../enemyAct.js';
 
 // 冲击波环纹理（按"厚/薄"两档缓存；additive 下黑=透明）
 //   fat  = 炽闪用的大光晕（宽带，几乎不出环）
@@ -469,6 +472,101 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   unit.restoreColor?.();
 }
 
+// —— 命中 beat（火主题，2026-10-09 补齐）：重击 = 烈焰爆（火色冲击 + 热环 + 溅烬），
+// 普击/连击 = 火星撞击。共享底座 enemyImpactBeat，只换 palette + garnish ——
+// 他的火是会烧的：命中留烬（重力下坠的火星），不是通用暗铜橙的「钝器撞击」。
+async function pyroHitBeat(ctx, deps, args) {
+  const heavy = args.fx.tier === 'heavy';
+  await enemyImpactBeat(ctx, deps, {
+    ...args,
+    pal: {
+      color: heavy ? [1.0, 0.34, 0.10] : [1.0, 0.52, 0.22],
+      hot: heavy ? [1.35, 0.85, 0.40] : [1.2, 0.9, 0.5],
+      rim: [1.0, 0.55, 0.28],
+      sparkColor: heavy ? 0xff7a2e : 0xffa04c,
+      sparkCount: heavy ? 34 : 15,
+      sparkSpeed: heavy ? 26 : 16,
+      flashColor: 0xffb888,
+    },
+    garnish: (c2, d, { at, heavy: hv }) => {
+      // 溅烬：带重力的火星从命中点坠散（烧的是人，不是石头）
+      d.particles?.spawn?.(at.x, at.y, {
+        color: 0xff8a3a, count: hv ? 18 : 7, speed: hv ? 18 : 10,
+        size: 1.0, ttl: 0.8, gravity: 8, z: at.z,
+      });
+      if (!hv) return;
+      // 重击补一记细热环（爆发余浪——ringTexture(true) 的白热细峰口径）
+      const ring = d.particles?.spawnSprite?.(at.x, at.y, {
+        texture: ringTexture(true), width: 3.6, height: 3.6, z: (at.z ?? 0) + 1, ttl: 0.5, gravity: 0,
+      });
+      if (ring) c2.spawn(async (c3) => {
+        await c3.tweenRaw(ring, { w: 13, h: 13 }, { durationMs: 460, ease: 'power2.out' });
+      });
+    },
+  });
+}
+
+// —— 起手 beat：盾拍（盾6 + 塞 2 张灼伤入牌库）= 火种起播——两粒火种从胸口划弧
+// 飞向玩家（灼伤在路上）；P2 的「消耗燃烧回血」拍 = 火向源头回流（玩家侧火星
+// 被拽回 Boss 胸口 + 体表白热一闪）。攻击拍静默（突进 + 命中 beat 已是语言）。
+async function pyroAct({ ctx, deps, unit, player, kinds }) {
+  if (kinds.includes('attack')) return;
+  const H = unit._standeeHeight ?? 22;
+  const from = { x: unit.position.x, y: unit.position.y + H * 0.55, z: unit.position.z };
+  if (kinds.includes('defend')) {
+    for (let i = 0; i < 2; i++) {
+      await arcProjectile(ctx, deps, {
+        from, to: player ? {
+          x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z,
+        } : null,
+        color: [1.0, 0.42, 0.12], hot: [1.3, 0.8, 0.4],
+        size: 1.15, ms: 430, arcH: 3.8, stretch: 1.1,
+        lampIntensity: 320,
+        trail: { color: 0xff7a30, speed: 3, size: 0.5, ttl: 0.26 },
+      });
+      await ctx.wait(130);
+    }
+    return;
+  }
+  if (kinds.includes('debuff')) {
+    // P2「全场点燃」拍：一圈火种自胸口向四周炸散（各单位的燃烧由 aura 系统自行点起，
+    // 这里只演「源头那一撒」）
+    const ux = unit.position.x, uy = unit.position.y + H * 0.5, uz = unit.position.z;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const sp = 14 + Math.random() * 6;
+      const rec = deps.particles?.spawnSprite?.(ux, uy, {
+        texture: streakTexture(), width: 2.8, height: 0.8, z: uz + 1.5,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.55 + 2, gravity: 4, ttl: 0.75, scalePop: 0.3,
+      });
+      if (rec) rec.sprite.material.rotation = Math.atan2(Math.sin(a) * 0.55, Math.cos(a));
+    }
+    unit.flash?.(0xff9a4a);
+    await ctx.wait(360);
+    return;
+  }
+  if (kinds.includes('buff')) {
+    // 回流：玩家胸口一撮火星被拽向 Boss（低弧快吸）+ Boss 体表白热闪
+    const to = { x: from.x, y: from.y, z: from.z };
+    const px = player?.position.x ?? from.x;
+    const py = (player ? player.position.y + 3.4 * (player._baseScale ?? 1) : from.y);
+    const pz = player?.position.z ?? from.z;
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const rec = deps.particles?.spawnSprite?.(px + (Math.random() - 0.5) * 3, py + (Math.random() - 0.5) * 3, {
+        texture: streakTexture(), width: 2.4, height: 0.7, z: pz + 1,
+        vx: (to.x - px) * 1.6, vy: (to.y - py) * 1.6 + 3, gravity: 0, ttl: 0.6, scalePop: 0.3,
+      });
+      if (rec) rec.sprite.material.rotation = Math.atan2(to.y - py, to.x - px);
+    }
+    unit.flash?.(0xffb060);
+    await ctx.wait(320);
+  }
+  // 未知/其余拍：静默（P2 剧本与命中 beat 已覆盖本 Boss 的演出语言）
+}
+
 export function registerPyroScripts(register) {
   register('bosses/pyroP2', pyroP2);
+  registerEnemyHitBeat('pyro', pyroHitBeat);
+  registerEnemyAct('pyro', pyroAct);
 }

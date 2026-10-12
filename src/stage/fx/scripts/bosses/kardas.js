@@ -12,6 +12,8 @@
 // 美术口径：kardas 暂无立绘（占位色块），全部效果按立牌体量派生、不依赖贴图内容。
 import * as THREE from 'three';
 import { duelPose } from '../../camera.js';
+import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
+import { registerEnemyAct } from '../enemyAct.js';
 
 // 电弧纹理（三档缓存：锯齿折线 + 白热内核 + 暗红晕。每次爆发随机取档 + 随机旋转，
 // 同一张折线复读太多次会读出「贴图感」，三档足够错开）。
@@ -239,6 +241,63 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
   unit.restoreColor?.();
 }
 
+// —— 命中 beat（等离子主题，2026-10-09 补齐）：多段 = 爪痕（暗红电弧拖痕在命中点
+// 炸开），重击（15/27）= 撕碎（交叉双爪痕 + 电弧连爆）。共享底座 enemyImpactBeat。
+async function kardasHitBeat(ctx, deps, args) {
+  const heavy = args.fx.tier === 'heavy';
+  await enemyImpactBeat(ctx, deps, {
+    ...args,
+    pal: {
+      color: heavy ? [0.95, 0.22, 0.16] : [1.0, 0.38, 0.24],
+      hot: heavy ? [1.3, 0.55, 0.42] : [1.2, 0.62, 0.45],
+      rim: [1.05, 0.4, 0.32],
+      sparkColor: heavy ? 0xff5a4a : 0xff8a6a,
+      flashColor: 0xffb8a0,
+    },
+    garnish: (c2, d, { at, heavy: hv }) => {
+      // 爪痕：命中点炸 1~2 道斜切电弧（arcTexture 的白热内核读成爪锋），重击交叉双痕
+      const n = hv ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const rec = d.particles?.spawnSprite?.(at.x + (i - (n - 1) / 2) * 2.2, at.y, {
+          texture: arcTexture(Math.floor(Math.random() * 3)),
+          width: hv ? 8.5 : 6.2, height: hv ? 3.6 : 2.6,
+          z: (at.z ?? 0) + 1.6, ttl: 0.16, gravity: 0, scalePop: 0.25,
+        });
+        if (rec) rec.sprite.material.rotation = (i % 2 === 0 ? 0.55 : -0.45) + (Math.random() - 0.5) * 0.2;
+      }
+      // 等离子迸溅：命中点本体电弧（重击多炸两道）。H 传半量：sparkArc 的 H 同时
+      // 驱动 sprite 尺寸与高度散布，全量 22 会把电弧抬到头顶、宽过半身
+      sparkArc(d.particles, at.x, at.y - 5, at.z ?? 0, 10, { scale: hv ? 1.15 : 0.7, ttl: 0.14 });
+      if (hv) {
+        sparkArc(d.particles, at.x, at.y - 5, at.z ?? 0, 10, { scale: 0.9, ttl: 0.12 });
+        sparkArc(d.particles, at.x, at.y - 5, at.z ?? 0, 10, { scale: 0.75, ttl: 0.16 });
+      }
+    },
+  });
+}
+
+// —— 起手 beat：盾拍（盾10）= 植爪卸力——前爪砸地蓄势（姿态压宽一拍 + 爪侧电弧 +
+// 扬尘）。攻击拍静默（突进 + 爪痕命中 beat 已是语言）；嘶吼转段拍由 P2 剧本接管。
+async function kardasAct({ ctx, deps, unit, kinds }) {
+  if (kinds.includes('attack')) return;
+  if (!kinds.includes('defend')) return;
+  const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
+  const H = unit._standeeHeight ?? 22;
+  deps.particles?.spawn?.(ux, uy + H * 0.06, {
+    color: 0x8a5a44, count: 12, speed: 8, size: 1.2, ttl: 0.8, gravity: -9, z: uz + 0.5,
+  });
+  sparkArc(deps.particles, ux, uy, uz, H, { scale: 0.65, ttl: 0.13 });
+  unit.flash?.(0xb03440);
+  const id = unit.uniqueID;
+  await ctx.custom(id, {
+    durationMs: 360, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.10 * Math.sin(t * Math.PI), widen: 1 + 0.14 * Math.sin(t * Math.PI) }),
+  });
+  unit.resetPose?.();
+}
+
 export function registerKardasScripts(register) {
   register('bosses/kardasP2', kardasP2);
+  registerEnemyHitBeat('kardas', kardasHitBeat);
+  registerEnemyAct('kardas', kardasAct);
 }

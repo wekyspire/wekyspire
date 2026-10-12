@@ -28,6 +28,7 @@ export class DisplayModel {
 
   /** 视图/测试订阅模型变化（'card-created' | 'card-zone' | 'card-removed' | 'battle-begin'）。 */
   on(event, handler) { return this._bus.on(event, handler); }
+  off(event, handler) { this._bus.off(event, handler); }
 
   /** 战斗边界（新 BattleStage 接管时）重置卡牌面：模型跨场存活，内容按场清空。 */
   beginBattle() {

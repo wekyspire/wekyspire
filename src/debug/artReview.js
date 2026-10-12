@@ -73,7 +73,7 @@ async function renderCards(filter, search) {
     const raw = document.createElement('img');
     raw.className = 'raw';
     if (e.artUrl) { raw.src = e.artUrl; raw.addEventListener('click', () => zoom(e.artUrl)); }
-    else raw.replaceWith(Object.assign(document.createElement('div'), { className: 'raw', textContent: '（无美术·占位）',
+    else raw.replaceWith(Object.assign(document.createElement('div'), { className: 'raw', textContent: '（无美术占位）',
       style: 'display:grid;place-items:center;color:#54617c;font:11px monospace' }));
     cell.appendChild(raw);
     const face = document.createElement('img');

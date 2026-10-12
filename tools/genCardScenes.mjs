@@ -69,7 +69,7 @@ const SCENES = [
   { id: 'duckHead', prompt: 'crossed steel-gray armored vambraces filling the frame raised in guard, solid overlapping steel plates with visible seams, matte metal, no skin, no bare hands, sparks bursting on the plates, the knight\'s bright red scarf wrapped at the neck clearly visible and vivid visible at the frame edge below the crossed arms' },
   { id: 'punch', prompt: `extreme close-up of a steel-gray armored fist held low and coiled: massive faceted knuckle plates like boulders filling the frame, hard cool light from the upper left grazing the plate edges, most of the frame sinking into pure black shadow, a small vivid red scarf fleck at the frame edge, quiet coiled weight, no motion lines, dark background` }, // 2026-09-22 三改：弃软气刷圆拳+卡通放射线，巨石切面语法（对齐 fierceFist 标杆）
   { id: 'focusChant', prompt: `extreme close-up of two steel-gray armored gauntlets pressed together in prayer, a single bright drop of light floating between the palms, the hands filling the entire frame, no helmet in frame, dark background` },
-  // —— 体修·拳组合（过牌；骑士本体 + 大面积黑灰） ——
+  // —— 体修：拳组合（过牌；骑士本体 + 大面积黑灰） ——
   { id: 'fastPunch', prompt: `dramatic low-angle side view of a steel-gray armored straight punch: the huge gauntlet fist fills the left third of the frame aimed left, massive faceted knuckle plates like boulders catching a hard cool light from the upper left, the armored forearm receding smaller into pure black at the right, one sharp white speed line streaking above the fist, a small vivid red scarf fleck in the dark, extreme scale and weight, dark background` }, // 2026-09-22 二改：弃三节圆筒臂横摆（无体量无光影），巨石切面+前缩+硬光
   { id: 'fullCharge', prompt: 'the same contained charge composition with the knight standing small below a funneling energy stream, the energy modest and plain like stirred dust, a quiet workmanlike casting, clearly low-tier, no brilliance' },
   { id: 'wildPunch', prompt: 'a small stretched black silhouette of a knight leaping through the air mid haymaker strike, the silhouette clearly reading as full plate armor with a rounded helmet outline and armored shoulders, the knight\'s bright red scarf wrapped at the neck clearly visible and vivid whipping behind, violent red and black speed lines storming around him, the silhouette small in frame, berserk momentum' },
@@ -97,7 +97,7 @@ const SCENES = [
   { id: 'novice', prompt: 'the peerless family composition of a lone knight standing unhurried amid a ring of shattered training posts and broken blades, lower tier: fewer broken posts, fainter strike scars on the ground, the knight calm and grounded, his red scarf the only color' },
   { id: 'wildFist', prompt: `extreme close-up of a steel-gray fist flickering through multiple ghostly phantom hand shapes, ever-changing afterimages of open palm claw and fist overlapping it, the ten-thousand-change fist, dark background` },
   { id: 'voidCard', prompt: `a single blank translucent playing card floating in darkness, its face completely empty, the card's edges dissolving into fading particles, pale dim outline on black, no ghost, no face, no creature, nothingness` },
-  // —— 体修·刀组合（卡序；大剑动作族） ——
+  // —— 体修：刀组合（卡序；大剑动作族） ——
   // 斩局内进阶链 v3（2026-09-22 用户三轮迭代）：**刀刃当主角、骑士淡化**（半露于画缘，S 级成剪影）；
   // prompt 只写可直接入画的具体景物（不为难 AI 具象化「斩金断石」）；明度/能量严格渐强——
   // 暗钢 → 金火花 → 沙暴 → 碧涛 → 白光 → 泛白，让玩家一眼读出「一重更比一重强」。
@@ -134,7 +134,7 @@ const SCENES = [
   { id: 'ironRain', prompt: `a rain of jagged iron shards pouring down across the frame, a metallic storm, dark background` },
   { id: 'bladeArt', prompt: 'a dark silhouette of a martial artist mid sword-form, sweeping a plain straight greatsword in a wide flowing arc, the blade trailing a broad ribbon of cold white light with petal-shaped wisps peeling off it, the small disciplined figure against the huge sweeping light arc, dark background, no readable face' },
   { id: 'bladeHeart', prompt: `extreme close-up of a long blade held flat across the chest over the heart, both steel-gray gauntlets cradling it gently, the blade resting against the armor like a cherished heart, quiet devotion, dark background` },
-  // —— 体修·拆组合（格挡；防御与姿态） ——
+  // —— 体修：拆组合（格挡；防御与姿态） ——
   { id: 'carefulStrike', prompt: `a single steel-gray palm-blade hand in close-up frozen mid-strike, one precise thin targeting line crossing the entire frame, surgical stillness` },
   { id: 'doubleStrike', prompt: 'twin solid steel-gray armored gauntlet fists striking the same point one-two, solid overlapping steel plates with visible plate seams, matte metal, no skin visible, no bare hands, no fabric wraps, no bandages on skin, two crisp separate impact bursts side by side, both plated fist shapes clearly readable, tight close crop, nothing else in frame' },
   { id: 'pluckStar', prompt: 'a colossal steel-gray armored gauntlet reaching up from the bottom of the frame against a vast night sky packed with many bright stars, its articulated plate fingers spread wide, one single brilliant star falling into the open palm with a long shining trail, starlight glinting across the armor plates, the star field rich and radiant' },

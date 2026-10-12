@@ -18,7 +18,7 @@
 // ScriptKilled 拒绝 → 协程沿 await 链直接展开退出，**后续语句不再执行**
 // （防场景拆除后残段继续改世界）；onKill 注册的清理函数同步执行。
 // kill 是拆除级语义：animator 注册对象的补间被杀时其状态机停在 animating，
-// 由下一次 animate/enterTracking 自愈（注册表随舞台销毁的场合无需处理）。
+// 由下一次 animate 自愈（注册表随舞台销毁的场合无需处理）。
 import { gsapTween } from '../animator/StageAnimator.js';
 
 const KILLED = Symbol('fx-script-killed');
