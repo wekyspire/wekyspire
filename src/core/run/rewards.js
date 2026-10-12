@@ -22,10 +22,10 @@ export const REWARDS_PLACEHOLDER = {
 
 export const TIER_RANK = { C: 1, B: 2, A: 3, S: 4 };
 
-// ---- 等阶分布表（暂定值待实测调参）：按来源通道 ----
-// normal：普通战后开包 + 训练房抓牌；elite：精英/Boss 战后 + 老虎机卡包大奖。
+// ---- 等阶分布表：按来源通道 ----
+// normal：普通战后开包 + 训练房抓牌 + 售货机卡包；elite：精英/Boss 战后 + 老虎机卡包大奖。
 export const REWARD_TIER_TABLE = Object.freeze({
-  normal: Object.freeze({ C: 65, B: 35 }),
+  normal: Object.freeze({ C: 78, B: 22 }),
   elite: Object.freeze({ B: 65, A: 35 }),
 });
 // 通道 → 池子等阶上限（S 永不入包，不列）
@@ -47,15 +47,9 @@ export const PACKS = Object.freeze({
 });
 
 // 通用卡注入：概率 + 保底计数（run.commonPity 累计未注入次数，达 pity 必注入）
-// 45% 高注入率：曝光率优先（门禁过深时
-// 通用件是跨体系构筑的胶水，先让玩家看得见）。
-export const COMMON_INJECT = Object.freeze({ chance: 0.45, pity: 4 });
-// 基础包专用注入浓度：
-// 主注入 90%、保底 2 次开包，命中后独立掷 secondChance 再换第二张（不同位、不重复）。
-// 期望每包 ≈1.35 张通用卡（浓度 ~45%）——通用卡是强力单卡但不能成体系（C 位）：
-// 灵脉玩家开基础包收益升，体修玩家的体修候选被稀释到平均 1.65 张/包，前期成型
-// 压力增加（蓝量/恢复/获取途径三刀的第三刀）。
-export const BODY_PACK_INJECT = Object.freeze({ chance: 0.9, pity: 2, secondChance: 0.5 });
+export const COMMON_INJECT = Object.freeze({ chance: 0.25, pity: 4 });
+// 基础包专用注入浓度：命中后独立掷 secondChance 再换第二张（不同位、不重复）。
+export const BODY_PACK_INJECT = Object.freeze({ chance: 0.5, pity: 4, secondChance: 0.5 });
 
 // 卡定义归属的卡包：显式 pack 字段优先（通用灰卡标 'common'），否则按 type 归维度
 export function packOf(def) {
@@ -77,11 +71,10 @@ export function packLevel(run, packId) {
 }
 
 // 某卡包的**升级门禁**上限（晋升专用，与开包概率无关——D4 脱钩后升级仍看体系等级：
-// lv0→C / lv1→B / lv2→A / lv3+→S；S 的晋升排除在 promotion.js 目标侧声明）。
+// lv0→C / lv1→B / lv2+→A；S 不经晋升获得，promotion.js 目标侧另有逐链排除）。
 // 注意：开包上限不走这里，走 REWARD_TIER_CAP（来源制）。
 export function maxRewardTier(run, packId = 'body') {
   const lv = packLevel(run, packId);
-  if (lv >= 3) return 'S';
   if (lv >= 2) return 'A';
   if (lv >= 1) return 'B';
   return 'C';
@@ -132,6 +125,21 @@ export function deckAffinityWeight(run, def) {
   const want = new Set(ids);
   const n = (run?.player?.deck ?? []).reduce((s, rt) => s + (want.has(rt.defId) ? 1 : 0), 0);
   return 1 + DECK_AFFINITY.perCard * Math.min(n, DECK_AFFINITY.maxCount);
+}
+
+// 重复卡排斥：牌组已持有某 series 的卡 → 奖励内同 series 候选权重 ×SERIES_DUP_FACTOR
+export const SERIES_DUP_FACTOR = 0.6;
+
+/** 档内选卡修正（§六）= 持卡亲和 × 重复系列排斥。
+ *  一次抽取复用同一闭包（牌组 series 集只建一次）。 */
+export function deckRewardWeighter(run) {
+  const ownedSeries = new Set();
+  for (const rt of run?.player?.deck ?? []) {
+    const s = getSkillDefinition(rt.defId)?.series;
+    if (s) ownedSeries.add(s);
+  }
+  return (def) => deckAffinityWeight(run, def)
+    * (def?.series && ownedSeries.has(def.series) ? SERIES_DUP_FACTOR : 1);
 }
 
 // 单包卡池：包归属 + 排除 Z/S 与 canSpawnAsReward=false + 深入卡门禁 + 牌组门槛。
@@ -282,16 +290,18 @@ function rollWeighted(run, defs, weightOf, count, affinityOf = null) {
   return picks;
 }
 
-// 可开卡包：基础包恒开；灵脉需 leino ≥ 1 且已有可出内容（维度表里没有的自动隐藏）。
-// **本局路线（run.route）对应的灵脉包不受等级门禁**——灵脉开局
-// 等级 0 起步，第一场战斗起就必须能开本体系卡包，否则前两场战斗只剩体修包可开。
+// 可开卡包：基础包仅体修开局可开（run.route === 'body'）；灵脉包需 leino ≥ 1 且
+// 池内有可出内容（池空自动隐藏）。**本局路线（run.route）对应的灵脉包不受等级门禁**——
+// 灵脉开局等级 0 起步，第一场战斗起就必须能开本体系卡包。
 // 通用包不在列表中——它只以注入形式出现。
 export function availablePacks(run) {
-  const out = [PACKS.body];
+  const out = [];
+  if ((run?.route ?? 'body') === 'body') out.push(PACKS.body);
   for (const id of ['fire']) {
     const unlocked = (run?.player?.leino?.[id] ?? 0) >= 1 || run?.route === id;
     if (unlocked && packCardPool(run, id).length > 0) out.push(PACKS[id]);
   }
+  if (!out.length) out.push(PACKS.body); // 兜底：灵脉池抽空等极端局面下奖励流不能断
   return out;
 }
 
@@ -316,7 +326,7 @@ export function spawnableCardPool(run = null) {
 // 该通道才有 A 直出）。
 export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLDER.skillChoiceCount, { channel = 'normal' } = {}) {
   return rollTiered(run, packCardPool(run, packId, rewardTierCap(channel)), count, rewardTierTable(channel),
-    def => deckAffinityWeight(run, def))
+    deckRewardWeighter(run))
     .map(def => def.id);
 }
 
@@ -412,7 +422,7 @@ export function rollTrainingChoices(run, count = REWARDS_PLACEHOLDER.skillChoice
     run, pool,
     weightOf,
     count,
-    def => deckAffinityWeight(run, def), // 档内仅持卡亲和（子系统亲和已撤，同 rollSkillChoices）
+    deckRewardWeighter(run),
   ).map(def => def.id); // 先取 id：注入会原地替换元素
   injectCommon(run, picks, 'normal'); // 训练抓牌不展示通用角标，注入结果直接生效
   return picks;

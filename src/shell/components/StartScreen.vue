@@ -65,9 +65,8 @@ import { settings, persistSettings, setDebugMode } from '../settings';
 import { showMenuDialog } from '../menuDialog';
 import { readSave } from '../saves';
 import { ROUTES, ROUTE_IDS } from '../../core/run/routes.js';
-import { fadeInTitleMusic, fadeOutTitleMusic } from '../audio';
+import { playMusic, stopMusic } from '../audio';
 import startBg from '../../assets/images/start-screen.webp';
-import titleMusicUrl from '../../assets/sounds/story-mode-intro.mp3';
 
 const props = defineProps({
   saves: {
@@ -96,13 +95,6 @@ function toggleDebug(e) {
 // 回主菜单后 props.saves 整份换新，调试槽也顺手重读（与另外两槽同一节拍）
 watch(() => props.saves, () => { debugSave.value = readSave('debug'); });
 watch(isStory, (v) => {
-  // 暂时关闭故事模式切换
-  if (v) {
-    isStory.value = false;
-    // 取消checkbox选中状态，提示故事模式尚未制作
-    showMenuPopup('故事模式尚未制作');
-    return;
-  }
   settings.menuStoryMode = v;
   persistSettings();
   syncAmbience();
@@ -131,10 +123,6 @@ const saveKey = computed(() => {
 async function launch(loadSave) {
   // 读档以存档自身的模式为准；新开局以当前复选框为准
   const story = loadSave ? loadSave.storyMode !== false : isStory.value;
-  if (story) {
-    showMenuPopup('故事模式尚未制作');
-    return;
-  }
   // 调试局读档：强制带调试标记（面板/槽位随档走）
   const debug = loadSave ? !!loadSave.debugMode : isDebug.value;
   // 新开局且**真实**槽已有存档：确认覆盖（调试局写独立 debug 槽，不需要问）
@@ -155,7 +143,6 @@ async function launch(loadSave) {
 // ---------- 故事模式氛围：雪花粒子 + 标题音乐 ----------
 const snowLayer = ref(null);
 let snowTimer = null;
-let titleMusic = null;
 
 function spawnFlake() {
   const el = snowLayer.value;
@@ -184,23 +171,16 @@ function stopSnow() {
 function syncAmbience() {
   if (isStory.value) {
     startSnow();
-    if (settings.soundOn) titleMusic = fadeInTitleMusic(titleMusicUrl);
+    playMusic('title'); // soundOn 由引擎 master 门控（关掉=静音续播，再开不重启）
   } else {
     stopSnow();
-    fadeOutTitleMusic(titleMusic);
-    titleMusic = null;
+    stopMusic();
   }
 }
-watch(() => settings.soundOn, (on) => {
-  if (!isStory.value) return;
-  if (on) titleMusic = fadeInTitleMusic(titleMusicUrl);
-  else { fadeOutTitleMusic(titleMusic); titleMusic = null; }
-});
 onMounted(() => { if (isStory.value) syncAmbience(); });
 onBeforeUnmount(() => {
   stopSnow();
-  fadeOutTitleMusic(titleMusic);
-  titleMusic = null;
+  stopMusic();
 });
 </script>
 

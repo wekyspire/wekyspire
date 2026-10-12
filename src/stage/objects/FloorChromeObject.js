@@ -129,7 +129,7 @@ export class FloorChromeObject extends THREE.Group {
       const numW = g.measureText(numeral).width;
       g.font = `${unitPx}px ${UI_FONT}`;
       const unitW = g.measureText('层').width;
-      const W = Math.ceil(numW + gap + unitW + pad * 2);
+      const W = Math.ceil(numW + gap * 2 + unitW * 2 + pad * 2);
       const H = Math.ceil(numPx * 1.15 + pad * 2);
       c.width = W * S; c.height = H * S;
       g.scale(S, S);
@@ -140,12 +140,15 @@ export class FloorChromeObject extends THREE.Group {
       const unitInk = boss ? 'rgba(232,90,90,0.85)' : 'rgba(198,205,216,0.85)';
       const outline = 'rgba(10,10,16,0.92)';
       const pass = (fill) => {
-        g.font = `${numPx}px ${UI_FONT}`;
-        if (fill) g.fillStyle = ink; else { g.strokeStyle = outline; g.lineWidth = 7; }
-        fill ? g.fillText(numeral, pad, baseline) : g.strokeText(numeral, pad, baseline);
         g.font = `${unitPx}px ${UI_FONT}`;
         if (fill) g.fillStyle = unitInk; else { g.strokeStyle = outline; g.lineWidth = 5; }
-        fill ? g.fillText('层', pad + numW + gap, baseline) : g.strokeText('层', pad + numW + gap, baseline);
+        fill ? g.fillText('第', pad, baseline) : g.strokeText('层', pad , baseline);
+        g.font = `${numPx}px ${UI_FONT}`;
+        if (fill) g.fillStyle = ink; else { g.strokeStyle = outline; g.lineWidth = 7; }
+        fill ? g.fillText(numeral, pad + unitW + gap, baseline) : g.strokeText(numeral, pad + unitW + gap, baseline);
+        g.font = `${unitPx}px ${UI_FONT}`;
+        if (fill) g.fillStyle = unitInk; else { g.strokeStyle = outline; g.lineWidth = 5; }
+        fill ? g.fillText('层', pad + unitW + gap + numW + gap, baseline) : g.strokeText('层', pad + unitW + gap + numW + gap, baseline);
       };
       g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
       pass(false);

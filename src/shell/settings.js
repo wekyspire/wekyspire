@@ -30,6 +30,8 @@ const IS_DEV = import.meta.env.DEV;
 
 export const settings = reactive({
   soundOn: saved.soundOn !== false, // 默认开启
+  // 主音量 0..1（菜单滑条；默认 50%）
+  volume: typeof saved.volume === 'number' ? Math.min(1, Math.max(0, saved.volume)) : 0.5,
   // 卡牌/UI 后处理链（辉光 bloom；stage/post/uiComposer）——默认开；
   // 低档设备关掉退回直渲（画面少一层辉光，功能无损）。
   fxPost: saved.fxPost !== false,
@@ -55,7 +57,7 @@ export const settings = reactive({
 
 export function persistSettings() {
   writeJson(KEY, {
-    soundOn: settings.soundOn, fxPost: settings.fxPost, renderQuality: settings.renderQuality, maxRenderRes: settings.maxRenderRes,
+    soundOn: settings.soundOn, volume: settings.volume, fxPost: settings.fxPost, renderQuality: settings.renderQuality, maxRenderRes: settings.maxRenderRes,
     menuStoryMode: settings.menuStoryMode, debugMode: settings.debugMode,
     slotDevourTutored: settings.slotDevourTutored,
     demonRollTutored: settings.demonRollTutored,
@@ -64,6 +66,12 @@ export function persistSettings() {
 
 export function toggleSound() {
   settings.soundOn = !settings.soundOn;
+  persistSettings();
+}
+
+/** 主音量（0..1，越界收拢）。 */
+export function setVolume(v) {
+  settings.volume = Math.min(1, Math.max(0, +v || 0));
   persistSettings();
 }
 

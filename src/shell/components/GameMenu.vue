@@ -2,7 +2,7 @@
 // 游戏中弹出菜单（Esc 呼出）：继续/查看存档/设置（音效开关）/回到主菜单。
 // 存档为检查点制（层首/终局自动落盘），此处只读展示。
 import { computed, inject } from 'vue';
-import { settings, toggleSound, toggleFxPost, setRenderQuality, setMaxRenderRes } from '../settings.js';
+import { settings, toggleSound, setVolume, toggleFxPost, setRenderQuality, setMaxRenderRes } from '../settings.js';
 import { readSave } from '../saves.js';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
@@ -45,6 +45,11 @@ const QUALITY_TIERS = [
           <input type="checkbox" :checked="settings.soundOn" @change="toggleSound()" />
           音效
         </label>
+        <div class="row quality">
+          <span class="qlabel">音量</span>
+          <input type="range" class="vol" min="0" max="100" :value="Math.round(settings.volume * 100)"
+            @input="setVolume(+$event.target.value / 100)" />
+        </div>
         <label class="row toggle">
           <input type="checkbox" :checked="settings.fxPost" @change="toggleFxPost()" />
           辉光特效
@@ -99,6 +104,7 @@ h2 { margin: 0 0 14px; font-size: 22px; color: #f5f5f5; text-align: center; }
 .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .toggle input { accent-color: #9a9a9a; width: 15px; height: 15px; cursor: pointer; }
 .quality { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
+.vol { width: 150px; accent-color: #e0e0e0; cursor: pointer; }
 .qlabel { flex: 1; }
 .seg { display: flex; gap: 4px; }
 .seg button { flex: none; width: 42px; padding: 4px 0; font-size: 13px; }
