@@ -12,12 +12,14 @@ import { EnemyTurnStartInstruction } from '../../instructions/turn.js';
 import { aliveEnemies } from '../../state/battleState.js';
 
 // ---- 复苏组件（腐败根须/树心/刺刺草「春风」共用）----
-// onDeath 记账（剩余次数 + 倒计时 2），敌方回合开始时 tick——倒计时归零即复活。
-// 时序：玩家回合 N 击杀 → 敌回合 N（2→1）→ 玩家回合 N+1（喘息）→ 敌回合 N+1 复活动作
-// ——「死亡后 1 回合复活，玩家只有 1 回合喘息」。
+// onDeath 记账（剩余次数 + 倒计时 breathTurns+1），敌方回合开始时 tick——倒计时归零即复活。
+// 时序（breathTurns=1）：玩家回合 N 击杀 → 敌回合 N（2→1）→ 玩家回合 N+1（喘息）→
+// 敌回合 N+1 复活动作——「死亡后 1 回合复活，玩家只有 1 回合喘息」；
+// breathTurns=2（树心）：敌 N（3→2）→ 玩家 N+1（喘息）→ 敌 N+1（2→1）→
+// 玩家 N+2（喘息）→ 敌 N+2 复活——玩家有 2 回合喘息。
 // 复活前提 = 战斗仍在进行：若它是场上最后一只敌人，击杀瞬间胜利结算先行、tick 永不
 // 执行——「把它留到最后杀」就是根须/树心的既定收束打法，无需改核心胜利判定。
-function reviveKit({ times = Infinity, hp = null } = {}) {
+function reviveKit({ times = Infinity, hp = null, breathTurns = 1 } = {}) {
   return {
     onBattleStart(ctx, unit) {
       unit._revives = times;
@@ -40,7 +42,7 @@ function reviveKit({ times = Infinity, hp = null } = {}) {
       const unit = actx.unit;
       if ((unit._revives ?? 0) > 0) {
         unit._revives -= 1;
-        unit._reviveCountdown = 2; // 隔一个完整玩家回合后复活
+        unit._reviveCountdown = breathTurns + 1; // 隔 breathTurns 个完整玩家回合后复活
       }
     },
   };
@@ -66,31 +68,47 @@ registerSkill({
 
 // ---- 普通怪 ----
 
-// 史莱姆：教学基准怪——攻 9 → 盾 9 两拍循环。39 血。第 1 层固定单挑；2–4 层史莱姆战固定位。
-// 史莱姆B：防攻变体（先盾后攻，36 血）——史莱姆爆发主题战的压场位：首拍起盾不下压，
-// 给小史莱姆的塞粘液/融合滚雪球留出铺开时间。
+// 史莱姆：教学基准怪——47 血。开局两拍：攻7 → 盾5+蓄势4；随后 攻7 ↔ 盾9 循环。
+// 第 1 层固定单挑；2–4 层史莱姆战固定位。
+// 史莱姆B：防攻变体（43 血，先盾后攻：盾8 ↔ 攻10）——史莱姆爆发主题战的压场位：
+// 首拍起盾不下压，给小史莱姆的塞粘液/融合留出铺开时间。
 // 楼层区间即模板出没层；通配位就近取材贴最低 base（小史莱姆 1），B 实际不进编成。
-function slimeDef(id, { name, attackFirst, maxHp, difficulty }) {
+function slimeDef(id, { name, maxHp, difficulty, attackFirst, attackAmount, shieldAmount }) {
   registerEnemy({
     id, name, difficulty,
     createUnit: () => new Enemy({ defId: id, name, maxHp }),
     act(actx) {
-      const attackBeat = actx.unit.actionIndex % 2 === (attackFirst ? 0 : 1);
+      const i = actx.unit.actionIndex;
+      // 史莱姆开局第二拍：盾5+蓄势4（之后进正常循环）
+      if (id === 'slime' && i === 1) {
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 5 }));
+        actx.kernel.submitInstruction(new AddEffectInstruction({
+          target: actx.unit, effectId: 'momentum', stacks: 4,
+        }));
+        return;
+      }
+      const attackBeat = i % 2 === (attackFirst ? 0 : 1);
       if (attackBeat) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: actx.unit, target: actx.player, amount: 9 + actx.unit.getStat('attack'),
+          source: actx.unit, target: actx.player, amount: attackAmount + actx.unit.getStat('attack'),
         }));
       } else {
-        actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: 9 }));
+        actx.kernel.submitInstruction(new GainShieldInstruction({ target: actx.unit, amount: shieldAmount }));
       }
     },
-    getIntention: (unit) => ((unit.actionIndex % 2 === (attackFirst ? 0 : 1))
-      ? { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') }
-      : { kinds: ['defend'], note: '自身护盾+9' }),
+    getIntention: (unit) => {
+      const i = unit.actionIndex;
+      if (id === 'slime' && i === 1) {
+        return { kinds: ['defend', 'buff'], note: '自身护盾+5、蓄势+4' };
+      }
+      return (i % 2 === (attackFirst ? 0 : 1))
+        ? { kinds: ['attack'], hits: 1, damage: attackAmount + unit.getStat('attack') }
+        : { kinds: ['defend'], note: `自身护盾+${shieldAmount}` };
+    },
   });
 }
-slimeDef('slime', { name: '史莱姆', attackFirst: true, maxHp: 39, difficulty: { base: 2, floorMin: 1, floorMax: 4 } });
-slimeDef('slimeB', { name: '史莱姆B', attackFirst: false, maxHp: 36, difficulty: { base: 2, floorMin: 3, floorMax: 5 } });
+slimeDef('slime', { name: '史莱姆', maxHp: 47, difficulty: { base: 2, floorMin: 1, floorMax: 4 }, attackFirst: true, attackAmount: 7, shieldAmount: 9 });
+slimeDef('slimeB', { name: '史莱姆B', maxHp: 43, difficulty: { base: 2, floorMin: 3, floorMax: 5 }, attackFirst: false, attackAmount: 10, shieldAmount: 8 });
 
 // 怨灵 A/B（成群出现的强 Debuff 位；A 类开局洗 4 张虚无，B 类开局虚弱 2）：
 // 之后两拍循环——攻 10 → 洗 1 张虚无。虚无牌永久滞留牌库，长线磨损玩家的抽牌质量。
@@ -99,7 +117,7 @@ function wraithDef(id, opener) {
   registerEnemy({
     id, name: '怨灵',
     difficulty: { base: 3, floorMin: 2, floorMax: 6 },
-    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 37 }),
+    createUnit: () => new Enemy({ defId: id, name: '怨灵', maxHp: 39 }),
     act(actx) {
       const { unit, player } = actx;
       if (unit.actionIndex === 0) return open(actx);
@@ -147,7 +165,7 @@ function slimeletDef(id, firstIsAttack) {
   registerEnemy({
     id, name: '小史莱姆',
     difficulty: { base: 1, floorMin: 2, floorMax: 16 },
-    createUnit: () => new Enemy({ defId: id, name: '小史莱姆', maxHp: 9 }),
+    createUnit: () => new Enemy({ defId: id, name: '小史莱姆', maxHp: 11 }),
     onBattleStart(ctx, unit) {
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'fusion', stacks: 1,
@@ -181,11 +199,11 @@ function slimeletDef(id, firstIsAttack) {
 slimeletDef('slimeletA', false); // A 类：拍1 塞粘液 → 拍2 攻4
 slimeletDef('slimeletB', true);  // B 类：拍1 攻4 → 拍2 塞粘液
 
-// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻10 → 攻4+荆棘3。37 血。
+// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻9 → 荆棘3。44 血。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
-  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 37 }),
+  createUnit: () => new Enemy({ defId: 'hedgehog', name: '针鼠', maxHp: 44 }),
   act(actx) {
     const { unit } = actx;
     if (unit.actionIndex === 0) {
@@ -195,13 +213,16 @@ registerEnemy({
       return;
     }
     const phase = (unit.actionIndex - 1) % 3;
-    const amount = (phase === 1 ? 10 : 4) + unit.getStat('attack');
-    actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: actx.player, amount,
-    }));
-    if (phase === 0) {
+    if (phase === 1) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 9 + unit.getStat('attack'),
+      }));
+    } else if (phase === 0) {
+      actx.kernel.submitInstruction(new DealDamageInstruction({
+        source: unit, target: actx.player, amount: 4 + unit.getStat('attack'),
+      }));
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
-    } else if (phase === 2) {
+    } else {
       actx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'thorns', stacks: 3,
       }));
@@ -212,13 +233,13 @@ registerEnemy({
     const phase = (unit.actionIndex - 1) % 3;
     const atk = unit.getStat('attack');
     if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 4 + atk, note: '自身护盾+10' };
-    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
-    return { kinds: ['attack', 'buff'], hits: 1, damage: 4 + atk, note: '自身荆棘+3' };
+    if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + atk };
+    return { kinds: ['buff'], note: '自身荆棘+3' };
   },
 });
 
 // 腐苔球：压缩手牌空间——每拍玩家紧勒+1（手牌上限-1，紧勒经效果轨 statModifiers
-// 进 handLimitOf），三拍循环（拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻 9）；亡语归还自己
+// 进 handLimitOf），三拍循环（拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻 7）；亡语归还自己
 // 施加的全部紧勒层数（杀了就松手）。
 // A/B 类：B 类紧勒晚一拍起步——第 2 拍才开始蔓延，给玩家一个手牌完整的首回合抢输出；
 // 同场 2 只苔球的编成一律 B+C 配合（见 floorEnemyGenerator），单只编成用 A。
@@ -228,7 +249,7 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
     id, name: '腐苔球',
-    createUnit: () => new Enemy({ defId: id, name: '腐苔球', maxHp: 27 }),
+    createUnit: () => new Enemy({ defId: id, name: '腐苔球', maxHp: 34 }),
     act(actx) {
       const { unit, player } = actx;
       if (openingGuard && unit.actionIndex === 0) {
@@ -240,15 +261,15 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: player, effectId: 'constrict', stacks: 1 }));
       }
-      // 三拍循环：拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻9。
-      // B 类首拍算循环第三拍（第一拍攻9 起手，第 2 拍起正常蔓延循环）——相位 +2。
+      // 三拍循环：拍1 纯蔓延 → 拍2 盾8+回5 → 拍3 攻7。
+      // B 类首拍算循环第三拍（第一拍攻7 起手，第 2 拍起正常蔓延循环）——相位 +2。
       const phase = (delayedGrip ? unit.actionIndex + 2 : unit.actionIndex) % 3;
       if (phase === 1) {
         actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 8 }));
         actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 }));
       } else if (phase === 2) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
-          source: unit, target: player, amount: 9 + unit.getStat('attack') }));
+          source: unit, target: player, amount: 7 + unit.getStat('attack') }));
       }
     },
     getIntention: (unit) => {
@@ -267,7 +288,7 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
             ? (gripsNow ? ['defend', 'buff', 'debuff'] : ['defend', 'buff'])
             : (gripsNow ? ['debuff'] : [])),
         hits: attacking ? 1 : undefined,
-        damage: attacking ? 9 + unit.getStat('attack') : undefined,
+        damage: attacking ? 7 + unit.getStat('attack') : undefined,
         note: gripsNow ? '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）' : '迟滞蔓延（下回合起）',
       };
     },
@@ -284,41 +305,42 @@ mossBallDef('mossBallA', false); // A 类：每拍紧勒（含首拍）
 mossBallDef('mossBallB', true);  // B 类：首拍攻9 不缠（算循环第三拍），第 2 拍起每拍紧勒
 mossBallDef('mossBallC', false, true); // C 类：首拍纯防御（盾8），第 2 拍起正常循环
 
-// 鼓腹蟾：渐强威胁——鼓气 → 启动段 → 永远重击 18。放着不管会出事，但打它没有任何
-// 反制机制——纯粹的 DPS 检查。
-// A/B/C 类：B/C 启动段各多插一/两拍「攻 7」过渡拍——重击到达时间 A=T3 / B=T4 / C=T5，
-// 蟾群编成用不同型错峰，后齐射变轮射，玩家每回合有可防御窗口；单蟾 18 不动，
-// 仍考验 DPS 与启动速度（拖到 T5 三蟾照样齐 54）。
-function pufferToadDef(id, ramped) {
+// 鼓腹蟾：渐强威胁——鼓气 → 启动段（逐拍加码）→ 永远停在重击上限。放着不管会出事，
+// 但打它没有任何反制机制——纯粹的 DPS 检查。
+// A/B/C 类启动段不同：A 攻7→9∞；B 攻5→攻7→10∞；C 攻3→攻6→攻9→12∞——
+// 蟾群编成用不同型错峰，后齐射变轮射，玩家每回合有可防御窗口。
+const PUFFER_LADDERS = {
+  pufferToadA: { steps: [7], cap: 9 },
+  pufferToadB: { steps: [5, 7], cap: 10 },
+  pufferToadC: { steps: [3, 6, 9], cap: 12 },
+};
+function pufferToadDef(id) {
+  const { steps, cap } = PUFFER_LADDERS[id];
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
     id, name: '鼓腹蟾',
-    createUnit: () => new Enemy({ defId: id, name: '鼓腹蟾', maxHp: 28 }),
+    createUnit: () => new Enemy({ defId: id, name: '鼓腹蟾', maxHp: 41 }),
     act(actx) {
       const { unit, player } = actx;
       const i = unit.actionIndex;
       if (i === 0) return; // 鼓气：白给一拍
-      const rampEnd = 2 + ramped;               // 重击起点（含）
-      const amount = i >= rampEnd ? 18 : (i === rampEnd - 1 ? 10 : 7);
+      const amount = (i - 1 < steps.length) ? steps[i - 1] : cap;
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: amount + unit.getStat('attack'),
-        tags: i >= rampEnd ? ['heavy'] : [],   // 重击档：敌方命中演出（enemyHitFx）
       }));
     },
     getIntention: (unit) => {
       const atk = unit.getStat('attack');
       const i = unit.actionIndex;
       if (i === 0) return { kinds: ['unknown'], note: '鼓腹（蓄力中）' };
-      const rampEnd = 2 + ramped;
-      if (i >= rampEnd) return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
-      if (i === rampEnd - 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
-      return { kinds: ['attack'], hits: 1, damage: 7 + atk };
+      const amount = (i - 1 < steps.length) ? steps[i - 1] : cap;
+      return { kinds: ['attack'], hits: 1, damage: amount + atk };
     },
   });
 }
-pufferToadDef('pufferToadA', 0); // A 类：鼓气 → 攻10 → 重击18∞
-pufferToadDef('pufferToadB', 1); // B 类：鼓气 → 攻7 → 攻10 → 重击18∞
-pufferToadDef('pufferToadC', 2); // C 类：鼓气 → 攻7 → 攻7 → 攻10 → 重击18∞
+pufferToadDef('pufferToadA'); // A 类：鼓气 → 攻7 → 攻9∞
+pufferToadDef('pufferToadB'); // B 类：鼓气 → 攻5 → 攻7 → 攻10∞
+pufferToadDef('pufferToadC'); // C 类：鼓气 → 攻3 → 攻6 → 攻9 → 攻12∞
 
 // 爆囊：定时炸弹——进战获得爆炸引线3（自己回合结束 -1，归零对玩家阵营全体炸 14 并
 // 自爆）。三拍循环：攻4 → 护盾6 → 待爆。
@@ -370,48 +392,49 @@ function blastPodDef(id, cautious = false) {
 blastPodDef('blastPod');        // A 类：攻4 → 盾6 → 待爆
 blastPodDef('blastPodB', true); // B 类：缩囊蓄势（盾4+蓄势2）→ 攻4 → 盾6 → 待爆
 
-// 石茧：拍0 破茧蓄势9（纯增强不攻击），拍1 攻6+盾12，拍2+ 攻3+盾6。62 血。
+// 石茧：拍0 破茧硬壳（盾15），拍1 蓄势10，拍2 攻6+盾10，拍3+ 攻3+盾6。69 血。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'stoneCocoon', name: '石茧',
-  createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 62 }),
+  createUnit: () => new Enemy({ defId: 'stoneCocoon', name: '石茧', maxHp: 69 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex === 0) {
-      actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'momentum', stacks: 9,
-      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
       return;
     }
     if (unit.actionIndex === 1) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 6 + unit.getStat('attack'),
+      actx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'momentum', stacks: 10,
       }));
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 12 }));
       return;
     }
+    const big = unit.actionIndex === 2;
     actx.kernel.submitInstruction(new DealDamageInstruction({
-      source: unit, target: player, amount: 3 + unit.getStat('attack'),
+      source: unit, target: player, amount: (big ? 6 : 3) + unit.getStat('attack'),
     }));
-    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 6 }));
+    actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: big ? 10 : 6 }));
   },
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) {
-      return { kinds: ['buff'], note: '破茧：蓄势+9' };
+      return { kinds: ['defend'], note: '破茧：自身护盾+15' };
     }
-    return unit.actionIndex === 1
-      ? { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+12' }
+    if (unit.actionIndex === 1) {
+      return { kinds: ['buff'], note: '蓄势+10' };
+    }
+    return unit.actionIndex === 2
+      ? { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+10' }
       : { kinds: ['attack', 'defend'], hits: 1, damage: 3 + atk, note: '自身护盾+6' };
   },
 });
 
-// 岩螺：蓄势引擎——拍1 缩壳（盾10+回8+蓄势3），拍2 攻1×4（蓄势让每段都吃加成）。
+// 岩螺：蓄势引擎——拍1 缩壳（盾10+回8+蓄势3），拍2 攻1×4（蓄势让每段都吃加成）。73 血。
 // 拖得越久打越疼，但本体血厚难秒：打还是磨的节奏题。
 registerEnemy({
   difficulty: { base: 4, floorMin: 2, floorMax: 16 },
   id: 'rockSnail', name: '岩螺',
-  createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 65 }),
+  createUnit: () => new Enemy({ defId: 'rockSnail', name: '岩螺', maxHp: 73 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex % 2 === 0) {
@@ -470,13 +493,13 @@ thornWeedDef('thornWeedB', 1); // B 类：从第二拍（分泌毒液）起步
 thornWeedDef('thornWeedT', 0, true); // T 类：不会复苏（Boss 召唤物）
 
 // 腐食甲虫：出场自带甲壳2（主级伤害减半/层）。三拍循环：啃食牌库顶1张（不攻击）→
-// 攻8 → 攻8。B 类：首拍获得甲壳1（不攻击），第 2 拍起接正常循环——只配
+// 攻7 → 攻7。B 类：首拍获得甲壳1（不攻击），第 2 拍起接正常循环——只配
 // 草地大麻烦B 编队，压首回合入场伤害。
 function carrionBeetleDef(id, cautious = false) {
   registerEnemy({
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
     id, name: '腐食甲虫',
-    createUnit: () => new Enemy({ defId: id, name: '腐食甲虫', maxHp: 22 }),
+    createUnit: () => new Enemy({ defId: id, name: '腐食甲虫', maxHp: 27 }),
     onBattleStart(ctx, unit) {
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'shell', stacks: 2,
@@ -499,7 +522,7 @@ function carrionBeetleDef(id, cautious = false) {
         return;
       }
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 8 + unit.getStat('attack'),
+        source: unit, target: player, amount: 7 + unit.getStat('attack'),
       }));
     },
     getIntention: (unit) => {
@@ -510,20 +533,20 @@ function carrionBeetleDef(id, cautious = false) {
       const phase = (((cautious ? unit.actionIndex - 1 : unit.actionIndex) % 3) + 3) % 3;
       return phase === 0
         ? { kinds: ['debuff'], note: '啃食：吃掉你的牌库顶1张（本场消化）' }
-        : { kinds: ['attack'], hits: 1, damage: 8 + atk };
+        : { kinds: ['attack'], hits: 1, damage: 7 + atk };
     },
   });
 }
-carrionBeetleDef('carrionBeetle');      // A 类：啃食牌库顶 → 攻8 → 攻8
+carrionBeetleDef('carrionBeetle');      // A 类：啃食牌库顶 → 攻7 → 攻7
 carrionBeetleDef('carrionBeetleB', true); // B 类：首拍甲壳+1（不攻击）→ 正常循环
 
-// 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 攻8+盾30 → 恢复16 → 攻16。
+// 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 盾20 → 恢复16 → 攻18。48 血。
 // 自愈+厚盾+大单发，是一只完整的「马拉松检查」（重击 22→16 于 09-22；
-// 掘洞回血 24→16 于 09-26——三轮试玩实测回 24 让击杀窗只剩 T1-T2，及格线被顶到 30-40 血）。
+// 掘洞回血 24→16 于 09-26；2026-10-13 改版：盾拍撤攻改纯盾20、重击 16→18、血 38→48）。
 registerEnemy({
   difficulty: { base: 3, floorMin: 2, floorMax: 16 },
   id: 'diggerMole', name: '掘地鼹鼠',
-  createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 38 }),
+  createUnit: () => new Enemy({ defId: 'diggerMole', name: '掘地鼹鼠', maxHp: 48 }),
   act(actx) {
     const { unit, player } = actx;
     if (unit.actionIndex === 0) {
@@ -534,15 +557,12 @@ registerEnemy({
     }
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 8 + unit.getStat('attack'),
-      }));
-      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 30 }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 20 }));
     } else if (phase === 1) {
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 16 }));
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 16 + unit.getStat('attack'),
+        source: unit, target: player, amount: 18 + unit.getStat('attack'),
         tags: ['heavy'],   // 重击档：敌方命中演出（enemyHitFx）
       }));
     }
@@ -551,15 +571,15 @@ registerEnemy({
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) return { kinds: ['attack'], hits: 1, damage: 7 + atk, note: '突袭' };
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 8 + atk, note: '自身护盾+30' };
+    if (phase === 0) return { kinds: ['defend'], note: '掘洞：自身护盾+20' };
     if (phase === 1) return { kinds: ['buff'], note: '掘洞恢复：回复16' };
-    return { kinds: ['attack'], hits: 1, damage: 16 + atk, note: '重击' };
+    return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
   },
 });
 
 // 静电毛球：电动（每有一个友军攻击+3，友军增减即时反映面板）——集群越厚它越凶。
 // 两拍循环：拍0 电击（攻4）并为友军全员蓄势+1，拍1 防御12。
-// 血量 20–29 随机（生成器定档）。
+// 血量 21–38 随机（生成器定档）。
 // B 类：固定 17 血、起始节拍=防御拍（错开集群的开局输出峰）——
 // 只进静电草地 A/B 编队替换一只。
 function staticPuffDef(id, maxHp, startBeat = 0) {
@@ -599,16 +619,16 @@ function staticPuffDef(id, maxHp, startBeat = 0) {
     },
   });
 }
-staticPuffDef('staticPuff', 25);  // 基础：20–29 随机（生成器覆盖 maxHp）
+staticPuffDef('staticPuff', 29);  // 基础：21–38 随机（生成器覆盖 maxHp）
 staticPuffDef('staticPuffB', 17, 1); // B 类：固定 17 血、从防御拍起步
 
 // 嗡嗡虫 A/B（塞卡干扰位，成群出现）：登场闪避1；三拍循环——A 类先塞后打，B 类先打后塞。
-// 迷眼粉尘塞牌库随机位（抽到手上才开始计时），尾拍是 2×5 的多段撞击。
+// 迷眼粉尘塞牌库随机位（抽到手上才开始计时），尾拍是 2×3 的多段撞击。血量 22–27 随机（生成器定档）。
 function buzzbugDef(id, firstIsAttack) {
   registerEnemy({
     id, name: '嗡嗡虫',
     difficulty: { base: 2, floorMin: 2, floorMax: 16 },
-    createUnit: () => new Enemy({ defId: id, name: '嗡嗡虫', maxHp: 19 }),
+    createUnit: () => new Enemy({ defId: id, name: '嗡嗡虫', maxHp: 24 }),
     onBattleStart(ctx, unit) {
       ctx.kernel.submitInstruction(new AddEffectInstruction({
         target: unit, effectId: 'dodge', stacks: 1,
@@ -622,7 +642,7 @@ function buzzbugDef(id, firstIsAttack) {
       const swarm = phase === 2;
       const jab = phase === (firstIsAttack ? 0 : 1);
       if (swarm) {
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 3; i++) {
           actx.kernel.submitInstruction(new DealDamageInstruction({
             source: unit, target: player, amount: 2 + unit.getStat('attack'),
           }));
@@ -644,7 +664,7 @@ function buzzbugDef(id, firstIsAttack) {
     getIntention: (unit) => {
       const atk = unit.getStat('attack');
       const phase = unit.actionIndex % 3;
-      if (phase === 2) return { kinds: ['attack'], hits: 5, damage: 2 + atk };
+      if (phase === 2) return { kinds: ['attack'], hits: 3, damage: 2 + atk };
       const jab = phase === (firstIsAttack ? 0 : 1);
       return jab
         ? { kinds: ['attack'], hits: 4, damage: 1 + atk }
@@ -652,8 +672,8 @@ function buzzbugDef(id, firstIsAttack) {
     },
   });
 }
-buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍3 撞×5
-buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×5
+buzzbugDef('buzzbugA', false); // A 类：拍1 塞粉尘 → 拍2 撞×4 → 拍3 撞×3
+buzzbugDef('buzzbugB', true);  // B 类：拍1 撞×4 → 拍2 塞粉尘 → 拍3 撞×3
 
 // 腐败根须：会复苏的持续输出位——无限复活（死后 1 回合、固定 11 血；作为场上最后一只
 // 被击杀时战斗即刻胜利，复苏不触发）。首现 15 血。三拍循环：攻5 → 攻2×3 → 蓄势2。
@@ -699,20 +719,18 @@ rottenRootDef('rottenRoot');
 rottenRootDef('rottenRootB', 2);
 rottenRootDef('rottenRootT', 0, true); // T 类：不复苏、无蓄势拍（Boss 召唤物）
 
-// 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结）。57 血。三拍：攻5 → 攻3×3 → 蓄势3
-//（第三拍是攻3×3 后的蓄力拍，长战渐强）。
+// 腐败树心：血厚版根须——同样无限复苏（留到最后杀即终结），死后 2 回合才复活（玩家
+// 有 2 回合喘息）。59 血。三拍：护盾10 → 攻3×3 → 蓄势3（长战渐强）。
 registerEnemy({
   difficulty: { base: 3, floorMin: 2, floorMax: 16 },
   id: 'rottenTreeHeart', name: '腐败树心',
-  createUnit: () => new Enemy({ defId: 'rottenTreeHeart', name: '腐败树心', maxHp: 57 }),
-  ...reviveKit({ times: Infinity }),
+  createUnit: () => new Enemy({ defId: 'rottenTreeHeart', name: '腐败树心', maxHp: 59 }),
+  ...reviveKit({ times: Infinity, breathTurns: 2 }),
   act(actx) {
     const { unit, player } = actx;
     const phase = unit.actionIndex % 3;
     if (phase === 0) {
-      actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 5 + unit.getStat('attack'),
-      }));
+      actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
     } else if (phase === 1) {
       for (let i = 0; i < 3; i++) {
         actx.kernel.submitInstruction(new DealDamageInstruction({
@@ -727,9 +745,9 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
-    const note = '复苏：死后1回合复活';
+    const note = '复苏：死后2回合复活';
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 5 + atk, note };
+    if (phase === 0) return { kinds: ['defend'], note: `自身护盾+10。${note}` };
     if (phase === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk, note };
     return { kinds: ['buff'], note: `蓄力：自身蓄势+3${note ? `（${note}）` : ''}` };
   },

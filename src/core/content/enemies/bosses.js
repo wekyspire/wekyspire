@@ -228,13 +228,13 @@ registerEnemy({
 
 // ②″ 11 层 Boss · MEFM-1（章1 火主题 Boss 池之一；
 // lore 对应「警戒的无人战体」）。开场自带防御4+格挡2（铁壳：固定减伤 + 受攻击免伤）。
-// 一阶段四拍：钩爪发射（伤残1，不造成伤害）→ 攻2×2 → 攻2×4 → 炎魔1+格挡2（积焰）。
-// 转段：血量跌至 150 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
+// 一阶段四拍：钩爪发射（伤残1，不造成伤害）→ 扫射3×2 → 扫射3×4 → 炎魔1+格挡2（积焰）。
+// 转段：血量跌至 170 以下的行动拍——失去防御4，故障空转一拍，进二阶段。
 // 二阶段：首拍获得炎魔2，随后三拍循环：攻5×3 → 钩爪发射（伤残2）→ 攻5×3（点燃海）。
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
-  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 225 }),
+  createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 265 }),
   onBattleStart(ctx, unit) {
     // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
     ctx.kernel.submitInstruction(new AddEffectInstruction({
@@ -253,7 +253,7 @@ registerEnemy({
     };
     const claw = (stacks) => actx.kernel.submitInstruction(new AddEffectInstruction({
       target: actx.player, effectId: 'maim', stacks }));
-    if (!unit._phase2 && unit.hp < 150) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
+    if (!unit._phase2 && unit.hp < 170) { // 转段拍：铁壳剥落 + 故障空转（占拍演出）
       unit._phase2 = true; unit._phaseBeat = 0;
       // 转阶段演出走通用剧本闸口（fx 架构 ANIM_SCRIPT，同 pyro）
       actx.presenter?.playScript?.({ script: 'bosses/mefm1P2', unit: unit.uniqueID });
@@ -266,8 +266,8 @@ registerEnemy({
     if (!unit._phase2) {
       const beat = unit.actionIndex % 4;
       if (beat === 0) claw(1);
-      else if (beat === 1) hit(2, 2);
-      else if (beat === 2) hit(4, 2);
+      else if (beat === 1) hit(2, 3);
+      else if (beat === 2) hit(4, 3);
       else {
         actx.kernel.submitInstruction(new AddEffectInstruction({
           target: unit, effectId: 'flameDemon', stacks: 1 }));
@@ -290,11 +290,11 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
-      if (unit.hp < 150) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
+      if (unit.hp < 170) return { kinds: ['buff'], note: '故障：失去防御4，停机一回合' };
       const beat = unit.actionIndex % 4;
       if (beat === 0) return { kinds: ['debuff'], note: '钩爪发射：赋予伤残1（受到的伤害+1）' };
-      if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 2 + atk };
-      if (beat === 2) return { kinds: ['attack'], hits: 4, damage: 2 + atk };
+      if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 3 + atk };
+      if (beat === 2) return { kinds: ['attack'], hits: 4, damage: 3 + atk };
       return { kinds: ['buff'], note: '积焰：炎魔1、格挡2' };
     }
     if ((unit._phaseBeat ?? 0) === 0) return { kinds: ['buff'], note: '点火完成：炎魔2' };

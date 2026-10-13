@@ -109,16 +109,16 @@ export function createRunCutsceneFlows(ctx) {
         id,
         // 不拼 glyph：字素（炎）与 label 首字同形，连读成「炎火灵脉」
         // 错词（夜测 r6路5 实报，每局进阶必现）；hint 行「突破火灵脉」即目标口径。
-        label: `${meta.label}（等级 ${run.player.leino?.[id] ?? 0}）`,
+        label: `${meta.label}`,//（等级 ${run.player.leino?.[id] ?? 0}）`,
         hint: `突破${meta.label}`,
       };
     }),
-    { id: 'skip', label: '跳过（体修等阶 +1，生命上限 +3，可删一张卡）', hint: '不选灵脉，精进体修' },
+    { id: 'skip', label: '锻炼身体（生命上限 +3，移除一张卡牌）', hint: '' },
   ];
   /** 选择之后的结果页（一句话确认，数字读实时 run；首次 0→1 顺带宣告获赠内容）。 */
   const ascensionResultPage = (id) => {
     if (id === 'skip') {
-      return { speaker: '旁白', text: `（你压下了那点火种。体修的精进悄然累积——体修等阶 ${run.player.bodyLevel ?? 0}，生命上限 +3。此刻起，你还可以从牌库中删去一张卡。）` };
+      return { speaker: '旁白', text: `（体能锻炼中，你排除了杂念。）` };
     }
     let text = `（${(DIM_META[id] ?? {}).label ?? id} 突破至 ${run.player.leino?.[id] ?? 0} 级：`
       + `生命回复 ${ASCENSION_PLACEHOLDER.healAmount} 点，魏启上限 +${ASCENSION_PLACEHOLDER.manaGain}。`;
@@ -147,15 +147,14 @@ export function createRunCutsceneFlows(ctx) {
     const options = run.ascensionOffer.map((id) => {
       const def = getAbilityDefinition(id);
       const tag = def.grade === 'master' ? '大师' : '精英';
-      return { id, label: `【${tag}】${def.name}——${def.description}`, hint: '授予此能力' };
+      return { id, label: `【${tag}】${def.name}——${def.description}`, hint: '' };
     });
-    options.push({ id: 'skip', label: '暂且不取（能力池保留，下次进阶再择）', hint: '跳过能力授予' });
+    options.push({ id: 'skip', label: '不是现在', hint: '跳过能力获取' });
     await cutscene.play({
       steps: [{
         type: 'dialogue', bg,
         pages: [
-          { speaker: '旁白', text: '突破的余韵未散，一缕新的「法」在识海里成形。' },
-          { speaker: '旁白', text: '择一项能力纳入道基——', choices: options },
+          { speaker: '旁白', text: '选择一项能力', choices: options },
         ],
         onChoice: (id) => { picked = id; },
       }],
@@ -167,7 +166,7 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({
         steps: [{
           type: 'dialogue', bg,
-          pages: [{ speaker: '旁白', text: `（${def.name}已入道基：${def.description}）` }],
+          pages: [{ speaker: '旁白', text: `（你掌控了 ${def.name}）` }],
         }],
       });
     }
@@ -197,8 +196,8 @@ export function createRunCutsceneFlows(ctx) {
           {
             type: 'dialogue', bg,
             pages: [
-              { speaker: '旁白', text: '塔层的灵力在此汇聚，经脉里的火种轻轻跳动。' },
-              { speaker: '旁白', text: '择一条主维度突破——或就此收手，把心思留给身体。', choices: ascensionChoices() },
+              { speaker: '旁白', text: '塔层的灵力在此汇聚，你灵脉内的火种轻轻跳动。' },
+              { speaker: '旁白', text: '选择一个灵脉进行突破，或者把时间留给体能训练。', choices: ascensionChoices() },
             ],
             onChoice: (id) => {
               picked = id;
