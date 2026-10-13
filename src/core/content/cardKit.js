@@ -225,12 +225,14 @@ export function triggerChant(sctx) {
  *   · 单选（max = 1）：手牌来源**原地点牌即应答**；非手牌来源仍走覆盖层（场景里无可点对象）。
  *
  * 候选为空时**返回 null 不提交**（空集无合法应答，会把界面挂死）——调用方据此跳过。
- * 形状：`{ kind:'selectCards', source, min, max, reason, picker?, candidates:[uniqueID] }`
+ * 形状：`{ kind:'selectCards', source, min, max, reason, picker?, candidates:[uniqueID], flavor? }`
  * （**不再有 `count` 字段**：min/max 是规范，count 是已废弃的旧口径。）
+ * flavor：语义风味标记（现仅 'discard' 弃牌）——前端据此给已选未确认的候选挂
+ * 将弃红框预告；纯 UI 提示，不参与结算。
  */
 export function buildCardSelectionRequest(sctx, {
   source = 'hand', min = 1, max = null, filter = null, reason = null, zone = null,
-  overlay = null, defs = null, overrides = null,
+  overlay = null, defs = null, overrides = null, flavor = null,
 } = {}) {
   // 「定义池选卡」（source 'pool'，发现类）：候选不在任何区——candidates 直接给 defId
   //（投影层会用一次性 runtime 现视图，见 bridge/projection.js pendingInput.poolCards）。
@@ -244,6 +246,7 @@ export function buildCardSelectionRequest(sctx, {
     return {
       kind: 'selectCards', source: 'pool', min: lo, max: hi, reason,
       picker: 'overlay', candidates: poolDefs, ...(overrides ? { overrides } : null),
+      ...(flavor ? { flavor } : null),
     };
   }
   const zoneName = zone ?? (source === 'deck' ? 'deck' : 'hand');
@@ -256,6 +259,7 @@ export function buildCardSelectionRequest(sctx, {
     kind: 'selectCards', source, min: lo, max: hi, reason,
     picker: useOverlay ? 'overlay' : undefined,
     candidates: pool.map(c => c.uniqueID),
+    ...(flavor ? { flavor } : null),
   };
 }
 
@@ -274,8 +278,8 @@ export function requestCardSelection(sctx, opts = {}) {
 }
 
 // 手牌选牌请求：返回 AwaitPlayerInputInstruction（调用方存到 sctx.self 上，下一段读 selected）
-export function requestHandSelection(sctx, { count = 1, filter = null, reason = null } = {}) {
-  return requestCardSelection(sctx, { source: 'hand', min: count, max: count, filter, reason });
+export function requestHandSelection(sctx, { count = 1, filter = null, reason = null, flavor = null } = {}) {
+  return requestCardSelection(sctx, { source: 'hand', min: count, max: count, filter, reason, flavor });
 }
 
 // 牌库选牌请求（寻找/抽出类）

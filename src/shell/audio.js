@@ -8,6 +8,7 @@
 //   AudioParam 上（求和语义），模拟阵风时小时大；战斗内 duck 压暗不切源，回塔原样续播。
 import { watch } from 'vue';
 import { settings } from './settings.js';
+import { resolveAudioUrl, loadAudioPack } from './audiopack.js';
 import titleMusicUrl from '../assets/sounds/story-mode-intro.mp3';
 import battleCh1Url from '../assets/sounds/battle-regular-ch1.mp3';
 import windTowerUrl from '../assets/sounds/wind-tower.wav';
@@ -78,7 +79,7 @@ function ensureCtx() {
 function load(key) {
   let p = buffers.get(key);
   if (!p) {
-    p = fetch(TRACKS[key].url)
+    p = fetch(resolveAudioUrl(TRACKS[key].url))
       .then(r => r.arrayBuffer())
       .then(ab => ctx.decodeAudioData(ab))
       .catch((e) => { console.warn('[audio] 解码失败', key, e); return null; });
@@ -281,23 +282,49 @@ export function _debug() {
 }
 
 /**
- * 开机预载：全部登记轨 fetch + 解码进缓存（不播放）。onStats 形状与 preloadAllArt 相同
- * （done/total/loadedBytes/totalBytes），由 App 合并进同一条进度。失败只降级为静音开局
- * （load 已 catch 落 null），不拦加载门。
+ * 开机预载：全部登记轨下载 + 解码进缓存（不播放）。onStats 形状与 preloadAllArt 相同
+ * （done/total/loadedBytes/totalBytes），由 App 合并进同一条进度。
+ * gate = 与美术包**串行下载**的等待门（小水管服务器：同一时刻只跑一条大流量；
+ * App 传入「artpack 下载落定」的 promise）。打包路径：单个 audiopack-*.bin 流式
+ * 拉取（字节精确进度，取代 HEAD 逐条探测）；无包/失败回退逐条旧路径。
+ * 失败只降级为静音开局（load 已 catch 落 null），不拦加载门。
  */
-export async function preloadAudio({ onStats } = {}) {
+export async function preloadAudio({ onStats, gate = null } = {}) {
   ensureCtx();
   const keys = Object.keys(TRACKS);
+  await gate;
+  // 打包路径：单包流式下载（字节精确进度）；解码段沿用包字节报数（分母不回缩，
+  // 进度条不回跳）。包下载失败/无包 → packed=false 走逐条回退
+  let packGot = 0, packTot = 0;
+  const packed = await loadAudioPack({
+    onProgress: (got, tot, ms) => {
+      packGot = got; packTot = tot;
+      onStats?.({
+        done: got >= tot ? keys.length : 0, total: keys.length,
+        loadedBytes: got, totalBytes: tot, elapsedMs: ms, failed: 0,
+      });
+    },
+  }).catch(() => false);
+  let done = 0, failed = 0;
+  if (packed) {
+    for (const k of keys) {
+      const buf = await load(k);
+      if (!buf) failed += 1;
+      done += 1;
+      onStats?.({ done, total: keys.length, loadedBytes: packGot, totalBytes: packTot, failed });
+    }
+    return { total: keys.length, failed };
+  }
+  // 逐条回退：HEAD 探测体积（缺席 = 该条不计入分母）
+  let loadedBytes = 0, totalBytes = 0;
   const sizes = new Map();
-  let totalBytes = 0;
-  await Promise.all(keys.map(async (k) => {   // HEAD 探测体积（缺席 = 该条不计入分母）
+  await Promise.all(keys.map(async (k) => {
     try {
       const res = await fetch(TRACKS[k].url, { method: 'HEAD' });
       const n = Number(res.headers.get('content-length'));
       if (res.ok && Number.isFinite(n) && n > 0) { sizes.set(k, n); totalBytes += n; }
     } catch { /* 缺席 */ }
   }));
-  let done = 0, loadedBytes = 0, failed = 0;
   const report = () => onStats?.({ done, total: keys.length, loadedBytes, totalBytes });
   report();
   await Promise.all(keys.map(async (k) => {

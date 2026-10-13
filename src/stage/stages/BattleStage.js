@@ -30,7 +30,7 @@ import { dispatchAnimBeat } from './battleBeats.js';
 import { unitBeats } from './battleBeats/units.js';
 import { inputBeats, ARROW_Z } from './battleBeats/input.js';
 import { syncBeats } from './battleBeats/sync.js';
-import { cardBeats, PILE_POSITIONS, CARD_BURN_MS } from './battleBeats/cards.js';
+import { cardBeats, PILE_POSITIONS, CARD_BURN_MS, HELD_ANCHOR } from './battleBeats/cards.js';
 import { DisplayModel } from '../../bridge/displayModel.js';
 import { CardObject } from '../objects/CardObject.js';
 import { UnitObject } from '../objects/UnitObject.js';
@@ -229,6 +229,10 @@ export class BattleStage {
                                // 后端状态即时变，显示状态随队列节拍变，时序由 sync 指令位置表达）
     this._snapshotSeq = 0;     // 已应用快照的显示时刻序号（bridge 投影 seq）：显示状态只进不退
     this._displayCard = null;          // 正在做发动展示的卡 { id }（全局唯一卡牌：展示用本体，无替身）
+    // 发动展示分流进 held 的主语卡集合（_skillDisplay 挂旗/zone 离 held 摘旗）——
+    // 只有它们吃展示位锚点的弹簧目标；宾语经快照对账进 held 的不跟踪（它有自己的
+    // 宾语展示位 y=4，被锚点拽走就是转化演出的回归）
+    this._heldByDisplay = new Set();
     this._burning = new Set();         // 焚烧中的卡视图（onTick 驱动 updateBurn 至燃尽；已出注册表）
     this._disposed = false;            // 幽灵守卫：dispose 后本舞台不再处理任何总线事件
     this._entering = new Set();        // 入场飞行中的卡（sync 建档，_layoutAndTrack 起飞后清除）
@@ -829,12 +833,20 @@ export class BattleStage {
     const spreadId = this._pick ? null : (this._aiming?.id ?? this._hoveredCardId);
     this.layout.layoutHand('hand', orderedHand, spreadId);
     // 静息姿态交弹簧层逐帧软收敛（目标表整表替换，让位/收养规则见 HandSprings）。
-    // 目标资格 = zone 'hand'（held=展示位停留 / deck=牌库停车都不发目标——所有权
-    // 由 zone 记录，弹簧只认领手牌）
+    // 目标资格 = zone 'hand'（deck=牌库停车不发目标——所有权由 zone 记录）+
+    // 发动展示分流的 held 主语卡（_heldByDisplay：展示位锚点是它的静息位——
+    // 选牌 WAIT 等长结算窗里始终停在屏幕中央，不会滞留/滑回手牌扇形）。
+    // 池选遮罩期（pick.backdrop）held 卡被手工压到遮罩下（z 26），弹簧不对它发目标
+    // ——否则 z 通道会被锚点拽回 60 顶穿遮罩；关层后 z 归位、目标自然恢复
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
       if (a && this.model.getZone(id) === 'hand') targets.set(id, a);
+    }
+    if (!this._pick?.backdrop) {
+      for (const id of this._heldByDisplay) {
+        if (this.model.getZone(id) === 'held' && this._views.has(id)) targets.set(id, HELD_ANCHOR);
+      }
     }
     // 选卡覆盖层（手牌来源）：把候选的目标锚点换成网格位——同一批 CardObject 直接
     // "飞"进界面，不渲染副本；关闭时 targets 自然回到手牌扇形
@@ -878,15 +890,18 @@ export class BattleStage {
       if (this._pick) {
         // 覆盖层：候选可点（选中态高亮），非候选压灰；其余视觉态一律让位
         const isCandidate = this._pick.ids.includes(id);
-        view.setVisualState(this._pick.selection.includes(id) ? 'highlighted'
+        // 弃牌语义（flavor 'discard'）的选中态不走 C0 提暖——将弃红框已表达「这张要走」
+        const doomPick = this._pick.request?.flavor === 'discard';
+        view.setVisualState(this._pick.selection.includes(id) && !doomPick ? 'highlighted'
           : (isCandidate ? 'normal' : 'disabled'));
       } else if (this._aiming?.id === id) {
         view.setVisualState('highlighted');
       } else if (pending?.candidates) {
         view.setVisualState(pending.candidates.includes(id) ? 'highlighted' : 'disabled');
       } else if (this._dumpMode && zone === 'hand') {
-        // 弃牌模式（D3 一键全弃）：进模式即全选 → 整手高亮；对账摘除的（已离手）回常态
-        view.setVisualState(this._dumpSel.has(id) ? 'highlighted' : 'normal');
+        // 弃牌模式（D3 一键全弃）：选中态由将弃红框表达（doom 标记），C0 不再提暖——
+        // 提暖（亮）与「要离开了」（沉）语义相冲
+        view.setVisualState('normal');
       } else if (this._endTurnRequested && zone === 'hand') {
         // 回合过渡锁（点了结束回合、下一回合快照未落）：整手压灰——锁定期打牌/换卡全关
         // （放在结算期分支之后：应答输入的候选高亮不受锁影响）

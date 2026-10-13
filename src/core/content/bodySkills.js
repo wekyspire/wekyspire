@@ -627,15 +627,16 @@ registerSkill({
 //   * 瞬击下游（拳压，拳师深入卡）——蓄力系造的瞬击终于有「吃瞬击」的加成件；
 //   * 弃牌引擎（混元）——弃牌语言（呼吸/假动作/以无胜有）的消费端。
 // 数值对标：无条件部分 = 同阶白板（乱拳 6=拳、密雨 9=快拳、千手 12=炮拳），
-// 多段/条件加成才是体系溢价。失去生命 = 无来源固定伤害（跳修正、护盾可吸收、
-// 不触发荆棘/忍耐类反制——纯代价语义）。
+// 多段/条件加成才是体系溢价。失去生命 = 无来源穿透伤害（防御/护盾/格挡都不减免
+// ——失去的是生命不是护盾；纯代价语义，selfcost 标记挡受击响应）。
 
 // 群伤原语（bodyAoe）与扫腿链归拆组合（blockSkills.js，series 'block'）
 // ——扫腿线重做为多敌防卡后归属拆；群伤原语上移 cardKit.aoeAttack 共用。
 
-// 狂拳 C → B → A（卖血链；C 9伤 / B 13伤 / A 13伤+2AP）。失去生命 = 无来源固定伤害
-// （跳修正、护盾可吸收、不触发荆棘/忍耐类反制——纯代价语义）；获得 AP 走指令
-// （伤害换节奏）。
+// 狂拳 C → B → A（卖血链；C 8伤 / B 11伤 / A 11伤+2AP）。失去生命 = 无来源穿透伤害
+// （防御/护盾/格挡都不减免——失去的是生命不是护盾；PRE 修饰全按 source=玩家/特定
+// tags 过滤，source:null 的代价不被任何修饰触碰；荆棘要 source、忍耐排除 selfcost，
+// 受击响应天然不触发——纯代价语义）；获得 AP 走指令（伤害换节奏）。
 function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }) {
   registerSkill({
     id, name: '狂拳', type: 'normal', tier, series: 'wildPunch', subsystem: 'fist',
@@ -646,7 +647,7 @@ function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }
     use(sctx) {
       attackDamage(sctx, damage);
       sctx.kernel.submitInstruction(new DealDamageInstruction({
-        source: null, target: sctx.player, amount: lifeLoss, fixed: true, tags: ['selfcost'],
+        source: null, target: sctx.player, amount: lifeLoss, pierce: true, tags: ['selfcost'],
       }));
       if (ap > 0) sctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: ap }));
       return true;
@@ -655,9 +656,9 @@ function wildPunchCard({ id, tier, damage, lifeLoss, ap = 0, promotesTo = null }
     battleDescribe: (sctx) => `${resolvedDamageText(sctx, damage)}，失去${lifeLoss}生命${ap > 0 ? `，获得${ap}行动点` : ''}`,
   });
 }
-wildPunchCard({ id: 'wildPunchC', tier: 'C', damage: 9, lifeLoss: 2, ap: 1, promotesTo: 'wildPunchB' });
-wildPunchCard({ id: 'wildPunchB', tier: 'B', damage: 13, lifeLoss: 2, ap: 1, promotesTo: 'wildPunchA' });
-wildPunchCard({ id: 'wildPunchA', tier: 'A', damage: 13, lifeLoss: 2, ap: 2 });
+wildPunchCard({ id: 'wildPunchC', tier: 'C', damage: 8, lifeLoss: 3, ap: 1, promotesTo: 'wildPunchB' });
+wildPunchCard({ id: 'wildPunchB', tier: 'B', damage: 11, lifeLoss: 3, ap: 1, promotesTo: 'wildPunchA' });
+wildPunchCard({ id: 'wildPunchA', tier: 'A', damage: 11, lifeLoss: 3, ap: 2 });
 
 // 乱拳 C → 雨拳 B → 千手 A → 万手 S（多段链：每段独立结算、独立吃减伤门与触发面。
 // 总伤 9/12/16/30）

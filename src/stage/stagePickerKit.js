@@ -598,7 +598,7 @@ export function createStagePickerKit({
         cancelFn = () => { onIntent?.({ action: 'slotDecline' }); };
         picker.attachPicker(pickerNow());
         picker.open({
-          title: pd.tier === 'major' ? '选一张卡牌（大奖）' : '选一张卡牌（小奖）',
+          title: pd.tier === 'major' ? '选择一张卡牌（大奖）' : '选择一张卡牌（小奖）',
           cards: pd.choices.map(c => ({
             uniqueID: c.defId, defId: c.defId, view: c.view, enabled: true,
           })),
@@ -823,7 +823,8 @@ export function createStagePickerKit({
         scene()?.remove(inst);
         inst.dispose();
       }
-      if (deckViewer) { scene()?.remove(deckViewer); deckViewer.dispose(); deckViewer = null; }
+      // CardGalleryObject 的整清口是 close()（幂等：背板/条目/文本/pickable 全收），无 dispose
+      if (deckViewer) { scene()?.remove(deckViewer); deckViewer.close(); deckViewer = null; }
       cardPicker = null;
       relicPicker = null;
       showcase = null;

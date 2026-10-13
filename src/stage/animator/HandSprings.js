@@ -8,7 +8,8 @@
 // 让位，期间对象被租借方驱动。租约结束（onComplete 或被顶杀）自动回落
 // free，本层从 object3D 当前姿态零速收养——承接落定/中断姿态 → 平滑滑向
 // 锚点，卡在任何时刻都有所有者，不存在无人驾驶的僵尸态。
-// 目标表由宿主 _layoutAndTrack 整表替换（只对 zone='hand' 的卡发目标）。
+// 目标表由宿主 _layoutAndTrack 整表替换（zone='hand' 的手牌 + 发动展示分流的
+// held 主语卡——后者的锚点是展示位，见 BattleStage._heldByDisplay）。
 //
 // 半隐式欧拉 + 固定子步积分：帧率无关、长帧截断防瞬移。由宿主逐帧 update(dt)；
 // node 测试手动步进即可确定性地推进到收敛。

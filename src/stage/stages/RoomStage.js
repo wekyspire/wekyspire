@@ -727,7 +727,10 @@ export class RoomStage {
    * 启动机位补间（ease-out cubic）；then 在**到位后**执行一次。
    * 保险丝：补间靠渲染循环推进，而渲染循环在后台标签页/失焦窗口里会被浏览器节流到停摆
    * （rAF 0 帧）——那样"面板等推近到位才开"就会变成永远不开。故同时挂一个定时器兜底：
-   * 补间没跑完也把 then 兑现（画面可能停在旧帧，但 UI 不会假死）。
+   * 补间没跑完也把 then 兑现——但**兑现前先把机位贴到终点**：保险丝防的是 UI 假死，
+   * 不是把相机撂在半空。旧实现直接掐死补间，主线程被长任务（纹理首传/管线编译）卡住
+   * 超过 dur+400ms 时保险丝抢在补间前面点火 → 相机永远停在半途（实报：zoom-in 卡顿
+   * 后相机停在半空，且因 _focused 已置位，再点同一机器被幂等挡下 = 「按了没反应」）。
    */
   _startCamTween(to, dur = ZOOM_MS, then = null) {
     const cam = this._sm?.camera;
@@ -740,7 +743,13 @@ export class RoomStage {
     if (then) {
       this._camFuse = setTimeout(() => {
         this._camFuse = null;
-        if (this._camTween) { this._camTween = null; then(); }
+        const q = this._camTween;
+        if (q) {
+          this._camTween = null;
+          cam.position.copy(q.to.position);       // 贴到终点再兑现：到达性不因卡顿丢失
+          cam.quaternion.copy(q.to.quaternion);
+          then();
+        }
       }, dur * 1000 + 400);
     }
   }

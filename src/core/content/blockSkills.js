@@ -167,7 +167,7 @@ const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSk
   describe: () => `${base}伤害；/named{破}：${per}伤害`,
   battleDescribe: (sctx) => {
     const layers = sctx.player.getEffectStacks('block');
-    const bonus = layers > 0 ? `（当前${layers}层 → +${layers * per}）` : '';
+    const bonus = layers > 0 ? `（当前${layers}层 → ${per}×${layers}）` : '';
     return `${resolvedDamageText(sctx, base)}，/named{破}：${per}伤害${bonus}`;
   },
 });
@@ -177,7 +177,7 @@ breakAttack('breakStanceA', '贯心', 'A', 9, 7, null);
 
 // 堡垒/铜城（破势系列护盾链 C/B/A）：基础护盾 + 破：N 护盾（三阶皆消耗）。
 // 设计稿未写费用 → 0 费。先给基础护盾，再清空格挡逐层转化。
-// 2026-10-10 修订：破 6/7/8 → 5/6/7；铜城 12 盾/破6 且改迷你（计 0 张手牌）。
+// 铜城改迷你（计 0 张手牌）。
 const breakShield = (id, name, tier, base, per, { promotesTo = null, mini = false } = {}) => registerSkill({
   id, name, type: 'normal', tier, series: 'barrier', subsystem: 'block',
   cost: { mana: 0, actionPoint: 0 },
@@ -198,9 +198,9 @@ const breakShield = (id, name, tier, base, per, { promotesTo = null, mini = fals
     return `${base}护盾，/named{破}：${per}护盾${bonus}`;
   },
 });
-breakShield('barrierC', '堡垒', 'C', 10, 5, { promotesTo: 'barrierB' });
-breakShield('barrierB', '堡垒', 'B', 12, 6, { promotesTo: 'barrierA' });
-breakShield('barrierA', '铜城', 'A', 12, 6, { mini: true });
+breakShield('barrierC', '堡垒', 'C', 10, 4, { promotesTo: 'barrierB' });
+breakShield('barrierB', '堡垒', 'B', 12, 5, { promotesTo: 'barrierA' });
+breakShield('barrierA', '铜城', 'A', 12, 5, { mini: true });
 
 // 武魂（破势系列 A）：消耗。破：1 行动点（每层独立一枚 AP 指令，可各自被修饰）。
 registerSkill({
@@ -407,7 +407,7 @@ berserkStanceCard('berserkStanceA', '狂战掌控', 'A', 1, null);
 // 手牌形态双向终端：P5 按手牌形态给格挡。手牌数按**裸张数**计（卡面手牌数 =
 // 直观张数，激活咏唱算 1 张，不加权——见 battle.md §1 基础约定）；
 // 触发时激活的自身也在手、算 1 张。咏唱统一 1。
-const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3, promotesTo = null, series = 'winWithout' } = {}) => registerSkill({
+const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 2, promotesTo = null, series = 'winWithout' } = {}) => registerSkill({
   id, name, type: 'normal', tier, series, subsystem: 'block',
   cost: { mana: 0, actionPoint: ap },
   charges: { max: Infinity, cooldownTurns: 0 },
@@ -429,7 +429,7 @@ const handGateChant = (id, name, tier, conditionText, gate, { ap = 1, block = 3,
   battleDescribe: (sctx) => `${conditionText}，/effect{格挡}${block}`,
 });
 
-// 以无胜有（B→A）：没有自由手牌（手牌全是激活咏唱）→ 3 层格挡
+// 以无胜有（B→A）：没有自由手牌（手牌全是激活咏唱）→ 2 层格挡
 // （A 档 0AP——升阶 = 免费化）。「自由手牌」= 未激活咏唱（canDumpCards 同口径）。
 const noFreeHand = (sctx, battleState) =>
   battleState.zones.hand.every(c => c.isActivated);
@@ -438,16 +438,16 @@ handGateChant('winWithoutB', '以无胜有', 'B', '若你没有自由手牌',
   { promotesTo: 'winWithoutA' });
 handGateChant('winWithoutA', '以无胜有', 'A', '若你没有自由手牌',
   noFreeHand,
-  { ap: 0, block: 3 });
+  { ap: 0, block: 2 });
 
-// 以有胜无（B→A）：手牌不少于 4/3 张（囤手）→ 3 层格挡。
+// 以有胜无（B→A）：手牌不少于 4/3 张（囤手）→ 2 层格挡。
 // 触发时激活的自身也在手、算 1 张。
 handGateChant('haveWithoutB', '以有胜无', 'B', '若你手牌不少于4张',
   (sctx, battleState) => battleState.zones.hand.length >= 4,
   { promotesTo: 'haveWithoutA', series: 'haveWithout' });
 handGateChant('haveWithoutA', '以有胜无', 'A', '若你手牌不少于3张',
   (sctx, battleState) => battleState.zones.hand.length >= 3,
-  { block: 3, series: 'haveWithout' });
+  { block: 2, series: 'haveWithout' });
 
 // 活动筋骨（C/B/A，1AP/0AP/0AP，冷却1）：获得力量 1/1/2。
 // 2026-10-10 改版：原「B 起力量 1+N（随打出次数成长）」简化为固定值（设计稿 §1.2
@@ -470,8 +470,7 @@ rallyCard('rallyB', '活动筋骨', 'B', 0, 1, 'rallyA');
 rallyCard('rallyA', '活动筋骨', 'A', 0, 2);
 
 // ==== 碎击系列（格挡转负面效果）=================================================
-// 【破】在此是固定触发（不按层）：消耗全部格挡，换目标/全体的虚弱。
-// 碎击 C：1AP 9伤；破：目标虚弱2。冷却 5（数值向 B 档靠拢，阶差在冷却）。
+// 碎击 C：1AP 9伤；破：目标虚弱1。冷却 5（数值向 B 档靠拢，阶差在冷却）。
 registerSkill({
   id: 'shatterHitC', name: '碎击', type: 'normal', tier: 'C', series: 'shatterHit', subsystem: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -481,17 +480,18 @@ registerSkill({
   use(sctx) {
     attackDamage(sctx, 9);
     const target = enemyTarget(sctx);
-    if (breakAllBlock(sctx) > 0 && target) addEffect(sctx, 'weaken', 2, target);
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers && target; i++) addEffect(sctx, 'weaken', 1, target);
     return true;
   },
-  describe: () => '9伤害；/named{破}：目标/effect{虚弱}2',
+  describe: () => '9伤害；/named{破}：目标/effect{虚弱}1',
   battleDescribe: (sctx) => {
     const layers = sctx.player.getEffectStacks('block');
-    return `${resolvedDamageText(sctx, 9)}，/named{破}：目标/effect{虚弱}2（当前${layers}层）`;
+    return `${resolvedDamageText(sctx, 9)}，/named{破}：目标/effect{虚弱}1${layers > 0 ? `×${layers}层` : ''}`;
   },
 });
 
-// 碎击 B：1AP 9伤；破：目标虚弱2。
+// 碎击 B：1AP 9伤；破：目标虚弱1。
 registerSkill({
   id: 'shatterHitB', name: '碎击', type: 'normal', tier: 'B', series: 'shatterHit', subsystem: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -501,17 +501,18 @@ registerSkill({
   use(sctx) {
     attackDamage(sctx, 9);
     const target = enemyTarget(sctx);
-    if (breakAllBlock(sctx) > 0 && target) addEffect(sctx, 'weaken', 2, target);
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers && target; i++) addEffect(sctx, 'weaken', 1, target);
     return true;
   },
-  describe: () => '9伤害；/named{破}：目标/effect{虚弱}2',
+  describe: () => '9伤害；/named{破}：目标/effect{虚弱}1',
   battleDescribe: (sctx) => {
     const layers = sctx.player.getEffectStacks('block');
-    return `${resolvedDamageText(sctx, 9)}，/named{破}：目标/effect{虚弱}2（当前${layers}层）`;
+    return `${resolvedDamageText(sctx, 9)}，/named{破}：目标/effect{虚弱}1${layers > 0 ? `×${layers}层` : ''}`;
   },
 });
 
-// 碎骨 A：1AP 9伤；破：全体敌人虚弱2（AoE 化是 A 档的阶差）。
+// 碎骨 A：1AP 9伤；破：全体敌人虚弱1（AoE 化是 A 档的阶差）。
 registerSkill({
   id: 'shatterHitA', name: '碎骨', type: 'normal', tier: 'A', series: 'shatterHit', subsystem: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -519,15 +520,16 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
     attackDamage(sctx, 9);
-    if (breakAllBlock(sctx) > 0) {
-      for (const e of aliveEnemies(sctx.battleState)) addEffect(sctx, 'weaken', 2, e);
+    const layers = breakAllBlock(sctx);
+    for (let i = 0; i < layers; i++) {
+      for (const e of aliveEnemies(sctx.battleState)) addEffect(sctx, 'weaken', 1, e);
     }
     return true;
   },
-  describe: () => '9伤害；/named{破}：所有敌人/effect{虚弱}2',
+  describe: () => '9伤害；/named{破}：所有敌人/effect{虚弱}1',
   battleDescribe: (sctx) => {
     const layers = sctx.player.getEffectStacks('block');
-    return `${resolvedDamageText(sctx, 9)}，/named{破}：所有敌人/effect{虚弱}2（当前${layers}层）`;
+    return `${resolvedDamageText(sctx, 9)}，/named{破}：所有敌人/effect{虚弱}1${layers > 0 ? `×${layers}层` : ''}`;
   },
 });
 

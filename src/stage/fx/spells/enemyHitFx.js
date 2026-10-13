@@ -38,12 +38,13 @@ const RAPID_WINDOW_MS = 1200;
 
 /**
  * 敌方来源的伤害节拍决议：payload + 意图 → { tier, ...params } | null。
- * 只接「敌方 + 主级 + 有生命值伤害」——附级 tick（燃烧/中毒/荆棘）与环境伤害
- * （source 为 null）不给；玩家卡来源在调用方已被 resolveDamageFx 优先接管。
+ * 只接「敌方 + 主级」——附级 tick（燃烧/中毒/荆棘）与环境伤害（source 为 null）
+ * 不给；玩家卡来源在调用方已被 resolveDamageFx 优先接管。**不按 dealt 门控**：
+ * 命中演出是攻击方施加的特效，被护盾整吞（dealt=0）与被闪避（dodged 拍）都照播
+ * ——量级由调用方另传 swing（出手重量）决定，不由实际生命损失决定。
  * intention = 快照里该敌人的本次行动预告（伤害拍时点尚未刷新，仍是本次值）。
  */
 export function resolveEnemyHitFx(stage, payload, dealt, intention = null) {
-  if (dealt <= 0) return null;
   if (payload?.source?.side !== 'enemy') return null;
   if ((payload?.type ?? 'major') !== 'major') return null;
 
@@ -99,18 +100,20 @@ export async function runEnemyHitBeat(ctx, deps, args) {
  * 暖闪）。pal 覆盖档位默认（palette/量级），garnish = 命中瞬间的主题附加粒子
  * （重击/普击分别给），都在 punchImpact 之前起跑（fire-and-forget 叠在冲击上）。
  */
-export async function enemyImpactBeat(ctx, deps, { fx, unit, dealt, fromX = null, pal = {}, garnish = null }) {
+export async function enemyImpactBeat(ctx, deps, { fx, unit, dealt, swing = null, fromX = null, pal = {}, garnish = null }) {
   const t = ENEMY_HIT_TIERS[fx.tier] ?? ENEMY_HIT_TIERS.normal;
   const s = unit._baseScale ?? 1;
   const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
   const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
   const heavy = fx.tier === 'heavy';
+  // 量级按 swing（出手重量，盾吞/闪避时 = gross）——dealt=0 不缩成无物
+  const mag = swing ?? dealt;
   if (garnish) {
-    try { garnish(ctx, deps, { unit, at, heavy, dealt, s }); } catch { /* 主题附加件失败不拦冲击主体 */ }
+    try { garnish(ctx, deps, { unit, at, heavy, dealt, swing: mag, s }); } catch { /* 主题附加件失败不拦冲击主体 */ }
   }
   await punchImpact(ctx, deps, {
     at, dir,
-    scale: Math.max((pal.scaleK ?? t.scaleK) * punchScaleFor(dealt, heavy), 0.9),
+    scale: Math.max((pal.scaleK ?? t.scaleK) * punchScaleFor(mag, heavy), 0.9),
     ms: pal.ms ?? t.ms,
     color: pal.color ?? (heavy ? [1.0, 0.44, 0.22] : [1.0, 0.62, 0.30]),
     hot: pal.hot ?? (heavy ? [1.25, 0.72, 0.42] : [1.15, 0.85, 0.52]),

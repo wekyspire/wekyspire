@@ -11,7 +11,7 @@ export function gurpasWidgets(w, snap) {
   w.push({ kind: 'sub', align: 'center', tint: '#9aa3b8', text: '她只收 A/S 级遗物' });
   // 买到即开的卡包：优先占屏（三选一）
   if (g.pendingPackCards?.length) {
-    w.push({ kind: 'sub', align: 'center', tint: '#cfe0f5', text: `全 ${g.pendingPack.packId === 'gurpasA' ? 'A' : 'B'} 级卡牌，择一张加入牌组` });
+    w.push({ kind: 'sub', align: 'center', tint: '#cfe0f5', text: `全 ${g.pendingPack.packId === 'gurpasA' ? 'A' : 'B'} 级卡牌，选择一张加入牌组` });
     w.push({
       kind: 'cards', idPrefix: 'gurpasPack', cols: 3, scale: 0.8,
       items: g.pendingPackCards.map(c => ({

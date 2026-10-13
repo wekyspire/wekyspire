@@ -88,7 +88,9 @@ function startAssetPreload() {
     document.fonts.load('16px "WenDaoChaoHei"', '魏启尖塔'),
     document.fonts.load('16px "SourceHanTC"', '魏启尖塔'),
   ]).catch(() => {});
-  // 音频与美术并行预载，两路统计合并进同一条进度（音频失败不拦门：静音开局可玩，美术才卡死）
+  // 音频与美术并行预载、两路统计合并进同一条进度（音频失败不拦门：静音开局可玩，美术才卡死）。
+  // 大下载**串行**（小水管服务器：artpack 下完才放行 audiopack——同一时刻只跑一条
+  // 大流量，请求数 4×音频 → 1，进度按字节累加单调可读）
   let artS = null, audS = null;
   const emitProgress = () => {
     const done = (artS?.done ?? 0) + (audS?.done ?? 0);
@@ -99,9 +101,12 @@ function startAssetPreload() {
       totalBytes: (artS?.totalBytes ?? 0) + (audS?.totalBytes ?? 0),
     });
   };
-  const audioPreload = preloadAudio({ onStats: (s) => { audS = s; emitProgress(); } });
+  let releasePackGate;
+  const packGate = new Promise((r) => { releasePackGate = r; });   // artpack 落定 → audiopack 起跑
+  const audioPreload = preloadAudio({ onStats: (s) => { audS = s; emitProgress(); }, gate: packGate });
   preloadAllArt({
     onStats: (s) => { artS = s; emitProgress(); },   // stats 的计数字段叫 done——映射回 loaded（字节进度条的分母语义）
+    onPackSettled: releasePackGate,
   }).then(async (r) => {
     if (r.failed > 0) { window.__bootShell?.failed(r.failed); return; }   // 卡住：只给重试
     await Promise.all([fontReady, audioPreload]);

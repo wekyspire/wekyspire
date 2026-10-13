@@ -108,8 +108,8 @@ export const DEMON_DEBUFFS = Object.freeze({
     battle: { battles: 1, startEffects: [['weaken', 7]] }, permanent: { attack: 1 },
   },
   despair: {
-    tier: 'black', name: '绝望', desc: '下一场战斗中，你于第 4 回合结束时死亡，下次遇到老虎机会送你一次免费 roll。',
-    battle: { battles: 1, deathAtTurnEnd: 4 }, immediate: (run) => { run.slotFreeRolls += 1; },
+    tier: 'black', name: '绝望', desc: '下一场战斗中，你于第 4 回合结束时死亡，下次遇到老虎机会送你4次免费 roll。',
+    battle: { battles: 1, deathAtTurnEnd: 4 }, immediate: (run) => { run.slotFreeRolls += 4; },
   },
   blindness: {
     tier: 'black', name: '失明', desc: '下一场战斗中，你无法看见敌人意图。',

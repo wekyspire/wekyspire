@@ -62,9 +62,9 @@ export function slotPrizeText(p) {
   if (p.upgradeCopyId) return `获得「升级后的复制品」：${defName(p.upgradeCopyId)}`;
   if (p.upgrade?.kind === 'random') return `随机升级 ${p.upgrade.count} 张卡牌`;
   if (p.upgrade?.kind === 'free') return '免费升级一张卡牌';
-  if (p.relicChoices?.length) return '择一件 A 级遗物';
+  if (p.relicChoices?.length) return '选择一件 A 级遗物';
   if (p.relicId) return `获得遗物：${relicName(p.relicId)}`;
-  if (p.choices?.length) return '择一张卡牌加入牌组';
+  if (p.choices?.length) return '选择一张卡牌加入牌组';
   return p.kind ?? '';
 }
 

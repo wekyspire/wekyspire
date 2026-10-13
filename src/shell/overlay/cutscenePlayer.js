@@ -94,9 +94,10 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
 
   // 最近一次"有画面"的 step（fade/image/dialogue）——**退出切幕**要带着它一起盖：
   // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（实报：事件结果页播完后
-  // 先露出背后的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent），
-  // 故不会把很久以前的旧内容泄进后来的转场；没有可保留内容（面板路径 / 战斗→塔楼）时为 null，
-  // 行为与原来完全一致。`play()` 开头会清掉，保证一部新剧本不会继承上一部的残留。
+  // 先露出背后的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent）。
+  // 保鲜期只到所属剧本落幕的那个任务结束（尾闸里 setTimeout(0) 失效化）：紧随的转场
+  // 在同一微任务链里取走它；玩家中途操作过别的界面后，旧内容不许再被当 hold 摆回屏上。
+  // `play()` 开头也会清掉，保证一部新剧本不会继承上一部的残留。
   let lastContent = null;
   const beginStep = (script, step) => {
     state.script = script; state.step = step; state.phase = null;
@@ -282,6 +283,14 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
               state.script = null;
               state.step = null;
               state.phase = null;
+            }
+            // lastContent 保鲜期只到本任务结束：紧随其后的转场在同一微任务链里就把它
+            // 取走；留到以后的皆是历史——玩家若先操作过别的界面（选卡/特写/面板），
+            // 离房切幕会把早已收掉的旧对话当 hold 摆回屏上（实报：粉碎/升级对话在
+            // 切幕开始瞬间重弹）。
+            if (activeScripts === 0 && lastContent) {
+              const stale = lastContent;
+              setTimeout(() => { if (lastContent === stale) lastContent = null; }, 0);
             }
           });
           resolve();

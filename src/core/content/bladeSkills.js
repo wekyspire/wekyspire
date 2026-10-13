@@ -71,6 +71,7 @@ class ChantDrawDiscardInstruction extends BattleInstruction {
         // 不再手搓 { count } 旧口径（前端只认旧字段的那套交互已删，见 cardKit 注释）。
         const request = buildCardSelectionRequest(ctx, {
           source: 'hand', min: this.count, max: this.count, reason: this.reason,
+          flavor: 'discard',
         });
         if (!request) {
           this.result = { discarded: [] };   // 空手（牌库也抽空）：无事发生
@@ -275,6 +276,7 @@ const cleaveCard = (id, name, tier, shield, picks, promotesTo = null, { series =
       sctx.self._pick = requestHandSelection(sctx, {
         count: Math.min(picks, hand.length),
         reason: `${name}：选${picks}张手牌丢弃`,
+        flavor: 'discard',
       });
       return false;
     }
@@ -291,7 +293,8 @@ cleaveCard('handCleaveB', '花刀', 'B', 11, 1, 'handCleaveA');   // id 沿用�
 cleaveCard('handCleaveA', '蔽目花刀', 'A', 14, 1);
 cleaveCard('perfectCleaveA', '完美花刀', 'A', 11, 2, null, { series: 'perfectCleave' });            // 分叉散卡：选 2 弃
 
-// 刀舞系列：丢弃所有手牌，每张 N 护盾（快照打出时点的手牌；弃牌联动的抽牌不进范围）。
+// 刀舞系列：丢弃所有自由手牌，每张 N 护盾（快照打出时点的手牌；弃牌联动的抽牌不进范围）。
+// 自由手牌 = 未激活咏唱（激活咏唱不是弃牌对象，以无胜有/canDumpCards 同口径）。
 const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'silverDance', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
@@ -301,15 +304,16 @@ const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   use(sctx) {
     // 快照手牌（自身已离手在 pending；弃牌联动的抽牌不进范围——打出时点口径）
     for (const card of [...sctx.battleState.zones.hand]) {
+      if (card.isActivated) continue;
       discardCard(sctx, card.uniqueID);
       gainShield(sctx, per);
     }
     return true;
   },
-  describe: () => `丢弃所有手牌，每张${per}护盾`,
+  describe: () => `丢弃所有自由手牌，每张${per}护盾`,
   battleDescribe: (sctx) => {
-    const n = sctx.battleState.zones.hand.length;
-    return `丢弃所有手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
+    const n = sctx.battleState.zones.hand.filter(c => !c.isActivated).length;
+    return `丢弃所有自由手牌${n > 0 ? `（当前${n}张）` : ''}，每张${per}护盾`;
   },
 });
 danceCard('silverDanceC', '刀舞', 'C', 5, 'silverDanceB');

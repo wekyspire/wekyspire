@@ -254,6 +254,7 @@ export const syncBeats = {
   //     显形），此门不碰——离场飞行需要途中可见。
   _cardZoneDoor(id, from, to) {
     if (this._disposed) return;
+    if (from === 'held') this._heldByDisplay.delete(id); // 离 held 摘展示位跟踪旗（回手/离场）
     if (to === 'hand') {
       if (from === 'deck') this._entering.add(id);
       return;
@@ -392,6 +393,8 @@ export const syncBeats = {
     this._setButtonState('swap', {
       label: '弃牌', sublabel: `⚡${cost}`, enabled: canDump, active: this._dumpMode,
     });
+    // 将弃红框随本函数覆盖的全部状态变更刷新（弃牌模式开关/自动退模、选卡层点选）
+    this._updateDoomMarks();
   },
   // 按钮数据/悬停签名去抖：内容不变不重烘（牌面烘焙有 canvas 成本）。
   // `data` 缺省 = 复用上一次的数据（悬停态变化时只改 active，不必让调用方重算整套数据）。
@@ -408,18 +411,31 @@ export const syncBeats = {
     btn.setCard({ ...base, active: !!base.active || hover });
     btn.setVisualState(base.enabled ? 'normal' : 'disabled');
   },
-  // 「将弃」预告（Three 层特效）：hover 结束回合按钮时，给 P9 会被
-  // 尾弃的手牌挂红色呼吸描边（CardFxLayer.setDoomed）。名单来自投影 overflowVictims
-  // （与核心清理同一算法），只在玩家自由行动窗展示——已点结束回合（锁）/结算期都不亮
+  // 「将弃」预告（Three 层特效，CardFxLayer.setDoomed 红色呼吸描边 + 盖纱）三个来源并集：
+  //   ① hover 结束回合按钮：P9 会被尾弃的手牌（名单 = 投影 overflowVictims，
+  //      与核心清理同一算法），只在玩家自由行动窗展示——已点结束回合（锁）/结算期都不亮；
+  //   ② 弃牌模式已选张（进模式即全选，主按钮确认前全程预告）；
+  //   ③ 弃牌语义的选卡覆盖层（request.flavor === 'discard'）已选未确认张。
   _updateDoomMarks() {
-    const victims = (!!this._btnHover.main
+    let doomed = (!!this._btnHover.main
       && this._snapshot?.turn?.side === 'player'
       && !this._snapshot?.pendingInput
       && !this._endTurnRequested
       && (this._snapshot?.overflowVictims?.length ?? 0) > 0)
       ? new Set(this._snapshot.overflowVictims) : null;
+    if (this._dumpMode && this._dumpSel.size) {
+      doomed ??= new Set();
+      for (const id of this._dumpSel) doomed.add(id);
+    }
+    // 手牌模式候选即 _views 里的手牌视图；instantiate 模式的临时候选不在 _views（弃牌
+    // 语义只发手牌来源，这里仅是口径守卫）
+    if (this._pick?.request?.flavor === 'discard' && this._pick.mode === 'hand'
+      && this._pick.selection.length) {
+      doomed ??= new Set();
+      for (const id of this._pick.selection) doomed.add(id);
+    }
     for (const [id, view] of this._views) {
-      const on = !!victims?.has(id);
+      const on = !!doomed?.has(id);
       if (!!view._doomOn !== on) { view._doomOn = on; view.setDoomMark(on); }
     }
   },
