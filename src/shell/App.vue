@@ -360,7 +360,6 @@ onBeforeUnmount(() => {
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
       @wheel="onWheel"
-      @contextmenu.prevent
     ></canvas>
     <!-- 加载门 = index.html 静态启动壳（assetsReady 时已揭幕退场）；
          菜单级：开始界面（含 changelog 弹层） -->

@@ -13,6 +13,11 @@ import titleMusicUrl from '../assets/sounds/story-mode-intro.mp3';
 import battleCh1Url from '../assets/sounds/battle-regular-ch1.mp3';
 import windTowerUrl from '../assets/sounds/wind-tower.wav';
 import windSoftUrl from '../assets/sounds/wind-tower-soft.wav';
+import roomIndoorUrl from '../assets/sounds/room-indoor.wav';
+import roomIndoorTorchUrl from '../assets/sounds/room-indoor-torch.wav';
+import roomCrtHumUrl from '../assets/sounds/room-crt-hum.wav';
+import roomCampfireUrl from '../assets/sounds/room-campfire.wav';
+import powerOnUrl from '../assets/sounds/power-on.wav';
 
 // 音轨登记表：volume/reverb 是默认电平（0..1，reverb 为湿声发送量），生成手感不对就改这里；
 // bus = 'music'（过音乐总线，吃 MUSIC_BUS_LEVEL 削幅）| 'sfx'（直连 master）
@@ -21,6 +26,12 @@ const TRACKS = {
   battleCh1: { url: battleCh1Url, volume: 0.45, reverb: 0.08, bus: 'music' },
   wind:      { url: windTowerUrl, volume: 0.55, reverb: 0.28, bus: 'music' },
   windSoft:  { url: windSoftUrl, volume: 0.45, reverb: 0.34, bus: 'music' },
+  // 休息室氛围床（playRoomAmbience 组合播；音量手感不对改这里）
+  roomIndoor:     { url: roomIndoorUrl, volume: 0.5, reverb: 0.25, bus: 'music' },        // 塔楼室内底噪（无火把）
+  roomIndoorTorch:{ url: roomIndoorTorchUrl, volume: 0.5, reverb: 0.25, bus: 'music' },   // 塔楼室内底噪（带火把）
+  roomCrtHum:     { url: roomCrtHumUrl, volume: 0.22, reverb: 0.04, bus: 'music' },       // 显像管电器白噪（干一点，电气感不吃湿声）
+  roomCampfire:   { url: roomCampfireUrl, volume: 0.45, reverb: 0.15, bus: 'music' },     // 篝火噼啪
+  powerOn:        { url: powerOnUrl, volume: 0.6, reverb: 0.12, bus: 'music' },           // 通电（一次性，老虎机房进房触发）
 };
 
 let ctx = null;
@@ -276,9 +287,68 @@ export function stopWind({ fadeOut = 2 } = {}) {
   setTimeout(() => teardownWind(w, true), fadeOut * 1000 + 60);
 }
 
+// ---------- 休息室氛围床 ----------
+// 进房按房型组合播（环境层 + 特色层），离房整体收；篝火休息后单独收火层。
+// 与风声床同位：素材自带有机起伏，不需要 LFO 雕琢——简单 loop 足够。
+let ambience = null;   // Map<key, 句柄> 单实例（同刻只有一个房间在响）
+export async function playAmbience(keys, { fadeIn = 1.2 } = {}) {
+  ensureCtx();
+  stopAmbience({ fadeOut: Math.min(fadeIn, 0.8) });
+  const map = new Map();
+  ambience = map;
+  const handles = await Promise.all(keys.map(k => play(k, { loop: true, fadeIn })));
+  for (const [i, k] of keys.entries()) map.set(k, handles[i]);
+  if (ambience !== map) {   // await 期间被收/被换床（快速离房再进）：孤儿句柄即刻自收
+    for (const h of handles) stop(h, { fadeOut: 0.3 });
+  }
+}
+
+/** 收掉整张氛围床（离房/换房）。 */
+export function stopAmbience({ fadeOut = 1.2 } = {}) {
+  if (!ambience) return;
+  for (const h of ambience.values()) stop(h, { fadeOut });
+  ambience = null;
+}
+
+/** 单收一层（篝火休息后火灭音随）：长淡出，其余层原样续播。 */
+export function stopAmbienceLayer(key, { fadeOut = 2.5 } = {}) {
+  const h = ambience?.get(key);
+  if (!h) return;
+  ambience.delete(key);
+  stop(h, { fadeOut });
+}
+
+/** 单层增减益（level 相对该层轨表电平；>1 抬升）：篝火推近特写时火声放大、拉远回落。 */
+export function duckAmbienceLayer(key, level = 1, ramp = 0.8) {
+  const h = ambience?.get(key);
+  if (!h || !ctx) return;
+  trackVolume(h, h.volume * level, ramp);
+}
+
+/**
+ * 房型 → 氛围组合（挂点 = runController 进房换台那拍，与 duckWind(0) 同节拍）：
+ *   商店房（瑞米售货机）：室内底噪 + 显像管白噪
+ *   老虎机房（含银行机）：进房通一次电（只此一次）+ 室内底噪
+ *   营地训练房（篝火+训练桩）：带火把底噪 + 篝火（休息后火层收掉，见 campChoose）
+ * 其余房静默（风声已压暗）。未知房型返回 null 不响。
+ */
+export function playRoomAmbience(roomType) {
+  if (roomType === 'shop') return playAmbience(['roomIndoor', 'roomCrtHum']);
+  if (roomType === 'slot') {
+    void play('powerOn');   // 进房通电一次性（走 TRACKS 默认电平）
+    return playAmbience(['roomIndoor']);
+  }
+  if (roomType === 'campTraining') return playAmbience(['roomIndoorTorch', 'roomCampfire']);
+  return null;
+}
+
 /** 探针/调试用只读快照。 */
 export function _debug() {
-  return { state: ctx?.state ?? 'uninit', music: music?.key ?? null, wind: !!wind, live: live.size, loaded: [...buffers.keys()] };
+  return {
+    state: ctx?.state ?? 'uninit', music: music?.key ?? null, wind: !!wind,
+    ambience: ambience ? [...ambience.keys()] : null,
+    live: live.size, loaded: [...buffers.keys()],
+  };
 }
 
 /**

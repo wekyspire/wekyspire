@@ -90,16 +90,7 @@ const UPGRADE_SOURCES = {
     tips: false,   // 删卡界面不弹卡牌 tooltip——浏览的是自己的牌组，逐卡弹预览只是噪音
   },
   bossRemove: {
-    cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会
-    burn: true,   // 同 gurpasRemove：确认时原地燃尽
-    intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
-    title: '删除一张卡牌', confirmLabel: '确认删除',
-    tips: false,   // 同 gurpasRemove：删卡不弹卡牌 tooltip
-  },
-  ascensionRemove: {
-    // 跳过进阶的删卡反哺：与 Boss 奖励同一计数器/同一结算，
-    // 仅文案不同——title 用户钦定「删一张卡」；「取消」只收起界面（不删也行）。
-    cards: (s) => s?.cardRemoval?.removeCards,
+    cards: (s) => s?.cardRemoval?.removeCards,   // Boss 奖励删卡机会（即时弹：领完奖励/跳过进阶那一拍）
     burn: true,   // 同 gurpasRemove：确认时原地燃尽
     intent: (uniqueID) => ({ action: 'bossRemoveCard', uniqueID }),
     title: '删除一张卡牌', confirmLabel: '确认删除',

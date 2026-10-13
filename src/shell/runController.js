@@ -26,7 +26,7 @@ import { campOptions, campRest, campRecoverRemi, campLocked as campGateLocked } 
 import { SLOT, devourReady } from '../core/run/rooms/slotMachine.js';
 import { eventView, resolveEvent } from '../core/run/rooms/event.js';
 import { createRunContext } from '../core/run/runContext.js';
-import { playMusic, stopMusic, duckWind } from './audio.js';
+import { playMusic, stopMusic, duckWind, playRoomAmbience, stopAmbience, stopAmbienceLayer, duckAmbienceLayer } from './audio.js';
 import { createRunPresenter } from './runPresenter.js';
 import { ascensionReady, LEINO_DIMENSIONS } from '../core/run/ascension.js';
 import { equipRelic, unequipRelic, prepUseRelic, refreshRunModifiers } from '../core/run/prep.js';
@@ -371,6 +371,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify: () => notify(),
     setRoomScenePending: (v) => { roomScenePending = v; },
     panelStage: () => panelStage(),   // 跳过进阶收尾的删卡界面挂点（晚绑定，同 showcase）
+    playBossRemoveNow: () => machines.playBossRemoveNow(),   // 跳过进阶的删卡反哺（即时弹，放弃即作废）
     lifecycle: {
       completeRoom: () => completeRoom(run),
       completeRoomAndNotify: () => { completeRoom(run); notify(); },
@@ -536,6 +537,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     const doSwap = () => {
       stopMusic();  // 战斗 BGM 到此为止（败北线已在 endBattle 收过，幂等）
       duckWind(1);  // 风声床回全量（战斗压暗态的恢复）
+      stopAmbience();   // 氛围床兜底（终局线不该还有房间氛围）
       pendingClearFx = null; // 楼层 clear 是回塔楼的演出，结算屏路径不播
       battleStage?.dispose(); battleStage = null;
       roomStage?.dispose(); roomStage = null;
@@ -570,8 +572,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       // 将要用幕间/房间场景呈现的房间：先置"待呈现"，notify 与切幕之间塔楼层不再铺房间面板
       if (run.currentRoom === 'event' || restRecipeFor(run.currentRoom)) roomScenePending = true;
     }
-    // 奖励环节结束 → 切幕回塔楼 → clear 动画 → 战后剧本 → 进房（节拍见 afterRewardToFloor）
-    void afterRewardToFloor();
+    // 奖励环节结束 → （Boss 删卡机会就地弹选卡）→ 切幕回塔楼 → clear 动画 → 战后剧本 → 进房
+    void (async () => {
+      if (run.pendingCardRemoval > 0) await machines.playBossRemoveNow();
+      await afterRewardToFloor();
+    })();
   }
 
   // ---- 场景式休息房（第一间 = 赌厅 casino）----
@@ -601,8 +606,13 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       }));
       roomStage.setPanelIntentHandler(dispatchPanelIntent);
       roomStage.setRunSequencer(runSequencer);   // 得卡演出的指令化挂点（与离房切幕串行）
+      // 篝火推近特写 = 火声放大（拉远回落）：焦点上行只报名字与机器条目，表现侧自己认
+      roomStage.setMachineFocusListener((name, entry) => {
+        if (entry?.kind === 'camp') duckAmbienceLayer('roomCampfire', name ? 1.9 : 1);
+      });
       stageManager.setStage(roomStage);
-      duckWind(0);   // 休息房不算塔楼层：进房压暗（未来房间专属 BGM 也挂这个节拍）
+      duckWind(0);   // 休息房不算塔楼层：进房压暗（不切源，回塔续播）
+      playRoomAmbience(run.currentRoom);   // 房间专属氛围组合（audio.js 组合表：商店/老虎机/营地）
       syncMapStatus();   // 状态栏/资源行进房先落位（不等 notify）
       roomScenePending = false;   // 场景已就位：抑制交给 roomStage 这个条件接管
     };
@@ -659,6 +669,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   /** 把房间舞台换回塔楼（不排幕）：奖励/进阶等"多段演出"共用同一段换台代码。 */
   function swapRoomToMap() {
     duckWind(1); // 回塔楼画面即恢复风声（无配方房离开时 roomStage 本就为空，此调用同样覆盖）
+    stopAmbience(); // 房间氛围床随房收掉
     if (stageManager && mapStage) mapStage.setFloor(run.floor, run.totalFloors);
     // 先释放房间舞台、后换台（同 swapBattleToMap）：dispose→onExit 的基准机位还原
     // 不得晚于塔楼 onEnter 的新机位——此前顺序反了，只靠随后的爬升 tween 逐帧覆写
@@ -683,6 +694,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    */
   function swapAnyToMap() {
     duckWind(1); // 回塔楼画面即恢复风声（调试硬重置可能发生在战斗压暗态）
+    stopAmbience(); // 调试硬重置可能发生在房间氛围态
     battleStage?.dispose(); battleStage = null;
     roomStage?.dispose(); roomStage = null;
     endStage?.dispose(); endStage = null;
@@ -825,7 +837,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   }
   function campChoose(option) {
     if (run.gameStage !== 'room' || campLocked()) return;
-    if (option === 'rest') campRest(run);
+    if (option === 'rest') {
+      campRest(run);
+      stopAmbienceLayer('roomCampfire', { fadeOut: 3 });   // 休息过火：篝火层慢淡熄（火把底噪原样续到离房）
+    }
     else if (option === 'recoverRemi') campRecoverRemi(run);
     maybeLeaveRoom();
   }

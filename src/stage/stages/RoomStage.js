@@ -88,6 +88,7 @@ export class RoomStage {
     this._stageSnap = null;
     this._stagePanelUi = null;   // 阶段面板本地交互态（种子包勾选缓冲）
     this._focused = null;        // 聚焦的机器名
+    this._onMachineFocus = null; // 机器聚焦监听（Shell 后置注入：篝火推近增音等表现侧反馈）
     this._hoverName = null;      // 当前 hover 的交互物名（聚焦时恒 null，见 handlePointerMove）
     this._downHit = null;
     this._pickIds = [];
@@ -347,6 +348,8 @@ export class RoomStage {
 
   /** 当前聚焦的机器名（调试/测试）。 */
   get focusedMachine() { return this._focused; }
+  /** 机器聚焦监听注入（name, entry）：推近/拉远的表观侧反馈（篝火增音）。 */
+  setMachineFocusListener(fn) { this._onMachineFocus = fn ?? null; }
   /** 当前打开的面板种类（'slot' | 'bank' | 'shop' | null）。 */
   get openPanel() { return this._panelKind; }
   get rigs() { return this._rigs; }
@@ -653,6 +656,9 @@ export class RoomStage {
     if (this._focused === name) return;
     this._focused = name;
     for (const [n, rig] of this._rigs) rig.setFocus?.(n === name);
+    // 表现侧聚焦反馈上行（Shell 注入；name=null = 拉远）：篝火推近时火声放大等
+    const focusEntry = this._markers.find(m => m.name === name)?.entry ?? null;
+    this._onMachineFocus?.(name, focusEntry);
     // 聚焦时隐藏全部机器浮标（2026-10-02，夜测 1002 [路4] 根治）：箭头是「这台能点」
     // 的全景指引，聚焦特写里职责已完成；且特写机位把它顶到画面上沿，发光体经
     // bloom 链与顶栏文本发生层序穿插（金币数字被盖、遗物徽章又压其上）。聚焦时

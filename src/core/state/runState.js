@@ -33,7 +33,7 @@ export function createRunState({ player = null, seed = 1, profile = null } = {})
     roomData: null,              // 当前奖励房临时数据（如训练抓牌候选；离房时清空）
     roomTable: null,             // 塔楼房间表 [floor→房型]：createRun 按种子一次定死（runFlow.buildRoomTable）
     eventFlags: {},              // 剧情旗标（事件内容用 setFlag 写；故事模式的分支记忆，随存档留存）
-    pendingCardRemoval: 0,       // 待使用的删卡机会（Boss 奖励，§2.1）
+    pendingCardRemoval: 0,       // 删卡机会（Boss 奖励 §2.1；即时消费的瞬时段位——获得那一拍就地弹选卡，不随档留存）
     relicUses: {},               // 主动遗物剩余次数 { relicId: uses }（§4.5）
     shop: null,                  // 售货机当层货架 { floor, discount, items[] }（SHOP.md §一；非商店层为 null）
     // 老虎机（SLOT_MACHINE.md）：当层瞬态 + 跨遇到累积。产出挂 pending 等领取/放弃。
