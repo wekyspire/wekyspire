@@ -45,7 +45,10 @@ export function createRunMachines(ctx) {
     ctx.notify();
   }
 
-  // Boss 奖励的删卡机会（§2.1）：与古尔帕斯删卡服务同一套能力
+  // Boss 奖励的删卡机会（§2.1）：与古尔帕斯删卡服务同一套能力。
+  // 即时化（2026-10-13 用户定）：机会不再留存——获得那一拍（领完奖励/跳过进阶后）
+  // 就地弹全屏删卡，放弃 = 作废；确认 = 焚卡演出落账（bossRemoveCard）后回执。
+  let bossRemoveSettle = null;   // playBossRemoveNow 的单次回执位（确认路径消费）
   function bossRemoveCard(uniqueID) {
     if (run.pendingCardRemoval <= 0) return;
     try {
@@ -55,6 +58,43 @@ export function createRunMachines(ctx) {
       console.warn('[removeCard]', err.message);
     }
     ctx.notify();
+    const settle = bossRemoveSettle;
+    bossRemoveSettle = null;
+    settle?.();
+  }
+
+  /** 就地弹删卡选择并等它落定（确认焚尽或放弃作废）。返回 Promise。 */
+  function playBossRemoveNow() {
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        bossRemoveSettle = null;
+        resolve();
+      };
+      bossRemoveSettle = settle;
+      const open = () => {
+        // 快照口径：两条真实路径（Boss 胜利/进阶跳过）的机会都落在对应 notify **之前**
+        // （finishBattle 先加账、进阶在幕间中点 notify），舞台 _snap 的 cardRemoval 段必在场。
+        const opened = ctx.panelStage()?.openUpgradePicker?.('bossRemove', {
+          // 放弃（返回/关闭）= 机会作废，不留存
+          onSkip: () => { run.pendingCardRemoval = 0; ctx.notify(); settle(); },
+        });
+        if (!opened) {   // 无候选可删（空牌组等极端）：机会无从使用，直接作废
+          run.pendingCardRemoval = 0;
+          settle();
+        }
+      };
+      // 入手特写在播时让位（特写 busy 会吞掉选卡器的全部点击 = 玩家死锁）：
+      // 等特写落定（玩家点收下）再弹。正常流程领奖前特写必已收——这是防御位。
+      const stage = ctx.panelStage?.();
+      if (stage?.showcasing) {
+        const poll = setInterval(() => {
+          if (!ctx.panelStage?.()?.showcasing) { clearInterval(poll); open(); }
+        }, 200);
+      } else open();
+    });
   }
 
   // ---- 古尔帕斯之店（35 层固定房；SHOP.md §二）----
@@ -225,7 +265,7 @@ export function createRunMachines(ctx) {
   }
 
   return {
-    bankDo, bossRemoveCard, gurpasDo,
+    bankDo, bossRemoveCard, playBossRemoveNow, gurpasDo,
     spin, slotTake, slotDecline, slotPickUpgrade, slotDevour, reportSlotAnimDone,
     openDevourFlow, shopTakeCard, shopTakeRelic,
     slotView: () => slotView(run),

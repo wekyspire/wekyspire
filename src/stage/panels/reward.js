@@ -7,21 +7,10 @@ import { withLabels } from './shared.js';
  * 卡包未选时给瓦片；已开包（含单包自动开）给卡面三选一。
  */
 export function buildRewardPanel(snap) {
-  const removal = snap.cardRemoval;
   const w = [];
   w.push({ kind: 'title', text: snap.title ?? '战后奖励', align: 'center' });
   w.push({ kind: 'text', text: `金币 +${snap.money}`, tint: '#ffd75e', align: 'center' });
   w.push({ kind: 'gap' });
-
-  // Boss 通关奖励：删卡机会（§2.1）——与古尔帕斯的删卡服务同一套选卡界面
-  if (removal) {
-    w.push({
-      kind: 'button', id: 'reward:removeCard', width: 360, size: 'sub',
-      label: `使用删卡机会（剩 ${removal.count} 次）`,
-      action: { action: 'openUpgradePicker', source: 'bossRemove', local: true },
-    });
-    w.push({ kind: 'gap' });
-  }
 
   if (!snap.packId) {
     w.push({ kind: 'sub', text: '按灵脉等级出卡', tint: '#9aa3b8', align: 'center' });

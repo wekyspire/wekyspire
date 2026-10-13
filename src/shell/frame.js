@@ -4,6 +4,13 @@
 // 数学（App.vue 的 onPointer、tooltipHub.framePoint/place）都依赖这个框存在。
 export const FRAME_ASPECT = 16 / 9;
 
+// 右键菜单整体关闭（两入口共用防线）：玩家操作全是左键点击/拖拽，浏览器右键菜单
+// 只会在误操作时弹出打断游戏（CSS 关不了菜单，必须 DOM 级拦截；框选的关闭在
+// main.css 的全局 user-select）。
+if (typeof document !== 'undefined') {
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
 /** 在窗口内取最大可容纳的 16:9 矩形居中摆放（边缘铺黑），并同步舞台渲染尺寸。
  *  reserveRight/reserveLeft：为常驻侧栏预留像素（观战页右侧 300px 侧栏）——
  *  预留后取景框自己变窄居中，战斗画面不会被侧栏压住（相机按新 aspect 自适应）。 */

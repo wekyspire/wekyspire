@@ -41,7 +41,7 @@ export function restoreRunFromSave(run, save) {
     attack: p.attack, defense: p.defense, maxHandSize: p.maxHandSize,
   };
   Object.assign(run.remi, save.remi);
-  run.pendingCardRemoval = save.pendingCardRemoval;
+  run.pendingCardRemoval = 0;   // 删卡机会不随档留存（读档复活一个没有入口的机会只会变成幽灵计数）
   run.eventFlags = { ...(save.eventFlags ?? {}) }; // 旧档无此字段 → 空旗标
   run.relicUses = { ...save.relicUses };
   run.shop = save.shop ? { ...save.shop, items: save.shop.items.map(it => ({ ...it })) } : null;

@@ -213,10 +213,9 @@ export function createRunCutsceneFlows(ctx) {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
       // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
       await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼
-      // 跳过进阶的删卡反哺：揭幕后就地开全屏删卡界面（title「删一张卡」）。
-      // 可跳过——「返回」只收起界面，机会经 prep 面板的「使用删卡机会」按钮长期保留。
+      // 跳过进阶的删卡反哺：揭幕后就地弹全屏删卡（即时化——放弃即作废，机会不留存）。
       // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
-      if (picked === 'skip') ctx.panelStage?.()?.openUpgradePicker?.('ascensionRemove');
+      if (picked === 'skip') void ctx.playBossRemoveNow?.();
       return true;
     } finally {
       ascensionPlaying = false;

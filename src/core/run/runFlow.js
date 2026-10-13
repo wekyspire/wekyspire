@@ -151,7 +151,7 @@ export function finishBattle(run, verdict, battle = null) {
     // 放在 spawnRewards 之前——遗物收益与战后奖励分开记账。
     for (const id of activeRelics(run)) getRelicDefinition(id)?.onBattleVictory?.(run, battle);
     if (isBossFloor(run.floor)) {
-      run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）
+      run.pendingCardRemoval += 1; // Boss 奖励：删卡机会（§2.1）——Shell 领完奖励就地弹选卡（放弃即作废，不留存）
       run.player.hp = run.player.maxHp; // 章间休整：HP 回满
       // Boss 掉落遗物：抽取走 draft.js 统一 SDK（权重/门禁/驱重/池空兜底集中一处，
       // Boss 掉落只是又一个调用方）；特写由 Shell 的拥有集差分自动兜，这里不声明演出。

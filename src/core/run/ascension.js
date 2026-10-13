@@ -117,9 +117,8 @@ export function chooseAscension(run, dimension = null) {
   if (dimension === null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）
     gainMaxHp(run, 3); // 跳过补偿：+3 生命上限（走 gainMaxHp 抬 baseStats，PreBattle 重算不抹）
-    // 跳过反哺：再赠一次**可选**删卡机会——与 Boss 奖励同一计数器，
-    // 不删也行：机会在 prep/奖励面板的「使用删卡机会」按钮长期保留，进阶幕间收尾时也会
-    // 就地弹一次全屏删卡界面（title「删一张卡」，可跳过）。
+    // 跳过反哺：再赠一次**可选**删卡机会——与 Boss 奖励同一计数器；幕间收尾时
+    // 就地弹全屏删卡，放弃即作废（机会不留存，2026-10-13 用户定）。
     run.pendingCardRemoval = (run.pendingCardRemoval ?? 0) + 1;
     return proceedAfterLevelUp(run);
   }

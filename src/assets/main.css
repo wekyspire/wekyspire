@@ -4,6 +4,15 @@ body {
   padding: 0;
   font-family: 'SourceHanTC', 'Microsoft YaHei', Arial, sans-serif;
 }
+/* 玩家操作全是点击/拖拽：文本框选只会带来误操作（连同拖出图片幽灵）一并关闭
+   （2026-10-13 用户定；右键菜单的关闭见 shell/frame.js 的 document 级监听） */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+}
+img, canvas {
+  -webkit-user-drag: none;
+}
 :root {
   /* 展示字族（标题/大数字）：与 stage/richtext/uiFont.js 的 UI_FONT 同源 */
   --font-display: 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif;
