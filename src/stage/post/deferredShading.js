@@ -38,6 +38,12 @@ const LIST_CAP = MAX_TILES * TILE_CAP;    // 灯索引表容量（最坏情况�
 // 灯半径钳制（?dlr=N，调试/演示用）：culling 收益取决于灯的有效半径——火把 cutoff=145
 // 盖满全屏时圆测试不剔；钳到真实照亮半径可即时看到逐像素灯数下降。0 = 不钳
 const DLR = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('dlr')) || 0 : 0;
+// 功率推导的紧致剔除半径：irr(R) = I/R^decay = ε 处截尾（ε = 不可见辐照度阈值，
+// 终值半步量化 0.5/255 ÷ 暗墙 albedo/π ≈ 0.1~0.16 的口径，?deps= 可调）。超出部分的
+// 贡献按构造低于可见半步——同时充当剔除半径与视觉窗都安全（窗在 R 处归零）。
+// I=0 的空闲灯 R=0 整灯剔除；小灯自动收紧（I=5/decay1.8 → R≈27）。
+const CULL_EPS = typeof location !== 'undefined'
+  ? Number(new URLSearchParams(location.search).get('deps')) || 0.03 : 0.03;
 const RECIP_PI = 0.3183098861837907;      // 1/π（BRDF_Lambert，与 forward 生成码同值）
 
 // G-buffer 槽位（'output' 槽 = 材质自己的输出 → 附件 0，albedo twin 的 colorNode；
@@ -406,7 +412,12 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
         const i4 = count * 16;
         lightData[i4] = _v.x; lightData[i4 + 1] = _v.y; lightData[i4 + 2] = _v.z;
         const rawCut = o.distance > 0 ? o.distance : 1e6;
-        lightData[i4 + 3] = DLR > 0 ? Math.min(rawCut, DLR) : rawCut;
+        // 紧致半径：R = (I/ε)^(1/decay)，I 取 color×intensity 的最大通道；
+        // 与手写窗取 min（物理尾短于窗 = 白赚，长于窗 = 窗说了算），dlr 手动钳最后套
+        const lum = Math.max(o.color.r, o.color.g, o.color.b) * o.intensity;
+        const decay = Math.max(o.decay, 0.5);
+        const rTight = lum > 0 ? Math.pow(lum / CULL_EPS, 1 / decay) : 0;
+        lightData[i4 + 3] = Math.min(rawCut, rTight, DLR > 0 ? DLR : 1e6);
         lightData[i4 + 4] = o.color.r * o.intensity;
         lightData[i4 + 5] = o.color.g * o.intensity;
         lightData[i4 + 6] = o.color.b * o.intensity;
