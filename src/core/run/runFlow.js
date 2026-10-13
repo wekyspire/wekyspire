@@ -14,6 +14,7 @@ import { activeRelics, grantRelic } from './prep.js';
 import { getRelicDefinition } from '../relics/registry.js';
 import { draftRelic } from '../relics/draft.js';
 import { applyRoute } from './routes.js';
+import { recordKills } from './runStats.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -144,6 +145,8 @@ export function finishBattle(run, verdict, battle = null) {
   const remi = battle?.battleState.allies.find(a => a.defId === 'remi');
   if (remi?.isDead()) run.remi.drivenOff = true;
   if (verdict === 'victory') {
+    // 战绩统计：胜利 = 出场敌人全歼，按编成一次性记账（结算屏「讨伐」数据源）
+    recordKills(run, battle?.battleState?.enemies);
     // 遗物的战斗胜利钩子：**run 级资源只在 run 层改**（战斗内订阅不得直写 run 状态）。
     // 放在 spawnRewards 之前——遗物收益与战后奖励分开记账。
     for (const id of activeRelics(run)) getRelicDefinition(id)?.onBattleVictory?.(run, battle);

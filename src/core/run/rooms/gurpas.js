@@ -3,6 +3,7 @@ import { grantRelic, activeRelics } from '../prep.js';
 import { allSkills } from '../../skills/registry.js';
 import { getSkillDefinition } from '../../skills/registry.js';
 import { createSkillRuntime } from '../../state/skillRuntime.js';
+import { recordGold } from '../runStats.js';
 
 // 古尔帕斯之店（SHOP.md §二）：本该是一场战斗的 35 层，被古佩·诗菲改造成了店铺。
 // 昂贵、稀有、几乎全是旧魏启大陆的东西——**S/A 遗物的唯一稳定渠道**，并提供删卡服务。
@@ -191,6 +192,7 @@ export function sellGurpasRelic(run, relicId) {
   run.player.relics = run.player.relics.filter(id => id !== relicId);
   run.player.equippedRelics = (run.player.equippedRelics ?? []).filter(id => id !== relicId);
   run.player.money += price;
+  recordGold(run, price);
   ensureGurpasStock(run).soldToHer.push(relicId);
   return { price, name: def.name };
 }

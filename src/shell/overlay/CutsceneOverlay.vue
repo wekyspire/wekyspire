@@ -98,7 +98,7 @@ const cgDur = computed(() => {
   width: 100%; padding: 11px 16px; text-align: left; cursor: pointer;
   background: rgba(22, 22, 22, .92); color: #e8e8e8;
   border: 2px solid #606060; border-radius: 0;
-  font: 600 15px/1.4 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif; transition: background .12s ease, border-color .12s ease;
+  font: 600 15px 'WenDaoChaoHei', 'Microsoft YaHei', sans-serif; transition: background .12s ease, border-color .12s ease;
 }
 .choices button:hover:not(:disabled) { background: rgba(48, 48, 48, .95); border-color: #9a9a9a; }
 .choices button:disabled { opacity: .42; cursor: default; }

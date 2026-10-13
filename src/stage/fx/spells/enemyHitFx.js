@@ -19,6 +19,12 @@ export const ENEMY_HIT_SPELLS = Object.freeze({
 const ENEMY_HIT_BEATS = new Map();
 export function registerEnemyHitBeat(defId, fn) { ENEMY_HIT_BEATS.set(defId, fn); }
 
+// 远程型敌人名单：命中拍的「蓄势后拉 → 发力突进」对它们是错语言（施法者/射击机器/
+// 扎根植物不扑人——身体语言由 act 起手的投射物承担）。注册口同在 fx/scripts/bosses/。
+const ENEMY_NO_LUNGE = new Set();
+export function registerEnemyNoLunge(defId) { ENEMY_NO_LUNGE.add(defId); }
+export function enemyLungeSuppressed(defId) { return ENEMY_NO_LUNGE.has(defId); }
+
 // 重击内容数据标签（DealDamageInstruction tags）：敌方 def 的 act 里提交伤害时
 // 带上即入重击档——意图 note 里的「重击」文案不进演出判定（文案解析脆）。
 export const HEAVY_TAG = 'heavy';

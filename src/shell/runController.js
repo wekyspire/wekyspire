@@ -19,6 +19,7 @@ import { BattleStage } from '../stage/stages/BattleStage.js';
 import { sceneIdForFloor } from '../stage/scenes/rooms/index.js';
 import { restRecipeFor, mergeRecipeOverride } from '../stage/scenes/rooms/presets.js';
 import { RoomStage } from '../stage/stages/RoomStage.js';
+import { EndStage } from '../stage/stages/EndStage.js';
 import { preloadBattleArt } from '../stage/art/preload.js';
 import { upgradableCards, beginTraining, trainUpgradeStart, trainUpgrade, trainDrawChoices, trainDraw, trainUpgradeModes } from '../core/run/rooms/training.js';
 import { campOptions, campRest, campRecoverRemi, campLocked as campGateLocked } from '../core/run/rooms/camp.js';
@@ -95,7 +96,7 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
   });
 }
 
-export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false, route = 'body' } = {}) {
+export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false, route = 'body', onRestart = null } = {}) {
   const runBus = mitt();
   // run 级共享演出队列（S2）：battle / room / tower / cutscene 指令在同一队列定序，
   // 跨层演出链（终局动画 → 幕间黑幕 → 塔楼抵达）由此成为可表达的结构
@@ -137,6 +138,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   const runCtx = createRunContext(run, { presenter: runPresenter });
   let battleStage = null;
   let roomStage = null;   // 场景式休息房舞台（仅 gameStage==='room' 且有配方时存在）
+  let endStage = null;    // 终局结算舞台（仅 gameStage==='end' 时存在）
+  let endEntering = false; // 切幕进行中重入闸
   const log = reactive([]);  // 战斗日志（Shell 展示用）
 
   // three.js 状态栏（两舞台共享 PlayerStatusObject）：战斗外 AP 恒满，魏启 = run 持久值；
@@ -231,6 +234,9 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     else battleStage?.setPanel?.(null);
     mapStage?.setPanel?.(roomPresentedOnScene() ? null : snap);
     roomStage?.setPanel?.(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
+    // 终局兜底：任何路径落进 'end'（败北/登顶/读档恢复）都切进结算舞台——
+    // 正常路径（endBattle/claimReward）已先行调用，这里是幂等重入的保险丝
+    if (run.gameStage === 'end') void enterEndScreen();
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
     // （奖励选卡在 reward 阶段完成）——无 cutscene 的普通层也有整个战前准备
     // 阶段可用作加载窗口（幂等：共享缓存按 url 去重）
@@ -502,6 +508,51 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     enterRoomPresentation();
   }
 
+  // ---- 终局结算屏（'end'）----
+  // 结算屏数据装配：core run → 纯视图对象（EndStage 不反查 core 注册表）。
+  function endViewOf() {
+    const kills = Object.entries(run.stats?.kills ?? {})
+      .map(([defId, count]) => ({ name: getEnemyDefinition(defId)?.name ?? defId, count }));
+    kills.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+    const victory = run.result === 'victory';
+    return {
+      result: run.result,
+      title: victory ? (import.meta.env.PROD ? '第一章·完' : '登顶成功') : '倒在了塔中',
+      subtitle: victory ? `通关全塔 ${run.totalFloors} 层` : `止步于第 ${run.floor} 层（共 ${run.totalFloors} 层）`,
+      kills,
+      deckCount: run.player.deck.length,
+      goldEarned: run.stats?.goldEarned ?? 0,
+      relics: (run.player.relics ?? []).map(id => ({ id, name: getRelicDefinition(id)?.name ?? id })),
+    };
+  }
+
+  /**
+   * 切幕进入终局结算屏（幂等；headless 无舞台时跳过——'end' 语义不受影响）。
+   * 黑幕中点：拆战斗/房间舞台 → 建 EndStage 换台；揭幕后 startTally 逐条结算。
+   */
+  async function enterEndScreen() {
+    if (endStage || endEntering || !stageManager) return;
+    endEntering = true;
+    const doSwap = () => {
+      stopMusic();  // 战斗 BGM 到此为止（败北线已在 endBattle 收过，幂等）
+      duckWind(1);  // 风声床回全量（战斗压暗态的恢复）
+      pendingClearFx = null; // 楼层 clear 是回塔楼的演出，结算屏路径不播
+      battleStage?.dispose(); battleStage = null;
+      roomStage?.dispose(); roomStage = null;
+      endStage = markRaw(new EndStage({
+        stageManager, bus: animBus, view: endViewOf(),
+        onAction: (action) => { if (action === 'restart') onRestart?.(); },
+      }));
+      endStage.attachInput({ stageManager, bus: animBus });
+      stageManager.setStage(endStage);
+      notify();
+    };
+    try {
+      await cutscene.sceneTransition(doSwap, { holdMs: 250 });
+      endStage?.startTally();
+    } finally { endEntering = false; }
+  }
+
   // ---- reward ----
   // 卡包制：先开包（chooseRewardPack）再领卡；只有体修包时 spawnRewards 已自动开包
   function chooseRewardPack(packId) {
@@ -513,6 +564,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.gameStage !== 'reward') return; // 防迟到重复点击
     chooseSkillReward(run, defId);
     completeRewards(run);
+    if (run.gameStage === 'end') { notify(); return; } // 登顶终局：notify 的兜底分支切结算屏（不回塔楼）
     if (run.gameStage === 'room') {
       slot.lastSpin = null; slot.anim = null; // 进新房清上一房瞬态
       // 将要用幕间/房间场景呈现的房间：先置"待呈现"，notify 与切幕之间塔楼层不再铺房间面板
@@ -633,6 +685,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     duckWind(1); // 回塔楼画面即恢复风声（调试硬重置可能发生在战斗压暗态）
     battleStage?.dispose(); battleStage = null;
     roomStage?.dispose(); roomStage = null;
+    endStage?.dispose(); endStage = null;
     battlePending = false;
     restEntering = false;
     roomScenePending = false;
@@ -856,6 +909,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage = null;
     roomStage?.dispose();
     roomStage = null;
+    endStage?.dispose();
+    endStage = null;
     showcase.dispose();     // 获得演出的兜底定时器/挂起队列：离局必须停（不然定时器会开着火离局）
     runPresenter.clear();   // 挂起的表现意图属于这一局：离局即弃
     runSequencer.cancelAll();
@@ -884,6 +939,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     getBattleBridge: () => battleBridge,
     getBattleStage: () => battleStage,
     getRoomStage: () => roomStage,   // 场景式休息房舞台（App 的指针路由据此转发）
+    getEndStage: () => endStage,     // 终局结算舞台（App 的指针路由据此转发）
+    enterEndScreen,                  // 显式进入结算屏（读档恢复到 'end' 时用；正常路径由 notify 兜底触发）
     enterRestRoomScene,              // 显式进入场景式休息房（读档/调试/测试用；正常路径由 claimReward 触发）
     startBattle, claimReward, chooseRewardPack,
     trainingBegin, trainingUpgrade, trainingDrawRoll, trainingDraw,

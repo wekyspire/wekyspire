@@ -16,9 +16,11 @@
 // 美术口径：mefm1 暂无立绘（占位色块），全部效果按立牌体量派生、不依赖贴图内容。
 import * as THREE from 'three';
 import { duelPose } from '../../camera.js';
-import { arcProjectile } from '../../spells/blocks.js';
-import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
+import { arcProjectile, lampPulse } from '../../spells/blocks.js';
+import { registerEnemyHitBeat, enemyImpactBeat, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
 import { registerEnemyAct } from '../enemyAct.js';
+import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
+import { makeHexShield } from '../../hexShield.js';
 
 // 电火花纹理：横向拉长的白蓝炽核 + 尾迹（与 pyro 余烬拖影同构、换色温——冷电 vs 热火）
 let _sparkTex = null;
@@ -63,6 +65,38 @@ function ringTexture() {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   _ringTex = tex;
+  return tex;
+}
+
+// 枪口焰纹理：金色四芒星闪（白热核 + 十字主芒 + 斜芒 + 暖晕）——机发那一瞬的
+// 「发射源在喷火」读感，配灯闪与迸射火光粒子
+let _muzzleTex = null;
+function muzzleTexture() {
+  if (_muzzleTex) return _muzzleTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const spike = (rot, len, wid) => {
+    g.save(); g.translate(64, 64); g.rotate(rot);
+    const grad = g.createLinearGradient(-len, 0, len, 0);
+    grad.addColorStop(0, 'rgba(255,190,90,0)');
+    grad.addColorStop(0.5, 'rgba(255,230,170,0.9)');
+    grad.addColorStop(1, 'rgba(255,190,90,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.ellipse(0, 0, len, wid, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  };
+  spike(0, 60, 9); spike(Math.PI / 2, 60, 9);
+  spike(Math.PI / 4, 40, 6); spike(-Math.PI / 4, 40, 6);
+  const core = g.createRadialGradient(64, 64, 1, 64, 64, 22);
+  core.addColorStop(0, 'rgba(255,252,240,1)');
+  core.addColorStop(0.5, 'rgba(255,220,140,0.85)');
+  core.addColorStop(1, 'rgba(255,180,80,0)');
+  g.fillStyle = core;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _muzzleTex = tex;
   return tex;
 }
 
@@ -119,6 +153,10 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
   }
 
   // —— ① 故障：阶梯抽搐 + 红蓝告警闪 + 电火花 + 微震荡连击 ——
+  // 装甲失效（转段核心事件）：蜂窝力场当场碎裂剥落——「它最硬的东西没了」
+  unit._armorShattered = true;
+  unit._bossPhase = 2;
+  unit._fxLayer?.get('bossArmor')?.shatter?.();
   let step = -1;
   await ctx.custom(id, {
     durationMs: T.GLITCH, ease: 'none',
@@ -245,22 +283,100 @@ async function mefm1HitBeat(ctx, deps, args) {
   });
 }
 
-// —— 起手 beat：钩爪拍（赋予伤残，无伤害）= 钩爪发射——钢蓝钩爪弹从机体胸口
-// 划弧飞向玩家，抵达炸一撮电火花（伤残的「被抓烂」读感）；积焰/点火拍（buff）=
-// 排焰口喷一口橙火（P2 常驻排焰的预告版）。攻击拍静默（弹链命中 beat 已是语言）。
-async function mefm1Act({ ctx, deps, unit, player, kinds }) {
-  if (kinds.includes('attack')) return;
+// —— 起手 beat：攻击拍 = 金色弹雨扫射（2026-10-09 用户定稿）——实弹数 = 伤害段数，
+// 其余为掠射装饰弹（外观与实弹一致、不做区分；压迫感来自弹幕密度而非命中数）；
+// 每发配枪口焰（四芒星闪 + 迸射火光 + 大金色点光短闪——fx1 让给枪口焰，弹体不再
+// 挂灯：弹体灯每帧写强度会掐死焰闪）。P2 弹量/射速/枪口焰全面上调（过热齐射）。
+// 命中侧的电火花由 hit beat 承接。钩爪拍（赋予伤残，无伤害）= 钩爪发射——钢蓝钩爪弹
+// 划弧飞向玩家，抵达炸电火花；积焰/点火拍（buff）= 排焰口喷一口橙火。
+async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
   const H = unit._standeeHeight ?? 22;
   const from = { x: unit.position.x, y: unit.position.y + H * 0.5, z: unit.position.z };
+  const to = player
+    ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
+    : null;
+  if (kinds.includes('attack')) {
+    const hits = Math.max(1, Math.min(args?.hits ?? 1, 6));
+    const p2 = (unit._bossPhase ?? 1) >= 2;
+    const extras = p2 ? 6 : 3;            // 掠射装饰弹（P2 弹幕密度翻倍）
+    const total = hits + extras;
+    const gap = p2 ? 65 : 90;             // 射速（间隔 < 飞行时长 = 空中同时多弹，读弹幕不读滴漏）
+    const flyMs = p2 ? 230 : 260;
+    unit.flash?.(0xffd27a);
+    // 后座体态：先仰 0.14s，射流期间缓缓回正。收 promise 与弹链一起等齐——
+    // 子剧本随父本结算被杀（铁律），不收敛会让回正段在末尾被腰斩、机体残留后仰
+    const id = unit.uniqueID;
+    const recoil = ctx.spawn(async (c) => {
+      await c.custom(id, {
+        durationMs: 140, ease: 'power2.out',
+        onUpdate: (t) => unit.setPose({ lean: (p2 ? 0.07 : 0.05) * t }),
+      });
+      await c.custom(id, {
+        durationMs: 120 + total * gap, ease: 'power1.inOut',
+        onUpdate: (t) => unit.setPose({ lean: (p2 ? 0.07 : 0.05) * (1 - t) }),
+      });
+      unit.resetPose?.();
+    });
+    await ctx.wait(140);
+    // 弹着点表：前 hits 发瞄玩家，其余掠射（头顶/两侧），洗牌混排——
+    // 实弹藏进弹雨，读不出「哪发会掉血」
+    const targets = [];
+    if (to) {
+      for (let i = 0; i < hits; i++) targets.push(to);
+      for (let i = 0; i < extras; i++) {
+        targets.push({
+          x: to.x + (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 5),
+          y: to.y + (Math.random() < 0.4 ? 3.5 + Math.random() * 3.5 : (Math.random() - 0.5) * 3),
+          z: to.z,
+        });
+      }
+      for (let i = targets.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [targets[i], targets[j]] = [targets[j], targets[i]];
+      }
+    }
+    // 子剧本随父本结算即被杀（script.js 铁律）——全部收 promise 末尾统一 await
+    const jobs = [recoil.promise];
+    for (let i = 0; i < total; i++) {
+      // 出膛口逐发微移（多管齐射）
+      const muzzle = {
+        x: from.x + (Math.random() - 0.5) * 2.2,
+        y: from.y + (Math.random() - 0.5) * 1.6,
+        z: from.z,
+      };
+      jobs.push(ctx.spawn((c) => arcProjectile(c, deps, {
+        from: muzzle, to: targets[i] ?? to,
+        color: [1.05, 0.75, 0.26], hot: [1.65, 1.3, 0.6],
+        // 远场口径（同 pyro 流星教训）：Boss 在 z≈-56 远端——曳光弹给 2.2wu + 大拉伸
+        // 读「成串钢芯弹」，靠 ms/间隔而非尺寸表达「小快灵」
+        size: p2 ? 2.8 : 2.6, ms: flyMs, arcH: 0.6, stretch: 2.6, darting: 0.12,
+        lampName: null,
+        trail: { color: 0xffc35a, speed: 2, size: 1.0, ttl: 0.28 },
+      })).promise);
+      // 枪口焰：金色四芒星闪 + 迸射火光 + 大金色点光短闪
+      deps.particles?.spawnSprite?.(muzzle.x, muzzle.y, {
+        texture: muzzleTexture(), width: p2 ? 5.6 : 4.2, height: p2 ? 5.6 : 4.2,
+        z: muzzle.z + 1.5, ttl: 0.12, scalePop: 0.9, gravity: 0,
+      });
+      deps.particles?.spawn?.(muzzle.x, muzzle.y, {
+        color: 0xffa844, count: p2 ? 12 : 7, speed: 15, size: 1.2, ttl: 0.28, z: muzzle.z + 1,
+      });
+      jobs.push(ctx.spawn((c) => lampPulse(c, deps, {
+        name: 'light:fx1', at: { x: muzzle.x, y: muzzle.y, z: muzzle.z + 2 },
+        color: [1.0, 0.74, 0.3], peak: p2 ? 2400 : 1500, attackMs: 26, decayMs: p2 ? 110 : 90,
+      })).promise);
+      if (i < total - 1) await ctx.wait(gap);
+    }
+    await Promise.all(jobs);
+    return;
+  }
   if (kinds.includes('debuff')) {
     await arcProjectile(ctx, deps, {
-      from, to: player ? {
-        x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z,
-      } : null,
+      from, to,
       color: [0.55, 0.65, 0.8], hot: [0.85, 0.95, 1.25],
-      size: 1.35, ms: 380, arcH: 3.2, stretch: 1.35,
-      lampIntensity: 380,
-      trail: { color: 0x9ecbff, speed: 4, size: 0.5, ttl: 0.22 },
+      size: 2.6, ms: 380, arcH: 3.2, stretch: 1.6,
+      lampName: 'light:fx1', lampIntensity: 480,
+      trail: { color: 0x9ecbff, speed: 4, size: 1.0, ttl: 0.3 },
     });
     if (player) {
       const px = player.position.x, py = player.position.y + 3.4 * (player._baseScale ?? 1);
@@ -285,4 +401,34 @@ export function registerMefm1Scripts(register) {
   register('bosses/mefm1P2', mefm1P2);
   registerEnemyHitBeat('mefm1', mefm1HitBeat);
   registerEnemyAct('mefm1', mefm1Act);
+  // 射击机器：不突进——笨重战体的攻击是原地扫射（曳光弹承担距离），不是飞扑
+  registerEnemyNoLunge('mefm1');
+  // 常驻装甲导演（bossStateFx）：P1 持有 defense = 六边形能量硬化装甲在线；
+  // 转段拍剧本置 _armorShattered 并播碎裂，此后不再重建（甲没了就是没了）
+  registerBossStateFx('mefm1', (obj, unitProj) => {
+    if (unitProj.isDead) return;
+    const def = unitProj.effects?.find((e) => e.effectId === 'defense');
+    const on = (def?.stacks ?? 0) > 0 && !obj._armorShattered;
+    if (on) obj._fxLayer?.overlay('bossArmor', 2, (l) => makeHexShield(l));
+    obj._fxLayer?.setLevel('bossArmor', on ? 1 : 0);
+  });
+  // 受击补充（目标侧）：甲在 = 命中点涟漪 + 白蓝金属火星（打在力场上）；
+  // 甲碎后 = 橙白火花 + 灰烟星点（打在裸露机壳上）
+  registerBossHurtFx('mefm1', (ctx, deps, { unit, dealt, fromX }) => {
+    const H = unit._standeeHeight ?? 22;
+    const armor = unit._fxLayer?.get('bossArmor');
+    const nx = fromX == null ? 0.5 : (fromX < unit.position.x ? 0.24 : 0.76);
+    if (armor && armor.levelNow() > 0.25) {
+      armor.impact(nx + (Math.random() - 0.5) * 0.14, 0.35 + Math.random() * 0.35);
+      deps.particles?.spawn?.(unit.position.x, unit.position.y + H * 0.55, {
+        color: 0xbfe0ff, count: Math.min(4 + Math.round(dealt / 4), 12), speed: 14,
+        size: 0.8, ttl: 0.45, z: unit.position.z + 1,
+      });
+      return;
+    }
+    deps.particles?.spawn?.(unit.position.x, unit.position.y + H * 0.55, {
+      color: 0xffb066, count: Math.min(5 + Math.round(dealt / 4), 14), speed: 16,
+      size: 0.9, ttl: 0.5, gravity: -6, z: unit.position.z + 1,
+    });
+  });
 }

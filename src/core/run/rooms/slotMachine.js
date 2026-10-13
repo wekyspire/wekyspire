@@ -9,6 +9,7 @@ import { promoteCard, gatedPromotionTargets, canPromoteRuntime } from '../promot
 import { getSkillDefinition } from '../../skills/registry.js';
 import { getRelicDefinition } from '../../relics/registry.js';
 import { getEffectDefinition } from '../../effects/registry.js';
+import { recordGold } from '../runStats.js';
 
 // 老虎机（SLOT_MACHINE.md）：**资源交换**——花费金币 roll，产出可放弃；吞噬遗物/卡换金币。
 //
@@ -380,7 +381,7 @@ export function takeSlotPrize(run, choice = null) {
   if (!p) throw new Error('当前没有待领取的产出');
   const out = { kind: p.kind, tier: p.tier };
 
-  if (p.money != null) { run.player.money += p.money; out.money = p.money; }
+  if (p.money != null) { run.player.money += p.money; recordGold(run, p.money); out.money = p.money; }
   if (p.healPct != null) {
     const pl = run.player;
     pl.hp = Math.min(pl.maxHp, pl.hp + Math.ceil(pl.maxHp * p.healPct));
@@ -525,6 +526,7 @@ export function devourSlot(run, { kind, relicId = null, uniqueID = null } = {}) 
   }
 
   run.player.money += gold;
+  recordGold(run, gold);
   if (freeRoll) run.slotFreeRolls = (run.slotFreeRolls ?? 0) + 1;
   run.slotDevour = 0; // 用掉即清零
   return { kind, gold, freeRoll };

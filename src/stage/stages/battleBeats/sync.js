@@ -9,6 +9,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveUnitAuras } from '../../fx/recipes.js';
 import { AuraHost } from '../../fx/aura.js';
+import { syncBossStateFx } from '../../fx/bossStateFx.js';
 import { warmSpellFx } from '../../fx/spells/index.js';
 import { warmDrainOrbs } from '../../fx/gpu/resourceDrainFx.js';
 import { attachOrbs } from '../../fx/orbs.js';
@@ -145,6 +146,9 @@ export const syncBeats = {
           def.update(aura, unitProj.effects.find((e) => e.effectId === key));
         }
       }
+      // Boss 常驻状态导演（bossStateFx）：机制状态件（装甲/电弧/热缝……）按 defId
+      // 驱动，读同一拍投影推目标值（件内 tick 缓动收敛）；非 Boss 未注册直返
+      syncBossStateFx(obj, unitProj);
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));

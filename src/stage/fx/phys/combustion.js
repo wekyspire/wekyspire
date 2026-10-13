@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import {
   Fn, If, Discard, uniform, positionLocal, positionWorld, materialColor,
-  vec2, vec3, vec4, mix, sin, dot, floor, fract, smoothstep,
+  vec2, vec3, vec4, mix, sin, dot, floor, fract, smoothstep, float,
 } from 'three/tsl';
 import { M } from '../../scenes/kit/materials.js';
 import { createFireProposer, fireProposalClearNode, SCENE_FIRE, SCENE_EMBER } from '../gpu/fireProposals.js';

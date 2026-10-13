@@ -62,6 +62,8 @@ export function restoreRunFromSave(run, save) {
       ? { ...save.bank.pendingRoll, options: [...(save.bank.pendingRoll.options ?? [])] } : null,
   } : null;
   run.pendingDebuffs = (save.pendingDebuffs ?? []).map(d => ({ ...d }));
+  // 战绩统计：旧档无此字段 → 保留 createRunState 的零值（runStats.ensureStats 兜底）
+  if (save.stats) run.stats = { kills: { ...save.stats.kills }, goldEarned: save.stats.goldEarned ?? 0 };
   // 调试档的现场恢复（**仅 debugMode 档**）：真实存档语义 = 检查点，恒在 prep 恢复；
   // 调试档（造档工具产出 / 面板导出）要能从"房内 / 进阶中"直接接着跑，否则复现 bug
   // 还得手动点进房间。非 prep 阶段一律按"落到本层 prep"归一 —— 战斗本身不入档

@@ -29,7 +29,7 @@ export {
 /**
  * 快照 kind → widget builder + PanelObject 形态（**所有舞台共用一份**：
  * 塔楼层 MapStage、战斗层 BattleStage（战后奖励）、房间层 RoomStage 的 dock 面板各取所需）。
- * 未登记 kind = 该阶段没有 Three 面板（目前 stage='end' 由 Vue 的 EndPanel 接管）。
+ * 未登记 kind = 该阶段没有 Three 面板（stage='end' 由 EndStage 结算舞台整屏接管）。
  */
 export const PANEL_BUILDERS = Object.freeze({
   prep: { build: buildPrepPanel, form: 'anchored' },

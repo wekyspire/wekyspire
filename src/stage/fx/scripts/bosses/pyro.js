@@ -17,9 +17,10 @@ import { materialOf } from '../../../scenes/kit/materials.js';
 import { desatColor } from '../../../scenes/kit/palette.js';
 import { duelPose, viewHeightOf } from '../../camera.js';
 import { attachCharBurn, resetCharBurn } from '../../charBurn.js';
-import { arcProjectile } from '../../spells/blocks.js';
-import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
+import { arcProjectile, fireBurst, screenFlash, groundRing, lampPulse, dreadVeil } from '../../spells/blocks.js';
+import { registerEnemyHitBeat, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
 import { registerEnemyAct } from '../enemyAct.js';
+import { registerBossHurtFx } from '../../bossStateFx.js';
 
 // 冲击波环纹理（按"厚/薄"两档缓存；additive 下黑=透明）
 //   fat  = 炽闪用的大光晕（宽带，几乎不出环）
@@ -142,6 +143,7 @@ const sstep = (x) => x * x * (3 - 2 * x); // 压扁曲线：起步与到位都�
 async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onStageDispose, runScript, unitById, setArtVariant }) {
   const unit = unitById(args.unit);
   if (!unit) return; // 快照缺失兜底：静默收拍
+  unit._bossPhase = 2; // act 分支的转段拍判别（enemyAct 以旧意图 kinds 先行触发，见 pyroAct）
   const id = unit.uniqueID;
   const ux = unit.position.x;
   const uy = unit.position.y;
@@ -472,45 +474,100 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   unit.restoreColor?.();
 }
 
-// —— 命中 beat（火主题，2026-10-09 补齐）：重击 = 烈焰爆（火色冲击 + 热环 + 溅烬），
-// 普击/连击 = 火星撞击。共享底座 enemyImpactBeat，只换 palette + garnish ——
-// 他的火是会烧的：命中留烬（重力下坠的火星），不是通用暗铜橙的「钝器撞击」。
+// —— 命中 beat（火主题，2026-10-09 返工）：术士的火不是钝器——命中 = fireBurst
+// 落点爆（锚玩家脚边、火向上烧）+ 溅烬，不再是 punchImpact 换色。重击 = 更大的
+// 火体 + 暖闪 + 震屏（enemyImpactBeat 骨架整段弃用：拳环读「打」，火体读「烧」）。
 async function pyroHitBeat(ctx, deps, args) {
+  const { unit, dealt } = args;
   const heavy = args.fx.tier === 'heavy';
-  await enemyImpactBeat(ctx, deps, {
-    ...args,
-    pal: {
-      color: heavy ? [1.0, 0.34, 0.10] : [1.0, 0.52, 0.22],
-      hot: heavy ? [1.35, 0.85, 0.40] : [1.2, 0.9, 0.5],
-      rim: [1.0, 0.55, 0.28],
-      sparkColor: heavy ? 0xff7a2e : 0xffa04c,
-      sparkCount: heavy ? 34 : 15,
-      sparkSpeed: heavy ? 26 : 16,
-      flashColor: 0xffb888,
-    },
-    garnish: (c2, d, { at, heavy: hv }) => {
-      // 溅烬：带重力的火星从命中点坠散（烧的是人，不是石头）
-      d.particles?.spawn?.(at.x, at.y, {
-        color: 0xff8a3a, count: hv ? 18 : 7, speed: hv ? 18 : 10,
-        size: 1.0, ttl: 0.8, gravity: 8, z: at.z,
-      });
-      if (!hv) return;
-      // 重击补一记细热环（爆发余浪——ringTexture(true) 的白热细峰口径）
-      const ring = d.particles?.spawnSprite?.(at.x, at.y, {
-        texture: ringTexture(true), width: 3.6, height: 3.6, z: (at.z ?? 0) + 1, ttl: 0.5, gravity: 0,
-      });
-      if (ring) c2.spawn(async (c3) => {
-        await c3.tweenRaw(ring, { w: 13, h: 13 }, { durationMs: 460, ease: 'power2.out' });
-      });
-    },
+  const feet = { x: unit.position.x, y: unit.position.y, z: unit.position.z };
+  if (heavy) ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.16, ms: 210, color: 0xffb888 }));
+  await fireBurst(ctx, deps, {
+    at: feet,
+    scale: heavy ? 1.5 : 0.78 + Math.min(dealt / 60, 0.25),
+    ms: heavy ? 520 : 380,
+    color: heavy ? [1.0, 0.36, 0.10] : [1.0, 0.46, 0.16],
+    hot: heavy ? [1.35, 0.85, 0.42] : [1.2, 0.9, 0.5],
+    ember: [1.0, 0.2, 0.05],
+    sparkColor: 0xff8a3a,
+    sparkCount: heavy ? 30 : 15,
+    linger: { count: heavy ? 14 : 8, speed: 7, ttl: 1.6, size: 0.9, gravity: -6 },
+    lampIntensity: heavy ? 1100 : 620,
+    shakeSeverity: heavy ? 1.5 : 0,
   });
 }
 
-// —— 起手 beat：盾拍（盾6 + 塞 2 张灼伤入牌库）= 火种起播——两粒火种从胸口划弧
-// 飞向玩家（灼伤在路上）；P2 的「消耗燃烧回血」拍 = 火向源头回流（玩家侧火星
-// 被拽回 Boss 胸口 + 体表白热一闪）。攻击拍静默（突进 + 命中 beat 已是语言）。
+// —— 起手 beat：术士不扑人——攻击拍 = 施法：后仰蓄力（余烬向掌心回吸，小版 P2 吸气）
+// → 焰鞭出袖（fire orb 投射）。重击拍 = 长蓄力（更久更深 + 两级渐亮）→ 陨火
+// （更大更慢更高的火球）。投射物飞行由本拍阻塞承担，伤害节拍只留命中火体。
+async function pyroAttackCast(ctx, deps, { unit, player, heavy }) {
+  const H = unit._standeeHeight ?? 22;
+  const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
+  const chest = { x: ux, y: uy + H * 0.55, z: uz };
+  const to = player
+    ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
+    : null;
+  const id = unit.uniqueID;
+  const windMs = heavy ? 820 : 300;
+  // 蓄力：余烬回吸（重击五批、普攻两批，越到后越密）
+  ctx.spawn(async (c) => {
+    const batches = heavy ? 5 : 2;
+    for (let i = 0; i < batches; i++) {
+      const n = heavy ? 3 + Math.min(i, 3) : 3;
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = H * (0.5 + Math.random() * 0.4);
+        const px = ux + Math.cos(a) * r, py = chest.y + Math.sin(a) * r * 0.7;
+        const pull = (heavy ? 0.42 : 0.26) * (0.8 + Math.random() * 0.4);
+        const vx = (chest.x - px) / pull, vy = (chest.y - py) / pull;
+        const rec = deps.particles?.spawnSprite?.(px, py, {
+          texture: streakTexture(), width: heavy ? 3.8 : 3.0, height: heavy ? 1.15 : 0.95, z: uz + 1.5,
+          vx, vy, gravity: 0, ttl: pull, scalePop: 0.3,
+        });
+        if (rec) rec.sprite.material.rotation = Math.atan2(vy, vx);
+      }
+      await c.wait(windMs / batches);
+    }
+  });
+  await ctx.custom(id, {
+    durationMs: windMs, ease: 'power2.inOut',
+    onUpdate: (t) => unit.setPose({ lean: -(heavy ? 0.16 : 0.10) * t, squash: 1 - 0.06 * Math.sin(t * Math.PI) }),
+  });
+  unit.flash?.(heavy ? 0xffc884 : 0xff9a4a);
+  if (heavy) unit.flash?.(0xffe3b4);
+  // 放：前倾一弹，与投射物起飞并行
+  const snap = ctx.custom(id, {
+    durationMs: 260, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ lean: -(heavy ? 0.16 : 0.10) * (1 - t) + (heavy ? 0.2 : 0.13) * Math.sin(t * Math.PI) }),
+  });
+  await arcProjectile(ctx, deps, {
+    from: chest, to,
+    color: [1.0, 0.42, 0.12], hot: [1.35, 0.9, 0.5],
+    // 战场沿 z 纵深排布，Boss 在远端——投射物全程大半时间在远场，尺寸按近场读感给足
+    // （2.6 在远端只剩一粒灰），拖尾同步加粗加长；普攻带一点 darting 读「鞭梢脆响」
+    size: heavy ? 6.2 : 4.2, ms: heavy ? 680 : 460, arcH: heavy ? 8.5 : 4.2,
+    stretch: heavy ? 1.7 : 1.45, darting: heavy ? 0 : 0.16,
+    lampName: 'light:fx1', lampIntensity: heavy ? 950 : 500,
+    fire: true,
+    trail: { color: 0xff7a30, speed: 3, size: heavy ? 1.15 : 0.85, ttl: heavy ? 0.42 : 0.34 },
+  });
+  await snap;
+  unit.resetPose?.();
+}
+
+// —— 起手 beat：攻击拍 = 施法（pyroAttackCast：蓄力回吸 → 焰鞭/陨火——重击拍的
+// 意图 kinds 只有 ['attack']，普攻拍是 ['attack','debuff']，以此分档）；盾拍
+// （盾6 + 塞 2 张灼伤入牌库）= 火种起播——两粒火种从胸口划弧飞向玩家；P2 的
+// 「全场点燃」拍（debuff）= 蓄→爆→传燃三段大制；「消耗燃烧回血」拍（buff）=
+// 吸纳火焰——全场的火被抽干倒灌进他胸口。
+// 转段拍判别：enemyAct 以旧意图快照先行触发（aiAct stage 0），转段那拍的 kinds
+// 是 ['buff']（蓄力预告）——buff 分支以 unit._bossPhase（P2 剧本首行置位）门控，
+// 转段拍静默让位给 pyroP2 大剧本。
 async function pyroAct({ ctx, deps, unit, player, kinds }) {
-  if (kinds.includes('attack')) return;
+  if (kinds.includes('attack')) {
+    await pyroAttackCast(ctx, deps, { unit, player, heavy: !kinds.includes('debuff') });
+    return;
+  }
   const H = unit._standeeHeight ?? 22;
   const from = { x: unit.position.x, y: unit.position.y + H * 0.55, z: unit.position.z };
   if (kinds.includes('defend')) {
@@ -520,47 +577,176 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
           x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z,
         } : null,
         color: [1.0, 0.42, 0.12], hot: [1.3, 0.8, 0.4],
-        size: 1.15, ms: 430, arcH: 3.8, stretch: 1.1,
-        lampIntensity: 320,
-        trail: { color: 0xff7a30, speed: 3, size: 0.5, ttl: 0.26 },
+        size: 2.0, ms: 430, arcH: 3.8, stretch: 1.1,
+        lampName: 'light:fx1', lampIntensity: 320,
+        trail: { color: 0xff7a30, speed: 3, size: 0.7, ttl: 0.28 },
       });
       await ctx.wait(130);
     }
     return;
   }
   if (kinds.includes('debuff')) {
-    // P2「全场点燃」拍：一圈火种自胸口向四周炸散（各单位的燃烧由 aura 系统自行点起，
-    // 这里只演「源头那一撒」）
-    const ux = unit.position.x, uy = unit.position.y + H * 0.5, uz = unit.position.z;
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
-      const sp = 14 + Math.random() * 6;
-      const rec = deps.particles?.spawnSprite?.(ux, uy, {
-        texture: streakTexture(), width: 2.8, height: 0.8, z: uz + 1.5,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.55 + 2, gravity: 4, ttl: 0.75, scalePop: 0.3,
+    // P2「全场点燃」（2026-10-09 重制）：蓄（后仰展身 + 余烬回吸一口）→ 爆（暖屏闪
+    // + 胸口气浪细环 + 贴地火浪扫全战场 + 径向火星风暴）→ 传燃（火浪按距离传到每个
+    // 单位脚下，到谁谁着——燃烧层由 core/aura 同步，这里给「点着」的一瞬）
+    const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
+    const chestY = uy + H * 0.55;
+    const id = unit.uniqueID;
+    const jobs = [];
+    jobs.push(ctx.spawn(async (c) => {   // 蓄：三批余烬倒吸回胸口
+      for (let i = 0; i < 3; i++) {
+        for (let k = 0; k < 4; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = H * (0.5 + Math.random() * 0.4);
+          const px = ux + Math.cos(a) * r, py = chestY + Math.sin(a) * r * 0.7;
+          const pull = 0.26;
+          const vx = (ux - px) / pull, vy = (chestY - py) / pull;
+          const rec = deps.particles?.spawnSprite?.(px, py, {
+            texture: streakTexture(), width: 3.0, height: 0.9, z: uz + 1.5,
+            vx, vy, gravity: 0, ttl: pull, scalePop: 0.3,
+          });
+          if (rec) rec.sprite.material.rotation = Math.atan2(vy, vx);
+        }
+        await c.wait(120);
+      }
+    }).promise);
+    await ctx.custom(id, {
+      durationMs: 400, ease: 'power2.in',
+      onUpdate: (t) => unit.setPose({ lean: -0.14 * t, widen: 1 + 0.14 * t }),
+    });
+    unit.resetPose?.();
+    unit.flash?.(0xff9a4a);
+    // 爆（全部收进 jobs——父本结算杀子件的铁律）
+    jobs.push(ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.15, ms: 240, color: 0xffa050 })).promise);
+    const ring = deps.particles?.spawnSprite?.(ux, chestY, {
+      texture: ringTexture(true), width: H * 0.3, height: H * 0.3, z: uz + 2, ttl: 0.7, gravity: 0,
+    });
+    if (ring) {
+      jobs.push(ctx.spawn(async (c) => {
+        await c.tweenRaw(ring, { w: H * 2.3, h: H * 2.3 }, { durationMs: 640, ease: 'power2.out' });
+      }).promise);
+    }
+    jobs.push(ctx.spawn((c) => groundRing(c, deps, {
+      at: { x: ux, y: uy, z: uz }, size: 150, ms: 900,
+      color: [1.0, 0.42, 0.12], hot: [1.35, 0.9, 0.45], spin: 2.6,
+    })).promise);
+    // 径向火星风暴
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.25;
+      const sp = 20 + Math.random() * 10;
+      const rec = deps.particles?.spawnSprite?.(ux, chestY, {
+        texture: streakTexture(), width: 3.4, height: 0.95, z: uz + 1.5,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.55 + 2.5, gravity: 5, ttl: 0.8, scalePop: 0.3,
       });
       if (rec) rec.sprite.material.rotation = Math.atan2(Math.sin(a) * 0.55, Math.cos(a));
     }
-    unit.flash?.(0xff9a4a);
-    await ctx.wait(360);
+    deps.particles?.spawn?.(ux, chestY, { count: 40, color: 0xff7a30, speed: 46, ttl: 0.7, size: 1.6, z: uz });
+    deps.shake?.impulse?.(2.4);
+    jobs.push(ctx.spawn((c) => lampPulse(c, deps, {
+      name: 'light:fx1', at: { x: ux, y: chestY, z: uz + 2 },
+      color: [1, 0.5, 0.15], peak: 1800, attackMs: 60, decayMs: 700,
+    })).promise);
+    // 传燃：火浪按距离推进（~7ms/wu）——到谁谁脚下起火（Boss 自身 = 源头，跳过）
+    const playerView = deps.cast?.get?.('role:player') ?? null;
+    const others = (deps.cast?.query?.('unit:') ?? [])
+      .map((e) => e.handle)
+      .filter((v) => v && v !== unit && !v._dead);
+    if (playerView && !others.includes(playerView)) others.push(playerView);
+    for (const v of others) {
+      const d = Math.hypot(v.position.x - ux, v.position.z - uz);
+      const lag = Math.min(520, d * 7);
+      jobs.push(ctx.spawn(async (c) => {
+        await c.wait(lag);
+        v.flash?.(0xff7a30);
+        await fireBurst(c, deps, {
+          at: { x: v.position.x, y: v.position.y, z: v.position.z },
+          scale: 0.55, ms: 320, sparkCount: 10, lampIntensity: 260,
+          linger: { count: 5, speed: 5, ttl: 1.1, size: 0.7, gravity: -5 },
+        });
+      }).promise);
+    }
+    await Promise.all(jobs);
     return;
   }
   if (kinds.includes('buff')) {
-    // 回流：玩家胸口一撮火星被拽向 Boss（低弧快吸）+ Boss 体表白热闪
+    // 转段蓄力拍（kinds ['buff'] 但 _bossPhase 未置位）：让位给 pyroP2 大剧本
+    if ((unit._bossPhase ?? 1) < 2) return;
+    // P2「吸纳火焰」（2026-10-09 重制）：全场的火被抽干——火从每个燃烧源身上撕出来
+    // 倒灌进他胸口。压迫感 = 世界先暗半拍（火都走了）→ 他在汇聚点越烧越亮
     const to = { x: from.x, y: from.y, z: from.z };
-    const px = player?.position.x ?? from.x;
-    const py = (player ? player.position.y + 3.4 * (player._baseScale ?? 1) : from.y);
-    const pz = player?.position.z ?? from.z;
-    const n = 8;
-    for (let i = 0; i < n; i++) {
-      const rec = deps.particles?.spawnSprite?.(px + (Math.random() - 0.5) * 3, py + (Math.random() - 0.5) * 3, {
-        texture: streakTexture(), width: 2.4, height: 0.7, z: pz + 1,
-        vx: (to.x - px) * 1.6, vy: (to.y - py) * 1.6 + 3, gravity: 0, ttl: 0.6, scalePop: 0.3,
-      });
-      if (rec) rec.sprite.material.rotation = Math.atan2(to.y - py, to.x - px);
+    const id = unit.uniqueID;
+    const veil = dreadVeil(ctx, deps);   // 世界暗半拍（onKill 兜底摘除）
+    veil?.set?.(0.45, 380);
+    // 源清单：玩家 + 盟友 + 敌方（不含自己）+ 火盆——凡是有火的地方都被抽
+    const playerView = deps.cast?.get?.('role:player') ?? null;
+    const sources = [];
+    if (playerView) sources.push(playerView);
+    for (const e of deps.cast?.query?.('unit:') ?? []) {
+      const v = e.handle;
+      if (v && v !== unit && v !== playerView && !v._dead) sources.push(v);
     }
-    unit.flash?.(0xffb060);
-    await ctx.wait(320);
+    const streams = [];
+    for (const v of sources) {
+      streams.push({
+        x: v.position.x,
+        y: v.position.y + (v._standeeHeight ?? 16) * 0.45,
+        z: v.position.z,
+      });
+      v.flash?.(0xff5a2a);
+    }
+    for (const { handle } of deps.cast?.query?.('prop:brazierFire') ?? []) {
+      const p = handle.object?.position;
+      if (p) streams.push({ x: p.x, y: p.y + 2.5, z: p.z });
+    }
+    // 每源：一条主火舌（arcProjectile 倒飞回胸口）+ 一簇加速 streak 流（火被撕出来）
+    const jobs = [];
+    for (const s0 of streams) {
+      jobs.push(ctx.spawn((c) => arcProjectile(c, deps, {
+        from: s0, to,
+        color: [1.0, 0.5, 0.14], hot: [1.4, 1.0, 0.5],
+        size: 2.6, ms: 620, arcH: 6, stretch: 1.5,
+        lampName: null,   // 灯留给入体炽闪（多源同借 fx1 会互相覆写）
+        fire: true,
+        trail: { color: 0xff7a30, speed: 3, size: 0.9, ttl: 0.4 },
+      })).promise);
+      jobs.push(ctx.spawn(async (c) => {
+        for (let i = 0; i < 7; i++) {
+          const pull = 0.5;
+          const px = s0.x + (Math.random() - 0.5) * 3, py = s0.y + (Math.random() - 0.5) * 3;
+          const vx = (to.x - px) / pull, vy = (to.y - py) / pull;
+          const rec = deps.particles?.spawnSprite?.(px, py, {
+            texture: streakTexture(), width: 3.0, height: 0.85, z: (s0.z ?? 0) + 1.5,
+            vx, vy, gravity: 0, ttl: pull, scalePop: 0.25,
+          });
+          if (rec) rec.sprite.material.rotation = Math.atan2(vy, vx);
+          await c.wait(60);
+        }
+      }).promise);
+    }
+    unit.flash?.(0xff9a4a);
+    await ctx.wait(560);   // 等主火舌倒灌落定
+    // 入体：胸口炽胀 + 金色炽闪 + 体表三段渐亮 + 轻震
+    unit.flash?.(0xffc884);
+    jobs.push(ctx.spawn((c) => lampPulse(c, deps, {
+      name: 'light:fx1', at: { x: to.x, y: to.y, z: to.z + 2 },
+      color: [1, 0.55, 0.18], peak: 2600, attackMs: 70, decayMs: 800,
+    })).promise);
+    deps.particles?.spawnSprite?.(to.x, to.y, {
+      texture: ringTexture(), width: H * 0.5, height: H * 0.5, z: to.z + 1.5,
+      ttl: 0.5, scalePop: 0.5, gravity: 0,
+    });
+    await ctx.custom(id, {
+      durationMs: 420, ease: 'power2.out',
+      onUpdate: (t) => {
+        const k = 1 + 0.1 * Math.sin(t * Math.PI);   // 炽胀一拍（吃进去的火撑了一下）
+        unit.setPose({ widen: k, squash: 1 - (k - 1) * 0.6 });
+      },
+    });
+    unit.resetPose?.();
+    unit.flash?.(0xffe3b4);
+    deps.shake?.impulse?.(1.4);
+    veil?.set?.(0, 550);
+    await Promise.all(jobs);
   }
   // 未知/其余拍：静默（P2 剧本与命中 beat 已覆盖本 Boss 的演出语言）
 }
@@ -569,4 +755,21 @@ export function registerPyroScripts(register) {
   register('bosses/pyroP2', pyroP2);
   registerEnemyHitBeat('pyro', pyroHitBeat);
   registerEnemyAct('pyro', pyroAct);
+  // 施法者：不突进——攻击的身体语言是蓄力与投射物（act 起手），不是肉身前扑
+  registerEnemyNoLunge('pyro');
+  // 受击补充：打在火主身上 = 命中点溅起一撮下坠余烬 + 流火拖影（烧的是火，
+  // 不是肉）。常驻火焰/火球升温已由 aura/orbs 承接，这里只补「挨打那一瞬」
+  registerBossHurtFx('pyro', (ctx, deps, { unit, dealt }) => {
+    const H = unit._standeeHeight ?? 22;
+    const y = unit.position.y + H * (0.35 + Math.random() * 0.3);
+    deps.particles?.spawn?.(unit.position.x, y, {
+      color: 0xff8a3a, count: Math.min(4 + Math.round(dealt / 5), 12), speed: 9,
+      size: 1.1, ttl: 0.9, gravity: 8, z: unit.position.z + 1,
+    });
+    const rec = deps.particles?.spawnSprite?.(unit.position.x, y, {
+      texture: streakTexture(), width: 2.6, height: 0.75, z: unit.position.z + 2,
+      vx: (Math.random() - 0.5) * 14, vy: 6 + Math.random() * 4, gravity: 5, ttl: 0.55, scalePop: 0.3,
+    });
+    if (rec) rec.sprite.material.rotation = Math.atan2(6, (Math.random() - 0.5) * 14);
+  });
 }
