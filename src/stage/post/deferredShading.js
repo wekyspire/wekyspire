@@ -8,24 +8,33 @@
 //   常量，twin 上同名属性赋值）；动态循环上界 = 固定 MAX + Break（towerClouds 同款）；
 //   灯表走 DataTexture（TSL uniform 数组不可用）；光强 = color×intensity（无 4π 因子，
 //   AnalyticLightNode 实测）；雾 = FogNode 的 smoothstep(near, far, 视距)。
-// v2 已接：透明件 G-buffer 深度比较（立牌 alphaTestNode 硬 discard / 世界粒子 soft fade，
-//   见 post/gbufDepth.js）+ 点光屏幕椭圆逐像素剔除（CPU 投影，?dlr=N 可钳半径演示）。
+// v3 已接：透明件 G-buffer 深度比较（立牌 alphaTestNode 硬 discard / 世界粒子 soft fade，
+//   见 post/gbufDepth.js）+ 点光 tiled 剔除（compute 三连：计数清零→tile z minmax→两遍式
+//   剔除建表；16×16 tile 侧平面 |dot|≤r ×4 + 线性视距重叠；atomic 领表项；光照循环查
+//   grid/list 只遍历本 tile 灯。?dlr=N 可钳半径演示剔除收益）。
 // 已知缺口：alphaTest 切割件进 G-buffer（rough 槽与 alpha 冲突须四槽或另案）；多次散射
 //   LUT 补偿（当前 TS 单次散射，spec 略保守）；bloomOffset depthPrepass 对 GBUF 层房间件
 //   的层位适配；RoomStage 接入。
 import * as THREE from 'three';
-import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { MeshBasicNodeMaterial, StorageBufferAttribute } from 'three/webgpu';
 import {
-  Fn, If, Loop, Break, uniform, texture, uv,
-  vec2, vec3, vec4, float, max, min, dot, mix, pow, sqrt, abs,
-  clamp, smoothstep, oneMinus, normalize, length,
+  Fn, If, Loop, Break, uniform, texture, textureLoad, uv, storage,
+  vec2, vec3, vec4, float, int, uint, max, min, dot, mix, pow, sqrt, abs, cross, normalize, length,
+  clamp, smoothstep, oneMinus, instanceIndex, atomicAdd, atomicStore, screenCoordinate,
   mrt, normalView, materialRoughness, materialMetalness, output,
 } from 'three/tsl';
 import { passUV, makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass } from './passes.js';
 import { gbufDepthShared } from './gbufDepth.js';
 
 export const GBUF_LAYER = 6;              // BLOOM_LAYER=7 之外的未占用层位
-const MAX_LIGHTS = 64;                    // 灯表容量（G-buffer 场景实测 21 盏，上限留破坏时代余量）
+const MAX_LIGHTS = 64;                    // 灯表容量（百盏低亮度小灯是既定路线，容量随之）
+// ---- tiled 灯剔除（compute 两遍式）：16×16 像素 tile，z minmax 还原 tile 视锥，
+// 灯球 vs 侧平面(|dot|≤r)×4 + 线性视距重叠；计数→atomic 领表项→回写索引表 ----
+const TILE = 16;                          // tile 像素边长
+const TILE_CAP = 32;                      // 每 tile 灯上限（clamp）
+const MAX_TX = 256, MAX_TY = 144;         // tile 网格容量帽（4K/16 = 240×135）
+const MAX_TILES = MAX_TX * MAX_TY;
+const LIST_CAP = MAX_TILES * TILE_CAP;    // 灯索引表容量（最坏情况预分配，约 4MB）
 // 灯半径钳制（?dlr=N，调试/演示用）：culling 收益取决于灯的有效半径——火把 cutoff=145
 // 盖满全屏时圆测试不剔；钳到真实照亮半径可即时看到逐像素灯数下降。0 = 不钳
 const DLR = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('dlr')) || 0 : 0;
@@ -96,17 +105,17 @@ const dlLighting = Fn(([u]) => {
     const directDiffuse = vec3(0.0).toVar();
     const directSpecular = vec3(0.0).toVar();
 
-    // ---- 点光表（DataTexture 4×MAX，每灯 4 texel）+ 屏幕椭圆早退（逐像素 light culling：
-    // CPU 每帧投影灯球为 NDC 椭圆，像素不在包围内即跳过全段 BRDF——粒度细于 tile 网格，
-    // 且免 compute 建表通道（CPU 写 storage 的 compute 侧读回全零旧坑）。着色为本件自有
-    // Torrance-Sparrow 族 D_GGX·V_SmithCorrelated·F_Schlick（Cook-Torrance 现代式）----
-    Loop(MAX_LIGHTS, ({ i }) => {
-      If(float(i).greaterThanEqual(u.lightCount), () => { Break(); });
-      const rowY = float(i).add(0.5).div(float(MAX_LIGHTS));
-      const t2 = texture(u.tLight, vec2(0.625, rowY));
-      const ex = ndc.xy.x.sub(t2.x).div(t2.z.max(1e-4));
-      const ey = ndc.xy.y.sub(t2.y).div(t2.w.max(1e-4));
-      If(ex.mul(ex).add(ey.mul(ey)).lessThan(1.0), () => {
+    // ---- 点光走 tile 灯表（compute 剔除建表，见控制器 cullFn）：每像素只遍历本 tile 的
+    // 灯列表。着色为本件自有 Torrance-Sparrow 族 D_GGX·V_SmithCorrelated·F_Schlick ----
+    const px = screenCoordinate.xy.div(float(TILE)).floor();
+    const tidU = uint(px.y.mul(u.tilesX).add(px.x)).mul(uint(2));
+    const listOffset = u.gridRO.element(tidU).toVar();
+    const listCount = u.gridRO.element(tidU.add(uint(1))).toVar();
+    Loop(TILE_CAP, ({ i }) => {
+      If(uint(i).greaterThanEqual(listCount), () => { Break(); });
+      const li = u.listRO.element(listOffset.add(uint(i))).toVar();
+      const rowY = float(li).add(0.5).div(float(MAX_LIGHTS));
+      If(float(li).lessThan(u.lightCount), () => {
       const t0 = texture(u.tLight, vec2(0.125, rowY));
       const t1 = texture(u.tLight, vec2(0.375, rowY));
       const lv = t0.xyz.sub(vpos);
@@ -246,8 +255,120 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
     shadowBias: uniform(0.002),
     shadowOn: uniform(0.0),
     debug: uniform(0.0),
+    // tile 网格（compute 剔除 <-> 光照查表共用）
+    tilesX: uniform(1.0), tilesY: uniform(1.0),
+    viewW: uniform(2.0), viewH: uniform(2.0),
+    camNear: uniform(0.1), camFar: uniform(2000.0),
+    gridRO: null, listRO: null,   // 创建后回填（storage 只读节点）
   };
   const lightScene = makeFullScreenPass(dlLighting(u));
+
+  // ---- tiled 剔除资源：grid[tile]=(offset,count) + 全局索引表 + 分配计数 + tile z 范围 ----
+  // 只读副本必须另建节点：toReadOnly() 原地改写并返回 this（在写节点上调会把写口废掉）
+  const gridAttr = new StorageBufferAttribute(new Uint32Array(MAX_TILES * 2), 1);
+  const listAttr = new StorageBufferAttribute(new Uint32Array(LIST_CAP), 1);
+  const gridS = storage(gridAttr, 'uint', MAX_TILES * 2);
+  const listS = storage(listAttr, 'uint', LIST_CAP);
+  const counterS = storage(new StorageBufferAttribute(new Uint32Array(1), 1), 'uint', 1).toAtomic();
+  const tileZS = storage(new StorageBufferAttribute(new Float32Array(MAX_TILES * 2), 1), 'vec2', MAX_TILES);
+  u.gridRO = storage(gridAttr, 'uint', MAX_TILES * 2).toReadOnly();
+  u.listRO = storage(listAttr, 'uint', LIST_CAP).toReadOnly();
+
+  // pass C0：分配计数清零（单线程；与后续 compute 同提交保序）
+  const resetNode = Fn(() => {
+    atomicStore(counterS.element(uint(0)), uint(0));   // atomic 引用不能普通 assign
+  })().compute(1, [1]);
+
+  // pass C1：tile z minmax（每 tile 一线程扫 16×16 的 G-buffer 深度，NDC z 存表）
+  let zmmDepthNode = null;
+  const zmmNode = Fn(() => {
+    const total = u.tilesX.mul(u.tilesY).floor();
+    If(float(instanceIndex).lessThan(total), () => {
+      const txf = float(instanceIndex).mod(u.tilesX).floor().toVar();
+      const tyf = float(instanceIndex).div(u.tilesX).floor().toVar();
+      const zmin = float(1.0).toVar();
+      const zmax = float(0.0).toVar();
+      Loop(TILE, ({ i: yy }) => {
+        Loop(TILE, ({ i: xx }) => {
+          const ux = txf.mul(float(TILE)).add(float(yy)).add(0.5).div(u.viewW);
+          const uy = tyf.mul(float(TILE)).add(float(xx)).add(0.5).div(u.viewH);
+          const d = textureLoad(gbufferRT.depthTexture, vec2(ux, uy)).x.toVar();
+          zmin.assign(min(zmin, d));
+          zmax.assign(max(zmax, d));
+        });
+      });
+      tileZS.element(instanceIndex).assign(vec2(zmin, zmax));
+    });
+  })().compute(MAX_TILES, [64]);
+  // pass C2：两遍式剔除（计数→atomic 领 [offset, offset+count) →回写灯索引）
+  // 侧平面测试 |dot(L, n̂)| ≤ r 四面（平面过相机原点，符号不敏感）；深度用线性视距重叠。
+  const cullNode = Fn(() => {
+    const total = u.tilesX.mul(u.tilesY).floor();
+    If(float(instanceIndex).lessThan(total), () => {
+      const tid = instanceIndex.toVar();
+      const txf = float(tid).mod(u.tilesX).floor().toVar();
+      const tyf = float(tid).div(u.tilesX).floor().toVar();
+      // tile 四角 NDC → 视空间方向（projInv × 单位 w）
+      const x0 = txf.mul(float(TILE)).mul(2.0).div(u.viewW).sub(1.0);
+      const x1 = txf.add(1.0).mul(float(TILE)).mul(2.0).div(u.viewW).sub(1.0);
+      const y0 = tyf.mul(float(TILE)).mul(2.0).div(u.viewH).sub(1.0);
+      const y1 = tyf.add(1.0).mul(float(TILE)).mul(2.0).div(u.viewH).sub(1.0);
+      const dirOf = (xx, yy) => u.camProjInv.mul(vec4(xx, yy, 1.0, 1.0)).xyz.normalize();
+      const nL = normalize(cross(dirOf(x0, y0), dirOf(x0, y1)));
+      const nR = normalize(cross(dirOf(x1, y1), dirOf(x1, y0)));
+      const nT = normalize(cross(dirOf(x0, y0), dirOf(x1, y0)));
+      const nB = normalize(cross(dirOf(x0, y1), dirOf(x1, y1)));
+      // NDC z → 线性视距（WebGPU z∈[0,1]：d = n·f / (f − z(f−n))）
+      const zm = tileZS.element(tid);
+      const nf = u.camNear.mul(u.camFar);
+      const fmn = u.camFar.sub(u.camNear);
+      const dMin = nf.div(u.camFar.sub(zm.x.mul(fmn)));
+      const dMax = nf.div(u.camFar.sub(zm.y.mul(fmn)));
+      // 计数遍
+      const cnt = int(0).toVar();
+      Loop(MAX_LIGHTS, ({ i }) => {
+        If(float(i).greaterThanEqual(u.lightCount), () => { Break(); });
+        const rowY = float(i).add(0.5).div(float(MAX_LIGHTS));
+        const t0 = textureLoad(lightTex, vec2(0.125, rowY));
+        const lp = t0.xyz;
+        const r = t0.w;
+        const dl = length(lp);
+        If(abs(dot(lp, nL)).lessThanEqual(r)
+          .and(abs(dot(lp, nR)).lessThanEqual(r))
+          .and(abs(dot(lp, nT)).lessThanEqual(r))
+          .and(abs(dot(lp, nB)).lessThanEqual(r))
+          .and(dl.add(r).greaterThanEqual(dMin))
+          .and(dl.sub(r).lessThanEqual(dMax)), () => {
+          cnt.addAssign(1);
+        });
+      });
+      cnt.assign(min(cnt, int(TILE_CAP)));
+      const offset = atomicAdd(counterS.element(uint(0)), uint(cnt)).toVar();
+      gridS.element(tid.mul(uint(2))).assign(offset);
+      gridS.element(tid.mul(uint(2)).add(uint(1))).assign(uint(cnt));
+      // 回写遍（同判定）
+      const j = int(0).toVar();
+      Loop(MAX_LIGHTS, ({ i }) => {
+        If(float(i).greaterThanEqual(u.lightCount), () => { Break(); });
+        const rowY2 = float(i).add(0.5).div(float(MAX_LIGHTS));
+        const t02 = textureLoad(lightTex, vec2(0.125, rowY2));
+        const lp2 = t02.xyz;
+        const r2 = t02.w;
+        const dl2 = length(lp2);
+        If(abs(dot(lp2, nL)).lessThanEqual(r2)
+          .and(abs(dot(lp2, nR)).lessThanEqual(r2))
+          .and(abs(dot(lp2, nT)).lessThanEqual(r2))
+          .and(abs(dot(lp2, nB)).lessThanEqual(r2))
+          .and(dl2.add(r2).greaterThanEqual(dMin))
+          .and(dl2.sub(r2).lessThanEqual(dMax)), () => {
+          If(j.lessThan(cnt).and(offset.add(j).lessThan(int(LIST_CAP))), () => {
+            listS.element(offset.add(j)).assign(uint(i));
+          });
+          j.addAssign(1);
+        });
+      });
+    });
+  })().compute(MAX_TILES, [64]);
 
   // ---- 安装：房间子树 twin 替换 + GBUF 层；灯与阴影相机挂 GBUF 位（两 pass 灯集恒定，
   // 防管线 churn；阴影相机须看见 GBUF-only 的房间 mesh）----
@@ -343,6 +464,10 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
       u.tShadow.value = sd;
     }
 
+    u.viewW.value = gbufferRT.width;
+    u.viewH.value = gbufferRT.height;
+    u.camNear.value = camera.near;
+    u.camFar.value = camera.far;
     // 透明件深度比较共享口（gbufDepth.js）：与光照同一相机矩阵
     gbufDepthShared.camProjInv.value.copy(camera.projectionMatrixInverse);
     gbufDepthShared.tDepth.value = gbufferRT.depthTexture;
@@ -368,6 +493,9 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
     camera.layers.set(GBUF_LAYER);
     renderer.render(scene, camera);
     renderer.setMRT(null);
+    // tile 剔除三连（计数清零 → tile z minmax → 两遍式剔除建表）；单次提交保序，
+    // 消费的是本帧 G-buffer 深度（pass A 刚产出）
+    renderer.compute([resetNode, zmmNode, cullNode]);
     // pass B：全屏光照 → composer 场景色 RT（线性 HDR；深度走 G-buffer，RT 自有深度闲置）
     u.tGAlbedo.value = gbufferRT.textures[0];
     u.tGNormal.value = gbufferRT.textures[1];
@@ -387,6 +515,8 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
 
   function resize(w, h) {
     gbufferRT.setSize(Math.max(1, w), Math.max(1, h));
+    u.tilesX.value = Math.ceil(w / TILE);
+    u.tilesY.value = Math.ceil(h / TILE);
   }
 
   function dispose() {
