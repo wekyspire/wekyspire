@@ -8,8 +8,11 @@
 //   常量，twin 上同名属性赋值）；动态循环上界 = 固定 MAX + Break（towerClouds 同款）；
 //   灯表走 DataTexture（TSL uniform 数组不可用）；光强 = color×intensity（无 4π 因子，
 //   AnalyticLightNode 实测）；雾 = FogNode 的 smoothstep(near, far, 视距)。
-// 已知 v1 缺口（spike 验证项）：alphaTest 切割件未接（rough 槽与 alpha 冲突须四槽或另案）；
-//   透明件深度遮挡未接（设计定案 = shader 内采 G-buffer 深度比较，v1 缺省关闭）。
+// v2 已接：透明件 G-buffer 深度比较（立牌 alphaTestNode 硬 discard / 世界粒子 soft fade，
+//   见 post/gbufDepth.js）+ 点光屏幕椭圆逐像素剔除（CPU 投影，?dlr=N 可钳半径演示）。
+// 已知缺口：alphaTest 切割件进 G-buffer（rough 槽与 alpha 冲突须四槽或另案）；多次散射
+//   LUT 补偿（当前 TS 单次散射，spec 略保守）；bloomOffset depthPrepass 对 GBUF 层房间件
+//   的层位适配；RoomStage 接入。
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
@@ -19,9 +22,13 @@ import {
   mrt, normalView, materialRoughness, materialMetalness, output,
 } from 'three/tsl';
 import { passUV, makeFullScreenPass, renderFullScreenPass, disposeFullScreenPass } from './passes.js';
+import { gbufDepthShared } from './gbufDepth.js';
 
 export const GBUF_LAYER = 6;              // BLOOM_LAYER=7 之外的未占用层位
 const MAX_LIGHTS = 64;                    // 灯表容量（G-buffer 场景实测 21 盏，上限留破坏时代余量）
+// 灯半径钳制（?dlr=N，调试/演示用）：culling 收益取决于灯的有效半径——火把 cutoff=145
+// 盖满全屏时圆测试不剔；钳到真实照亮半径可即时看到逐像素灯数下降。0 = 不钳
+const DLR = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('dlr')) || 0 : 0;
 const RECIP_PI = 0.3183098861837907;      // 1/π（BRDF_Lambert，与 forward 生成码同值）
 
 // G-buffer 槽位（'output' 槽 = 材质自己的输出 → 附件 0，albedo twin 的 colorNode；
@@ -89,12 +96,19 @@ const dlLighting = Fn(([u]) => {
     const directDiffuse = vec3(0.0).toVar();
     const directSpecular = vec3(0.0).toVar();
 
-    // ---- 点光表（DataTexture 2×MAX：texel0 = 视空间位置+截止半径，texel1 = 色×强度+decay）----
+    // ---- 点光表（DataTexture 4×MAX，每灯 4 texel）+ 屏幕椭圆早退（逐像素 light culling：
+    // CPU 每帧投影灯球为 NDC 椭圆，像素不在包围内即跳过全段 BRDF——粒度细于 tile 网格，
+    // 且免 compute 建表通道（CPU 写 storage 的 compute 侧读回全零旧坑）。着色为本件自有
+    // Torrance-Sparrow 族 D_GGX·V_SmithCorrelated·F_Schlick（Cook-Torrance 现代式）----
     Loop(MAX_LIGHTS, ({ i }) => {
       If(float(i).greaterThanEqual(u.lightCount), () => { Break(); });
       const rowY = float(i).add(0.5).div(float(MAX_LIGHTS));
-      const t0 = texture(u.tLight, vec2(0.25, rowY));
-      const t1 = texture(u.tLight, vec2(0.75, rowY));
+      const t2 = texture(u.tLight, vec2(0.625, rowY));
+      const ex = ndc.xy.x.sub(t2.x).div(t2.z.max(1e-4));
+      const ey = ndc.xy.y.sub(t2.y).div(t2.w.max(1e-4));
+      If(ex.mul(ex).add(ey.mul(ey)).lessThan(1.0), () => {
+      const t0 = texture(u.tLight, vec2(0.125, rowY));
+      const t1 = texture(u.tLight, vec2(0.375, rowY));
       const lv = t0.xyz.sub(vpos);
       const dist = max(length(lv), 1e-4);
       const L = lv.div(dist);
@@ -118,6 +132,7 @@ const dlLighting = Fn(([u]) => {
         ).max(0.0);
         const F = F0.add(oneMinus(F0).mul(pow(oneMinus(VdotH), 5.0)));
         directSpecular.addAssign(irrad.mul(NdotL).mul(D).mul(Vis).mul(F));
+      });
       });
     });
 
@@ -199,9 +214,11 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
   gbufferRT.textures[1].name = 'normal';
   gbufferRT.textures[2].name = 'mat';
 
-  // 灯表（DataTexture 上传：TSL uniform 数组不可用；NEAREST 逐纹素取值）
-  const lightData = new Float32Array(2 * 4 * MAX_LIGHTS);
-  const lightTex = new THREE.DataTexture(lightData, 2, MAX_LIGHTS, THREE.RGBAFormat, THREE.FloatType);
+  // 灯表（DataTexture 上传：TSL uniform 数组不可用；NEAREST 逐纹素取值）。
+  // 每灯 4 texel：0=视空间位置+截止半径；1=色×强度+decay；2=屏幕 NDC 椭圆（cx,cy,rx,ry，
+  // 灯球的保守屏幕包围，光照循环先做椭圆测试再进 GGX——即逐像素 light culling）
+  const lightData = new Float32Array(4 * 4 * MAX_LIGHTS);
+  const lightTex = new THREE.DataTexture(lightData, 4, MAX_LIGHTS, THREE.RGBAFormat, THREE.FloatType);
   lightTex.magFilter = THREE.NearestFilter;
   lightTex.minFilter = THREE.NearestFilter;
 
@@ -257,19 +274,38 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
     u.camProjInv.value.copy(camera.projectionMatrixInverse);
     u.camWorld.value.copy(camera.matrixWorld);
 
+    const W = gbufferRT.width, H = gbufferRT.height;
+    const pe = camera.projectionMatrix.elements;
     let count = 0;
     let dir1Set = false;
     scene.traverse((o) => {
       if (!o.isLight || !o.visible) return;
       if (o.isPointLight && count < MAX_LIGHTS) {
         o.getWorldPosition(_v).applyMatrix4(_view);
-        const i4 = count * 8;
+        const i4 = count * 16;
         lightData[i4] = _v.x; lightData[i4 + 1] = _v.y; lightData[i4 + 2] = _v.z;
-        lightData[i4 + 3] = o.distance > 0 ? o.distance : 1e6;
+        const rawCut = o.distance > 0 ? o.distance : 1e6;
+        lightData[i4 + 3] = DLR > 0 ? Math.min(rawCut, DLR) : rawCut;
         lightData[i4 + 4] = o.color.r * o.intensity;
         lightData[i4 + 5] = o.color.g * o.intensity;
         lightData[i4 + 6] = o.color.b * o.intensity;
         lightData[i4 + 7] = o.decay;
+        // 屏幕包围椭圆（NDC）：中心 = 投影；半径 = cutoff × focal / w（透视缩放）。
+        // 背后（w<=0）：球穿近面（w < cutoff）按全屏保守，否则整灯剔除（rx=0 恒不中）
+        const x = _v.x, y = _v.y, z = _v.z;
+        const cw = pe[3] * x + pe[7] * y + pe[11] * z + pe[15];
+        if (cw > 1e-3) {
+          lightData[i4 + 8] = (pe[0] * x + pe[4] * y + pe[8] * z + pe[12]) / cw;
+          lightData[i4 + 9] = (pe[1] * x + pe[5] * y + pe[9] * z + pe[13]) / cw;
+          const rpx = lightData[i4 + 3] * pe[5] * (H / 2) / cw;
+          lightData[i4 + 10] = rpx / (W / 2);
+          lightData[i4 + 11] = rpx / (H / 2);
+        } else if (lightData[i4 + 3] > -_v.z + camera.near) {
+          lightData[i4 + 8] = 0; lightData[i4 + 9] = 0;
+          lightData[i4 + 10] = 3; lightData[i4 + 11] = 3;   // 全屏保守
+        } else {
+          lightData[i4 + 10] = 0;                            // 恒不中（剔除）
+        }
         count += 1;
       } else if (o.isDirectionalLight && o !== moonlight) {
         o.getWorldPosition(_v);
@@ -306,6 +342,10 @@ export function createDeferredShading({ scene, roomGroup, moonlight }) {
       if (sd.compareFunction === null) sd.compareFunction = THREE.LessEqualCompare;
       u.tShadow.value = sd;
     }
+
+    // 透明件深度比较共享口（gbufDepth.js）：与光照同一相机矩阵
+    gbufDepthShared.camProjInv.value.copy(camera.projectionMatrixInverse);
+    gbufDepthShared.tDepth.value = gbufferRT.depthTexture;
 
     // fog（线性 Fog；场景无雾时保持远置缺省 = 不生效）
     const fog = scene.fog;

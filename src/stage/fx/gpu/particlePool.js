@@ -29,6 +29,7 @@
 // 降级：非 WebGPU 后端一律返回 null（compute 是 WebGPU 专属；UI/世界 = 同类两实例）。
 import * as THREE from 'three';
 import { StorageBufferAttribute, PointsNodeMaterial } from 'three/webgpu';
+import { DEFERRED_ON, gbufSoftFadeFactor } from '../../post/gbufDepth.js';
 import {
   Fn, If, Loop, uniform, storage, select, uv,
   float, int, uint, vec3, vec4,
@@ -436,6 +437,11 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
     vec4(m.mul(aColor.a).mul(0.7), 0.0, 0.0, 1.0),
     vec4(aColor.rgb, m.mul(aColor.a)));
   additiveLight(pointsMat);
+  // deferred 路径：世界池粒子对 G-buffer 深度软衰减（soft particle，渐隐带 2 世界单位）；
+  // UI 池不接（uiScene 无场景深度语义）；非 deferred 局不接入节点（前向零开销）
+  if (space === 'world' && DEFERRED_ON) {
+    pointsMat.colorNode = gbufSoftFadeFactor(2.0).mul(pointsMat.colorNode);
+  }
 
   const points = new THREE.Sprite(pointsMat);
   points.geometry = geo;
