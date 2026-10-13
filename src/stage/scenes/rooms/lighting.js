@@ -71,7 +71,7 @@ export const LIGHTING_PRESETS = {
     bounce: [[120, 100], [90, 90]],
     battleGlow: [0xb6bac1, 5200, 195],   // 战场主补光：中性灰白（黑白主题）
     centerFill: [0xa8acb3, 3800, 170],
-    fire: { base: FIRE_BASE * 0.56, dist: 145, cap: 14 },
+    fire: { base: FIRE_BASE * 0.28, dist: 145, cap: 14 },   // 亮度减半（deferred 紧致半径配套：R≈82→≈55）
     tint: { base: [0.52, 0.53, 0.56], fireGain: [0.21, 0.21, 0.23], radius: 64 },
   },
   // 赌厅（休息房·老虎机/银行机）：**外围光再压一档、亮度靠中央光撑**。
