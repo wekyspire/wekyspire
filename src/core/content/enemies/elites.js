@@ -79,7 +79,7 @@ registerEnemy({
 });
 
 // ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
-// 被斩杀），首拍扑咬 23；随后三拍循环：盾15+中毒8 → 盾15+攻12 → 晕眩发呆（破盾窗口）。
+// 被斩杀），首拍扑咬 24；随后三拍循环：盾15+中毒8 → 盾15+攻12 → 晕眩发呆（破盾窗口）。
 //（2026-10-10 加强：中毒固定伤化后 6→8、攻 10→12，对齐 ENEMIES_1.md 新稿）
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
@@ -93,7 +93,7 @@ registerEnemy({
     const atk = actx.unit.getStat('attack');
     if (actx.unit.actionIndex === 0) {
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: actx.unit, target: actx.player, amount: 23 + atk,
+        source: actx.unit, target: actx.player, amount: 24 + atk,
       }));
       return;
     }
@@ -114,7 +114,7 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) {
-      return { kinds: ['attack'], hits: 1, damage: 23 + atk, note: '自身开局自带护盾20' };
+      return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '自身开局自带护盾20' };
     }
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒8' };
@@ -124,11 +124,11 @@ registerEnemy({
 });
 
 // ⑳ 碎岩穿山甲（第 1 章精英）：重甲 + 蓄势冲锋——固定防御 2；两拍循环：
-// 蓄力（盾15 + 蓄势5）→ 冲锋（攻7，蓄势让每一击都吃满加成）。
+// 蓄力（盾15 + 蓄势5）→ 冲锋（攻5，蓄势让每一击都吃满加成）。88 血。
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'rockPangolin', name: '碎岩穿山甲',
-  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 84 }),
+  createUnit: () => new Enemy({ defId: 'rockPangolin', name: '碎岩穿山甲', maxHp: 88 }),
   onBattleStart(ctx, unit) {
     // 花岗岩甲：固定减伤 2 走「防御」效果轨（玩家可见），同 MEFM-1 铁壳口径
     ctx.kernel.submitInstruction(new AddEffectInstruction({
@@ -144,14 +144,14 @@ registerEnemy({
     } else {
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player,
-        amount: 7 + unit.getStat('attack'), // 蓄势走 PRE 订阅，不双计
+        amount: 5 + unit.getStat('attack'), // 蓄势走 PRE 订阅，不双计
       }));
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+5' }
     : { kinds: ['attack'], hits: 1,
-        damage: 7 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
+        damage: 5 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
 });
 

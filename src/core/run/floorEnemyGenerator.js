@@ -334,10 +334,10 @@ export function generateEncounter(run) {
   const out = slots.map(s => descriptorOf(s.defId, s.d));
 
   // ---- 编成后处理 ----
-  // 静电毛球：20–29 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
+  // 静电毛球：21–38 血随机（ENEMIES_1.md §6.4；描述符落 maxHp，spawnEnemy 按此定血）
   // staticPuffB 固定 17 血——精确 id 匹配不覆盖 B 变体
   for (let i = 0; i < out.length; i++) {
-    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.pick([20, 23, 26, 29]) };
+    if (out[i].defId === 'staticPuff') out[i] = { ...out[i], maxHp: rng.int(21, 38) };
   }
   // 刺刺草：17–22 血随机（ENEMIES_1.md；B 变体同档）
   for (let i = 0; i < out.length; i++) {
@@ -348,6 +348,7 @@ export function generateEncounter(run) {
   // 章2 血量随机档（ENEMIES_2.md"X-Y 血随机"单位；B 变体同档，burnBotB 的减半血在
   // 定义内固定、不经此表）
   const RANDOM_HP = {
+    buzzbugA: [22, 27], buzzbugB: [22, 27],
     corpGuard: [42, 48], corpGuardB: [42, 48],
     recruitGunner: [42, 48], recruitGunnerB: [42, 48], recruitGunnerC: [42, 48],
     channeler: [53, 58],

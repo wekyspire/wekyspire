@@ -18,6 +18,7 @@
 
 import gsap from 'gsap';
 import { EventNames } from '../bridge/events.js';
+import { createFlightWatchdog } from './flightWatchdog.js';
 
 export const CARD_UPGRADE_TIMING = Object.freeze({
   gatherMs: 360,   // 集中：从选中位飞到亮相位并放大（已在亮相位则整拍跳过）
@@ -60,12 +61,13 @@ export function playCardUpgradeFlight({
     let settled = false;
     const tweens = [];
     // fx 闪光层是时间驱动的：演出卡不在任何宿主帧循环里，自己用 ticker 喂
-    const tickFx = (time, deltaMs) => card.updateFx(Math.min(deltaMs, 100) / 1000);
+    let beats = 0;
+    const tickFx = (time, deltaMs) => { beats++; card.updateFx(Math.min(deltaMs, 100) / 1000); };
     gsap.ticker.add(tickFx);
     const settle = () => {
       if (settled) return;
       settled = true;
-      clearTimeout(safety);
+      stopWatchdog();
       gsap.ticker.remove(tickFx);
       for (const tw of tweens) tw.kill();
       card.removeFromParent?.();
@@ -73,8 +75,8 @@ export function playCardUpgradeFlight({
       finishBeat();
       onDone?.();
     };
-    // 兜底：tween 链断裂（异常/外部清场）也不吞上行——意图延迟可以，丢失不行
-    const safety = setTimeout(settle, TOTAL_MS + 500);
+    // 兜底看门狗（flightWatchdog.js）：链断裂不吞上行；帧饥饿时等演出爬完
+    const stopWatchdog = createFlightWatchdog({ heartbeat: () => beats, onExpire: settle });
 
     // ① 集中：从选中位飞到亮相位并放大（距离太近 = 已在台上，整拍跳过）
     const gatherFrom = {

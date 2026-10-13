@@ -12,6 +12,7 @@
 
 import gsap from 'gsap';
 import { EventNames } from '../bridge/events.js';
+import { createFlightWatchdog } from './flightWatchdog.js';
 
 export const CARD_BURN_FLIGHT_TIMING = Object.freeze({
   gatherMs: 320,   // 集中：从选中位飞到亮相位并放大（近距整拍跳过）
@@ -45,7 +46,9 @@ export function playCardBurnFlight({
     const tweens = [];
     // 燃烧/余烬逐帧驱动（startBurn 后宿主本应逐帧调 updateBurn）：演出卡不在
     // 宿主帧循环里，ticker 自喂（updateFx 顺带养卡面 fx，与升级演出同口径）
+    let beats = 0;   // gsap 心跳计数（看门狗判「链还活着」的依据）
     const tick = (time, deltaMs) => {
+      beats++;
       const dt = Math.min(deltaMs, 100) / 1000;
       card.updateFx?.(dt);
       card.updateBurn?.(dt);
@@ -54,7 +57,7 @@ export function playCardBurnFlight({
     const settle = () => {
       if (settled) return;
       settled = true;
-      clearTimeout(safety);
+      stopWatchdog();
       gsap.ticker.remove(tick);
       for (const tw of tweens) tw.kill();
       card.removeFromParent?.();
@@ -62,8 +65,8 @@ export function playCardBurnFlight({
       finishBeat();
       onDone?.();
     };
-    // 兜底：tween/燃尽链断裂（异常/外部清场）也不吞回调
-    const safety = setTimeout(settle, TOTAL_MS + 500);
+    // 兜底看门狗（flightWatchdog.js）：链断裂不吞回调；帧饥饿时等演出爬完
+    const stopWatchdog = createFlightWatchdog({ heartbeat: () => beats, onExpire: settle });
 
     // ① 集中：选中位 → 亮相位（近距整拍跳过——「本来就在场景内」的原地烧）
     const gatherFrom = {
