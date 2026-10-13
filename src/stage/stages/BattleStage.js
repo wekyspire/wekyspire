@@ -64,6 +64,7 @@ import { sharedCardArtCache } from '../art/cardArtCache.js';
 import { sharedUnitArtCache, playerSwordVariant, PLAYER_SWORD_TIERS } from '../art/unitArt.js';
 import { getScene, slotTransform } from '../scenes/index.js';
 import { createVolumetricMoonlight } from '../scenes/volumetricMoon.js';
+import { createDeferredShading } from '../post/deferredShading.js';
 import { runScript } from '../fx/script.js';
 import { AuraHost } from '../fx/aura.js';
 import { createChantSceneFx } from '../fx/chantSceneFx.js';
@@ -164,7 +165,17 @@ export class BattleStage {
     // 单测假 renderer 无 setRenderTarget → null，StageManager 回退直接渲染）
     const renderer = stageManager._renderer;
     if (this._scene3D?.moonlight && renderer && typeof renderer.setRenderTarget === 'function') {
-      this._composer = createVolumetricMoonlight({ light: this._scene3D.moonlight, march: stageManager.getRenderQuality?.() });
+      // 混合 deferred 实验路径（?deferred=1）：pass 1 由 deferredShading 接管
+      this._deferred = (typeof location !== 'undefined'
+        && new URLSearchParams(location.search).get('deferred') === '1')
+        ? createDeferredShading({
+          scene: this.scene, roomGroup: this._scene3D.group, moonlight: this._scene3D.moonlight,
+        }) : null;
+      this._composer = createVolumetricMoonlight({
+        light: this._scene3D.moonlight,
+        march: stageManager.getRenderQuality?.(),
+        scenePass: this._deferred,
+      });
       this.composeScene = ({ scene, camera }) => this._composer.render(renderer, scene, camera);
       this.composeResize = (w, h) => this._composer.resize(w, h);
       this.composeResize(stageManager.viewSize.width || 2, stageManager.viewSize.height || 2);
@@ -1270,6 +1281,8 @@ export class BattleStage {
     this._closeViewer();
     this._composer?.dispose();
     this._composer = null;
+    this._deferred?.dispose(); // deferred 实验路径：还原 twin/层位后释放 G-buffer 链
+    this._deferred = null;
     this.particles2World?.dispose(); // 粒子池 v2（世界）
     this.particles2World = null;
     this.particles2Ui?.dispose(); // 粒子池 v2（UI 空间）

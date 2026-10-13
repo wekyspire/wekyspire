@@ -70,6 +70,7 @@ node tools/saveForge.mjs --from-session r20-a1-2 --out 现场1   # headless 会�
 - **面板层次坑**：场景房的 dock 操纵条（`rs._panel`）与阶段模态面板（`rs._stagePanel`）会**同时存在**——点击助手一律优先阶段模态；自写页面内表达式同理。
 - **演出期输入/读数坑**：长演出链期间点击会被输入仲裁**静默吞掉**（按钮 enabled 也照吞），快照只在 sync 节拍推进（积压期读 `_snapshot.turn` 永远是旧值）。操作前等演出落定（`waitFor` 快照条件），`waitIdleFrames` 只数 rAF 帧不管队列、不是「演出播完」。
 - **自检**：`node tools/browserHarness.mjs --check [--save 名] [--headed]`——报帧率/WebGL/现场状态 + 截图 `tmp/play/harness-check.png`。
+- **性能探针**：`node tools/perfProbe.mjs --scene map|battle|both`——帧率解锁跑真实帧成本，实验矩阵 = 分辨率阶梯（GPU 斜率）+ CDP CPU 节流（CPU 斜率）+ 主线程采样归并 + fxPost/月光档/渲染背板帽开关；报告落 `tmp/perf/`。harness 口子：`h.perf(ms)`（帧节拍 + renderer.info；WebGPU three 的 `info.render.calls` 是启动以来累计，每帧真值在 `drawCalls/frameCalls`）、`h.cpuProfile(ms)`、`h.cpuThrottle(rate)`。子树成本归因用「裸渲 + 逐子树隐藏 + h.perf」二分（GPU 时间戳的 pass 括号含队列等待，不能做子树归因）。
 - 参考脚本：`tmp/play/check-train-real.mjs`。
 
 ## 分支、协作与部署

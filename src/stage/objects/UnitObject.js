@@ -23,7 +23,8 @@
 // 场景可遮蔽立牌（合理）但不可遮蔽状态；卡牌 UI 是独立 pass 天然在其上。
 
 import * as THREE from 'three';
-import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
+import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { DEFERRED_ON, applyGbufHardTest } from '../post/gbufDepth.js'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
 import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
@@ -135,6 +136,9 @@ export class UnitObject extends THREE.Group {
       new MeshBasicNodeMaterial({ color: SIDE_COLORS[side] ?? 0x888888, alphaTest: 0.5, fog: false }),
     );
     this._body.name = 'body';
+    // deferred 路径：立牌对 G-buffer 深度做硬遮挡（forward 余量 pass 不写深度）；
+    // 非 deferred 局不接入节点（构建期常量门控，前向零开销）
+    if (DEFERRED_ON) applyGbufHardTest(this._body.material);
     this._body.position.y = standeeHeight / 2;
     // bloom offset 通道（fx/bloomOffset.js）：本体常驻 BLOOM_LAYER——偏移 pass 每帧
     // 重渲一遍（单位寥寥几个 quad，代价可忽略），偏移量由本体补丁按 uBurn 现算现写

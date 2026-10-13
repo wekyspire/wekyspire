@@ -74,6 +74,16 @@ export async function launch({ headless = true, viewport = { width: 1280, height
   const abs = (u) => (u.startsWith('http') ? u : `${url}${u.replace(/^\//, '')}`);
   const sleep = (ms) => page.waitForTimeout(ms);
 
+  // CDP 懒会话（性能探针用：Emulation/Profiler 域）
+  let _cdp = null;
+  async function cdpSession() {
+    if (!_cdp) {
+      _cdp = await page.context().newCDPSession(page);
+      await _cdp.send('Profiler.enable');
+    }
+    return _cdp;
+  }
+
   const helpers = {
     browser, page, errors, consoleErrors,
 
@@ -379,6 +389,91 @@ export async function launch({ headless = true, viewport = { width: 1280, height
       requestAnimationFrame(tick);
     }), ms),
 
+    // ---- 性能探针口子（CDP 懒会话：CPU 节流 / 主线程采样）----
+    cpuThrottle: async (rate = 1) => {
+      const s = await cdpSession();
+      await s.send('Emulation.setCPUThrottlingRate', { rate });
+    },
+    /**
+     * 主线程采样 profile（默认 0.5ms 采样间隔）。返回 { wallMs, jsMs, jsPct, gcMs,
+     * top:[{fn,loc,selfMs}], groups }。Σdeltas ≈ JS 执行时长（空闲段不采样），
+     * jsPct = jsMs / wallMs 即主线程占用率。
+     */
+    cpuProfile: async (ms = 5000) => {
+      const s = await cdpSession();
+      await s.send('Profiler.setSamplingInterval', { interval: 500 });
+      await s.send('Profiler.start');
+      await sleep(ms);
+      const { profile } = await s.send('Profiler.stop');
+      return summarizeCpuProfile(profile, ms);
+    },
+
+    /** WebGPU 适配器信息（vendor/architecture——报告「跑在哪块卡上」用）。 */
+    adapterInfo: () => page.evaluate(async () => {
+      try {
+        const a = await navigator.gpu?.requestAdapter?.();
+        const i = a?.info ?? {};
+        return { vendor: i.vendor ?? '', architecture: i.architecture ?? '', device: i.device ?? '' };
+      } catch (e) { return { error: String(e).slice(0, 120) }; }
+    }),
+
+    /**
+     * 帧节奏 + 渲染负载采样窗口（性能探针主力口子）。探针 rAF 晚于应用主循环注册，
+     * 每帧跑在全部应用回调之后：相邻两次探针间隔 = 完整帧周期。窗口内关掉
+     * renderer.info.autoReset、逐帧累计（多 pass 链的 draw/tris 记全量），结束还原。
+     */
+    perf: (ms = 3000) => page.evaluate((dur) => new Promise((resolve) => {
+      const info = window.__shell?.stageManager?._renderer?.info;
+      const prevAuto = info?.autoReset;
+      if (info) { info.autoReset = false; info.reset(); }
+      let longTasks = 0, longTaskMs = 0;
+      let po = null;
+      try {
+        po = new PerformanceObserver((l) => {
+          for (const e of l.getEntries()) { longTasks += 1; longTaskMs += e.duration; }
+        });
+        po.observe({ entryTypes: ['longtask'] });
+      } catch { /* longtask 不支持时跳过 */ }
+      const iv = [];
+      let draws = 0, tris = 0, pts = 0, passes = 0, computes = 0;
+      let last = null;
+      const t0 = performance.now();
+      const tick = () => {
+        const t = performance.now();
+        if (last != null) {
+          iv.push(t - last);
+          if (info) {
+            draws += info.render.drawCalls; tris += info.render.triangles; pts += info.render.points;
+            passes += info.render.frameCalls; computes += info.compute.frameCalls;
+          }
+        }
+        info?.reset();
+        last = t;
+        if (t - t0 < dur) requestAnimationFrame(tick);
+        else {
+          if (info) info.autoReset = prevAuto;
+          po?.disconnect?.();
+          const n = Math.max(1, iv.length);
+          const s = [...iv].sort((a, b) => a - b);
+          const q = (p) => +s[Math.min(s.length - 1, Math.floor(p * s.length))].toFixed(2);
+          resolve({
+            fps: +(n / ((t - t0) / 1000)).toFixed(1),
+            ms: { mean: +(iv.reduce((a, b) => a + b, 0) / n).toFixed(2), p50: q(0.5), p95: q(0.95), max: +s[s.length - 1].toFixed(2) },
+            drawsPerFrame: +(draws / n).toFixed(1),
+            passesPerFrame: +(passes / n).toFixed(1),
+            computePerFrame: +(computes / n).toFixed(1),
+            trisPerFrame: Math.round(tris / n),
+            pointsPerFrame: Math.round(pts / n),
+            textures: info?.memory?.textures ?? null,
+            renderTargets: info?.memory?.renderTargets ?? null,
+            programs: info?.memory?.programs ?? null,
+            longTasks, longTaskMs: +longTaskMs.toFixed(0),
+          });
+        }
+      };
+      requestAnimationFrame(tick);
+    }), ms),
+
     /** 截图（落 tmp/play/<名字>.png）。 */
     shot: async (name) => {
       mkdirSync(OUT_DIR, { recursive: true });
@@ -394,6 +489,43 @@ export async function launch({ headless = true, viewport = { width: 1280, height
 
   // 顶级导出也带上（脚本可 `const { page } = h` 直接用）
   return Object.assign(helpers, { sleep });
+}
+
+/**
+ * CDP Profiler 结果归并：samples[i] 与 timeDeltas[i]（µs）配对累计各节点 self 时间；
+ * 按 URL 桶归并（three/vue/gsap/app/other）+ top 函数清单。跨空闲的大 delta（>100ms）
+ * 不计入 JS 时间——采样器只在 JS 执行期发样本，Σdeltas ≈ 主线程 JS 忙时。
+ */
+function summarizeCpuProfile(profile, wallMs) {
+  const byId = new Map(profile.nodes.map((n) => [n.id, n.callFrame]));
+  const self = new Map();
+  let jsMs = 0, gcMs = 0;
+  for (let i = 0; i < profile.samples.length; i++) {
+    const d = profile.timeDeltas[i] ?? 0;
+    if (d <= 0 || d > 100000) continue;
+    const cf = byId.get(profile.samples[i]);
+    if (!cf) continue;
+    jsMs += d / 1000;
+    if (cf.functionName === '(garbage collector)') { gcMs += d / 1000; continue; }
+    const key = `${cf.functionName || '(anonymous)'}@${(cf.url || '').split('?')[0]}:${cf.lineNumber + 1}`;
+    self.set(key, (self.get(key) ?? 0) + d / 1000);
+  }
+  const bucket = (url) => !url ? 'native'
+    : url.includes('three') || url.includes('/deps/chunk-') ? 'three'
+    : url.includes('vue') ? 'vue'
+      : url.includes('gsap') ? 'gsap'
+    : url.includes('/src/') ? 'app' : 'other';
+  const groups = {};
+  for (const [k, v] of self) {
+    const b = bucket(k.split('@')[1] ?? '');
+    groups[b] = +((groups[b] ?? 0) + v).toFixed(1);
+  }
+  const top = [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+    .map(([k, v]) => {
+      const at = k.lastIndexOf('@');
+      return { fn: k.slice(0, at), loc: k.slice(at + 1), selfMs: +v.toFixed(1) };
+    });
+  return { wallMs, jsMs: +jsMs.toFixed(1), jsPct: wallMs ? +(100 * jsMs / wallMs).toFixed(1) : null, gcMs: +gcMs.toFixed(1), top, groups };
 }
 
 /** 便捷入口：起浏览器 → 打开 URL/save → 跑 fn → 关掉。 */

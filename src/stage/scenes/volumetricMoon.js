@@ -150,6 +150,8 @@ export function createVolumetricMoonlight({
   lightBoost = 0.9,
   tint = null,       // 配方场景调色 [r,g,b]（composeRoom grading.tint 下发；缺省白）
   march = null,      // { scale, steps }（缺省 ?moonq= 档，moonQualityFromUrl）
+  scenePass = null,  // 实验路径（?deferred=1）：接管 pass 1（G-buffer+光照+forward 余量），
+                     // 并以 scenePass.depthTexture 供 march（延迟链的场景深度在 G-buffer RT）
 } = {}) {
   const q = march ?? moonQualityFromUrl();
   let marchScale = Math.min(1, Math.max(0.25, +q.scale || 1));   // march/EMA 链分辨率系数
@@ -227,6 +229,7 @@ export function createVolumetricMoonlight({
     historyWrite.setSize(mw, mh);
     rtColor.setSize(rw, rh);
     bloom.resize(rw, rh);
+    scenePass?.resize?.(rw, rh);
     historyValid = false; // 尺寸变了，历史失效重收敛
   }
 
@@ -249,11 +252,17 @@ export function createVolumetricMoonlight({
     u.tShadow.value = shadowDepth; // 深度在 depthTexture（color 纹理是未用的垃圾）
     u.emaAlpha.value = historyValid ? EMA_ALPHA : 1;
 
-    // pass 1：场景 → RT
-    renderer.setRenderTarget(rt);
-    renderer.clear();
-    renderer.render(scene, camera);
-    u.tDepth.value = rt.depthTexture;
+    // pass 1：场景 → RT（deferred 实验路径由 scenePass 接管：G-buffer + 全屏光照 +
+    // forward 余量叠画，写进本 RT；march 改读 G-buffer 深度）
+    if (scenePass) {
+      scenePass.renderScenePass(renderer, scene, camera, rt);
+      u.tDepth.value = scenePass.depthTexture;
+    } else {
+      renderer.setRenderTarget(rt);
+      renderer.clear();
+      renderer.render(scene, camera);
+      u.tDepth.value = rt.depthTexture;
+    }
     // pass 2：march + EMA → historyWrite（tHistory 读上一帧的 historyRead）
     u.tHistory.value = historyRead.texture;
     renderer.setRenderTarget(historyWrite);
