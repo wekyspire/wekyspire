@@ -50,12 +50,18 @@ function confirmChoice(c) {
 
     <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步。
          该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸）。
-         .dialogue 按 step 所属剧本重挂（事件主对话 → 结果页各有一次入场拍）；
-         页内容按页码重挂（翻页 = 文字渐显重放） -->
-    <div v-else-if="page" :key="state.script" class="dialogue" :class="{ 'has-bg': !!step.bg }" @click="player.advance()">
-      <img v-if="step.bg" :key="step.bg" class="bgimg" :src="step.bg" alt="">
+         CG 组（黑底衬 + 图 + 纱）不随剧本重挂：换页/换剧本时背景连续过渡，
+         只有对白框重播入场拍（.box 按 state.script 重挂）。黑底衬保证 CG 淡入淡出
+         窗口里只露黑、不透出底下的塔楼/房间渲染（2026-10-13 实报闪烁的根治） -->
+    <div v-else-if="page" class="dialogue" :class="{ 'has-bg': !!step.bg }" @click="player.advance()">
+      <Transition name="bgb">
+        <div v-if="step.bg" class="bgblack"></div>
+      </Transition>
+      <Transition name="bgf">
+        <img v-if="step.bg" :key="step.bg" class="bgimg" :src="step.bg" alt="">
+      </Transition>
       <div v-if="step.bg" class="scrim"></div>
-      <div class="box">
+      <div :key="state.script" class="box">
         <div :key="state.pageIndex" class="page">
           <div class="speaker">
             <span class="speaker-text">{{ page.speaker }}</span>
@@ -105,12 +111,22 @@ function confirmChoice(c) {
 /* 对话框（**黑色半透明 flat 框**，方角厚边，UI_LANGUAGE） */
 .dialogue { position: absolute; inset: 0; cursor: pointer; background: rgba(5, 5, 5, .55); }
 .dialogue.has-bg { background: rgba(5, 5, 5, .38); }
-/* CG 入场：淡入 + 极缓推近（Ken Burns，14s 收在 1.045——静态图也要有呼吸） */
+/* CG 黑底衬：CG 在场期间垫一层不透明黑——淡入淡出窗口里露的是黑而非游戏场景 */
+.bgblack { position: absolute; inset: 0; background: #04060e; }
+.bgb-enter-active { transition: opacity 300ms ease; }
+.bgb-enter-from { opacity: 0; }
+.bgb-leave-active { transition: opacity 460ms ease; }
+.bgb-leave-to { opacity: 0; }
+/* CG：全屏等比覆盖 + 极缓推近（Ken Burns，14s 收在 1.045——静态图也要有呼吸）；
+   换图 = 双图共存交叉淡化（离开图绝对定位铺底，进入图盖上淡入） */
 .bgimg {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;
-  animation: bgIn 600ms ease both, bgDrift 14s ease-out 600ms forwards;
+  animation: bgDrift 14s ease-out 600ms forwards;
 }
-@keyframes bgIn { from { opacity: 0; } to { opacity: 1; } }
+.bgf-enter-active { transition: opacity 600ms ease; }
+.bgf-enter-from { opacity: 0; }
+.bgf-leave-active { transition: opacity 500ms ease; }
+.bgf-leave-to { opacity: 0; }
 @keyframes bgDrift { from { transform: scale(1); } to { transform: scale(1.045); } }
 /* 底部渐暗纱：保证对话框可读性（CG 亮区压字的问题） */
 .scrim {
@@ -118,6 +134,7 @@ function confirmChoice(c) {
   background: linear-gradient(to top, rgba(4, 5, 8, .78) 0%, rgba(4, 5, 8, .34) 34%, rgba(4, 5, 8, 0) 58%);
   animation: bgIn 600ms ease both;
 }
+@keyframes bgIn { from { opacity: 0; } to { opacity: 1; } }
 /* 对话框入场：上浮 + 淡入（每次 dialogue step 重挂触发——事件主对话与结果页各一拍） */
 .box {
   position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
