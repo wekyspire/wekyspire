@@ -24,12 +24,14 @@ import { getRelicDefinition } from '../relics/registry.js';
 import { grantRelic } from './prep.js';
 import { promoteCard } from './promotion.js';
 import { recordEffect } from './runContext.js';
+import { recordGold } from './runStats.js';
 
 /** 获得金币（amount ≤ 0 视为无事发生：不记账、不演出）。 */
 export function gainMoney(ctx, amount, { source = '' } = {}) {
   const n = Math.max(0, Math.floor(amount ?? 0));
   if (n <= 0) return 0;
   ctx.run.player.money += n;
+  recordGold(ctx.run, n); // 战绩统计：金币流入（结算屏「金币获得」数据源）
   // source 只进日志（归因），不上特写——事件对话刚演过来源，界面复述即冗余
   recordEffect(ctx, { kind: 'money', amount: n, source });
   ctx.presenter.showcase({ kind: 'gold', amount: n, title: `+${n} 金币` });

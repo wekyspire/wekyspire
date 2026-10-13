@@ -83,6 +83,8 @@ export function snapshotRun(run) {
         ? { ...run.bank.pendingRoll, options: [...(run.bank.pendingRoll.options ?? [])] } : null,
     } : null,
     pendingDebuffs: (run.pendingDebuffs ?? []).map(d => ({ ...d })),
+    // 战绩统计（结算屏数据源）：旧档无此字段 → 读档侧 ensureStats 惰性补零
+    stats: { kills: { ...(run.stats?.kills ?? {}) }, goldEarned: run.stats?.goldEarned ?? 0 },
     player: {
       hp: p.hp, maxHp: p.maxHp,
       mana: p.mana, maxMana: p.maxMana,

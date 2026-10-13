@@ -1,6 +1,6 @@
 <script setup>
 // Vue 薄壳：三层场景的最外层编排（README「场景层级」总纲）。
-// 菜单层 = 纯 Vue（StartScreen / GameMenu / EndPanel）；
+// 菜单层 = 纯 Vue（StartScreen / GameMenu）；
 // 大世界层（塔楼层）= MapStage（ThreeJS）+ Three 面板（prep 等，见 stage/panels/）；
 // 战斗层（房间层）= BattleStage（ThreeJS）+ BattleHud 等叠加；休息阶段面板见 stage/panels/。
 // dialogue / cutscene overlay 由 Vue 渲染，跨后两层（CutsceneOverlay）。
@@ -12,7 +12,6 @@ import { readSave } from './saves.js';
 import StartScreen from './components/StartScreen.vue';
 import GameMenu from './components/GameMenu.vue';
 import BattleHud from './components/BattleHud.vue';
-import EndPanel from './components/EndPanel.vue';
 import MenuPopup from './components/MenuPopup.vue';
 import MenuDialog from './components/MenuDialog.vue';
 import TooltipOverlay from './components/TooltipOverlay.vue';
@@ -156,7 +155,10 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   detachTooltipForward = null;
   mapStage?.dispose?.();
   mapStage = new MapStage({});
-  ctrl.value = createRunController({ stageManager, mapStage, save: loadSave, storyMode, debugMode, route });
+  ctrl.value = createRunController({
+    stageManager, mapStage, save: loadSave, storyMode, debugMode, route,
+    onRestart: () => onStart(), // 结算屏「再来一局」出口（与旧 EndPanel 的 restart 同语义）
+  });
   ctrl.value.debug.setToast((text) => showPopup('调试', text));   // 调试回执同时进全局 toast
   // 地图舞台的输入通道 + 常驻 tooltip 转发：装配点在此（同时持有 stageManager 与 animBus）
   mapStage.attachInput({ stageManager, bus: ctrl.value.animBus });
@@ -171,6 +173,8 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   menuOpen.value = false;
   // 调试档可能是"房内现场"（造档工具产出）：补一次进房派发（幂等：已在房内则只刷演出）
   if (ctrl.value.run.gameStage === 'room') ctrl.value.enterRoomPresentation?.();
+  // 读档落在终局（存档语义允许 'end' 落盘）：直接切进结算屏
+  if (ctrl.value.run.gameStage === 'end') void ctrl.value.enterEndScreen?.();
   if (settings.debugMode) debugUi.open = true;   // 调试模式开着就默认把面板摆出来（省一次 F9）
   // 冒烟/控制台钩子
   window.__shell = { ctrl, stageManager, newGame };
@@ -257,6 +261,7 @@ function activeStage() {
   if (battle) return battle;   // 战斗 / 战后奖励：战斗舞台存在期间由它接管指针
   const room = c.getRoomStage();
   if (room && (c.run.gameStage === 'room' || c.run.gameStage === 'ascension')) return room;
+  if (c.run.gameStage === 'end') return c.getEndStage?.() ?? mapStage; // 终局结算屏（Three 层）
   return mapStage;
 }
 
@@ -359,7 +364,7 @@ onBeforeUnmount(() => {
       <!-- 玩家常驻状态：战斗内/地图背景均由 three.js PlayerStatusObject 绘（左下角） -->
       <!-- prep / reward 面板已迁入 Three（MapStage 的 PanelObject；数据经 core/run/panelSnapshot 下行） -->
       <BattleHud v-if="stage === 'battle'" :ctrl="ctrl" />
-      <EndPanel v-else-if="stage === 'end'" :ctrl="ctrl" @restart="onStart" />
+      <!-- 终局结算屏已迁入 Three 层（EndStage，切幕进入），不再有 Vue 弹窗 -->
       <!-- 游戏内弹出菜单：Esc 呼出（存档/设置/回主菜单） -->
       <button class="menu-fab" @click="menuOpen = true">菜单</button>
       <!-- 调试面板入口（仅调试模式）：F9 或点这里开合；面板 z 压过幕间层，卡住时也能用 -->

@@ -1,5 +1,6 @@
 import { getSkillDefinition, allSkills } from '../../skills/registry.js';
 import { promoteCard } from '../promotion.js';
+import { recordGold } from '../runStats.js';
 
 // 银行机（SLOT_MACHINE.md §银行机）：与老虎机成对出现，关键词是**资源的时间价值**。
 //
@@ -279,6 +280,7 @@ export function accrueBankInterest(run) {
   b.combo += 1;
   const gain = interestOf(b.deposit, b.combo);
   b.deposit += gain;
+  recordGold(run, gain); // 利息在计入存款这一拍记「获得」（取出本金不记——是自己的钱回家）
   return gain;
 }
 
@@ -313,6 +315,7 @@ export function bankOverdraft(run, tierId) {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   run.player.money += tier.gold;
+  recordGold(run, tier.gold);
   b.pendingRoll = { tier: tierId, gold: tier.gold, options: shuffled.slice(0, tier.rolls) };
   return bankView(run);
 }

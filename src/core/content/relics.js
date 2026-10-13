@@ -1,4 +1,5 @@
 import { registerRelic } from '../relics/registry.js';
+import { recordGold } from '../run/runStats.js';
 import { TurnStartInstruction, PlayerTurnEndInstruction, PlayerTurnInstruction } from '../instructions/turn.js';
 import {
   DealDamageInstruction, ApplyDamageInstruction, GainShieldInstruction, ApplyHealInstruction, wouldBeLethal,
@@ -649,7 +650,7 @@ registerRelic({
   id: 'royalCrystal', name: '皇晶石', rarity: 'B', nonSlot: true, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗胜利后，额外获得 4 金币。',
   flavor: '我很富裕，相信我',
-  onBattleVictory: (run) => { run.player.money += 4; },
+  onBattleVictory: (run) => { run.player.money += 4; recordGold(run, 4); },
 });
 
 // ---- 生成衍生牌（RELICS.md；六张牌只由遗物生成，不进任何卡包）----

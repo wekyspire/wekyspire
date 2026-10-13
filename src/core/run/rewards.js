@@ -1,5 +1,6 @@
 import { allSkills, getSkillDefinition } from '../skills/registry.js';
 import { createSkillRuntime } from '../state/skillRuntime.js';
+import { recordGold } from './runStats.js';
 
 // 战后奖励（RUN_DESIGN §1，卡包制 + 大调 D4）：
 //   金币固定入账 → 玩家选一个**卡包**（基础包恒开，其余维度需该维度灵脉等级 ≥1）
@@ -334,6 +335,7 @@ export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLD
 // opts.channel：来源通道（'elite' = 精英/Boss 战后，由 runFlow 按遭遇判定；缺省 normal）。
 export function spawnRewards(run, { channel = 'normal' } = {}) {
   run.player.money += REWARDS_PLACEHOLDER.moneyPerBattle;
+  recordGold(run, REWARDS_PLACEHOLDER.moneyPerBattle);
   const packs = availablePacks(run).map(p => p.id);
   run.rewards = {
     money: REWARDS_PLACEHOLDER.moneyPerBattle,

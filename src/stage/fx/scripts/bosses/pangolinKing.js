@@ -15,8 +15,11 @@
 // 美术口径：暂无立绘（占位色块），全部效果按立牌体量派生、不依赖贴图内容。
 import * as THREE from 'three';
 import { duelPose } from '../../camera.js';
+import { groundRing } from '../../spells/blocks.js';
 import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.js';
 import { registerEnemyAct } from '../enemyAct.js';
+import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
+import { makePlateArmor } from '../../plateArmor.js';
 
 // 细环冲击纹理（同 pyro/kardas 的「白热细峰」口径，暖砂色调——尘浪不是火浪）
 let _ringTex = null;
@@ -105,6 +108,10 @@ async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, cam
   });
 
   // —— 爆发：猛立过冲 + 双环尘浪 + 石屑 + 尘吼柱 ——
+  // 恼怒净化（转段核心事件）：岩板甲当场崩落——「它不要甲了，要你命」
+  unit._bossPhase = 2;
+  unit._armorShattered = true;
+  unit._fxLayer?.get('bossPlates')?.shatter?.();
   unit.flash?.(0xffc86a);
   rockShards(particles, ux, uy + H * 0.4, uz, 14);
   particles.spawn(ux, uy + H * 0.35, {
@@ -191,7 +198,7 @@ async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, cam
   unit.restoreColor?.();
 }
 
-// —— 命中 beat（岩甲主题）：重击 = 岩崩（琥珀金冲击 + 石屑 + 落地砂尘），
+// —— 命中 beat（岩甲主题）：重击 = 岩崩（琥珀金冲击 + 石屑 + 贴地尘环 + 落地砂尘），
 // 连拍 = 鳞甲连击（砂砾火花），普击 = 大爪击。共享底座 enemyImpactBeat。
 async function pangolinHitBeat(ctx, deps, args) {
   const heavy = args.fx.tier === 'heavy';
@@ -206,7 +213,7 @@ async function pangolinHitBeat(ctx, deps, args) {
       flashColor: 0xffe2b0,
       shakeK: heavy ? 1.9 : 1.5,
     },
-    garnish: (c2, d, { at, heavy: hv }) => {
+    garnish: (c2, d, { at, heavy: hv, unit: target }) => {
       if (hv) {
         // 岩崩：带棱角的石屑从命中点抛物坠散（与通用落地尘区分：这是被砸出来的）
         d.particles?.spawn?.(at.x, at.y, {
@@ -215,6 +222,12 @@ async function pangolinHitBeat(ctx, deps, args) {
         d.particles?.spawn?.(at.x, at.y, {
           color: 0xb8a98c, count: 12, speed: 12, size: 1.4, ttl: 0.9, gravity: -8, z: at.z,
         });
+        // 贴地尘环：重锤落地，尘浪从脚边荡开（真贴地平躺环，俯角透视自读椭圆）
+        c2.spawn((c3) => groundRing(c3, d, {
+          at: { x: at.x, y: target?.position.y ?? 0, z: at.z ?? 0 },
+          size: 17, ms: 720, spin: 1.1,
+          color: [0.62, 0.5, 0.36], hot: [1.05, 0.85, 0.55],
+        }));
       } else {
         // 砂砾火花：鳞甲蹭出来的碎砂
         d.particles?.spawn?.(at.x, at.y, {
@@ -225,13 +238,55 @@ async function pangolinHitBeat(ctx, deps, args) {
   });
 }
 
-// —— 起手 beat：上甲拍（盾50 + 脆弱如山）= 岩甲生长——两波琥珀砂沿体上升 +
-// 体态涨宽一拍 + 低鸣（微震）；增强/荆棘拍（buff）= 轻量琥珀一闪。
-// 攻击拍静默（突进 + 岩甲命中 beat 已是语言）；恼怒转段拍由 P2 剧本接管。
-async function pangolinAct({ ctx, deps, unit, kinds }) {
-  if (kinds.includes('attack')) return;
+// 棘刺纹理：细针（棘甲竖起的一根刺——白瓷尖 + 琥珀根）
+let _spikeTex = null;
+function spikeTexture() {
+  if (_spikeTex) return _spikeTex;
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 128, 0, 0);
+  grad.addColorStop(0, 'rgba(233,180,90,0)');
+  grad.addColorStop(0.25, 'rgba(233,180,90,0.85)');
+  grad.addColorStop(0.8, 'rgba(255,244,220,0.95)');
+  grad.addColorStop(1, 'rgba(255,250,235,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(10, 128); g.lineTo(16, 0); g.lineTo(22, 128); g.closePath();
+  g.fill();
+  _spikeTex = new THREE.CanvasTexture(c);
+  _spikeTex.colorSpace = THREE.SRGBColorSpace;
+  return _spikeTex;
+}
+
+// —— 起手 beat：攻击拍 = 碾压蓄势——P1 沉身短蓄（一撮砂），P2 重锤（蓄势叠满的
+// 那拍）深压涨宽 + 碎石连跳 + 琥珀两闪；突进砸击由伤害节拍接棒。上甲拍
+// （盾50 + 脆弱如山）= 岩甲生长；荆棘/增强拍（buff）= 棘甲竖起——背脊弹出一蓬
+// 细刺 + 金属细纹闪。
+async function pangolinAct({ ctx, deps, unit, kinds, args }) {
   const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
   const H = unit._standeeHeight ?? 22;
+  if (kinds.includes('attack')) {
+    const deep = (unit._bossPhase ?? 0) >= 2; // P2 蓄势重锤（P1 普攻 12 与重锤同 hits=1，靠相位分档）
+    const id = unit.uniqueID;
+    if (deep) {
+      unit.flash?.(0x9a6c28);
+      gritBurst(deps.particles, ux, uy, uz, H, 7);
+      ctx.spawn(async (c) => { await c.wait(260); gritBurst(deps.particles, ux, uy, uz, H, 9); });
+      deps.shake?.impulse?.(0.5);
+    }
+    await ctx.custom(id, {
+      durationMs: deep ? 600 : 280, ease: 'power2.in',
+      onUpdate: (t) => unit.setPose({
+        squash: 1 - (deep ? 0.24 : 0.13) * t,
+        widen: 1 + (deep ? 0.2 : 0.1) * t,
+        lean: -0.05 * t,
+      }),
+    });
+    unit.resetPose?.();
+    if (deep) { unit.flash?.(0xd9a04c); gritBurst(deps.particles, ux, uy, uz, H, 8); }
+    return;
+  }
   if (kinds.includes('defend')) {
     deps.shake?.impulse?.(0.6);
     unit.flash?.(0xd9a04c);
@@ -250,11 +305,22 @@ async function pangolinAct({ ctx, deps, unit, kinds }) {
     return;
   }
   if (kinds.includes('buff')) {
+    // 棘甲竖起：背脊一蓬细刺弹出（上抛缓落）+ 金属细纹闪——「别碰我」的读感。
+    // 远场口径：Boss 在 z≈-56，1.1×3.4 的针亚像素化读不出（1009 取证实拍教训）
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI * (0.16 + (i / 8) * 0.68); // 扇形放射（朝上半圆）
+      const rec = deps.particles?.spawnSprite?.(
+        ux + Math.cos(a) * H * 0.24, uy + H * 0.44 + Math.sin(a) * H * 0.22, {
+          texture: spikeTexture(), width: 1.5, height: 4.6, z: uz + 1.6,
+          vx: Math.cos(a) * 4, vy: Math.sin(a) * 4.5 + 3, gravity: -5, ttl: 0.7, scalePop: 0.45,
+        });
+      if (rec) rec.sprite.material.rotation = a - Math.PI / 2; // 针尖朝外
+    }
     deps.particles?.spawn?.(ux, uy + H * 0.3, {
       color: 0xe8b45a, count: 8, speed: 4, ttl: 0.6, size: 0.9, gravity: 2, z: uz + 0.8,
     });
     unit.flash?.(0xb8863a);
-    await ctx.wait(280);
+    await ctx.wait(300);
   }
 }
 
@@ -262,4 +328,41 @@ export function registerPangolinKingScripts(register) {
   register('bosses/pangolinKingP2', pangolinKingP2);
   registerEnemyHitBeat('pangolinKing', pangolinHitBeat);
   registerEnemyAct('pangolinKing', pangolinAct);
+  // 常驻岩甲导演（bossStateFx）：defense = 鳞板甲在线（上甲逐排显形）；
+  // momentum（蓄势）= 甲缝/体缝渗炽光（P2 板片崩落后热缝留在裸躯上）；
+  // 转段拍剧本置 _armorShattered 并播崩落，此后板甲不再重建
+  registerBossStateFx('pangolinKing', (obj, unitProj) => {
+    if (unitProj.isDead) return;
+    const def = unitProj.effects?.find((e) => e.effectId === 'defense');
+    const mom = unitProj.effects?.find((e) => e.effectId === 'momentum')?.stacks ?? 0;
+    const armorOn = (def?.stacks ?? 0) > 0 && !obj._armorShattered;
+    const heat = Math.min(mom / 12, 1);
+    if (armorOn) obj._fxLayer?.overlay('bossPlates', 2, (l) => makePlateArmor(l));
+    obj._fxLayer?.setLevel('bossPlates', armorOn ? 1 : 0);
+    const plates = obj._fxLayer?.get('bossPlates');
+    if (plates) plates.setHeat(heat);
+    else if (heat > 0 && obj._armorShattered) {
+      // P2 裸躯热缝：板甲已碎，仍需建件承 heat（板形项已被 plateFade/level 归零）
+      obj._fxLayer?.overlay('bossPlates', 2, (l) => makePlateArmor(l))?.setHeat?.(heat);
+    }
+  });
+  // 受击补充：甲在 = 打铁（clank 震颤 + 岩屑）；甲碎后 = 砂尘 + 热缝一涌
+  registerBossHurtFx('pangolinKing', (ctx, deps, { unit, dealt }) => {
+    const H = unit._standeeHeight ?? 22;
+    const plates = unit._fxLayer?.get('bossPlates');
+    const y = unit.position.y + H * 0.5;
+    if (plates && plates.levelNow() > 0.25) {
+      plates.clank();
+      deps.particles?.spawn?.(unit.position.x, y, {
+        color: 0x8a6f4d, count: Math.min(4 + Math.round(dealt / 5), 11), speed: 15,
+        size: 1.1, ttl: 0.7, gravity: -16, z: unit.position.z + 1,
+      });
+      return;
+    }
+    deps.particles?.spawn?.(unit.position.x, y, {
+      color: 0xb8a98c, count: Math.min(4 + Math.round(dealt / 6), 9), speed: 10,
+      size: 1.2, ttl: 0.8, gravity: -8, z: unit.position.z + 1,
+    });
+    if (plates) plates.setHeat(Math.min(plates.u.uHeat.value + 0.12, 1)); // 挨打添一把火（下一拍 director 按真值收回）
+  });
 }

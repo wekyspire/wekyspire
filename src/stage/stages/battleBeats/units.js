@@ -7,7 +7,8 @@ import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
-import { resolveEnemyHitFx, runEnemyHitBeat } from '../../fx/spells/enemyHitFx.js';
+import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed } from '../../fx/spells/enemyHitFx.js';
+import { bossHurtFxOf } from '../../fx/bossStateFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
 
@@ -44,7 +45,8 @@ export const unitBeats = {
       if (r.flash == null) r.flash = 0xfff2d8; // 物理撞击的淡暖白闪（非伤害红闪）
     }
     const lunging = !!src && srcId !== this._snapshot?.player?.uniqueID
-      && !src._dead && ((payload?.type ?? 'major') === 'major' || remiCharge);
+      && !src._dead && ((payload?.type ?? 'major') === 'major' || remiCharge)
+      && !enemyLungeSuppressed(src._defId); // 远程型敌人（施法者/射击/扎根）不突进——身体语言在 act 起手
     const sx = src?.position.x ?? 0;
     const sy = src?.position.y ?? 0; // 地板高度（冲锋跳弧的基准——别裸写 0，slotTransform 的 y 是地板）
     const sz = src?.position.z ?? 0;
@@ -92,6 +94,15 @@ export const unitBeats = {
         this._fxRunScript((c) => runEnemyHitBeat(c, this._spellDeps(), {
           fx: enemyFx, unit, dealt,
           fromX: src?.position.x ?? null,
+        }));
+      }
+      // Boss 受击补充（目标侧，bossStateFx）：boss 被打的主题反馈——装甲涟漪/电弧
+      // 噼啪/岩屑崩落。与 dmgFx/enemyFx 正交（那两路演「攻击方打出什么」，这路演
+      // 「这只 boss 挨打会怎样」）；盾吸收也算挨打（absorbed>0 同样触发涟漪）
+      const hurtFx = (dealt > 0 || absorbed > 0) && unit?._defId ? bossHurtFxOf(unit._defId) : null;
+      if (hurtFx) {
+        this._fxRunScript((c) => hurtFx(c, this._spellDeps(), {
+          unit, dealt, absorbed, fromX: src?.position.x ?? null,
         }));
       }
       if (projSync) await projSync.gate();   // 投射物卡：受击演出自抵达帧起

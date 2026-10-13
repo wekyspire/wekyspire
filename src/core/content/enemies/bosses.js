@@ -470,13 +470,13 @@ registerEnemy({
     if (beat === 0) {
       return allies >= 3
         ? { kinds: ['buff'], note: '全员力量3' }
-        : { kinds: ['unknown'], note: '召唤（腐败根须/刺刺草）' };
+        : { kinds: ['summon'], note: '召唤（腐败根须/刺刺草）' };
     }
     if (beat === 1) return { kinds: ['debuff'], note: '虚弱1，脆弱1' };
     if (beat === 2) {
       return allies > 0
         ? { kinds: ['buff'], note: '全员恢复15血' }
-        : { kinds: ['unknown'], note: '召唤1个' };
+        : { kinds: ['summon'], note: '召唤1个' };
     }
     return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack') };
   },
