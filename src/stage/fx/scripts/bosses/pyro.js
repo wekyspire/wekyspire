@@ -586,20 +586,33 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
     return;
   }
   if (kinds.includes('debuff')) {
-    // P2「全场点燃」（2026-10-09 重制）：蓄（后仰展身 + 余烬回吸一口）→ 爆（暖屏闪
-    // + 胸口气浪细环 + 贴地火浪扫全战场 + 径向火星风暴）→ 传燃（火浪按距离传到每个
-    // 单位脚下，到谁谁着——燃烧层由 core/aura 同步，这里给「点着」的一瞬）
+    // P2「全场点燃」（2026-10-13 前摇加深）：大动作三段读——
+    //   蓄（~0.95s）：世界先压暗半档（全场的火都向他倾）→ 后仰展身 + 余烬成批
+    //     倒吸（渐密渐急）+ 环绕火球收进体内；
+    //   憋（0.2s）：顶点高频微颤、万籁俱寂的一瞬（大爆发前的静默拍）；
+    //   爆：暖屏闪 + 胸口气浪细环 + 贴地火浪扫全战场 + 径向火星风暴 + 火球甩出；
+    //   传燃：火浪按距离传到每个单位脚下，到谁谁着——燃烧层由 core/aura 同步，
+    //     这里给「点着」的一瞬。
     const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
     const chestY = uy + H * 0.55;
     const id = unit.uniqueID;
     const jobs = [];
-    jobs.push(ctx.spawn(async (c) => {   // 蓄：三批余烬倒吸回胸口
-      for (let i = 0; i < 3; i++) {
-        for (let k = 0; k < 4; k++) {
+    const veil = dreadVeil(ctx, deps);   // 世界压暗（onKill 兜底摘除）
+    veil?.set?.(0.4, 520);
+    const orbit = unit.parts?.get('orbs')?.userData?.orbit;
+    const orbitBase = orbit ? { radius: orbit.radius, speed: orbit.speed } : null;
+    if (orbit) {   // 环绕火球收进体内（蓄力的「抽」）
+      jobs.push(ctx.spawn((c) => c.tweenRaw(orbit, {
+        radius: orbitBase.radius * 0.5, speed: orbitBase.speed * 1.7,
+      }, { durationMs: 740, ease: 'power2.in' })).promise);
+    }
+    jobs.push(ctx.spawn(async (c) => {   // 蓄：七批余烬倒吸回胸口，渐密渐急
+      for (let i = 0; i < 7; i++) {
+        const pull = 0.30 - i * 0.024;
+        for (let k = 0; k < 4 + i; k++) {
           const a = Math.random() * Math.PI * 2;
-          const r = H * (0.5 + Math.random() * 0.4);
+          const r = H * (0.5 + Math.random() * 0.45);
           const px = ux + Math.cos(a) * r, py = chestY + Math.sin(a) * r * 0.7;
-          const pull = 0.26;
           const vx = (ux - px) / pull, vy = (chestY - py) / pull;
           const rec = deps.particles?.spawnSprite?.(px, py, {
             texture: streakTexture(), width: 3.0, height: 0.9, z: uz + 1.5,
@@ -607,15 +620,32 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
           });
           if (rec) rec.sprite.material.rotation = Math.atan2(vy, vx);
         }
-        await c.wait(120);
+        await c.wait(168 - i * 14);
       }
     }).promise);
     await ctx.custom(id, {
-      durationMs: 400, ease: 'power2.in',
-      onUpdate: (t) => unit.setPose({ lean: -0.14 * t, widen: 1 + 0.14 * t }),
+      durationMs: 740, ease: 'power2.in',
+      onUpdate: (t) => unit.setPose({ lean: -0.16 * t, widen: 1 + 0.15 * t }),
+    });
+    // 憋：顶点 200ms 高频微颤（蓄不住）——爆发前的静默一拍，压暗到最深
+    veil?.set?.(0.52, 210);
+    await ctx.custom(id, {
+      durationMs: 200, ease: 'none',
+      onUpdate: (t) => {
+        const sh = Math.sin(t * Math.PI * 2 * 6.5) * 0.02 * (0.5 + t);
+        unit.setPose({ lean: -0.16, widen: 1.15 + sh });
+      },
     });
     unit.resetPose?.();
     unit.flash?.(0xff9a4a);
+    veil?.set?.(0, 640);
+    // 火球被爆风重新甩出（过冲外扩再收回轨道）
+    if (orbit && orbitBase) {
+      jobs.push(ctx.spawn(async (c) => {
+        await c.tweenRaw(orbit, { radius: orbitBase.radius * 1.18, speed: orbitBase.speed }, { durationMs: 320, ease: 'power3.out' });
+        await c.tweenRaw(orbit, { radius: orbitBase.radius, speed: orbitBase.speed }, { durationMs: 460, ease: 'power2.inOut' });
+      }).promise);
+    }
     // 爆（全部收进 jobs——父本结算杀子件的铁律）
     jobs.push(ctx.spawn((c) => screenFlash(c, deps, { intensity: 0.15, ms: 240, color: 0xffa050 })).promise);
     const ring = deps.particles?.spawnSprite?.(ux, chestY, {

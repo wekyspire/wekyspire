@@ -89,6 +89,18 @@ export class DealDamageInstruction extends BattleInstruction {
     this.result = this._apply.result ?? {
       damage: 0, defenseBlocked: 0, shieldAbsorbed: 0, dealt: 0, cancelled: true,
     };
+    // 闪避改判也要播攻击方演出（爪光/重击是攻击方施加的特效，闪避不免除）：补发
+    // dealt=0 的 dodged 伤害拍——受击侧无数字无击退，突进与命中特效照常走节拍。
+    if (!this._apply.result && this._apply.cancelReason === 'dodge') {
+      ctx.presenter?.damage?.({
+        source: this.source, target, dealt: 0,
+        gross: this.fixed ? this.amount : this.payload.damage,
+        defenseBlocked: 0, shieldAbsorbed: 0, pierce: false,
+        skillDefId: this.skillDefId ?? this.skill?.defId ?? null,
+        type: this.type, tags: [...this.tags], fixed: this.fixed, killed: false, heavy: false,
+        dodged: true,
+      });
+    }
     return true;
   }
 }

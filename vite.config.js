@@ -69,6 +69,48 @@ function artPackPlugin() {
   };
 }
 
+// 音频资源打包（同 artpack 机制独立成包——缓存键独立，音频改版不动美术包名）：
+// 产物里的全部音频资产裸拼接成单个 audiopack-<md5前8>.bin + dist 根
+// audiopack-manifest.js。运行期 src/shell/audiopack.js 拉包换汇（slice→blob）；
+// 原始单文件**保留在产物里**作回退路径（与 artpack 的 414 张原图同一惯例：
+// 包拉取失败/长度不符时逐条旧路径仍可用）。客户端音频请求 4×(HEAD+GET) → 1 GET。
+const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav' };
+function audioPackPlugin() {
+  return {
+    name: 'wekyspire-audiopack',
+    generateBundle(_options, bundle) {
+      const files = Object.entries(bundle)
+        .filter(([name, info]) => info.type === 'asset'
+          && /^assets\/[^/]+\.(mp3|wav)$/i.test(name))
+        .sort(([a], [b]) => (a < b ? -1 : 1));
+      if (!files.length) return;
+      const entries = {};
+      const parts = [];
+      let offset = 0;
+      for (const [name, info] of files) {
+        const src = Buffer.from(info.source);
+        const ext = name.split('.').pop().toLowerCase();
+        entries[name.split('/').pop()] = [offset, src.length, AUDIO_MIME[ext] ?? 'application/octet-stream'];
+        parts.push(src);
+        offset += src.length;
+      }
+      const pack = Buffer.concat(parts);
+      const hash = createHash('md5').update(pack).digest('hex').slice(0, 8);
+      this.emitFile({ type: 'asset', fileName: `assets/audiopack-${hash}.bin`, source: pack });
+      const manifest = `// 构建期生成（wekyspire-audiopack）：音频包目录。
+`
+        + `export const PACK_URL = 'assets/audiopack-${hash}.bin';
+`
+        + `export const PACK_TOTAL = ${pack.length};
+`
+        + `export const ENTRIES = ${JSON.stringify(entries)};
+`;
+      this.emitFile({ type: 'asset', fileName: 'audiopack-manifest.js', source: manifest });
+      console.log(`[audiopack] ${files.length} 条音频 → audiopack-${hash}.bin（${(pack.length / 1048576).toFixed(1)} MB）`);
+    },
+  };
+}
+
 // 版本号单一事实源 = package.json；只在构建期注入 version 字段（不内联整份 JSON）
 const pkgVersion = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8')).version
 
@@ -104,7 +146,7 @@ export default defineConfig(({mode}) => {
           isCustomElement: (tag) => tag.startsWith('colored-')
         }
       }
-    }), debugSavesPlugin(root), artPackPlugin()],
+    }), debugSavesPlugin(root), artPackPlugin(), audioPackPlugin()],
     resolve: {
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue'],
       alias: {

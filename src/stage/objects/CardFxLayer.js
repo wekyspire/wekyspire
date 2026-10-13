@@ -4,10 +4,10 @@
 // 固定层级（C = Card；z 为牌面局部纵深，牌面 z=0）：
 //   C0 牌面 shader —— face 材质补丁（fx/cardBodyFx.js，构造即挂常驻）：uBurn 焚毁
 //        吞蚀（离场演出）/ uDim 禁用压暗 / uHighlight 高亮提暖；记录 = this.body
-//   C1 压暗层 z 0.35~0.36 —— veil 冷却膜（shader 霜冻/腐蚀）+ doom 暗化盖纱：
-//        法线混合压暗牌面（「这张牌暂时不可用/要离开」的沉下去感）
-//   C2 标记层 z 0.40~0.50 —— chip 冷却拍数水印（0.40）、lock 锁定四角括号（0.44）、
-//        doom 将弃描框（0.50）：表意件，低透明度/描边，不发光
+//   C1 压暗层 z 0.35~0.36 —— veil 冷却膜（shader 霜冻/腐蚀）+ doom 暗化盖纱（0.36，
+//        TSL 面片法线混合）：压暗牌面（「这张牌暂时不可用/要离开」的沉下去感）
+//   C2 标记层 z 0.40~0.50 —— chip 冷却拍数水印（0.40，不发光）、lock 锁定四角括号
+//        （0.44，TSL 面片加色）、doom 将弃描框（0.50，TSL 面片加色）：表意件
 //   C3 发光层 z 0.40~3.0 —— pulse 一次性加色脉冲（0.45，TSL shader 三模式能量面片）、
 //        edge 咏唱流光（0.40，
 //        低于手牌扇相邻卡 z 间隔 0.5：邻牌盖得住光环；HDR 直出 >1.45 阈喂 bloom）、
@@ -32,12 +32,12 @@ const PULSE_MARGIN = 4;
 // 冷却拍数水印：牌面中央低透明度平面白字（平面型水印，
 // 驳回大号发光 counter 与色块徽章两版）
 const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
-// 将弃描边：警示红 + 急促呼吸（1.2s——逼近的截止感）；暗化盖纱让牌面"沉"下去
-const DOOM_COLOR = 0xd84848;
-const DOOM_PERIOD = 1.2;
-// 锁定括号：警戒琥珀 + 慢呼吸（2.4s——「已被瞄准」的持续状态感，与将弃的急促截止区分）
-const LOCK_COLOR = 0xe8a23c;
-const LOCK_PERIOD = 2.4;
+// 将弃描边：警示红 + 急促呼吸（1.2s 周期——逼近的截止感）；暗化盖纱让牌面"沉"下去
+// （颜色烘常量 vec3 进 shader——彩层 uniform 跨会话非确定失显铁律；0xd84848≈(0.847,0.282,0.282)）
+const DOOM_MARGIN = 2;   // 描框面片外扩边距（环带外缘 1.15 留软边余量）
+// 锁定括号：警戒琥珀 + 慢呼吸（2.4s 周期——「已被瞄准」的持续状态感，与将弃的急促截止区分；
+// 0xe8a23c≈(0.910,0.635,0.235)）
+const LOCK_MARGIN = 2;   // 括号面片外扩边距（臂端外缘 1.45 留软边余量）
 // 咏唱流光面片：牌面外扩边距（给 rim 外溢与光晕留空间）、点亮淡入速率
 const EDGE_MARGIN = 5;
 const EDGE_FADE_IN = 3.5;
@@ -212,6 +212,41 @@ const veilShade = Fn(([vUv, uTime, uFrac, uMode, uCard]) => {
   return vec4(col, min(alpha, 0.92));
 });
 
+// ---- 将弃/锁定标记面片（shader 化：旧实现为 5/8 件 mesh 条 + JS 逐帧写透明度呼吸）----
+// 形状全在 shader 内 SDF 绘制、呼吸由 uTime 驱动（相位口径与旧 JS 循环一致：doom 框
+// 0.45~0.95 急促（2π/1.2≈5.236）、盖纱反相 0.22~0.34；lock 0.45~0.95 慢（2π/2.4≈2.618)）。
+
+// 将弃描框：圆角矩形环带（心线外扩 0.6、带粗 1.1——同旧四边条几何），加色发光件
+const doomFrameShade = Fn(([vUv, uTime, uCard]) => {
+  const p = vUv.sub(0.5).mul(uCard.add(DOOM_MARGIN * 2));
+  const d = sdRoundBox(p, uCard.mul(0.5).add(0.6), 1.5);
+  const ring = oneMinus(smoothstep(0.35, 0.55, abs(d)));
+  const k = float(0.5).add(sin(uTime.mul(5.236)).mul(0.5));
+  return vec4(vec3(0.847, 0.282, 0.282).mul(ring).mul(float(0.45).add(k.mul(0.5))), 1.0);
+});
+
+// 将弃盖纱：牌面圆角内均匀压暗（法线混合；框亮时纱浮、框暗时纱沉的反相轻颤）
+const doomVeilShade = Fn(([vUv, uTime, uCard]) => {
+  const p = vUv.sub(0.5).mul(uCard);
+  const corner = oneMinus(smoothstep(-0.25, 0.0, sdRoundBox(p, uCard.mul(0.5), 1.5)));
+  const k = float(0.5).add(sin(uTime.mul(5.236)).mul(0.5));
+  return vec4(vec3(0.102, 0.031, 0.031), corner.mul(float(0.34).sub(k.mul(0.12))));
+});
+
+// 锁定括号：四角 L 形瞄准框（外扩 1.0、条粗 0.9、臂长 5——同旧八条几何；abs 镜像折叠
+// 到第一象限后取横竖两臂盒 SDF 之并），加色发光件
+const lockShade = Fn(([vUv, uTime, uCard]) => {
+  const p = vUv.sub(0.5).mul(uCard.add(LOCK_MARGIN * 2));
+  const q = abs(p);
+  const w = uCard.x.mul(0.5).add(1.0), h = uCard.y.mul(0.5).add(1.0);
+  // 横臂盒（心 (w-2.5, h)、半 (2.5, 0.45)）∪ 竖臂盒（心 (w, h-2.5)、半 (0.45, 2.5)）
+  const dH = max(abs(q.x.sub(w.sub(2.5))).sub(2.5), abs(q.y.sub(h)).sub(0.45));
+  const dV = max(abs(q.x.sub(w)).sub(0.45), abs(q.y.sub(h.sub(2.5))).sub(2.5));
+  const mask = oneMinus(smoothstep(-0.25, 0.25, min(dH, dV)));
+  const k = float(0.5).add(sin(uTime.mul(2.618)).mul(0.5));
+  return vec4(vec3(0.910, 0.635, 0.235).mul(mask).mul(float(0.45).add(k.mul(0.5))), 1.0);
+});
+
 // ---- 一次性加色脉冲 shader（2026-10-09 重做，替代纯色半透明方块）----
 // 单 shader + scalar uniform 组驱动三种能量演出（控制量打包：uVecA = [prog, mode, intensity, seed]，
 // uVecB = [cardW, cardH, reach, 0]——r185 实测 Fn 参数 ≤4 才安全，超参会整体猝死）：
@@ -309,8 +344,10 @@ export class CardFxLayer extends THREE.Group {
     this._veilFracTarget = 0;
     this._chip = null;       // 冷却拍数水印（随薄纱显示）
     this._chipN = null;      // 水印当前数字（重烘判据）
-    this._doom = null;       // 将弃特效组（暗化盖纱 + 四边描框，惰性创建）
-    this._lock = null;       // 锁定特效组（四角瞄准括号，惰性创建）
+    this._doom = null;       // 将弃特效组（盖纱 + 描框两张 TSL 面片，惰性创建）
+    this._doomUniforms = null; // { uTime, uCard }——盖纱/描框共相位（呼吸全在 shader 内）
+    this._lock = null;       // 锁定括号面片（TSL shader 单件，惰性创建）
+    this._lockUniforms = null;
     this._pulse = null;      // 脉冲面片（TSL shader，惰性创建）
     this._pulseTl = null;    // { elapsed, duration } | null
     this._pulseUniforms = null; // uVecA[prog,mode,intensity,seed] / uColor / uVecB[cardW,cardH,reach,-]
@@ -531,42 +568,41 @@ export class CardFxLayer extends THREE.Group {
     }
   }
 
-  /** 「将弃」标记（P9 尾弃预告）：红色呼吸描边框 + 暗化盖纱。幂等。呼吸推进在 update(dt)。 */
+  /** 「将弃」标记（P9 尾弃预告 + 弃牌选择未确认预告）：红色呼吸描边框 + 暗化盖纱。
+   *  两张 TSL 面片（盖纱法线混合压暗 / 描框加色发光），呼吸全在 shader 内由 uTime
+   *  驱动（update 只推统一时钟）。幂等。 */
   setDoomed(on) {
     if (on === !!this._doom) return;
     if (!on) {
       this.remove(this._doom);
       this._doom.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
       this._doom = null;
+      this._doomUniforms = null;
       return;
     }
+    this._doomUniforms = {
+      uTime: uniform(this._t),
+      uCard: uniform(new THREE.Vector2(this._w, this._h)),
+    };
     const g = new THREE.Group();
     g.name = 'doom';
     // 暗化盖纱（普通混合压暗牌面——"这张牌要离开了"的沉下去感；加色系特效压不住它）
-    const shade = new THREE.Mesh(
-      new THREE.PlaneGeometry(this._w, this._h),
-      new THREE.MeshBasicMaterial({ color: 0x1a0808, transparent: true, opacity: 0.3, depthWrite: false }),
-    );
+    const shadeMat = new MeshBasicNodeMaterial({
+      transparent: true, blending: THREE.NormalBlending, depthWrite: false,
+    });
+    shadeMat.colorNode = doomVeilShade(uv(), this._doomUniforms.uTime, this._doomUniforms.uCard);
+    const shade = new THREE.Mesh(new THREE.PlaneGeometry(this._w, this._h), shadeMat);
     shade.position.z = 0.36;
-    shade.name = 'shade';
     g.add(shade);
-    // 四边描框（呼吸主件）：比牌面外扩 0.6，框条粗 1.1
-    const w = this._w + 1.2, h = this._h + 1.2, t = 1.1;
-    const mkBar = (bw, bh, x, y) => {
-      const bar = new THREE.Mesh(
-        new THREE.PlaneGeometry(bw, bh),
-        additiveLight(new THREE.MeshBasicMaterial({
-          color: DOOM_COLOR, transparent: true, opacity: 0.8, depthWrite: false,
-        })),
-      );
-      bar.position.set(x, y, 0.5);
-      bar.name = 'bar';
-      g.add(bar);
-    };
-    mkBar(w + t, t, 0, h / 2);           // 顶
-    mkBar(w + t, t, 0, -h / 2);          // 底
-    mkBar(t, h + t, -w / 2, 0);          // 左
-    mkBar(t, h + t, w / 2, 0);           // 右
+    // 四边描框（呼吸主件，加色发光；面片比牌面外扩，形状在 shader 内 SDF 绘制）
+    const frameMat = additiveLight(new MeshBasicNodeMaterial({
+      transparent: true, depthWrite: false,
+    }));
+    frameMat.colorNode = doomFrameShade(uv(), this._doomUniforms.uTime, this._doomUniforms.uCard);
+    const frame = new THREE.Mesh(
+      new THREE.PlaneGeometry(this._w + DOOM_MARGIN * 2, this._h + DOOM_MARGIN * 2), frameMat);
+    frame.position.z = 0.5;
+    g.add(frame);
     this._doom = g;
     this.add(g);
   }
@@ -574,38 +610,31 @@ export class CardFxLayer extends THREE.Group {
   get hasDoomMark() { return !!this._doom; }
 
   /** 「锁定」标记（无人战体「解除威胁」）：警戒琥珀色四角括号 + 慢呼吸——
-   *  区别于将弃的红色整框（锁定是「被瞄准」，将弃是「要离开」）。幂等；呼吸在 update(dt)。 */
+   *  区别于将弃的红色整框（锁定是「被瞄准」，将弃是「要离开」）。
+   *  单张 TSL 面片（加色发光；四角 SDF 与呼吸全在 shader 内）。幂等。 */
   setLocked(on) {
     if (on === !!this._lock) return;
     if (!on) {
       this.remove(this._lock);
       this._lock.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
       this._lock = null;
+      this._lockUniforms = null;
       return;
     }
-    const g = new THREE.Group();
-    g.name = 'lock';
-    // 四角 L 形括号（瞄准框）：每角两根短条，牌面外扩 1.0，条粗 0.9，臂长 5
-    const inset = 1.0, t = 0.9, arm = 5;
-    const w = this._w / 2 + inset, h = this._h / 2 + inset;
-    const mkArm = (bw, bh, x, y) => {
-      const bar = new THREE.Mesh(
-        new THREE.PlaneGeometry(bw, bh),
-        additiveLight(new THREE.MeshBasicMaterial({
-          color: LOCK_COLOR, transparent: true, opacity: 0.85, depthWrite: false,
-        })),
-      );
-      bar.position.set(x, y, 0.44);
-      bar.name = 'arm';
-      g.add(bar);
+    this._lockUniforms = {
+      uTime: uniform(this._t),
+      uCard: uniform(new THREE.Vector2(this._w, this._h)),
     };
-    // 四角：右上/右下/左下/左上，每角横臂 + 竖臂
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-      mkArm(arm, t, sx * (w - arm / 2), sy * h);          // 横臂（沿牌边向内）
-      mkArm(t, arm, sx * w, sy * (h - arm / 2));          // 竖臂（沿牌边向内）
-    }
-    this._lock = g;
-    this.add(g);
+    const mat = additiveLight(new MeshBasicNodeMaterial({
+      transparent: true, depthWrite: false,
+    }));
+    mat.colorNode = lockShade(uv(), this._lockUniforms.uTime, this._lockUniforms.uCard);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(this._w + LOCK_MARGIN * 2, this._h + LOCK_MARGIN * 2), mat);
+    mesh.position.z = 0.44;
+    mesh.name = 'lock';
+    this._lock = mesh;
+    this.add(mesh);
   }
 
   get hasLockMark() { return !!this._lock; }
@@ -675,20 +704,9 @@ export class CardFxLayer extends THREE.Group {
         this._veilUniforms.uTime.value = this._t; // 呼吸/闪烁/纹理漂移全在 shader 内
       }
     }
-    if (this._doom) {
-      // 将弃呼吸：描边框 0.45~0.95 急促明暗（逼近的截止感），暗化盖纱同相反相轻颤
-      const k = 0.5 + 0.5 * Math.sin((this._t / DOOM_PERIOD) * Math.PI * 2);
-      for (const o of this._doom.children) {
-        o.material.opacity = o.name === 'bar' ? 0.45 + 0.5 * k : 0.22 + 0.12 * (1 - k);
-      }
-    }
-    if (this._lock) {
-      // 锁定呼吸：四角括号 0.45~0.95 慢明暗（持续瞄准态，无截止感）
-      const k = 0.5 + 0.5 * Math.sin((this._t / LOCK_PERIOD) * Math.PI * 2);
-      for (const o of this._lock.children) {
-        o.material.opacity = 0.45 + 0.5 * k;
-      }
-    }
+    // 将弃/锁定：呼吸全在 shader 内（相位口径与旧 JS 循环一致），只推统一时钟
+    if (this._doomUniforms) this._doomUniforms.uTime.value = this._t;
+    if (this._lockUniforms) this._lockUniforms.uTime.value = this._t;
     for (const u of [this._edgeUniforms, this._condUniforms]) {
       if (!u) continue;
       u.uTime.value = this._t;

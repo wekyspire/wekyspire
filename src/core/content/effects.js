@@ -224,7 +224,9 @@ registerEffect({
   }],
 });
 
-// 虚弱：每层攻击 -1（可把攻击压到负——伤害算式对负面板天然衰减，减半/加成仍对称生效）。
+// 虚弱：每层攻击 -1；每次攻击后层数 -1（EFFECTS.md：多段攻击逐段削减——
+// 订阅认主级非固定伤害，出牌与敌方行动同一条 DealDamage 路径，多段天然逐段扣）。
+// 攻击压到负可——伤害算式对负面板天然衰减，减半/加成仍对称生效。
 registerEffect({
   id: 'weaken',
   type: 'debuff',
@@ -232,8 +234,19 @@ registerEffect({
   statModifiers: {
     attack: (stacks) => -stacks,
   },
+  subscriptions: (unit) => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    filter: (instr) => instr.source === unit && !unit.isDead()
+      && instr.type === 'major' && !instr.fixed,
+    react: (instr, ctx) => {
+      ctx.kernel.submitInstruction(new AddEffectInstruction({
+        target: unit, effectId: 'weaken', stacks: -1,
+      }), instr);
+    },
+  }],
   name: '虚弱',
-  description: '每层使攻击降低 1 点。',
+  description: '每层使攻击降低 1 点；每次攻击后层数 -1。',
   icon: '📉',
   color: 'purple',
 });

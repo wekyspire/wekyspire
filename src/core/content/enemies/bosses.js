@@ -1367,7 +1367,7 @@ registerEnemy({
 //   跨线【过量】：自伤6+力量4；
 //   三段·渊素暴走（<40%）：每拍【过载】自伤4换力量1（自焚死钟——龟缩玩家的胜路是
 //     「赢=不死」）；灵潮倾泻 (6+atk)×3 → 掠夺成性（偷2魏启+1AP+力量1）→
-//     渊素反噬（fixed 5，自愈5——吸玩家的命）。
+//     渊素反噬（穿透 5，自愈5——吸玩家的命）。
 registerEnemy({
   // elite:true 仅借「锚点=base」的缩放语义（章3 Boss 难度14 → hpMult=1），180 血精确落地。
   difficulty: { base: 14, floorMin: 33, floorMax: 33, elite: true },
@@ -1482,9 +1482,9 @@ registerEnemy({
       actx.kernel.submitInstruction(new DealDamageInstruction({
         source: unit, target: player, amount: 8 + atk }));
     } else {
-      // 【渊素反噬】吸玩家的命
+      // 【渊素反噬】吸玩家的命（穿透：预告词是「5点穿透生命伤害」——护盾不减免）
       actx.kernel.submitInstruction(new DealDamageInstruction({
-        source: unit, target: player, amount: 5, fixed: true, tags: ['vampiric'] }));
+        source: unit, target: player, amount: 5, pierce: true, tags: ['vampiric'] }));
       actx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: 5 }));
     }
   },

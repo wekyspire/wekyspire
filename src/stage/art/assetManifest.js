@@ -51,11 +51,13 @@ async function probeSizes() {
  *   onStats: (stats) => void                        统计回调（每次进度 + 探测完成时）
  *          stats = { done, total, loadedBytes, totalBytes, elapsedMs, failed }
  *          （loadedBytes/totalBytes 只有在 HEAD 探测拿到 Content-Length 时才有意义）
+ *   onPackSettled: (ok) => void                     artpack 下载落定即回调（成功 true/
+ *          回退 false，解码 warm 之前）——App 用它门控 audiopack 串行下载
  *   imageFactory: 类                                测试注入的 Image 桩（缺省全局 Image）
  *   caches: { stage, card, ui, relic }              测试注入位（缺省共享单例）
  * @returns {Promise<{ total: number, failed: number }>}
  */
-export function preloadAllArt({ onProgress, onStats = null, imageFactory = null, caches = null } = {}) {
+export function preloadAllArt({ onProgress, onStats = null, onPackSettled = null, imageFactory = null, caches = null } = {}) {
   const Img = imageFactory ?? (typeof Image !== 'undefined' ? Image : null);
   const targets = caches ?? {
     stage: sharedUnitArtCache, card: sharedCardArtCache, ui: sharedUiArtCache, relic: sharedRelicArtCache,
@@ -74,6 +76,7 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
   if (!Img || !total) {
     onProgress?.(0, 0); // node/headless 无图可载：立即放行（不挡测试与 SSR 式路径）
     onStats?.({ done: 0, total, loadedBytes: 0, totalBytes: 0, elapsedMs: 0, failed: 0 });
+    onPackSettled?.(false);   // 无下载段也要放行串行门（audio 的 gate 不悬空）
     return Promise.resolve({ total, failed: 0 });
   }
   let t0 = Date.now();
@@ -117,6 +120,7 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
           onStats?.({ done: 0, total, loadedBytes: got, totalBytes: tot, elapsedMs: elapsed, failed: 0 });
         },
       }).catch(() => false);
+      onPackSettled?.(!!packed);   // 下载落定即放行音频包（串行编排见 App.vue）
       if (packed) {
         t0 = Date.now();
         await loadAll((url) => resolveArtUrl(url));
@@ -126,6 +130,7 @@ export function preloadAllArt({ onProgress, onStats = null, imageFactory = null,
     // 逐张回退：先探测体积（并行 HEAD）——拿到总大小，进度条才能给出真实
     // 百分比/速度/ETA。探测本身也把资源预热进缓存；失败/无 fetch/无 document
     // （node 测试）则整段跳过。
+    onPackSettled?.(false);   // 回退路径同样放行串行门（resolve 幂等，重复调用无害）
     if (!imageFactory && typeof document !== 'undefined') {
       for (const [url, n] of await probeSizes()) {
         sizes.set(url, n);

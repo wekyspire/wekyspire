@@ -69,9 +69,10 @@ export const unitBeats = {
       const dmgFx = dealt > 0 ? resolveDamageFx(payload?.skillDefId) : null;
       // 敌方来源回落（五模板通配）：玩家技能表查不到的 major 伤害交给敌方三式
       // （普攻撞击/连击小快/重击大冲击）——判据与配方在 enemyHitFx.js。
-      // 意图 = 本次行动预告（伤害拍时点尚未刷新）：重击/连击按怪的出力口径判
+      // 意图 = 本次行动预告（伤害拍时点尚未刷新）：重击/连击按怪的出力口径判。
+      // 不按 dealt 门控：盾整吞/闪避（dodged 拍）攻击方特效照播（攻击方施加语义）。
       let enemyFx = null;
-      if (dealt > 0 && !dmgFx) {
+      if (!dmgFx) {
         const srcIntention = srcId != null
           ? (this._snapshot?.enemies ?? []).find(e => e.uniqueID === srcId)?.intention ?? null
           : null;
@@ -93,6 +94,8 @@ export const unitBeats = {
       } else if (enemyFx) {
         this._fxRunScript((c) => runEnemyHitBeat(c, this._spellDeps(), {
           fx: enemyFx, unit, dealt,
+          // 盾吞/闪避时 dealt=0：量级按出手重量（gross）——攻击方特效不因防住缩水
+          swing: dealt > 0 ? dealt : Math.max(payload?.gross ?? 0, 0),
           fromX: src?.position.x ?? null,
         }));
       }

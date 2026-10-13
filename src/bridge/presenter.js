@@ -90,6 +90,8 @@ export function createBridgePresenter({
         log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 造成 ${p.dealt} 点伤害`, 'combat');
       } else if ((p.shieldAbsorbed ?? 0) > 0) {
         log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 的攻击被护盾完全吸收（吸收 ${p.shieldAbsorbed}）`, 'combat');
+      } else if (p.dodged) {
+        log(`${p.source?.name ?? '环境'} 对 ${p.target.name} 的攻击被闪避`, 'combat');
       }
     },
     heal: (p) => {

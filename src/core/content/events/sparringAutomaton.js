@@ -1,6 +1,5 @@
-// 事件：演武残机（塔内设施，与售货机/老虎机/银行机同源——会吃金币的演武机械，不会说话。
-// 决策轴：**金币换卡牌晋升**（现在事件池里唯一的晋升渠道）+ 生命换金币的赌。
-// 晋升目标 = 牌组内随机一张可晋升卡（run.rng 确定性）；无可晋升卡则交易不成立（不扣钱）。
+// 事件：打击机械
+
 import { registerEvent } from '../../events/registry.js';
 import { gainMoney, spendMoney, damagePlayer, upgradeCard } from '../../run/runEffects.js';
 import { canPromoteRuntime } from '../../run/promotion.js';
@@ -8,42 +7,49 @@ import { getSkillDefinition } from '../../skills/registry.js';
 
 registerEvent({
   id: 'sparringAutomaton',
-  name: '演武残机',
+  name: '打击机械',
   art: 'sparringAutomaton',
   pages: [
-    { speaker: '旁白', text: '墙边立着一台演武机械，断了一臂，胸前的投币口锈了一半。它还在原地空练同一套拆招，一遍，又一遍。' },
-    { speaker: '旁白', text: '察觉到你靠近，它停下动作，把断臂转向你——摆出一个「请」的演练手势。' },
+    { speaker: '旁白', text: '墙边立着一台似乎是训练设施的机械，断了一臂，胸前的投币口锈了一半。' },
+    { speaker: '旁白', text: '它在原地空练同一套机械的招式，一遍，又一遍。' },
+    { speaker: '旁白', text: '察觉到你靠近，它停下动作，把断臂转向你，似乎在邀请你参与进来。' },
   ],
   choices: (run) => [
     {
-      id: 'repair', label: '喂它 10 金',
-      hint: '它陪你拆解招式：随机一张可晋升的卡获得晋升',
+      id: 'repair', label: '向投币口投入10金币',
+      hint: '随机升级一张卡牌',
       disabled: run.player.money < 10,
     },
-    { id: 'spar', label: '跟它过招', hint: '失去 6 生命；赢了撬开储币匣，+20 金' },
-    { id: 'leave', label: '让它安静练吧', hint: '破风声一下，又一下' },
+    { id: 'spar', label: '很有精神！与我一战！', hint: '失去 6 生命，获得 28 金币' },
+    { id: 'leave', label: '让它安静地继续练吧', hint: '' },
   ],
   resolve(run, choiceId, ctx) {
     if (choiceId === 'repair') {
       const candidates = run.player.deck.filter(c => canPromoteRuntime(c, run));
       if (candidates.length === 0) {
-        return { pages: [{ speaker: '旁白', text: '（它静静站了一会儿，没有收你的钱，重新转回去空练——你的路数，它已拆无可拆。）' }] };
+        return { pages: [
+          { speaker: '旁白', text: '（它静静站了一会儿，吐出了刚刚从你这儿收下的钱。）' },
+          { speaker: '旁白', text: '（你的路数，它已拆无可拆。）' }
+        ] };
       }
-      if (!spendMoney(ctx, 10, { source: '演武残机 · 投币' })) {
-        return { pages: [{ speaker: '旁白', text: '（你摸了摸钱袋——不够。它等了一会儿，重新转回去空练。）' }] };
+      if (!spendMoney(ctx, 10, { source: '演武残机：投币' })) {
+        return { pages: [{ speaker: '旁白', text: '（你摸了摸干瘪的钱袋）' }] };
       }
       const pick = candidates[Math.floor(run.rng.next() * candidates.length)];
       const before = getSkillDefinition(pick.defId).name;
       // 走 runEffects 原语（改 run + 记流水 + 声明「卡牌升级」变身演出——揭幕后播）
       const rt = upgradeCard(ctx, pick.uniqueID, null, { source: '演武残机 · 投币' });
       const after = getSkillDefinition(rt.defId).name;
-      return { pages: [{ speaker: '旁白', text: `（金币落进投币口，齿轮重新咬合。它陪你把那式动作拆了七遍——你的「${before}」豁然贯通，化作「${after}」。然后它退回墙边，继续空练。）` }] };
+      return { pages: [{ speaker: '旁白', text: `（它开始和你过招——「${before}」豁然贯通，化作「${after}」。）` }] };
     }
     if (choiceId === 'spar') {
-      const lost = damagePlayer(ctx, 6, { source: '演武残机 · 过招' });
-      gainMoney(ctx, 20, { source: '演武残机 · 彩头' });
-      return { pages: [{ speaker: '旁白', text: `（断臂快得看不清——你挨了好几下（损失 ${lost} 点生命），但最终撬开了它胸前的储币匣：20 金彩头滚落一地。它退回去继续空练，像什么都没发生。）` }] };
+      const lost = damagePlayer(ctx, 6, { source: '演武残机：过招' });
+      gainMoney(ctx, 28, { source: '演武残机：彩头' });
+      return { pages: [
+        { speaker: '旁白', text: `（你挨了好几下，但最终漂亮地一拳放倒了机械）` },
+        { speaker: '旁白', text: `（你撬开了它的储币匣，拿到了金币）` }
+      ] };
     }
-    return { pages: [{ speaker: '旁白', text: '（你放轻脚步走开了。身后，断臂的破风声一下，又一下。）' }] };
+    return { pages: [{ speaker: '旁白', text: '（你决定不打扰它。）' }] };
   },
 });

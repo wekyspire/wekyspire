@@ -20,6 +20,11 @@ export const PILE_POSITIONS = {
 /** 焚毁燃烧总时长（ms）：离场节拍阻塞至此——发动 → 效果 → 燃烧殆尽 → 状态同步 */
 export const CARD_BURN_MS = 750;
 
+/** 发动展示位锚点 = held（结算区）的静息位：_skillDisplay 的飞行落点，也是弹簧对
+ *  「发动展示分流进 held 的主语卡」的跟踪目标（BattleStage._layoutAndTrack）。
+ *  宾语展示不走这里（它的展示位 y=4 更高，同屏不叠卡，见本文件结算宾语展示）。 */
+export const HELD_ANCHOR = { x: 0, y: -2, z: 60, scale: 1.15, rotation: 0 };
+
 export const cardBeats = {
   // 离场节拍：播放该卡的离场演出（弃/回库=飞行停车；焚毁=原地燃烧殆尽）并
   // **阻塞本节拍**（onDone 才回 finish）——"发动 → 效果 → 离场"的次序由
@@ -236,8 +241,18 @@ export const cardBeats = {
         this._displayCard = null;
         finish(); // 发动节拍结束；离场由后续 ANIM_CARD_* 节拍驱动
         if (this._views.has(id)) {
-          if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)) {
+          // 结算区真值三口径：离场节拍在排队 / 已应用快照 pending / **仍在队列里的
+          // sync 快照 pending**——结算期输入挂起（花刀选弃等 WAIT）时最新快照还排在
+          // 本节拍之后未应用，this._snapshot 是打出前的旧值（读出「还在手牌」→ 弹簧
+          // 收养滑回扇形、之后 zone 翻 held 也没人把它接回展示位的实报回归）；
+          // 队列里的 sync 快照才是 settle 时点的真值
+          const queuedPending = !!this.bridge.sequencer.findPending(ins =>
+            ins.meta?.event === EventNames.ANIM_STATE_SYNC
+            && (ins.meta?.payload?.snapshot?.pending ?? []).includes(id));
+          if (this._hasDepartureBeatQueued(id) || (this._snapshot?.pending ?? []).includes(id)
+            || queuedPending) {
             this.model.setZone(id, 'held'); // 停留位等收（离场节拍在排队 / 结算区卡：正在结算不回手；单门摘弹簧+拾取）
+            this._heldByDisplay.add(id);    // 主语展示卡：弹簧跟踪展示位锚点（_layoutAndTrack）
           }
           // else：弹簧自动收养——从展示位零速接管，平滑滑回扇形锚点
         }
@@ -247,9 +262,11 @@ export const cardBeats = {
       // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
       // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
       // 根治：命中模板即刻预置 held（zone 过单门，摘弹簧目标+摘拾取），settle 幂等收尾
-      // ——held = 静止位在展示位的 zone，弹簧目标资格只认 hand。
+      // ——held = 静止位在展示位的 zone；主语展示卡由 _heldByDisplay 挂旗，
+      // _layoutAndTrack 给它发展示位锚点的弹簧目标（手牌扇形目标只认 zone 'hand'）。
       if (resolveSpellFx(payload?.def?.id ?? payload?.skill?.defId ?? null)) {
         this.model.setZone(id, 'held');
+        this._heldByDisplay.add(id);
       }
       // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
       // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
@@ -272,13 +289,13 @@ export const cardBeats = {
             value: 0, duration: 0.8, ease: 'power2.out', overwrite: 'auto',
           });
         }
-        this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
+        this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
           durationMs: 70,
           onComplete: onArrived,
         });
       });
     } else {
-      this.animator.animate(id, { x: 0, y: -2, z: 60, scale: 1.15 }, {
+      this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
         durationMs: 70,
         delayMs: drainDelay,
         onComplete: onArrived,

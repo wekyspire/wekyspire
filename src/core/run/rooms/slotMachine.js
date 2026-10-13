@@ -17,7 +17,7 @@ import { recordGold } from '../runStats.js';
 //
 // 已实装
 //   · 赠抽：每次进老虎机房免费赠送 2 抽（免费抽照常计入粉碎/安慰奖/保底爬坡）
-//   · 涨价：单价 5 起，每次付费 roll 后 +3（粉碎换金兼负删卡主渠道）
+//   · 涨价：单价 7 起，每次付费 roll 后 +5（粉碎换金兼负删卡主渠道）
 //   · 保底：小奖 18% 起、每次未中 +7%；大奖 2% 起、每次未中 +2%；中奖后各自重置；
 //           小奖+大奖 > 100% 时小奖实际按 (100% − 大奖) 计
 //   · 奖项：小奖/大奖两档（档内权重见 MINOR/MAJOR），**产出总是可以放弃**；
@@ -31,13 +31,13 @@ import { recordGold } from '../runStats.js';
 //   —— 后者需要 `脆弱`/`伤残` 等尚未实装的效果与「下一场战斗」「下三场战斗」的跨战斗计时。
 
 export const SLOT = Object.freeze({
-  baseCost: 5,        // 首次单价
-  costStep: 3,        // 每次付费 roll 后涨价
-  freeRollsPerVisit: 2, // 每次进房赠送的免费抽数（D5）
+  baseCost: 7,        // 首次单价
+  costStep: 5,        // 每次付费 roll 后涨价
+  freeRollsPerVisit: 1, // 每次进房赠送的免费抽数（D5）
   minorBase: 0.18, minorStep: 0.07,   // 小奖概率（未中即累加，中奖重置）
   majorBase: 0.02, majorStep: 0.02,   // 大奖概率
   devourEvery: 7,     // 每累积这么多次 roll 可吞噬一次
-  giftAfterPulls: 4,  // 同一层拉过这么多次杆仍颗粒无收 → 离房时送安慰奖（D5 自 2 收紧到 4）
+  giftAfterPulls: 3,  // 同一层拉过这么多次杆仍颗粒无收 → 离房时送安慰奖
   // 档内权重（文档只给了档概率，档内分配是调参位）
   minorWeights: {
     moneySmall: 20, heal: 16, pack: 16, highCard: 10,
@@ -67,16 +67,16 @@ export const SLOT_GIFTS = Object.freeze({
   cola: {
     id: 'cola',
     name: '可乐',
-    desc: '「就算没中奖，也总得喝点什么。」',
-    effect: '恢复 4 生命；下一场战斗开始时额外恢复 1 魏启。',
+    desc: '经典美味',
+    effect: '恢复 9 生命。下一场战斗开始时额外恢复 2 魏启。',
     tint: 0xc0392b,          // 占位美术的色块/特写底色（唯一事实源，场景与面板共用）
-    heal: 4,
-    manaBonus: 1,
+    heal: 9,
+    manaBonus: 2,
   },
   chicken: {
     id: 'chicken',
     name: '鸡腿',
-    desc: '「机器烤的，别问它怎么烤的。」',
+    desc: 'Yummy Yummy！',
     effect: '恢复 9 生命；最大生命 +1。',
     tint: 0xd9a05b,
     heal: 9,
@@ -507,7 +507,7 @@ export function devourSlot(run, { kind, relicId = null, uniqueID = null } = {}) 
   if (kind === 'relic') {
     const def = getRelicDefinition(relicId);
     if (!def) throw new Error(`没有这件遗物：${relicId}`);
-    if (rarOf(def) === 'S') throw new Error('S 级遗物嚼不动——它嚼一嚼又吐了出来');
+    if (rarOf(def) === 'S') throw new Error('老虎机嚼了嚼，又将遗物吐了出来！它的牙齿似乎不如这件遗物一般坚固...');
     const i = run.player.relics.indexOf(relicId);
     if (i < 0) throw new Error(`背包里没有这件遗物：${relicId}`);
     gold = roll(SLOT.devourValue.relic[rarOf(def)]);
@@ -527,7 +527,7 @@ export function devourSlot(run, { kind, relicId = null, uniqueID = null } = {}) 
 
   run.player.money += gold;
   recordGold(run, gold);
-  if (freeRoll) run.slotFreeRolls = (run.slotFreeRolls ?? 0) + 1;
+  if (freeRoll) run.slotFreeRolls = (run.slotFreeRolls ?? 0) + 2; // 诅咒卡 → 赠送 2 次免费抽
   run.slotDevour = 0; // 用掉即清零
   return { kind, gold, freeRoll };
 }

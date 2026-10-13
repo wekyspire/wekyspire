@@ -153,52 +153,61 @@ export function createRunMachines(ctx) {
   // （选项按可粉碎内容动态隐藏）→ 全屏选卡 / 选遗物 → 提交 core → 金币获得特写。
   // 对话是 Shell 层的东西（CutsceneOverlay），所以这条链只能编排在这里——Stage 只负责
   // 「谁被点了」和「把候选画出来」，不做游戏判定。
+  // 单飞锁（与 trainingUpgradeFlow 同型）：对话剧本没有幂等 id，本链在播期间再入会把
+  // 第二份「粉碎什么？」排进共享串行队列，在任意后续时点弹出。
+  let devourFlowBusy = false;
   async function openDevourFlow() {
+    if (devourFlowBusy) return false;
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return false;
     if (run.slotPending || !devourReady(run)) return false;
     const relics = devourableRelics(run);
     const cards = devourableCards(run);
     if (!relics.length && !cards.length) return false;
-    const choices = [];
-    if (cards.length) choices.push({ id: 'card', label: '粉碎一张卡牌', hint: `${cards.length} 张可选` });
-    if (relics.length) choices.push({ id: 'relic', label: '粉碎一件遗物', hint: `${relics.length} 件可选` });
-    choices.push({ id: 'cancel', label: '算了' });
-    let picked = null;
-    await cutscene.play({
-      steps: [{
-        type: 'dialogue',
-        pages: [{
-          speaker: '老虎机',
-          text: '机器张开了嘴，齿间漏出金币碰撞的响声。\n「粉碎什么？」',
-          choices,
+    devourFlowBusy = true;
+    try {
+      const choices = [];
+      if (cards.length) choices.push({ id: 'card', label: '粉碎一张卡牌', hint: `${cards.length} 张可选` });
+      if (relics.length) choices.push({ id: 'relic', label: '粉碎一件遗物', hint: `${relics.length} 件可选` });
+      choices.push({ id: 'cancel', label: '算了' });
+      let picked = null;
+      await cutscene.play({
+        steps: [{
+          type: 'dialogue',
+          pages: [{
+            speaker: '老虎机',
+            text: '机器张开了嘴，齿间漏出金币碰撞的响声。\n「粉碎什么？」',
+            choices,
+          }],
+          onChoice: (id) => { picked = id; },
         }],
-        onChoice: (id) => { picked = id; },
-      }],
-    });
-    if (picked !== 'card' && picked !== 'relic') return false;
-    return !!ctx.panelStage()?.openDevourPicker({
-      kind: picked,
-      cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId })),
-      relics: relics.map(r => ({
-        id: r.id, name: r.name, rarity: r.rarity,
-        desc: getRelicDefinition(r.id)?.description ?? '',
-      })),
-      onPick: (key) => {
-        const res = picked === 'card'
-          ? devourSlot(run, { kind: 'card', uniqueID: key })
-          : devourSlot(run, { kind: 'relic', relicId: key });
-        ctx.notify();
-        ctx.roomStage()?.playCrush?.();   // 机器端的"咬合 + 迸币"演出（结算已完成，这里只是表现）
-        // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
-        ctx.panelStage()?.showcaseItem({
-          title: `+${res.gold} 金币`,
-          desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡牌' : '老虎机满意地嚼碎了那件遗物',
-          effect: res.freeRoll ? '它还额外吐了一次免费拉杆' : '金币已经落进你的钱袋',
-          artKey: 'gold',
-          tint: 0xffd75e,
-        });
-      },
-    });
+      });
+      if (picked !== 'card' && picked !== 'relic') return false;
+      return !!ctx.panelStage()?.openDevourPicker({
+        kind: picked,
+        cards: cards.map(c => ({ uniqueID: c.uniqueID, defId: c.defId })),
+        relics: relics.map(r => ({
+          id: r.id, name: r.name, rarity: r.rarity,
+          desc: getRelicDefinition(r.id)?.description ?? '',
+        })),
+        onPick: (key) => {
+          const res = picked === 'card'
+            ? devourSlot(run, { kind: 'card', uniqueID: key })
+            : devourSlot(run, { kind: 'relic', relicId: key });
+          ctx.notify();
+          ctx.roomStage()?.playCrush?.();   // 机器端的"咬合 + 迸币"演出（结算已完成，这里只是表现）
+          // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）
+          ctx.panelStage()?.showcaseItem({
+            title: `+${res.gold} 金币`,
+            desc: picked === 'card' ? '老虎机满意地嚼碎了那张卡牌' : '老虎机满意地嚼碎了那件遗物',
+            effect: res.freeRoll ? '作为回报，它决定让你免费玩一轮老虎机！' : '金币已经落进你的钱袋！',
+            artKey: 'gold',
+            tint: 0xffd75e,
+          });
+        },
+      });
+    } finally {
+      devourFlowBusy = false;
+    }
   }
   // ---- 商店（售货机，SHOP.md §一）----
   // 购货的出货演出与获得特写（含"买到即自动开包"）在 runShowcase.js（shopBuy/shopAnimDone）。
