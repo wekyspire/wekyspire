@@ -1,0 +1,609 @@
+// 章1 小怪演出内容注册（2026-10-15 敌人演出批）：
+// 逐敌登记 act 起手拍（enemyAct）、命中主题（enemyHitFx）、死亡/复苏覆写
+// （enemyLifeFx）。通用体态走 families.js 族模板（参数化配色/力度）；种族签名动作
+// （甲虫啃食、蟾蜍鼓气、静电链、苔球蔓延、爆囊自爆、穿山甲卷甲）在本文实现。
+// 起手拍纪律：攻击族的出手由伤害拍突进承接（_damageHit），本层只加「预告」
+// 起手；扎根/远程型注册 noLunge（身体语言由投射物/粒子承担）。
+import * as THREE from 'three';
+import { isAttackKind, isDebuffKind, isBuffKind } from '../../../../core/intentKinds.js';
+import { registerEnemyAct } from '../enemyAct.js';
+import { registerEnemyHitTheme, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
+import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
+import { fireBurst, impactBurst } from '../../spells/blocks.js';
+import {
+  strikeWindup, spitGlob, chargeUpFx, hunkerFx, dazeSway, wailFx, trembleWarn,
+} from './families.js';
+
+const sOf = (u) => u._baseScale ?? 1;
+const has = (kinds, k) => kinds.includes(k);
+const isAtk = (kinds) => kinds.some(isAttackKind);
+const isDeb = (kinds) => kinds.some(isDebuffKind);
+const isBuf = (kinds) => kinds.some(isBuffKind);
+
+// ====== 种族签名动作 ======
+
+// 蟾蜍鼓气（pufferToad 首拍）：深吸气 → 急剧膨胀（撑到变形）→ 憋住微颤。
+// 与后续 ladder 攻击的 blob 起手构成「越鼓越大」的长线叙事。
+async function pufferInflate({ ctx, deps, unit }) {
+  const s = sOf(unit);
+  // 深吸气：先收再涨（蓄气的呼吸节拍）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 260, ease: 'power2.inOut',
+    onUpdate: (t) => {
+      const k = t < 0.45 ? t / 0.45 : 1 - (t - 0.45) / 0.55;
+      unit.setPose({ squash: 1 - 0.05 * k, widen: 1 + 0.04 * k });
+    },
+  });
+  // 急剧膨胀：一口气撑大 + 喉部微粒（鼓到漏气）
+  deps.particles?.spawn?.(unit.position.x, unit.position.y + 3.4 * s, {
+    color: 0xa8d878, count: 8, speed: 5, size: 0.7, ttl: 0.5, gravity: 4, z: unit.position.z,
+  });
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 300, ease: 'back.out(2.5)',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.24 * t, widen: 1 + 0.3 * t }),
+  });
+  // 憋住微颤（气压读感）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 340, ease: 'none',
+    onUpdate: (t) => {
+      const q = 1 + 0.015 * Math.sin(t * Math.PI * 9);
+      unit.setPose({ squash: 0.76 * q, widen: 1.3 * q });
+    },
+  });
+  // 收尾：泄气回中（姿态连续性——下一拍起手从干净姿态接）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 260, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 0.76 + 0.24 * t, widen: 1.3 - 0.3 * t }),
+  });
+}
+
+// 静电链（staticPuff 电击拍）：毛球到每个友军一道错峰电弧 + 全员蓄势的起手。
+// 电弧 = additive 折线（活跃窗内每帧重掷折点读「电在跳」），亮头尾、暗中段。
+async function zapChainFx({ ctx, deps, unit }) {
+  const { scene, particles, cast } = deps;
+  if (typeof document === 'undefined' || !scene) return;
+  const from = { x: unit.position.x, y: unit.position.y + 3.2 * sOf(unit), z: unit.position.z ?? 0 };
+  const targets = [];
+  for (const { handle: t } of cast?.query?.('unit:') ?? []) {
+    if (t && t !== unit && t.side === 'enemy' && !t._dead) targets.push(t);
+  }
+  // 起手：毛球蓄电（压实 + 电火花）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 200, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * t, widen: 1 + 0.08 * t }),
+  });
+  particles?.spawn?.(from.x, from.y, { color: 0xbfe0ff, count: 10, speed: 6, size: 0.7, ttl: 0.4, gravity: 0, z: from.z });
+  const SEG = 6;
+  const arcs = [];
+  for (const [i, tgt] of targets.entries()) {
+    const to = { x: tgt.position.x, y: tgt.position.y + 3.2 * sOf(tgt), z: tgt.position.z ?? 0 };
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEG + 1) * 3), 3));
+    const mat = new THREE.LineBasicMaterial({
+      color: new THREE.Color(0.7, 0.85, 1.6), transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    });
+    const line = new THREE.Line(geo, mat);
+    line.name = 'spellFx:zap';
+    scene.add(line);
+    arcs.push({ line, geo, mat, to, i });
+    ctx.onKill(() => { scene.remove(line); geo.dispose(); mat.dispose(); });
+  }
+  const cleanArcs = () => { for (const a of arcs) { scene.remove(a.line); a.geo.dispose(); a.mat.dispose(); } };
+  // 电弧活跃窗（每道错峰亮起）
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: 640, ease: 'none',
+    onUpdate: () => {
+      for (const a of arcs) {
+        const life = Math.max(0, Math.min(1, (st.t - a.i * 0.12) / 0.55));
+        a.line.visible = life > 0 && life < 1;
+        if (!a.line.visible) continue;
+        const pos = a.geo.attributes.position.array;
+        for (let k = 0; k <= SEG; k++) {
+          const f = k / SEG;
+          const edge = k === 0 || k === SEG;
+          const jx = edge ? 0 : (Math.random() - 0.5) * 1.4;
+          const jy = edge ? 0 : (Math.random() - 0.5) * 1.4;
+          pos[k * 3] = from.x + (a.to.x - from.x) * f + jx;
+          pos[k * 3 + 1] = from.y + (a.to.y - from.y) * f + jy;
+          pos[k * 3 + 2] = from.z + (a.to.z - from.z) * f + jx * 0.2;
+        }
+        a.geo.attributes.position.needsUpdate = true;
+        a.mat.opacity = 0.9 * Math.sin(life * Math.PI);
+      }
+    },
+    onComplete: cleanArcs,
+  });
+  cleanArcs();
+  // 收势回中
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 200, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * (1 - t), widen: 1 + 0.08 * (1 - t) }),
+  });
+}
+
+// 嗡嗡虫振翅（buzzbug 塞粉尘拍）：高频扑翼 + 翼侧两股尘雾喷向牌库方向。
+async function wingDust({ ctx, deps, unit, player }) {
+  const s = sOf(unit);
+  const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 520, ease: 'none',
+    onUpdate: (t) => {
+      const f = Math.sin(t * Math.PI * 16); // 高频扑翼
+      unit.setPose({ squash: 1 + 0.05 * f, widen: 1 - 0.06 * f, lean: dir * 0.05 * Math.sin(t * Math.PI * 3) });
+    },
+  });
+  const ch = { x: unit.position.x, y: unit.position.y + 3.2 * s, z: unit.position.z ?? 0 };
+  deps.particles?.spawn?.(ch.x, ch.y, { color: 0xd8c088, count: 14, speed: 7, size: 0.9, ttl: 0.8, gravity: -3, z: ch.z });
+  deps.particles?.spawn?.(ch.x + dir * 2.4 * s, ch.y, { color: 0xc0a860, count: 8, speed: 10, size: 0.7, ttl: 0.6, gravity: -5, z: ch.z });
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 140, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ lean: dir * 0.05 * (1 - t) }),
+  });
+}
+
+// 甲虫啃食起手（carrionBeetle 啃牌拍）：嗅探（朝牌库侧探身两下）→ 张合颚预备。
+// 正餐（被焚卡飞向口部咬碎）由 ANIM_CARD_BURNT 的 _gnawOut 在结算拍接手。
+async function gnawAntic({ ctx, deps, unit, player }) {
+  const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
+  // 嗅探两下（探身 + 缩回）
+  for (let i = 0; i < 2; i++) {
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 160, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ lean: dir * 0.12 * Math.sin(Math.PI * t), widen: 1 + 0.05 * Math.sin(Math.PI * t) }),
+    });
+  }
+  // 张合颚（widen 两脉冲——口器开合读感）+ 前方碎屑星子
+  deps.particles?.spawn?.(unit.position.x + dir * 2 * sOf(unit), unit.position.y + 2.6 * sOf(unit), {
+    color: 0xc0a878, count: 5, speed: 4, size: 0.5, ttl: 0.4, gravity: -8, z: unit.position.z,
+  });
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 300, ease: 'none',
+    onUpdate: (t) => unit.setPose({ widen: 1 + 0.10 * Math.abs(Math.sin(t * Math.PI * 4)), lean: dir * 0.08 }),
+  });
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 160, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ lean: dir * 0.08 * (1 - t), widen: 1 }),
+  });
+}
+
+// 苔球蔓延（mossBall 紧勒拍）：压实一拍 + 贴地绿雾三波漫向玩家。
+// 「看不见的紧勒」用地面蔓延雾读——压迫感走空间而不是数值。
+async function spreadGrip({ ctx, deps, unit, player }) {
+  const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
+  const feet = { x: unit.position.x, y: unit.position.y + 0.8 * sOf(unit), z: unit.position.z ?? 0 };
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 200, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * t, widen: 1 + 0.12 * t }),
+  });
+  for (let i = 0; i < 3; i++) {
+    deps.particles?.spawn?.(feet.x + dir * (1.5 + i * 2.2), feet.y, {
+      color: 0x6a8a4a, count: 6, speed: 5 + i, size: 1.3, ttl: 0.9, gravity: -1, z: feet.z,
+    });
+    await ctx.wait(110);
+  }
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 240, ease: 'power2.out',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * (1 - t), widen: 1 + 0.12 * (1 - t) }),
+  });
+}
+
+// 穿山甲卷甲蓄力（rockPangolin 蓄力拍）：蜷成球状（压扁 + 过盈）+ 岩尘环 +
+// 甲片蓄能微光。冲锋拍本身走通用突进（lunge 即「滚进」）。
+async function pangolinCurl({ ctx, deps, unit }) {
+  const s = sOf(unit);
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 360, ease: 'power3.inOut',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.3 * t, widen: 1 + 0.34 * t }),
+  });
+  const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z ?? 0 };
+  deps.particles?.spawn?.(feet.x, feet.y, { color: 0xb0a088, count: 10, speed: 8, size: 1.2, ttl: 0.7, gravity: -8, z: feet.z });
+  deps.particles?.spawn?.(unit.position.x, unit.position.y + 3.2 * s, {
+    color: 0xd8b860, count: 8, speed: 3, size: 0.7, ttl: 0.8, gravity: 6, z: unit.position.z,
+  });
+  await ctx.wait(140);
+}
+
+// 爆囊自爆死亡（blastPod：引线归零）。覆写通用死亡——它不是「倒下」是「炸开」：
+// 短促膨胀到极限（白热一拍）→ 轰然爆碎（火球 + 冲击环 + 震屏 + 碎壳）→
+// 本体随爆隐藏收殓。14 群伤的受击演出先于本拍各自播过，此处只演爆体本身。
+function blastDeath(stage, unit, payload, finish) {
+  if (!payload?.tags?.includes('blast')) return false; // 拆弹（被玩家击杀）走通用死亡
+  const s = unit._baseScale ?? 1;
+  unit.hideIntention();
+  unit.hideStatus();
+  const { x: px, y: py, z: pz } = unit.position;
+  stage.animator.animateCustom(unit.uniqueID, {
+    durationMs: 340, ease: 'power3.in',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.22 * t, widen: 1 + 0.38 * t }),
+    onComplete: () => {
+      stage._fxRunScript?.((c) => runBlastBurst(c, stage, { x: px, y: py + 3 * s, z: pz }, s));
+      unit.setPose({ squash: 1, widen: 1 });
+      unit.visible = false; // 随爆消失：收殓语义与通用死亡一致（place/sync 保持隐藏）
+      finish();
+    },
+  });
+  return undefined;
+}
+
+// 史莱姆融化死亡（slime/slimeB）：塌软成滩而非倒牌——缓慢下塌（squash 到底）→
+// 液滴四溅 → 原地液化淡出（材质褪湿色 + alpha 侵蚀收干）。
+function slimeMeltDeath(stage, unit, payload, finish) {
+  if (payload?.heavy) return false; // 重击致死仍走击退倒牌（力道压过融化）
+  const { x: px, y: py, z: pz } = unit.position;
+  unit.hideIntention();
+  const bodyMat = unit.body.material;
+  bodyMat.transparent = true;
+  bodyMat.needsUpdate = true;
+  const startColor = bodyMat.color.clone();
+  const wetColor = new THREE.Color(0x4a6a3a);
+  stage.animator.animateCustom(unit.uniqueID, {
+    durationMs: 560, ease: 'power2.in',
+    onUpdate: (t) => {
+      unit.setPose({ squash: 1 - 0.68 * t, widen: 1 + 0.55 * t });
+      bodyMat.color.copy(startColor).lerp(wetColor, t * 0.6);
+    },
+    onComplete: () => {
+      stage.particles.spawn(px, py + 0.5, {
+        count: 16, color: 0x86c86a, speed: 10, ttl: 0.7, gravity: -24, size: 1.2, z: pz,
+      });
+      unit.hideStatus();
+      unit.body.castShadow = false;
+      stage.animator.animateCustom(unit.uniqueID, {
+        durationMs: 420, ease: 'power1.in',
+        onUpdate: (t) => { bodyMat.opacity = 1 - t; },
+        onComplete: () => {
+          bodyMat.color.copy(startColor);
+          unit.visible = false;
+          finish();
+        },
+      });
+    },
+  });
+  return undefined;
+}
+
+// 复苏 garnish（起立落定后的主题点缀，fire-and-forget）
+// 春风系（刺刺草）：嫩绿光点盘旋升起 + 脚下青草环闪。
+function springBudGarnish(stage, unit) {
+  const { x, y, z } = unit.position;
+  stage.particles.spawn(x, y + 0.5, { count: 14, color: 0x9fe07a, speed: 3, size: 0.9, ttl: 1.1, gravity: 7, z });
+  stage.particles.spawn(x, y + 0.3, { count: 8, color: 0x6ac86a, speed: 6, size: 1.1, ttl: 0.8, gravity: -2, z });
+}
+// 腐根系（腐败根须/树心）：暗绿腐气低漫 + 地面根须纹光。
+function rotRootGarnish(stage, unit) {
+  const { x, y, z } = unit.position;
+  stage.particles.spawn(x, y + 0.4, { count: 12, color: 0x7a8a4a, speed: 4, size: 1.2, ttl: 1.0, gravity: 3, z });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.random() * 0.5;
+    stage.particles.spawn(x + Math.cos(a) * 1.6, y + 0.2, { count: 3, color: 0x5a7a3a, speed: 5, size: 0.8, ttl: 0.7, gravity: -6, z });
+  }
+}
+// 鼹鼠钻出（掘地鼹鼠 spawn）：脚下土块迸溅（从地下顶出来的读感）。
+function moleEmergeGarnish(stage, unit) {
+  const { x, y, z } = unit.position;
+  stage.particles.spawn(x, y + 0.4, { count: 18, color: 0x9a7a52, speed: 11, ttl: 0.8, gravity: -18, size: 1.5, z });
+  stage.particles.spawn(x, y + 0.2, { count: 10, color: 0x6a5238, speed: 7, ttl: 0.5, gravity: -10, size: 1.1, z });
+}
+
+// 爆囊爆碎段（_fxRunScript 协程）：火球 + 冲击环 + 焦黑碎壳
+async function runBlastBurst(ctx, stage, at, s) {
+  const deps = stage._spellDeps?.() ?? {};
+  await Promise.all([
+    fireBurst(ctx, deps, {
+      at, scale: 1.6 + 0.4 * s, ms: 460, shakeSeverity: 2.2,
+      sparkCount: 30, linger: { count: 14, ttl: 1.6 },
+    }),
+    impactBurst(ctx, deps, {
+      at: { x: at.x, y: at.y + 1.5, z: at.z }, color: [1.0, 0.5, 0.2], hot: [1.3, 0.9, 0.6],
+      count: 26, speed: 30, size: 1.2, ttl: 0.6, flashSize: 9, flashMs: 240, lampIntensity: 1400,
+    }),
+  ]);
+  stage.particles.spawn(at.x, at.y, { count: 14, color: 0x3a2e24, speed: 18, ttl: 0.9, gravity: -26, size: 1.0, z: at.z });
+}
+
+// ====== 逐敌注册 ======
+
+export function registerChapter1EnemyFx() {
+  // -- 史莱姆族（胶质）--
+  for (const id of ['slime', 'slimeB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isAtk(kinds)) return strikeWindup('blob', { color: 0x86c86a, dropletColor: 0x9fe07a })(a);
+      if (has(kinds, 'buff')) return chargeUpFx({ color: 0x9fe08a })(a); // 蓄势拍
+      if (has(kinds, 'defend')) return hunkerFx({ depth: 0.85 })(a);
+      return 'generic';
+    });
+    registerEnemyDeathBeat(id, slimeMeltDeath);
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.62, 0.95, 0.45], hot: [0.95, 1.25, 0.75], rim: [0.5, 0.9, 0.5], sparkColor: 0x9fe070 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0x86c86a, count: heavy ? 12 : 7, speed: 9, size: 1.0, ttl: 0.6, gravity: -22, z: at.z,
+      }),
+    });
+  }
+  // -- 小史莱姆（塞粘液）--
+  for (const id of ['slimeletA', 'slimeletB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isAtk(kinds)) return strikeWindup('blob', { color: 0x86c86a })(a);
+      if (isDeb(kinds)) return spitGlob({
+        color: [0.45, 0.85, 0.35], hot: [0.8, 1.15, 0.65], size: 1.3, ms: 380, arcH: 3,
+        trailColor: 0x6aba50, impactColor: 0x8ad06a, impactCount: 10,
+      })(a);
+      return 'generic';
+    });
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.62, 0.95, 0.45], hot: [0.95, 1.25, 0.75], sparkColor: 0x9fe070 },
+    });
+  }
+  // -- 怨灵（远程：洗虚无/虚弱）--
+  for (const id of ['wraithA', 'wraithB']) {
+    registerEnemyAct(id, async (a) => {
+      if (isDeb(a.kinds)) return wailFx({ color: 0xb9a0e8, rings: 3 })(a);
+      return 'generic'; // 攻击拍：通用突进（怨灵扑脸即「鬼上身」）
+    });
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.55, 0.42, 0.85], hot: [0.9, 0.8, 1.3], rim: [0.5, 0.4, 0.9], sparkColor: 0xb9a0e8 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0x9a80c8, count: heavy ? 10 : 6, speed: 5, size: 1.0, ttl: 0.9, gravity: 5, z: at.z,
+      }),
+    });
+  }
+  // -- 针鼠（荆棘）--
+  registerEnemyAct('hedgehog', async (a) => {
+    const { kinds } = a;
+    if (isAtk(kinds)) return strikeWindup('rear', { color: 0xc8b060 })(a);
+    if (isBuf(kinds)) return chargeUpFx({ color: 0xc8d078 })(a); // 竖刺/补刺
+    if (has(kinds, 'defend')) return hunkerFx({ depth: 1.0 })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('hedgehog', {
+    pal: { sparkColor: 0xd8c060 },
+    garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+      color: 0xc8b060, count: heavy ? 8 : 4, speed: 22, size: 0.5, ttl: 0.35, gravity: -14, z: at.z,
+    }), // 针刺飞刺（细快小粒）
+  });
+  // -- 腐苔球（扎根：紧勒/防御/攻）--
+  for (const id of ['mossBallA', 'mossBallB', 'mossBallC']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (kinds.includes('strongDebuff')) return spreadGrip(a);
+      if (isAtk(kinds)) return strikeWindup('blob', { color: 0x7a9a5a })(a);
+      if (has(kinds, 'defend')) return hunkerFx({ depth: 0.9 })(a);
+      return 'generic';
+    });
+    registerEnemyNoLunge(id); // 苔球贴地蠕动，不扑人
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.5, 0.75, 0.4], hot: [0.85, 1.05, 0.6], sparkColor: 0x8aba60 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0x6a8a4a, count: heavy ? 12 : 8, speed: 6, size: 1.1, ttl: 0.8, gravity: -8, z: at.z,
+      }),
+    });
+  }
+  // -- 鼓腹蟾（鼓气/渐强攻）--
+  for (const id of ['pufferToadA', 'pufferToadB', 'pufferToadC']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (kinds.includes('unknown')) return pufferInflate(a); // 鼓气拍
+      if (isAtk(kinds)) return strikeWindup('blob', {
+        color: 0xa8d878, heavy: kinds.includes('heavy'),
+      })(a);
+      return 'generic';
+    });
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.6, 0.85, 0.4], hot: [0.95, 1.15, 0.6], sparkColor: 0xb8e070 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0xc8e080, count: heavy ? 14 : 8, speed: 11, size: 0.9, ttl: 0.6, gravity: -16, z: at.z,
+      }),
+    });
+  }
+  // -- 爆囊（待爆/缩囊/攻；自爆死亡）--
+  for (const id of ['blastPod', 'blastPodB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (kinds.includes('unknown')) return trembleWarn({ color: 0xff5a3a })(a); // 待爆拍
+      if (isAtk(kinds)) return strikeWindup('blob', { color: 0xe08850 })(a);
+      if (has(kinds, 'defend')) return hunkerFx({ depth: 1.0, dustColor: 0x8a6a50 })(a);
+      return 'generic';
+    });
+    registerEnemyDeathBeat(id, blastDeath);
+    registerEnemyHitTheme(id, {
+      pal: { sparkColor: 0xff9a50 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0xff8a40, count: heavy ? 12 : 6, speed: 8, size: 0.8, ttl: 0.5, gravity: 6, z: at.z,
+      }),
+    });
+  }
+  // -- 石茧（破茧/蓄势/攻）--
+  registerEnemyAct('stoneCocoon', async (a) => {
+    const { kinds } = a;
+    if (isAtk(kinds)) return strikeWindup('rear', { color: 0xb0a890 })(a);
+    if (isBuf(kinds)) return chargeUpFx({ color: 0xd8c8a0 })(a);
+    if (has(kinds, 'defend')) return hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('stoneCocoon', {
+    pal: { sparkColor: 0xc8bca0 },
+    garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+      color: 0xa8a090, count: heavy ? 12 : 7, speed: 14, size: 0.9, ttl: 0.5, gravity: -28, z: at.z,
+    }), // 岩屑崩落
+  });
+  // -- 岩螺（缩壳/壳弹连击）--
+  registerEnemyAct('rockSnail', async (a) => {
+    const { kinds } = a;
+    if (isAtk(kinds)) return strikeWindup('rear', { color: 0xb0a890 })(a); // 壳弹起手（连击命中走 rapid）
+    if (has(kinds, 'defend') || isBuf(kinds)) return hunkerFx({ depth: 1.1 })(a);
+    return 'generic';
+  });
+  registerEnemyNoLunge('rockSnail');
+  registerEnemyHitTheme('rockSnail', {
+    pal: { sparkColor: 0xc8bca0 },
+    garnish: (c, d, { at }) => d.particles?.spawn?.(at.x, at.y, {
+      color: 0xb0a890, count: 5, speed: 18, size: 0.7, ttl: 0.4, gravity: -26, z: at.z,
+    }),
+  });
+  // -- 刺刺草（藤鞭/毒液；春风复苏）--
+  for (const id of ['thornWeed', 'thornWeedB', 'thornWeedT']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isAtk(kinds)) return strikeWindup('lash', { color: 0x8aba60 })(a);
+      if (isDeb(kinds)) return spitGlob({
+        color: [0.35, 0.75, 0.30], hot: [0.7, 1.05, 0.55], size: 1.2, ms: 400, arcH: 3.5,
+        trailColor: 0x5a9a40, impactColor: 0x7aba50, impactCount: 10,
+      })(a);
+      return 'generic';
+    });
+    if (id !== 'thornWeedT') registerEnemySpawnGarnish(id, springBudGarnish); // T 类无复苏
+    registerEnemyHitTheme(id, {
+      pal: { sparkColor: 0x9aba60 },
+    });
+  }
+  // -- 腐食甲虫（啃食/硬化/攻）--
+  for (const id of ['carrionBeetle', 'carrionBeetleB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (kinds.includes('strongDebuff')) return gnawAntic(a); // 啃牌起手（正餐在焚毁拍）
+      if (isAtk(kinds)) return strikeWindup('rear', { color: 0xb09060 })(a);
+      if (isBuf(kinds)) return chargeUpFx({ color: 0xc0b090 })(a); // B 类硬化
+      return 'generic';
+    });
+    registerEnemyHitTheme(id, {
+      pal: { sparkColor: 0xd0a860 },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0x8a7048, count: heavy ? 10 : 5, speed: 16, size: 0.7, ttl: 0.45, gravity: -24, z: at.z,
+      }), // 甲壳碎屑
+    });
+  }
+  // -- 掘地鼹鼠（突袭/掘洞/重击）--
+  registerEnemyAct('diggerMole', async (a) => {
+    const { kinds } = a;
+    if (kinds.includes('heavy')) return strikeWindup('crouch', { color: 0x9a7a52, heavy: true })(a);
+    if (isAtk(kinds)) return strikeWindup('crouch', { color: 0x9a7a52 })(a);
+    if (has(kinds, 'defend')) return hunkerFx({ depth: 1.1, dustColor: 0x9a7a52 })(a);
+    if (isBuf(kinds)) return chargeUpFx({ color: 0xa8d8a0 })(a); // 掘洞恢复
+    return 'generic';
+  });
+  registerEnemySpawnGarnish('diggerMole', moleEmergeGarnish);
+  registerEnemyHitTheme('diggerMole', {
+    pal: { sparkColor: 0xc0a070, dustColor: 0x9a7a52 },
+  });
+  // -- 静电毛球（电击链/防御）--
+  for (const id of ['staticPuff', 'staticPuffB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isAtk(kinds)) return zapChainFx(a); // 电击+全员蓄势（电弧是攻击的本体演出）
+      if (has(kinds, 'defend')) return hunkerFx({ depth: 0.8 })(a);
+      return 'generic';
+    });
+    registerEnemyNoLunge(id); // 远程电击不突进
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.55, 0.75, 1.30], hot: [1.0, 1.15, 1.5], rim: [0.5, 0.7, 1.2], sparkColor: 0xbfe0ff },
+      garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0xd8ecff, count: heavy ? 12 : 7, speed: 20, size: 0.6, ttl: 0.3, gravity: 0, z: at.z,
+      }),
+    });
+  }
+  // -- 嗡嗡虫（振翅塞粉尘/连撞）--
+  for (const id of ['buzzbugA', 'buzzbugB']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isDeb(kinds)) return wingDust(a);
+      if (isAtk(kinds)) return strikeWindup('hover', { color: 0xd8c088 })(a);
+      return 'generic';
+    });
+    registerEnemyHitTheme(id, {
+      pal: { sparkColor: 0xe0d0a0 },
+      garnish: (c, d, { at }) => d.particles?.spawn?.(at.x, at.y, {
+        color: 0xd8c088, count: 5, speed: 8, size: 0.7, ttl: 0.5, gravity: -6, z: at.z,
+      }),
+    });
+  }
+  // -- 腐败根须/树心（藤拍/蓄力；腐根复苏）--
+  for (const id of ['rottenRoot', 'rottenRootB', 'rottenRootT']) {
+    registerEnemyAct(id, async (a) => {
+      const { kinds } = a;
+      if (isAtk(kinds)) return strikeWindup('lash', { color: 0x7a8a4a })(a);
+      if (isBuf(kinds)) return chargeUpFx({ color: 0x9a8a5a })(a);
+      return 'generic';
+    });
+    if (id !== 'rottenRootT') registerEnemySpawnGarnish(id, rotRootGarnish);
+    registerEnemyHitTheme(id, {
+      pal: { color: [0.5, 0.6, 0.35], hot: [0.8, 0.9, 0.55], sparkColor: 0x8a9a5a },
+    });
+  }
+  registerEnemyAct('rottenTreeHeart', async (a) => {
+    const { kinds } = a;
+    if (isAtk(kinds)) return strikeWindup('lash', { color: 0x7a8a4a })(a);
+    if (isBuf(kinds)) return chargeUpFx({ color: 0x9a8a5a })(a);
+    if (has(kinds, 'defend')) return hunkerFx({ depth: 0.7 })(a);
+    return 'generic';
+  });
+  registerEnemySpawnGarnish('rottenTreeHeart', rotRootGarnish);
+  registerEnemyHitTheme('rottenTreeHeart', {
+    pal: { color: [0.5, 0.6, 0.35], hot: [0.8, 0.9, 0.55], sparkColor: 0x8a9a5a },
+  });
+
+  // ====== 章1 精英 ======
+
+  // 雪狼：开局压制（短嚎+伏低）、塞震慑（冰嚎）、攻+盾、三连爪击
+  registerEnemyAct('snowwolf', async (a) => {
+    const { kinds } = a;
+    if (isDeb(kinds) && !isAtk(kinds)) {
+      return wailFx({ color: 0xaed8f0, rings: 4, upMotes: 10 })(a); // 塞震慑拍：冰嚎
+    }
+    if (isDeb(kinds) && isAtk(kinds)) {
+      await wailFx({ color: 0xbfd8e8, rings: 2, upMotes: 4 })(a); // 开局压制：短嚎
+      return strikeWindup('crouch', { color: 0xc8d8e0 })(a); // → 伏低（咬随伤害拍）
+    }
+    if (isAtk(kinds)) return strikeWindup('crouch', { color: 0xc8d8e0, heavy: kinds.includes('heavy') })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('snowwolf', {
+    pal: { color: [0.62, 0.80, 1.05], hot: [1.0, 1.1, 1.35], rim: [0.55, 0.75, 1.1], sparkColor: 0xcfe8f5 },
+    garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+      color: 0xd8ecf8, count: heavy ? 12 : 7, speed: 12, size: 0.8, ttl: 0.55, gravity: -6, z: at.z,
+    }),
+  });
+  // 沼泽伏击者：扑咬（重档）/毒雾/晕眩发呆
+  registerEnemyAct('swampAmbusher', async (a) => {
+    const { kinds } = a;
+    if (kinds.includes('stun')) return dazeSway({ color: 0xa8c890 })(a);
+    if (isDeb(kinds) && !isAtk(kinds)) {
+      return spitGlob({
+        color: [0.4, 0.7, 0.35], hot: [0.75, 1.0, 0.55], size: 2.0, ms: 460, arcH: 4,
+        trailColor: 0x5a8a4a, impactColor: 0x7aba5a, impactCount: 18,
+      })(a);
+    }
+    if (isAtk(kinds)) return strikeWindup('crouch', { color: 0x7a9a5a, heavy: true })(a);
+    if (has(kinds, 'defend')) return hunkerFx({ depth: 1.1 })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('swampAmbusher', {
+    pal: { sparkColor: 0x8aba60, dustColor: 0x6a7a52 },
+  });
+  // 碎岩穿山甲：卷甲蓄力 → 冲锋（滚进走通用突进）
+  registerEnemyAct('rockPangolin', async (a) => {
+    const { kinds } = a;
+    if (has(kinds, 'defend') || isBuf(kinds)) return pangolinCurl(a);
+    if (isAtk(kinds)) return strikeWindup('crouch', { color: 0xb0a088, heavy: true })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('rockPangolin', {
+    pal: { sparkColor: 0xd0b880 },
+    garnish: (c, d, { at, heavy }) => d.particles?.spawn?.(at.x, at.y, {
+      color: 0xa89878, count: heavy ? 14 : 8, speed: 16, size: 1.0, ttl: 0.55, gravity: -26, z: at.z,
+    }),
+  });
+  // 幼年罗刹：狂乱连爪/力量蓄
+  registerEnemyAct('youngRakshasa', async (a) => {
+    const { kinds } = a;
+    if (isBuf(kinds)) return chargeUpFx({ color: 0xe0705a })(a); // 力量2（暴怒红）
+    if (isAtk(kinds)) return strikeWindup('crouch', { color: 0xd08868 })(a);
+    return 'generic';
+  });
+  registerEnemyHitTheme('youngRakshasa', {
+    pal: { color: [0.9, 0.4, 0.3], hot: [1.3, 0.7, 0.55], sparkColor: 0xf09070 },
+  });
+}

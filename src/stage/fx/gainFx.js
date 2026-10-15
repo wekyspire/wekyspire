@@ -67,8 +67,9 @@ export function playGainSweep(unit, colorHex, { dir = 1, durMs = 230 } = {}) {
 }
 
 // 脚下环纹理（厚描边软环——读作「地面光圈」；方角语言归 UI 铬件，地面光是氛围件用圆）
+// （export：敌人起手族模板（嚎叫/震颤波）共享同一环纹理缓存）
 let _ringTex = null;
-function ringTexture() {
+export function ringTexture() {
   if (_ringTex) return _ringTex;
   const c = document.createElement('canvas');
   c.width = c.height = 128;

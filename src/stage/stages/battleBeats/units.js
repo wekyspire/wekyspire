@@ -9,6 +9,7 @@ import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
 import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed } from '../../fx/spells/enemyHitFx.js';
 import { bossHurtFxOf } from '../../fx/bossStateFx.js';
+import { enemyDeathBeatOf, enemySpawnGarnishOf } from '../../fx/enemyLifeFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
 
@@ -447,6 +448,9 @@ export const unitBeats = {
           },
           onComplete: () => {
             billboard.rotation.x = 0;
+            // 逐敌入场 garnish（enemyLifeFx：春风绿芽/腐根缠绕等复苏主题点缀）——
+            // fire-and-forget 不占节拍
+            enemySpawnGarnishOf(unit._defId)?.(this, unit);
             finish();
           },
         });
@@ -472,6 +476,10 @@ export const unitBeats = {
     }
     // 天斩击杀分支（heavenCleave 施术拍挂的断裂标记）：立牌沿斩缝裂成两半
     if (this._cleaveSplit?.delete(id)) return this._unitCleaveSplitBeat(unit, finish);
+    // 逐敌死亡覆写（enemyLifeFx：爆囊自爆/史莱姆融化等种族死亡语言）——
+    // 返回 false = 覆写方声明不适用本死因（如爆囊被拆弹），回落既有分支
+    const customDeath = enemyDeathBeatOf(unit._defId);
+    if (customDeath && customDeath(this, unit, payload, finish) !== false) return;
     // 重击致死分支（heavy 标记）：击退后仰 → 撑不住 → 倒尽（加强版倾倒）
     if (payload?.heavy) return this._unitHeavyDeathBeat(unit, finish);
     const billboard = unit.billboard;

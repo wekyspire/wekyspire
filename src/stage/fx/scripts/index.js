@@ -23,6 +23,7 @@ import { registerMefm1Scripts } from './bosses/mefm1.js';
 import { registerPangolinKingScripts } from './bosses/pangolinKing.js';
 import { registerCorruptSourceScripts } from './bosses/corruptSource.js';
 import { registerEnemyActScript } from './enemyAct.js';
+import { registerChapter1EnemyFx } from './enemies/chapter1.js';
 
 const REG = new Map();
 
@@ -42,3 +43,4 @@ registerMefm1Scripts(registerScript);
 registerPangolinKingScripts(registerScript);
 registerCorruptSourceScripts(registerScript);
 registerEnemyActScript(registerScript);
+registerChapter1EnemyFx(); // 章1 小怪逐敌演出（act 起手/命中主题/死亡覆写注册）

@@ -12,6 +12,7 @@ import { makeBodyFlames } from './bodyFlames.js';
 import { makeVaporPlumes } from './vaporPlumes.js';
 import { makeStasisShell } from './stasisShell.js';
 import { makeStunStars } from './stunStars.js';
+import { makeFuseGlow } from './fuseGlow.js';
 import gsap from 'gsap';
 
 // 主级默认模板（与 _damageHit 现行参数逐项对齐——默认路径零回归）
@@ -192,6 +193,16 @@ const UNIT_AURA_THEMES = {
     levelOf: () => 1,
     enterDur: 0.4, // 星星逐颗弹入 + 转速渐入（stunStars backOut/phase）
     exitDur: 0.5,
+  },
+  // 爆炸引线（爆囊）：心跳辉光——层数 = 剩余回合数，反相映射（引线越短越红越急）：
+  // 3 层 0.3（暖橙缓搏）→ 1 层 1.0（白炽红疾搏），层数扣减经 update 自动追档
+  blastFuse: {
+    layer: 2,
+    build: (layer) => makeFuseGlow(layer),
+    levelOf: (s) => Math.max(0.3, 1.35 - (s ?? 1) * 0.35),
+    enterDur: 0.5,
+    exitDur: 0.4,
+    emitter: { rate: 5, color: 0xff6a30, speed: 3, ttl: 0.8, gravity: 5, size: 0.9, radius: 1.2, yOff: 1.5 },
   },
 };
 

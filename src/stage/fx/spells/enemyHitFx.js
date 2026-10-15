@@ -19,6 +19,14 @@ export const ENEMY_HIT_SPELLS = Object.freeze({
 const ENEMY_HIT_BEATS = new Map();
 export function registerEnemyHitBeat(defId, fn) { ENEMY_HIT_BEATS.set(defId, fn); }
 
+// 小怪命中主题表（2026-10-15 敌人演出批）：defId → { pal, garnish }——
+// 不重写 beat 编排（三式底座不动），只换命中瞬间的配色与主题附加粒子。
+// pal 键对位 enemyImpactBeat 的 pal 参数（color/hot/rim/sparkColor/dustColor 等）；
+// garnish(ctx, deps, {unit, at, heavy, dealt, swing, s}) = 命中一拍的种族附加件
+// （在冲击主体之前起跑，fire-and-forget）。内容注册在 fx/scripts/enemies/。
+const ENEMY_HIT_THEMES = new Map();
+export function registerEnemyHitTheme(defId, theme) { ENEMY_HIT_THEMES.set(defId, theme); }
+
 // 远程型敌人名单：命中拍的「蓄势后拉 → 发力突进」对它们是错语言（施法者/射击机器/
 // 扎根植物不扑人——身体语言由 act 起手的投射物承担）。注册口同在 fx/scripts/bosses/。
 const ENEMY_NO_LUNGE = new Set();
@@ -51,17 +59,19 @@ export function resolveEnemyHitFx(stage, payload, dealt, intention = null) {
   const defId = payload.source.defId ?? null;
   const override = ENEMY_HIT_SPELLS[defId];
   if (override === 'none') return null;
-  if (override) return { tier: override.tier ?? 'normal', beat: ENEMY_HIT_BEATS.get(defId), ...override };
+  // 小怪命中主题（pal/garnish 参数行）：与 tier/beat 合并进 fx 描述符
+  const theme = ENEMY_HIT_THEMES.get(defId) ?? null;
+  if (override) return { tier: override.tier ?? 'normal', beat: ENEMY_HIT_BEATS.get(defId), ...theme, ...override };
 
   const tags = payload?.tags ?? [];
   const beat = ENEMY_HIT_BEATS.get(defId);
-  if (tags.includes(HEAVY_TAG)) return { tier: 'heavy', beat };
+  if (tags.includes(HEAVY_TAG)) return { tier: 'heavy', beat, ...theme };
 
   // 意图口径（主判据）：重击 = 预告伤害够大；连击 = 意图 hits ≥ 2
   if (typeof intention?.damage === 'number' && intention.damage >= HEAVY_INTENT_FALLBACK) {
-    return { tier: 'heavy', beat };
+    return { tier: 'heavy', beat, ...theme };
   }
-  if ((intention?.hits ?? 0) >= 2) return { tier: 'rapid', beat };
+  if ((intention?.hits ?? 0) >= 2) return { tier: 'rapid', beat, ...theme };
 
   // 意图缺失兜底：同源连拍记账（窗内第 2 拍起 = 连击式）
   const now = performance.now();
@@ -71,8 +81,8 @@ export function resolveEnemyHitFx(stage, payload, dealt, intention = null) {
   const inWindow = last != null && now - last.t <= RAPID_WINDOW_MS;
   stage._enemyHitRecent.set(srcId, { t: now, n: inWindow ? last.n + 1 : 1 });
 
-  if (inWindow && last.n >= 1) return { tier: 'rapid', beat };
-  return { tier: 'normal', beat };
+  if (inWindow && last.n >= 1) return { tier: 'rapid', beat, ...theme };
+  return { tier: 'normal', beat, ...theme };
 }
 
 // 三式配方：量级对齐玩家拳（punchImpact 同款下限口径）——敌侧立牌远、玩家侧
@@ -92,7 +102,8 @@ export async function runEnemyHitBeat(ctx, deps, args) {
   const { fx, unit } = args;
   if (!fx || !unit) return;
   if (fx.beat) { await fx.beat(ctx, deps, args); return; }
-  await enemyImpactBeat(ctx, deps, args);
+  // 小怪命中主题行（pal/garnish）经 fx 描述符流入三式底座
+  await enemyImpactBeat(ctx, deps, { ...args, pal: fx.pal ?? {}, garnish: fx.garnish ?? null });
 }
 
 /**

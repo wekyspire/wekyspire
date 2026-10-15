@@ -38,9 +38,13 @@ export const cardBeats = {
     }
     this.picker.removePickable(id);
     if (type === EventNames.ANIM_CARD_BURNT) {
-      // 牌库来源的焚毁（腐食甲虫啃牌库顶）：视图停在牌库堆上且隐形、从未烘面——
+      // 敌方吞噬（腐食甲虫啃牌）：卡不原地烧——飞向啃食者口部被咬碎咽下
+      const src = payload?.source?.uniqueID != null
+        ? (this._units.get(payload.source.uniqueID) ?? null) : null;
+      if (src && !src._dead) return this._gnawOut(id, view, src, payload, finish);
+      // 牌库来源的焚毁（无来源单位的中立焚牌）：视图停在牌库堆上且隐形、从未烘面——
       // 先烘面显形、飞到中央展示位（宾语展示同机位），落定再原地燃尽；
-      // 否则焚毁整场演给一张隐形空白卡（"吃卡没感觉"的病根）。手牌卡维持原地烧。
+      // 否则焚毁整场演给一张隐形空白卡。手牌卡维持原地烧。
       if (!view.visible && payload?.cardView) {
         view.setCard(payload.cardView);
         view.visible = true;
@@ -64,6 +68,53 @@ export const cardBeats = {
     this.model.setZone(id, 'deck'); // 状态在节拍时点推进（模型权威）
     this._flyOut(id, view, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, finish);
   },
+  // 啃食焚毁（腐食甲虫 gnawDeck）：被焚的卡从牌库顶被叼走——弧线飞递到甲虫口部
+  // （世界口位经 worldToUI 换算进卡牌 UI 平面）→ 两口咬碎（卡面骤缩震颤 + 碎屑迸溅
+  // + 甲虫前扑咬合姿态）→ 残余咽下（缩小淡出）。节拍阻塞至咽下收尾（同焚毁链）。
+  _gnawOut(id, view, src, payload, finish) {
+    if (!view.visible && payload?.cardView) {
+      view.setCard(payload.cardView); // 牌库卡从未烘面（同中立焚毁的显形理由）
+      view.visible = true;
+    }
+    const s = src._baseScale ?? 1;
+    const mouth = { x: src.position.x, y: src.position.y + 3.1 * s, z: src.position.z ?? 0 };
+    const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
+    const crumbs = (n) => this.particles.spawn(mouth.x, mouth.y, {
+      count: n, color: 0xd8c8a8, speed: 9, ttl: 0.5, gravity: -26, size: 0.8, z: mouth.z,
+    });
+    // 咬合：甲虫前扑一啄（姿态通道，同步差分不踩）+ 卡面骤缩 + 碎屑
+    const bite = (k) => {
+      src.setPose({ squash: 0.9, widen: 1.1, lean: 0.10 });
+      gsap.delayedCall(0.12, () => src.resetPose());
+      const sc = view.scale.x;
+      this._tweenFactory(view.scale, { x: sc * (1 - 0.22 * k), y: sc * (1 - 0.22 * k) }, { durationMs: 110, ease: 'power3.out' });
+      this._tweenFactory(view.rotation, { z: (Math.random() - 0.5) * 0.4 }, { durationMs: 110 });
+      crumbs(5 + k * 3);
+    };
+    this._cardFlight(id, { x: ui.x, y: ui.y, z: 50, scale: 0.85 }, {
+      arc: 15, tilt: 0.18, ease: 'power1.in', durationMs: 380,
+      onDone: () => {
+        bite(1);
+        gsap.delayedCall(0.17, () => bite(2));
+        gsap.delayedCall(0.36, () => {
+          // 咽下：残余缩小淡出 → 收殓（同 _burnOut 的对象终结路径）
+          this._tweenFactory(view.scale, { x: 0.15, y: 0.15 }, { durationMs: 200, ease: 'power2.in' });
+          this._tweenFactory(view.faceMesh.material, { opacity: 0 }, {
+            durationMs: 200, ease: 'power2.in',
+            onComplete: () => {
+              this.model.removeCard(id);
+              this._views.delete(id);
+              this.animator.unregister(id);
+              this.uiScene.remove(view);
+              view.dispose();
+              finish();
+            },
+          });
+        });
+      },
+    });
+  },
+
   // 焚毁离场：原地燃烧殆尽（着色器自底向上吞蚀 + 前沿余烬 + 火起颤动），
   // 燃尽后牌面已全 discard（不可见）——瞬移落位牌库图标处即销毁收尾，无飞行动画。
   // 焚毁 = 对象终结（唯一销毁路径）：模型出册 + 视图销毁（burnt 不回流，id 不会
