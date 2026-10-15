@@ -17,6 +17,7 @@ import MenuDialog from './components/MenuDialog.vue';
 import TooltipOverlay from './components/TooltipOverlay.vue';
 import { fitGameFrame } from './frame.js';
 import { stopMusic, playWind, duckWind, stopWind, preloadAudio } from './audio.js';
+import { audioPackInfo } from './audiopack.js';
 import { attachTooltipForwarding } from './tooltipForward.js';
 import { menuDialogState } from './menuDialog.js';
 import CutsceneOverlay from './overlay/CutsceneOverlay.vue';
@@ -92,15 +93,18 @@ function startAssetPreload() {
   // 大下载**串行**（小水管服务器：artpack 下完才放行 audiopack——同一时刻只跑一条
   // 大流量，请求数 4×音频 → 1，进度按字节累加单调可读）
   let artS = null, audS = null;
+  let audTotalHint = 0;   // manifest 提前量出的音频包字节数：音频串行在美术后，分母从第 0 秒
+  // 就要含它——否则进度条先冲到美术 100%、音频开跑又跌回去（总分母「没囊括音频」的实报）
   const emitProgress = () => {
     const done = (artS?.done ?? 0) + (audS?.done ?? 0);
     window.__bootShell?.progress({
       ...(artS ?? {}), loaded: done, done,
       total: (artS?.total ?? 0) + (audS?.total ?? 0),
       loadedBytes: (artS?.loadedBytes ?? 0) + (audS?.loadedBytes ?? 0),
-      totalBytes: (artS?.totalBytes ?? 0) + (audS?.totalBytes ?? 0),
+      totalBytes: (artS?.totalBytes ?? 0) + Math.max(audS?.totalBytes ?? 0, audTotalHint),
     });
   };
+  audioPackInfo().then((info) => { if (info?.total) { audTotalHint = info.total; emitProgress(); } });
   let releasePackGate;
   const packGate = new Promise((r) => { releasePackGate = r; });   // artpack 落定 → audiopack 起跑
   const audioPreload = preloadAudio({ onStats: (s) => { audS = s; emitProgress(); }, gate: packGate });
