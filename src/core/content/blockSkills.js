@@ -562,6 +562,7 @@ const bloodFistCard = (id, name, tier, heal, promotesTo = null) => registerSkill
     const selfID = sctx.self.uniqueID;
     sctx.kernel.addSubscription({
       when: UseSkillInstruction, phase: 'post', window: 'turn',
+      owner: selfID,
       filter: (instr) => instr.skill.uniqueID !== selfID,
       react: (instr, ctx) => ctx.kernel.submitInstruction(
         new ApplyHealInstruction({ target: ctx.player, amount: heal }), instr),

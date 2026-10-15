@@ -8,21 +8,10 @@ import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instruc
 import { aliveEnemies } from '../state/battleState.js';
 import { isBladeCard, gainPower } from './cardKit.js';
 
-// 战意：战斗开始时获得 1 层力量。不作为初始能力授予，
-// 保留定义供旧档兼容与后续奖励/事件投放使用。
-registerAbility({
-  id: 'battleFocus', name: '战意',
-  description: '战斗开始时获得 1 层力量。',
-  onBattleStart(ctx) {
-    ctx.player.addEffect('strength', 1);
-  },
-});
-
 // 火灵脉体系能力（FIRE_VEIN_CARDS §0）：首次点亮火灵脉时自动授予，
 // 战斗开始获得可燃1（燃烧结算每层减免 3 + 因燃烧掉血洗入余烬——
 // 基础能力是余烬经济的启动器）。
-// 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅），
-// 不能照抄战意的直改写法。
+// 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅，禁止直改）。
 registerAbility({
   id: 'fireVein', name: '火灵脉',
   description: '战斗开始时，获得可燃1。',

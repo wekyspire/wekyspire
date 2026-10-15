@@ -6,7 +6,7 @@ import Enemy from '../../state/enemy.js';
 import { registerEnemy } from '../../enemies/registry.js';
 import { registerSkill } from '../../skills/registry.js';
 import { AddCardInstruction, DrawCardsInstruction, BurnCardInstruction } from '../../instructions/cards.js';
-import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction } from '../../instructions/combat.js';
+import { DealDamageInstruction, GainShieldInstruction, ApplyHealInstruction, ClearShieldInstruction } from '../../instructions/combat.js';
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { EnemyTurnStartInstruction } from '../../instructions/turn.js';
 import { aliveEnemies } from '../../state/battleState.js';
@@ -32,8 +32,14 @@ function reviveKit({ times = Infinity, hp = null, breathTurns = 1 } = {}) {
           unit._reviveCountdown -= 1;
           if (unit._reviveCountdown > 0) return;
           unit._reviveCountdown = 0;
-          unit.hp = hp ?? unit.maxHp;
-          unit.shield = 0;
+          // 复活走指令轨（治疗 + 清盾：PRE 修饰/veto 与播报同管线），演出播报随行
+          const healAmount = Math.max(0, (hp ?? unit.maxHp) - unit.hp);
+          if (healAmount > 0) {
+            kctx.kernel.submitInstruction(new ApplyHealInstruction({ target: unit, amount: healAmount }), instr);
+          }
+          if (unit.shield > 0) {
+            kctx.kernel.submitInstruction(new ClearShieldInstruction({ target: unit }), instr);
+          }
           kctx.presenter?.unitSpawned?.({ source: null, unit });
         },
       });

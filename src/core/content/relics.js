@@ -10,6 +10,7 @@ import { AddEffectInstruction } from '../instructions/effects.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
 import { gainMaxHp } from '../run/prep.js';
+import { healPlayer } from '../run/runEffects.js';
 import { isBossFloor } from '../run/runFlow.js';
 
 // 遗物内容（个体设计见 RELICS.md）。
@@ -29,7 +30,7 @@ import { isBossFloor } from '../run/runFlow.js';
 //     prep.applyBattleModifier(ctx, 字段, 增量) 改（防御除外，见上）。
 //   onBattleVictory(run, battle)：战斗**胜利**后的 run 层结算（run 级资源只在这里改——
 //     战斗内订阅不得直写 run 状态）。
-//   onCampRest(run) 营地休整时（非槽位式的常驻钩子）
+//   onCampRest(run, ctx) 营地休整时（非槽位式的常驻钩子；run 级改动走 runEffects 原语）
 //   onBattleStart(ctx) / subscriptions(ctx)：战斗内钩子（仅「已激活」遗物挂载）
 //   战斗级数值修正（maxMana/maxHandSize/…）走 battleModifiers 或 applyBattleModifier
 //   （从 baseStats 重算、随战斗消失）；**防御除外**——防御已效果化（battleRoot），
@@ -83,9 +84,8 @@ registerRelic({
   id: 'springFlask', name: '山泉壶', rarity: 'C', nonSlot: true,
   description: '休息处休息时，额外恢复 8 点生命。',
   flavor: '这是一个壶，你可以用它装水喝。不一定非得是山泉水',
-  onCampRest(run) {
-    const p = run.player;
-    p.hp = Math.min(p.maxHp, p.hp + 8);
+  onCampRest(run, ctx) {
+    healPlayer(ctx, 8, { source: '山泉壶' });
   },
 });
 
@@ -762,6 +762,7 @@ registerRelic({
       when: DrawCardsInstruction,
       phase: 'post',
       window: 'once',           // 首次抽牌（初始抽牌）后触发一次
+      owner: 'relic:primordialMatrix',
       react: (instr, c) => {
         const pool = c.battleState.zones.hand;
         if (!pool.length) return; // 空集守卫

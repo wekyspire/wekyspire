@@ -221,7 +221,9 @@ export function freeChantToggle(def, self) {
 }
 
 /**
- * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 冷却锚定 → 按 owner 注销订阅 → 播报。
+ * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 冷却锚定 → 注销激活订阅 → 播报。
+ * 激活订阅 owner = `${uniqueID}:chant`——只拆激活这一组，常驻订阅（owner = 裸
+ * uniqueID，如短暂回库）活到离场，不被熄灭误拆。
  * 调用方：打出已激活咏唱（免费解除，随后按卡牌特性离场）、离手不变量
  * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）、沉默等远程熄灭。
  * 咏唱冷却自**终止**起算（激活/持续激活不计时）：一切终止路径统一在此锚定，
@@ -236,7 +238,7 @@ export function deactivateChant(ctx, skill, reason, target = null) {
   skill.isActivated = false;
   const cd = cooldownOf(skill); // 冷却时长走有效视图（modifier 可 patch）
   if (cd > 0) skill.currentCooldown = cd;
-  ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);
+  ctx.kernel.removeSubscriptionsByOwner(`${skill.uniqueID}:chant`);
   ctx.presenter?.chantToggled?.({ skill, on: false, reason });
   return true;
 }
@@ -276,10 +278,11 @@ export function enterBattle(ctx, self) {
   return self;
 }
 
-// 离开战斗（或转化时的换绑前奏）：注销该卡名下全部订阅（常驻 + activated 同 owner
-// + 每条 modifier 的 :mod: 订阅——前缀整体拆除）。
+// 离开战斗（或转化时的换绑前奏）：注销该卡名下全部订阅——常驻（owner = 裸 uniqueID）
+// + 激活咏唱（`${uniqueID}:chant`）+ 每条 modifier（`${uniqueID}:mod:` 前缀整体拆除）。
 export function leaveBattle(ctx, uniqueID) {
   ctx.kernel.removeSubscriptionsByOwner(uniqueID);
+  ctx.kernel.removeSubscriptionsByOwner(`${uniqueID}:chant`);
   ctx.kernel.removeSubscriptionsByOwnerPrefix(`${uniqueID}:mod:`);
 }
 

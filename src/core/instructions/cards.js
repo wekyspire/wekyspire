@@ -71,7 +71,10 @@ export class DrawCardsInstruction extends BattleInstruction {
   }
 }
 
-// 焚牌：任意 zone → 焚毁区。手牌中的激活咏唱先熄灭（离手不变量，含焚毁）。
+// 焚牌：任意 zone → 焚毁区。**焚毁只此一个原语**——一切「到坟场」的语义（消耗打出、
+// 消耗咏唱离手、锁定结算、敌方吞噬、MoveCard 落点 burnt）最终都展开到本指令，
+// 焚毁 veto（斩）与焚毁订阅（业火）因此对所有来源同口径可见。
+// 手牌中的激活咏唱先熄灭（离手不变量，含焚毁）。
 export class BurnCardInstruction extends BattleInstruction {
   constructor({ uniqueID }, opts = {}) {
     super(opts);
@@ -153,12 +156,23 @@ export class MoveCardInstruction extends BattleInstruction {
 
   execute(ctx) {
     const fromZone = zoneOf(ctx.battleState, this.uniqueID);
-    // 消耗咏唱退出激活即焚毁（词条读有效视图）：从手中移出落牌库时改走焚毁原语
-    // 子节点展开（斩焚毁 veto / 镜燃等 Burn 订阅可见；本指令照常完成）。
     const handCard = fromZone === 'hand'
       ? ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID)
       : null;
     const resolved = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    // 落点即坟场 = 焚毁：一律改走 BurnCardInstruction 子节点展开（焚毁只此一个原语——
+    // 斩焚毁 veto / 业火等 Burn 订阅 / 焚毁计数对一切「移动到坟场」同口径可见；
+    // 本移动指令照常完成，焚毁计数与播报归焚方子节点）。
+    if (resolved === 'burnt') {
+      const card = fromZone
+        ? ctx.battleState.zones[fromZone].find(c => c.uniqueID === this.uniqueID)
+        : null;
+      this.result = { card, toZone: 'burnt' };
+      if (card) ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: this.uniqueID }), this);
+      return true;
+    }
+    // 消耗咏唱退出激活即焚毁（词条读有效视图）：从手中移出落牌库时改走焚毁原语
+    // 子节点展开（斩焚毁 veto / 业火等 Burn 订阅可见；本指令照常完成）。
     if (handCard?.isActivated && keywordsOf(handCard).includes('exhaust') && resolved === 'deck') {
       this.result = { card: handCard, toZone: 'burnt' };
       ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: this.uniqueID }), this);
@@ -296,6 +310,34 @@ export class TransformCardInstruction extends BattleInstruction {
         return true;
       }
     }
+  }
+}
+
+// 卡牌威力提升：runtime.power 增减的唯一指令轨（内容侧经 cardKit.gainPower 提交，
+// 不裸改字段）。威力变化与卡面演出同拍落地（benefit/power 公共节拍），
+// delta 走白名单可被 PRE 修饰。
+export class GainCardPowerInstruction extends BattleInstruction {
+  constructor({ uniqueID, delta }, opts = {}) {
+    super(opts);
+    this.uniqueID = uniqueID;
+    this.delta = delta;
+  }
+
+  get modifiablePayload() { return ['delta']; }
+
+  buildPayload() { this.payload.delta = this.delta; }
+
+  execute(ctx) {
+    const zone = zoneOf(ctx.battleState, this.uniqueID);
+    const card = zone ? ctx.battleState.zones[zone].find(c => c.uniqueID === this.uniqueID) : null;
+    if (!card) {
+      this.result = { found: false };   // 过期引用无害（与弃/移同哲学）
+      return true;
+    }
+    card.power += this.payload.delta;
+    this.result = { found: true, card, power: card.power };
+    ctx.presenter?.cardReact?.({ card, kind: 'benefit', variant: 'power', magnitude: this.payload.delta });
+    return true;
   }
 }
 

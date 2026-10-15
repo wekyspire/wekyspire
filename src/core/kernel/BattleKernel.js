@@ -202,17 +202,22 @@ export default class BattleKernel {
 
   // 干跑预览（卡面"应用后"描述等只读估算用）：构建载荷并跑完 PRE 订阅管线，
   // 返回指令本身（读 payload / cancelled），不 execute、不泵子节点。
-  // PRE 反应提交的子指令（格挡 -1、闪避 -1 等）挂在探针 children 上被丢弃，
-  // 真实状态不受影响——因此 PRE 订阅契约 = 只 setPayload / veto / 经 parent
-  // 提交子指令；在 PRE 里直改状态的写法会在干跑中泄漏，属违约。
-  // 不复用 _runPhaseSubscriptions：它会在 react 后注销 once 窗口订阅，干跑
-  // 不得消耗一次性触发（"下次伤害翻倍"预览后仍须生效）。
+  // 干跑期间 ctx.isPreview = true——**PRE 订阅契约：setPayload / veto / 经 parent
+  // 提交子指令随时可做（子指令挂探针上被丢弃），但一切直改世界状态的分支必须以
+  // ctx.isPreview 短路**（责任在监听器；内核只负责提供环境量与不打消耗）：
+  // 本函数不复用 _runPhaseSubscriptions，once 窗口订阅在干跑后不注销
+  // （"下次伤害翻倍"预览后仍须生效）。
   // 仅在等待玩家输入（泵静止）时调用；不对运行中的指令树做快照。
   preview(instr, ctx) {
     instr.buildPayload(ctx);
-    for (const entry of this._collect(instr, 'pre', ctx)) {
-      entry.react(instr, ctx);
-      if (instr.cancelled) break; // 被 veto 后不再触发后续 PRE
+    ctx.isPreview = true;
+    try {
+      for (const entry of this._collect(instr, 'pre', ctx)) {
+        entry.react(instr, ctx);
+        if (instr.cancelled) break; // 被 veto 后不再触发后续 PRE
+      }
+    } finally {
+      ctx.isPreview = false;
     }
     return instr;
   }

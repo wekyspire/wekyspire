@@ -15,7 +15,7 @@ import { DealDamageInstruction, GainShieldInstruction } from '../instructions/co
 import { AddEffectInstruction } from '../instructions/effects.js';
 import {
   DrawCardsInstruction, AddCardInstruction, BurnCardInstruction,
-  DiscardCardInstruction, MoveCardInstruction,
+  DiscardCardInstruction, MoveCardInstruction, GainCardPowerInstruction,
 } from '../instructions/cards.js';
 import { PlayerTurnEndInstruction, ChantTriggerInstruction } from '../instructions/turn.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
@@ -124,14 +124,14 @@ export function reactFx(sctx, card, kind, extra = null) {
 }
 
 /**
- * 卡牌威力提升（runtime.power 增加）——**唯一入口**：改数值 + 通知 presenter 播
- * 卡面反应节拍（benefit/power，公共动画：bridge 的 cardReact → ANIM_CARD_REACT）。
+ * 卡牌威力提升（runtime.power 增加）——**唯一入口**：提交 GainCardPowerInstruction
+ * 子节点（数值变更与 benefit/power 公共节拍都在指令轨上，delta 可被 PRE 修饰；
+ * 节拍随子节点落地——use() 里调用时本次结算读不到新值）。
  * 内容侧任何改 power 的地方都该走它，别裸改 `card.power += n`（那样只有数字变、没有演出）。
  */
 export function gainPower(sctx, card, delta) {
   if (!card || !delta) return card;
-  card.power += delta;
-  reactFx(sctx, card, 'benefit', { variant: 'power', magnitude: delta });
+  sctx.kernel.submitInstruction(new GainCardPowerInstruction({ uniqueID: card.uniqueID, delta }));
   return card;
 }
 
