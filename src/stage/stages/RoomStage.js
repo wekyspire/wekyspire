@@ -601,10 +601,17 @@ export class RoomStage {
       // 营地&训练房的防误触口径（2026-10-12 用户定）：聚焦机器时点继续 = 只退焦，
       // 不收房——玩家正盯着训练桩/篝火看，那一击多半是想去碰机器而不是想走。
       if (this._campContinueGated() && this._focused) { this._focusMachine(null); return; }
-      // 「继续前进」的**义务门**（**由各机器模块自报**：恶魔 roll / 卡包待选 / 强绑抓牌是硬拦，
-      // 营地的休整是软提示——第一次点继续只给一句提示泡泡，**再点一次即离房**）。
-      // 先问各机器是否接管这次点击（拉回镜头提示 / 播离房安慰奖），都没接管才真的离房。
+      // 「继续前进」的**义务门**：机器模块先接管自己认得的问句种类（拉回镜头提示 /
+      // 播离房安慰奖）；都没接管时若快照还有待答问句（duty，questions.js 单一事实源），
+      // 在继续键上给通用拦截——义务门的完整覆盖由 duty 保证，机器只做定向提示。
       for (const m of this._machines) if (m.onContinue?.()) return;
+      if (this._snap?.duty) {
+        this._bubbles.say('room:duty', {
+          x: this._continue.position.x, y: this._continue.position.y + 18,
+          text: '还有没处理完的事。', kind: 'thought', duration: 2.2,
+        });
+        return;
+      }
       this._onIntent?.({ action: 'leaveRoom' });   // 主动离开休息室（宿主走幕间黑幕回塔楼）
       return;
     }
@@ -614,13 +621,13 @@ export class RoomStage {
   }
 
   /**
-   * 房里**还欠着的事**（null = 可以离房）：由各**机器模块自报**（`pendingDuty`）。
-   * 现存门全为硬拦（'train' / 'pendingUpgrade' / 'demon' / 'shop'）——训练必做、
-   * 恶魔轮盘/售货机钱已到手，不处理完不许走；篝火休整是可选收益不设门
-   * （2026-10-07 用户定）。本舞台只做聚合。
+   * 房里**还欠着的事**（null = 可以离房）：机器模块自报（`pendingDuty`，认得的问句
+   * 种类给定向提示）∪ 快照 `duty`（待答问句种类，问句协议单一事实源——机器没覆盖
+   * 的种类也压暗，新增问句自动进门）。硬拦在 core 的 completeRoom（执法）与
+   * onContinue 的机器/通用拦截（UX）；篝火休整是可选收益不设门（2026-10-07 用户定）。
    */
   _pendingRoomDuty() {
-    return this._machines.some(m => m.pendingDuty?.(this._snap));
+    return !!this._snap?.duty || this._machines.some(m => m.pendingDuty?.(this._snap));
   }
 
   /** 营地&训练房的继续键防误触口径适用判定（训练未开始不显示 / 聚焦态只退焦）。 */

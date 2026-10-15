@@ -57,26 +57,17 @@ function symbolsForTier(tier) {
 export function createSlotMachine(ctx) {
   let gift = null;              // 安慰奖二选一演出件（惰性；见 _playGift）
   let demon = null;             // 恶魔 roll 状态机（见 _stepDemonRoll）
-  let slotPoll = null;          // 转轮播完的轮询定时器（playSlotSpin 体）
 
   /**
    * 拉一次转轮（编排器直调宿主实现，非快照 diff——快照只带「转动中」布尔做置灰）。
-   * rig.pull 自带回执回调（§9.13 吸收项：消轮询 API 不对称）——落定拍同步触发；
-   * 拉杆被拒（已在转）没有回调可挂，退回 isBusy 轮询兜底（唯一残存轮询）。
+   * rig.pull 自带回执回调（§9.13 吸收项）：拉杆落定拍同步触发一次即弃；转轮在转时
+   * 拒拉即并圈（回调串到在转那圈的收尾拍，rig 内部消化，宿主零轮询）。
    * @returns 是否接手（无 rig → false，编排器自行落定）
    */
   function playSlotSpin({ tier }, onDone) {
     const rig = ctx.rigs().get('slot');
     if (!rig) return false;
-    if (rig.pull({ tier, symbols: symbolsForTier(tier ?? 'none'), onDone })) return true;
-    clearInterval(slotPoll);
-    slotPoll = setInterval(() => {
-      if (rig.isBusy()) return;
-      clearInterval(slotPoll);
-      slotPoll = null;
-      onDone();
-    }, 120);
-    return true;
+    return rig.pull({ tier, symbols: symbolsForTier(tier ?? 'none'), onDone });
   }
 
   // ---- 恶魔 roll（银行机超额取款的代价）----
@@ -298,11 +289,6 @@ export function createSlotMachine(ctx) {
     gift = null;
   }
 
-  function _onExit() {
-    clearInterval(slotPoll);
-    slotPoll = null;
-  }
-
   return {
     kinds: ['slot'],
     createRig: (entry) => createSlotMachineRig({ object: entry.object, parts: entry.parts }),
@@ -400,16 +386,21 @@ export function createSlotMachine(ctx) {
       rig?.setLeverHover?.(leverOk);
     },
 
-    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'，
-     *  qa 修：此前 pending 挂着照样能离房，产出静默丢弃成幽灵奖项）。 */
-    pendingDuty: () => (ctx.snap()?.bank?.pendingRoll ? 'demon'
-      : (ctx.snap()?.slot?.pending ? 'prize' : null)),
+    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'），
+     *  qa 修：此前 pending 挂着照样能离房，产出静默丢弃成幽灵奖项。
+     *  判据走快照 duty（= currentQuestion 种类，共存态自动按问句优先序取先）；
+     *  slotGift 不在此列——点继续由 _playGift 拦截演出（领完自动续上离房）。 */
+    pendingDuty: () => {
+      const d = ctx.snap()?.duty;
+      return d === 'demonRoll' ? 'demon' : (d === 'slotPrize' ? 'prize' : null);
+    },
 
     /** 点「继续前进」时接管：恶魔词条未选 → 拉回镜头提示；产出未处理 → 同样拉回提示；
      *  安慰奖未领 → 演完再离房。 */
     onContinue() {
-      if (ctx.snap()?.bank?.pendingRoll) { _nudgeDemonRoll(); return true; }
-      if (ctx.snap()?.slot?.pending) {
+      const d = ctx.snap()?.duty;
+      if (d === 'demonRoll') { _nudgeDemonRoll(); return true; }
+      if (d === 'slotPrize') {
         if (ctx.focused() !== 'slot') ctx.focusMachine('slot');
         const entry = ctx.entryOf('slot');
         if (entry) ctx.bubbles().say('room:slot', {
@@ -437,9 +428,7 @@ export function createSlotMachine(ctx) {
       return true;
     },
 
-    onExit() { _onExit(); },
     dispose() {
-      _onExit();
       _removeGift();
       _disarmDemonChoice();
     },

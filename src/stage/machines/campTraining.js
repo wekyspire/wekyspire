@@ -52,9 +52,8 @@ export function createCampTrainingMachine(ctx) {
     panel: (name, snap) => (name === 'camp' ? buildCampPartPanel(snap) : buildTrainingPartPanel(snap)),
 
     /**
-     * 义务门贡献（null = 这段不欠事）：只剩训练两项硬拦——
-     *   · 'train'          —— 训练没开始（训练必做且先于篝火）；
-     *   · 'pendingUpgrade' —— 抓卡后的尾款升级。
+     * 义务门贡献（null = 这段不欠事）：训练没开始是房间自身的事；问句类欠账
+     * （尾款升级 / 可选抓牌候选）判据走快照 duty（= currentQuestion 种类）。
      * 篝火休整是可选收益（2026-10-07 用户定：不再提示也不再拦，点继续直接推进）。
      */
     pendingDuty(snap) {
@@ -62,13 +61,14 @@ export function createCampTrainingMachine(ctx) {
       const t = snap.training ?? {};
       if (snap.room === 'campTraining' || snap.room === 'training') {
         if (!t.started) return 'train';
-        if (t.pendingUpgrade) return 'pendingUpgrade';
+        if (snap.duty === 'trainingUpgrade') return 'pendingUpgrade';
+        if (snap.duty === 'trainingDraw') return 'draw';
       }
       return null;
     },
 
     /**
-     * 点「继续前进」时接管：训练没开始 / 尾款未清 → 拉镜头提示（硬拦，每次都拦）；
+     * 点「继续前进」时接管：训练没开始 / 尾款未清 / 抓牌未决 → 拉镜头提示（硬拦，每次都拦）；
      * 篝火没歇过 → 直接放行离房（可选收益，不是必做项）。
      */
     onContinue() {
@@ -77,7 +77,8 @@ export function createCampTrainingMachine(ctx) {
       const t = snap.training ?? {};
       if (snap.room === 'campTraining' || snap.room === 'training') {
         if (!t.started) { _nudgeTraining('请先完成训练。'); return true; }
-        if (t.pendingUpgrade) { _nudgeTraining('请先完成卡牌升级。'); return true; }
+        if (snap.duty === 'trainingUpgrade') { _nudgeTraining('请先完成卡牌升级。'); return true; }
+        if (snap.duty === 'trainingDraw') { _nudgeTraining('可选的抓牌还没处理。'); return true; }
       }
       return false;
     },

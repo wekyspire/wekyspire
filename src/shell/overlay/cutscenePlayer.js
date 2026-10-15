@@ -333,21 +333,19 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
     return true;
   }
 
-  let transitionBusy = false;
   /**
    * 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
-   * 转场重叠时退化为直切（不卡流程、不排二次黑幕）。
+   * **唯一调用方是 transitionStage**（runController）：转场串行由队列 'transition' 家族
+   * 标签互等担保，本函数不自带单飞——并发直调即两段 wipe 交错，属调用方违约。
    * `hold` = 刚播完的那一拍内容（若本转场是"某段 cutscene 的退出"）：黑幕会**带着它一起盖下来**，
    * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（实报的节拍错位）。
    */
   function sceneTransition(swap = null, { coverMs, revealMs, holdMs } = {}) {
-    if (transitionBusy) { swap?.(); return Promise.resolve(); }
-    transitionBusy = true;
     const hold = takeLastContent();
     return play({
       id: '__transition__', // 内联剧本，不入触发规则；played flag 不拦匿名转场
       steps: [{ type: 'wipe', hold, atCover: swap ?? undefined, ...(coverMs != null ? { coverMs } : {}), ...(revealMs != null ? { revealMs } : {}), ...(holdMs != null ? { holdMs } : {}) }],
-    }).finally(() => { transitionBusy = false; });
+    });
   }
 
   /** 触发规则查询：返回命中且未播过的剧本 id 列表（流程侧手动 play 的依据）。 */

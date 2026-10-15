@@ -778,3 +778,50 @@ ambient 约定（画廊入队，独立小活）。
 - bug 考古全表 + 散落模式 file:line 清单：调研会话输出（2026-10-13）。
 - 第一轮对抗审查 + 六疑点裁决全文：评审会话输出（2026-10-13，三份，含全部 file:line 证据）。
 - Stage 层视角上轮审查：`quest_prompts/FRONTEND_STRUCTURE_REVIEW.md`。
+
+### 9.20 残留收尾批（2026-10-15，架构评审后用户四项裁决，已实施并验证）
+
+评审定位的六处残留按用户裁决逐项落地：
+
+1. **义务门收编 core（§4.3 决策补执行）**：completeRoom 挂问句硬门（`currentQuestion(run)`
+   非空即抛、错误带种类）——训练房 trained 门保留，pendingUpgrade 专属门删除（被问句门
+   蕴含）；执法单点在 core，shell/场景端只做提示 UX。roomSnapshot 新增 `duty` 字段
+   （= 问句种类单一事实源下发）：RoomStage 继续键压暗泛化为 `machines ∪ duty`、机器没
+   接手的种类在继续键上通用拦截提示；campTraining/vending/slotMachine 三机器的
+   pendingDuty/onContinue 全部改读 duty 种类（trainingDraw/bankOffer 从此自动进门，
+   新增问句种类零手改）。headless engine.mjs 的手写枚举门保留（UX 提示用途）。
+2. **ascension 共享收尾**：场景对话路径与面板应答路径统一走 `ascensionTail`（结果页 →
+   能力授予 → 退出切幕 → 跳过删卡）；chooseAscensionDimension/skipAscension 的两条
+   `void async IIFE` 裸链删除，改 'ascension-finish' 流程指令（tagAll:false 同 devour
+   代数）。行为一致性补齐：面板路径现在也播结果页、跳过也当场弹删卡（旧面板路径跳过的
+   删卡机会要等下一场战斗后才被消费）。
+3. **transitionBusy 删除**：sceneTransition 不再自带单飞——唯一调用方 transitionStage
+   的家族标签互等已是结构担保；原「并发裸奔直切」降级路径恰是黑幕中点纪律要防的语义，
+   属该删的死防御位（用户原则：兜底越少越好，最薄链路最接近完美形态）。
+4. **rig 拒拉并圈**：pull 在转轮中不再返回 false，onDone 串到在转那圈的落定拍（与旧
+   轮询等时零定时器）——slotMachine 机器的 120ms isBusy 轮询与 slotPoll 变量整体删除
+   （dispose 残留引用一并清）。「唯一残存轮询」清零。
+5. **bankOffer 应答统一进协议**：answerQuestion 加 `opts.kind` 定向参数（共存态点名答
+   哪一问，不匹配返回 false 不落账）；runShowcase 的 onSkip 弃置与无候选自动弃置两处
+   直调 takeBankOffer 改走 `answerQuestion(run, null, {kind:'bankOffer'})`，例外登记
+   进 questions.js 头注（共存态承重场景由机制本身承载）。
+6. **trainingDrawRoll 双保险删除**：手动直开选卡与手动 kick 升级链删除，呈现与自动链
+   全走问句驱动（notify 尾 drive 同拍呈现；空闲沿补发驱动尾款链）——e2e 实证驱动链
+   完整接棒。
+
+顺带：settings.js 的 `import.meta.env?.DEV`（node 冒烟可直接 import shell 模块，浏览器
+语义不变——此前 runMachines→settings 链让 devour 冒烟在 node 下必炸）。
+
+**验证**：node 冒烟（questions 五份 + devour + sequencer + quiescence + transition 三份 +
+scalars + 新增 kind-target 9/9 与 duty-gate 9/9）+ npm test PASS + build ✓ + e2e 四链
+全绿（trainq 12/12、slotq 18/18、bankq 9/9、flowq 12/12 二跑——首跑 reload 后点击 flake
+复跑绿）。
+
+**过程中甄别的存量问题（非本批回归）**：① trainq-e2e 环境过期——重造档无升级目标
+（尾款自然免除）+ 盲点对话在选项页命中「跳过进阶」→ 删卡选卡假阳成「四选一」；
+已修脚本（forge 行补 `--leino fire=2`、进阶选项显式 cutsceneChoice）。② smoke-run
+深潜局 floor 12 战斗 400 步卡死、smoke-camprules uniqueID 崩、smoke-shell-transition
+引用已删卡 mountainCleave——均在未改动提交树上一致复现，属平衡/旧脚本漂移。
+
+**开放任务（用户令）**：单独一轮「兜底代码没删干净 / 不需要的兜底逻辑与状态」全库排查
+（已记 TODO.md）。

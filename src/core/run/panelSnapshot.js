@@ -18,6 +18,7 @@ import { getRelicDefinition } from '../relics/registry.js';
 import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { cardViewFromDef } from '../skills/cardView.js';
 import { isBossFloor, FLOORS_PER_CHAPTER } from './runFlow.js';
+import { currentQuestion } from './questions.js';
 import { PACKS } from './rewards.js';
 import {
   LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
@@ -152,7 +153,9 @@ export function ascensionSnapshot(run) {
 export function roomSnapshot(run, extra = {}) {
   const room = run.currentRoom;
   const p = run.player;
-  const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
+  // duty = 待答问句种类（questions.js 单一事实源）：场景端义务门（继续键压暗/拦截提示）
+  // 的统一判据——机器模块不再各自枚举 pending 字段，新增问句种类自动进门。
+  const snap = { kind: 'room', room, money: p.money, relicUses: undefined, duty: currentQuestion(run)?.kind ?? null };
 
   // 售货机（商店房 = room === 'shop'）：货架 + 卡包开出的三选一挂起时优先呈现
   if (isShopFloor(run.floor) && run.shop) {

@@ -226,38 +226,52 @@ export function createRunCutsceneFlows(ctx) {
         ],
       });
       if (!picked) return false;                      // 未选择（异常路径）：留在 ascension 阶段
-      await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
-      if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
-      // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
-      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());   // 进阶结束 → 切幕回塔楼
-      // 跳过进阶的删卡反哺：揭幕后就地弹全屏删卡（即时化——放弃即作废，机会不留存）。
-      // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
-      if (picked === 'skip') void ctx.playBossRemoveNow?.();
+      await ascensionTail(picked);
       return true;
     } finally {
       done();
     }
   }
 
-  /** 面板兜底路径（正常由 playAscensionScene 的对话选项走）：选了维度后同样要"收尾切幕"。 */
-  function chooseAscensionDimension(dimension) {
+  /**
+   * 进阶结算后的**共享收尾**（场景对话路径与面板应答路径同一段——任何进阶出口的
+   * 节拍与美术一致）：结果页 → 能力授予（挂起时）→ 切幕回塔楼（揭幕即相机爬升）→
+   * （跳过）删卡反哺：揭幕后就地弹全屏删卡（即时化——放弃即作废，机会不留存）。
+   */
+  async function ascensionTail(picked) {
+    const bg = eventArtUrlNamed('ascension', '进阶');
+    await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
+    if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
+    // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
+    await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());   // 进阶结束 → 切幕回塔楼
+    if (picked === 'skip') void ctx.playBossRemoveNow?.();
+  }
+
+  /**
+   * 面板应答路径（ascension 阶段的正路应答——维度按钮/跳过，非幕间再入）：core 结算
+   * 同拍落账，收尾链 = 'ascension-finish' 流程指令，与场景路径共享 ascensionTail。
+   * 退出 'all'：尾段还要往同一队列排 cutscene 步骤与切幕（互等死锁教训同 devour）。
+   */
+  function finishAscension(dimension) {
     if (run.gameStage !== 'ascension') return;
     chooseAscension(run, dimension);
     ctx.notify();
-    void (async () => {
-      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());
-    })();
+    enqueueFlowInstruction(dedicatedSequencer, {
+      tag: 'ascension-finish', meta: { event: 'room:ascension-finish' },
+      entryOk: () => run.gameStage !== 'ascension',   // 已结算翻篇（迟到排队的重入自灭）
+      play: async (done) => {
+        try { await ascensionTail(dimension == null ? 'skip' : dimension); }
+        finally { done(); }
+      },
+    });
+  }
+  /** 面板兜底路径（正常由 playAscensionScene 的对话选项走）：选了维度后同样走共享收尾。 */
+  function chooseAscensionDimension(dimension) {
+    finishAscension(dimension);
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
   function skipAscension() {
-    if (run.gameStage !== 'ascension') return;
-    chooseAscension(run, null);
-    ctx.notify();
-    void (async () => {
-      if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());
-    })();
+    finishAscension(null);
   }
 
   return {

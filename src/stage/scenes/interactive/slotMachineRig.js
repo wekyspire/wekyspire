@@ -595,7 +595,16 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
 
   // ---- 拉杆 ----
   function pull({ tier = 'minor', symbols = null, onDone = null } = {}) {
-    if (st.spin) return false;                      // 转轮中不能再拉（调用方另有防抖）
+    if (st.spin) {
+      // 转轮中不能再拉（编排器另有 findPending 防双扣）——这杆并进在转的那圈：
+      // 落定回调串到当前 spin 的收尾拍（编排器侧等的就是「rig 落定」这一拍，
+      // 并圈与「等它转完再回执」等时，且免轮询）。落面按在转那圈的计划揭示。
+      if (onDone) {
+        const prev = st.spin.onDone;
+        st.spin.onDone = prev ? () => { prev(); onDone(); } : onDone;
+      }
+      return true;
+    }
     st.pulling = true;
     st.leverRelease = 0;
     st.win = null;

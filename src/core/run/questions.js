@@ -16,8 +16,9 @@
 // demonRoll（恶魔词条三选一）**必答**：钱已到手，abandon = forbidden。浏览器应答经
 // bankDemonPick（runShowcase：chooseDemonDebuff 的结果驱动两拍演出）——answerQuestion
 // 这条只服务 headless/协议直答。呈现 = 老虎机恶魔形态（快照 diff 驱动）+ 占位面板按钮，
-// 驱动不自动弹。bankOffer（词条附赠）可放弃：null = takeBankOffer 弃置；非 null 应答
-// 走选卡意图链（bankUpgradeOffer/bankBurnOffer），不经单发通道。
+// 驱动不自动弹。bankOffer（词条附赠）可放弃：null = takeBankOffer 弃置（呈现入口的
+// 放弃/无候选弃置走 answerQuestion(run, null, {kind:'bankOffer'}) 定向应答，不直调原语）；
+// 非 null 应答走选卡意图链（bankUpgradeOffer/bankBurnOffer），不经单发通道。
 //
 // trainingUpgrade 是**必答问句**（abandon = forbidden，欠升级态没有跳过出口）且答案
 // 是多步的（twoC 升两张、分叉带 targetId）——不经 answerQuestion 单发通道，应答走
@@ -78,9 +79,12 @@ export function currentQuestion(run) {
  * **分发单源自 currentQuestion**——取值序与应答序由同一段代码定义，共存态
  * （如拉杆产出未领 + 恶魔 roll 同开）不会答错对象；kind 特例（必答拒 null /
  * 多步应答走意图链）在各分支内声明。返回是否真的答上了。
+ * opts.kind = 定向应答（如 bankOffer 的弃置：呈现入口在共存态下必须点名答哪一问，
+ * 缺省会按 currentQuestion 优先序答错对象）——kind 与当前问句不符时返回 false 不落账。
  */
-export function answerQuestion(run, answer) {
+export function answerQuestion(run, answer, { kind } = {}) {
   const q = currentQuestion(run);
+  if (kind && q?.kind !== kind) return false;
   switch (q?.kind) {
     case 'shopPack': takeShopCard(run, answer); return true;
     case 'shopRelicPack': takeShopRelic(run, answer); return true;

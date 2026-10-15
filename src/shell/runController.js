@@ -360,8 +360,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
    * （core 迁移 + 舞台换装；可返回 Promise——黑幕保持到兑现，战斗预载就绪才揭幕；
    * 抛错自兜：揭幕照常，notify 不缺席）→ **notify（中点纪律）**：面板/状态栏/问句
    * 呈现都在黑幕里就位，揭幕即新画面 → 揭幕。migrate 内部**不再手放 notify**。
-   * 单飞 = 'run:transition' 家族标签互等：转场全局串行（cutscene.sceneTransition 的
-   * transitionBusy 在并发下会让第二次 swap 裸奔无幕——队列互等从结构上堵住）。
+   * 单飞 = 'run:transition' 家族标签互等：转场全局串行（sceneTransition 不自带单飞，
+   * 并发直调即调用方违约——背靠背转场在此被结构性堵住）。
    * 返回 Promise（揭幕拍 resolve）。
    * **唯一成文豁免**：内容幕间的 wipe step atCover（进阶 fromRoom 换台——对话内容
    * 依赖剧本 nextBox 幕后就位，本入口形状表达不了）；豁免方自理中点清算与 notify。
@@ -1042,19 +1042,22 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     if (run.roomData?.pendingUpgrade) notify();  // twoC 还剩一张：原地刷新候选
     else maybeLeaveRoom();
   }
-  // 可选段开局：掷四选一候选 → 当场开全屏 overlay（不再内嵌面板卡阵）。
+  // 可选段开局：掷四选一候选 → 问句驱动在 notify 拍自动开全屏 overlay（不再内嵌面板卡阵）。
   // ⚠ 不查 trained——可选抓牌本来就发生在**训练完成之后**（曾因沿用旧「trained=已锁」
   // 语义静默吞掉按钮点击，用户报「抓牌按钮没反应」）；core 守卫兜已开局/已收束。
   function trainingDrawRoll() {
     if (run.gameStage !== 'room' || run.roomData?.pendingUpgrade) return;
     trainDrawChoices(run);
-    notify({ force: true });   // 快照新鲜度契约：下一行直开选卡读 _snap（抓牌候选就在本次变更里）
-    panelStage()?.openTrainingDrawPicker?.();
+    // force = 快照新鲜度契约：选卡器读 panelHost._snap，候选就在本次变更里；
+    // 开界面由 notify 尾的 questions.drive 统一负责（同源单份，不再手动直开）
+    notify({ force: true });
   }
   function trainingDraw(defId = null) {
     if (run.gameStage !== 'room' || !run.roomData?.drawChoices) return;
     answerQuestion(run, defId); // 欠升级态没有跳过出口，null 只会是放弃候选（picker 返回）
-    if (run.roomData?.pendingUpgrade) { notify(); openTrainingUpgradeFlow(); }   // 尾款自动链（问句驱动同款）
+    // 尾款自动链与离房都由 notify/空闲沿的问句驱动接管（驱动 diff trainingUpgrade →
+    // openTrainingUpgradeFlow；无问句且单房做完 → maybeLeaveRoom），此处不再手动 kick
+    if (run.roomData?.pendingUpgrade) notify();
     else maybeLeaveRoom();
   }
   function campChoose(option) {

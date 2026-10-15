@@ -239,12 +239,16 @@ export function createVendingMachine(ctx) {
       return true;
     },
 
-    /** 义务门贡献：卡包买到即开还没挑牌 = 硬拦离房（'shop'）。 */
-    pendingDuty: () => (ctx.snap()?.shop?.pending ? 'shop' : null),
+    /** 义务门贡献：卡包买到即开还没挑牌 = 硬拦离房（'shop'）——判据走快照 duty（问句种类）。 */
+    pendingDuty: () => {
+      const d = ctx.snap()?.duty;
+      return (d === 'shopPack' || d === 'shopRelicPack') ? 'shop' : null;
+    },
 
     /** 点「继续前进」时接管：卡包未挑 → 拉回售货机并开面板提示。 */
     onContinue() {
-      if (!ctx.snap()?.shop?.pending) return false;
+      const d = ctx.snap()?.duty;
+      if (d !== 'shopPack' && d !== 'shopRelicPack') return false;
       _nudgeShopPending();
       return true;
     },

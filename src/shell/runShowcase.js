@@ -13,7 +13,7 @@ import { cardViewFromDef } from '../core/skills/cardView.js';
 import { withLabels } from '../stage/panels/shared.js';
 import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
 import { showcaseItemOf } from './runPresenter.js';
-import { chooseDemonDebuff, DEMON_DEBUFFS , takeBankOffer } from '../core/run/rooms/bank.js';
+import { chooseDemonDebuff, DEMON_DEBUFFS } from '../core/run/rooms/bank.js';
 import { buyShopItem } from '../core/run/rooms/shop.js';
 import { answerQuestion } from '../core/run/questions.js';
 import { SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
@@ -167,17 +167,17 @@ export function createRunShowcase(ctx) {
    */
   function openBankOfferPicker() {
     const offer = run.bank?.offers?.[0] ?? null;
-    // 返回/关闭 = 放弃这份附赠（面板按钮已删，offer 不再有无入口的死状态）
-    const onSkip = () => {
-      if (run.bank?.offers?.length) { takeBankOffer(run); ctx.notify?.(); }
-    };
+    // 返回/关闭 = 放弃这份附赠（面板按钮已删，offer 不再有无入口的死状态）。
+    // 定向应答（kind:'bankOffer'）：共存态下 currentQuestion 可能是别的问句——
+    // 点名答 offer 才不会答错对象（此刻答不上的留给问句驱动下一拍再呈现）
+    const decline = () => { if (answerQuestion(run, null, { kind: 'bankOffer' })) ctx.notify?.(); };
     const opened
-      = offer === 'upgrade' ? !!ctx.panelStage()?.openUpgradePicker?.('bankUpgrade', { onSkip })
-        : offer === 'burn' ? !!ctx.panelStage()?.openUpgradePicker?.('bankBurn', { onSkip })
+      = offer === 'upgrade' ? !!ctx.panelStage()?.openUpgradePicker?.('bankUpgrade', { onSkip: decline })
+        : offer === 'burn' ? !!ctx.panelStage()?.openUpgradePicker?.('bankBurn', { onSkip: decline })
           : false;
     // 无候选（如升级 offer 但全牌组无过门晋升目标）：这份附赠无处兑现——弃置，
     // 别留一个没有任何入口的死 offer（面板按钮已删）。
-    if (!opened && offer) { takeBankOffer(run); ctx.notify?.(); }
+    if (!opened && offer) decline();
   }
   /** 两拍获得演出的编排已指令化（见上方 playDemonReward）：词条 → 逐张焚毁 → 金币 → 附赠选卡。 */
 
