@@ -1,9 +1,8 @@
-// 卡通爆炸（爆裂术终止专属，2026-10-02 用户定艺术方向）：**2D 烟雾粒子爆散变色，
+// 卡通爆炸（爆裂术终止专属）：**2D 烟雾粒子爆散变色，
 // 黑烟云朵是主体**——经典卡通画的「一团镶黑边的烟蓬 + 内里火光 + 火星四溅」。
 //
 // 为什么不在粒子池 v2 里：池材质全局 additiveLight，而黑烟需要**法线混合的暗色
-// 不透明粒子**（加法混合出不了黑色）——用户点名的「自定义 size attribute 更新 &
-// vertex/fragment shader 粒子系统」按 moonDust 先例自承载（InstancedBufferGeometry
+// 不透明粒子**（加法混合出不了黑色）——自承载实现（InstancedBufferGeometry
 // + PointsNodeMaterial），一次性效果、~140 实例、无逐帧 CPU。
 //
 // 无状态解析驱动：所有粒子属性出生即定（aOrigin/aVel/aParm/aKind 四个 instanced
@@ -15,7 +14,7 @@
 //   1 smoke  烟云主体：灰→黑大 puff，带深色描边带（卡通轮廓），分两波——
 //            地面环形烟（XZ 外向爆开 = 冲击波的卡通表达）+ 球冠主体烟（错帧出生滚卷）
 //   2 spark  火星：高 HDR 小点抛物线外抛（bloom 拾取）
-// 尺度基准：战场视深 ≈229 单位，1 世界单位 ≈ 7.4 css px（2026-10-02 实测校准）。
+// 尺度基准：战场视深 ≈229 单位，1 世界单位 ≈ 7.4 css px。
 import * as THREE from 'three';
 import { PointsNodeMaterial } from 'three/webgpu';
 import {
@@ -161,8 +160,8 @@ export async function cartoonNova(ctx, deps, {
     // 几何边界截断 = 硬边）——rim 用**未扰动**的 d 收边，d→1 时 alpha 必为 0
     const rim = oneMinus(smoothstep(0.90, 1.0, d)).toVar();
     const outline = smoothstep(0.66, 0.82, r).mul(body).toVar();   // 卡通描边带
-    // 烟三停：火照暖灰 → 中灰 → 近黑（卡通黑烟主体——首版中停 0.36 在暗场景
-    // 反读成白雾，压到 0.26/0.095 才是「黑烟」）
+    // 烟三停：火照暖灰 → 中灰 → 近黑（卡通黑烟主体——中停值偏高在暗场景
+    // 反读成白雾）
     const smokeC = mix(
       mix(vec3(0.82, 0.52, 0.32), vec3(0.26, 0.235, 0.225), smoothstep(0.0, 0.18, t)),
       vec3(0.075, 0.07, 0.07), smoothstep(0.18, 0.8, t));

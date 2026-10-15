@@ -2,12 +2,12 @@
 // cutscene **内容层**：按播放器当前 step 渲染 fade / image / dialogue，全屏阻塞。
 // ⚠ 幕间黑幕（wipe）**不在这里**——它是独立的一层（`SceneWipeOverlay.vue` + `sceneWipe.js`），
 // 因为黑幕是"场景切换"的呈现、目的地可以是任何东西（包括本层的内容）；同层会导致
-// "黑幕播完内容才蹦出来"（实报的架构问题）。
+// "黑幕播完内容才蹦出来"。
 // step 词汇表见 cutscenePlayer.js 头注；image 过渡时长由 step 参数驱动（缺省 fadeIn/out 400ms）。
 //
-// 事件界面交互批（2026-10-13）：对话框入场/文字渐显/选项错峰入场与确认回拍/
+// 事件界面交互：对话框入场/文字渐显/选项错峰入场与确认回拍/
 // 继续指示呼吸/CG 缓推。全部纯呈现层（CSS 挂载动画 + 选项确认的 200ms 视觉拍），
-// 不改播放器闸门协议——点击推进、choose 回执时序与之前完全一致。
+// 不改播放器闸门协议——点击推进与 choose 回执时序保持不动。
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({ player: { type: Object, required: true } });
@@ -51,8 +51,8 @@ function confirmChoice(c) {
     <!-- dialogue：点击任意处翻页；末页点击推进时间轴下一步。
          该页带 choices 时**不翻页**——必须点某个选项（player.choose 回执开闸）。
          CG 组（黑底衬 + 图 + 纱）不随剧本重挂：换页/换剧本时背景连续过渡，
-         只有对白框重播入场拍（.box 按 state.script 重挂）。黑底衬保证 CG 淡入淡出
-         窗口里只露黑、不透出底下的塔楼/房间渲染（2026-10-13 实报闪烁的根治） -->
+           只有对白框重播入场拍（.box 按 state.script 重挂）。黑底衬保证 CG 淡入淡出
+           窗口里只露黑、不透出底下的塔楼/房间渲染 -->
     <div v-else-if="page" class="dialogue" :class="{ 'has-bg': !!step.bg }" @click="player.advance()">
       <Transition name="bgb">
         <div v-if="step.bg" class="bgblack"></div>

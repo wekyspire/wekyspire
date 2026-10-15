@@ -168,6 +168,6 @@ export const hasFlag = (run, key) => !!(run.eventFlags ?? {})[key];
  * @param {...object} cmds 单位指令描述符（逐条排队，Shell 按序执行）
  */
 export function unitAction(ctx, ...cmds) {
-  for (const cmd of cmds) ctx.presenter.unitCommand?.(cmd);
+  for (const cmd of cmds) ctx.presenter.unitCommand(cmd);
   return cmds;
 }

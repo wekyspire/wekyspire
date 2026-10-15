@@ -40,13 +40,13 @@ function registerPureFist({ id, name, tier, damage, cost, promotesTo = null }) {
   });
 }
 
-// 拳 B（2026-10-10 更名自「快拳」，id 随名走 punchB）：1AP 9 伤。
+// 拳 B：1AP 9 伤。
 registerPureFist({
   id: 'punchB', name: '拳', tier: 'B', damage: 9,
   cost: { mana: 0, actionPoint: 1 }, promotesTo: 'punchA',
 });
 
-// 拳 A（2026-10-10 更名自「炮拳」，id 随名走 punchA）：1AP 12 伤。
+// 拳 A：1AP 12 伤。
 registerPureFist({
   id: 'punchA', name: '拳', tier: 'A', damage: 12,
   cost: { mana: 0, actionPoint: 1 }, promotesTo: 'punchS',
@@ -64,7 +64,7 @@ registerPureFist({
 // 重拳族共用骨架：大冷却 + 高额伤害；冷却走全局回合扫掠（P2 每回合 1 拍），
 // 打出其他牌是**手中加速**途径（每打 1 牌即刻冷却 1，定向直达），
 // 与拳组合「高频出牌」哲学互为引擎。自身打出结算完成时已离手（pending→deck），
-// 不会自我加速。全链慢热（2026-10-07 定：开局从头冷却）。
+// 不会自我加速。全链慢热：开局从头冷却。
 function registerCollapseFist({ id, name, tier, damage, promotesTo = null, cooldownTurns = 7 }) {
   registerSkill({
     id, name, type: 'normal', tier, series: 'fierceFist', subsystem: 'fist',
@@ -102,8 +102,7 @@ registerCollapseFist({ id: 'fierceFistA', name: '重拳', tier: 'A', damage: 34,
 registerCollapseFist({ id: 'fierceFistS', name: '崩拳', tier: 'S', damage: 82, cooldownTurns: 12 });
 
 // ==== 3. 敏捷连击系列（抽牌）====================================================
-// 伤害 + 无条件抽牌的过牌打点（2026-10-10 改版：原「先手抽牌」条件撤销——
-// 抽牌从领跑奖励变为系列本体，数值相应回调）。
+// 伤害 + 无条件抽牌的过牌打点。
 
 function registerAgileCombo({ id, name, tier, damage, draw, promotesTo = null }) {
   registerSkill({
@@ -506,8 +505,7 @@ registerPlayCountChant({ id: 'leverageS', name: '太极', tier: 'S', every: 3, a
 // ==== 8. 武学系列（抽牌 → 伤害，与太极互为引擎）====
 // 每抽 1 张牌（一切抽牌来源：回合开始/技能/造牌连锁）对随机敌人 damage **固定伤害**，
 // 每张独立随机选靶（多敌时伤害散步）；无存活敌人（战斗收尾）静默落空。
-// 2026-10-10 改版：次级伤害 → 固定（跳修正与防御、护盾可吸收——面向玩家的伤害
-// 机理简化），数值 2/2/2/3、咏唱负担 2/2/1/0。
+// 数值 2/2/2/3、咏唱负担 2/2/1/0。
 
 function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, promotesTo = null }) {
   registerSkill({
@@ -525,8 +523,8 @@ function registerDrawDamageChant({ id, name, tier, damage, ap = 1, weight = 1, p
           for (let i = 0; i < drawn; i++) {
             const target = randomAliveEnemy(sctx);
             if (!target) break; // 敌已死光（收尾期）：伤害落空
-            // 固定伤害：跳修正与防御、护盾可吸收——不吃任何加成（武术姿态×精通
-            // 的爆炸伤病灶从伤害类型上根除）、不上燃、不触发受击响应。
+            // 固定伤害：跳修正与防御、护盾可吸收——不吃任何加成（避免武术姿态×
+            // 精通把每抽伤滚爆）、不上燃、不触发受击响应。
             dealDamage(sctx, damage, { target, fixed: true, type: 'minor' });
           }
           if (drawn > 0) reactFx(sctx, sctx.self, 'benefit', { variant: 'proc', magnitude: drawn });
@@ -545,11 +543,11 @@ registerDrawDamageChant({ id: 'noviceS', name: '无双', tier: 'S', damage: 3, a
 
 // ==== 9. 深入卡（需精英能力「拳师」）====
 
-// 万变拳（A/S）：1AP 冷却2——**选择 1/2 张手牌免费发动**（2026-10-01 用户定改版：
-// 原「下N张打出 AP 费用为 0」的 PRE 计数豁免弃用——可用性判定不认豁免导致灰卡
-// 打不出（1001 夜测中危）。现行 = 结算期手牌选卡（overlay 覆盖层）→ 逐张嵌套
-// 强发（costOverride 0/0，随机敌目标——与漂浮系 freePlayCard 同范式）；手牌不足
-// 张数时按余量截断（buildCardSelectionRequest 的 min/max 收口），空手静默落空。
+// 万变拳（A/S）：1AP 冷却2——**选择 1/2 张手牌免费发动**。实现 = 结算期手牌选卡
+// （overlay 覆盖层）→ 逐张嵌套强发（costOverride 0/0，随机敌目标——与漂浮系
+// freePlayCard 同范式），不走「下N张 AP 费用为 0」的费用豁免——可用性判定不认
+// 豁免，被豁免的灰卡打不出；手牌不足张数时按余量截断（buildCardSelectionRequest
+// 的 min/max 收口），空手静默落空。
 function wildFistCard({ id, tier, count, promotesTo = null }) {
   registerSkill({
     id, name: '万变拳', type: 'normal', tier, series: 'wildFist', subsystem: 'fist', deep: 'fist',
@@ -626,12 +624,11 @@ registerSkill({
 //   * 群伤 AOE（重踏链）——拳组合此前零 AOE（武学只是随机散步）；
 //   * 瞬击下游（拳压，拳师深入卡）——蓄力系造的瞬击终于有「吃瞬击」的加成件；
 //   * 弃牌引擎（混元）——弃牌语言（呼吸/假动作/以无胜有）的消费端。
-// 数值对标：无条件部分 = 同阶白板（乱拳 6=拳、密雨 9=快拳、千手 12=炮拳），
-// 多段/条件加成才是体系溢价。失去生命 = 无来源穿透伤害（防御/护盾/格挡都不减免
+// 数值对标：无条件部分 = 同阶基础拳白板，多段/条件加成才是体系溢价。失去生命 = 无来源穿透伤害（防御/护盾/格挡都不减免
 // ——失去的是生命不是护盾；纯代价语义，selfcost 标记挡受击响应）。
 
 // 群伤原语（bodyAoe）与扫腿链归拆组合（blockSkills.js，series 'block'）
-// ——扫腿线重做为多敌防卡后归属拆；群伤原语上移 cardKit.aoeAttack 共用。
+// ——群伤原语上移 cardKit.aoeAttack 共用。
 
 // 狂拳 C → B → A（卖血链；C 8伤 / B 11伤 / A 11伤+2AP）。失去生命 = 无来源穿透伤害
 // （防御/护盾/格挡都不减免——失去的是生命不是护盾；PRE 修饰全按 source=玩家/特定
@@ -730,8 +727,7 @@ counterDrawCard({ id: 'counterDrawB', tier: 'B', threshold: 3, extra: 1, promote
 counterDrawCard({ id: 'counterDrawA', tier: 'A', threshold: 4, extra: 1 });
 
 // 满拳系列 C→B→A：C/B 蓄满一击：6 群伤，打出后仍有至少 5 张手牌时 +5/+8；
-// A 全神一击：8 群伤，同条件 +11（2026-10-10 设计稿修订：判据措辞改「打出后
-// 仍有至少 5 张」，加成 7/10/13 → 5/8/11）。
+// A 全神一击：8 群伤，同条件 +11。
 // 判定在打出后（自身已离手入结算区），手牌按**裸张数**计（激活咏唱算 1 张，不加权
 // ——见 battle.md §1 基础约定）。
 function fullChargeCard({ id, name, tier, base, bonus, threshold, promotesTo = null }) {
@@ -790,8 +786,8 @@ discardEngineChant({ id: 'hunYuanPlusS', name: '混元', tier: 'S', weight: 0, e
 // ==== 泛用组件（起始卡组配套，非 §1 系列）====
 
 // 肾上腺素 B/A（通用灰卡，COMMON_CARDS 定稿）：0 开销消耗卡——获得 1AP 并抽 2/3 牌。
-// 应急节奏阀，消耗属性保证不沉淀循环。起始组自带一张（2026-10-07 用户定：基础
-// 能力不再追加第二张）；本卡仍可经通用注入抽到（pack: 'common'）。
+// 应急节奏阀，消耗属性保证不沉淀循环。起始组只自带一张（基础能力不再追加
+// 第二张）；本卡仍可经通用注入抽到（pack: 'common'）。
 function adrenalineCard({ id, tier, draw, promotesTo = null }) {
   registerSkill({
     id, name: '肾上腺素', type: 'normal', pack: 'common', tier, series: 'adrenaline', subsystem: 'fist',
@@ -838,8 +834,8 @@ registerSkill({
 });
 
 // ==== 体修通用散卡 ==============================================================
-// 忘却 B/A（体修通用卡——不在任何子体系，不吃卡包亲和；2026-10-10 更名自「归元秘术」
-// 并加消耗——0 费无冷却的无限重置违反 0 开销卡纪律）：重置弃牌操作开销为 0
+// 忘却 B/A（体修通用卡——不在任何子体系，不吃卡包亲和；带消耗——0 费无冷却的
+// 无限重置违反 0 开销卡纪律）：重置弃牌操作开销为 0
 //（battleState.swapCount 归零——弃牌阶梯首步免费重新起跳；battle.md R3 阶梯的
 // 唯一归零口）。A 级带迷你（计 0 张手牌）。
 const forgetCard = ({ id, tier, mini = false, promotesTo = null }) => registerSkill({
@@ -862,7 +858,7 @@ forgetCard({ id: 'forgetA', tier: 'A', mini: true });
 // ==== 体修起始卡组（BODY_CULTIVATION_CARDS §0：从基础卡「拳/盾」生长）====
 // 拳（C）×5 + 盾（C）×4 + 格挡（C）×1 + 肾上腺素 ×1 + 情况不对 ×1（情况不对仅一张，
 // 双份组合逆天；迷你词条保留——计 0 张手牌，抽到不卡手）
-// 肾上腺素做节奏阀、情况不对做鬼抽保险（2026-10-07 用户定：基础能力不再追加第二张肾上腺素）。
+// 肾上腺素做节奏阀、情况不对做鬼抽保险。
 // 斩不在初始卡组：由开局遗物「大剑」（默认装备、0 槽）在每场战斗开始时洗入 1 张斩
 // ——卸下大剑 = 自选不带斩进战。见 relics.js / RELICS.md。
 export const BODY_STARTER_DECK = Object.freeze([

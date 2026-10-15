@@ -128,13 +128,13 @@ function chantWeightOf(card, battleState) {
   return discount > 0 ? Math.max(1, w - discount) : w;
 }
 
-// 手牌容量占用序列（容量 point bar 的显示口径，2026-09-30 用户定：占用点的相对
+// 手牌容量占用序列（容量 point bar 的显示口径：占用点的相对
 // 顺序贴手牌从左到右）：三段 = [空咏唱容量] + [手牌序占用] + [空手牌容量/超载]。
 // 手牌序里每张卡按类型展开——普通卡 1 颗（type 'hand'）、迷你卡 1 条幻影竖线
 // （type 'mini'，计 0 容量）、激活咏唱按折扣后权重逐颗展开（先吃咏唱容量
 // 'chant'，容量吃满的溢出颗 'chantOverflow'）。超载红珠（'overflow'）**归属
-// 将弃卡本尊**（pickOverflowVictims 同一算法——hover 超载卡即亮它自己的红珠，
-// 报障「超载卡 hover 无高亮」的根因是旧红珠为无主聚合计数）；理论余量（无卡
+// 将弃卡本尊**（pickOverflowVictims 同一算法——hover 超载卡即亮它自己的红珠）；
+// 理论余量（无卡
 // 可弃的纯咏唱压力极端）才落尾段聚合。slot 带 card（uniqueID）供 hover 联动
 // 定位；填充行无主。聚合计数字段与 handBreakdown 同源兼容。
 export function handCapacitySlots(ctx) {

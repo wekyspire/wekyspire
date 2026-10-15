@@ -92,7 +92,7 @@ function tagWeight(def, weights = {}) {
 // 交互设施（老虎机 / 银行机 / 售货机…：prop 定义带 `interactive` 标签，build 时挂 userData.interactive
 // 由 RoomStage 的 rig 驱动）：**只能由配方 guaranteed 定点摆放**，绝不进任何随机池。
 // 它们带着 container / lamp / metal / glass 这些通用标签，不挡就会在任意 PCG 房间里随机长出
-// （实报：这三台机器只该在特定楼层出现）。楼层门禁在房间调度层（SHOP_FLOORS / slot 房），
+// （这三台机器只该在特定楼层出现）。楼层门禁在房间调度层（SHOP_FLOORS / slot 房），
 // 场景层的口径是"随机撒布永不放交互件"，两者互补。
 const isInteractiveFixture = (d) => (d.tags ?? []).includes('interactive');
 
@@ -193,7 +193,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     return height;
   };
 
-  // ---- 地形分区（低谷/高台/裂缝/斜坡；用户定五类规则）----
+  // ---- 地形分区（低谷/高台/裂缝/斜坡，五类规则）----
   // 在 keepout 之后、一切摆放之前生成：分区避让站位区（单位永不踏上地形 = 站位区留空），
   // 摆放器经 terra.heightAt/zoneAt/tiltAt 取放置高度/选品限制/斜坡姿态。
   const terra = generateTerrain(
@@ -532,7 +532,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
         // 面向战场中轴（+z 为资产观众侧）；斜坡带 tilt（垂直坡面法线躺贴）
         const ry = Math.atan2(0 - px, -10 - pz);
         const tilt = terra.tiltAt(px, pz) || {};
-        // 撒布件限流激活（2026-10-06 场景交互）：带 behaviors 的撒布件按预算随机
+        // 撒布件限流激活（场景交互）：带 behaviors 的撒布件按预算随机
         // 抽签退出静态合批、登记 notifiable（冲击物理/燃烧才生效）。预算 = 每房 3 件
         // ——合批代价可控，且每间房的「可炸之物」位置随种子漂移（布景不能全是炸药）
         const scatNotif = (def.behaviors?.length ?? 0) > 0
@@ -810,7 +810,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     reserved: left.relief,
   });
 
-  // ---- 维护度·蛛网 pass：高墙顶角/窗楣旁张网（maintenance 驱动，用户定阶段 3 维护变差）----
+  // ---- 维护度·蛛网 pass：高墙顶角/窗楣旁张网（maintenance 驱动，阶段 3 维护变差）----
   // 网走 unlit pale 丝线，暗室里泛微光；避开口（网心撞窗洞/门洞上缘就跳）。
   const maint = recipe.maintenance ?? 0;
   if (maint > 0) {
@@ -987,7 +987,7 @@ export function composeRoom(recipeId, seed = 'dev', override = null) {
     return out;
   }
 
-  // ---- 场景交互世界（冲击物理 + 燃烧，2026-10-06）：挂 group.userData 供
+  // ---- 场景交互世界（冲击物理 + 燃烧）：挂 group.userData 供
   // behaviors（B.physBody/B.combustible）上溯寻址；update 每帧驱动。粒子池由
   // 舞台装配后 bindPool 注入（场景层不知道舞台） ----
   const propPhys = createPropPhysics({ heightAt: (x, z) => terra.heightAt(x, z) }).bind(group);

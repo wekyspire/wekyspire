@@ -1,4 +1,4 @@
-// 弯月大刀光（劈系列全局刀光，2026-10-07 用户定）：场景内 3D 的巨大弯月圆弧，
+// 弯月大刀光（劈系列全局刀光）：场景内 3D 的巨大弯月圆弧，
 // 一面实（外弧白热刃口）一面虚（内弧冷蓝残迹），从左往右出现-消失——
 // 单程双段 sweep（reveal 前缘扫过显现，erase 后沿同向扫过收没）暗示大剑横劈。
 // 几何 = 自烘弧带（**水平面**——垂直 y 的横劈平面，弧躺在敌阵上空、凸向远处；
@@ -15,7 +15,7 @@ import { SPELL_DEBUG } from './blocks.js';
 
 const MOON_RENDER_ORDER = 50;   // 施术面片层级（与 blocks 的 FX_RENDER_ORDER 同值）
 const ARC_SEG = 96;             // 弧向细分
-const ARC_LEN = 1.8;            // 弧长（rad，~103°——弧度再削换弦长（2026-10-07 用户定：够长够着所有敌人为先）
+const ARC_LEN = 1.8;            // 弧长（rad，~103°——再削弧度换弦长（够长够着所有敌人为先）
 
 /** 弯月弧带几何：thetaStart 端在右、逆时针到左；uv.x 直接烘成左→右 0→1 */
 function moonArcGeometry(innerR, outerR) {
@@ -124,7 +124,7 @@ export async function moonArcSweep(ctx, deps, {
   // 中心），+0.5 让弧带中段穿身体
   const R = (spanW / 2) / Math.sin(ARC_LEN / 2);
   const depth = R * (1 - Math.cos(ARC_LEN / 2));
-  // 弧心前移弧深 + 再向玩家 16（2026-10-07 用户定：整体再压向玩家）
+  // 弧心前移弧深 + 再向玩家 16（整体再压向玩家）
   mesh.position.set(at.x, at.y + 0.5, (at.z ?? 0) + depth + 16);
   deps.scene.add(mesh);
   ctx.onKill(release);

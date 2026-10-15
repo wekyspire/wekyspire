@@ -36,7 +36,7 @@ const TRACKS = {
 
 let ctx = null;
 let master = null, convolver = null, musicBus = null;
-// 背景乐总线固定电平（2026-10-12 用户定：在总音量之外再削 50%，给未来的音效留响度头room）
+// 背景乐总线固定电平：在总音量之外再削 50%，给未来的音效留响度头room
 const MUSIC_BUS_LEVEL = 0.5;
 const buffers = new Map();  // key → Promise<AudioBuffer>（预解码常驻）
 const live = new Set();     // 在播音轨句柄

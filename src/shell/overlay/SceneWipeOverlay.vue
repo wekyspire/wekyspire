@@ -1,16 +1,15 @@
 <script setup>
-// 幕间切幕层（独立于 cutscene 内容层，用户 的架构修正）：
+// 幕间切幕层（独立于 cutscene 内容层）：
 // 自占一层、z-index 压过内容层（对话/CG）——黑幕盖住时内容可以在它下面就位/换舞台，
-// 揭开时露出的就是目的地本身。状态机见 sceneWipe.js；本组件只负责画。
+// 揭开时露出的就是目的地本身。状态机见 sceneWipe.js（coverMs/revealMs 构造即有值）；本组件只负责画。
 import { computed } from 'vue';
-import { SCENE_TRANSITION_MS } from './sceneWipe.js';
 
 const props = defineProps({ wipe: { type: Object, required: true } });
 const s = computed(() => props.wipe.state);
 // 过渡时长跟随当前子阶段（enter 无过渡：先屏外落位）
 const dur = computed(() => {
-  if (s.value.phase === 'cover') return s.value.coverMs ?? SCENE_TRANSITION_MS.cover;
-  if (s.value.phase === 'reveal') return s.value.revealMs ?? SCENE_TRANSITION_MS.reveal;
+  if (s.value.phase === 'cover') return s.value.coverMs;
+  if (s.value.phase === 'reveal') return s.value.revealMs;
   return 0;
 });
 // 瑞米涂鸦（UI_LANGUAGE.md 加载涂鸦章）：加载界面与幕间黑屏共用同款序列帧。

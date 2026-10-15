@@ -60,8 +60,8 @@ function cardModel({ cardId, params }) {
   };
 }
 
-// cards：多卡并列预览（升级分叉的 hover——候选卡的全部可升方向并排摆，用户定
-// ）。单张时退化为与 card 相同的单卡模型，少一层并列样式分叉。
+// cards：多卡并列预览（升级分叉的 hover）：候选卡的全部可升方向并排摆。
+// 单张时退化为与 card 相同的单卡模型，少一层并列样式分叉。
 function cardsModel({ cardIds = [], params }) {
   const defs = cardIds.filter(id => id != null && hasSkill(id)).map(id => getSkillDefinition(id));
   if (!defs.length) return { title: `[cards] ${cardIds.join(',')}`, body: '' };

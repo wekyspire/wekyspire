@@ -376,11 +376,8 @@ registerRelic({
 registerRelic({
   id: 'masterInsight', name: '宗师的心得', rarity: 'C', cost: 1,
   description: '每场战斗打出的第三张牌，打出后抽 1 牌。',
-  // 第 8 轮裁决重做（旧版 = 第 3 张牌回其 AP 消耗）：旧版有静默坑——第 3 张若是 0 费牌，
-  // 本场等于白装（回 AP 0），且体修 AP 本就不是瓶颈（R8-F/D 双证）；抽牌治空转也治静默坑，
-  // 任何构筑第 3 张牌都有正收益。
-  // 铭刻（flavor：tooltip 效果描述后另起一段展示；RELICS.md 原文——叠炎体系
-  // 「与燃烧博弈」的设计哲学注脚：收益与风险并存）
+  // 铭刻（flavor：tooltip 效果描述后另起一段展示）——叠炎体系
+  // 「与燃烧博弈」的设计哲学注脚：收益与风险并存
   flavor: '不要玩火，不要玩火，玩火必自焚',
   subscriptions: () => {
     let plays = 0;

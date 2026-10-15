@@ -32,7 +32,7 @@ import { buildTowerClouds, CLOUD_PRESETS } from './towerClouds.js';
 // ---- 调参位（浏览器验收后收紧）----
 export const SKY_TOP = 0x82909e;       // 天顶：灰（阴雪天空，留一丝蓝）
 export const SKY_BOTTOM = 0x5c6169;    // 低空/雾色：暗板岩灰（远地/远云/穹面三处同源
-                                       // 融成一条暗雾带——用户定雾就要暗，不要亮辉光）
+                                       // 融成一条暗雾带——雾就要暗，不要亮辉光）
 export const FOG_DENSITY = 0.015;      // 指数雾密度：~50 单位能见度（50 处融 ~47%，
                                        // 120 处 ~98%）——塔身约半透雾感、雪原远端全融天
 export const GROUND_BASE_Y = -58;      // 雪原高度（固定：塔世界固定，相机随层爬升）
@@ -45,7 +45,7 @@ export const STORM_WIND = { x: 7, z: 2.5 };
 // 雪相/云观感的分章混合系数（TOWER.md 四阶段）：
 // 11 层 boss 前恰在云外（ch1 平静雪）、12 层入云、12-33 层完全在云内（ch2 风暴）、
 // 34 层起太虚回静。混合跨 5 层（11→16 入、33→38 出）——雪速渐变摊到多次攀爬里，
-// 不挤在一次爬升中造成"短暂明显加快"（报）。云板几何由 CLOUD_PRESETS.base/top
+// 不挤在一次爬升中造成"短暂明显加快"。云板几何由 CLOUD_PRESETS.base/top
 // 对齐塔层（18..174），与本地曲线配套。
 export function towerStormLevel(floor) {
   const rise = smoothstep(11, 16, floor);
@@ -59,7 +59,7 @@ export function towerStormLevel(floor) {
 export const TOWER_X = 58;             // 塔楼横向位置（右侧）
 export const TOWER_Z = -10;
 // 塔基轻吻雪面 0.5 单位（防贴地浮空的发丝缝）；层 f 模块中心 = 塔基 + (f-0.5)×层高，
-// 即层 1 直接坐在塔基线上、只埋 0.5——此前埋 2+半层（79% 入土）是摆放公式差了半层。
+// 即层 1 直接坐在塔基线上、只埋 0.5——公式若差半层，塔身大部分入土。
 export const TOWER_BASE_Y = GROUND_BASE_Y - 0.5;
 
 /**
@@ -167,9 +167,8 @@ function buildSnowfall({ count = 4800 } = {}) {
   // 正值下落速率
   const fall = mix(0.5, uFall, uStormAmt).mul(fract(sA.mul(17.31)).mul(0.9).add(0.7));
   // 速度场（斜风 + 湍流）；位移积分与其**同号一致**（base = origin + disp）。
-  // ⚠ 三处符号必须一致：vel.y = -fall（向下）、disp.y = -fall·t。此前 fall 自身
-  // 被塞过负号 + disp.y 未跟上 → 速度与位移再次反号，雪片朝右下落、长轴朝右上
-  // （视觉即"向左下拉伸"的斜线，二番）。
+  // ⚠ 三处符号必须一致：vel.y = -fall（向下）、disp.y = -fall·t。fall 与 disp
+  // 任一处塞错负号 → 速度与位移反号，雪片朝右下落、长轴朝右上（视觉即"向左下拉伸"）。
   const wind = uStorm.mul(uStormAmt); // vec2 × float：斜风
   const vel = vec3(
     wind.x.add(ampX.mul(sin(wX.mul(uTime).add(pX)))),
@@ -263,7 +262,6 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   const fog = new THREE.FogExp2(SKY_BOTTOM, FOG_DENSITY);
 
   // ---- 天空穹：渐变（地平线雾色 → 天顶灰蓝），不吃引擎雾不写深度、最先画 ----
-  // WebGPU 迁移 TSL 版（原 GLSL dome.*.glsl 逐式平移）。
   // 归一化半径与 DOME_RADIUS = 900 同值（改半径时两处一起动）。
   // 调参位：smoothstep 两端（0.56=雾带顶、0.92=天顶渐入）与 uTop/uBottom
   //（头部 SKY_TOP/SKY_BOTTOM 注入，uBottom 与 FogExp2 雾色同源）。
@@ -272,7 +270,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   // 无缝相接就必须同语义：编码但不受 tone map（与 three 对 background 色的处理
   // 一致）；否则 tone map 把穹顶压暗一截 → 地平线接缝。NodeMaterial
   // 的内建输出链自动按渲染目标判定（进 RT 线性管线时跳过输出变换，整帧只在
-  // towerClouds 合成段统一走）——旧版手挂 tonemapping/colorspace chunk 的语义由此接管。
+  // towerClouds 合成段统一走）。
   // 云层不再在此合成（旧穹顶 UV 合成会被不透明几何盖掉，云内俯视出横向分界）——
   // 已迁入 towerClouds.js 三段管线的末段 transmittance composite。
   const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 16);
@@ -309,8 +307,8 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
   clouds.uniforms.uFogColor.value = fog.color;   // 共享 Color 实例：远云融雾 = 地平线辉光
 
   // ---- 光照：雪夜，两半球环境光（上灰蓝天空 / 下偏白雪地反光）+ 弱冷平行光做雪丘体积 ----
-  // 败塔氛围定稿（2026-10-09）：全场景压暗、只留天空相对亮——雪原与塔身吃进光量
-  // 大幅削减（反照率不动，破坏性更新禁），悬空白字层号在暗底上自然 outstanding。
+  // 败塔氛围：全场景压暗、只留天空相对亮——雪原与塔身吃进光量
+  // 大幅削减（反照率不动，破坏性更新禁），悬空白字层号在暗底上自然醒目。
   const hemi = new THREE.HemisphereLight(0x848b96, 0x9aa0a8, 0.045);
   group.add(hemi);
   const rim = new THREE.DirectionalLight(0xc7cad0, 0.09);
@@ -326,7 +324,7 @@ export function buildTowerWilderness({ towerX = TOWER_X, towerZ = TOWER_Z } = {}
 
   // 层跟随光（track）：随相机锚点爬升的独立光源——塔是世界固定的，decay 2 的点光
   // 钉死塔基在高层衰减殆尽，当前层的塔身/雪面要它来补（setAnchorY 抬到锚点上方 5，
-  // 与 central 同偏移同色温，跨层光照观感一致）。压暗定稿后强度同步削弱（50 → 13）。
+  // 与 central 同偏移同色温，跨层光照观感一致）。全场景压暗口径下强度取 13。
   const track = new THREE.PointLight(0xe9ebed, 13, 300, 2);
   track.name = 'floorTrackLight';
   track.position.set(TOWER_X-2, TOWER_BASE_Y+3, TOWER_Z+3);

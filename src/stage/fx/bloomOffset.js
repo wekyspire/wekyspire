@@ -36,7 +36,7 @@ export function setBloomWriter(obj, on = true) {
 }
 
 /** depth-only 预填材质：按「是否镂空 + alphaMap」签名缓存，每件只建一次、建后永不改值。
- *  ⚠ 不用 scene.overrideMaterial 做预填（2026-09-30 探针实锤的每帧资源 churn 根源）：
+ *  ⚠ 不用 scene.overrideMaterial 做预填（每帧资源 churn 根源）：
  *  渲染器的 override 模拟会把每个对象的 alphaTest 逐个拷到共享 override 材质上，而
  *  r185 的 alphaTest 是 version++ 的 accessor——共享材质 version/cacheKey 随对象序列
  *  来回翻转（0↔0.5），RenderObjects 版本比对每渲染遍失配 → renderObject/绑定组/UBO
@@ -83,7 +83,7 @@ export function renderBloomOffsetPass(renderer, scene, camera, { clearDepth = fa
   const prevBg = scene.background;
   const prevColor = renderer.getClearColor(new THREE.Color());
   const prevAlpha = renderer.getClearAlpha();
-  // 门控（2026-09-30 实测空闲房写入件=0）：没有任何可见写入件 → 整段跳过——
+  // 门控（空闲房常态写入件=0）：没有任何可见写入件 → 整段跳过——
   // depth 预填全场重渲 + 层重渲 + RT 带宽在无 FX 时序里是纯浪费。调用方已把
   // 渲染目标切到偏移 RT，这里只清黑保持「无偏移」语义（bloom 链每帧都采样它）。
   if (!hasVisibleWriter(scene)) {

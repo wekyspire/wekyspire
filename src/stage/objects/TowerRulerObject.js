@@ -23,7 +23,7 @@ const LEN = { normal: 2.0, mid: 3.2, boss: 4.6, current: 6.2 };   // 刻度长�
 const COL = { normal: 0xc4c4c4, mid: 0xdcdcdc, boss: 0xe85a5a, elite: 0xeda24e, current: 0xf2f2f2 };
 // 当前层 HDR 基色（分量略过 bloom 阈值 1.45 起辉——uiScene 终段过 bloom 链；无辉光档退化为纯白）
 const COL_CURRENT_HDR = [1.62, 1.78, 2.24];
-const TICK_H = 0.4;              // 刻度线粗（wu；雪地背景上再细就消失——2026-10-11 实测）
+const TICK_H = 0.4;              // 刻度线粗（wu；雪地背景上再细就消失）
 const TICK_PLANE_H = TICK_H * 4;  // 刻度面片高（纹理上方是线、下方挂软阴影）
 const OPACITY = { idle: 0.72, hover: 0.95, current: 0.98 };
 const SPACING = 3.3;              // 刻度纵向间距（wu）
@@ -244,7 +244,7 @@ export class TowerRulerObject extends THREE.Group {
    * defer = 爬升待播（战后换台先把塔摆到新层、相机还在旧层）：呈现按兵不动，
    *   当前层/亮浪/回中全留给 arriveFloor 的 animate 拍——静默预推进会吃掉亮浪
    *   （floor 已等 → animate 拍早退），且预收敛的 scroll 撞上爬升 tween 的绝对
-   *   驱动 = 全条带瞬移跳变（2026-10-11 病根）。变章重建不受 defer 约束（内容换了
+   *   驱动 = 全条带瞬移跳变。变章重建不受 defer 约束（内容换了
    *   必须重排），但 scroll/当前层同样留给 animate 拍。
    */
   setFloor(floor, totalFloors, { animate = false, defer = false } = {}) {
@@ -322,7 +322,7 @@ export class TowerRulerObject extends THREE.Group {
   }
 
   /** 该层房型的一句话描述（冒泡框第二行）。战斗语义优先（Boss/精英配色归它们）；
-   *  其余层报房间表的真实房型（开局定死）；无表（旧档/直建舞台）退回旧的到层随机口径。 */
+   *  其余层报房间表的真实房型（开局定死）；无表（旧档/直建舞台）退回到层随机推断口径。 */
   _descOf(f) {
     if (isBossFloor(f)) return { text: 'Boss', tint: '#e86a6a' };
     if (isEliteFloor(f)) return { text: '精英战斗', tint: '#eda24e' };
@@ -414,7 +414,7 @@ export class TowerRulerObject extends THREE.Group {
     // 滚动游标平滑
     this._scroll += (this._scrollT - this._scroll) * Math.min(1, dt * 8);
     // 亮浪：head 骑 scroll 游标（爬升 tween 逐帧直写）——途经层随相机点亮，落定那拍
-    // 目标层触发抵达闪光（旧实现 head 按 26 层/秒自跑，单层爬升开场即闪完，与相机脱节）
+    // 目标层触发抵达闪光（head 若按固定速度自跑会与相机脱节：单层爬升开场即闪完）
     var currFloorSoft = this._floor;
     if (this._sweep) {
       const s = this._sweep;

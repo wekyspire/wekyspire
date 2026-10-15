@@ -1,4 +1,4 @@
-// 敌方行动起手剧本（2026-10-06 五模板通配方案）：core aiAct stage0 经
+// 敌方行动起手剧本：core aiAct stage0 经
 // presenter.playScript({ script: 'enemyAct', unit, kinds, hits }) 触发，意图快照
 // （kinds/hits 标量）在此分流模板。纯攻击类不演（起手 = _damageHit 的突进编排）；
 // 纯施法类给施法者一拍「进架」语言——命中侧反馈（受方姿态/粒子/护盾罩）由
@@ -6,7 +6,7 @@
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
 import { arcProjectile } from '../spells/blocks.js';
 
-// 逐敌专属起手（Boss 主题化，2026-10-09）：defId → async ({ctx, deps, args, unit, player, kinds})。
+// 逐敌专属起手（Boss 主题化）：defId → async ({ctx, deps, args, unit, player, kinds})。
 // 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
 // 该拍已有别的演出语言——转段剧本/命中 beat）。注册口给 fx/scripts/bosses/
 // 一文件一 Boss（内容归属原则），替代旧的 SKIP_ACT_FX 整体跳过名单。
@@ -34,8 +34,8 @@ async function curseShot(ctx, deps, { unit, player }) {
   }
 }
 
-// 施法增益式（增强自身或友军）：施法者周身一撮金白/蓝白粒子的轻起手（2026-10-07
-// 用户定：原脚下光柱删除——payoff 语言放在起手位读不通，「被捅」观感）。增益落点
+// 施法增益式（增强自身或友军）：施法者周身一撮金白/蓝白粒子的轻起手（payoff
+// 语言放在起手位读不通——脚下光柱读「被捅」）。增益落点
 // （受方 buff 姿态/粒子）由后续节拍承接
 async function empowerCast(ctx, deps, { unit, light = false }) {
   const at = { x: unit.position.x, y: unit.position.y, z: unit.position.z };

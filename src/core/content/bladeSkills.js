@@ -197,7 +197,7 @@ const slashCard = ({ id, name, tier, damage, cd, slow = true, overwriteDesc = nu
     // 先进阶后伤害：进阶是结算内的簿记，放前面保证即便伤害击杀终局截断也已落定。
     // 发动卡自身已离手（pending），findSlashCard 看不见它——自我进阶直接对 self 转化。
     // 伤害归属用打出时点的本阶名（skillDefId 覆写）：变身先落定，self.defId 已是下一阶，
-    // 不覆写的话日志会打出「[削金斩] 30伤」这类名数错位（r22-a2 实报）。
+    // 不覆写的话日志会打出「[削金斩] 30伤」这类名数错位。
     transformSlashCard(sctx, sctx.self);
     attackDamage(sctx, damage, { skillDefId: id });
     for (let i = 0; i < 3; i++) addCard(sctx, 'ironShardC', { index: 'random' });
@@ -565,8 +565,7 @@ breathCard('breathA', '呼吸', 'A', { exhaust: false });
 
 // ==== 归来系列（爆发过卡）======================================================
 // 怀念 C/B/A + 归来 S（全链消耗）：纯粹的大过牌——抽 3/4/5（S 带迷你，0 费用栏）。
-// 2026-10-10 改版：原「护盾 + 全手牌速冷」的速冷职责移交真空利刃系列（定向斩冷却），
-// 怀念重做为纯爆发过卡（设计稿归来系列重写）。
+// 速冷职责不在本系列（定向斩冷却归真空利刃系列）。
 const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = false, image = 'reminiscence', series = 'reminiscence' } = {}) => registerSkill({
   id, name, type: 'normal', tier, series, subsystem: 'blade', image,
   keywords: [...(mini ? ['mini'] : []), 'exhaust'],
@@ -589,7 +588,6 @@ reminiscenceCard('homecomingS', '归来', 'S', 5, { mini: true, image: 'homecomi
 // ==== 真空利刃系列（牌库污染换速冷）============================================
 // 利刃 C/B/A + 真空利刃 S：抽牌 + **令斩冷却 N**（定向速冷：SkillCooldownInstruction
 // 对斩链卡直达推进，不等回合扫掠；无斩/斩满充能则静默落空——磨刀同口径）+ 洗入碎铁。
-// 速冷职责自怀念系列移交（2026-10-10 设计稿）。
 const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promotesTo = null, image = 'vacuumBlade' }) => registerSkill({
   id, name, type: 'normal', tier, series: 'vacuumBlade', subsystem: 'blade', image,
   cost: { mana: 0, actionPoint: ap },
@@ -830,8 +828,7 @@ annihilatingEdgeCard({ id: 'annihilatingEdgeS', tier: 'S', ap: 1, exhaust: false
 // 练刀 C/B/A：抽2/2/3，**将手中所有刀法牌洗回牌库底**，并令它们**本战斗中**伤害 +3/+4/+5。费用 1AP（B 起 0AP），无冷却。
 // 「本战斗中」= runtime.power（跨 zone 持续、战斗结束随 runtime 一起丢弃），
 // 洗回走 FIFO 回牌库底——下回合抽回来仍是强化过的刀，这是主要的正反馈环。
-// 卡面写「洗回牌库底」而非「弃掉」：回库正是本卡的收益环（P0 实锤：读「弃掉」以为永久失去，
-// 把主力斩当废牌丢了两次，R8-A）。
+// 卡面写「洗回牌库底」而非「弃掉」：回库正是本卡的收益环，「弃掉」易被读成永久失去。
 // 无可用性门槛（卡面没写/named{顽固} 就不得暗设条件）：抽完手中无刀时纯白板收场。
 const practiceBladeCard = (id, tier, ap, power, draw, { promotesTo = null } = {}) => registerSkill({
   id, name: '练刀', type: 'normal', tier, series: 'practiceBlade', subsystem: 'blade', deep: 'blade',
@@ -852,8 +849,8 @@ const practiceBladeCard = (id, tier, ap, power, draw, { promotesTo = null } = {}
     }
     return true;
   },
-  // 卡面写「洗回牌库底」而非「弃掉」——回库正是本卡的收益环（P0 实锤：读「弃掉」
-  // 以为永久失去，把主力斩当废牌丢了两次，R8-A）。动词与本卡语义对齐，不依赖术语表。
+  // 卡面写「洗回牌库底」而非「弃掉」——回库正是本卡的收益环，「弃掉」易被读成
+  // 永久失去。动词与本卡语义对齐，不依赖术语表。
   describe: () => `抽${draw}，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
   battleDescribe: () => `抽${draw}，将手中所有/named{刀法牌}洗回牌库底，令其本战斗伤害+${power}`,
 });

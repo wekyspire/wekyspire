@@ -1,17 +1,17 @@
 // Boss 剧本：燃焰术士（pyro）。一只 Boss 的全部自定义演出聚合在本文件（内容归属原则）。
 // 触发点见 core enemies.js pyro act（转段拍经 presenter.playScript 上报 id）。
-// 视觉大改（浏览器实拍迭代）：
+// 视觉总纲：
 //   · 机位**按舞台真 fov 反解**（`camera.framing` / `camera.basePose`）：战斗相机是 24° 长焦，
-//     视野高度 ≈0.42×距离——旧版凭经验写死 34u/62u 距离，实拍出来特写只剩半张脸、常驻构图
-//     把血条压进手牌扇。常驻机位改走 duelPose（基准取景的长焦平视派生），**转段不切特写**；
-//   · 整段拉长到 4s，三轨（火焰燃烧 / 场景变换 / 物体焚化）各自错峰（见 T 与各段注释）；
-//   · 蓄力补「吸气」：四周余烬被拽进胸口（向心 sprite + 速度对齐的拖影）；
-//   · 爆发补双道细环冲击波 + 炽闪（贴地世界环在平视机位下侧看成一条线，已删）；
-//   · 烧毁扩到 wood+cloth 双族（Boss 房的旗杆与布旗一起烧焦，视觉信息量才够）；
-//   · 光照覆写走「压冷光 + 抬火光」的光池口径（旧版全灯×1.45+染红 = 整场洗成牛奶红，
-//     实拍什么细节都没有）；余烬发射位改按 Boss 体量派生，不再写死房间坐标；
-//   · 常驻机位加极慢呼吸漂移（长回合战斗不呆）；
-//   · 火球狂暴改推 orbit.heat（orbs.js 口径：亮度/抖幅/尾迹/灯光整体升温）。
+//     视野高度 ≈0.42×距离——写死距离的构图必废。常驻机位走 duelPose（基准取景的
+//     长焦平视派生），**转段不切特写**；
+//   · 整段 4s，三轨（火焰燃烧 / 场景变换 / 物体焚化）各自错峰（见 T 与各段注释）；
+//   · 蓄力带「吸气」：四周余烬被拽进胸口（向心 sprite + 速度对齐的拖影）；
+//   · 爆发双道细环冲击波 + 炽闪（贴地世界环在平视机位下会侧看成一条线，不用）；
+//   · 烧毁覆盖 wood+cloth 双族（Boss 房的旗杆与布旗一起烧焦，视觉信息量才够）；
+//   · 光照覆写走「压冷光 + 抬火光」的光池口径（全灯统一提亮染红会把整场洗成
+//     牛奶红，读不出细节）；余烬发射位按 Boss 体量派生，不写死房间坐标；
+//   · 常驻机位带极慢呼吸漂移（长回合战斗不呆）；
+//   · 火球狂暴推 orbit.heat（orbs.js 口径：亮度/抖幅/尾迹/灯光整体升温）。
 import * as THREE from 'three';
 import { materialOf } from '../../../scenes/kit/materials.js';
 import { desatColor } from '../../../scenes/kit/palette.js';
@@ -25,7 +25,7 @@ import { registerBossHurtFx } from '../../bossStateFx.js';
 // 冲击波环纹理（按"厚/薄"两档缓存；additive 下黑=透明）
 //   fat  = 炽闪用的大光晕（宽带，几乎不出环）
 //   thin = 炸开用的冲击波（白热峰只占 2.5% 半径 + 内缘一道暗带）——
-//          环拉到大体量时宽带版会糊成一圈肥皂泡（09-23 实拍），细环才读得出"气浪"
+//          环拉到大体量时宽带版会糊成一圈肥皂泡，细环才读得出"气浪"
 const _ringTex = new Map();
 function ringTexture(thin = false) {
   const key = thin ? 'thin' : 'fat';
@@ -35,7 +35,7 @@ function ringTexture(thin = false) {
   const g = c.getContext('2d');
   const grad = g.createRadialGradient(128, 128, 100, 128, 128, 126);
   if (thin) {
-    // 只留一道白热细峰 + 极窄的暖边（09-23 实拍：内缘那道 0.18 的橙带铺到大半径
+    // 只留一道白热细峰 + 极窄的暖边（内缘那道 0.18 的橙带铺到大半径
     // 就成了一整面棕色球壳，气浪读成了肥皂泡）
     grad.addColorStop(0, 'rgba(255,120,40,0)');
     grad.addColorStop(0.72, 'rgba(255,120,40,0)');
@@ -87,7 +87,7 @@ function streakTexture() {
 /**
  * 机位反解：给定「立牌高度占画框纵向的比例 bodyFrac」与「脚底在画框的纵向位置
  * feetFrac（0=顶，1=底）」，从舞台真实 fov 解出距离与注视点。
- * 铁律：不写死世界坐标——长焦/广角一改，写死的构图就全废（09-23 两次踩坑）。
+ * 铁律：不写死世界坐标——长焦/广角一改，写死的构图就全废。
  * @param {object} unit   宿主 UnitObject（position.y = 脚底，_standeeHeight = 立牌高）
  * @param {object} camera CameraDirector（取 framing 量尺）
  * @param {number} lateral 横向偏移（负 = 从 Boss 左侧看，给构图一点角度）
@@ -106,15 +106,15 @@ function poseFor(unit, camera, { bodyFrac, feetFrac, lateral = 0, tilt = 0 }) {
   };
 }
 
-// 转段时间轴（ms，整段拉长到 4s）。蓄力与爆发**都在 P2 构图里演**
-// （相机只走 A→B，不再有特写那一跳），时间预算全花在动作与三轨错峰上：
+// 转段时间轴（ms，整段 4s）。蓄力与爆发**都在 P2 构图里演**
+// （相机只走 A→B 一条线，不跳特写），时间预算全花在动作与三轨错峰上：
 //   火焰燃烧轨（吸气/点燃/火舌/二次浪/火球升温）、场景变换轨（光照由近及远）、
 //   物体焚化轨（布先木后，烧黑→侵蚀两拍）各自起步时刻与时长都不同步 = 「参差」。
 // 下面的数是**剧本协程自报的分段时长**（总和 = 本拍阻塞时长，实测口径见 tmp/play/pyro-dur.mjs）。
 // 转段拍的受击动画排在前面，第一个 ctx.custom 要晚半拍才起跳，所以吸气/火舌那些
 // 循环的拍数都按 T 的整窗给（10×170≈CHARGE、5×110≈BURN[0]…），别让它们跑在补间前面。
-// 曾经这里少 0.7s：烧毁着色器在爆发那一拍现场编译，主线程冻 715ms 把时长吞掉
-// ——现在 program 入场就编好（BattleStage 的 warmCharBurn），时间轴回归纯设计值。
+// 烧毁着色器 program 由 BattleStage 入场预热（warmCharBurn）——现场编译会冻主线程
+// 0.7s 把时长吞掉，预热后时间轴是纯设计值。
 const T = {
   CHARGE: 1700, // 憋火：缓压到底 + 底位高频颤 + 逐级点燃
   POP: 240, // 爆发后过冲弹起
@@ -125,7 +125,7 @@ const T = {
 };
 const sstep = (x) => x * x * (3 - 2 * x); // 压扁曲线：起步与到位都软，中段陡
 
-// 转阶段「燃躯解放」（转段首拍空转 = 本剧本，实测放行 ≈4.0s 阻塞节拍）：
+// 转阶段「燃躯解放」（转段首拍空转 = 本剧本，放行 ≈4.0s 阻塞节拍）：
 //   蓄力（1.5s）：推镜到对抗机位 + 下蹲吸气（压扁到底后高频颤）+ 余烬被吸进胸口 + 五级点燃
 //   爆发（瞬发）：闪橙 + 炽闪 + 双道细环冲击波 + 四层火星爆散 + 重震荡 + 渐晕
 //   燃躯（1.5s，三拍）：火自体内窜出 → 环火二次浪 → 吐一口火灰定相
@@ -155,8 +155,8 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   // —— P2 常驻机位：基准战斗取景的「长焦 + 平视」派生（duelPose）——
   // 注视点/方位都不动 ⇒ 画里内容与默认战斗镜头基本一致（队友、战场、房间全在），
   // 但 fov 24°→17.8°、俯角 20°→9°：透视被压扁，敌我两排贴到同一层平面上，
-  // 对抗感来自镜头本身而不是怼脸（09-23）。
-  // **转段全程也不切特写**（同一定论的推论）：镜头只走 A（基准）→ B（对抗机位）一条线，
+  // 对抗感来自镜头本身而不是怼脸。
+  // **转段全程也不切特写**：镜头只走 A（基准）→ B（对抗机位）一条线，
   // 蓄力与爆发都在最终构图里演——玩家看到的景别始终不变，火是在他眼皮底下长起来的。
   const base = camera?.basePose;
   const p2Pose = base
@@ -177,11 +177,11 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
       const k = sway.t - T.SWAY_AT;
       // 三条漂移都写成「k=0 时严格为 0」的零相位式（sin(0)=0、cos-1、y 不带初相），
       // 再乘 1.2s 缓入包络——介入瞬间必须与静止位**连续**，否则常驻机位会当场瞬移
-      // 2.7u ≈ 25px（09-23 实拍：转段中段那一下跃变就是它，`pyro-cam-jump.mjs` 量得）
+      // 2.7u ≈ 25px
       const ramp = sstep(Math.min(1, k / 1.2));
       const b = dir.getPose('pyroP2');
       // 写**偏移通道**而不是相机：呼吸漂移各占一路，与受击震荡、任何在途运镜求和叠加
-      // （旧版直写 cam.position 是绝对落笔，与震荡抢笔就是那下肉眼可感的跳变）
+      // （直写 cam.position 是绝对落笔，与震荡抢笔会产生肉眼可感的跳变）
       dir.setOffset('pyroSway',
         Math.sin(k * 0.33) * viewH * 0.035 * ramp,
         Math.sin(k * 0.24) * viewH * 0.02 * ramp,
@@ -195,8 +195,8 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   ctx.spawn(async (c) => {
     // 吸气：每拍从胸口外一圈拽回几缕余烬（向心直线 + 头亮尾暗的拖影），
     // 越到后面越密也越急，配合压扁读成「把火吸进身体」。
-    // 拍数按**实测蓄力窗**给（10×170≈1.7s）：本剧本的 ctx.custom 排在敌方受击动画之后，
-    // 实测起跳要晚 ~0.5s（pyro-dur 量得），只按 T.CHARGE 给数会提前吸完
+    // 拍数按实测蓄力窗给（10×170≈1.7s）：本剧本的 ctx.custom 排在敌方受击动画之后，
+    // 起跳要晚 ~0.5s（pyro-dur 量得），只按 T.CHARGE 给数会提前吸完
     for (let i = 0; i < 10; i++) {
       const n = 3 + Math.min(i, 4);
       const pull = 0.55 - i * 0.03; // 吸合时长递减 = 越吸越急
@@ -219,8 +219,8 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   });
   shake.impulse(0.4);
   // 憋火：前 6 成时间缓压到底（smoothstep——起步软、到位硬），后 4 成**在底位高频颤**
-  // （憋不住的火，不是压扁到终点就死掉），同时五级点燃一次比一次亮（09-23：1.4s 三段
-  // 太赶，拉长后中间必须有内容，否则「蓄力」读成卡顿）
+  // （憋不住的火，不是压扁到终点就死掉），同时五级点燃一次比一次亮（蓄力中段
+  // 必须有内容，否则「蓄力」读成卡顿）
   const IGNITE_AT = [[0.12, 0xff8a45], [0.3, 0xff9a4a], [0.5, 0xffb060], [0.68, 0xffc884], [0.86, 0xffe3b4]];
   const ignite = IGNITE_AT.map(() => false);
   await ctx.custom(id, {
@@ -246,15 +246,15 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   // 不 await：640ms 全跑在弹起 + 燃躯三拍里，转段总时长不受影响。
   ctx.flip(unit.standee, () => setArtVariant?.(unit, 'p2'), { durationMs: 640 });
   // 炽闪：一团主题色大光晕原地亮起速灭（scalePop 出生弹跳 + 短 ttl；按立牌体量，
-  // 光晕盖过半身但不能盖满屏——旧版 13u 在特写距离上直接洗白整帧，09-23 教训）。
-  // 现在**没有特写垫着了**，体量按常驻景别给（H 的六成长这样，广角里才读得出「炸」）
+  // 光晕盖过半身但不能盖满屏——满屏即洗白整帧）。没有特写垫着，
+  // 体量按常驻景别给（H 的六成长这样，广角里才读得出「炸」）
   particles.spawnSprite(ux, chestY, {
     texture: ringTexture(), width: H * 0.62, height: H * 0.62, z: uz - 1,
     ttl: 0.3, gravity: 0, scalePop: 0.6,
   });
   // 相机面冲击环 ×2：spawnSprite 拿到 rec 后直推 rec.w/h（sprite.scale/opacity 每帧由
   // 粒子系统从 rec 重写 + 按寿命淡出，补 tween sprite 会被覆写）。
-  // 用细环纹理（ringTexture(true)）：宽带版拉到两倍立牌高就糊成一圈肥皂泡（09-23 实拍），
+  // 用细环纹理（ringTexture(true)）：宽带版拉到两倍立牌高就糊成一圈肥皂泡，
   // 白热细峰才读得出「一道气浪推开」。两道错开——外环快而远（先到的浪头）+
   // 内环慢而厚（余势），单层环看不出厚度。
   const WAVES = [
@@ -279,15 +279,15 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   vignette.pulse(3);
 
   // —— 场景覆写 ②~⑤：常驻渐升整体挂舞台寿命的独立剧本——
-  // 教训（验收 P1-1）：ctx.spawn 的子本会随本拍收尾被连带杀掉（onKill 在正常收尾也触发），
+  // ctx.spawn 的子本会随本拍收尾被连带杀掉（onKill 在正常收尾也触发），
   // 起得晚的渐升（uBurn/余烬 rate/光照后段）会冻结在半截；runScript 缺失时兜底退回 ctx.spawn。
   // 三轨起步时刻**互不相同**（⑤火焰=爆发即起、②场景=由近及远逐灯、③焚化=布先木后），
-  // 才读得出「房间在他周围一件件烧起来」，而不是一次整体淡入（09-23 用户定：参差具体）。
+  // 才读得出「房间在他周围一件件烧起来」，而不是一次整体淡入（参差要具体）。
   const orbit = unit.parts?.get('orbs')?.userData?.orbit;
   (runScript ?? ((body) => { ctx.spawn(body); }))(async (c) => {
     const jobs = [];
     // ② 光照转「火主冷辅」：强度一律走 mood 乘子（lighting.update 每帧按 base×periph
-    //    重写各灯强度——直推 light.intensity 会被当场覆盖，09-23 复审发现）；灯色仍可直推。
+    //    重写各灯强度——直推 light.intensity 会被当场覆盖）；灯色仍可直推。
     //    结构光整体压暗（房间边缘沉下去）+ 火光乘子反抬（火盆/烛火更跳），
     //    再逐灯以 Boss 为圆心由近及远错峰染色。
     const mood = cast.get('light:mood');
@@ -319,8 +319,8 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
     // ②b 火主近旁光（挂单位 = 跟随，不进 lighting.group ⇒ update 不管它，强度自由补间）：
     //    爆发即亮的亮橙黄，随后颜色沉向血红、强度再抬一档——「亮橙黄 → 红」两段过渡，
     //    把 Boss 立牌与近旁地面从暗场里托出来。
-    //    灯从舞台光池借（light:fx0，改）：演出中途 new + add 灯会触发全场景
-    //    着色器重编译（实测 1.2s 冻帧）；池灯入场即在场景里，重挂到单位不触发重编译
+    //    灯从舞台光池借（light:fx0）：演出中途 new + add 灯会触发全场景
+    //    着色器重编译冻帧；池灯入场即在场景里，重挂到单位不触发重编译
     const bossLight = cast.get('light:fx0');
     if (bossLight) {
       bossLight.color.set(0xffc266);
@@ -335,9 +335,9 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
     // ③ 焚化分轨（族单例挂 modifier）：布易燃——先黑、蚀得深；木后裂——只啃表皮。
     //    每族两拍（uChar 烧黑 → uBurn 侵蚀）各带自己的 delay，错峰推进而非串行到底。
     //    burnTo 口径：前沿 = uBurn×1.35 − 0.35·hash ⇒ 0.4 ≈ 啃掉四成、留六成骨架；
-    //    再高就把旗啃成一片彩纸噪点（09-23 实拍）
+    //    再高就把旗啃成一片彩纸噪点
     //    attach 在这里只是兜底（幂等）：Boss 房的 program 已由 BattleStage 入场预热，
-    //    这一拍推的是 uniform——现场打补丁会触发重编译，把演出冻住半秒（09-23 跃变）
+    //    这一拍推的是 uniform——现场打补丁会触发重编译，把演出冻住半秒
     const CHAR = [
       { fam: 'cloth', charAt: 260, charMs: 1500, charTo: 0.82, burnAt: 1250, burnMs: 2700, burnTo: 0.4 },
       { fam: 'wood', charAt: 980, charMs: 1900, charTo: 0.66, burnAt: 2300, burnMs: 3400, burnTo: 0.24 },
@@ -353,7 +353,7 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
       c.tweenRaw(rec.uTime, { value: 600 }, { durationMs: 600000, ease: 'none' }); // fire-and-forget
     }
     // ④ 场景余烬：火盆口照旧（房间其它角度看得见的义务），另外在**机位可见空域**
-    //    撒四缕飘灰——写死房间坐标时实拍里发射器全在画框外（09-23 教训），
+    //    撒四缕飘灰——写死房间坐标会让发射器全在画框外，
     //    现在一律按 Boss 体量派生（灰是他的火，得围着他）。每缕自己的起步时刻错开
     //    （0.5/0.9/1.5/2.1s）：灰是一层一层飘起来的，不是一开阀就满屏
     for (const { handle } of cast.query('prop:brazierFire')) {
@@ -380,8 +380,8 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
       onStageDispose?.(() => em.stop());
       jobs.push(c.tweenRaw(em, { rate }, { durationMs: 2400, delayMs: lag }));
     }
-    // ④b 热浪环：以 Boss 为心的三圈 outward 发射 + 上升偏置（emitter 方向窗/径向散布，
-    //    09-23 新增能力）——内圈亮金而急、中圈主橙、外圈暗红大而缓（余烬碎皮感）；
+    // ④b 热浪环：以 Boss 为心的三圈 outward 发射 + 上升偏置（emitter 方向窗/径向散布）
+    //    ——内圈亮金而急、中圈主橙、外圈暗红大而缓（余烬碎皮感）；
     //    速率/尺寸/颜色/起步全不同，读作热气从火主身上一圈圈荡开、向上蒸腾
     const heatRings = [
       { r: H * 0.5, rate: 36, speed: 15, vby: 9, size: 1.1, color: 0xffd9a0, ttl: 1.4, lag: 300 },
@@ -474,7 +474,7 @@ async function pyroP2({ ctx, args, cast, particles, shake, vignette, camera, onS
   unit.restoreColor?.();
 }
 
-// —— 命中 beat（火主题，2026-10-09 返工）：术士的火不是钝器——命中 = fireBurst
+// —— 命中 beat（火主题）：术士的火不是钝器——命中 = fireBurst
 // 落点爆（锚玩家脚边、火向上烧）+ 溅烬，不再是 punchImpact 换色。重击 = 更大的
 // 火体 + 暖闪 + 震屏（enemyImpactBeat 骨架整段弃用：拳环读「打」，火体读「烧」）。
 async function pyroHitBeat(ctx, deps, args) {
@@ -586,7 +586,7 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
     return;
   }
   if (kinds.includes('debuff')) {
-    // P2「全场点燃」（2026-10-13 前摇加深）：大动作三段读——
+    // P2「全场点燃」：大动作三段读——
     //   蓄（~0.95s）：世界先压暗半档（全场的火都向他倾）→ 后仰展身 + 余烬成批
     //     倒吸（渐密渐急）+ 环绕火球收进体内；
     //   憋（0.2s）：顶点高频微颤、万籁俱寂的一瞬（大爆发前的静默拍）；
@@ -701,7 +701,7 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
   if (kinds.includes('buff')) {
     // 转段蓄力拍（kinds ['buff'] 但 _bossPhase 未置位）：让位给 pyroP2 大剧本
     if ((unit._bossPhase ?? 1) < 2) return;
-    // P2「吸纳火焰」（2026-10-09 重制）：全场的火被抽干——火从每个燃烧源身上撕出来
+    // P2「吸纳火焰」：全场的火被抽干——火从每个燃烧源身上撕出来
     // 倒灌进他胸口。压迫感 = 世界先暗半拍（火都走了）→ 他在汇聚点越烧越亮
     const to = { x: from.x, y: from.y, z: from.z };
     const id = unit.uniqueID;

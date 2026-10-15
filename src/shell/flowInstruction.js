@@ -32,8 +32,8 @@ export function enqueueFlowInstruction(dedicatedSequencer, { tag, meta, entryOk,
 /**
  * 轮询等待条件成立（流程指令 play 内的「等舞台/局面就绪」段共用形状）。
  * 刻意**没有超时**：等待条件含玩家节奏段（选卡/特写收下），墙钟保险丝会误杀
- * （时基裁决同 battle-span）；pred 读取的世界消失时应自然返回真值收尾
- * （可选链落到 undefined 的取反），不靠超时兜底。
+ * （时基约定同 battle-span）；pred 读取的世界消失时应自然返回真值收尾
+ * （可选链落到 undefined 的取反），不靠超时收尾。
  */
 export function waitFor(pred, everyMs = 150) {
   return new Promise((resolve) => {

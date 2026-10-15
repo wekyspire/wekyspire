@@ -825,3 +825,42 @@ scalars + 新增 kind-target 9/9 与 duty-gate 9/9）+ npm test PASS + build ✓
 
 **开放任务（用户令）**：单独一轮「兜底代码没删干净 / 不需要的兜底逻辑与状态」全库排查
 （已记 TODO.md）。
+
+
+## 9.21 全库兜底排查 + 注释精简（用户令的独立清理轮）
+
+三片只读排查（shell / stage / core+bridge）+ 七区注释编辑并行铺开，逐条裁决落地。
+
+**兜底删除（行为零变化类）**：App.vue enterEndScreen 重复调用（构造尾单源）；quiescence
+capMs 死参 + deadline 永假分支；transitionStage / maybeEnterRestScene 的 `if (!enqueued)`
+永假分支；SceneWipeOverlay `??` 永假；claimReward 清 slot.lastSpin（问句 close 已单源）；
+panelSnapshot canStartBattle 永真 flag（连同 prep.js 消费位）；ascension totalLeino 死导出；
+stagePickerKit upgrading/burning 空挂 getter；rig paintBulbs 死参 / isDemon 死 API /
+st 未初始化字段补齐；machines/slotMachine `_removeGift(0.5)` 被忽略实参；sync.js reconcile
+路 _updateDoomMarks 重复刷新；RoomStage `_activate` 的 stagePanel 不可达分支；MapStage
+arriveFloor 防御 _settleRise（onExit 收真路径）；campTraining 'train' 三层保险的最外不可达层；
+cards.js DRAIN_FLIGHT_MS 固定延迟死路（光珠真到达已全覆盖）。
+
+**兜底改 throw（静默降级 → 显式契约破裂）**：runDriver 训练尾款防御 break；gurpas /
+shop 未知商品类型兜底；slotMachine takeSlotPrize 空候选硬化（decline 出口仍在）；runFlow
+roomOf 无表现场随机（回落会静默消耗 rng 主账本）。
+
+**真 bug 修复**：① toTitle/dispose 不停氛围床（营地 Esc 回主菜单篝火氛围一路响）——
+stopAmbience 收进 runController.dispose 单源，enterEndScreen 的死位删除；②
+stagePickerKit burnBusy 声明「同上吞指针」但三条路由都没查——补齐三处 + dispose 重置。
+
+**恒真可选链成组清理**（同一进程内必真的 `?.`，headless 合法缺席的外层保留）：
+runController / runShowcase / runMachines / runQuestions / runCutsceneFlows / stageDirector /
+App.vue / BattleStage / battleBeats（units/sync）。⚠ `_drainFx?.` 保留——createResourceDrainFx
+池缺位返 null 是真缺口（排查代理误判，已复核）。
+
+**注释精简**：全库 ~160 文件，删日期/轮次/出处/旧版对照考古（规则留为现在时陈述），
+删所见即所得复述与跨点重复；relies：核心抽象注释保留设计原则，口径/时序/不变量保留。
+
+**保留的拿不准项（报用户裁决）**：panelSnapshot 'training'/'camp' 旧档分支（saveRestore
+原样恢复旧 roomTable——存档截断日拍板）；event.js findScript 内容删除退回重抽（事件
+注册表仍在活跃迭代）；runFlow+shell 的 ascensionReady 离房接棒双写（跨层恢复路径，两片
+排查结论相左，保守双留）。
+
+**验证**：冒烟（duty-gate 9/9、kind-target 9/9、devour 14/14、smoke-run 6 种子整局 ✓ +
+floor12 预存卡死复现即已知问题）+ npm test PASS + build ✓ + e2e trainq/slotq 全绿。

@@ -67,9 +67,8 @@ export const inputBeats = {
   /**
    * 战斗常驻按钮（结束回合 / 换卡）的悬停态。这两枚是**直接挂在舞台上**的 CardObject，
    * 不像休息房面板按钮那样走 `PanelObject.onHover → ButtonObject.setHovered` —— 漏喂就完全
-   * 没有 hover 反馈（实报"结束回合和换卡没有 hover 效果"）。悬停走按钮面的
-   * active 主题（淡蓝底），与整套 `bakeButtonFace` 按钮同一套语言；传 null 清空
-   * （模态/拖拽/瞄准期间不该留高亮）。
+   * 没有 hover 反馈。悬停走按钮面的 active 主题（淡蓝底），与整套 `bakeButtonFace`
+   * 按钮同一套语言；传 null 清空（模态/拖拽/瞄准期间不该留高亮）。
    */,
   _syncButtonHover(hit) {
     const id = hit?.kind === 'button' ? hit.id : null;
@@ -116,8 +115,8 @@ export const inputBeats = {
       if (displayPlayable && this.bridge.intents.canPlayCard(hit.id)) {
         // 按投影 targetMode 分流：选目标卡进瞄准（卡留手牌），免目标卡旧式拖拽（卡随指针）。
         // **可选目标只剩一个时不进瞄准**：退化成免目标卡的拖拽交互（拖过出牌线即打出，
-        // 目标自动取那唯一的候选人）——用户定 单目标也**不要**"点一下就出牌"，
-        // 出牌手势必须一致（"点按"在手牌里没有语义，误触代价太大）。
+        // 目标自动取那唯一的候选人）——单目标也**不要**"点一下就出牌"，出牌手势必须
+        // 一致（"点按"在手牌里没有语义，误触代价太大）。
         const targetMode = proj?.hand.find(c => c.uniqueID === hit.id)?.targetMode ?? 'none';
         const solo = (targetMode === 'enemy' || targetMode === 'ally')
           ? this._soloTargetId(targetMode) : null;

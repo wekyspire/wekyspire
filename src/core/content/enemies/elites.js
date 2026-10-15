@@ -80,7 +80,6 @@ registerEnemy({
 
 // ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
 // 被斩杀），首拍扑咬 24；随后三拍循环：盾15+中毒8 → 盾15+攻12 → 晕眩发呆（破盾窗口）。
-//（2026-10-10 加强：中毒固定伤化后 6→8、攻 10→12，对齐 ENEMIES_1.md 新稿）
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
@@ -155,7 +154,7 @@ registerEnemy({
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
 });
 
-// ㉑ 幼年罗刹（第 1 章精英；ENEMIES_1.md 2026-10-09 新增，文档 id 栏是模板复制残留）：
+// ㉑ 幼年罗刹（第 1 章精英；ENEMIES_1.md 的 id 栏是模板复制残留，以代码为准）：
 // 惩罚不可控攻击节奏——开局暴怒1（被打就长力量），三拍复读：攻3×3 → 攻3×4+暴怒1
 // → 力量2。高爆发/可控的牌组打起来通顺，蹭刀流会把它喂起来。
 registerEnemy({

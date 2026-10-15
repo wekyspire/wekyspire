@@ -22,7 +22,7 @@ export function buildPrepPanel(snap) {
   w.push({ kind: 'gap' });
   w.push({
     kind: 'button', id: 'prep:start', label: '进入战斗', size: 'main',
-    enabled: snap.canStartBattle !== false, action: { action: 'startBattle' },
+    action: { action: 'startBattle' },
   });
   return w;
 }

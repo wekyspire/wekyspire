@@ -31,8 +31,8 @@ import { startCloudNoiseBake } from '../stage/scenes/cloudNoise.js';
 import { probeWebGpuAdapter } from '../stage/webgpuProbe.js';
 // 内容注册表（卡牌/敌人/事件定义，随内容膨胀只会更重）切出急加载图（L2，
 // quest_prompts/ASSET_PACK.md）：动态 import 与 GPU 探测/美术预载**并行**下载；
-// 放行门 = 美术 ∧ 内容双就绪。此前它是静态 import——内容代码（tooltipHub 块
-// 1.55MB 的主要成分）随 modulepreload 急加载，放行时间随内容膨胀线性恶化。
+// 放行门 = 美术 ∧ 内容双就绪。若走静态 import，内容代码（tooltipHub 块
+// 1.55MB 的主要成分）会随 modulepreload 急加载，放行时间随内容膨胀线性恶化。
 const contentReady = ref(false);
 let contentPromise = null;
 function loadContent() {
@@ -68,8 +68,8 @@ const stage = computed(() => ctrl.value?.run.gameStage ?? 'prep');
 // （此后所有舞台首拍同步命中素材缓存，无占位闪变）。
 // 加载门视觉在**静态启动壳**（index.html 内联，JS 到达前已上色）：进度/失败/GPU 门
 // 经 window.__bootShell 推入；Vue 侧只留 assetsReady 状态机与揭幕时机。
-// ⚠ 失败不放行：终止下载/断网会让 onerror 落定，早期实现照常放行
-// →"掐掉下载也能带着缺图进游戏"；现在失败推给壳卡住并给重试键（__bootRetry）。
+// ⚠ 失败不放行：终止下载/断网会让 onerror 落定，若照常放行就成了
+// "掐掉下载也能带着缺图进游戏"；失败推给壳卡住并给重试键（__bootRetry）。
 const assetsReady = ref(false);
 // WebGPU 兼容门：不支持的设备卡死在启动壳，不做 WebGL 回退。
 // 检测在预载**之前**——不过门的设备连下载都不开始（gpuUnsupported 恒挡 assetsReady）。
@@ -94,7 +94,7 @@ function startAssetPreload() {
   // 大流量，请求数 4×音频 → 1，进度按字节累加单调可读）
   let artS = null, audS = null;
   let audTotalHint = 0;   // manifest 提前量出的音频包字节数：音频串行在美术后，分母从第 0 秒
-  // 就要含它——否则进度条先冲到美术 100%、音频开跑又跌回去（总分母「没囊括音频」的实报）
+  // 就要含它——否则进度条先冲到美术 100%、音频开跑又跌回去（总分母没囊括音频）
   const emitProgress = () => {
     const done = (artS?.done ?? 0) + (audS?.done ?? 0);
     window.__bootShell?.progress({
@@ -122,7 +122,7 @@ watch([assetsReady, contentReady], ([a, c]) => { if (a && c) window.__bootShell?
 (async () => {
   const adapter = await probeWebGpuAdapter();
   if (!adapter) {
-    // 区分「非安全上下文」与「真不支持」（裸 IP 访问踩坑）：http +
+    // 区分「非安全上下文」与「真不支持」（裸 IP 访问的场景）：http +
     // 非 localhost 下 navigator.gpu 根本不存在，失败页需要给出可操作的引导而非
     // 一句「设备不支持」（浏览器明明支持）。
     const insecure = typeof window !== 'undefined' && window.isSecureContext === false;
@@ -159,14 +159,14 @@ const menuWipe = createSceneWipe();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function newGame({ storyMode = false, loadSave = null, debugMode = false, route = 'body' } = {}) {
-  ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
+  ctrl.value?.dispose(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
   detachTooltipForward = null;
-  mapStage?.dispose?.();
+  mapStage?.dispose();
   mapStage = new MapStage({});
   ctrl.value = createRunController({
     stageManager, mapStage, save: loadSave, storyMode, debugMode, route,
-    onRestart: () => onStart(), // 结算屏「再来一局」出口（与旧 EndPanel 的 restart 同语义）
+    onRestart: () => onStart(), // 结算屏「再来一局」出口
   });
   ctrl.value.debug.setToast((text) => showPopup('调试', text));   // 调试回执同时进全局 toast
   // 地图舞台的输入通道 + 常驻 tooltip 转发：装配点在此（同时持有 stageManager 与 animBus）
@@ -181,16 +181,15 @@ function newGame({ storyMode = false, loadSave = null, debugMode = false, route 
   phase.value = 'game';
   menuOpen.value = false;
   // 调试档可能是"房内现场"（造档工具产出）：补一次进房派发（幂等：已在房内则只刷演出）
-  if (ctrl.value.run.gameStage === 'room') ctrl.value.enterRoomPresentation?.();
-  // 读档落在终局（存档语义允许 'end' 落盘）：直接切进结算屏
-  if (ctrl.value.run.gameStage === 'end') void ctrl.value.enterEndScreen?.();
+  if (ctrl.value.run.gameStage === 'room') ctrl.value.enterRoomPresentation();
+  // 读档落在终局：构造尾 settleStageEffects 已单源路由进结算屏
   if (settings.debugMode) debugUi.open = true;   // 调试模式开着就默认把面板摆出来（省一次 F9）
   // 冒烟/控制台钩子
   window.__shell = { ctrl, stageManager, newGame };
 }
 
 function onStart(opts = {}) {
-  // 切幕进入（用户 2026-10-09 定）：黑幕盖满后才换台建局，揭幕即塔楼——不再闪切。
+  // 切幕进入：黑幕盖满后才换台建局，揭幕即塔楼，不闪切。
   // 菜单期没有 ctrl（其切幕层随 ctrl 渲染），故用 App 自持的 menuWipe 走完整段；
   // 覆盖期间 host 吸收一切点击，开始键天然防连点。
   menuWipe.begin();
@@ -243,10 +242,10 @@ async function autoStartFromUrl() {
 function toTitle() {
   stopMusic(); // 无尽模式回主菜单没有标题曲兜底，战斗 BGM 在此收掉（故事模式由 StartScreen 换轨）
   stopWind();  // 风声床只随局存在
-  ctrl.value?.dispose?.(); // 战斗舞台释放 + 挂起演出瞬落
+  ctrl.value?.dispose(); // 战斗舞台释放 + 挂起演出瞬落
   detachTooltipForward?.();
   detachTooltipForward = null;
-  mapStage?.dispose?.();
+  mapStage?.dispose();
   mapStage = null;
   ctrl.value = null;
   menuOpen.value = false;
@@ -261,13 +260,13 @@ function toTitle() {
 // ⚠ 房内进阶（训练改版）期间 gameStage 是 'ascension' 但 RoomStage 仍存活
 // 且仍是**渲染中的舞台**——种子包等阶段模态面板画在它的 uiScene 上。此时指针必须继续
 // 喂 RoomStage，否则会喂给不可见的 MapStage（它也建了同一份面板：tooltip 走全局总线
-// 照常弹、点击却在操作看不见的副本——用户报「种子包 hover/点选失效」的病灶）。
+// 照常弹、点击却在操作看不见的副本）。
 // 离房路径的 ascension（completeRoom 已拆 roomStage）不满足 roomStage 存活条件，自然回地图。
 // 路由本体在 stageDirector（runController 持有，一处派生）；此处只做 ctrl 就绪前的回落。
 function activeStage() {
   const c = ctrl.value;
   if (!c) return null;
-  return c.director?.inputStage(c.run.gameStage) ?? mapStage;
+  return c.director.inputStage(c.run.gameStage);
 }
 
 function onPointer(type) {
@@ -283,7 +282,7 @@ function onPointer(type) {
 // 预生成指针 handler：模板里直接写 onPointer('x') 只会调工厂丢弃闭包，$event 传不进去
 const onPointerMove = onPointer('handlePointerMove');
 // 滚轮专用：通用 onPointer 传的是指针坐标，而 handleWheel 要的是 **e.deltaY**
-// （原实现把 clientX 当 deltaY 传进去，导致只能向下滚、无法向上——交互 bug 已修）。
+// （不是指针坐标）。
 // 方向保持浏览器原生语义（向下滚 deltaY > 0 = 内容上移/看后面的卡）。
 function onWheel(e) {
   const stage = activeStage();

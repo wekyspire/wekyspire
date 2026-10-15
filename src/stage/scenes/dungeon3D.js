@@ -37,7 +37,7 @@ const FLOOR_FAR_Z = -80;
 const LEFT_WALL_X = -95;
 const LEFT_WALL_TH = 12; // 左墙厚度：必须 > 2 个 shadow texel（2048/400≈5wu/texel），否则 PCF 边缘漏光
 
-const TORCH_LIGHT_BASE = 460; // 幽火点光基准强度（2026-10-11 大幅削弱，旧值 1150 晃眼；与 rooms/lighting.js FIRE_BASE 同口径）
+const TORCH_LIGHT_BASE = 460; // 幽火点光基准强度（与 rooms/lighting.js FIRE_BASE 同口径）
 const CHANDELIER_LIGHT_BASE = 800;
 const MOONLIGHT_BASE = 2.2;    // 月光平行光强度（穿窗投影的主角：窗形光池要读得出来）
 const FLAME_RATE = 12;          // 每幽火火焰粒子 /秒
@@ -525,7 +525,7 @@ export function buildDungeon3D() {
   // position 对平行光只决定**阴影相机的深度原点**（光照方向 = position→target 不变）：
   // 必须沿光轴反向后移足够远，让整面高墙（到 +460）都落在阴影相机近平面之前——
   // 墙在 y≈49.5 以上沿光轴深度为负会被 near 裁掉，shadow map 缺上半墙，
-  // 回溯打中上半墙的采样读空深度=恒亮（右上角漏光楔形的真凶，其边界即 y≈49.5 等高线）
+  // 回溯打中上半墙的采样读空深度=恒亮（右上角漏光楔形即此因，其边界即 y≈49.5 等高线）
   moonlight.position.set(LEFT_WALL_X - 145, 145, -29);
   moonlight.target.position.set(30, FLOOR_Y, 0);
   group.add(moonlight);
@@ -598,7 +598,7 @@ export function buildDungeon3D() {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
           t.emitterAcc -= 1;
-          // 火星粒子（2026-10-09 用户定）：尺寸减半以上、亮度适量削减（同 rooms/lighting.js）
+          // 火星粒子：尺寸减半以上、亮度适量削减（同 rooms/lighting.js）
           particles.spawn(t.x + (Math.random() - 0.5) * 1.6, t.y + 2.2, {
             count: 1, z: t.z, color: Math.random() < 0.35 ? 0x96999e : 0x6c7075,
             speed: 4.2, ttl: 0.6, gravity: 2, // 上浮

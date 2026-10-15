@@ -1031,7 +1031,6 @@ export class MapStage {
     });
     const fromFloor = this._cameraFloor; // 雪相插值起点（跨 11→12 爬升时雪渐变成风暴配方）
     this._cameraFloor = floor;
-    this._settleRise(); // 串行队列下理论不可达，防御上一段未收的爬升
     const proxy = { k: 0 };
     const finish = () => { this._floorChrome.markLanded(floor); onDone?.(); };
     this._riseDone = finish;

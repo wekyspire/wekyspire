@@ -1,5 +1,5 @@
 // 数字/短文本烘焙：血量 / 护盾盾值共用。
-// 描边纪律（2026-10-11 用户定）：文道潮黑本体即粗，描边只给发丝级（fontPx×0.07），
+// 描边纪律：文道潮黑本体即粗，描边只给发丝级（fontPx×0.07），
 // 且与粗体互斥——合成 bold 已全线禁用，描边不再承担「仿粗」职责。
 // 逻辑像素按全局 10px/世界单位 约定（width/height 即世界尺寸 ×10）；
 // node 无 document 不走此路径（各控件注入 baker 兜底）。
@@ -67,12 +67,12 @@ export function bakeRichLine(text, {
 
 /**
  * **auto 单行烘焙**：有 markup 走 bakeRichLine，没有则原样走 bakeBoldText。
- * 这是面板/特写一类的缺省烘焙——纯文本行的排版与观感与改动前**一致**
- * （无回归），只有写了 markup 的行才切换到富文本渲染。
+ * 这是面板/特写一类的缺省烘焙——纯文本行仍走 bakeBoldText（观感零变化），
+ * 只有写了 markup 的行才切换到富文本渲染。
  *
  * ⚠ 两条路径的描边参数名不同：bakeBoldText 的 `stroke` 是**颜色**（它自带宽度），
  * 富文本路径要的是**宽度** `strokeWidth`；auto 里缺省按字号推导（与 bakeBoldText
- * 内部口径 max(3, fontPx×0.2) 对齐），颜色仍是那支深墨。
+ * 内部口径 max(1.2, fontPx×0.07) 对齐），颜色仍是那支深墨。
  * @param {object} opts bakeBoldText 的 opts（fontPx/tint/stroke/italic）+ strokeWidth/bold
  */
 export function bakeAutoLine(text, opts = {}) {

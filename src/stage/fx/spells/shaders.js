@@ -1,11 +1,11 @@
 // 施术演出 shader 库（TSL——WebGPU 迁移后内嵌 shader 的唯一写法，范式抄
 // CardFxLayer 的 veil/edgeGlow：MeshBasicNodeMaterial + colorNode 全量接管输出）。
-// TA 纪律（2026-09-30 用户定）：好看的特效大部分靠 shader 写，geometry transform
+// TA 纪律：好看的特效大部分靠 shader 写，geometry transform
 // 只做辅助——面片只是画布，形状/扫掠/拖尾/渐隐全在 fragment 里算。
 // 纪律：WGSL smoothstep 一律正向写法（反向边用 oneMinus）；无控制流（纯算术）；
 // 加色混合（additiveLight，rgb 直出、alpha 恒 1）；核心推过 bloom 阈 1.45 起晕。
 // ⚠ 色参一律**常量 vec3 节点**（调用侧 vec3(r,g,b) 烘进 Fn），不走 Color 型 uniform
-// ——2026-09-30 实测：Color uniform 的彩色造型层会在部分编译会话里整体失显
+// ——Color uniform 的彩色造型层会在部分编译会话里整体失显
 // （白核项活、色缘项死、跨会话非确定；同文件未改动的 Fn 也会被连带重编退化），
 // 与 darkSlashShade 的「Fn 末参不绑定」同族的管线缓存坑。颜色无需运行时变更，
 // uniform 纯属白给绑定风险。只有**逐帧动画的标量**（uProgress/uArc/uDir/uSeed）用
@@ -24,7 +24,7 @@ import {
  *    （头前缘 smoothstep 正向截断：未扫过区域严格为 0）；
  *  · 细条纹调制（刀锋流光的方向感）+ 全局尾段渐隐。
  *  · 画布横向加宽 SLASH_QUAD_SPAN 倍 + x 坐标补偿（世界形状不变）——扫掠头热区
- *    原本直接冲出 quad 直边（用户实测横向两道断层）；真边缘由 edge mask 软收。
+ *    原本直接冲出 quad 直边，横向读出两道断层；真边缘由 edge mask 软收。
  * @param vUv       quad uv
  * @param uProgress 0..1 扫掠进度（block 侧 tween 推 uniform）
  * @param uColor    vec3 核心色（线性；峰值 ~2.4×HDR）
@@ -48,7 +48,7 @@ export const slashShade = Fn(([vUv, uProgress, uColor, uFringe, uArc, uDir, uDbg
   const thin = taper.mul(0.55).add(0.45);   // 宽度系数 0.45..1
   // 截面用**显式宽度**（UV 单位）分层——塞进一条薄带里核/晕/影互相挤压读不出层次：
   //   热核 ~4px 细线（HDR 白）、aura 3 倍宽冷蓝裙（阈下辉光）、画布高 5 世界单位给裙展开空间
-  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.16)));    // 核宽 0.16uv（质量整改加宽）
+  const dyC = abs(y.sub(yc)).div(thin.mul(float(0.16)));    // 核宽 0.16uv
   const core = exp(dyC.mul(dyC).mul(-1.0));
   const dyA = abs(y.sub(yc)).div(thin.mul(float(0.42)));    // 裙宽 2.6×核
   const fringe = exp(dyA.mul(dyA).mul(-1.0));
@@ -101,9 +101,9 @@ export const darkSlashShade = Fn(([vUv, uProgress, uArc, uDir]) => {
 
 /**
  * 投射物能量核：径向双层（宽晕 + 热核 HDR 闪烁）。
- * （2026-10-02 拆分：原 coreShade 的第 5 参 uRing 是绑定雷区——uRing=0 时整个
- * colorNode 输出全灭（投射物从未真正渲染，「火球」一直是尾迹粒子+灯在撑场）；
- * 按「Fn ≤4 参」纪律拆成投射物/闪光两个 4 参版本。）
+ * （Fn ≤4 参纪律：第 5 参是绑定雷区——第 5 参为 0 时整个 colorNode 输出全灭
+ * （投射物从未真正渲染，「火球」一直是尾迹粒子+灯在撑场）；故拆成投射物/闪光
+ * 两个 4 参版本。）
  * @param vUv quad uv
  * @param uProgress 任意单调时间量（供闪烁）
  * @param uColor vec3 晕色（线性）
@@ -120,7 +120,7 @@ export const projectileShade = Fn(([vUv, uProgress, uColor, uHot]) => {
 });
 
 /**
- * 晶片（回蓝语汇的资源形状——与 projectileShade 光珠同族异形，2026-10-09）：
+ * 晶片（回蓝语汇的资源形状——与 projectileShade 光珠同族异形）：
  *  · 形状 = 长菱晶粒（x 长轴四向收锐），中线亮脊（内棱面全反射）+ 随 uProgress
  *    掠过长轴的棱面火彩（飞行中的晶体反光扫动）；
  *  · 边缘熄灭 mask（直边穿帮铁律）；热核脊推 HDR 过阈起晕（bloom 代劳辉光）；
@@ -153,7 +153,7 @@ export const ringFlashShade = Fn(([vUv, uProgress, uColor, uHot, uSeed]) => {
   const p = vUv.sub(vec2(0.5));
   const r = length(p).mul(2.0);
   // 边缘熄灭（punchShade 同款纪律）：环在高进度逼近 quad 直边，无 mask 会在
-  // 地板上切出矩形亮痕（glm-flash 复审实测）
+  // 地板上切出矩形亮痕
   const mask = oneMinus(smoothstep(float(0.40), float(0.49), abs(p.x)))
     .mul(oneMinus(smoothstep(float(0.40), float(0.49), abs(p.y))));
   const hole = smoothstep(float(0.12), float(0.52), r);   // 内孔：中心让位给热核
@@ -193,11 +193,11 @@ export const punchShade = Fn(([vUv, uProgress, uColor, uHot, uRim]) => {
   const x = p.x.mul(float(PUNCH_QUAD_SPAN));   // 跨度补偿：画布加宽、世界形状不变
   const y = p.y;
   // 边缘熄灭：mask 带全部落在内容包络之外——环峰 r_max 0.61 折回 |p.x|≤0.41 /
-  // |p.y|≤0.41（2026-10-07 调形：环收小 + 压扁 2.1→1.5 后重算，速度线由径向衰减
-  // 自然归零，mask 只兜尾段残量——上下直边不再当腰掐亮内容）
+  // |p.y|≤0.41（速度线由径向衰减自然归零，mask 只兜尾段残量——上下直边
+  // 不当腰掐亮内容）
   const mask = oneMinus(smoothstep(float(0.43), float(0.50), abs(p.x)))
     .mul(oneMinus(smoothstep(float(0.43), float(0.50), abs(p.y))));
-  // y 压扁 1.5 倍 → 环横向拉长（贴身水平撞击，不是球形爆炸；原 2.1 过扁）
+  // y 压扁 1.5 倍 → 环横向拉长（贴身水平撞击，不是球形爆炸）
   const r = length(vec2(x, y.mul(1.5)));
   const ring = exp(pow(abs(r.sub(uProgress.mul(0.48).add(0.13))), float(2.0)).mul(-45.0));
   const core = exp(r.mul(r).mul(-16.0)).mul(pow(oneMinus(uProgress), float(2.0)));
@@ -231,7 +231,7 @@ export const punchShade = Fn(([vUv, uProgress, uColor, uHot, uRim]) => {
 export const fireBurstShade = Fn(([vUv, uProgress, uColor, uHot, uEmber, uSeed]) => {
   const p = vUv.sub(vec2(0.5));
   const q = vec2(p.x, p.y.add(0.30));            // 原点下移：上方留体积
-  // mask 渐变带加宽（0.20 起）：窄带硬切断读「直边笔直」（glm-flash 三轮实测）
+  // mask 渐变带加宽（0.20 起）：窄带硬切断读「直边笔直」
   const mask = oneMinus(smoothstep(float(0.20), float(0.48), abs(p.x)))
     .mul(oneMinus(smoothstep(float(0.24), float(0.48), abs(p.y))));
   const rq = length(vec2(q.x, q.y.mul(0.66)));   // 纵向拉长的火体半径
@@ -239,13 +239,12 @@ export const fireBurstShade = Fn(([vUv, uProgress, uColor, uHot, uEmber, uSeed])
   const wane = oneMinus(smoothstep(float(0.40), float(1.0), uProgress));
   // 火舌剪影：向上收尖（上部质量递减——火焰不是矩形板）
   const taper = oneMinus(smoothstep(float(-0.10), float(0.50), q.y).mul(0.65));
-  // fbm 湍流（2026-10-06 升级：sin 双频在 fbm 旋涡旁读机械——火的卷曲感要域噪声）
+  // fbm 湍流：sin 双频在 fbm 旋涡旁读机械——火的卷曲感要域噪声
   const turb = fbm2(vec2(q.x.mul(2.6).add(uSeed), q.y.mul(2.2).sub(uProgress.mul(1.4))))
     .mul(0.55).add(0.62);
   const body = exp(rq.mul(rq).mul(grow.mul(2.4).sub(8.2))).mul(wane).mul(taper).mul(turb);
   // 深红缘：火体外缘一圈（色温分层的外层——「像火」的关键层）。环心收进 0.36、
-  // 带展宽到 -30、幅值 1.5——旧版 0.42/-40/1.1 贴着 quad 边缘 mask 被掐掉半幅，
-  // 实测读不出红带（glm-flash 复审）
+  // 带展宽到 -30、幅值 1.5——红带须收回 mask 带之内，贴着 quad 边缘会被掐掉半幅
   const rim = exp(pow(abs(rq.sub(0.36)), float(2.0)).mul(-30.0)).mul(wane).mul(taper).mul(float(1.5));
   // 上升热柱（白热芯向上拔的火舌——y 高斯放宽到 -5.5：舌头更高，火「缠身」不「腰间着火」）
   const plume = exp(q.x.mul(q.x).mul(-30.0)
@@ -327,7 +326,7 @@ export const veilShade = Fn(([vUv, uProgress, uColor, uHot, uSeed]) => {
 // blocks.js 的 linearColor 帮手统一装配。勿改回 Color 型 uniform——管线缓存坑，
 // 见文件头注。
 
-// ---- 火系投射物 / 体修聚气 / 贴地环（2026-10-06 审计重制批）------------------
+// ---- 火系投射物 / 体修聚气 / 贴地环 ------------------
 
 /**
  * 火弹能量核（fireOrb——火系投射物专属，替代 projectileShade 的「发光团」）：
@@ -351,9 +350,8 @@ export const fireOrbShade = Fn(([vUv, uPhase, uColor, uHot, uSeed]) => {
   const rr = length(vec2(x.div(oneMinus(tail.mul(0.45))), p.y.mul(1.35)));
   const ang = atan(p.y, x.add(0.01));
   // **fbm 雕刻剪影**：覆盖率 = 噪声场 − 径向距离 的平滑阶跃——外轮廓由噪声
-  // 定义（舔火缺口/锯齿缘），不是径向高斯被 quad 裁形（v2 病根：等亮线是直边）。
-  // 头尾轴向梯度（v4：v3 四象限均分读不出方向——三处贯通：尾侧阈值抬高碎散、
-  // 热度头×1.2 尾×0.7、热核前移）
+  // 定义（舔火缺口/锯齿缘），不是径向高斯被 quad 裁形（那会让等亮线成直边）。
+  // 头尾轴向梯度三处贯通：尾侧阈值抬高碎散、热度头×1.2 尾×0.7、热核前移
   const axial = x.mul(0.5).add(0.5);                          // 0 尾 .. 1 头
   const tailBias = oneMinus(axial).mul(0.16);
   const n = fbm2(vec2(ang.mul(1.8).add(uSeed), rr.mul(2.4).sub(uPhase.mul(1.1))));
@@ -373,7 +371,7 @@ export const fireOrbShade = Fn(([vUv, uPhase, uColor, uHot, uSeed]) => {
     .add(uHot.mul(cov.mul(heat).mul(1.6)))
     .add(uColor.mul(tailWisp).mul(1.0))
     .add(uHot.mul(core.mul(2.2)));
-  // 头尾梯度乘在**最终合成色**上（v4 病根：乘在中间场会被 smoothstep/覆盖率
+  // 头尾梯度乘在**最终合成色**上（乘在中间场会被 smoothstep/覆盖率
   // 截断吃掉——终乘是唯一保证到达成片的位置；头×1.2 尾×0.7）
   return vec4(rgb.mul(axial.mul(0.5).add(0.7)).mul(mask), float(1.0));
 });
@@ -457,7 +455,7 @@ const vnoise2 = Fn(([p]) => {
 const fbm2 = Fn(([p]) => vnoise2(p).mul(0.62).add(vnoise2(p.mul(2.13).add(19.7)).mul(0.38)));
 
 /**
- * 旋涡火幕（fireWhirl 火焰旋风 v2 的主体，2026-10-06 重做）：**圆柱面**上一场
+ * 旋涡火幕（fireWhirl 火焰旋风的主体）：**圆柱面**上一场
  * 真正的湍流火旋——不是条纹管。四层手艺：
  *   · **涡剪旋转采样**：噪声场坐标随时间旋转，角速度底部大顶部小（涡的剪切
  *     感——火根甩得快、火梢拖着走），叠加竖直上卷（火上飘）；
@@ -487,7 +485,7 @@ export const whirlShade = Fn(([vUv, uPhase, uProgress, uColor, uHot, uSeed]) => 
   const w2 = fbm2(q.mul(1.9).add(vec2(w1.mul(2.6).add(4.7), w1.mul(1.4))));   // 域扭曲：第二场被第一场弯折
   const f = w1.mul(0.35).add(w2.mul(0.65));
   // **撕裂场**（沿剪切方向缓变的第三场）：把连续螺旋带撕成数条独立火舌——
-  // 「几条火互相追赶」而不是「一条绸带绕圈」（glm-flash 终审病根①）
+  // 「几条火互相追赶」而不是「一条绸带绕圈」
   const tear = smoothstep(float(0.22), float(0.52),
     fbm2(q.add(vec2(uPhase.mul(0.35).add(9.3), uSeed.mul(0.7)))));
   // 覆盖率：阈值随高度平方抬升（顶上碎成孤舌）×撕裂；接缝渐隐
@@ -500,7 +498,7 @@ export const whirlShade = Fn(([vUv, uPhase, uProgress, uColor, uHot, uSeed]) => 
   // 视向假厚度：掠射（法线侧视）→ 亮且浓；正对 → 薄透——单壳读体积
   const graze = abs(normalView.x).mul(0.75).add(0.45);
   // 竖直火势：慢衰减（火裹全身到肩）+ **顶部破圆**（灭点高度随角向噪声起伏——
-  // 顶缘不是闭合甜甜圈，glm-flash 终审病根②的另一半）+ 火根贴地
+  // 顶缘不是闭合甜甜圈）+ 火根贴地
   const hTop = float(0.68).add(w1.mul(0.20));
   const venv = exp(h.mul(-1.35)).mul(oneMinus(smoothstep(hTop, hTop.add(0.14), h)))
     .mul(smoothstep(float(-0.03), float(0.10), h));

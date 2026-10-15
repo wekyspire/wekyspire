@@ -24,8 +24,7 @@ import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, 
 
 // ==== 点火系列（基石：点火 C/B/A）=============================================
 // 点火 C 已在 skills.js 定义；此处补 B/A 两阶。
-// 2026-10-10 火系大改：去伤害去费用（0 费、冷却1），改为「洗入1余烬 + 施加燃烧」
-// ——点火从直伤件变成余烬经济的启动器（燃烧 5/7/9）。
+// 点火是余烬经济的启动器：0 费、冷却1，「洗入1余烬 + 施加燃烧」（燃烧 5/7/9）。
 
 // 点火 B：0费，冷却1，洗入1余烬，施加燃烧 7。
 registerSkill({
@@ -383,9 +382,9 @@ registerFireControlPair('fireControlShiftA', '控火术：变', 'A', 2, 'none', 
 // ==== 火墙系列（C/B/A：火系的即时格挡补缺）====================================
 // 定位：火系输出碾压、但卡包里**盾牌稀缺**，所有防御都长在自燃转盾上、需要提前铺，
 // 被突袭时一张即时大盾都没有——本系列补这个洞。
-// 2026-10-10 火系大改：加成判据从「自身燃烧」改为「牌库余烬存量」——火墙读的是
-// 余烬经济（叠炎新资源轴）。护盾基础值三阶分化 6/9/12 + 牌库每张余烬 +2
-//（设计稿当日修订：三阶有区分）。全阶 1AP + 冷却 1（0 费盾不冷却 = 白嫖盾墙）。
+// 加成判据 = 牌库余烬存量——火墙读的是余烬经济（叠炎的资源轴）。
+// 护盾基础值三阶分化 6/9/12 + 牌库每张余烬 +2。
+// 全阶 1AP + 冷却 1（0 费盾不冷却 = 白嫖盾墙）。
 function fireWallCard({ id, tier, base, promotesTo = null }) {
   registerSkill({
     id, name: '火墙', type: 'fire', tier, series: 'fireWall', subsystem: 'blaze',
@@ -468,8 +467,8 @@ registerSkill({
 
 // ==== 涡轮增压系列（过卡：燃烧产量换抽牌）=======================================
 // 涡轮增压 C/B/A（全链消耗；C 带 1AP）｜抽 3/3/4；**自己诞生以来**全场每产生过
-// 5 层燃烧，此卡多抽 1（2026-10-10 火系大改新系列——设计稿注：卡进战斗后注册
-// 监听计数 AddEffect(burn) 正增量，计数挂在自身 runtime、可序列化）。
+// 5 层燃烧，此卡多抽 1（卡进战斗后注册监听计数 AddEffect(burn) 正增量，
+// 计数挂在自身 runtime、可序列化）。
 function turboChargerCard({ id, tier, draw, ap = 0, promotesTo = null }) {
   registerSkill({
     id, name: '涡轮增压', type: 'fire', tier, series: 'turbo', subsystem: 'blaze',

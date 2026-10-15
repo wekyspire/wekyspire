@@ -100,13 +100,13 @@ function perfectReady(sctx) {
   }
   return true;
 }
-// 标记：headless 的 why 诊断按此识别完美条件、点名左侧压位卡（第 6 轮 A 建议——
-// 「只报自定义条件不满足，玩家要自己反推是哪张」）
+// 标记：headless 的 why 诊断按此识别完美条件、点名左侧压位卡
+//（否则只报自定义条件不满足，玩家要自己反推是哪张）
 perfectReady.isPerfectCondition = true;
 
 // ==== 精准（完美/命中）系列 =====================================================
 // 伤害对标拳系白板（精准一击 15/2AP 对标拳 9/AP+完美小溢价），命中给格挡下放到全系列。
-// 数字阶梯：15格挡2 / 19格挡2 / 2×10 / 23格挡2 / S 30格挡4（2026-10-10 修订 B/A）。
+// 数字阶梯：15格挡2 / 19格挡2 / 2×10 / 23格挡2 / S 30格挡4。
 // 完美条件为战术挑战保留。
 // 【命中】口径（与 NAMED 词条一致）：**造成伤害即可触发**——不要求生命值伤害
 // （打在护盾上也算命中），被闪避/被 veto/目标已死才算未命中；
@@ -151,7 +151,7 @@ perfectSeries('pluckStarS', '摘星手', 'S', 30, { block: 4, series: 'pluckStar
 // 一击，逐层叠加面板会指数化膨胀）。基础伤害仍是标准攻击算式（基数+面板+power）。
 
 // 解体/贯心（破势系列攻击链 C/B/A）：基础伤害统一 9；破：每层 5/6/7 伤害
-//（破势的爆发全押在格挡层数上，低层数时也不纯亏；2026-10-10 修订 6/7/8 → 5/6/7）。
+//（破势的爆发全押在格挡层数上，低层数时也不纯亏）。
 const breakAttack = (id, name, tier, base, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'breakStance', subsystem: 'block',
   cost: { mana: 0, actionPoint: 1 },
@@ -284,8 +284,7 @@ sweepCard({ id: 'heavyStompA', name: '扫堂腿', tier: 'A', damage: 11, block: 
 sweepCard({ id: 'heavyStompS', name: '旋风腿', tier: 'S', damage: 18, block: 3 });
 
 // ==== 忍耐系列（受击转格挡）====================================================
-// 忍耐效果为常驻受击引擎（见 content/effects.js）；B/A 另加目标虚弱1
-//（2026-10-10 修订：撤「自身虚弱3」、3 → 1，并补 A 档 0 费位）。
+// 忍耐效果为常驻受击引擎（见 content/effects.js）；全链另加目标虚弱1。
 const endureCard = ({ id, tier, ap, promotesTo = null }) => registerSkill({
   id, name: '忍耐', type: 'normal', tier, series: 'endure', subsystem: 'block', image: 'endure',
   cost: { mana: 0, actionPoint: ap },
@@ -337,7 +336,7 @@ const turtleStanceCard = (id, name, tier, ap, blockPerTrigger, clumsy, promotesT
     return effect;
   },
 });
-// 全链咏唱 C/B/B/A=2、S=0（2026-10-10 设计稿修订：回摆 2）；龟守姿态 2AP；AP 与格挡量见各行。
+// 全链咏唱 C/B/B/A=2、S=0；龟守姿态 2AP；AP 与格挡量见各行。
 turtleStanceCard('defensePrepC', '防御准备', 'C', 2, 1, 0, ['defensePrepB', 'turtleStanceB'], 2);
 turtleStanceCard('defensePrepB', '守护姿态', 'B', 1, 1, 0, 'defensePrepA', 2);
 // 龟守姿态（B 支线）：格挡2，2AP（与守护并列的分叉位，不是守护的晋升目标）
@@ -348,11 +347,10 @@ turtleStanceCard('divineTurtleS', '神龟姿态', 'S', 1, 2, 0, null, 0, 'divine
 
 // 武术链（格挡转攻击）：激活期间，玩家为来源的每一条**主级**伤害指令 PRE 加
 // 「格挡层数 × N」。固定伤害（fixed）payload 白名单为空、不可修饰，跳过。
-// 2026-10-10 改版：C 位撤销（B 起步）、每层 +2 → +1（设计稿武术链重写——
-// 「每层格挡令全伤害 +1」，全伤害 = 一切可被修饰的主级伤害）。B 2AP 咏唱1 /
+// 「每层格挡令全伤害 +1」，全伤害 = 一切可被修饰的主级伤害。B 2AP 咏唱1 /
 // A(大师姿态) 1AP 咏唱1。
-// 主级过滤是精通病灶的修复本体：精通/无双每抽一张牌发一条固定伤害（fixed，
-// 天然不可修饰）——双重保险下爆炸伤病灶已根除。
+// 主级过滤同时挡住精通/无双的每抽一张固定伤害（fixed，天然不可修饰）——
+// 双重保险，格挡堆高也不会把这类伤害滚爆。
 const martialStanceCard = (id, name, tier, ap, per, weight, promotesTo) => registerSkill({
   id, name, type: 'normal', tier, series: 'martialStance', subsystem: 'block',
   cost: { mana: 0, actionPoint: ap },
@@ -449,9 +447,7 @@ handGateChant('haveWithoutA', '以有胜无', 'A', '若你手牌不少于3张',
   (sctx, battleState) => battleState.zones.hand.length >= 3,
   { block: 2, series: 'haveWithout' });
 
-// 活动筋骨（C/B/A，1AP/0AP/0AP，冷却1）：获得力量 1/1/2。
-// 2026-10-10 改版：原「B 起力量 1+N（随打出次数成长）」简化为固定值（设计稿 §1.2
-// 归拳子体系散卡，数值直写）；归属自拆子体系移入拳子体系，冷却 2 → 1。
+// 活动筋骨（C/B/A，1AP/0AP/0AP，冷却1）：获得力量 1/1/2（固定值，不随打出次数成长）。
 const rallyCard = (id, name, tier, ap, strength, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'rally', subsystem: 'fist',
   cost: { mana: 0, actionPoint: ap },
@@ -536,8 +532,7 @@ registerSkill({
 // ==== 散卡 =====================================================================
 
 // 快如雨（B→A）：冷却1——打出时按**本回合已打出的牌数**结算：每 3 张获得
-// 1 层格挡（向下取整，不含自身——发动卡结算时尚未计入）。B 1AP / A 0AP
-//（2026-10-10 修订：撤 C 档、疾如风并入本系列同名）。
+// 1 层格挡（向下取整，不含自身——发动卡结算时尚未计入）。B 1AP / A 0AP。
 const rapidBlockCard = (id, name, tier, ap, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'fastRain', subsystem: 'block',
   cost: { mana: 0, actionPoint: ap },
@@ -594,9 +589,8 @@ prepareCard('prepareMoveB', '准备出招', 'B', 0, 2, 'prepareMoveA');
 prepareCard('prepareMoveA', '准备出招', 'A', 0, 3);
 
 // 血拳 B/A（1AP，消耗）：打出后，本回合每打 1 卡恢复 1/2 生命。
-// 2026-10-10 归属变更：自拆子体系移入拳子体系（设计稿 §1.2 散卡）——过牌/出牌
-// 频率语言属拳。订阅挂 'turn' 窗口——回合结束自动清扫，「本回合」的时限由窗口
-// 语义承载；排除自身（自身打出时订阅尚未生效，双保险 filter）。治疗走 ApplyHeal 管线。
+// 订阅挂 'turn' 窗口——回合结束自动清扫，「本回合」的时限由窗口语义承载；
+// 排除自身（自身打出时订阅尚未生效，双保险 filter）。治疗走 ApplyHeal 管线。
 const bloodFistCard = (id, name, tier, heal, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'bloodFist', subsystem: 'fist',
   cost: { mana: 0, actionPoint: 1 },

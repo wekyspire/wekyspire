@@ -184,7 +184,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   }
   // 词条附赠（upgrade/burn offer）**不再摆按钮**：获得演出链尾自动开全屏选卡界面
   // （返回/关闭 = 放弃，runShowcase.discardBankOffer 消费 offer）——与训练/老虎机
-  // 「面板不留操作按钮、一切 overlay 化」同口径（2026-09-30 用户裁定）。
+  // 「面板不留操作按钮、一切 overlay 化」同口径。
 }
 
 /** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */

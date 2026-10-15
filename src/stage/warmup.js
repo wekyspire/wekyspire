@@ -1,11 +1,11 @@
-// 开屏轻量预热（2026-10-12 改造）：只做菜单期（开始界面盖布背后）安全且便宜的两段——
-//   ② uiScene 样卡（C0 卡面特效全链 + canvas 纹理 legacy 管线；uiComposer 后处理链
+// 开屏轻量预热：只做菜单期（开始界面盖布背后）安全且便宜的两段——
+//   ① uiScene 样卡（C0 卡面特效全链 + canvas 纹理 legacy 管线；uiComposer 后处理链
 //      随渲染循环自然走通），暖完即从 uiScene 摘除（菜单期不再逐帧渲染它）；
-//   ③ 施术面片全变体：技能注册表全 defId 走 warmSpellFx 既有机制（变体按程序去重）。
-// 原「逐间预建 PCG 房 + 体积月光 composer 真渲数帧再拆」的①段已删（2026-10-12）：
-// 拆房只摘不 dispose 泄漏 GPU 资源、暖场房 seed 与真房不同覆盖不精确、后台标签页下
-// rAF 停摆会把余段拖进游戏期——房间管线预热迁至自然挂载点（RoomStage 构造 = 幕间
-// 黑幕中点：compileAsync + initTexture，见 RoomStage.js）。
+//   ② 施术面片全变体：技能注册表全 defId 走 warmSpellFx 既有机制（变体按程序去重）。
+// 房间管线预热不进开屏：「逐间预建 PCG 房 + 体积月光 composer 真渲数帧再拆」
+// 不可行——拆房只摘不 dispose 泄漏 GPU 资源、暖场房 seed 与真房不同覆盖不精确、
+// 后台标签页下 rAF 停摆会把余段拖进游戏期——放在自然挂载点（RoomStage 构造 =
+// 幕间黑幕中点：compileAsync + initTexture，见 RoomStage.js）。
 // 全程 isLive 门控：玩家一开局（setStage 被游戏舞台接管），未做的段立即放弃，暖场
 // 不与游戏期竞争。`?warmup=0` 可关（排障口径）。
 // 暖场由 newGame 的 setStage 自然接管；菜单阶段常驻渲染成本 = 空场景一帧。
@@ -51,7 +51,7 @@ export async function runBootWarmup(stageManager, { whenContent = null } = {}) {
     stageManager.setStage(warmStage);
 
     if (contentOk) {
-      // ② uiScene 真卡样片（C0 卡面特效 + 富文本烘焙）+ canvas 纹理样片（legacy basic）
+      // ① uiScene 真卡样片（C0 卡面特效 + 富文本烘焙）+ canvas 纹理样片（legacy basic）
       try {
         if (isLive()) {
           const baker = makeCardFaceBaker({ cardArt: sharedCardArtCache });
@@ -88,7 +88,7 @@ export async function runBootWarmup(stageManager, { whenContent = null } = {}) {
         console.warn('[warmup] uiScene 样片预热异常（跳过）：', err);
       }
 
-      // ③ 施术面片全变体（全 defId；变体按程序去重，量级 ~几十个 quad）
+      // ② 施术面片全变体（全 defId；变体按程序去重，量级 ~几十个 quad）
       if (isLive()) {
         try {
           warmSpellFx(allSkills().map(d => d.id), {

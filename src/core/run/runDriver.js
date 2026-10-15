@@ -145,7 +145,6 @@ export class RunDriver {
   // 房间缺省抉择（占位直通）：钩子未处理时走各房最小默认行为
   defaultRoomAction(run) {
     switch (run.currentRoom) {
-      case 'training':
       case 'campTraining':
         // 必做训练（升阶，达标则本步切 'ascension' 由后续步解掉）→
         // 可选段缺省全做（4 选 1 取首张 + 尾款新制：优先 2C 模式逐张升，其次 1B）→（合并房）篝火。
@@ -159,7 +158,7 @@ export class RunDriver {
           trainDraw(run, run.roomData.drawChoices[0]);
         }
         // 尾款：未选模式先选（能 2C 就 2C，否则 1B），再逐张升该等阶首张
-        // （twoC 要升满 2 张才清尾款——while 循环到清；候选意外耗尽时 break 防死循环）
+        //（twoC 要升满 2 张才清尾款——while 循环到清）
         while (run.roomData?.pendingUpgrade) {
           const pending = run.roomData.pendingUpgrade;
           if (typeof pending !== 'object' || !pending.mode) {
@@ -168,17 +167,10 @@ export class RunDriver {
           }
           const tier = run.roomData.pendingUpgrade.mode === 'twoC' ? 'C' : 'B';
           const card = upgradableCards(run).find(rt => getSkillDefinition(rt.defId)?.tier === tier);
-          if (!card) break;
+          if (!card) throw new Error('训练尾款候选意外耗尽（pendingUpgrade 未清但无可升卡）');
           trainUpgrade(run, card.uniqueID);
         }
-        if (run.currentRoom === 'campTraining') {
-          // 篝火缺省同 'camp'：瑞米被打跑则找回，否则休整（保命优先）
-          if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
-          else campRest(run);
-        }
-        break;
-      case 'camp':
-        // 缺省：瑞米被打跑则找回，否则休整（保命优先）
+        // 篝火：瑞米被打跑则找回，否则休整（保命优先）
         if (campOptions(run).includes('recoverRemi')) campRecoverRemi(run);
         else campRest(run);
         break;

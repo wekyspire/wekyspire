@@ -15,7 +15,7 @@ export function createStageDirector(refs) {
     panelStage,
 
     /** 'fx' step 的舞台服务来源（与 panelStage 同序）。 */
-    fxServices: () => panelStage()?.fxServices?.() ?? null,
+    fxServices: () => panelStage()?.fxServices() ?? null,
 
     /**
      * 指针喂谁（App.activeStage 的原序）：battle 存活期间由它接管（战斗 + 战后奖励）；
@@ -35,7 +35,7 @@ export function createStageDirector(refs) {
     /** 切幕统一清算：所有在场舞台的全屏模态一键收起（收呈现不收账——defer 语义，
      *  尾款/问句由下一拍 notify 重呈现）。 */
     dismissModals() {
-      for (const st of [refs.battle(), refs.room(), refs.map(), refs.end()]) st?.dismissModals?.();
+      for (const st of [refs.battle(), refs.room(), refs.map(), refs.end()]) st?.dismissModals();
     },
   };
 }

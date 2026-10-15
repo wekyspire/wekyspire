@@ -2,7 +2,7 @@
 // 收：pickerKit 转发族（三家逐字相同）与 _onPanelAction 分流骨架（local 动作表按舞台配置）。
 // 不收：setPanel/_renderPanel/_removePanel —— 三家的模态压暗 / dock+stagePanel 双轨 /
 // shopOpen 视图重映射是本质分叉（评审 A5），留在各舞台。新 kit 能力在这里加一个转发即可，
-// 不必三舞台各抄一遍（BattleStage 漏 handleWheel / 漏 showcaseItem 的实报 bug 均出自手工三份）。
+// 不必三舞台各抄一遍（BattleStage 漏 handleWheel / 漏 showcaseItem 的 bug 均出自手工三份）。
 //
 // 装上后舞台须自带：_pickerKit / _snap / _panel / _grantBusy / _runSequencer / _onIntent /
 // uiScene / _deckAnchor() / _removePanel()（隐式契约，缺了即抛——与拆封前同一批字段）。

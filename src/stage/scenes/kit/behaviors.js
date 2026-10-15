@@ -1,5 +1,5 @@
-// propKit 交互行为模板目录（WORKFLOW §5）——flutterOnImpact（fx Phase 4）+
-// physBody / combustible（2026-10-06 场景交互：冲击波物理与燃烧）。
+// propKit 交互行为模板目录（WORKFLOW §5）——flutterOnImpact +
+// physBody / combustible（场景交互：冲击波物理与燃烧）。
 // 契约：行为模板返回 { interactions: { <event>: { radius?, respond(handle, payload) } } }；
 // 资产侧 behaviors 字段只允许实例化模板（逻辑在 kit，参数在道具），composeRoom 把带
 // behaviors 的道具排除出静态合批、登记进 notifiables；舞台经 cast（prop: 前缀）+
@@ -57,7 +57,7 @@ export function flutterOnImpact({ radius = 95, tilt = 0.05, durationMs = 450, sw
   };
 }
 
-// 冲击波物理体（2026-10-06 场景交互）：impact 三级响应——
+// 冲击波物理体（场景交互）：impact 三级响应——
 //   s < integrity×0.42        震颤（委托 flutter 同款摆动，幅度按 s）
 //   s < integrity             位移（整体入物理世界滑动/翻倒，撞地撞墙后停在新位置）
 //   s ≥ integrity             散架 L1（子部件各自飞）；s ≥ integrity×2.3 追加 L2
@@ -124,7 +124,7 @@ export function physBody({ radius = 95, integrity = 22 } = {}) {
   };
 }
 
-// 可燃体（2026-10-06 场景交互）：heat 事件 → 部件热量注入（combustion.js 状态机：
+// 可燃体（场景交互）：heat 事件 → 部件热量注入（combustion.js 状态机：
 // 点燃/火势 tier/邻近蔓延/燃尽 + GPU 火焰粒子通路）。参数只有 radius——
 // 部件耐火随机在 combustion 侧（physProfile.flameResist × 族系数）。
 export function combustible({ radius = 110 } = {}) {

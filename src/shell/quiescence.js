@@ -24,16 +24,13 @@ export function battleQuiescent({ alive, pendingInput, queueCount }) {
  * @param {object} options
  *   probe: () => boolean true = 卡死态成立
  *   onTrip: () => void 引爆动作（如 finish 闸门）
- *   intervalMs / strikes / capMs：检测间隔 / 连续命中拍数 / 绝对上限。
- *   **缺省无绝对上限**（战斗时长无界、战中 AFK 合法——span 闸门的设计约束）；
- *   需要绝对上限的调用方显式传。
+ *   intervalMs / strikes：检测间隔 / 连续命中拍数。无绝对上限——战斗时长无界、
+ *   战中 AFK 合法（span 闸门的设计约束）。
  * @returns {() => void} 停止函数（dispose 调用）
  */
-export function createPredicateFuse({ probe, onTrip, intervalMs = 2000, strikes = 3, capMs = Infinity }) {
+export function createPredicateFuse({ probe, onTrip, intervalMs = 2000, strikes = 3 }) {
   let hit = 0;
-  const deadline = Date.now() + capMs;
   const timer = setInterval(() => {
-    if (Date.now() > deadline) { clearInterval(timer); return; }
     if (!probe()) { hit = 0; return; }
     if (++hit >= strikes) { clearInterval(timer); onTrip(); }
   }, intervalMs);

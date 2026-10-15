@@ -1,5 +1,4 @@
-// 「房间机器流」域（从 runController 抽出的第二个域，用户定 的原则）：
-// 老虎机 / 银行机 / 古尔帕斯之店 / 售货机收尾 / 吞噬 这几台机器的**交互编排**。
+// 「房间机器流」域：老虎机 / 银行机 / 古尔帕斯之店 / 售货机收尾 / 吞噬 这几台机器的**交互编排**。
 //
 // 分工：core 结算与各房间 API 在 `core/run/rooms/*`（纯逻辑、可 headless）；这里管
 // 「意图 → core 调用 → notify → 附带演出触发」——时序归 Shell，机器语义归 core。
@@ -30,7 +29,7 @@ import { settings, persistSettings } from './settings.js';
 export function createRunMachines(ctx) {
   const { run, slot, dedicatedSequencer, cutscene, showcase } = ctx;
 
-  // ---- 机器内容触发（下沉自 notify，2026-10-14 用户裁决：内容归触发源）----
+  // ---- 机器内容触发 ----
   // 恶魔 roll 解说（面板指引文本全删，改对话简述）——超额取款入账、机器切恶魔形态
   // 那一刻讲：生涯首次讲清规则（持久化 settings），之后每次只一句「你知道该干什么。」。
   // 让位必须带重试：上一发词条→金币特写常常还没收完（uiBusy），等待期间 pendingRoll
@@ -47,7 +46,7 @@ export function createRunMachines(ctx) {
       entryOk: () => run.bank?.pendingRoll === pr && run.gameStage === 'room',
       play: async (done) => {
         try {
-          await waitFor(() => !ctx.panelStage?.()?.uiBusy);
+          await waitFor(() => !ctx.panelStage()?.uiBusy);
           if (run.bank?.pendingRoll !== pr) return;   // 等待期间局面已翻篇：不讲
           const first = !settings.demonRollTutored;
           if (first) { settings.demonRollTutored = true; persistSettings(); }
@@ -85,7 +84,7 @@ export function createRunMachines(ctx) {
           let bailed = false;
           await waitFor(() => {
             if (run.slotPending) { bailed = true; return true; }
-            return !ctx.panelStage?.()?.uiBusy;
+            return !ctx.panelStage()?.uiBusy;
           });
           if (bailed) return;
           if (run.gameStage !== 'room' || run.currentRoom !== 'slot' || !devourReady(run)) return;
@@ -131,8 +130,8 @@ export function createRunMachines(ctx) {
   }
 
   // Boss 奖励的删卡机会（§2.1）：与古尔帕斯删卡服务同一套能力。
-  // 即时化（2026-10-13 用户定）：机会不再留存——获得那一拍（领完奖励/跳过进阶后）
-  // 就地弹全屏删卡，放弃 = 作废；确认 = 焚卡演出落账（bossRemoveCard）。
+  // 机会即时消耗不留存：获得那一拍（领完奖励/跳过进阶后）就地弹全屏删卡，
+  // 放弃 = 作废；确认 = 焚卡演出落账（bossRemoveCard）。
   function bossRemoveCard(uniqueID) {
     if (run.pendingCardRemoval <= 0) return;
     try {
@@ -158,7 +157,7 @@ export function createRunMachines(ctx) {
           try {
             // 入手特写在播时让位（特写 busy 会吞掉选卡器的全部点击 = 玩家死锁）：
             // 等特写落定（玩家点收下）再弹。正常流程领奖前特写必已收——这是防御位。
-            await waitFor(() => !ctx.panelStage?.()?.showcasing);
+            await waitFor(() => !ctx.panelStage()?.showcasing);
             // 候选快照现场投影直喂（opts.snap）：不读分布式面板快照——boss-remove 窗口期
             // gameStage 已离 reward，battleStage 的面板分发是 setPanel(null)（读 _snap 必
             // 空手）；现场投影既带 cardRemoval 段、也含刚领的奖励卡（P4a 前的陈旧窗旧病同除）
@@ -174,7 +173,7 @@ export function createRunMachines(ctx) {
             }
             // 等收起（含焚毁演出）。静默收（切幕 dismissModals 不触发 onSkip——旧实现
             // 在这里会永远等不到回执）：没消费就收起 = 与放弃同判，机会作废。
-            await waitFor(() => !ctx.panelStage?.()?.uiBusy);
+            await waitFor(() => !ctx.panelStage()?.uiBusy);
             if (run.pendingCardRemoval > 0) { run.pendingCardRemoval = 0; ctx.notify(); }
           } finally {
             done();
@@ -292,13 +291,12 @@ export function createRunMachines(ctx) {
   // 单飞纪律归队列（不再手写 busy 锁）：流程 = 一条 'room:devour-flow' 指令（默认串行），
   // 在播期间的再入排在队尾，轮到它时若进度已被首份流程消费（devourReady=false）即自灭。
   // 投料口点选先于模态路由（RoomStage 既有秩序），选卡界面开着时 3D 投料口照样吃得着
-  // 点击——这正是要靠队列 + 状态门拦的再入源（实报：进两次选卡界面、连碎两次）。
-  // start 内 try/finally 兜底 finish：链上任何一环抛错指令也不悬挂；玩家节奏段
-  // （对话/选卡可长考）不能上墙钟保险丝——同 battle-span 的时基裁决。
+  // 点击——这正是要靠队列 + 状态门拦的再入源。
+  // start 内 try/finally 收尾 finish：链上任何一环抛错指令也不悬挂；玩家节奏段
+  // （对话/选卡可长考）不上墙钟保险丝（时基约定同 battle-span）。
   function openDevourFlow() {
-    // 单飞纪律归队列（壳见 flowInstruction.js）：流程内部还要往同一队列排 cutscene
-    // 剧本步骤/特写链——退出 'all' 防互等死锁（e2e 实抓的教训），自家标签互等拦再入
-    //（投料口点选先于模态路由，实报「进两次选卡界面连碎两次」），entryOk 状态门自灭。
+    // 壳见 flowInstruction.js：流程内部还要往同一队列排剧本步骤/特写链，故退出 'all'
+    // 防互等死锁；再入由自家标签互等拦住排队，轮到时 entryOk 状态门自灭。
     return enqueueFlowInstruction(dedicatedSequencer, {
       tag: 'devour-flow', meta: { event: 'room:devour-flow' },
       entryOk: () => run.gameStage === 'room' && run.currentRoom === 'slot'
@@ -328,7 +326,7 @@ export function createRunMachines(ctx) {
         }],
       });
       if (picked !== 'card' && picked !== 'relic') return;
-      const stage = ctx.panelStage?.();
+      const stage = ctx.panelStage();
       if (stage?.cardPicker?.opened || stage?.relicPicker?.opened) return;
       stage?.openDevourPicker({
         kind: picked,
@@ -344,11 +342,11 @@ export function createRunMachines(ctx) {
           // 金币走显示标量通道（§4.6）：core 已结算，先按住显示再 notify（那拍顶栏仍是旧值）。
           // 按住窗指令化（holdBeat）：特写播放挂在队列里，空闲对账不会把它冲掉
           let releaseHold = null;
-          if (res.gold > 0) releaseHold = ctx.scalars?.holdBeat?.({ scalar: 'money', amount: res.gold });
+          if (res.gold > 0) releaseHold = ctx.scalars.holdBeat({ scalar: 'money', amount: res.gold });
           const releaseGold = () => {
             const alive = releaseHold?.();   // holdBeat 收尾回执：false = 保险丝已收（长 AFK
             releaseHold = null;              // 边界，delta 已被对账贴平）——跳过 flight 防过冲
-            if (alive !== false) void ctx.scalars?.flight({ scalar: 'money', amount: res.gold });
+            if (alive !== false) void ctx.scalars.flight({ scalar: 'money', amount: res.gold });
           };
           ctx.notify();                          // 进度即刻清零：排队中的再入自此全部自灭
           ctx.roomStage()?.playCrush?.();   // 机器端的"咬合 + 迸币"演出（结算已完成，这里只是表现）
@@ -366,7 +364,7 @@ export function createRunMachines(ctx) {
             onCancel: () => {
               releaseHold?.();
               releaseHold = null;
-              ctx.scalars?.release('money', res.gold);
+              ctx.scalars.release('money', res.gold);
             },
           });
           if (!opened) releaseGold();
@@ -383,7 +381,7 @@ export function createRunMachines(ctx) {
   function shopTakeCard(defId) {
     if (run.gameStage !== 'room' || !run.shopPending) return;
     answerQuestion(run, defId);  // defId = null → 放弃这个卡包（choice 不够好时的出口）
-    tooltipHide();              // 售出商品视图即离场：悬空 tooltip 必清（夜测 r2路3/r3路1 滞留实报）
+    tooltipHide();              // 售出商品视图即离场：悬空 tooltip 必清
     ctx.notify();
   }
   function shopTakeRelic(relicId) {

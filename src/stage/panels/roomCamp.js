@@ -23,7 +23,7 @@ export function trainingWidgets(w, snap) {
     // 抓牌候选已掷出（正常自动开全屏四选一）：重开入口兜底
     w.push({ kind: 'button', id: 'train:pickDraw', width: 260, size: 'main', label: '选择一张新卡牌…', action: { action: 'trainingDrawPick' } });
   } else if (!t.optionalDone) {
-    // 可选段入口：按钮只写动作，代价与收益走下方说明小字（用户定两层结构）
+    // 可选段入口：按钮只写动作，代价与收益走下方说明小字（两层结构）
     w.push({ kind: 'button', id: 'train:roll', width: 260, size: 'main', label: '继续训练', action: { action: 'trainingDrawRoll' } });
     w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '获得一张新卡牌，并升级现有卡牌' });
   } else {

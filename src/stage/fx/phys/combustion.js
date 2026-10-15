@@ -1,4 +1,4 @@
-// PCG 道具燃烧（2026-10-06 场景交互大活·燃烧侧）：部件级状态机 + 材质接线。
+// PCG 道具燃烧（场景交互的燃烧侧）：部件级状态机 + 材质接线。
 // 世界实例挂 scene.userData.combust（composeRoom 创建、update 驱动 step、BattleStage
 // 装配后 bindPool 接世界粒子池）。B.combustible 的 heat 事件把外温打进部件热量，
 // 点燃/火势/燃尽全部在 step 演化；火焰粒子走 fireProposals 的 GPU 提交通路

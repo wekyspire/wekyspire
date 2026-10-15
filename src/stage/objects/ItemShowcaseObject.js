@@ -19,7 +19,7 @@
 // 放弃/收下的游戏语义由调用方（Shell 编排器）决定。
 //
 // 层次约定：全屏遮罩走 `OVERLAY_Z`（**高于"继续前进"这类常驻按钮**，与 CardScrollPickerObject
-// 同级）——压不住常驻按钮的话，按钮会画在半透明遮罩之上、看起来还能点（实报）；
+// 同级）——压不住常驻按钮的话，按钮会画在半透明遮罩之上、看起来还能点；
 // 输入走 Picker（自己登记全屏 dismiss 热区 + 跳过按钮热区），宿主只需把指针事件转发进来。
 //
 // 纯 Stage 层：不读 Core/Bridge；数据由调用方以纯对象传入（名称/描述/作用/素材 key/tint）。
@@ -61,8 +61,8 @@ function easeOutBack(t, k = 1.7) {
  *   'gold'  → **金币堆**（三摞金币 + 散落两枚，用户要的"金币堆"观感；事件/老虎机/吞噬的金币
  *             获得演出都走它——有真素材 `assets/items/gold.*` 时会被自动顶替）
  *   'pack'  → **卡包**（三张错叠卡背 + 束带结；老虎机择卡奖/商店卡包走它）
- *   'relic' → **遗物**（多面宝石 + 底座；无 3D 模型也无素材的遗物兜底——夜测 r2路5
- *             拾荒者的口袋纯色方块实报）
+ *   'relic' → **遗物**（多面宝石 + 底座；无 3D 模型也无素材的遗物兜底——拾荒者的
+ *             口袋曾是纯色方块）
  *   其它 key → null（退回 tint 色块）
  * headless（无 document）返回 null。
  */
@@ -249,8 +249,8 @@ function bakeGenericRelicArt() {
 /**
  * 托底暗晕贴图（程序化烘焙：中心暗、向边缘柔和化开到全透明）。
  *
- * 为什么需要它（实报「获得演出里图像 alpha=0 的区域仍然把 godlight 盖住了，
- * 很诡异」）：托底板原先是一块 **0.85 不透明度的深色方板**，尺寸比物品图还大一圈，且画在
+ * 为什么需要它（获得演出里图像 alpha=0 的区域仍会把 godlight 盖住）：托底板原先
+ * 是一块 **0.85 不透明度的深色方板**，尺寸比物品图还大一圈，且画在
  * 加色 godlight **之前**（z 更大）——物品图四周的透明区域于是露出的不是光束，而是一块硬边
  * 深色方块，正正好把放射光挡掉。改成**径向柔和暗晕**后：边缘全透明（光束照常透出），只有
  * 物品正后方留一块渐隐的暗底（保住"浅色物品压在亮光上"时的可读性）。
@@ -280,7 +280,7 @@ const _cardTexCache = new Map();
 function cardArtTextureOf(defId) {
   if (_cardTexCache.has(defId)) return _cardTexCache.get(defId);
   // ⚠ 注册表 get 对未知 id 抛异常——非卡 id 的 artKey（gold/pack/词条名…）会撞进来，
-  // 必须 has 预检（appearance.cardLook 同款坑）。漏检的后果实锤：金币拍炸死 show()
+  // 必须 has 预检（appearance.cardLook 同款坑）。漏检的后果：金币拍炸死 show()
   // 中途，特写冻在 in 相位、链尾回调永不触发（恶魔 offer 永不开 picker 的病根）。
   const def = hasSkill(defId) ? getSkillDefinition(defId) : null;
   const img = def ? sharedCardArtCache.get({ image: def.image, series: def.series, type: def.type, tier: def.tier }) : null;
@@ -349,7 +349,7 @@ export class ItemShowcaseObject extends THREE.Group {
 
     // ③ 物品图（含托底暗晕：素材是透明底时也要有"嵌在光里"的边界）
     // 托底 = **径向柔和暗晕**（不是硬边方板）：边缘全透明让 godlight 透出来，只在物品正后方
-    // 渐隐地压一层暗底（实报「alpha=0 区域把 godlight 盖住」的正是这块方板）。
+    // 渐隐地压一层暗底（会把 godlight 盖住的正是这块方板）。
     this._vignetteTex = bakeSoftVignette();
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(ART.size + 1.6, ART.size + 1.6),
@@ -499,8 +499,8 @@ export class ItemShowcaseObject extends THREE.Group {
   }
 
   /** 程序化占位美术（按 key 缓存复用；专属占位缺失时回退通用占位——任何 artKey
-   *  都不再落裸 tint 色块。r3路6/路7 实锤：调用点既有传泛型键（pack）也有传
-   *  遗物名/奖励 kind（relic 名失配、special 无映射），逐键打补丁不如兜底）。 */
+   *  都不再落裸 tint 色块：调用点既有传泛型键（pack）也有传遗物名/奖励 kind
+   *  （relic 名失配、special 无映射），逐键打补丁不如兜底）。 */
   _placeholderOf(key) {
     if (!this._placeholders) this._placeholders = new Map();
     if (!this._placeholders.has(key)) {

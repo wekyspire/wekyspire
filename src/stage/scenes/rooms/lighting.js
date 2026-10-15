@@ -9,7 +9,7 @@ import { FLOOR_Y } from '../dungeon3D.js';
 import { LEFT_WALL_X } from './walls.js';
 
 // 幽火点光基准（three 物理光度学 candela；同 dungeon3D TORCH_LIGHT_BASE 口径）。
-// 2026-10-11 用户定大幅削弱：旧值 1150 晃眼，砍到 4 成（亮度层级仍交给中央光池）。
+// 强度大幅削弱、砍到 4 成（不晃眼；亮度层级仍交给中央光池）。
 const FIRE_BASE = 460;
 
 // ---- 灯光去饱和（tonemap 后场景过饱和且偏蓝）----
@@ -119,8 +119,8 @@ export const LIGHTING_PRESETS = {
     // 单位染色底同样偏暖（火光照人）：base 暖中性、fireGain 暖橙
     tint: { base: [0.64, 0.57, 0.5], fireGain: [0.3, 0.2, 0.12], radius: 66 },
   },
-  // 商店房（休息房 → 冷白中性改版同日）：**冷白、中性的"机器房"**——用户定
-  // "自动售货机没有被赋予人格，是个纯中立玩意"，打光要冷白为主题、中性，质量对齐调优过的
+  // 商店房：**冷白、中性的"机器房"**——"自动售货机没有被
+  // 赋予人格，是个纯中立玩意"，打光要冷白为主题、中性，质量对齐调优过的
   // 赌厅（老虎机/银行机）：环境光压暗做对比度、亮度交给中央冷白光池 + 售货机自己的灯池。
   // 与赌厅的区别只在色温（冷白 vs 暖金）与机器灯色（中性白 vs 暖金），不做"暖店"基调。
   shop: {
@@ -202,8 +202,8 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   fill.position.set(30, 60, 200);
   group.add(fill);
 
-  // 月光落地反弹（假 GI）：两处光池点光——位置离开墙面（贴墙会把挂饰打得过艳，
-  // "unlit 壁画刺眼"的病灶），向房间中线收，只打地板光池
+  // 月光落地反弹（假 GI）：两处光池点光——位置离开墙面（贴墙会把挂饰打得过艳、
+  // unlit 壁画刺眼），向房间中线收，只打地板光池
   const [bounceA, bounceB] = preset.bounce;
   const pA = new THREE.PointLight(desat(0x9ba1a7), bounceA[0], bounceA[1], 1.8);
   pA.position.set(-10, FLOOR_Y + 6, -12);
@@ -261,8 +261,8 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
   }
 
   // 火点光：一火一灯（cap 上限，超出的火只留几何火苗不发光——宁缺毋滥，光池过多会洗亮全场）
-  // 闪烁去同步（2026-10-11 用户定）：旧版所有火共用同一对频率（11/23 rad/s），相位又
-  // 派生自网格化坐标（量化后容易撞车）——全场读感是齐闪。每火改带**频率倍率 + hash
+  // 闪烁去同步：所有火不能共用同一对频率（11/23 rad/s），相位也
+  // 不能派生自网格化坐标（量化后容易撞车）——否则全场读感是齐闪。每火带**频率倍率 + hash
   // 相位**（确定性：由坐标派生，同布局重放一致）。
   const torches = [];
   for (const a of fireAnchors.slice(0, preset.fire.cap)) {
@@ -376,7 +376,7 @@ export function createLighting(key, fireAnchors = [], lampAnchors = []) {
         t.emitterAcc += dt * FLAME_RATE;
         while (t.emitterAcc >= 1) {
           t.emitterAcc -= 1;
-          // 火星粒子（2026-10-09 用户定）：尺寸减半以上、亮度适量削减（加色+bloom
+          // 火星粒子：尺寸减半以上、亮度适量削减（加色+bloom
           // 偏移下原 0xd8dadd/0x9ba1a7 过曝刺眼）
           particles.spawn(t.x + (Math.random() - 0.5) * 1.6, t.y + 2.2, {
             count: 1, z: t.z, color: Math.random() < 0.35 ? 0x96999e : 0x6c7075,

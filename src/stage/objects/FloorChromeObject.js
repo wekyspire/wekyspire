@@ -4,9 +4,8 @@
 //   zoom-in，远去 fade-out 并微微 zoom-out；一次跨多层的上楼下楼动画无需任何专门编排。
 //   未登陆层（floor > 历史最高到层）经逐牌资格标量压 0（maxOpacity mask——爬升途经不提前亮相）。
 //   敌人预告走单独轨道：**每层独立实例**，内容按 prep 快照的 floor 落到该层那枚牌上
-//   （层牌未登陆被资格标量压着 → 新层预告落定前必不亮相——单例换父的「新敌人闪现旧层牌」
-//   病灶（2026-10-12 事件房路径实报：notify 先于爬升指令到达，预览在旧层牌上fade-in）
-//   由结构消除——没有换父，就没有时序窗）。
+//   （层牌未登陆被资格标量压着 → 新层预告落定前必不亮相——没有换父，就没有
+//   「新敌人闪现旧层牌」的时序窗）。
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { isBossFloor } from '../../core/run/runFlow.js';
@@ -15,7 +14,7 @@ import { deferDisposeTexture } from '../deferredDispose.js';
 import { EnemyPreviewObject } from './EnemyPreviewObject.js';
 import { playFloorClearRow } from '../fx/floorClearFx.js';
 
-const PX_PER_WU = 61;        // 塔深处屏幕换算（1280×720 实测 ≈61px/wu；烘焙逻辑像素按它折世界尺寸）
+const PX_PER_WU = 61;        // 塔深处屏幕换算（1280×720 下 ≈61px/wu；烘焙逻辑像素按它折世界尺寸）
 const PREVIEW_SCALE = 0.078; // 敌人预告内部单位（立牌高 17）→ 本件局部单位的基准换算（行宽超预算时自适应再缩）
 const TICK = { gap: 0.12, len: 0.5, thick: 0.05 };    // 塔钉 → 层号的短横
 const DOT_R = 0.11;

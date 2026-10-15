@@ -1,4 +1,4 @@
-// Boss 剧本：穿山甲王（pangolinKing，11 层 Boss 池·装甲主题，2026-10-09 补齐）。
+// Boss 剧本：穿山甲王（pangolinKing，11 层 Boss 池·装甲主题）。
 // 一只 Boss 的全部自定义演出聚合在本文件（内容归属原则，同 pyro.js）。触发点见
 // core enemies/bosses.js pangolinKing act 的转段拍（血量 < 190 → 恼怒：净化全部
 // 效果 + 占拍，本剧本占住那一拍）。
@@ -64,7 +64,7 @@ function rockShards(particles, ux, uy, uz, n = 12) {
   });
 }
 
-// 转段「恼怒」（净化拍，实测放行 ≈3.1s 阻塞节拍）
+// 转段「恼怒」（净化拍，放行 ≈3.1s 阻塞节拍）
 async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, camera, onStageDispose, runScript, unitById }) {
   const unit = unitById(args.unit);
   if (!unit) return; // 快照缺失兜底：静默收拍
@@ -132,7 +132,7 @@ async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, cam
     { w1: H * 1.05, ms: 740, ttl: 0.7 },
   ];
   for (const [i, wv] of WAVES.entries()) {
-    // 环放低位（H*0.22）：读作地面荡开的尘浪；贴地世界环在长焦平视下会侧看成线（pyro 教训）
+    // 环放低位（H*0.22）：读作地面荡开的尘浪；贴地世界环在长焦平视下会侧看成线
     const ring = particles.spawnSprite(ux, uy + H * 0.22, {
       texture: ringTexture(), width: H * 0.3, height: H * 0.3, z: uz + 2 + i, ttl: wv.ttl, gravity: 0,
     });
@@ -160,8 +160,8 @@ async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, cam
   await ctx.wait(380);
 
   // —— 常驻（挂舞台寿命）：琥珀点光 + 环身浮尘 + 低频碎砂 + 结构光压暗 ——
-  // 灯从舞台光池借（light:fx0）：演出中途 add 灯 = 全场景着色器重编译（实测 1.2s
-  // 冻帧）；池灯入场即在场景里，重挂到单位不触发重编译
+  // 灯从舞台光池借（light:fx0）：演出中途 add 灯 = 全场景着色器重编译冻帧；
+  // 池灯入场即在场景里，重挂到单位不触发重编译
   const rageLight = cast.get('light:fx0');
   if (rageLight) {
     rageLight.color.set(0xd9a04c);
@@ -192,7 +192,7 @@ async function pangolinKingP2({ ctx, args, cast, particles, shake, vignette, cam
     }
   });
 
-  // 演出机位退场：先补间飞回基准（flyHome 连 fov），再弹栈——瞬时硬切是病灶（09-24 修）
+  // 演出机位退场：先补间飞回基准（flyHome 连 fov），再弹栈——瞬时硬切是病灶
   await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('pangolinP2');
   unit.restoreColor?.();
@@ -306,7 +306,7 @@ async function pangolinAct({ ctx, deps, unit, kinds, args }) {
   }
   if (kinds.includes('buff')) {
     // 棘甲竖起：背脊一蓬细刺弹出（上抛缓落）+ 金属细纹闪——「别碰我」的读感。
-    // 远场口径：Boss 在 z≈-56，1.1×3.4 的针亚像素化读不出（1009 取证实拍教训）
+    // 远场口径：Boss 在 z≈-56，1.1×3.4 的针亚像素化读不出
     for (let i = 0; i < 9; i++) {
       const a = Math.PI * (0.16 + (i / 8) * 0.68); // 扇形放射（朝上半圆）
       const rec = deps.particles?.spawnSprite?.(

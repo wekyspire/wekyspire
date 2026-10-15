@@ -1,5 +1,4 @@
 // 售货机（vending）：商店房的货架 / 商品卡拾取 / 出货演出 / 溢出售货机动态生成。
-// 逻辑自 RoomStage 原样下沉——RoomStage 只做通用舞台机制。
 import * as THREE from 'three';
 import { createVendingMachineRig } from '../scenes/interactive/vendingMachineRig.js';
 import { buildShopPanel } from '../panels/index.js';
@@ -191,7 +190,7 @@ export function createVendingMachine(ctx) {
       _syncGoodsPickables();
     },
 
-    /** picker 撤/换后的内部簿记复位（旧代码不清这里，重 attach 后商品永远登记不到新 picker）。 */
+    /** picker 撤/换后的内部簿记复位（不清这里，重 attach 后商品登记不到新 picker）。 */
     pickerChanged() { goodsPickIds.clear(); },
 
     /**

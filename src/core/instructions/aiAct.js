@@ -48,7 +48,7 @@ function intentionOf(def, unit, battleState) {
 
 // 意图数值口径要吃 PRE 修饰族里「结算前可预知」的部分：蓄势对该单位所有非固定伤害
 // +层数（effects.js PRE 订阅），getIntention 的 damage 不含它的话预告系统性偏低
-// （0929 试玩实报：石茧意图 13 实打 17）。攻击类数值统一加当前蓄势层数。
+// （石茧预告 13 实打 17 一类）。攻击类数值统一加当前蓄势层数。
 // 注：蓄势受生命伤害会掉层，玩家打完后实打可能低于预告——预报口径与既有一致。
 export function withMomentumBonus(unit, intention) {
   const stacks = unit.getEffectStacks?.('momentum') ?? 0;

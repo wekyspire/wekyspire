@@ -24,7 +24,7 @@
 
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { DEFERRED_ON, applyGbufHardTest } from '../post/gbufDepth.js'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
+import { DEFERRED_ON, applyGbufHardTest } from '../post/gbufDepth.js'; // 本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
 import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
@@ -47,7 +47,7 @@ const HP_BAR_HEIGHT = 1.5;
 const SHIELD_FRAME_PAD = 0.45;  // 保护框相对血条的外扩
 const SHIELD_FRAME_COLOR = 0x5aa8ff;
 const SHIELD_POP_DUR = 0.28;    // 数值变更放缩跳动时长（牌库脉冲同语言）
-// 血量条补间（2026-10-09 用户定）：受伤/治疗不做瞬变——先快后慢（cubic-out），
+// 血量条补间：受伤/治疗不做瞬变——先快后慢（cubic-out），
 // 时长随变动幅度走（大伤/大疗看得见过程，小变动快闪即达）
 const HP_ANIM_MIN_MS = 240;
 const HP_ANIM_SPAN_MS = 660;
@@ -101,7 +101,7 @@ export class UnitObject extends THREE.Group {
     for (let i = 0; i < uniqueID.length; i++) _h = (_h * 31 + uniqueID.charCodeAt(i)) | 0;
     this._boardYawBias = BOARD_YAW_BIAS * ((_h & 1) ? 1 : -1);
 
-    // 命名部件表（多部件敌人，fx Phase 5）：key → Object3D（环绕火球/浮游炮等挂接件）。
+    // 命名部件表（多部件敌人）：key → Object3D（环绕火球/浮游炮等挂接件）。
     // 剧本经 partOrRoot(key) 寻址——部件不存在回落根节点（内容演进不炸旧剧本）
     this.parts = new Map();
     this._tickFns = new Set(); // 附件的逐帧钩子（环绕轨道等），update 统一驱动
@@ -110,8 +110,8 @@ export class UnitObject extends THREE.Group {
     // faceCamera 逐帧水平 yaw 转向相机（立牌形/圆柱 billboard，只 yaw——斜视下
     // 立牌不转正会被透视压斜；立面保持垂直地面，球面 pitch 后仰已弃）。
     // 脚下的假透视水平件（金环/护盾地环等）也挂这里：它们只有 yaw 对准相机后
-    // 椭圆长轴才与立牌底边平行——贴地不参与是旧错误约定，2026-10-02 用户指正后
-    // 统一收口；倾倒（死亡倾倒/假死留尸）只作用 billboard，status 与地面件不跟着倒
+    // 椭圆长轴才与立牌底边平行；倾倒（死亡倾倒/假死留尸）只作用 billboard，
+    // status 与地面件不跟着倒
     this._rig = new THREE.Group();
     this._rig.name = 'rig';
     this._rig.rotation.order = 'YXZ';
@@ -150,8 +150,8 @@ export class UnitObject extends THREE.Group {
     this._bodyColorBase = this._body.material.color.clone(); // 焚毁改色后的恢复基准（restoreBody）
     this._standee.add(this._body);
 
-    // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（脚底=地板，旧稿"站台下方"
-    // 在真 3D 地板下会被地面裁掉，故上移叠腿前，z 微抬避免与立牌 z-fight）
+    // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（贴脚底会被真 3D 地板
+    // 裁掉，故上移叠腿前，z 微抬避免与立牌 z-fight）
     // （rig 层：不随尸体倾倒）
     this._hpBar = new THREE.Group();
     this._hpBar.name = 'hpBar';
@@ -242,7 +242,7 @@ export class UnitObject extends THREE.Group {
     this._intention.name = 'intention';
     this._intention.position.set(0, standeeHeight + INTENTION_LIFT + INTENTION_STRIP_H / 2, 0.4);
     this._intention.visible = false;
-    this._rig.add(this._intention);   // rig 层：假死尸体倒平后「?」仍立着（2026-10-07 用户定）
+    this._rig.add(this._intention);   // rig 层：假死尸体倒平后「?」仍立着
     this._intentionSig = null;
     this._name = '';
     this._intentionT = Math.random() * Math.PI * 2;
@@ -271,7 +271,7 @@ export class UnitObject extends THREE.Group {
     this._body.material.map = texture;
     this._body.material.color.set(0xffffff);
     this._body.material.needsUpdate = true;
-    this._fxLayer?.body?.rebind?.(); // L0 着色链在立绘落地后建（旧 USE_MAP 变体重编的同位时机）
+    this._fxLayer?.body?.rebind?.(); // L0 着色链在立绘落地后建（USE_MAP 变体重编的同位时机）
     deferDisposeTexture(old);
     this._body.geometry.dispose();
     this._body.geometry = new THREE.PlaneGeometry(this._standeeHeight * aspect, this._standeeHeight);
@@ -540,7 +540,7 @@ export class UnitObject extends THREE.Group {
    */
   faceCamera(camDir) {
     this._rig.rotation.y = Math.atan2(camDir.x, camDir.z);
-    // 立牌固有偏航（2026-10-07 用户定）：不完全正对相机——正对视角下绕脚倒伏/
+    // 立牌固有偏航：不完全正对相机——正对视角下绕脚倒伏/
     // 摆动的透视压扁读不出幅度；偏一个固定角后倒伏带横向位移分量，读感立体。
     // 偏航写 billboard（倾倒组）：status/地面件仍在 rig 层保持正对相机
     this._billboard.rotation.y = this._boardYawBias;
@@ -549,8 +549,8 @@ export class UnitObject extends THREE.Group {
   /** 帧驱动：附件钩子（环绕轨道等）+ idle 呼吸 + 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
   update(dt) {
     // 逐件 try/catch：tick 件全是视觉装饰，一件抛错不许拖死主循环——且必须就地
-    // 摘除病灶（毒雾 s 字段撞名教训：异常逃出 update 把 rAF 主循环整链打断，
-    // 画面冻结但 gsap 继续推 uniform，数据断言全绿、视觉已死，极难察觉）
+    // 摘除病灶件（异常逃出 update 会把 rAF 主循环整链打断：画面冻结但 gsap 继续
+    // 推 uniform，数据断言全绿、视觉已死，极难察觉）
     for (const fn of this._tickFns) {
       try { fn(dt); } catch (e) {
         this._tickFns.delete(fn);
@@ -611,7 +611,7 @@ export class UnitObject extends THREE.Group {
 
   /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板但**挂 rig**——
    *  椭圆环是「假透视圆」（长轴压扁比模拟俯视），必须随立牌 yaw 对准相机，
-   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜（2026-10-02 用户指正）。
+   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜。
    *  rig 只 yaw 不 pitch，水平环 yaw 后仍贴地；尸体倾倒也不掀环（rig 层不吃倾倒）。 */
   setHighlight(on) {
     if (on === !!this._ring) return;
@@ -640,7 +640,7 @@ export class UnitObject extends THREE.Group {
 
   dispose() {
     this._fxLayer.dispose(); // fx 宿主先收：overlay 件摘钩销材质，L0 随本体材质消亡
-    // 部件自检（fx Phase 5）：部件把收尾挂在 userData.dispose（orbs 等）——
+    // 部件自检：部件把收尾挂在 userData.dispose（orbs 等）——
     // 单位视图消亡（死亡移除/舞台销毁）时统一摘部件、停 tick、释放部件材质
     for (const part of this.parts.values()) { try { part.userData?.dispose?.(); } catch (_) {} }
     this.parts.clear();

@@ -30,8 +30,8 @@ export function createRunCutsceneFlows(ctx) {
   // 事件 = 对话 + 选项 + 逻辑：进房即播一段**幕间**——背景 CG（占位美术，见 overlay/eventArt.js）
   // + 普通对话 → 摆出选项（`cutscene` 的 dialogue step 原生支持 choices）→ 玩家选 → core 结算
   // → 接着播结果页 → **切幕**回塔楼（事件房没有场景舞台，一直在 MapStage 上）。
-  // 进出都是幕间：进 = wipe step 后面的对话被"揭开"（切幕开始 → 事件画面就位 → 切幕结束，
-  // 实报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
+  // 进出都是幕间：进 = wipe step 后面的对话被"揭开"（切幕开始 → 事件画面就位 → 切幕结束
+  // 才露出）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
   // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
   const eventEntryOk = () => run.gameStage === 'room' && run.currentRoom === 'event'
     && !run.roomData?.eventResolved;
@@ -114,8 +114,8 @@ export function createRunCutsceneFlows(ctx) {
       const meta = DIM_META[id] ?? { label: id };
       return {
         id,
-        // 不拼 glyph：字素（炎）与 label 首字同形，连读成「炎火灵脉」
-        // 错词（夜测 r6路5 实报，每局进阶必现）；hint 行「突破火灵脉」即目标口径。
+        // 不拼 glyph：字素（炎）与 label 首字同形，会连读成「炎火灵脉」错词；
+        // hint 行「突破火灵脉」即目标口径。
         label: `${meta.label}`,//（等级 ${run.player.leino?.[id] ?? 0}）`,
         hint: `突破${meta.label}`,
       };
@@ -244,13 +244,13 @@ export function createRunCutsceneFlows(ctx) {
     if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
     // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
     await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());   // 进阶结束 → 切幕回塔楼
-    if (picked === 'skip') void ctx.playBossRemoveNow?.();
+    if (picked === 'skip') void ctx.playBossRemoveNow();
   }
 
   /**
    * 面板应答路径（ascension 阶段的正路应答——维度按钮/跳过，非幕间再入）：core 结算
    * 同拍落账，收尾链 = 'ascension-finish' 流程指令，与场景路径共享 ascensionTail。
-   * 退出 'all'：尾段还要往同一队列排 cutscene 步骤与切幕（互等死锁教训同 devour）。
+   * 退出 'all'：尾段还要往同一队列排 cutscene 步骤与切幕（退出 'self' 会互等死锁）。
    */
   function finishAscension(dimension) {
     if (run.gameStage !== 'ascension') return;

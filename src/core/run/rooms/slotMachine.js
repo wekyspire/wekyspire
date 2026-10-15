@@ -110,7 +110,7 @@ function slotState(run) {
   return run.slot;
 }
 
-/** 当前单价：5 起，每次 roll 后 +6（免费 roll 不涨价）。纯读——不初始化机器状态。 */
+/** 当前单价：SLOT.baseCost 起，每次付费 roll 后 +SLOT.costStep（免费 roll 不涨价）。纯读——不初始化机器状态。 */
 export const spinCost = (run) => SLOT.baseCost
   + SLOT.costStep * (run.slot?.floor === run.floor ? run.slot.rolls : 0);
 
@@ -413,14 +413,10 @@ export function takeSlotPrize(run, choice = null) {
     out.relicId = choice;
   }
   if (p.choices) {
-    // 空候选（历史脏档/旧版 rollTiered 空手）按「无候选奖」处理——收下落空但不抛错，
-    // 免得 pending 卡死（防御性硬化；根因已在 rollTiered 修掉）
-    if (p.choices.length > 0) {
-      if (!choice) throw new Error('这份产出需要选一张卡');
-      if (!p.choices.some(c => c.id === choice)) throw new Error(`卡不在候选里：${choice}`);
-      run.player.deck.push(createSkillRuntime(choice));
-      out.defId = choice;
-    }
+    if (!choice) throw new Error('这份产出需要选一张卡');
+    if (!p.choices.some(c => c.id === choice)) throw new Error(`卡不在候选里：${choice}`);
+    run.player.deck.push(createSkillRuntime(choice));
+    out.defId = choice;
   }
   if (p.upgrade) {
     if (p.upgrade.kind === 'random') {

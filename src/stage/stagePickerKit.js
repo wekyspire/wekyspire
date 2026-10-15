@@ -47,11 +47,11 @@ import { withLabels, slotPrizeText } from './panels/shared.js';
 // ---- 「升级 / 焚毁 / 删除」类选卡入口的统一来源表 ----
 // 每项 = 从快照取候选段 + 确认后上行的意图 + 三行文案（标题/提示/确认键）。
 // 本次合并取**并集**（塔楼层多出 gurpasRemove/bossRemove，房间层多出 slot），
-// 文案漂移一律以玩家可见的一致性为准（删卡统一「删除」，不再有「移除」）。
+// 文案漂移一律以玩家可见的一致性为准（删卡统一用「删除」，不用「移除」）。
 const UPGRADE_SOURCES = {
   // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
   // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
-  // （camp 源 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
+  // （无 camp 源——营地不能升级卡，升级全部走训练房尾款。）
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
@@ -70,8 +70,9 @@ const UPGRADE_SOURCES = {
   bankBurn: {
     cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤；**不看晋升 enabled**——见下方 anyCard）
     anyCard: true,
-    burn: true,   // 确认 = 摘下选中卡**原地燃尽**（playCardBurnFlight）再上行意图   // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
-                     // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来（2026-09-30 实锤）
+    burn: true,   // 确认 = 摘下选中卡**原地燃尽**（playCardBurnFlight）再上行意图；
+                     // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
+                     // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来
     intent: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
     title: '选择要焚毁的卡牌', confirmLabel: '确认焚毁',
     hint: '恶魔令你忘却',
@@ -152,7 +153,7 @@ export function createStagePickerKit({
     return bakeCache;
   }
 
-  /** 惰性建选卡界面（**bakeFace + bakeText + bus 三样齐全**——BattleStage 那份曾漏前两样）。 */
+  /** 惰性建选卡界面（bakeFace + bakeText + bus 三样齐全——缺 bakeFace/bakeText 候选卡隐身）。 */
   function ensureCardPicker() {
     if (cardPicker) return cardPicker;
     cardPicker = new CardScrollPickerObject({
@@ -185,7 +186,7 @@ export function createStagePickerKit({
    * 惰性建卡组 build 画廊（第四件）：复用 CardGalleryObject（渲染/拾取/悬浮与战斗
    * 同栈），idPrefix 'deckview:' 与战斗牌堆查看器（'viewer:'）的拾取 id 互不撞车；
    * bgZ 压过全屏选卡/面板模态（OVERLAY_Z 族）→ 可开在选卡界面**之上**——训练升级/
-   * 卡包三选一/战后选卡时按出来看一眼构筑再关回去（SLOW TODO 的动机场景）。
+   * 卡包三选一/战后选卡时按出来看一眼构筑再关回去。
    */
   function ensureDeckViewer() {
     if (deckViewer) return deckViewer;
@@ -298,14 +299,9 @@ export function createStagePickerKit({
     get deckViewer() { return deckViewer; },
     /** 特写是否在播（宿主据此吞掉面板输入 / 压暗常驻按钮）。 */
     get showcasing() { return !!showcase?.busy; },
-    /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
-    get upgrading() { return upgradeBusy; },
-    /** 卡牌焚毁演出是否在播（宿主据此压暗常驻按钮）。 */
-    get burning() { return burnBusy; },
     /**
      * 卡图异步到图后重烘选卡界面（宿主在 cardArt.addOnLoad 里调；合批由宿主负责）。
-     * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
-     * （实报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
+     * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白。
      */
     rebakeCards() { cardPicker?.rebakeCards?.(); deckViewer?.rebake(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
@@ -320,7 +316,7 @@ export function createStagePickerKit({
     /**
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
      * 所有入口都只列**可用**候选（`enabled !== false`：升级入口的 enabled = 有晋升目标，
-     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标——实报）。
+     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标）。
      * **晋升分叉**：确认的卡带多个晋升目标时不直接上行，换开
      * 「选择晋升方向」子面板（候选 = 各分叉目标卡面），确认才带 targetId 上行；
      * 子面板「返回」= 回上一级重选（不消费升级机会——意图未上行，core 未结算）。
@@ -429,7 +425,7 @@ export function createStagePickerKit({
           fire(ids[0]);
         };
         // 返回 = 只收起界面（不做放弃）；调用方传 opts.onSkip 则接手（银行词条 offer：
-        // 面板按钮已删，返回/关闭 = 放弃这份附赠，由 onSkip 消费掉 offer）
+        // 返回/关闭 = 放弃这份附赠，由 onSkip 消费掉 offer）
         cancelFn = opts.onSkip ?? null;
         picker.open({
           title: picks > 1 ? `${def.title}（${picks} 张）` : def.title,
@@ -579,8 +575,8 @@ export function createStagePickerKit({
         effect: needsPick ? '收下之后挑一件带走'
           : freeUpgrade ? '收下之后，选一张卡牌免费升级'
             : null,
-        // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
-        // ＝特写美术区一块空白灰——夜测路7b 实报）
+        // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint
+        // 色块＝特写美术区一块空白灰）
         artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
         tint: p.tier === 'major' ? 0xffd75e : 0xd8e2f4,
         skippable: true,
@@ -588,10 +584,10 @@ export function createStagePickerKit({
         onDismiss: () => {
           // 免费升级：收下后由编排器（machines.slotTake）检测 slotUpgradePending 就地开
           // 升级选卡——不在这里链式打开：本闭包捕获的是开特写时的旧快照，slotTake 之后
-          // 候选才生成，旧快照开卡必空手（实测软锁：选卡永不弹、双 pending 挂死离房门）
+          // 候选才生成，旧快照开卡必空手（否则软锁：选卡永不弹、双 pending 挂死离房门）
           if (freeUpgrade) onIntent?.({ action: 'slotTake' });
-          // 多选一奖项（统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
-          // 「返回」= 放弃——不再落回 dock 面板的内嵌卡行/按钮墙（旧逻辑已删）
+          // 多选一奖项：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
+          // 「返回」= 放弃（不落回 dock 面板的内嵌卡行/按钮墙）
           else if (needsPick) this.openSlotPrizePicker(snap);
           else onIntent?.({ action: 'slotTake' });
         },
@@ -599,8 +595,8 @@ export function createStagePickerKit({
     },
 
     /**
-     * 老虎机中奖产出的**多选一**（统一：获得演出 dismiss 后接全屏 overlay，
-     * 不再走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
+     * 老虎机中奖产出的**多选一**（获得演出 dismiss 后接全屏 overlay，
+     * 不走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
      * 演出 → `slotTake(choice)`；「返回」= 放弃这份产出（`slotDecline`，与卡包同口径——
      * 演出里的「跳过」也是放弃，两条出口殊途同归）。遗物类奖项走 RelicScrollPicker。
      * @returns 是否真的打开了（非多选奖项 / 无候选 → false）
@@ -761,7 +757,7 @@ export function createStagePickerKit({
     /** 滚轮：全屏界面开着才消费（返回是否真的动了；全屏界面是模态，滚轮只作用于它）。 */
     handleWheel(deltaY) {      if (cardPicker?.opened) return cardPicker.scrollBy(deltaY / 100);
       if (relicPicker?.opened) return relicPicker.scrollBy(deltaY / 100);
-      if (deckViewer?.opened) return true;   // 卡组画廊 v1 无滚动：吞掉防下层选卡界面联动
+      if (deckViewer?.opened) return true;   // 卡组画廊无滚动：吞掉防下层选卡界面联动
       return false;
     },
 
@@ -776,7 +772,7 @@ export function createStagePickerKit({
         deckViewer.setHovered(deckViewer.ownsHit(hit) ? hit.id : null);
         return true;
       }
-      if (grantBusy || upgradeBusy) return true;
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (showcase?.busy) return true;
       if (cardPicker?.opened) { cardPicker.onHover(hit, x, y); return true; }
       if (relicPicker?.opened) { relicPicker.onHover(hit, x, y); return true; }
@@ -793,7 +789,7 @@ export function createStagePickerKit({
         if (!deckViewer.ownsHit(hit)) closeDeckViewer();
         return true;
       }
-      if (grantBusy || upgradeBusy) return true;
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (showcase?.busy) { showcase.onClick(hit); return true; }
       if (cardPicker?.opened) { cardPicker.onClick(hit); return true; }
       if (relicPicker?.opened) { relicPicker.onClick(hit); return true; }
@@ -807,7 +803,7 @@ export function createStagePickerKit({
      */
     routePointerDown(hit, x, y) {
       if (deckViewer?.opened) return true;
-      if (grantBusy || upgradeBusy) return true;
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (cardPicker?.opened) return cardPicker.onPointerDown?.(hit, x, y) ?? false;
       if (relicPicker?.opened) return relicPicker.onPointerDown?.(hit, x, y) ?? false;
       return false;
@@ -835,8 +831,7 @@ export function createStagePickerKit({
      * 选卡/选遗物界面收起。只做视觉与输入面回收：picker.close 不触发 onCancel/onSkip
      * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 cancel
      * （收呈现不收账——onDismiss/onSkip 不替玩家做应答，defer 语义；本次 show 给了
-     * onCancel 的链式编排方收到中止信号）。夜测 1002 特写跨幕滞留族
-     * （[路4]/[r4路8]/[r6路6]）的根治位。
+     * onCancel 的链式编排方收到中止信号）。
      */
     dismissModals() {
       if (showcase?.busy) showcase.cancel();
@@ -863,6 +858,7 @@ export function createStagePickerKit({
       pickerRef = null;
       grantBusy = false;
       upgradeBusy = false;
+      burnBusy = false;
     },
   };
 }

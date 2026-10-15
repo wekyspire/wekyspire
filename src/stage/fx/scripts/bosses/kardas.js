@@ -57,7 +57,7 @@ function arcTexture(i = 0) {
   return tex;
 }
 
-// 冲击环纹理（与 pyro 同「细环」口径：白热细峰读气浪，宽带版会糊成肥皂泡——09-23 定论）
+// 冲击环纹理（与 pyro 同「细环」口径：白热细峰读气浪，宽带版会糊成肥皂泡）
 let _ringTex = null;
 function ringTexture() {
   if (_ringTex) return _ringTex;
@@ -76,8 +76,8 @@ function ringTexture() {
   return tex;
 }
 
-// 爪痕纹理（2026-10-09 重制）：三道**纺锤形**割线——两端尖细、中段最粗
-// （旧版等宽圆头线实拍读成「三道粉杠」）。白热芯主导不变（暗红房间里红晕零对比）。
+// 爪痕纹理：三道**纺锤形**割线——两端尖细、中段最粗
+// （等宽圆头线会读成「三道粉杠」）。白热芯主导（暗红房间里红晕零对比）。
 // 生灭动画由 clawRake 承担（短幅画出 + 挥向旋转），纹理本体只管形状。
 let _clawTex = null;
 function clawTexture() {
@@ -144,7 +144,7 @@ function dotTexture() {
 
 // 在目标胸口拍一记爪痕 sprite（dir 镜像左右手）。刀光式生灭：出生从 0.3 幅
 // 挥到全幅 + 挥向旋转（rake() 里的两条 tween），消失走 ttl 线性衰（白炽余温）。
-// 15wu 基准（旧版 9wu——用户定纹路放大 1.5-2 倍；纺锤形两端尖，放大不糊成盘）
+// 15wu 基准（纺锤形两端尖，放大不糊成盘）
 function clawRake(particles, at, { dir = 1, scale = 1, ttl = 0.3, delayRot = 0 } = {}) {
   const W = 15 * scale;
   const rec = particles.spawnSprite(at.x, at.y, {
@@ -302,8 +302,8 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
   }
 
   // —— 常驻（挂舞台寿命）：怒气红光 + 环身余烬 + 低频电弧 + 结构光压暗 ——
-  // 红光从舞台光池借（light:fx0）：演出中途 add 灯会触发全场景着色器重编译
-  // （实测 1.2s 冻帧，09-24）；池灯入场即在场景里，这里只挪位/换色/推强度
+  // 红光从舞台光池借（light:fx0——中途 add 灯会全场景重编译冻帧）；
+  // 池灯入场即在场景里，这里只挪位/换色/推强度
   const rageLight = cast.get('light:fx0');
   if (rageLight) {
     rageLight.color.set(0xff4a34);
@@ -326,17 +326,17 @@ async function kardasP2({ ctx, args, cast, particles, shake, vignette, camera, o
     const mood = cast.get('light:mood');
     if (mood) jobs.push(c.tweenRaw(mood, { dim: mood.dim * 0.78 }, { durationMs: 1800, delayMs: 200 }));
     await Promise.all(jobs);
-    // 常驻低频电弧已删——rageArcs v2 折线雷件本体就是常驻（director 推 level）
+    // 常驻低频电弧不另设——rageArcs 折线雷件本体就是常驻（director 推 level）
   });
 
   // 演出机位退场：先补间飞回基准机位（flyHome 连 fov 一起飞），再弹栈——
-  // 直接 pop 会瞬时硬切 63u + 4.8°（报「动画结束后相机弹回原位」的病灶，09-24 修）
+  // 直接 pop 会瞬时硬切 63u + 4.8°
   await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('kardasP2');
   unit.restoreColor?.();
 }
 
-// —— 命中 beat（等离子主题，2026-10-09 返工）：爪 = clawRake 三趾贴图 sprite
+// —— 命中 beat（等离子主题）：爪 = clawRake 三趾贴图 sprite
 // （白热芯 + 深红晕渐细割线，普击单挥 / 重击撕碎交叉双挥）+ 命中点电弧迸溅。
 // 冲击骨架仍是 enemyImpactBeat（量级/震屏/尘走三档表），爪痕叠在它上面读「撕裂」。
 async function kardasHitBeat(ctx, deps, args) {
@@ -374,7 +374,7 @@ async function kardasHitBeat(ctx, deps, args) {
 }
 
 // —— 起手 beat：攻击拍 = 兽性蓄力。轻击（多段连击）= 短压 + 一记折线雷；重击撕碎 =
-// 完整预备演出（anticipation，用户 1009 定）：深蹲压满 + 底位高频颤 + 等离子火花
+// 完整预备演出（anticipation）：深蹲压满 + 底位高频颤 + 等离子火花
 // 向爪尖汇聚 + 血气两段渐亮 + 蓄满一刻周身电弧齐鸣——力量感来自「蓄」不是「扑」，
 // 突进撕扑由伤害节拍的突进编排接棒。盾拍（盾10）= 植爪卸力（压宽一拍 + 电弧 + 扬尘）。
 // 嘶吼转段拍由 P2 剧本接管。

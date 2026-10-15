@@ -1,10 +1,10 @@
-// 资源消耗汇聚特效（方案 A，2026-10-09 用户定）——两层结构：
+// 资源消耗汇聚特效——两层结构：
 //   · 主体能量 = projectile 光珠（uiScene mesh 面片，fx/spells 的 projectileShade
 //     语言）：每资源 3 珠，从资源图标弧线加速飞进卡面费用徽章。**节拍权威**：
 //     playCardCost 返回 { done } = 最后一珠真落地的 promise——卡牌起飞不靠
 //     DRAIN_FLIGHT_MS 估算，由 projectile 完结时刻发送（缺宿主的兜底路径才用常量）。
 //   · garnish = GPU 池碎星（uber burst + destination 汇聚）：资源「碎裂」的尘随，
-//     数量级已降（光珠接管主体读感）。
+//     数量级低于主体（光珠承担主体读感）。
 // 非卡来源的消耗（维持费等）纯爆散（burst 不带目的锚）。
 //
 // 手感旋钮：ORBS（光珠流数/时长/弧高）+ 类型表 spawn/destination/render 参数；

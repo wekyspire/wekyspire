@@ -1,4 +1,4 @@
-// 伤害节拍演出决议器（2026-09-30 刀光体系的泛化）：施术节拍（index.js 决议链）
+// 伤害节拍演出决议器：施术节拍（index.js 决议链）
 // 管「怎么起手」，本文件管「命中那一刻长什么样」——伤害量/受击方位/攻击来向
 // 这些**只在伤害节拍有真值**的语义都在这里消费（units.js _damageHit 钩子调用）。
 //
@@ -13,7 +13,7 @@ import { cartoonNova } from './cartoonNova.js';
 const _novaRecent = new Map();
 
 /**
- * 爆裂术终止大爆（2026-10-02 用户定艺术方向）：敌方阵型中心一场**卡通烟云**
+ * 爆裂术终止大爆：敌方阵型中心一场**卡通烟云**
  * 大爆炸——黑烟云朵为主体（cartoonNova：法线混合暗色 puff + 描边 + 变色），
  * 配全屏暖白闪一瞬 + 灯池爆闪 + 重震屏。火球面片不上（写实湍流与卡通烟云
  * 风格打架）。粒子对象 fire-and-forget，本协程只管编排时序。
@@ -125,7 +125,7 @@ export function resolveDamageFx(defId) {
       return { kind: 'punch', heavy, rapid };
     }
     case 'fireBall':       // 火球链
-    case 'heatCharged':    // 蓄热火球链（拆系列同款）（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
+    case 'heatCharged':    // 蓄热火球链（单体投射落点；proj=tracked：施术拍登记、本拍等抵达）
     case 'firstStrike':    // 先发火弹/火矢/火球
     case 'shock':          // 爆震/轰灭（火系单体斩杀件）
       return { kind: 'fireburst', proj: 'tracked' };
@@ -151,7 +151,7 @@ export function resolveDamageFx(defId) {
 }
 
 /**
- * 附级结算特效（燃烧/中毒 tick，2026-10-09）：DoT 每拍伤害的专属命中读法——
+ * 附级结算特效（燃烧/中毒 tick）：DoT 每拍伤害的专属命中读法——
  * 燃烧 = 脚下小火腾起（fireBurst 低档）+ 躯干余烬上升 + 暖灯闪（「火咬一口」）；
  * 中毒 = 毒液自胸口飞溅坠落（重力下落）+ 病绿蒸气缓升 + 绿灯闪（立牌染绿归
  * 伤害节拍的 flash，不在此处）。量级随伤害开方轻缩放。fire-and-forget，
@@ -218,7 +218,7 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
       const look = fx.look ?? { color: [1.0, 0.98, 0.92], fringe: [0.5, 0.8, 1.6] };
       const flame = fx.kind === 'flameslash';
       if (flame) {
-        // 刃生成即带火（2026-10-07 用户定焰刃加强）：扫掠期间焰星随刃口连喷三轮
+        // 刃生成即带火：扫掠期间焰星随刃口连喷三轮
         // （与刃同步——火刀是「刃上有火」，不是砍完才飘灰）；短循环先于父本演完
         ctx.spawn(async (c) => {
           for (let i = 0; i < 3; i++) {
@@ -250,7 +250,7 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
     case 'punch': {
       const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
       const s = unit._baseScale ?? 1;
-      // 拳锚明显高于胸口（4.9×scale）——胸口锚与血条同位互相污染（glm-flash 第七轮）
+      // 拳锚明显高于胸口（4.9×scale）——胸口锚与血条同位互相污染
       const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
       await punchImpact(ctx, deps, {
         at, dir,
@@ -334,8 +334,8 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
       if (fx.proj === 'owned') {
         // 火花乱射：本拍自持投射物（窜天猴——飞行中随机甩尾，从主角手上弹出，
         // 抵达才爆）；落定即回执 projSync——主受击拍（受伤/数字）与此爆点同源触发。
-        // 慢摆大甩：dartFreq 0.42 把双频降到 2~3 个 S 弯（200ms 级飞行下原 4.5-8Hz
-        // 一屏十几帧走样成抖直线）；飞行拉长到 290ms 给甩尾留时间
+        // 慢摆大甩：dartFreq 0.42 把双频降到 2~3 个 S 弯（200ms 级飞行下
+        // 高频摆一屏十几帧走样成抖直线）；飞行拉长到 290ms 给甩尾留时间
         await arcProjectile(ctx, deps, {
           from: deps.playerAnchor?.() ?? { x: 0, y: 5, z: 0 },
           to: chest,
@@ -350,10 +350,10 @@ export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, 
       }
       await fireBurst(ctx, deps, {
         at: feet,
-        // 引燃是「点」不是「爆」：下限 0.72（旧 1.0 会让 0 伤点种也烧出火球级）
+        // 引燃是「点」不是「爆」：下限 0.72（下限过高会让 0 伤点种也烧出火球级）
         scale: Math.max(0.72, fireScaleFor(dealt) * 0.9),
         ms: 420,
-        // 引燃走橙金调（深红会与受击红闪同色系，火属辨识度被稀释——glm-flash 第七轮）
+        // 引燃走橙金调（深红会与受击红闪同色系，火属辨识度被稀释）
         color: [1.0, 0.55, 0.20], ember: [1.0, 0.25, 0.06],
         sparkCount: 10, sparkSpeed: 13,
         linger: { count: 8, speed: 4, ttl: 1.6, size: 0.6, gravity: -3 },

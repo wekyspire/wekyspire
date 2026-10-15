@@ -1,14 +1,12 @@
-// CPU 粒子门面（飘字/贴图专用）。使用边界（2026-10-07 用户定，AGENTS「CPU/GPU
-// 分工铁律」同步）：**默认一律走 GPU 粒子池**（fx/gpu/particlePool.js）；本门面只许
-// 承接**同时**满足两条件的粒子：①（per-粒子独立纹理/文本，或行为特别复杂）
+// CPU 粒子门面（飘字/贴图专用）。默认点粒子一律走 GPU 粒子池（fx/gpu/particlePool.js）；
+// 本门面只许承接**同时**满足两条件的粒子：①（per-粒子独立纹理/文本，或行为特别复杂）
 // 且 ② 总量十几个以内——都成立才走 CPU。
 //   · 文本/贴图粒子（spawnText/spawnSprite：伤害数字、治疗读数、符咒碎片、贴图
 //     光环）：烘焙纹理 Sprite 池，物理 = 初速度 + gravity + drag，透明度随寿命衰减
 //     （fadeIn 三角），scalePop 出生弹跳，按 space 分流 world/ui 两套（UI 前景层
 //     恒定屏幕尺寸、不被场景遮挡）——本门面的正当职责。
-// 历史迁移：一次性点粒子爆发（spawn）→ gpu/burstFx.js；持续点发射器
-// （spawnEmitter）→ gpu/ambientMotes.js（2026-10-07 全量迁移，本文件的点粒子
-// 池/发射器机械已删）。
+// 点粒子路由：一次性爆发（spawn）→ gpu/burstFx.js；持续发射器（spawnEmitter）
+// → gpu/ambientMotes.js（本文件不提供点粒子）。
 
 import * as THREE from 'three';
 import { renderRichTextBlock } from '../richtext/texture.js';

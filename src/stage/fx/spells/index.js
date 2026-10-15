@@ -1,4 +1,4 @@
-// 施术演出模板系统（spellFx，2026-09-30 用户定「动画逻辑生成器」架构）：
+// 施术演出模板系统（spellFx——「动画逻辑生成器」架构）：
 // 类比 PCG 管线（生成器 → 物体生成器 → SDK）的三层——
 //   · 基础块 SDK：fx/spells/blocks.js（cardFlare/arcProjectile/impactBurst/slashSweep/
 //     punchImpact/fireBurst/lightPillar…）
@@ -12,7 +12,7 @@
 //   - 返回的 async 协程即动画逻辑；ctx = fx/script 的 ScriptContext
 //     （tween/wait/spawn + 结构化 kill——被杀时后续语句不执行、onKill 清理必达）
 //   - notify() = 通知 sequencer「本节拍完成，可进下一个动画」。时机归模板自选
-//     （2026-09-30 用户定的三档口径）：
+//     （三档口径）：
 //       · 小卡 200~500ms：全程演完才 notify（短促刀光/抓伤）
 //       · 大卡：主体落定即 notify（如爆炸开始后 ~700ms），余烬等无主资产后台散尽
 //       · 依赖战斗实体不被打扰的强卡（摧山斩类：受击 billboard 断裂两半等）：
@@ -69,23 +69,23 @@ const TEMPLATES = {
 
 // 体系级映射（series → { id, params }）。命中本体全在伤害拍的体系挂 castFlare
 // （起手色参数化）；投射物体系挂各自的 cast 模板（落点爆在伤害拍）。
-// 子体系兜底（series 链级化后的体修三系桶行为——0.11.20 静默回退教训的防回归层）
+// 子体系兜底（series 链级化后的体修三系桶行为——防静默回退的兜底层）
 const SUBSYSTEM_SPELLS = {
   blade: { id: 'bladeCast' },   // 刀法：冷白刀光（四模式自动路由）
   block: { id: 'blockCast' },   // 格挡/架势：光壁/气场
   fist:  { id: 'fistCast' },    // 体修：拳风破空（四模式）
 };
 const SERIES_SPELLS = {
-  ember:         { id: 'emberBurst' },                                   // 余烬系（旧先锋模板整链）
+  ember:         { id: 'emberBurst' },                                   // 余烬系
   punch:         { id: 'fistCast' },                                     // 基石拳同体修
   fireBall:      { id: 'fireballCast' },                                 // 火球链
-  heatCharged:   { id: 'fireballCast' },                                 // 蓄热火球链（2026-10-11 拆系列）
+  heatCharged:   { id: 'fireballCast' },                                 // 蓄热火球链
   firstStrike:   { id: 'fireballCast' },                                 // 先发火弹/火矢/火球
   fireRain:      { id: 'fireRainCast', params: { aoe: true } },            // 火雨/火瀑（群伤全体落雨）
   ignite:        { id: 'igniteCast' },                                   // 点火/热浪
   burst:         { id: 'castFlare', params: { flareColor: 0xff9a3d } },  // 爆裂咏唱（新星在伤害拍）
   selfImmolate:  { id: 'castFlare', params: { flareColor: 0xffb066 } },  // 焰刃/玩火（火刀）
-  // ---- 2026-10-02 火系铺量 ----
+  // ---- 火系铺量 ----
   burnDoubler:   { id: 'burnSurge', params: { scale: 1.5 } },            // 焚烧/星炎：燃烧翻倍
   spark:         { id: 'sparkCast' },                                    // 火花链（多段小伤连珠）
   fireWhirl:     { id: 'fireWhirlCast' },                                // 火焰旋风：主角火环外推
@@ -111,7 +111,7 @@ const SERIES_SPELLS = {
                      size: 6.0, projMs: 230, arcH: 1.5, color: [1.0, 0.36, 0.12], core: 0xff6a3d } },
   fireControl:   { id: 'castFlare', params: { flareColor: 0xff8a4d } },  // 控火术（0 费快件——短起手）
   fireControlFinder: { id: 'castFlare', params: { flareColor: 0xff8a4d } },
-  // ---- 2026-10-02 核心卡批 ----
+  // ---- 核心卡批 ----
   fireTemper:    { id: 'manaCast', params: { from: 'card', fire: true,      // 淬炼：魏启回流（萃取火系镜像），
                      color: [0.52, 0.74, 1.22], hot: [1.30, 1.16, 0.80], core: 0x8ab4ff } }, // 热核金白淬闪
   relief:        { id: 'blockCast', params: { mode: 'ward',              // 泄压阀：魏启蓝转盾（泄压成墙）
@@ -136,7 +136,7 @@ const CARD_SPELLS = {
   mountainCleave:  { template: 'heavenCleave', params: { grade: 'A' } },
   skyCleave:      { template: 'heavenCleave', params: { grade: 'S' } },
   godCleave:      { template: 'heavenCleave', params: { grade: 'X' } },
-  // ---- 体修逐卡（2026-10-02）----
+  // ---- 体修逐卡 ----
   // 重拳蓄力：重拳链/炮/真/虎（空形拳已迁 S 签名档）
   heavyFistC:     { template: 'fistCast', params: { mode: 'heavy' } },
   heavyFistB:     { template: 'fistCast', params: { mode: 'heavy' } },
@@ -148,7 +148,7 @@ const CARD_SPELLS = {
   fullChargeC:     { template: 'fistCast', params: { mode: 'heavy', aoe: true } },      // 蓄满一击（群）
   fullChargeB: { template: 'fistCast', params: { mode: 'heavy', aoe: true } },
   fullSpirit:     { template: 'fistCast', params: { mode: 'heavy', aoe: true, gatherMs: 500 } },  // 全神一击（群）
-  // S 签名（2026-10-02 批次3）：空形 = 静场蓄意（兑付在伤害拍 voidStrike——
+  // S 签名：空形 = 静场蓄意（兑付在伤害拍 voidStrike——
   // 后手不成立则没有伤害拍，「打空就是空」）；虚形 = 七道虚影细流汇聚入体
   // （暧昧语言：不预判后手，成立则随后七牌入手兑现，不成立散作虚无）
   emptyFist:      { template: 'emptyFistCast' },   // S 空形拳
@@ -158,7 +158,7 @@ const CARD_SPELLS = {
   wildFlurry:     { template: 'fistCast', params: { mode: 'rapid', shots: 3 } },
   thousandHands:  { template: 'fistCast', params: { mode: 'rapid', shots: 4, staggerMs: 80 } },
   myriadHands:    { template: 'fistCast', params: { mode: 'rapid', shots: 6, staggerMs: 65 } },   // S 万手
-  // ---- 火系逐卡（2026-10-02）----
+  // ---- 火系逐卡 ----
   burnBurstStar:  { template: 'burnSurge', params: { scale: 2.0, grand: true } },     // 星炎（×3，S）
   nirvana:        { template: 'selfFlame', params: { pillar: true, scale: 1.1,    // 涅槃（S）
                     color: [1.0, 0.72, 0.30], hot: [1.3, 1.1, 0.75], ember: [1.0, 0.42, 0.08], core: 0xffd27a } },
@@ -182,7 +182,7 @@ const CARD_SPELLS = {
   grandNewYear:   { template: 'selfFlame', params: { pillar: true, scale: 1.2,
                     color: [1.0, 0.70, 0.25], hot: [1.35, 1.15, 0.80], ember: [1.0, 0.40, 0.08], core: 0xffe08a,
                     sparks: { color: 0xffe08a, count: 30 } } },
-  // ---- 刀法逐卡（2026-10-02 二批）----
+  // ---- 刀法逐卡 ----
   // 横劈链（群伤）：场景级横劈巨刀光（一记扫过敌阵，逐敌命中在伤害拍）
   cleave:           { template: 'bladeCast', params: { mode: 'cleaveC' } },
   powerCleave:      { template: 'bladeCast', params: { mode: 'cleaveC', cleaveMs: 245,
@@ -215,7 +215,7 @@ const CARD_SPELLS = {
   practiceBladeB: { template: 'bladeCast', params: { grindSparks: true } },
   practiceBladeA: { template: 'bladeCast', params: { grindSparks: true } },
   unsheathe:        { template: 'bladeCast', params: { core: 0xeaf2ff } },   // 拔刀术（A）：更亮起手
-  // ---- 格挡逐卡（2026-10-02 二批）----
+  // ---- 格挡逐卡 ----
   // 守·加盾链（ward：起手一亮即止，盾的读法归护盾罩 fx/shieldDome.js——随盾量常驻）
   shieldC:            { template: 'blockCast', params: { mode: 'ward' } },
   blockC:         { template: 'blockCast', params: { mode: 'ward' } },
@@ -258,7 +258,7 @@ const CARD_SPELLS = {
   shatterHitB:      { template: 'fistCast', params: { mode: 'strike' } },
   shatterHead:      { template: 'fistCast', params: { mode: 'heavy' } },
   endureB:       { template: 'fistCast', params: { mode: 'strike' } },
-  // ---- 体修：非拳件（2026-10-02 核心卡批：series 'fist' 的兜底拳风对这些卡是语义错配）----
+  // ---- 体修：非拳件（series 'fist' 的兜底拳风对这些卡是语义错配）----
   // 蓄力链（洗入瞬击）：气团数 = 洗入数；一瞬千击 toHand（发现 5 张直接进手）
   chargeUp:         { template: 'chargeUpCast', params: { count: 2 } },
   comboStrike:      { template: 'chargeUpCast', params: { count: 3 } },
@@ -282,10 +282,10 @@ const CARD_SPELLS = {
                         color: [0.86, 0.89, 0.98], hot: [1.10, 1.12, 1.20], core: 0xd8dce8 } },
   hunYuanS:         { template: 'blockCast', params: {
                         color: [0.90, 0.92, 1.02], hot: [1.25, 1.25, 1.30], core: 0xe8ecf4 } },
-  // ---- 经济卡（资源获得通用语言，2026-10-09 用户定：复用肾上腺素 manaCast——
+  // ---- 经济卡（资源获得通用语言：复用肾上腺素 manaCast——
   // 回蓝 = 魏启蓝**晶片**（shape:'crystal'，异形资源粒），回AP = 金色光珠；
   // from 三态按卡语义：纳气族（汲取/萃取）=汇(around) / 罐与针剂=饮(card)。
-  // ⚠ 键 = 卡真 id（0.11.20 改名后旧键 extract/manaJar/stimulant…曾整批静默失配）----
+  // ⚠ 键必须是卡真 id——错键整批静默失配----
   extractC:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8 } },
   extractB:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 4.8, streams: 5 } },
   extractA:          { template: 'manaCast', params: { from: 'around', shape: 'crystal', size: 5.4, streams: 6 } },
@@ -311,7 +311,7 @@ const CARD_SPELLS = {
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
   piercingShot:     { template: 'bladeCast', params: { mode: 'slash', arcH: 0.10,
                       color: [1.10, 1.02, 0.62], hot: [1.35, 1.28, 0.95], core: 0xf0e0a0 } },
-  // ---- 火系补量（2026-10-06：原 depth/melt 等 15 张零覆盖卡 + 特征卡签名）----
+  // ---- 火系补量 ----
   // 回蓝件（余热/重燃/回响烈焰）：火焰能量回流语言——manaCast 火调（余温收聚）
   residualHeatA:   { template: 'manaCast', params: { from: 'around', fire: true,
                      color: [1.0, 0.55, 0.22], hot: [1.2, 0.95, 0.60], core: 0xff9a4d } },
@@ -338,7 +338,7 @@ const CARD_SPELLS = {
   // 熔融/熔毁：燃烧剥离（消耗自身燃烧→群虚弱）——新模板 meltCast
   meltDown:        { template: 'meltCast' },
   meltCollapse:    { template: 'meltCast', params: { staggerMs: 70 } },
-  // ---- 消耗燃烧件（共享吸焰原语 siphonCast，2026-10-07）----
+  // ---- 消耗燃烧件（共享吸焰原语 siphonCast）----
   gatherFlame:     { template: 'siphonCast', params: { from: 'all', to: 'self' } },   // 火源归一（全场→己）
   burnSnapB:       { template: 'siphonCast', params: { from: 'target', to: 'above' } }, // 燃爆（吸干变现）
   burnSnapA:       { template: 'siphonCast', params: { from: 'target', to: 'above' } },
@@ -364,7 +364,7 @@ const CARD_SPELLS = {
   // 不灭火种（A 洗入余烬）：火种气团内聚（chargeUp 火调——洗入件同语言）
   eternalSpark:    { template: 'chargeUpCast', params: { count: 3,
                      color: [1.0, 0.60, 0.25], hot: [1.2, 1.0, 0.60], core: 0xffb066, accent: 0xffd97a } },
-  // ---- 体修补量（2026-10-06：兽形拳族 / 龟系姿态 / S 引擎件）----
+  // ---- 体修补量（兽形拳族 / 龟系姿态 / S 引擎件）----
   // 兽形拳族：气劲色相分家（龙金 / 豹铜绿 / 蛇紫 / 仿灰）——形态走 fistCast 既有模式
   dragonFist:      { template: 'fistCast', params: { mode: 'strike', gatherMs: 360,
                      color: [1.0, 0.85, 0.42], hot: [1.40, 1.22, 0.72], core: 0xf0cc70 } },
@@ -407,7 +407,7 @@ export function resolveSpellFx(defId) {
     if (template) return { template, params: { ...(card.params ?? {}) } };
   }
   const def = (() => { try { return getSkillDefinition(defId); } catch { return null; } })();
-  // 体修 series 已拆链级（2026-10-11 按 SKILL_DESIGN_PRINCIPLES 归位）：刀/拳/格挡的
+  // 体修 series 已拆链级：刀/拳/格挡的
   // 体系兜底改走 subsystem；SERIES_SPELLS 链级行（punch 等）照常直查。
   const row = SERIES_SPELLS[def?.series]
     ?? SUBSYSTEM_SPELLS[def?.subsystem];
@@ -446,7 +446,7 @@ export function runSpellFx({ defId, deps, notify, chantOff = false }) {
 
 /**
  * 战斗开场按卡组预告预热（shader 变体 compileAsync——Boss 房 charBurn 预热同款
- * 机制，2026-10-06 起真接通：WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法
+ * 机制：WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法
  * 面片黑一拍。变体按 (shade, 常量色字面量) 缓存——同构新材质走共享程序缓存）。
  * @param {string[]} deckDefIds 卡组 defId 列表
  * @param {object} deps 舞台服务袋（renderer/camera）
@@ -486,7 +486,7 @@ export function warmSpellFx(deckDefIds, deps) {
 }
 
 // 变体构造器表：params → [{ key, mk } | ...]。key 含色字面量（同 shade 异色 =
-// 异程序）。只收本批火系/体修词汇的 shade 面（blade/heavenCleave 走旧路径暂不预热）。
+// 异程序）。
 const projQuad = (p) => () => spellQuad({
   shade: projectileShade(uv(), uniform(5.0), linearColor(p.color), linearColor(p.hot)),
   width: 2.4, height: 2.4, name: 'warm:proj',

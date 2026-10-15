@@ -95,15 +95,14 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
         clearHandle?.visualDone?.then(() => { clearDone = true; tryFinish(); });
       },
     });
-    // 等待侧兜底：同时收 Promise 与指令本体——爬升/残影任一完成链悬空（回调被
-    // 打断、视觉承诺未兑现）时不留悬挂指令喂保险丝（runFuzz soak 实锤：
-    // tower:floor-arrive 被 6s fuse 强杀污染 timeoutCount）
+    // 完成链可能被舞台切换打断（回调悬空）：墙钟在已知时长 +200ms 处完结指令，
+    // 不留悬挂指令喂 6s 保险丝（时长已知的演出段允许墙钟帽）
     setTimeout(() => { settle(); if (instrId != null) sequencer.finish(instrId, { reason: 'manual' }); }, ms + 200);
   });
 }
 
 export function createRunController({ seed = (Date.now() >>> 0), stageManager = null, mapStage = null, save = null, storyMode = false, debugMode = false, route = 'body', onRestart = null } = {}) {
-  // 双 sequencer（2026-10-14 用户裁决，双轨拆分）：
+  // 双 sequencer（双轨拆分）：
   //   · battleSequencer（经典最小形态）= 后端单向数据流——bridge 把战斗 wire 指令排进它、
   //     舞台演出完在 battleBus 上回执。S2 的「battle/room/tower/cutscene 共队列」就此废除：
   //     终局→黑幕→塔楼的衔接改走事件/承诺（endBattle 本就等 bridge 收尾后才起幕间链）。
@@ -200,7 +199,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     battleStage?.topBar.setRelics(equippedRelicViews());
     // 卡组 chip 张数 = run 牌组总量（与画廊条目同源；战斗中 run 牌组恒定，notify 落位即准——
     // 战斗克隆可能多出遗物加的战斗卡（大剑的斩），那属于牌库面板的战斗口径，不进 build 计数）
-    battleStage?._deckChip?.setCount(run.player.deck.length);
+    battleStage?._deckChip.setCount(run.player.deck.length);
     battleStage?.statusBar.setPlayerShield(0);
     battleStage?.statusBar.setPlayerHp(run.player.hp, run.player.maxHp);
     battleStage?.statusBar.setRemi(remiView());
@@ -216,7 +215,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
   };
   // 阶段落定效应：只看 gameStage 值的协议反应，挂在阶段真正落定的时刻——
   // transitionStage 中点（阶段迁移唯一入口）、swapAnyToMap（调试硬重置落定点）、
-  // 构造初始（读档落位）。notify 不再背这些（与显示刷新无关的副作用，2026-10-14 重整）。
+  // 构造初始（读档落位）。
   const settleStageEffects = () => {
     persist();   // 检查点：prep（层首）与 end（终局）落盘；战斗内退出 = 回到本层战前
     // prep 入场即预热下场战斗素材：遭遇已知（advanceFloor 已定）、卡组已定
@@ -260,11 +259,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     presentRelic: (id) => showcase.presentRelic(id),         // 单件遗物直答路径的授予源特写
   });
   syncMapStatus(); // 初始同步一次（后续随 notify 自动跟随）
-  mapStage?.setPanel?.(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
+  mapStage?.setPanel(panelSnapshot(run, panelExtras())); // 休息阶段面板快照（数据下行唯一通道）
 
   // 该房间是否由**幕间/房间场景**呈现（事件幕间 or 有休息房配方）——呈现中塔楼层**不渲染房间面板**：
-  // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕随后
-  // 才盖住（实报的"营地 UI 错误地闪了一下"）。用"待呈现/已呈现"两个条件判定，
+  // 否则"选完奖励 → 进房"的瞬间塔楼会先铺一帧房间面板（营地/售货机/老虎机），幕间黑幕
+  // 随后才盖住。用"待呈现/已呈现"两个条件判定，
   // 不用"有配方"直接推断——无舞台/占位路径仍要把面板留给塔楼层。
   // 训练改版：**房内进阶**期间（gameStage 'ascension' 且 roomStage 存活——
   // currentRoom/roomData 原地保留）也按"房间场景呈现中"处理——阶段模态面板（种子包九选三）
@@ -276,11 +275,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     && (roomScenePending || !!roomStage)
     && (run.currentRoom === 'event' || !!restRecipeFor(run.currentRoom));
   // notify = 变异后果的显示刷新（纯投影）：状态栏 + 面板快照三舞台分发 + 问句呈现驱动。
-  // 2026-10-14 重整（用户裁决）：阶段协议反应（存档检查点/终局路由/战前预热）归
-  // settleStageEffects 的三个阶段落定点；内容触发（遗物特写/吞噬教学/恶魔解说）下沉到
-  // 各自触发源；显示标量对账归空闲沿——notify 不再背任何不属于显示刷新的逻辑。
-  // P4a idle 门控（同日用户裁决：无最大延迟帽——排空前方的演出时长不可知，玩家节奏段
-  // 选卡/特写长考期间面板旧值等待是正确语义）：队列忙时显示刷新让位，空闲沿**无条件**
+  // 职责边界：阶段协议反应（存档检查点/终局路由/战前预热）归 settleStageEffects 的
+  // 三个阶段落定点；内容触发（遗物特写/吞噬教学/恶魔解说）归各自触发源；显示标量对账
+  // 归空闲沿——notify 不背任何不属于显示刷新的逻辑。
+  // idle 门控：无最大延迟帽——排空前方的演出时长不可知，玩家节奏段选卡/特写长考期间
+  // 面板旧值等待是正确语义。队列忙时显示刷新让位，空闲沿**无条件**
   // 补发（不是挂脏才发——漏喊的刷新在下一次队列排空自愈，「漏 notify」族由结构消灭；
   // 演出期面板本就被画面盖住，跳过的只是不可见重绘）。force 旁路只剩两类真契约：
   // ①黑幕中点揭幕就位（transitionStage/进阶豁免点——揭幕不得露旧画面）；②notify 后
@@ -297,11 +296,11 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）
     // 战后奖励**画在战斗舞台上**：战斗结束后不换舞台，奖励 overlay 直接
     // 盖在战斗房间前；"战斗房 → 塔楼"的场景切换在**领奖后的切幕中点**完成（见 afterRewardToFloor）。
-    // 无战斗舞台（headless/降级）时自然落到塔楼层（mapStage）——行为与旧版一致。
-    if (run.gameStage === 'reward') battleStage?.setPanel?.(snap);
-    else battleStage?.setPanel?.(null);
-    mapStage?.setPanel?.(roomPresentedOnScene() ? null : snap);
-    roomStage?.setPanel?.(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
+    // 无战斗舞台（headless/降级）时自然落到塔楼层（mapStage）。
+    if (run.gameStage === 'reward') battleStage?.setPanel(snap);
+    else battleStage?.setPanel(null);
+    mapStage?.setPanel(roomPresentedOnScene() ? null : snap);
+    roomStage?.setPanel(snap);    // 场景式休息房：机器面板与翻牌计数器同源重绘
     questions.drive();   // 问句呈现：待答问句 + 屏幕空闲 → 开全屏选卡/产出特写（恢复即重发）
   };
 
@@ -314,10 +313,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     notify();
     showcase.flushRelicShowcase();
   });
-
-  // 恶魔 roll 解说 / 吞噬首满教学：内容触发已下沉触发源（runMachines，2026-10-14
-  // 用户裁决「内容归触发源」）——overdraft 入账拍 / 转轮揭示拍触发，进房恢复钩子
-  // machines.onSlotRoomEntered() 补电平覆盖。
 
   let logSeq = 0;
   const pushLog = ({ text, kind }) => {
@@ -339,7 +334,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // director 在下方才声明——晚绑定箭头闭包，运行期（首个 fx step）早已就位
     getFxServices: () => director.fxServices(),
   });
-  // 切幕统一清算（夜测 1002 [路4]/[r4路8]/[r6路6] 特写跨幕滞留族的根治，用户批准）：
+  // 切幕统一清算：
   // 每次幕间转场在全黑中点、换台 swap 之前，先把**所有舞台**的全屏模态（获得特写/
   // 选卡/选遗物）一键收起——目的地无论是什么，切幕那一刻还挂在任何舞台上的模态
   // 都是残影（战斗舞台的会被随后 dispose 带走；塔楼是常驻舞台，不清算就会跨进章/
@@ -391,7 +386,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           } finally { done(); }
         },
       });
-      if (!enqueued) resolve(false);   // 恒真 entryOk 今天拒不了；形状上不留悬挂分支
     });
   }
   // 按当前 run 状态查触发规则并逐条播放（幂等；阻塞靠流程侧 await）。返回实际播放条数——
@@ -418,7 +412,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     roomStage: () => roomStage,
   });
 
-  // ---- 幕间流（随机事件 / 进阶，用户定 对话 + 选项 + 同步结算 + 切幕出场）----
+  // ---- 幕间流（随机事件 / 进阶：对话 + 选项 + 同步结算 + 切幕出场）----
   // 编排整体在 runCutsceneFlows.js；lifecycle 是本控制器注入的房间/舞台生命周期动作，
   // 全部箭头晚绑定（swapRoomToMap/exitSceneAfterCutscene 在下方才定义，运行期才取值）。
   const cutsceneFlows = createRunCutsceneFlows({
@@ -582,8 +576,8 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           roomOverride,
         });
         // 战后奖励面板落在战斗舞台上：意图出口与塔楼层同一套
-        battleStage.setPanelIntentHandler?.(dispatchPanelIntent);
-        battleStage.setRunSequencer?.(dedicatedSequencer);   // 得卡演出的指令化挂点（与切幕/清层串行）
+        battleStage.setPanelIntentHandler(dispatchPanelIntent);
+        battleStage.setRunSequencer(dedicatedSequencer);   // 得卡演出的指令化挂点（与切幕/清层串行）
         stageManager.setStage(battleStage);
         playMusic('battleCh1'); // 战斗 BGM 随换场起跑（黑幕期淡入）；新章曲目登记进 audio.js TRACKS 后按 run.floor 选
         duckWind(0);            // 塔楼风声床压暗（不切源，回塔续播）
@@ -633,19 +627,17 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
         }).filter(e => e.defId),
       };
     }
-    // Boss 掉落遗物的授予源特写：finishBattle 内部起草授予（shell 不可见），
-    // 这里前后留影捕获新增（内容触发下沉触发源，2026-10-14）
+    // Boss 掉落遗物的授予源特写：finishBattle 内部起草授予（shell 不可见），前后留影捕获新增
     const relicsBefore = new Set(run.player.relics);
     finishBattle(run, result, bridge.battle); // 回写 run（含瑞米打跑检测）→ gameStage='reward'
     for (const id of run.player.relics) {
       if (!relicsBefore.has(id)) showcase.presentRelic(id);
     }
     if (result !== 'victory') stopMusic({ fadeOut: 2 }); // 战败即收战斗曲；胜利留到回塔（swapBattleToMap）再收
-    disarmSpanGate?.();   // 闸门 onEnd（先注册）已自收带 result；此处停保险丝 + cancelByOwner 清残（真兜底）
+    disarmSpanGate?.();   // 闸门 onEnd（先注册）已自收带 result；此处停保险丝 + cancelByOwner 清残
     disarmSpanGate = null;
     battleBridge = null;
-    // 状态栏提前同步（实报）：原来只有链条末尾的 notify 会刷状态栏，
-    // 于是爬塔动画播完才看到战后的血量/金币。这里在战斗舞台上先把状态推上去。
+    // 战斗落定即推状态栏：链条末尾的 notify 要等爬塔动画播完，战后血量/金币等不起。
     notify({ force: true });   // 推 reward 面板（契约：奖励 overlay 即刻可交互——不随门控推迟），背景仍是战斗房间
     if (run.gameStage === 'end') void enterEndScreen();   // 败北线：finishBattle 落 'end'（notify 不再背终局路由）
   }
@@ -706,7 +698,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     const doSwap = () => {
       stopMusic();  // 战斗 BGM 到此为止（败北线已在 endBattle 收过，幂等）
       duckWind(1);  // 风声床回全量（战斗压暗态的恢复）
-      stopAmbience();   // 氛围床兜底（终局线不该还有房间氛围）
       pendingClearFx = null; // 楼层 clear 是回塔楼的演出，结算屏路径不播
       battleStage?.dispose(); battleStage = null;
       roomStage?.dispose(); roomStage = null;
@@ -742,7 +733,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     completeRewards(run);
     if (run.gameStage === 'end') { void enterEndScreen(); notify(); return; } // 登顶终局：直调结算屏路由（不再借 notify 触发），不回塔楼
     if (run.gameStage === 'room') {
-      slot.lastSpin = null; // 进新房清上一房瞬态
       // 将要用幕间/房间场景呈现的房间：先置"待呈现"，notify 与切幕之间塔楼层不再铺房间面板
       if (run.currentRoom === 'event' || restRecipeFor(run.currentRoom)) roomScenePending = true;
     }
@@ -843,7 +833,6 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
           finally { done(); resolve(entered); }
         },
       });
-      if (!enqueued) resolve(false);
     });
   }
   /**
@@ -1023,7 +1012,7 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
       panelStage()?.openUpgradePicker?.('training');
       // 持有到尾款清账或演出落定：twoC 多选链是逐张「飞行 → 意图 → notify」推进的，
       // 中间拍问句还开着且选卡器已收——此刻放指令，问句驱动会把升级选卡重开一份，
-      // 与飞行链的下一张赛跑（实抓：收尾悬空一只没人关的选卡器）。升级/得卡飞行
+      // 与飞行链的下一张赛跑（会收尾悬空一只没人关的选卡器）。升级/得卡飞行
       // 指令在队 = 链还在走；玩家取消（选卡器收起且无飞行）则正常放行重入。
       await waitFor(() => {
         const busy = panelStage()?.uiBusy
@@ -1152,19 +1141,20 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     ...showcase.intents,
   };
   function dispatchPanelIntent(intent) { panelIntentHandlers[intent?.action]?.(intent); }
-  mapStage?.setPanelIntentHandler?.(dispatchPanelIntent);
-  mapStage?.setRunSequencer?.(dedicatedSequencer);   // 「择卡得卡」演出的指令化挂点（同 battleStage/roomStage）
+  mapStage?.setPanelIntentHandler(dispatchPanelIntent);
+  mapStage?.setRunSequencer(dedicatedSequencer);   // 「择卡得卡」演出的指令化挂点（同 battleStage/roomStage）
 
   // 离局清理（App.toTitle/newGame 调用）：战斗舞台释放 + 挂起演出瞬落
   // （动画不可序列化——重进/读档由检查点重建稳态）
   function dispose() {
+    stopAmbience();         // 房间氛围床随局收掉（模块级单例：不收会一路响进菜单/下一局）
     battleStage?.dispose();
     battleStage = null;
     roomStage?.dispose();
     roomStage = null;
     endStage?.dispose();
     endStage = null;
-    showcase.dispose();     // 获得演出的兜底定时器/挂起队列：离局必须停（不然定时器会开着火离局）
+    showcase.dispose();     // 获得演出的挂起队列：离局清空
     quiescence?.dispose();  // 静止态断言器采样定时器
     if (quiescence && typeof window !== 'undefined' && window.__quiescence === quiescence) {
       delete window.__quiescence; // 摘读口：回标题后旧断言器不可再被打到

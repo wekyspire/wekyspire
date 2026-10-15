@@ -341,7 +341,7 @@ export function chooseDemonDebuff(run, id) {
     out.battle = { battles: def.battle.battles };
   }
   if (def.tier === 'black') {
-    if (!b.blackCleared.includes(id)) b.blackCleared.push(id);
+    b.blackCleared.push(id);
     b.lockout = BANK.lockoutVisits;
   }
   b.pendingRoll = null;

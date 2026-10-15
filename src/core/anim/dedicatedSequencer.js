@@ -1,4 +1,4 @@
-// DedicatedSequencer —— 前端专属演出编排队列（双 sequencer 裁决，2026-10-14 用户定）。
+// DedicatedSequencer —— 前端专属演出编排队列（双 sequencer 双轨拆分）。
 //
 // 与经典 AnimationSequencer（core/anim/sequencer.js）的分工：
 //   · **经典 sequencer = 后端单向数据流**：bridge 把战斗指令（wire 描述符）排进它、

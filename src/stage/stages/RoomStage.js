@@ -174,13 +174,13 @@ export class RoomStage {
     this._unitArt = unitArt ?? ((typeof document !== 'undefined') ? sharedUnitArtCache : null);
     this._bakeLabel = bakeLabel || defaultBakeLabel();
     // 卡面烘焙（与战场/塔楼层同源）：**全屏选卡界面也必须拿到它**——漏传的症状是
-    // "候选卡一张都看不到、但 hover 预览正常"（预览走 tooltip 的 DOM 卡面，不经过这里；
-    // 实报"篝火处升级选卡界面卡牌隐身"的真凶）。面板与选卡界面共用这一份。
+    // "候选卡一张都看不到、但 hover 预览正常"（预览走 tooltip 的 DOM 卡面，不经过这里）。
+    // 面板与选卡界面共用这一份。
     this._bakeFace = (typeof document !== 'undefined')
       ? makeCardFaceBaker({ cardArt: sharedCardArtCache, unitArt: this._unitArt })
       : null;
     // 全屏选卡/选遗物界面 + 获得物特写：三舞台共用套件（stagePickerKit.js）——
-    // 与塔楼层/战斗层是**同一份实现**（此前这里抄了一份，文案与来源还在漂移）。
+    // 与塔楼层/战斗层是**同一份实现**。
     // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙是按值传进去的，早建会让候选卡面隐身）；
     // bus 传 getter：房间舞台的总线可能在 attachInput 里才注入，而界面是惰性创建的。
     this._pickerKit = createStagePickerKit({
@@ -197,15 +197,15 @@ export class RoomStage {
     this._statusBar.position.set(PLAYER_STATUS_POS.x, PLAYER_STATUS_POS.y, PLAYER_STATUS_POS.z);
     this.uiScene.add(this._statusBar);
     // 立绘晚到补挂（与塔楼层/战场同源同款）：漏这一步的症状是「休息房里玩家与瑞米的
-    // 头像都是空圆」（实报赌博层头像失踪）。素材通常已预载就绪，先挂一次；
+    // 头像都是空圆」。素材通常已预载就绪，先挂一次；
     // 未就绪则由 addOnLoad 回调补挂（水晶/金币的晚到补挂走 PlayerStatusObject 自己的订阅）。
     this._unsubArt = this._unitArt?.addOnLoad(() => this._applyAvatar());
     // 房间单位立牌的素材晚到补挂（骑士/瑞米/未来姿势图）
     this._unsubUnitArt = this._unitArt?.addOnLoad(() => this._roomUnits?.refreshArt());
     this._applyAvatar();
     // 卡图晚到重烘（与战场/塔楼层同语言）：房间面板（训练四选一/种子包）与全屏选卡的
-    // 候选卡都不在卡组里、没有战斗预热，首拍常是无图占位——不订阅就永远空白
-    // （实报）。每图一通知，用脏标记合批成一拍。
+    // 候选卡都不在卡组里、没有战斗预热，首拍常是无图占位——不订阅就永远空白。
+    // 每图一通知，用脏标记合批成一拍。
     {
       let dirty = false;
       this._unsubCardArt = sharedCardArtCache.addOnLoad(() => {
@@ -238,7 +238,7 @@ export class RoomStage {
     if (snap) this.setPanel(snap);
     this._registerPickables();   // 机器/浮标/继续按钮先登记（面板的按钮随面板建时登记）
 
-    // 黑幕内预热（2026-10-12 由开屏暖场迁入）：构造点就在幕间黑幕中点（sceneTransition
+    // 黑幕内预热：构造点就在幕间黑幕中点（sceneTransition
     // 的 atCover）——整房管线在此预付：compileAsync 一次走全渲染树；两拍后再收一轮
     // 已就绪纹理的 GPU 上传（画牌/转轮纹理解码晚于建房，首绘上传正是 zoom-in 卡顿的
     // 另一半）。fire-and-forget：黑幕只遮「已开始的编译」，不等待编译完成。
@@ -382,8 +382,7 @@ export class RoomStage {
     this._deckChip.setHovered(isDeckChipHit(hit)); // chip 在模态层之上：路由前先同步
     if (this._pickerKit.routeHover(hit, x, y)) return;   // 特写吞掉 hover / 全屏界面接管
     // 阶段级模态面板（房内进阶的种子包等）在台：hover 全归它，机器/浮标/继续键/停靠面板
-    // 一律不亮——模态语义（「种子包只能刷新不能选卡」的病灶之一：
-    // 阶段面板收不到 hover/click 路由）。
+    // 一律不亮——模态语义（若不路由给它，阶段面板收不到 hover/click）。
     if (this._stagePanel) {
       this._hoverName = null;
       for (const [, rig] of this._rigs) rig.setHover?.(false);
@@ -589,7 +588,6 @@ export class RoomStage {
 
   _activate(hit) {
     if (this._grantBusy) return;   // 得卡演出中：吞掉一切点击（机器/继续键/面板都先让路）
-    if (this._stagePanel) { this._stagePanel.onClick?.(hit); return; }   // 模态在台：点击全归它（冗余保险，Up 路径已拦）
     // 各机器的吞掉型点击（恶魔词条 / 投料口 / 商品卡）：命中即消化
     for (const m of this._machines) if (m.handleClick?.(hit)) return;
     if (!hit || hit.kind === 'background') {
@@ -598,7 +596,7 @@ export class RoomStage {
       return;
     }
     if (hit.id === this._continue.pickId) {
-      // 营地&训练房的防误触口径（2026-10-12 用户定）：聚焦机器时点继续 = 只退焦，
+      // 营地&训练房的防误触口径：聚焦机器时点继续 = 只退焦，
       // 不收房——玩家正盯着训练桩/篝火看，那一击多半是想去碰机器而不是想走。
       if (this._campContinueGated() && this._focused) { this._focusMachine(null); return; }
       // 「继续前进」的**义务门**：机器模块先接管自己认得的问句种类（拉回镜头提示 /
@@ -624,7 +622,7 @@ export class RoomStage {
    * 房里**还欠着的事**（null = 可以离房）：机器模块自报（`pendingDuty`，认得的问句
    * 种类给定向提示）∪ 快照 `duty`（待答问句种类，问句协议单一事实源——机器没覆盖
    * 的种类也压暗，新增问句自动进门）。硬拦在 core 的 completeRoom（执法）与
-   * onContinue 的机器/通用拦截（UX）；篝火休整是可选收益不设门（2026-10-07 用户定）。
+   * onContinue 的机器/通用拦截（UX）；篝火休整是可选收益不设门。
    */
   _pendingRoomDuty() {
     return !!this._snap?.duty || this._machines.some(m => m.pendingDuty?.(this._snap));
@@ -656,7 +654,7 @@ export class RoomStage {
     return sm.worldToUI(c.x, c.y + lift, c.z);
   }
 
-  /** 聚焦某个交互物（null = 退回房间全景）。用户定的节奏：**先把相机推到物件前，推到位之后再
+  /** 聚焦某个交互物（null = 退回房间全景）。节奏：**先把相机推到物件前，推到位之后再
    * 弹出该机器的操作 UI**；退回时反过来——先收 UI/追光，再把机位拉回全景。
    */
   _focusMachine(name) {
@@ -666,7 +664,7 @@ export class RoomStage {
     // 表现侧聚焦反馈上行（Shell 注入；name=null = 拉远）：篝火推近时火声放大等
     const focusEntry = this._markers.find(m => m.name === name)?.entry ?? null;
     this._onMachineFocus?.(name, focusEntry);
-    // 聚焦时隐藏全部机器浮标（2026-10-02，夜测 1002 [路4] 根治）：箭头是「这台能点」
+    // 聚焦时隐藏全部机器浮标：箭头是「这台能点」
     // 的全景指引，聚焦特写里职责已完成；且特写机位把它顶到画面上沿，发光体经
     // bloom 链与顶栏文本发生层序穿插（金币数字被盖、遗物徽章又压其上）。聚焦时
     // hover 本就不响应（AGENTS 语义），浮标一并退场。
@@ -741,9 +739,9 @@ export class RoomStage {
    * 保险丝：补间靠渲染循环推进，而渲染循环在后台标签页/失焦窗口里会被浏览器节流到停摆
    * （rAF 0 帧）——那样"面板等推近到位才开"就会变成永远不开。故同时挂一个定时器兜底：
    * 补间没跑完也把 then 兑现——但**兑现前先把机位贴到终点**：保险丝防的是 UI 假死，
-   * 不是把相机撂在半空。旧实现直接掐死补间，主线程被长任务（纹理首传/管线编译）卡住
-   * 超过 dur+400ms 时保险丝抢在补间前面点火 → 相机永远停在半途（实报：zoom-in 卡顿
-   * 后相机停在半空，且因 _focused 已置位，再点同一机器被幂等挡下 = 「按了没反应」）。
+   * 不是把相机撂在半空（不能直接掐死补间：主线程被长任务（纹理首传/管线编译）卡住
+   * 超过 dur+400ms 时保险丝会抢在补间前面点火，掐死补间则相机永远停在半途，
+   * 且 _focused 已置位、再点同一机器被幂等挡下 = 「按了没反应」）。
    */
   _startCamTween(to, dur = ZOOM_MS, then = null) {
     const cam = this._sm?.camera;
@@ -882,8 +880,8 @@ export class RoomStage {
     for (const m of this._machines) m.tick?.(dt);
     this._roomUnits?.tick(dt, this._sm?.camera ?? null);
     // 「继续前进」的明度：获得演出/全屏选择界面是**模态覆盖层**，期间这枚常驻按钮必须明显不可用。
-    // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点
-    // （实报）。故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
+    // 只靠 3D 遮罩压不住它——它在 UI 层比遮罩更靠前，会画在半透明遮罩之上、看起来还能点。
+    // 故这里逐帧给一个很低的暗度；其余时间按房间欠账（恶魔 roll /
     // 卡包待选 / 强绑抓牌）压到 0.4，正常为 1。放帧驱动是因为演出起止不走快照。
     this._continue.setDim(
       this._pickerKit.uiBusy ? 0.18

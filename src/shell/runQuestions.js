@@ -21,21 +21,21 @@ const closeCardPicker = (ctx, stage) => { if (stage.cardPicker?.opened) stage.ca
 
 const KINDS = {
   shopRelicPack: {
-    present: (ctx, stage) => stage.openShopRelicPackPicker?.(),
+    present: (ctx, stage) => stage.openShopRelicPackPicker(),
     close: (ctx, stage) => { if (stage.relicPicker?.opened) stage.relicPicker.close(); },
   },
   shopPack: {
-    present: (ctx, stage) => stage.openShopPackPicker?.(),
+    present: (ctx, stage) => stage.openShopPackPicker(),
     close: closeCardPicker,
   },
   trainingDraw: {
-    present: (ctx, stage) => stage.openTrainingDrawPicker?.(),
+    present: (ctx, stage) => stage.openTrainingDrawPicker(),
     close: closeCardPicker,
   },
   // 尾款升级：呈现 = 自动链流程指令（runController openTrainingUpgradeFlow），指令自收
-  trainingUpgrade: { present: (ctx) => ctx.startTrainingUpgrade?.(), close: () => {} },
+  trainingUpgrade: { present: (ctx) => ctx.startTrainingUpgrade(), close: () => {} },
   // 词条附赠选卡（upgrade/burn offer；无候选时入口自弃）
-  bankOffer: { present: (ctx) => ctx.startBankOffer?.(), close: closeCardPicker },
+  bankOffer: { present: (ctx) => ctx.startBankOffer(), close: closeCardPicker },
   slotPrize: {
     present: (ctx, stage, q) => {
       // 免费指定升级的选卡链已接管呈现（onDismiss 链开的 picker），这里让位
@@ -46,11 +46,11 @@ const KINDS = {
       // 直答也是状态迁移：补一拍 notify（面板重绘）+ 授予源特写（q.relicId 即授予物）
       if (q.relicId && !q.hasChoices && !q.hasRelicChoices && !q.freeUpgrade) {
         answerQuestion(ctx.run, 'take');
-        ctx.presentRelic?.(q.relicId);
-        ctx.notify?.();
+        ctx.presentRelic(q.relicId);
+        ctx.notify();
         return;
       }
-      stage.openSlotPrizeShowcase?.();
+      stage.openSlotPrizeShowcase();
     },
     // 揭示横幅（slot.lastSpin）的生命周期 = 问句生命周期
     close: (ctx) => { if (ctx.slot) ctx.slot.lastSpin = null; },

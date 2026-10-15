@@ -1,4 +1,4 @@
-// PCG 道具物理（冲击波响应，2026-10-06）：无物理引擎的简化刚体——只服务「被冲击
+// PCG 道具物理（冲击波响应）：无物理引擎的简化刚体——只服务「被冲击
 // 推动飞散」的演出观感，不做持续模拟。世界实例挂 scene.userData.propPhys，由
 // composeRoom 产出的 update(dt) 驱动 step；behaviors（B.physBody）在 impact 事件里
 // 向世界提交刚体 / 触发散架。

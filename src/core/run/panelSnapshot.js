@@ -91,7 +91,6 @@ export function prepSnapshot(run) {
           && usedSlots(run) + cost <= p.relicSlots,
       };
     }),
-    canStartBattle: true,
   };
 }
 

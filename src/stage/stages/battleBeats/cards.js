@@ -215,13 +215,11 @@ export const cardBeats = {
     const id = payload?.skill?.uniqueID;
     const view = id != null ? this._views.get(id) : null;
     if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
-    // 卡费消耗演出（fx/gpu/resourceDrainFx.js 方案 A）：光珠从资源图标弧线飞进
-    // 费用徽章——**节拍权威 = 光珠真到达 promise**（playCardCost 返回 done），
-    // 卡牌起飞由 projectile 完结时刻发送，不再估算；无宿主（headless 等无 uiScene）
-    // 退回 DRAIN_FLIGHT_MS 固定编排延迟。费用读定义/覆写口径（PRE 修饰的实付偏差
+    // 卡费消耗演出（fx/gpu/resourceDrainFx.js）：光珠从资源图标弧线飞进费用徽章——
+    // **节拍权威 = 光珠真到达 promise**（playCardCost 返回 done），卡牌起飞由
+    // projectile 完结时刻发送，不估算延迟。费用读定义/覆写口径（PRE 修饰的实付偏差
     // 只影响装饰数量级；X 费取当前读数）
     let drainWait = null;   // Promise | null
-    let drainDelay = 0;
     if (this._drainFx) {
       const ov = payload?.skill?.costOverride;
       const rawMana = ov?.mana ?? payload?.def?.cost?.mana ?? 0;
@@ -229,9 +227,7 @@ export const cardBeats = {
       const mana = rawMana === 'X' ? (this._resources?.mana.current ?? 0) : +rawMana || 0;
       const ap = rawAp === 'X' ? (this._resources?.ap.current ?? 0) : +rawAp || 0;
       if (mana > 0 || ap > 0) {
-        const res = this._drainFx.playCardCost({ mana, ap, cardView: view });
-        drainWait = res?.done ?? null;
-        if (!drainWait) drainDelay = DRAIN_FLIGHT_MS;
+        drainWait = this._drainFx.playCardCost({ mana, ap, cardView: view }).done;
       }
     }
     this._displayCard = { id };
@@ -244,7 +240,7 @@ export const cardBeats = {
           // 结算区真值三口径：离场节拍在排队 / 已应用快照 pending / **仍在队列里的
           // sync 快照 pending**——结算期输入挂起（花刀选弃等 WAIT）时最新快照还排在
           // 本节拍之后未应用，this._snapshot 是打出前的旧值（读出「还在手牌」→ 弹簧
-          // 收养滑回扇形、之后 zone 翻 held 也没人把它接回展示位的实报回归）；
+          // 收养滑回扇形、之后 zone 翻 held 也没人把它接回展示位）；
           // 队列里的 sync 快照才是 settle 时点的真值
           const queuedPending = !!this.bridge.sequencer.findPending(ins =>
             ins.meta?.event === EventNames.ANIM_STATE_SYNC
@@ -260,7 +256,7 @@ export const cardBeats = {
       // 施术演出模板接管停留窗期间，卡必须停在展示位：held 分流与 springs.release
       // 只在 notify（settle）时点发生，而施术协程把停留窗拉长到数百 ms（BASE 才 100ms）
       // ——卡到位 tween 落定即回落 idle，空窗期 springs 把它当「回手牌的卡」从中途拉回
-      // 扇形锚点（2026-10-02 用户报的「动画播一半先回手牌再飞牌库」回归根因）。
+      // 扇形锚点。
       // 根治：命中模板即刻预置 held（zone 过单门，摘弹簧目标+摘拾取），settle 幂等收尾
       // ——held = 静止位在展示位的 zone；主语展示卡由 _heldByDisplay 挂旗，
       // _layoutAndTrack 给它发展示位锚点的弹簧目标（手牌扇形目标只认 zone 'hand'）。
@@ -270,7 +266,7 @@ export const cardBeats = {
       }
       // 施术演出模板（fx/spells 动画逻辑生成器）：命中即接管停留窗，notify 时机
       // 由模板自选（小卡全程演完 / 大卡主体落定即通告、余烬后台散尽 / 实体锁强卡
-      // 全程 hold）。未命中 = BASE 现行为（短停留窗），零回归。
+      // 全程 hold）。未命中 = BASE 行为（短停留窗）。
       const spell = this._runSpellFx(payload, view, settle);
       if (!spell) {
         this.animator.animate(id, {}, { // 停留节拍（纯延迟 tween）
@@ -297,7 +293,6 @@ export const cardBeats = {
     } else {
       this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
         durationMs: 70,
-        delayMs: drainDelay,
         onComplete: onArrived,
       });
     }
@@ -362,8 +357,8 @@ export const cardBeats = {
       },
       // 投射物抵达追踪（施术拍登记 / 伤害拍 await——火花自持发射也走这里对齐时刻）
       projectiles: this._projectiles,
-      // 主角施术锚 = 抬手高度（2026-10-01 用户定：火弹等投掷物从**主角这儿**飞出来，
-      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者）。缺玩家视图时兜底卡尖。
+      // 主角施术锚 = 抬手高度：火弹等投掷物从**主角这儿**飞出来，
+      // 不从卡尖起飞——卡面是 UI，主角才是叙事上的施术者。缺玩家视图时兜底卡尖。
       // （伤害拍自持投射物也用——火花乱射从手上弹出）
       playerAnchor: () => {
         const id = this._snapshot?.player?.uniqueID;
@@ -456,11 +451,10 @@ export const cardBeats = {
   },
   // 转化闪变节拍（宾语身份跃迁的生效反馈主体）：蓄势下压 → 谷底起变换演出
   // （charReveal 双脸过渡接管换脸）→ 过冲弹起（演出并行）→ 回稳 → 新脸停留窗。
-  // 停留窗对齐演出全长（820ms）：旧版 260ms 窗读不完白光收束后的新脸；且斩系
+  // 停留窗对齐演出全长（820ms），保证读得完白光收束后的新脸；且斩系
   // 打出进阶后紧跟 3 张碎铁造牌节拍（生成卡 z=70 刻意压在展示卡之上），不留
   // 停留窗的话新脸唯一的干净阅读时间就是本节拍自身。held/deck 来源卡不经
   // _syncCardContents（只扫手牌），换脸只能由本节拍承担。
-  // （只扫手牌），换脸只能由本节拍承担。
   _transformBeat(payload, finish) {
     const id = payload?.card?.uniqueID ?? null;
     const view = id != null ? this._views.get(id) : null;

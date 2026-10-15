@@ -34,7 +34,7 @@ function departureBeat(stage, payload, finish, type) {
 function drawnBeat(stage, payload, finish) {
   // 入手抽牌：视觉由状态差分完成（新卡从牌库长开+跟踪飞入），这里只脉冲区域图标打节拍。
   // 因手牌上限没抽到牌（core 在载荷里分开记了 blockedByHandLimit 与 deckEmpty）：
-  // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字（实报）
+  // 给一次明确的视觉反馈——整手牌红色脉冲 + 骑士头顶提示文字
   if (payload?.blockedByHandLimit) stage._handPressureHint();
   return stage._pulsePile('deck', finish);
 }
@@ -73,7 +73,7 @@ function statusBeat(type) {
     }
     if (type === EventNames.ANIM_SHIELD) return stage._poseBeat(target, UNIT_POSES.defend, finish);
     // 效果姿态只摆「获得/叠层」：层数衰减/扣尽（燃烧跳完 -1 等）读作消退，
-    // 不配「被施加」的强姿态——回落下方通用脉冲（旧行为）
+    // 不配「被施加」的强姿态——回落下方通用脉冲
     if (type === EventNames.ANIM_EFFECT && (payload?.delta ?? 1) > 0) {
       return stage._poseBeat(target, payload?.type === 'debuff' ? UNIT_POSES.debuff : UNIT_POSES.buff, finish);
     }
@@ -107,8 +107,8 @@ function chantToggledBeat(stage, payload, finish) {
   // 咏唱双态翻转（发动点亮 / 关停·离手熄灭）：激活表达由边缘流光（状态差分）承担。
   // 回手放行不归本节拍——zone 单门（model.setZone → card-zone）在 sync 对账把卡
   // 翻回 hand 时弹簧自动收养滑回扇形；解除打出（on:false 'played'）的卡随后由
-  // CARD_MOVED 离场节拍接管，本节拍不碰跟踪层（曾经在此直写 hand+_entering，
-  // 与离场飞行对撞是「解除咏唱回手闪烁」bug 的根因，2026-10-11 删）。
+  // CARD_MOVED 离场节拍接管，本节拍不碰跟踪层——在此直写 hand+_entering
+  // 会与离场飞行对撞（「解除咏唱回手闪烁」的根因）。
   // 发动点亮且卡带激活能力（载荷 anim 描述符，core 按 def.activated 判定）时，
   // 在展示位播激活演出——「这张卡被点亮了」要看得见。
   const id = payload?.skill?.uniqueID ?? null;
@@ -142,8 +142,8 @@ function chantToggledBeat(stage, payload, finish) {
 function cooldownTickBeat(stage, payload, finish) {
   // 冷却推进/反向（payload.delta 带方向）：正向=绿、反向=暗红。
   // ⚠ 判据必须是「视图可见」（= 卡在手牌），不是 _views 是否命中——牌库中的卡视图保留
-  // 但 visible=false，打在它上面的脉冲肉眼不可见（障：斩弃回牌库看不到冷却动画，
-  // 脉冲全喂给了隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍
+  // 但 visible=false，打在它上面的脉冲肉眼不可见（斩弃回牌库的卡即此情形，
+  // 脉冲会全喂给隐藏视图）。不可见即改在牌库图标上播；队列定序保证入库那拍
   // 紧跟 cardMoved 飞入落定之后，脉冲正好衔接飞入完成那一刻。立即 finish——non-blocking。
   const delta = payload?.delta ?? 1;
   const id = payload?.skill?.uniqueID ?? null;

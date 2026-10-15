@@ -1,12 +1,12 @@
 // 火焰上身模板（火系自燃件：燃心决/急燃/可燃血液/火墙/熔岩铠甲/血焰/
 // 鬼火/焰愈/涅槃/火焰披风…）：火焰在**主角**身上腾起，暖光 punch 封顶。
-// 三形态（params.form，2026-10-06 分化——「一坨雾换色」是实测病根）：
+// 三形态（params.form——单形态换色会读成「一坨雾换色」）：
 //   burst 火环爆+上升火星（缺省：自燃/急燃/焰愈/庆典——「烧起来」）
 //   veil  贴身火帘缓燃（熔岩铠甲/火墙/血焰——「甲与墙」，火根贴地向上裹身）
 //   wisp  漂浮小焰上飘（鬼火/可燃血液——轻件，「引而不发」）
 // 大卡（涅槃级）任意形态加一道短火柱封顶。主题色参数化：橙 = 自燃通用 /
 // 金 = 治愈与庆典 / 青白 = 鬼火 / 深红 = 血焰。
-// 粒子预算纪律：buff 卡是高频动作——三层组总预算 ~34（旧版 62 实测糊成噪团）。
+// 粒子预算纪律：buff 卡是高频动作——三层组总预算 ~34（超量会糊成噪团）。
 import { cardFlare, fireBurst, lightPillar, spellQuad, linearColor, lampPulse, SPELL_DEBUG } from './blocks.js';
 import { projectileShade, veilShade } from './shaders.js';
 import { uniform, uv } from 'three/tsl';

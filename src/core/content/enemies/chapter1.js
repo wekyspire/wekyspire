@@ -541,8 +541,7 @@ carrionBeetleDef('carrionBeetle');      // A 类：啃食牌库顶 → 攻7 → 
 carrionBeetleDef('carrionBeetleB', true); // B 类：首拍甲壳+1（不攻击）→ 正常循环
 
 // 掘地鼹鼠：三拍蓄爆循环——首拍突袭7，然后 盾20 → 恢复16 → 攻18。48 血。
-// 自愈+厚盾+大单发，是一只完整的「马拉松检查」（重击 22→16 于 09-22；
-// 掘洞回血 24→16 于 09-26；2026-10-13 改版：盾拍撤攻改纯盾20、重击 16→18、血 38→48）。
+// 自愈+厚盾+大单发，是一只完整的「马拉松检查」。
 registerEnemy({
   difficulty: { base: 3, floorMin: 2, floorMax: 16 },
   id: 'diggerMole', name: '掘地鼹鼠',

@@ -1,4 +1,4 @@
-// Boss 常驻状态可视化（bossStateFx，2026-10-09 隔夜批）：aura 系统按**效果 id**驱动，
+// Boss 常驻状态可视化（bossStateFx）：aura 系统按**效果 id**驱动，
 // Boss 的「机制状态」（MEFM 装甲= defense 层数、卡达斯电弧= rage 层数、穿山甲热缝=
 // momentum 层数……）需要按**单位 defId** 的导演钩——注册表与运行器集中在本文件，
 // 内容（哪个 Boss 驱动哪些件）注册在各 bosses/*.js（内容归属原则）。

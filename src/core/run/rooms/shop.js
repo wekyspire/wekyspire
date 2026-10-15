@@ -124,12 +124,12 @@ function rollStock(run) {
       }));
       kinds.splice(kinds.findIndex(([k]) => k === 'apple'), 1); // 只放一件
     } else {
-      // 遗物货位 = 「稀有度遗物包」：货架只标档位不标具体件（选择面交给购买后的三选一，
-      // ）；具体三件在购买那一刻才由抽选 SDK 掷出（门禁/驱重/兜底集中）。
+      // 遗物货位 = 「稀有度遗物包」：货架只标档位不标具体件（选择面交给购买后的三选一），
+      // 具体三件在购买那一刻才由抽选 SDK 掷出（门禁/驱重/兜底集中）。
       const rarity = kind === 'relicC' ? 'C' : 'B';
       items.push(makeItem('relic', {
         id: `relicPack:${rarity}`, rarity,
-        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包`,   // 标签不加「三选一」后缀——定宽文本面超宽即硬裁（夜测 r4路6），选择方式开包即知
+        name: `${rarity} 级遗物包`, label: `${rarity} 级遗物包`,   // 标签不加「三选一」后缀——定宽文本面超宽即硬裁，选择方式开包即知
         sub: '买到即开', effect: '买到即开',
         price: priceIn(rarity === 'C' ? SHOP_PRICE.relicC : SHOP_PRICE.relicB, rng),
       }));
@@ -240,7 +240,7 @@ export function buyShopItem(run, index) {
       return { kind: 'pack', packId: it.packId, choices };
     }
     default:
-      return { kind: it.kind };
+      throw new Error(`售货机出现未知商品类型：${it.kind}`);
   }
 }
 

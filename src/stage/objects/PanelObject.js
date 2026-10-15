@@ -38,7 +38,7 @@ export const PANEL_ABOVE_Z = Z.PANEL + Z.CONTENT + 10;
  * **全屏模态覆盖层**（获得演出、全屏选卡/选遗物）的 z 基准。
  * 必须高于舞台自身的常驻按钮——「继续前进」挂在 PANEL_ABOVE_Z + 2，随投影机位浮动；
  * 覆盖层若只到 PANEL_ABOVE_Z，那枚按钮就画在遮罩之**上**，看起来"还能点"
- * （实报：获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
+ * （获得演出时下面的"继续"没被盖住）。分层约定：面板 < 常驻按钮
  * < 模态覆盖层；覆盖层内部再各自往上排（背板 → 主体 → 文本 → 按钮）。
  */
 export const OVERLAY_Z = PANEL_ABOVE_Z + 8;
@@ -138,7 +138,7 @@ export class PanelObject extends THREE.Group {
       // 而 rowH 里同名的 'sub'/'main' 是**文本行高**——曾因此把按钮压成 21px 高，
       // 标签字号 = 0.4×高 → 只有 8px，糊成一团（报"字体太小看不清"）。dock 已修；
       // 非 dock（modal/anchored）同款中招：prep 删卡按钮被压成 ~10px 无字细带
-      // （夜测 r5路5 实报）——按钮行高判定不按 form，一律按 kind。
+      // ——按钮行高判定不按 form，一律按 kind。
       const isDock = this.form === 'dock';
       const h = (w.kind === 'button')
         ? this._g.rowH[w.size === 'main' ? 'main' : 'button']

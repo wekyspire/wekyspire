@@ -1,5 +1,5 @@
-// 施术演出·基础块 SDK（spellFx 的乐高，2026-09-30 用户定「动画逻辑生成器」架构的
-// 底层件——类比 PCG 的 kit→composeRoom：模板生成器从这些块拼装，块是共享词汇）。
+// 施术演出·基础块 SDK（spellFx 的乐高——「动画逻辑生成器」架构的底层件，
+// 类比 PCG 的 kit→composeRoom：模板生成器从这些块拼装，块是共享词汇）。
 //
 // 块签名统一：`async (ctx, deps, p) => void`——
 //   ctx  = fx/script 的 ScriptContext（tween/wait/spawn + 结构化 kill 语义）
@@ -26,13 +26,13 @@ const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
 export const linearColor = (rgb) => vec3(rgb[0], rgb[1], rgb[2]);
 
-// 排障开关（?spelldebug=hold/const/shape/energy/color）：模块级解析一次、全 spells 共用
-// （原先 10 处内联 `new URLSearchParams(location.search)` 且零守卫）；node 无 location → null。
+// 排障开关（?spelldebug=hold/const/shape/energy/color）：模块级解析一次、全 spells 共用；
+// node 无 location → null。
 export const SPELL_DEBUG = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('spelldebug') : null;
 
-// ---- 施术面片管线预热（2026-10-06）-----------------------------------------
+// ---- 施术面片管线预热 ---------------------------------------------------------
 // WebGPU 首用管线异步编译 0.3~1.5s，期间 draw 被跳过 = 首施法面片黑一拍/整段
-// 缺席（真时间取证三轮实测：同 shader 同色，有的会话可见有的不可见——纯时序）。
+// 缺席（同 shader 同色在不同会话可见性不同——纯时序问题）。
 // charBurn 预热同款手法：常驻 scratch scene 收代表性 (shade, 常量色字面量) 变体，
 // 战斗开场 compileAsync 一次；管线缓存按程序哈希共享，后续同构新材质即时可用。
 // ⚠ 常量色是字面量进 WGSL 的——变体必须按模板**真实参数**建（假色 = 白预热）。
@@ -68,7 +68,7 @@ export async function cardFlare(ctx, deps, {
 } = {}) {
   const view = deps.cardView;
   if (!view?.fx?.pulse) return;
-  // 闪烁时长砍半（2026-10-09 用户定）：ms 仍是模板档位语义，实际 pulse = ms×0.5
+  // 闪烁时长砍半：ms 仍是模板档位语义，实际 pulse = ms×0.5
   // intensity 1.2：施术起手的环锋乘算过 bloom 阈（辉光一吻），区别于冷却 tick 的阈下指示
   view.fx.pulse({ color, durationMs: ms * 0.5, scale, intensity: 1.2 });
   await ctx.wait(Math.max(40, Math.round(ms * 0.25)));   // 亮起来就够——不等收尾
@@ -140,7 +140,7 @@ export async function arcProjectile(ctx, deps, {
   dartFreq = 1,   // 摆尾频率系数：短飞行（<300ms）下 dF1 4.5-8Hz 一屏只走十几帧，
                   // 高频摆会走样成抖直线——<1 换成少而大的甩（窜天猴的慢摆S弯）
   fire = false,   // 火系投射物：换 fireOrbShade（fbm 火面+头尾不对称+破边）——
-                  // 平滑高斯「发光团」不够审美线（2026-10-06 审计）
+                  // 平滑高斯「发光团」不够审美线
   shape = 'orb',  // 能量形状：'orb' = projectileShade 光珠（缺省）；'crystal' =
                   // crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）
 } = {}) {
@@ -305,7 +305,7 @@ export async function impactBurst(ctx, deps, {
  * 斩痕扫掠块（shader 主笔）：弓形新月带在目标身上扫过——形状/扫掠头/拖尾/渐隐
  * 全在 slashShade 的 fragment 里算（uProgress 推 uniform）；几何辅助 = 斜置角
  * + 命中一拍的 scale punch。短促刀光语言，300ms 级。
- * 方向语义（伤害节拍驱动，2026-09-30 用户定）：angle 直接给弧度——斩=竖置
+ * 方向语义（伤害节拍驱动）：angle 直接给弧度——斩=竖置
  * （≈±1.4）、劈=横置（≈0.1）、默认斜（-0.3）、连击=逐击随机短促。
  * scale 乘 width/height（伤害量越大刀光越大——模板参数化的起效案例）。
  */
@@ -328,8 +328,8 @@ export async function slashSweep(ctx, deps, {
   const uDir = uniform(dir);
   // ⚠ 暗层暂缓上线：TSL Fn 管线缓存坑——darkSlashShade 的 alpha 实测恒等于 body 单项
   // （tail/fade/强度全部不生效，α≈1 黑带），换 uniform/常量/硬编码均不触发重编。
-  // 根治（Fn 缓存键查明）前暗层**不构造不挂场**（旧版在判定前就建好几何+节点图，
-  // 每次挥刀白付一套 JS 构建）；亮刃单层已可读。
+  // 根治（Fn 缓存键查明）前暗层**不构造不挂场**（免得每次挥刀白付一套 JS 构建）；
+  // 亮刃单层已可读。
   const SPELL_DARK_LAYER = false;
   let dProg = null, dark = null;
   if (SPELL_DARK_LAYER) {
@@ -407,10 +407,9 @@ export async function punchImpact(ctx, deps, {
   const uProg = uniform(0.0);
   const { quad, release } = spellQuad({
     shade: punchShade(uv(), uProg, linearColor(color), linearColor(hot), linearColor(rim)),
-    // 面片要大于敌人本体——环的职责是「探出轮廓读冲击」（glm-flash 第七轮实测：
-    // 环撑满也出不了本体 footprint 就永远藏在身体后面）；横向 ×PUNCH_QUAD_SPAN
-    // 是画布加宽（shader 内坐标补偿保形）。2026-10-07 用户定整体收小一档
-    //（16→11.5 / 9.5→7.6——原 24×9.5 世界单位偏大）
+    // 面片要大于敌人本体——环的职责是「探出轮廓读冲击」（环撑满也出不了本体
+    // footprint 就永远藏在身体后面）；横向 ×PUNCH_QUAD_SPAN 是画布加宽
+    //（shader 内坐标补偿保形）
     width: 11.5 * PUNCH_QUAD_SPAN * scale, height: 7.6 * scale, name: 'spellFx:punch',
   });
   quad.position.set(at.x, at.y, (at.z ?? 0) + z);
@@ -568,10 +567,10 @@ export async function lightPillar(ctx, deps, {
   });
 }
 
-// ---- 场景参数演出块（2026-10-01 天斩 v2）：压暗幕 / 全屏白闪 -------------------
+// ---- 场景参数演出块：压暗幕 / 全屏白闪 -------------------
 // 设计口径：压暗/闪光走 **uiScene 顶层覆盖面**（DamageVignette 同机制——正交 UI
 // 视界整幅、renderOrder 1000、深度全关），不改 post pass 参数——零管线重建
-// （W2 教训：动 post 链配置会触发 pipeline churn），观战页同屏复用。
+// （动 post 链配置会触发 pipeline churn），观战页同屏复用。
 
 /** 压迫幕贴图（模块级单例）：径向渐变，中心留可视、四周沉入冷黑（斩杀预兆的
  * 「世界退场」感——与受击渐晕的暗红不同调，冷蓝黑）。 */
@@ -627,7 +626,7 @@ export function dreadVeil(ctx, deps) {
 
 /**
  * 全屏白闪（斩落一瞬的曝光读感）：uiScene 纯色覆盖面，attackMs 内爬到峰值、指数落。
- * attackMs=0 = 瞬亮（旧口径）；>0 给一条短攻击沿（高级斩的爆发 smooth in）。
+ * attackMs=0 = 瞬亮；>0 给一条短攻击沿（高级斩的爆发 smooth in）。
  */
 export async function screenFlash(ctx, deps, {
   intensity = 0.9, ms = 220, color = 0xffffff, attackMs = 0,

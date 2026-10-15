@@ -91,8 +91,7 @@ export function createBridge({
       const r = fn(...args);
       // 终局后不再补同步：此刻 battleEnd 的最终 sync 已入队，再标脏只会在
       // 战后某条指令 finish 时追加一条 straggler sync——战败路径战场舞台已被
-      // 结算屏拆掉，无人回执，只能被保险丝强杀并污染 timeoutCount（runFuzz
-      // 浏览器 soak 实锤：anim:state-sync 带败局判定超时）
+      // 结算屏拆掉，无人回执，只能被保险丝强杀并污染 timeoutCount
       if (isBattleFinished(battle)) return r;
       markDirty();
       syncIfIdle(); // 无节拍覆盖的意图变更（队列空闲时）立即追上显示状态

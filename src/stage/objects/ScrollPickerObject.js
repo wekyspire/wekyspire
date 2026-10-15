@@ -8,7 +8,7 @@
 //
 // 为什么不用裁剪遮罩：界面是**全屏**的，边界就是屏幕边界——滚出可视带的候选直接置
 // invisible（Three 视野外自然不显示，且 Picker 的 visibleUp 守卫使其**不可命中**），
-// 因此不需要 scissor/stencil。这正是用户指出「实现会相对简单」的原因。
+// 因此不需要 scissor/stencil。
 
 import * as THREE from 'three';
 import { TextBlockObject } from './TextBlockObject.js';
@@ -26,9 +26,8 @@ export const PICKER_Z = { BACKDROP: OVERLAY_Z, CONTENT: OVERLAY_Z + 2 };
 
 // 布局（世界单位）：标题带 / 滚动区带 / 底部按钮带。两个子类共用同一套带位，
 // 只有"单件尺寸与列数"不同（由 open 参数给）。
-// 标题带避开顶部资源行（TopResourceBar 占 UI_TOP 往下 ~5 单位，旧 titleY=-3.4 与其
-// 正面同高相撞、金币读数被标题盖住——夜测路6b/8b/2 三路复现）；与战斗面板
-// 「标题在资源行之下错开」的既有惯例对齐。
+// 标题带避开顶部资源行（TopResourceBar 占 UI_TOP 往下 ~5 单位，撞上会把金币读数
+// 盖住）；与战斗面板「标题在资源行之下错开」的既有惯例对齐。
 export const PICKER_LAYOUT = {
   titleY: UI_TOP - 8.2,
   hintY: UI_TOP - 11.6,
@@ -107,7 +106,7 @@ export class ScrollPickerObject extends THREE.Group {
     this.close();
     if (!buildItem || !items.length) return this;
     // 全屏模态开 = 悬空 tooltip 必清（售出商品位/离场对象的 tooltip 若不清会压在
-    // 候选卡上 ≥25s，DOM 层叠在 picker 之上——夜测 r3路1/r4路2 实证）
+    // 候选卡上 ≥25s，DOM 层叠在 picker 之上）
     this._hideTooltip();
     this._opened = true;
     this._multi = multi;
@@ -166,7 +165,7 @@ export class ScrollPickerObject extends THREE.Group {
     });
 
     // ---- 底部：取消 / 确认 ----
-    // 「返回」改名「取消」（2026-10-02 用户定）：按钮自述语义，各处不再需要「返回=放弃」的提示句
+    // 底部按钮叫「取消」而非「返回」：按钮自述语义，各处不再需要「返回=放弃」的提示句
     this._addButton(BACK_ID, '取消', { x: -34, y: LAYOUT.footerY, width: 200, size: 'sub' }, { action: 'cancel' });
     this._addButton(CONFIRM_ID, confirmLabel, { x: 34, y: LAYOUT.footerY, width: 200, size: 'main' }, { action: 'confirm' });
 
@@ -278,7 +277,7 @@ export class ScrollPickerObject extends THREE.Group {
     if (hit.id === CONFIRM_ID) {
       if (this._selected.size === 0) return false;
       // 多选下界（与 _applySelection 的按钮压暗同式）：点击路径也要拦——只压暗不拦点击时，
-      // 1/2 部分确认会照发（训练尾款 twoC 断链卡死在 remaining:1 的病根，夜测 1002 路二实锤）
+      // 1/2 部分确认会照发（训练尾款 twoC 曾因此断链卡死在 remaining:1）
       if (this._multi && (this._selected.size < this._minPicks || this._selected.size > this._picks)) {
         return false;
       }
@@ -395,7 +394,7 @@ export class ScrollPickerObject extends THREE.Group {
       new THREE.MeshBasicMaterial({ color: 0x7fa9d4, transparent: true, opacity: 0.5 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
-    // 滚动条可交互（「无法点击滚动条」）：轨道 + 滑块都注册成拾取件
+    // 滚动条可交互：轨道 + 滑块都注册成拾取件
     // ——按下滑块 = 抓住拖拽；按轨道 = 跳到该处并接续拖拽（见 onPointerDown/onHover）。
     this._picker?.addPickable(TRACK_ID, this._bar.track, { kind: 'button', space: 'ui' });
     this._picker?.addPickable(THUMB_ID, this._bar.thumb, { kind: 'button', space: 'ui' });
@@ -439,7 +438,7 @@ export class ScrollPickerObject extends THREE.Group {
   _syncScrollbar() {
     const bar = this._bar;
     if (!bar?.thumb) return;
-    // 无需滚动：整条淡化到几乎不可见（而非原先的"直接隐藏"——淡化的轨道仍提示这里可滚）
+    // 无需滚动：整条淡化到几乎不可见（淡化的轨道仍提示这里可滚）
     const idle = this._maxScroll <= 0;
     bar.track.visible = true;
     bar.thumb.visible = !idle;
@@ -454,8 +453,8 @@ export class ScrollPickerObject extends THREE.Group {
   }
 
   _applySelection() {
-    // 多选序号角标（glm-flash 验收发现：多选时选中卡只有着色呼吸，
-    // 静态读不出「选了哪几张、第几张」）：选中件右上角挂 picker 自有的小圆牌，
+    // 多选序号角标（多选时选中卡只有着色呼吸，静态读不出「选了哪几张、第几张」）：
+    // 选中件右上角挂 picker 自有的小圆牌，
     // 白字序号 = 点选顺序；角标位置/可见性随滚动（_applyScroll 统一摆）。
     const order = this._multi ? this.selectedKeys : [];
     for (const e of this._entries) {
@@ -505,8 +504,8 @@ export class ScrollPickerObject extends THREE.Group {
   _addText(text, { y, fontPx = 16, tint = '#d4d4d4', center = false } = {}) {
     if (!text) return null;
     const t = new TextBlockObject({ bakeText: this._bakeText, fontPx, tint });
-    // ⚠ maxWidth 的单位是**逻辑像素**（10px/世界单位），不是世界单位——曾经按世界单位传，
-    // 标题/提示被当成 ~16 字符宽就折行（一行提示折成三行，还压到候选区头上）。
+    // ⚠ maxWidth 的单位是**逻辑像素**（10px/世界单位），不是世界单位——按世界单位传
+    // 会被当成 ~16 字符宽就折行（一行提示折成多行，还压到候选区头上）。
     t.setText(text, { maxWidth: (HALF_UI_W * 2 - 12) * 10 });
     if (center) t.placeCenterTop(0, y);
     else t.placeLeftTop(-HALF_UI_W + 6, y);

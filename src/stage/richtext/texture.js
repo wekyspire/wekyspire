@@ -116,8 +116,8 @@ export function drawPlacements(ctx, placements, { style, drawIcon = defaultDrawI
 
 // 默认图标：圆形徽章（effect 橙 / skill 蓝 / card = 系列字形徽章），比白框占位耐看。
 // card 徽章按 appearance 契约走 cardLook：卡面主题色圆底 + seriesGlyph 字形
-// （glyph 恒有——series→type→'技' 三级回落）；此前落通用蓝圆，即夜测 ~20 例
-// 「洗入3●碎铁」裸蓝点的根因（layout 产出正确，仅绘制端缺分发）。
+// （glyph 恒有——series→type→'技' 三级回落）；此前落通用蓝圆，即「洗入3●碎铁」
+// 裸蓝点的根因（layout 产出正确，仅绘制端缺分发）。
 export function defaultDrawIcon(ctx, { iconType, name, x, y, size }) {
   const cx = x + size / 2;
   const cy = y + size / 2;
