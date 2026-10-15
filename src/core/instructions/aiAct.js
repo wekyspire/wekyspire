@@ -2,6 +2,7 @@ import BattleInstruction from '../kernel/BattleInstruction.js';
 import { aliveAllies, aliveEnemies } from '../state/battleState.js';
 import { getAllyDefinition } from '../allies/registry.js';
 import { getEnemyDefinition } from '../enemies/registry.js';
+import { isAttackKind } from '../intentKinds.js';
 
 // AI 单位行动：敌人与我方队友（瑞米）共用一条指令，
 // 行为定义由 resolveDef 注入（敌方回合传敌人注册表，友方行动传队友注册表）。
@@ -52,7 +53,7 @@ function intentionOf(def, unit, battleState) {
 // 注：蓄势受生命伤害会掉层，玩家打完后实打可能低于预告——预报口径与既有一致。
 export function withMomentumBonus(unit, intention) {
   const stacks = unit.getEffectStacks?.('momentum') ?? 0;
-  if (stacks > 0 && typeof intention?.damage === 'number' && intention.kinds?.includes('attack')) {
+  if (stacks > 0 && typeof intention?.damage === 'number' && intention.kinds?.some(isAttackKind)) {
     return { ...intention, damage: intention.damage + stacks };
   }
   return intention;

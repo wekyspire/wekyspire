@@ -581,7 +581,7 @@ export class BattleStage {
     else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
-    this._applyFlexGlows();            // 灵活卡金光（弃牌模式专属提示）
+    this._applyHandGlows();            // 手牌金光按高亮语境重涂（弃牌语境灵活卡亮）
   }
 
   // 立牌纹理补挂：缓存命中才设置，未命中等共享缓存订阅回调统一补
@@ -710,7 +710,7 @@ export class BattleStage {
       if (typeof document !== 'undefined' && anchors.length) {
         const lo = pick.min, hi = pick.max;
         const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
-        const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
+        const t = bakeBoldText(title, { fontPx: 17, tint: '#f2f2f2' });
         const hint = new THREE.Mesh(
           new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
           new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, fog: false }),
@@ -741,9 +741,18 @@ export class BattleStage {
     } else if (typeof document !== 'undefined') {
       // 手牌多选覆盖层（候选 = 手牌扇自身，无候选阵）：提示悬在手牌扇上方——
       // z 40 盖过悬浮抬升的手牌（静息 ≤15 / 抬升 ≤36），不与 instantiate 分支共用锚点
+      // 结算中的发动卡（held 展示位 z=60）同样压到候选网格（z=30）之下——打出的卡
+      // 不得盖住选牌界面；关层还原（与 instantiate 分支同一名册机制）。
+      pick.lowered = [];
+      for (const [cid, view] of this._views) {
+        if (this.model.getZone(cid) === 'held' && view?.position) {
+          pick.lowered.push([view, view.position.z]);
+          view.position.z = 26;
+        }
+      }
       const lo = pick.min, hi = pick.max;
       const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
-      const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
+      const t = bakeBoldText(title, { fontPx: 17, tint: '#f2f2f2' });
       const hint = new THREE.Mesh(
         new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
         new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, depthTest: false, fog: false }),
@@ -835,14 +844,14 @@ export class BattleStage {
     // 目标资格 = zone 'hand'（deck=牌库停车不发目标——所有权由 zone 记录）+
     // 发动展示分流的 held 主语卡（_heldByDisplay：展示位锚点是它的静息位——
     // 选牌 WAIT 等长结算窗里始终停在屏幕中央，不会滞留/滑回手牌扇形）。
-    // 池选遮罩期（pick.backdrop）held 卡被手工压到遮罩下（z 26），弹簧不对它发目标
-    // ——否则 z 通道会被锚点拽回 60 顶穿遮罩；关层后 z 归位、目标自然恢复
+    // 选卡覆盖层开着（任意模式）held 卡被手工压到候选层之下（z 26），弹簧不对它发
+    // 目标——否则 z 通道会被锚点拽回 60 顶穿选牌界面；关层后 z 归位、目标自然恢复
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
       if (a && this.model.getZone(id) === 'hand') targets.set(id, a);
     }
-    if (!this._pick?.backdrop) {
+    if (!this._pick) {
       for (const id of this._heldByDisplay) {
         if (this.model.getZone(id) === 'held' && this._views.has(id)) targets.set(id, HELD_ANCHOR);
       }
@@ -1104,6 +1113,9 @@ export class BattleStage {
     const id = payload?.card?.uniqueID ?? payload?.uniqueID ?? null;
     const view = id != null ? this._views.get(id) : null;
     if (!view) return finish();
+    // 牌库卡不可见（锻刀/养刀的批量威力提升会打到全区刀法牌）：跳过反应节拍，
+    // 不为看不见的卡空转队列时长；威力数值照常入账（sync 重烘时数字已更新）
+    if (this.model.getZone(id) === 'deck') return finish();
     const mode = cardReactMode(view._cardData, payload?.kind);
     view.fx.react({ mode, intensity: Math.min(1.4, 0.75 + (payload?.magnitude ?? 1) * 0.12) });
     const s0 = view.scale.x || 1;

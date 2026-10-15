@@ -16,6 +16,7 @@ import { registerEnemyHitBeat, enemyImpactBeat, registerEnemyNoLunge } from '../
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
 import { makeSporeVeins } from '../../sporeVeins.js';
+import { isAttackKind, isBuffKind, isDebuffKind } from '../../../../core/intentKinds.js';
 
 // 孢子软点纹理（radial 渐隐——读成悬浮的孢子/瘴气微滴，不是火花）
 let _sporeTex = null;
@@ -236,7 +237,7 @@ async function corruptHitBeat(ctx, deps, args) {
 async function corruptAct({ ctx, deps, unit, player, kinds }) {
   const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
   const H = unit._standeeHeight ?? 22;
-  if (kinds.includes('attack')) {
+  if (kinds.some(isAttackKind)) {
     const id = unit.uniqueID;
     // 前倾蓄势（扎根植物的「扑」= 上身倾压，不挪步）。子剧本随父本结算被杀
     // （铁律）——藤鞭循环只撑 390ms，会把 720ms 的回正段腰斩在中途（单位永久
@@ -289,7 +290,7 @@ async function corruptAct({ ctx, deps, unit, player, kinds }) {
     await ctx.wait(420);
     return;
   }
-  if (kinds.includes('debuff')) {
+  if (kinds.some(isDebuffKind)) {
     // 孢子云：一缕缕慢速漂向玩家（毒是渗过去的，不是射过去的）。
     // 远场+普通混合双重折损：1.8wu 软球在暗房里近乎隐形（发射正常、
     // 屏上读不出）——云孢子换白热芯变体 + 加大一号
@@ -308,7 +309,7 @@ async function corruptAct({ ctx, deps, unit, player, kinds }) {
     }
     return;
   }
-  if (kinds.includes('buff') || kinds.includes('heal')) {
+  if (kinds.some(isBuffKind) || kinds.includes('heal')) {
     unit._fxLayer?.get('bossVeins')?.pulse?.(1.2); // 治疗 = 全网养分一涌
     unit.flash?.(0x5a8a3e);
     // 输养：绿珠自胸口分流到每只为军召唤物（cast 前缀圈选取真实落点——硬编码两翼

@@ -1,5 +1,10 @@
 // 粒子类型注册表（PARTICLE_SYSTEM_V2 §三）——类型 = 全局静态描述符，显存不随登记分配；
-// 池在类型首次使用时才 bump 分段（懒注册），场景切换 pool.reset() 全释放。
+// 池在类型首次使用时才 bump 分段（懒注册）。生命周期两层分治：
+//   · 池段：随池实例走（各舞台自建池、随舞台 dispose 整体释放）；池内行回收见
+//     particlePool.retireType（停发后 ttl 到期惰性回收行与等容段）。
+//   · 登记：模块级常量（SCENE_FIRE 等）与进程同寿命不回收；动态登记（ambientMotes
+//     每发射器一行）由属主停/拆时 releaseParticleType 打墓碑——**id 单调永不复用**，
+//     活计数还额度（上限 64 判活不判累计）。
 // 两类粒子：
 //   · uber（默认）：spawn/行为/终结/渲染全参数化，一条 dispatch 罩全池所有 uber 段；
 //   · custom：desc.custom.build(ctx) 提供 JS→TSL 模块函数，独立编译独立 dispatch，
@@ -36,14 +41,15 @@
 export const PARTICLE_MAX_TYPES = 64;
 
 const TYPES = [];
+let liveTypes = 0;   // 活登记数（上限判据；墓碑不计——回收后额度还池）
 
 /**
  * 登记一个粒子类型，返回全局 typeId（喂给各池的 burst/setTypeActive/useType）。
  * 纯登记，不分配任何 GPU 资源。
  */
 export function defineParticleType(desc = {}) {
-  if (TYPES.length >= PARTICLE_MAX_TYPES) {
-    throw new Error(`粒子类型登记超限（${PARTICLE_MAX_TYPES}）`);
+  if (liveTypes >= PARTICLE_MAX_TYPES) {
+    throw new Error(`粒子类型登记超限（${PARTICLE_MAX_TYPES}，活 ${liveTypes}）`);
   }
   const render = {
     size: 0.5, sizeEndK: 0.4, color: [1, 1, 1], colorEnd: null, alpha: 1, heat: 1,
@@ -62,6 +68,10 @@ export function defineParticleType(desc = {}) {
     space: desc.space ?? 'world',
     cap: Math.max(1, desc.cap ?? 1024),
     kind: desc.kind ?? 'uber',
+    // 可回收声明（动态登记 opt-in）：闲置泵对 recyclable 且超时未用的类型自动打墓碑；
+    // 模块级常量不声明 = 与进程同寿命永不回收（在飞引用安全）
+    recyclable: !!desc.recyclable,
+    lastUsedAt: performance.now(),   // 活性戳（池回收泵摸活行时刷新）
     spawn: {
       rate: 0, ttl: 1, ttlJit: 0.25, vel: [0, 1, 0], velJit: 0.5, spread: 0.2,
       gravity: 0, drag: 0, windK: 0, radial: 0, ...(desc.spawn || {}),
@@ -80,10 +90,39 @@ export function defineParticleType(desc = {}) {
     throw new Error(`粒子类型 ${d.name}：kind=custom 必须提供 custom.build(ctx)`);
   }
   TYPES.push(d);
+  liveTypes += 1;
   return TYPES.length - 1;
 }
 
-/** 反查类型描述符（池分配时读静态参数）。 */
+/**
+ * 回收类型登记：打墓碑、活计数减一（上限按活计数判——回收后可再登记）。
+ * **id 单调永不复用**：在飞引用（发射器句柄/池行）零别名风险，墓碑只占数组槽
+ * （纯 JS 描述符，无显存）。模块级常量类型不回收（与进程同寿命）；动态登记
+ * （ambientMotes 每发射器一行）由属主在停/拆时释放。
+ */
+export function releaseParticleType(typeId) {
+  const e = TYPES[typeId];
+  if (!e || e.dead) return;
+  e.dead = true;
+  liveTypes -= 1;
+}
+
+/** 反查类型描述符（池分配时读静态参数；已回收的返回 null——懒分配即报未登记）。 */
 export function getParticleType(typeId) {
-  return TYPES[typeId] ?? null;
+  const e = TYPES[typeId];
+  return e && !e.dead ? e : null;
+}
+
+/**
+ * 闲置泵：释放「可回收声明 + 超时未用」的登记（打墓碑还额度）。活性由池回收泵
+ * 维护（摸活行即戳 lastUsedAt）——还在任何池里占行的类型不会被释放。多池各自泵，
+ * 幂等。阈值须远大于粒子 ttl（释放时在飞粒子已寿终）。
+ */
+export function releaseIdleParticleTypes(maxIdleMs = 8000) {
+  const now = performance.now();
+  for (let i = 0; i < TYPES.length; i++) {
+    const e = TYPES[i];
+    if (!e || e.dead || !e.recyclable) continue;
+    if (now - e.lastUsedAt >= maxIdleMs) releaseParticleType(i);
+  }
 }

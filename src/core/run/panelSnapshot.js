@@ -29,7 +29,7 @@ import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } 
 import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
-import { gatedPromotionTargets } from './promotion.js';
+import { gatedPromotionTargets, previewPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
 /**
@@ -350,15 +350,26 @@ export function cardRemovalSnapshot(run) {
  * 卡组 build 视图条目（「卡组」按钮的全屏画廊）：run 牌组原样平铺，array order 即展示序。
  * 视图 = 应用前口径（cardViewFromDef），战斗内克隆的临时状态（冷却/威力/激活/局内转化）
  * 一律不进——那些属于战斗牌库查看器（bridge 投影 zones.deck），两者是不同语义的视图。
+ * promotes = 本卡的升级方向（previewPromotionTargets——**预览口径不过等阶门禁**：
+ * 未解锁等阶的目标照示，玩家规划「怎么升级最赚」要看全链；无目标（S/Z/路线外填充卡）
+ * = 空数组）。行动侧（训练升级候选）仍走 deckUpgradeCards 的 gatedPromotionTargets。
  */
 export function deckViewEntries(run) {
   const p = run.player;
-  return p.deck.map(rt => ({
-    uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
-    // def 未注册（如大改名前的旧档残留 id）退 null view → 画廊按 defId 占位烘焙，
-    // 不拦开界面（与 stagePickerKit 的兜底契约一致）
-    view: hasSkill(rt.defId) ? cardViewFromDef(getSkillDefinition(rt.defId), { player: p }) : null,
-  }));
+  return p.deck.map(rt => {
+    const def = getSkillDefinition(rt.defId);
+    const targetIds = def ? previewPromotionTargets(run, def) : [];
+    return {
+      uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
+      // def 未注册（如大改名前的旧档残留 id）退 null view → 画廊按 defId 占位烘焙，
+      // 不拦开界面（与 stagePickerKit 的兜底契约一致）
+      view: hasSkill(rt.defId) ? cardViewFromDef(def, { player: p }) : null,
+      promotes: {
+        name: def?.name ?? rt.defId,
+        targets: targetIds.map(id => ({ defId: id, view: cardViewFromDef(getSkillDefinition(id), { player: p }) })),
+      },
+    };
+  });
 }
 
 export function deckUpgradeCards(run) {

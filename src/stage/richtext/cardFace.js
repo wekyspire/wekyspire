@@ -357,7 +357,7 @@ function drawHeader(ctx, card, manaCrystal) {
     const nameW = ctx.measureText(card.name ?? '').width;
     ctx.font = `16px ${UI_FONT}`;
     ctx.fillStyle = '#e8a03c';
-    ctx.fillText(`威${card.power > 0 ? '+' : ''}${card.power}`, 34 + nameW, 27);
+    ctx.fillText(`${card.power > 0 ? '+' : ''}${card.power}`, 34 + nameW, 27);
   }
   // 系列主题分隔线（名称下方）：细线 + 中央菱形饰
   ctx.fillStyle = theme;

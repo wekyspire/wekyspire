@@ -291,6 +291,7 @@ export const syncBeats = {
   _syncCardContents(proj) {
     const present = new Map();
     for (const c of proj.hand) present.set(c.uniqueID, { card: c, zone: 'hand' });
+    const glowCtx = this._handGlowContext();
 
     for (const [id, { card, zone }] of present) {
       const entry = this.model.get(id);
@@ -319,9 +320,8 @@ export const syncBeats = {
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
-      // 条件满足金光：condMet（def.condition 成立）∨ 弃牌模式下的灵活卡；
-      // 与咏唱流光在特效层内互斥（咏唱优先）
-      view.setCondGlow(!!card.condMet || (this._dumpMode && !!card.flexible));
+      // 条件金光按高亮语境三态（见 _handGlowContext）；与咏唱流光在特效层内互斥（咏唱优先）
+      view.setCondGlow(zone === 'hand' && this._glowOn(glowCtx, card));
       // 冷却薄纱（特效层持久指示，高度 = 剩余冷却比例：全灰=刚入冷、半灰=冷了一半）+
       // 剩余拍数水印（第三版视觉）；衰败推深超基准 = 暗红薄纱
       const max = card.charges?.max ?? Infinity;
@@ -339,11 +339,29 @@ export const syncBeats = {
     }
   },
 
-  // 弃牌模式切换时灵活卡金光重涂（无 sync 节拍的本地驱动；condMet 部分沿用快照值）
-  _applyFlexGlows() {
+  /** 手牌高亮语境（三态，回答「现在手牌在被用来做什么」）：
+   *  'play'   打牌语境（无选卡挂起、非弃牌模式）——条件满足卡（condMet）亮金光；
+   *  'discard' 弃牌语境（弃牌模式 ∨ 手牌选卡请求带 flavor:'discard'——花刀/刀法
+   *            咏唱的选弃、发起方在 cardKit.buildCardSelectionRequest 声明）——
+   *            灵活卡（flexible，碎铁类弃了不亏的卡）亮、condMet 熄；
+   *  'select' 其它选卡语境（万变拳/焚毁目标等）——全熄（此时「可用性」不是有效信息）。 */
+  _handGlowContext() {
+    if (this._dumpMode) return 'discard';
+    const req = this._snapshot?.pendingInput?.request;
+    if (req && (req.picker === 'overlay' || req.count != null)) {
+      return req.flavor === 'discard' ? 'discard' : 'select';
+    }
+    return 'play';
+  },
+  /** 语境 × 卡投影 → 金光开关（三态公式单源，_syncCardContents 与 _applyHandGlows 共用）。 */
+  _glowOn(ctx, card) {
+    return ctx === 'play' ? !!card.condMet : ctx === 'discard' ? !!card.flexible : false;
+  },
+  // 高亮语境切换时手牌金光重涂（弃牌模式开关是无 sync 节拍的本地驱动）
+  _applyHandGlows() {
+    const ctx = this._handGlowContext();
     for (const c of this._snapshot?.hand ?? []) {
-      this._views.get(c.uniqueID)?.setCondGlow(
-        !!c.condMet || (this._dumpMode && !!c.flexible));
+      this._views.get(c.uniqueID)?.setCondGlow(this._glowOn(ctx, c));
     }
   },
   _syncButtons(proj) {

@@ -30,6 +30,7 @@ import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
 import { UI_FONT } from '../richtext/uiFont.js';
+import { isAttackKind } from '../../core/intentKinds.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -717,13 +718,28 @@ function shieldIconTexture() {
 }
 
 // ---- 意图图标条烘焙 ----
-// 基础意图两两组合：攻（剑 + N×M 数字）/防（盾）/增强（升双箭头，绿）/
-// 削弱（降双箭头，紫）/召唤（四芒星）/晕眩（螺旋，不行动）/未知（?）。
+// 基础意图两两组合：攻（剑 + N×M 数字）/重击（阔剑 + 数字）/处决（斧 + 数字）/
+// 固定伤害攻击（石板钉剑 + 数字）/防（盾 + N 数字）/增强（升双箭头，绿）/
+// 强大强化（升三箭）/削弱（降双箭头，紫）/强大削弱（降三箭）/召唤（四芒星）/
+// 晕眩（螺旋，不行动）/未知（?）。每段 = 图标 + 可选紧跟数字（攻击族与防御带值）。
 // 全程序化矢量绘制——emoji 位图字在缩小
 // 采样下发糊且跨平台风格不可控，弃用；数字与 bakeBoldText 同语言（白粗体深描边）。
 const INTENTION_STRIP_H = 6.8;   // 图标条世界高（wu）——放大一倍便于阅读
 const INTENTION_GAP = 0.55;      // 图标/数字间距（wu）
 const INTENTION_LIFT = 0.9;      // 图标条底缘离头顶间隙（wu）：中心位 = 头顶 + 间隙 + 半高
+
+// 各意图段的数字文本（attack 族按 hits×damage；defend 按 shield）与数字特征色
+function intentionSegText(intention, kind) {
+  if (isAttackKind(kind) && intention.damage != null) {
+    return intention.hits > 1 ? `${intention.hits}×${intention.damage}` : `${intention.damage}`;
+  }
+  if (kind === 'defend' && intention.shield != null) return `${intention.shield}`;
+  return null;
+}
+const INTENTION_NUM_TINT = {
+  attack: '#ffe3e3', heavy: '#ffc9c9', execute: '#ffb0b0',
+  fixedAttack: '#dcdcdc', defend: '#cfe6ff',
+};
 
 function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   if (typeof document === 'undefined') return defaultBakeLabel();
@@ -731,14 +747,12 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const H = INTENTION_STRIP_H * ppw; // 逻辑像素高
   const gap = INTENTION_GAP * ppw;
   const fontPx = H * 0.6; // 数字字号 = 图标高的 60%（图标不变）
-  const attackText = kinds.includes('attack') && intention.damage != null
-    ? `${intention.hits > 1 ? `${intention.hits}×` : ''}${intention.damage}`
-    : null;
+  const segTexts = kinds.map(k => intentionSegText(intention, k));
   // 先量宽再开正式画布（canvas 定宽后改尺寸会重置绘制状态）
   const mctx = document.createElement('canvas').getContext('2d');
   mctx.font = `${fontPx}px ${UI_FONT}`;
-  const textW = attackText ? mctx.measureText(attackText).width : 0;
-  const W = kinds.length * H + (kinds.length - 1) * gap + (attackText ? gap + textW : 0);
+  const textWs = segTexts.map(t => (t ? gap + mctx.measureText(t).width : 0));
+  const W = kinds.length * H + (kinds.length - 1) * gap + textWs.reduce((a, b) => a + b, 0);
 
   const S = 4; // 超采样
   const canvas = document.createElement('canvas');
@@ -747,21 +761,23 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const ctx = canvas.getContext('2d');
   ctx.scale(S, S);
   let x = 0;
-  for (const k of kinds) {
+  kinds.forEach((k, i) => {
     drawIntentionGlyph(ctx, k, x, 0, H);
-    x += H + gap;
-  }
-  if (attackText) {
-    ctx.font = `${fontPx}px ${UI_FONT}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(3, fontPx * 0.18);
-    ctx.strokeStyle = 'rgba(5, 7, 12, 0.9)';
-    ctx.strokeText(attackText, x, H * 0.55);
-    ctx.fillStyle = '#ffe3e3';
-    ctx.fillText(attackText, x, H * 0.55);
-  }
+    x += H + (i < kinds.length - 1 ? gap : 0);
+    const t = segTexts[i];
+    if (t) {
+      ctx.font = `${fontPx}px ${UI_FONT}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(3, fontPx * 0.18);
+      ctx.strokeStyle = 'rgba(5, 7, 12, 0.9)';
+      ctx.strokeText(t, x + gap * 0.4, H * 0.55);
+      ctx.fillStyle = INTENTION_NUM_TINT[k] ?? '#ffe3e3';
+      ctx.fillText(t, x + gap * 0.4, H * 0.55);
+      x += textWs[i];
+    }
+  });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = anisotropy;
@@ -799,6 +815,98 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       ctx.fillRect(cx - s * 0.055, guardY + s * 0.1, s * 0.11, s * 0.18);
       break;
     }
+    case 'heavy': {
+      // 重击：阔剑（刃宽近三倍 + 暖红剑格）——比普通剑明显粗重
+      const cx = x + s / 2;
+      const bw = s * 0.3;
+      const bladeTop = y + s * 0.04;
+      const guardY = y + s * 0.74;
+      const grad = ctx.createLinearGradient(cx - bw, 0, cx + bw, 0);
+      grad.addColorStop(0, '#8a8f9a');
+      grad.addColorStop(0.5, '#e6dfe4');
+      grad.addColorStop(1, '#7c8290');
+      ctx.beginPath();
+      ctx.moveTo(cx, bladeTop);
+      ctx.lineTo(cx + bw, bladeTop + s * 0.32);
+      ctx.lineTo(cx + bw * 0.72, guardY);
+      ctx.lineTo(cx - bw * 0.72, guardY);
+      ctx.lineTo(cx - bw, bladeTop + s * 0.32);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.6, s * 0.045);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.8)';
+      ctx.stroke();
+      ctx.fillStyle = '#a03434';
+      ctx.fillRect(cx - s * 0.26, guardY, s * 0.52, s * 0.13);
+      ctx.beginPath();
+      ctx.arc(cx, guardY + s * 0.3, s * 0.08, 0, Math.PI * 2);
+      ctx.fillStyle = '#d84848';
+      ctx.fill();
+      break;
+    }
+    case 'execute': {
+      // 处决：单手斧（竖柄 + 一侧弧刃，暖红刃口）——致死量级的攻击读法
+      const cx = x + s * 0.42;
+      const topY = y + s * 0.05;
+      const botY = y + s * 0.95;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(2.4, s * 0.09);
+      ctx.strokeStyle = '#6b5640';
+      ctx.beginPath();
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(cx, botY);
+      ctx.stroke();
+      ctx.lineWidth = Math.max(1.4, s * 0.04);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.75)';
+      ctx.beginPath();
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(cx, botY);
+      ctx.stroke();
+      const bx = cx + s * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(bx, topY);
+      ctx.quadraticCurveTo(bx + s * 0.46, topY + s * 0.14, bx + s * 0.4, topY + s * 0.34);
+      ctx.quadraticCurveTo(bx + s * 0.22, topY + s * 0.3, bx, topY + s * 0.34);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(bx, topY, bx + s * 0.4, topY + s * 0.34);
+      grad.addColorStop(0, '#e8e0e0');
+      grad.addColorStop(1, '#b45252');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.6, s * 0.045);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.8)';
+      ctx.stroke();
+      break;
+    }
+    case 'fixedAttack': {
+      // 固定伤害攻击：石板底 + 钉住的细剑——「数值焊死」的读法（格挡/虚弱不动它）
+      const p = s * 0.06;
+      ctx.fillStyle = '#3a3f46';
+      ctx.fillRect(x + p, y + p, s - 2 * p, s - 2 * p);
+      ctx.lineWidth = Math.max(1.6, s * 0.05);
+      ctx.strokeStyle = '#788089';
+      ctx.strokeRect(x + p, y + p, s - 2 * p, s - 2 * p);
+      const cx = x + s / 2;
+      const bw = s * 0.1;
+      const bladeTop = y + s * 0.12;
+      const guardY = y + s * 0.72;
+      ctx.beginPath();
+      ctx.moveTo(cx, bladeTop);
+      ctx.lineTo(cx + bw, bladeTop + s * 0.26);
+      ctx.lineTo(cx + bw * 0.7, guardY);
+      ctx.lineTo(cx - bw * 0.7, guardY);
+      ctx.lineTo(cx - bw, bladeTop + s * 0.26);
+      ctx.closePath();
+      ctx.fillStyle = '#c9ced6';
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.2, s * 0.035);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.75)';
+      ctx.stroke();
+      ctx.fillStyle = '#9aa3ad';
+      ctx.fillRect(cx - s * 0.13, guardY, s * 0.26, s * 0.09);
+      break;
+    }
     case 'defend': {
       // 盾（蓝渐变纹章盾，与盾徽/状态面板盾图标同语言）
       const w = s * 0.78;
@@ -828,10 +936,24 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       drawChevron(ctx, x, y, s, 0.52, '#5ecb6e', false);
       break;
     }
+    case 'strongBuff': {
+      // 强大强化：绿色升三箭（更密的叠加读作「更强」）
+      drawChevron(ctx, x, y, s, 0.1, '#3fbf52', false);
+      drawChevron(ctx, x, y, s, 0.38, '#3fbf52', false);
+      drawChevron(ctx, x, y, s, 0.66, '#3fbf52', false);
+      break;
+    }
     case 'debuff': {
       // 削弱：紫色降双箭头
       drawChevron(ctx, x, y, s, 0.84, '#b26ee8', true);
       drawChevron(ctx, x, y, s, 0.48, '#b26ee8', true);
+      break;
+    }
+    case 'strongDebuff': {
+      // 强大削弱：紫红降三箭（更密的叠加读作「更强」）
+      drawChevron(ctx, x, y, s, 0.9, '#a04ad0', true);
+      drawChevron(ctx, x, y, s, 0.62, '#a04ad0', true);
+      drawChevron(ctx, x, y, s, 0.34, '#a04ad0', true);
       break;
     }
     case 'summon': {

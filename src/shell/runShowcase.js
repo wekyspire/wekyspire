@@ -16,6 +16,7 @@ import { showcaseItemOf } from './runPresenter.js';
 import { chooseDemonDebuff, DEMON_DEBUFFS } from '../core/run/rooms/bank.js';
 import { buyShopItem } from '../core/run/rooms/shop.js';
 import { answerQuestion } from '../core/run/questions.js';
+import { equipRelic, usedSlots } from '../core/run/prep.js';
 import { SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 import { tooltipHide } from './tooltipHub.js';
 import { enqueueFlowInstruction } from './flowInstruction.js';
@@ -38,6 +39,11 @@ export function createRunShowcase(ctx) {
     if (isShopDispensing()) return false;                // 售货机出货演出中：等场景回执再播（别盖住出货）
     const def = getRelicDefinition(relicShowcaseQueue.shift());
     if (!def) return false;
+    // 一键装备（槽位式且当下放得下）：特写里就能穿上，防止拿到后忘记装备
+    const slotCost = Number.isFinite(def.cost) ? def.cost : 1;
+    const equipOk = !def.nonSlot
+      && !run.player.equippedRelics.includes(def.id)
+      && usedSlots(run) + slotCost <= run.player.relicSlots;
     return stage.showcaseItem({
       title: def.name ?? def.id,
       effect: def.description ?? '',
@@ -46,6 +52,7 @@ export function createRunShowcase(ctx) {
       flavor: def.flavor ?? null,
       artKey: def.name ?? def.id,
       tint: parseInt((RARITY_COLORS[def.rarity] ?? RARITY_COLORS.C).slice(1), 16),
+      onEquip: equipOk ? () => { equipRelic(run, def.id); ctx.notify(); } : null,
       // 链式补排：这件被点掉后下一件即刻顶上（不依赖任何外部刷新节拍）
       onDismiss: () => flushRelicShowcase(),
     });
@@ -233,7 +240,9 @@ export function createRunShowcase(ctx) {
         onEnd: () => ctx.notify(),
       });
     }
-    ctx.notify();
+    // force：本拍刚排了出货指令（队列必忙），不旁路则 sold 差分到不了 rig——
+    // 门不开货不掉、回执干烧 4s 保险丝（与 spin 同款理由：结算拍即时刷新，防连点）
+    ctx.notify({ force: true });
     return res;
   }
   /** 场景回执：那件货已经掉进出货口 → 收掉对应出货指令（onEnd 补 notify 开包/差分特写）。 */

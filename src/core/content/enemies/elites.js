@@ -73,7 +73,7 @@ registerEnemy({
     }
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
-    if (phase === 1) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+14' };
+    if (phase === 1) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, shield: 14, note: '自身护盾+14' };
     return { kinds: ['attack'], hits: 3, damage: 6 + atk };
   },
 });
@@ -116,8 +116,8 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '自身开局自带护盾20' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒8' };
-    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 12 + atk, note: '自身护盾15' };
+    if (phase === 0) return { kinds: ['defend', 'debuff'], shield: 15, note: '自身护盾15，赋予玩家中毒8' };
+    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 12 + atk, shield: 15, note: '自身护盾15' };
     return { kinds: ['stun'], note: '晕眩（不行动）' };
   },
 });
@@ -148,7 +148,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+5' }
+    ? { kinds: ['defend', 'buff'], shield: 15, note: '蓄力：自身护盾+15、蓄势+5' }
     : { kinds: ['attack'], hits: 1,
         damage: 5 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
@@ -235,7 +235,7 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
     }
     if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 13 + unit.getStat('attack') };
-    return { kinds: ['defend'], note: '自身护盾+8' };
+    return { kinds: ['defend'], shield: 8, note: '自身护盾+8' };
   },
 });
 
@@ -261,7 +261,7 @@ registerEnemy({
   getIntention: (unit, battleState) => {
     const master = aliveEnemies(battleState).find(footmanMasterOf);
     return (unit.actionIndex % 2 === 0 && master)
-      ? { kinds: ['defend', 'buff'], note: '护主：主君护盾+5' }
+      ? { kinds: ['defend', 'buff'], shield: 5, note: '护主：主君护盾+5' }
       : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') };
   },
 });
@@ -352,7 +352,7 @@ registerEnemy({
     if (phase === 0) return { kinds: ['debuff'], note: '将「红色炸弹」「蓝色炸弹」洗入你的牌库' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
     if (phase === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 7 + atk, note: '向你的手牌塞入「白色炸弹」「黑色炸弹」' };
-    return { kinds: ['attack'], hits: 1, damage: 21 + atk, note: '重击' };
+    return { kinds: ['heavy'], hits: 1, damage: 21 + atk, note: '重击' };
   },
 });
 
@@ -405,7 +405,7 @@ registerEnemy({
     const phase = (unit.actionIndex - 1) % 4;
     if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 15 + atk };
     if (phase === 1) return { kinds: ['attack'], hits: 5, damage: 3 + atk };
-    if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
+    if (phase === 2) return { kinds: ['heavy'], hits: 1, damage: 24 + atk, note: '重击' };
     return { kinds: ['debuff'], note: '赋予玩家干扰1；将 4 张「虚无」洗入你的牌库' };
   },
 });

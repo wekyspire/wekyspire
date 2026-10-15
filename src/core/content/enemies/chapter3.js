@@ -40,7 +40,7 @@ registerEnemy({
       return { kinds: ['buff'], note: `自身再生${next}` };
     }
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
-    return { kinds: ['defend'], note: '自身护盾+10' };
+    return { kinds: ['defend'], shield: 10, note: '自身护盾+10' };
   },
 });
 
@@ -73,8 +73,8 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '自身护盾10 + 荆棘1 + 力量+1' }
-    : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') }),
+    ? { kinds: ['defend', 'buff'], shield: 10, note: '自身护盾10 + 荆棘1 + 力量+1' }
+    : { kinds: ['heavy'], hits: 1, damage: 10 + unit.getStat('attack') }),
 });
 
 // ㉑ 贪杯鬼（章3·滚雪球）：喝酒（自愈 9 + 力量 1）×2 → 醉拳 12，三拍循环。
@@ -133,6 +133,7 @@ registerEnemy({
       kinds: ['attack', 'defend'],
       hits: 1,
       damage: 12 + unit.getStat('attack'),
+      shield: 3 + tally * 2,
       note: `记账：自身护盾+${3 + tally * 2}（按你上回合打出的 ${tally} 张牌）`,
     };
   },

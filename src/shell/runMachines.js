@@ -290,11 +290,14 @@ export function createRunMachines(ctx) {
   // 「谁被点了」和「把候选画出来」，不做游戏判定。
   // 单飞纪律归队列（不再手写 busy 锁）：流程 = 一条 'room:devour-flow' 指令（默认串行），
   // 在播期间的再入排在队尾，轮到它时若进度已被首份流程消费（devourReady=false）即自灭。
-  // 投料口点选先于模态路由（RoomStage 既有秩序），选卡界面开着时 3D 投料口照样吃得着
-  // 点击——这正是要靠队列 + 状态门拦的再入源。
+  // 排队等待期（前有转轮/演出指令占队）投料口照常可点——再入靠源头去重 + 队列 + 状态门拦。
   // start 内 try/finally 收尾 finish：链上任何一环抛错指令也不悬挂；玩家节奏段
   // （对话/选卡可长考）不上墙钟保险丝（时基约定同 battle-span）。
   function openDevourFlow() {
+    // 源头去重：已有一份在队/在播（含排队等待期——投料口无模态遮罩照常可点）直接拒，
+    // 高速连点不再堆积重复份（重复份在「算了」/选卡开着两条不消费出路下会照播）。
+    // 不可塞进 entryOk——start 复检时会找到自己导致自灭。
+    if (dedicatedSequencer.findPending(i => i.meta?.event === 'room:devour-flow')) return false;
     // 壳见 flowInstruction.js：流程内部还要往同一队列排剧本步骤/特写链，故退出 'all'
     // 防互等死锁；再入由自家标签互等拦住排队，轮到时 entryOk 状态门自灭。
     return enqueueFlowInstruction(dedicatedSequencer, {
@@ -348,7 +351,9 @@ export function createRunMachines(ctx) {
             releaseHold = null;              // 边界，delta 已被对账贴平）——跳过 flight 防过冲
             if (alive !== false) void ctx.scalars.flight({ scalar: 'money', amount: res.gold });
           };
-          ctx.notify();                          // 进度即刻清零：排队中的再入自此全部自灭
+          // force：上面 holdBeat 已占队（特写窗），不旁路则计数器/ready 门停在「可粉碎」
+          // 直到特写被点掉——窗口全程 UI 骗人。金币显示走 scalars 通道不受影响。
+          ctx.notify({ force: true });           // 进度即刻清零：排队中的再入自此全部自灭
           ctx.roomStage()?.playCrush?.();   // 机器端的"咬合 + 迸币"演出（结算已完成，这里只是表现）
           // 金币获得特写（通用组件：有素材用素材，没有就拿色块代替）：
           // 点掉特写 → 飞行拍释放显示增量，顶栏数字此刻才 +N（§4.6 通道）；

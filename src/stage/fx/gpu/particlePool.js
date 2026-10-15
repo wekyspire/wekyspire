@@ -39,7 +39,7 @@ import {
 import { additiveLight } from '../../post/passes.js';
 import { windField } from './wind.js';
 import { bloomPassFlag, setBloomWriter } from '../bloomOffset.js';
-import { getParticleType } from './particleTypes.js';
+import { getParticleType, releaseIdleParticleTypes } from './particleTypes.js';
 
 const POOL_N = 16384; // 粒子上限（Σ 类型 cap 超此值 = 分配时报错，容量账摆明处）
 const MAX_T = 64;     // 类型表行数 / alive 计数槽数（2026-10-02 32→64：Boss 长战多种爆发组合打满过，夜测 1002 [r2路8]）
@@ -470,9 +470,35 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
     cursor: 0, prevCursor: 0, spawnActive: 0, rateScale: 1,
     spawnPos: [0, 0, 0], spawnAnchorIdx: -1, destAnchorIdx: -1,
     desc: null, customTick: null, api: null,
+    retireAt: 0,   // >0 = 退役中：停发等粒子 ttl 走完，到期回收（见 allocate 的惰性扫）
   }));
   let nextSlot = 0;
+  const freeRanges = [];   // 已回收段 {start, cap}：allocate 优先等容复用（非等容留存碎片，走 nextSlot 兜底）
   const customPasses = []; // 复杂类型各自 dispatch（allocate 时 build 产出）
+
+  function freeRow(i) {
+    const r = rows[i];
+    r.api?.dispose?.();
+    r.used = false;
+    r.retireAt = 0;
+    if (r.cap > 0) freeRanges.push({ start: r.start, cap: r.cap });
+  }
+
+  // 退役行惰性回收：①有退役线的到期收（ttl+宽限——显式回收路径的在飞粒子寿终后）；
+  // ②登记已死且无退役线的立即收（闲置泵路径：8s 闲置阈远大于粒子 ttl，在飞早已寿终）。
+  // 行与段还池（等容段优先复用）。
+  function sweepRetired() {
+    const now = performance.now();
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r.used) continue;
+      if (r.retireAt > 0) {
+        if (now >= r.retireAt) freeRow(i);
+        continue;
+      }
+      if (getParticleType(r.typeId) === null) freeRow(i);
+    }
+  }
 
   function allocate(typeId) {
     const desc = getParticleType(typeId);
@@ -480,19 +506,27 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
     if (desc.space !== space) {
       throw new Error(`粒子类型 ${desc.name}（space=${desc.space}）与池 space=${space} 不符`);
     }
+    sweepRetired();
     const t = rows.findIndex(r => !r.used);
     if (t < 0) throw new Error(`粒子类型表满（${MAX_T} 行/池）`);
-    if (nextSlot + desc.cap > POOL_N) {
-      throw new Error(`粒子池容量超限：Σcap ${nextSlot}+${desc.cap} > ${POOL_N}（${desc.name}）`);
+    let start = -1;
+    const fi = freeRanges.findIndex(f => f.cap === desc.cap);
+    if (fi >= 0) start = freeRanges.splice(fi, 1)[0].start;
+    else {
+      if (nextSlot + desc.cap > POOL_N) {
+        throw new Error(`粒子池容量超限：Σcap ${nextSlot}+${desc.cap} > ${POOL_N}（${desc.name}）`);
+      }
+      start = nextSlot;
+      nextSlot += desc.cap;
     }
     const r = rows[t];
     r.used = true; r.typeId = typeId; r.desc = desc;
-    r.start = nextSlot; r.cap = desc.cap;
+    r.start = start; r.cap = desc.cap;
     r.kind = desc.kind === 'custom' ? 1 : 0;
     r.cursor = 0; r.prevCursor = 0; r.spawnActive = 0; r.rateScale = 1;
     r.customTick = null; r.api = null;
+    r.retireAt = 0;
     r.spawnPos = [0, 0, 0]; r.spawnAnchorIdx = -1; r.destAnchorIdx = -1;
-    nextSlot += desc.cap;
     if (r.kind === 1) {
       // 复杂类型：独立编译 dispatch（只管自己段；spawn+update 一体，行为栈自写）。
       // build 返回 { update: ComputeNode, tick?: () => 本帧前置节点（如燃烧条目压缩）,
@@ -556,6 +590,19 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   /** 持续发射开关（rate 走类型 desc）。 */
   function setTypeActive(typeId, on) {
     rows[useType(typeId)].spawnActive = on ? 1 : 0;
+  }
+  /**
+   * 行退役：停发 + 登记 ttl 到期线；行与段在下次 allocate 的惰性扫里还池
+   * （在飞粒子活到 ttl 自然死，全局 dispatch 照常 aging）。发射器停/桥拆时调，
+   * 与 releaseParticleType 配对（先 retire 池行、后回收登记）。
+   */
+  function retireType(typeId) {
+    const i = rows.findIndex(r => r.used && r.typeId === typeId);
+    if (i < 0) return;
+    const r = rows[i];
+    r.spawnActive = 0;
+    const s = r.desc?.spawn ?? {};
+    r.retireAt = performance.now() + ((s.ttl ?? 0) + (s.ttlJit ?? 0)) * 1000 + 2000;   // 宽限余量
   }
   /** 持续发射速率倍率（如燃烧 × 活跃单位数）。 */
   function setTypeRateScale(typeId, k) {
@@ -682,6 +729,18 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   let drawAll = true;   // 空转藏绘状态（无注册类型 = 无 FX 可出生 → drawRange 归零）
   function update(dt) {
     t += dt; frame += 1;
+    // 回收泵（2s 节流）：摸活行（在用 = 不许闲置回收）→ 释放闲置可回收登记 →
+    // 扫退役/已死行还池。多池各自泵幂等；登记表是全局共享的，谁先泵到都一样。
+    if (frame % 120 === 0) {
+      const now = performance.now();
+      for (const r of rows) {
+        if (!r.used) continue;
+        const d = getParticleType(r.typeId);
+        if (d) d.lastUsedAt = now;
+      }
+      releaseIdleParticleTypes();
+      sweepRetired();
+    }
     let anyRows = false;
     for (const r of rows) {
       if (!r.used) continue;
@@ -724,10 +783,11 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   const tailNodes = [];
   function registerTail(fn) { tailNodes.push(fn); }
 
-  /** 场景切换清预算：段全释放、游标/锚点/计数归零、粒子全灭（类型登记不受影响）。 */
+  /** 全释放：段全释放、游标/锚点/计数归零、粒子全灭（类型登记不受影响；退役态一并清）。 */
   function reset() {
-    for (const r of rows) { r.api?.dispose?.(); r.used = false; }
+    for (const r of rows) { r.api?.dispose?.(); r.used = false; r.retireAt = 0; }
     nextSlot = 0;
+    freeRanges.length = 0;
     customPasses.length = 0;
     watchers.length = 0;
     for (const a of anchors) a.used = false;
@@ -782,6 +842,7 @@ export function createParticlePool(renderer, { space = 'world', name = 'particle
   return {
     points, update, dispose, reset,
     burst, setTypeActive, setTypeRateScale, setTypeSpawnPos, setTypeSpawnAnchor, setTypeDestination,
+    retireType,
     useType, typeApi, addAnchor, moveAnchor, removeAnchor, onDrained, registerTail,
     debugReadCounts, debugReadState,
     get allocatedSlots() { return nextSlot; },

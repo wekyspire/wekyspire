@@ -165,7 +165,7 @@ function corpGuardDef(id, startBeat) {
       const phase = (unit.actionIndex + startBeat) % 2;
       return phase === 0
         ? { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') }
-        : { kinds: ['defend', 'buff'], note: '护盾+12，自身力量+3' };
+        : { kinds: ['defend', 'buff'], shield: 12, note: '护盾+12，自身力量+3' };
     },
   });
 }
@@ -215,7 +215,7 @@ function spyDef(id, looping) {
         ? [2, 0, 1][unit.actionIndex % 3]
         : Math.min(unit.actionIndex, 3);
       if (beat === 0) return { kinds: ['debuff', 'attack'], hits: 1, damage: 10 + atk, note: spyLockNote(1) };
-      if (beat === 1) return { kinds: ['debuff'], note: spyLockNote(4) };
+      if (beat === 1) return { kinds: ['strongDebuff'], note: spyLockNote(4) };
       if (beat === 2) return { kinds: ['debuff', 'buff'], note: `${spyLockNote(1)}；自身力量+2` };
       return { kinds: ['attack'], hits: 3, damage: 3 + atk };
     },
@@ -270,7 +270,7 @@ function recruitGunnerDef(id, startBeat) {
       const atk = unit.getStat('attack');
       const phase = (unit.actionIndex + startBeat) % 3;
       if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 8 + atk, note: '流弹误伤随机友军 4' };
-      if (phase === 1) return { kinds: ['defend'], note: '慌张装填：护盾+5' };
+      if (phase === 1) return { kinds: ['defend'], shield: 5, note: '慌张装填：护盾+5' };
       return { kinds: ['attack'], hits: 1, damage: 12 + atk, note: '流弹误伤两名随机友军各 4' };
     },
   });
@@ -325,10 +325,10 @@ function nymphDef(id, { b1Attack = false, b3Attack = false, twoBeat = false } = 
       if (phase === 0) return b1Attack
         ? { kinds: ['attack'], hits: 3, damage: 3 + atk }
         : { kinds: ['debuff'], note: '将 2 张「虚无」洗入你的牌库' };
-      if (phase === 1) return { kinds: ['defend'], note: '护盾+10' };
+      if (phase === 1) return { kinds: ['defend'], shield: 10, note: '护盾+10' };
       return b3Attack
         ? { kinds: ['attack'], hits: 1, damage: 12 + atk }
-        : { kinds: ['debuff'], note: '赋予玩家滞气3（下回合无法抽牌）' };
+        : { kinds: ['strongDebuff'], note: '赋予玩家滞气3（下回合无法抽牌）' };
     },
   });
 }
@@ -355,7 +355,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '全体友军护盾+6' }
+    ? { kinds: ['defend', 'buff'], shield: 6, note: '全体友军护盾+6' }
     : { kinds: ['attack'], hits: 1, damage: 7 + unit.getStat('attack') }),
 });
 
@@ -384,7 +384,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['defend'], note: '列盾：护盾+15' };
+    if (phase === 0) return { kinds: ['defend'], shield: 15, note: '列盾：护盾+15' };
     // 预告与 ram 效果同源（+盾一半）；玩家破盾后读数实时回落
     const atk = unit.getStat('attack') + Math.floor(unit.shield / 2);
     return { kinds: ['attack'], hits: 1, damage: (phase === 1 ? 5 : 7) + atk };
@@ -413,7 +413,7 @@ registerEnemy({
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
     ? { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') }
-    : { kinds: ['defend', 'buff'], note: '护盾+10，全体友军蓄势+3' }),
+    : { kinds: ['defend', 'buff'], shield: 10, note: '护盾+10，全体友军蓄势+3' }),
 });
 
 // ---- 见习灵御（持续成长的攻击压力）：拍 1 力量 +3；此后每拍 攻 3 + 力量 +2（无上限）。
@@ -477,7 +477,7 @@ registerEnemy({
     const atk = unit.getStat('attack');
     const phase = unit.actionIndex % 3;
     if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 6 + atk };
-    if (phase === 1) return { kinds: ['defend'], note: '护盾+10' };
+    if (phase === 1) return { kinds: ['defend'], shield: 10, note: '护盾+10' };
     return { kinds: ['attack'], hits: 3, damage: 4 + atk };
   },
 });
@@ -695,6 +695,6 @@ registerEnemy({
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['debuff'], note: '将 2 张「虚无」洗入你的牌库' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
-    return { kinds: ['debuff'], note: '赋予玩家滞气1（下回合无法抽牌）' };
+    return { kinds: ['strongDebuff'], note: '赋予玩家滞气1（下回合无法抽牌）' };
   },
 });

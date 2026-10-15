@@ -9,18 +9,10 @@ import { EventNames } from '../../bridge/events.js';
 import { getSkillDefinition } from '../../core/skills/registry.js';
 import { cardTheme } from '../richtext/appearance.js';
 import { glowTexture } from '../fx/orbs.js';
+import { playGainSweep, playShieldRings } from '../fx/gainFx.js';
 
-/** 单位行动姿态配方（_poseBeat 用）：squash/widen 绕脚底压扁撑宽（乘数）、lean 绕脚
- *  前倾（符号在节拍内按朝向算）、flash 为立牌染色（restoreColor 复原）、in/hold/out 三段时长。
- *  攻击姿态不在此表：它是「突进位移 + 前倾」，编排在 _damageHit 里（接触瞬间 = 命中演出）。 */
-export const UNIT_POSES = Object.freeze({
-  // 防御：蜷缩支撑（压扁 + 撑宽 = 沉住马步），蓝闪
-  defend: { squash: 0.78, widen: 1.16, lean: 0, flash: 0x8fc3ff, inMs: 110, holdMs: 110, outMs: 190 },
-  // 增强：拔地而起（拔高 + 收窄 = 气势上行），金闪
-  buff: { squash: 1.18, widen: 0.94, lean: 0, flash: 0xffd34c, inMs: 130, holdMs: 90, outMs: 200 },
-  // 削弱：佝偻前倾（压扁 + 微倾 = 气势受挫），紫闪；lean 朝向对方阵营（节拍内按 side 赋号）
-  debuff: { squash: 0.84, widen: 1.06, lean: 0.1, flash: 0xb26ee8, inMs: 130, holdMs: 80, outMs: 190 },
-});
+/** 「获得」反馈配色（与意图条图标同语言：强化绿 / 削弱紫 / 护盾蓝） */
+const GAIN_COLORS = Object.freeze({ buff: 0x5ecb6e, debuff: 0xb26ee8 });
 
 // ---- 卡牌族 ----
 
@@ -41,41 +33,44 @@ function drawnBeat(stage, payload, finish) {
 
 // ---- 单位族 ----
 
-// 治疗/护盾/效果：目标脉冲 + 对应色粒子（双色主次爆发，亮度经系统内抖动分层）；
-// 治疗追加 +N 绿色文本粒子（无重力上飘）。
-// 护盾/效果另接**行动姿态**（非主角行动要有身体语言）——
-// 护盾 = 防御蜷缩、效果按 type 分增强拔起/削弱佝偻；治疗保持通用脉冲（治疗者姿态未定义，不硬造）。
-const STATUS_FX = Object.freeze({
-  [EventNames.ANIM_HEAL]:   { color: 0x66ff9e, accent: 0xd0ffe0, gravity: 18 },
-  [EventNames.ANIM_SHIELD]: { color: 0x8fc3ff, accent: 0xeaf4ff, gravity: -8 },
-  [EventNames.ANIM_EFFECT]: { color: 0xffd34c, accent: 0xffedb0, gravity: -6 },
-});
-
+// 治疗：目标脉冲 + 绿色主次爆发（治疗不在「获得反馈重做」三件内，维持原样）
+// + 恢复量的绿色文本粒子（无重力上飘）。
+// 护盾/效果 = 「获得」反馈三件（fx/gainFx.js）：结构化光取代旧的整面染色+放缩——
+// 护盾 → 脚下双环扩散（罩体凝实脉冲由 shieldDome 差分自播）；效果 → 剪影扫描光带
+// （增益上行/减益下行）。节拍只短阻塞（90~110ms）让光起读，余段后台播完。
 function statusBeat(type) {
   return (stage, payload, finish) => {
     const target = stage._findAnimTarget(payload);
     if (!target) return finish();
-    const fx = STATUS_FX[type];
-    stage.particles.spawn(target.position.x, target.position.y, { count: 16, color: fx.color, speed: 10, ttl: 0.6, size: 1.4, gravity: fx.gravity, z: target.position.z ?? 0 });
-    stage.particles.spawn(target.position.x, target.position.y, { count: 8, color: fx.accent, speed: 16, ttl: 0.45, size: 1.0, gravity: fx.gravity, z: target.position.z ?? 0 });
-    if (type === EventNames.ANIM_HEAL && (payload?.healed ?? 0) > 0) {
-      const p = stage._unitToUI(target, (Math.random() - 0.5) * 3, 4);
-      stage.particles.spawnText(
-        p.x, p.y,
-        `+${payload.healed}`,
-        {
-          fontSize: Math.min(30 + payload.healed * 2, 72), color: '#4ade80',
-          vx: (Math.random() - 0.5) * 6, vy: 14,
-          gravity: 0, drag: 1.2, ttl: 1.0, scalePop: 0.4,
-          space: 'ui',
-        },
-      );
+    if (type === EventNames.ANIM_HEAL) {
+      stage.particles.spawn(target.position.x, target.position.y, { count: 16, color: 0x66ff9e, speed: 10, ttl: 0.6, size: 1.4, gravity: 18, z: target.position.z ?? 0 });
+      stage.particles.spawn(target.position.x, target.position.y, { count: 8, color: 0xd0ffe0, speed: 16, ttl: 0.45, size: 1.0, gravity: 18, z: target.position.z ?? 0 });
+      if ((payload?.healed ?? 0) > 0) {
+        const p = stage._unitToUI(target, (Math.random() - 0.5) * 3, 4);
+        stage.particles.spawnText(
+          p.x, p.y,
+          `+${payload.healed}`,
+          {
+            fontSize: Math.min(30 + payload.healed * 2, 72), color: '#4ade80',
+            vx: (Math.random() - 0.5) * 6, vy: 14,
+            gravity: 0, drag: 1.2, ttl: 1.0, scalePop: 0.4,
+            space: 'ui',
+          },
+        );
+      }
+      return genericPulseBeat(stage, payload, finish, target);
     }
-    if (type === EventNames.ANIM_SHIELD) return stage._poseBeat(target, UNIT_POSES.defend, finish);
-    // 效果姿态只摆「获得/叠层」：层数衰减/扣尽（燃烧跳完 -1 等）读作消退，
-    // 不配「被施加」的强姿态——回落下方通用脉冲
-    if (type === EventNames.ANIM_EFFECT && (payload?.delta ?? 1) > 0) {
-      return stage._poseBeat(target, payload?.type === 'debuff' ? UNIT_POSES.debuff : UNIT_POSES.buff, finish);
+    if (type === EventNames.ANIM_SHIELD) {
+      playShieldRings(target);
+      stage.animator.animate(target.uniqueID, {}, { delayMs: 90, onComplete: finish });
+      return;
+    }
+    // 效果获得/叠层（delta>0）：扫描光带；衰减/扣尽读作消退——回落通用脉冲
+    if ((payload?.delta ?? 1) > 0) {
+      const debuff = payload?.type === 'debuff';
+      playGainSweep(target, debuff ? GAIN_COLORS.debuff : GAIN_COLORS.buff, { dir: debuff ? -1 : 1 });
+      stage.animator.animate(target.uniqueID, {}, { delayMs: 110, onComplete: finish });
+      return;
     }
     return genericPulseBeat(stage, payload, finish, target);
   };

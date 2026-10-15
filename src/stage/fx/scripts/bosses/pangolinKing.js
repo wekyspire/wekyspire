@@ -20,6 +20,7 @@ import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.j
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
 import { makePlateArmor } from '../../plateArmor.js';
+import { isAttackKind } from '../../../../core/intentKinds.js';
 
 // 细环冲击纹理（同 pyro/kardas 的「白热细峰」口径，暖砂色调——尘浪不是火浪）
 let _ringTex = null;
@@ -266,7 +267,7 @@ function spikeTexture() {
 async function pangolinAct({ ctx, deps, unit, kinds, args }) {
   const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
   const H = unit._standeeHeight ?? 22;
-  if (kinds.includes('attack')) {
+  if (kinds.some(isAttackKind)) {
     const deep = (unit._bossPhase ?? 0) >= 2; // P2 蓄势重锤（P1 普攻 12 与重锤同 hits=1，靠相位分档）
     const id = unit.uniqueID;
     if (deep) {

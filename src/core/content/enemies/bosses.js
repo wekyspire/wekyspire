@@ -146,16 +146,16 @@ registerEnemy({
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
       const beat = unit.actionIndex % 4;
-      if (beat === 0) return { kinds: ['defend', 'debuff'], note: '护盾+6，塞2张灼伤入你牌库' };
+      if (beat === 0) return { kinds: ['defend', 'debuff'], shield: 6, note: '护盾+6，塞2张灼伤入你牌库' };
       if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '赋予燃烧5' };
       if (beat === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '塞1张灼伤进手牌' };
-      return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
+      return { kinds: ['heavy'], hits: 1, damage: 18 + atk, note: '重击' };
     }
     const beat = (unit._phaseBeat ?? 0) % 4;
-    if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧11（含它自己）' };
+    if (beat === 0) return { kinds: ['strongDebuff'], note: '赋予所有单位燃烧11（含它自己）' };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 9 + atk, note: '塞1张灼伤进手牌' };
     if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复3血' };
-    return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
+    return { kinds: ['heavy'], hits: 1, damage: 24 + atk, note: '重击' };
   },
 });
 
@@ -216,13 +216,13 @@ registerEnemy({
       const beat = unit.actionIndex % 4;
       if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 4 + atk };
       if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
-      if (beat === 2) return { kinds: ['attack', 'buff'], hits: 1, damage: 15 + atk, note: '暴怒1' };
-      return { kinds: ['defend'], note: '自身护盾+10' };
+      if (beat === 2) return { kinds: ['heavy', 'buff'], hits: 1, damage: 15 + atk, note: '暴怒1' };
+      return { kinds: ['defend'], shield: 10, note: '自身护盾+10' };
     }
     const beat = (unit._phaseBeat ?? 0) % 3;
     if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 6 + atk };
     if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 5 + atk };
-    return { kinds: ['attack'], hits: 1, damage: 27 + atk, note: '撕碎' };
+    return { kinds: ['heavy'], hits: 1, damage: 27 + atk, note: '撕碎' };
   },
 });
 
@@ -381,13 +381,13 @@ registerEnemy({
     if (!unit._phase2 && unit.hp < 190) return { kinds: ['unknown'], note: '恼怒' };
     if (!unit._phase2) {
       if (unit.actionIndex === 0) return { kinds: ['buff'], note: '增强：防御2' };
-      if (unit.shield <= 0) return { kinds: ['defend', 'buff'], note: '护盾50，脆弱如山' };
+      if (unit.shield <= 0) return { kinds: ['defend', 'buff'], shield: 50, note: '护盾50，脆弱如山' };
       const beat = (unit._beat ?? 0) % 3;
       if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 12 + atk };
       if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
       return { kinds: ['buff'], note: '荆棘2' };
     }
-    return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '重击，蓄势+5' };
+    return { kinds: ['heavy', 'buff'], hits: 1, damage: 9 + atk, note: '重击，蓄势+5' };
   },
 });
 
@@ -469,13 +469,13 @@ registerEnemy({
     const beat = (unit.actionIndex - 1) % 4;
     if (beat === 0) {
       return allies >= 3
-        ? { kinds: ['buff'], note: '全员力量3' }
+        ? { kinds: ['strongBuff'], note: '全员力量3' }
         : { kinds: ['summon'], note: '召唤（腐败根须/刺刺草）' };
     }
-    if (beat === 1) return { kinds: ['debuff'], note: '虚弱1，脆弱1' };
+    if (beat === 1) return { kinds: ['strongDebuff'], note: '虚弱1，脆弱1' };
     if (beat === 2) {
       return allies > 0
-        ? { kinds: ['buff'], note: '全员恢复15血' }
+        ? { kinds: ['strongBuff'], note: '全员恢复15血' }
         : { kinds: ['summon'], note: '召唤1个' };
     }
     return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack') };
@@ -547,7 +547,7 @@ registerEnemy({
     if (phase < 2) {
       return { kinds: ['attack'], hits: 1, damage: 16 + unit.getStat('attack'), note: '亲征' };
     }
-    return { kinds: ['defend'], note: '亲征：自身护盾+10' };
+    return { kinds: ['defend'], shield: 10, note: '亲征：自身护盾+10' };
   },
 });
 
@@ -573,7 +573,7 @@ registerEnemy({
     }
     const master = aliveEnemies(battleState).find(e => e.defId === 'knightCommander');
     return master
-      ? { kinds: ['defend'], note: '护驾：骑士长护盾+10' }
+      ? { kinds: ['defend'], shield: 10, note: '护驾：骑士长护盾+10' }
       : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') };
   },
 });
@@ -637,7 +637,7 @@ registerEnemy({
         note: `烛火：燃烧${phase2 ? 3 : 2}；${bell}` };
     }
     if (beat === 1) return { kinds: ['attack'], hits: 1, damage: 14 + atk, note: bell };
-    return { kinds: ['defend'], note: `添烛：自身护盾+${phase2 ? 16 : 12}；${bell}` };
+    return { kinds: ['defend'], shield: phase2 ? 16 : 12, note: `添烛：自身护盾+${phase2 ? 16 : 12}；${bell}` };
   },
 });
 
@@ -1012,22 +1012,22 @@ registerEnemy({
     };
     if (phase === 1) {
       const b = beat % 4;
-      if (b === 0) return { kinds: ['defend', 'attack'], hits: 1, damage: 20 + atk, note: '直觉：自身护盾+40' };
+      if (b === 0) return { kinds: ['defend', 'attack'], hits: 1, damage: 20 + atk, shield: 40, note: '直觉：自身护盾+40' };
       if (b === 1) return { kinds: ['attack', 'debuff'], hits: 5, damage: 5 + atk, note: '蓄能：锁定你最先抽到的3张牌（回合结束时仍在手则焚毁）' };
       if (b === 2) return { kinds: ['attack'], hits: 1, damage: 50 + atk, note: '光能炮' };
       return { kinds: ['buff'], note: '错误重启：力量+4' };
     }
     if (phase === 2) {
       if (beat === 0) return { kinds: ['debuff'], note: '回忆：向你牌库洗入7张【躲闪】' };
-      if (beat === 1) return scatterPreview(5, 10, '羽翼扫射：自身护盾+15', ['attack', 'defend']);
-      if (beat === 2) return { kinds: ['defend', 'buff'], note: '腾空：闪避+3，自身护盾+30' };
+      if (beat === 1) return { ...scatterPreview(5, 10, '羽翼扫射：自身护盾+15', ['attack', 'defend']), shield: 15 };
+      if (beat === 2) return { kinds: ['defend', 'buff'], shield: 30, note: '腾空：闪避+3，自身护盾+30' };
       if (beat === 3) return scatterPreview(8, 10, '羽翼风暴');
       if (beat === 4) return { kinds: ['attack'], hits: 1, damage: 65 + atk, note: '轰落' };
       if (beat === 5) return { kinds: ['buff'], note: '怜悯：净化自身全部效果，本拍不攻击' };
       if ((unit._pressure ?? 0) > SHELL_OVERHEAT) {
-        return { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${SHELL_OVERHEAT}，取消扫射，自身护盾+50` };
+        return { kinds: ['defend'], shield: 50, note: `过热自保：本回合生命值伤害已超 ${SHELL_OVERHEAT}，取消扫射，自身护盾+50` };
       }
-      return scatterPreview(4, 14, `处决扫射：穿透伤害（本回合生命值伤害 >${SHELL_OVERHEAT} 则改为起盾 50）`);
+      return scatterPreview(4, 14, `处决扫射：穿透伤害（本回合生命值伤害 >${SHELL_OVERHEAT} 则改为起盾 50）`, ['execute']);
     }
     if (beat === 0) return { kinds: ['buff'], note: '过载重启：回满生命值（此形态不再加盾）' };
     if (beat === 1) return scatterPreview(4, 14, '高热：焚毁你的全部手牌', ['attack', 'debuff']);
@@ -1220,18 +1220,18 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '错错错误：自爆！' };
     }
     if (unit.getEffectStacks('stasis') > 0 || unit._phase2Pending) {
-      return { kinds: ['buff'], note: '系统统统错误，最终预案启动：净化自身全部效果，护盾+50' };
+      return { kinds: ['buff'], shield: 50, note: '系统统统错误，最终预案启动：净化自身全部效果，护盾+50' };
     }
     if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '徘徊' };
     if (!unit._phase2) {
       const beat = (unit.actionIndex - 1) % 3;
       if (beat === 0) return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：锁定手中3张牌（回合结束时仍在手则焚毁）' };
-      if (beat === 1) return { kinds: ['defend'], note: '劝诫：自身护盾+30' };
+      if (beat === 1) return { kinds: ['defend'], shield: 30, note: '劝诫：自身护盾+30' };
       return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：焚毁牌库顶2张' };
     }
     const beat = unit._redBeat % 3;
     if (beat === 0) return (unit._pressure ?? 0) > DRONE_OVERHEAT
-      ? { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${DRONE_OVERHEAT}，取消开火，自身护盾+50` }
+      ? { kinds: ['defend'], shield: 50, note: `过热自保：本回合生命值伤害已超 ${DRONE_OVERHEAT}，取消开火，自身护盾+50` }
       : { kinds: ['attack'], hits: 1, damage: 35 + atk, note: `锁定要害，清除：穿透伤害，自身格挡+1（本回合生命值伤害 >${DRONE_OVERHEAT} 则改为起盾 50）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 7, damage: 5 + atk, note: '反反反反制：锁定你的全部手牌' };
     return { kinds: ['unknown'], note: '重启....失失失失败' };
@@ -1499,13 +1499,13 @@ registerEnemy({
     const beat = (unit._beat ?? 0) % 3;
     if (phase === 1) {
       if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '灵压' };
-      if (beat === 1) return { kinds: ['defend', 'buff'], note: '架势：盾8、格挡2' };
+      if (beat === 1) return { kinds: ['defend', 'buff'], shield: 8, note: '架势：盾8、格挡2' };
       return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '虹吸：偷取2魏启' };
     }
     if (phase === 2) {
       if (beat === 0) return { kinds: ['debuff'], note: '灵脉虹吸：偷取你的一个增益的全部层数' };
       if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk, note: '谵妄突袭' };
-      return { kinds: ['defend', 'buff'], note: '戒断：盾12、格挡2' };
+      return { kinds: ['defend', 'buff'], shield: 12, note: '戒断：盾12、格挡2' };
     }
     if (beat === 0) return { kinds: ['attack'], hits: 3, damage: 6 + atk, note: `灵潮倾泻（每拍过载：自伤4换力量+1）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 8 + atk, note: '掠夺成性：偷2魏启，力量+1' };

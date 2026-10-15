@@ -401,42 +401,6 @@ export const unitBeats = {
       finish();
     });
   },
-  // 行动姿态节拍（防御/增强/削弱）：立牌绕脚「蓄势 → 定势 → 弹回」，
-  // 配姿态色立牌染色（flash → 收尾 restoreColor）。取代旧通用缩放脉冲——同等时长量级，
-  // 但三种行动各有身体语言。姿态起点恒为中立（节拍串行，上一拍已归位）；
-  // 被打断（收拍/拆台）经 onKill 归零姿态 + 复原染色，不留半蹲（正常结束也过这，幂等）。
-  _poseBeat(unit, pose, finish) {
-    if (unit._dead) { finish(); return; } // 尸体不摆姿态
-    // 削弱前倾朝向对方阵营：敌方（右侧）前倾 = 朝左 = +lean；我方 = 朝右 = -lean
-    const lean = pose.lean * (unit.side === 'enemy' ? 1 : -1);
-    const h = runScript(async (ctx) => {
-      ctx.onKill(() => { unit.resetPose(); unit.restoreColor(); });
-      unit.flash(pose.flash);
-      await ctx.custom(unit.uniqueID, {
-        durationMs: pose.inMs, ease: 'power2.out',
-        onUpdate: (t) => unit.setPose({
-          lean: lean * t,
-          squash: 1 + (pose.squash - 1) * t,
-          widen: 1 + (pose.widen - 1) * t,
-        }),
-      });
-      await ctx.wait(pose.holdMs);
-      // 弹回带一点过冲（back.out）：定势不是硬切回中立，而是松开后微微晃稳
-      await ctx.custom(unit.uniqueID, {
-        durationMs: pose.outMs, ease: 'back.out(1.7)',
-        onUpdate: (t) => unit.setPose({
-          lean: lean * (1 - t),
-          squash: 1 + (pose.squash - 1) * (1 - t),
-          widen: 1 + (pose.widen - 1) * (1 - t),
-        }),
-      });
-    }, { animator: this.animator });
-    this._fxScripts.add(h);
-    h.promise.then(() => {
-      this._fxScripts.delete(h);
-      finish();
-    });
-  },
   // 单位入场演出（召唤）：与死亡倾倒同轴的语言反演——
   // billboard「以脚为轴」从平躺立起（squash-stretch：立起过程中纵向压扁再弹开，
   // 果冻感）→ 立定瞬间落地扬尘（与死亡落尘同粒子语言）→ 两次衰减摇晃站稳

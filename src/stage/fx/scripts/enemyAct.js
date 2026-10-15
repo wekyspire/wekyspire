@@ -5,6 +5,8 @@
 // ANIM_EFFECT/ANIM_SHIELD 等既有节拍承接，本剧本只补施法者的动作侧。
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
 import { arcProjectile } from '../spells/blocks.js';
+import { isAttackKind, isBuffKind, isDebuffKind } from '../../../core/intentKinds.js';
+import { playCastConverge } from '../gainFx.js';
 
 // 逐敌专属起手（Boss 主题化）：defId → async ({ctx, deps, args, unit, player, kinds})。
 // 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
@@ -34,16 +36,12 @@ async function curseShot(ctx, deps, { unit, player }) {
   }
 }
 
-// 施法增益式（增强自身或友军）：施法者周身一撮金白/蓝白粒子的轻起手（payoff
-// 语言放在起手位读不通——脚下光柱读「被捅」）。增益落点
-// （受方 buff 姿态/粒子）由后续节拍承接
+// 施法增益式（增强自身或友军）：光点环收束进施法者胸口（聚能起手，fx/gainFx）
+// ——payoff 语言放在起手位读不通（脚下光柱读「被捅」）。增益落点
+// （受方 buff 扫描光带/粒子）由后续节拍承接
 async function empowerCast(ctx, deps, { unit, light = false }) {
-  const at = { x: unit.position.x, y: unit.position.y, z: unit.position.z };
-  deps.particles?.spawn?.(at.x, at.y + 1.5, {
-    color: light ? 0x8fc3ff : 0xffd88a, count: light ? 8 : 14, speed: 4,
-    size: 0.8, ttl: 0.9, gravity: -6, z: at.z,
-  });
-  await ctx.wait(light ? 280 : 380);   // 起手拍短停（粒子可见即可，不占戏）
+  playCastConverge(unit, deps.particles, light ? 0x9ecbff : 0xffe0a0);
+  await ctx.wait(200);   // 起手拍短停（收束可读即可，不占戏）
 }
 
 export function registerEnemyActScript(registerScript) {
@@ -56,13 +54,14 @@ export function registerEnemyActScript(registerScript) {
     // Boss beat 自己静默吞掉（起手 = 突进 + 命中主题 beat）
     const custom = ENEMY_ACT_BEATS.get(unit._defId);
     if (custom && await custom({ ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds }) !== 'generic') return;
-    // 攻击类（含攻击+buff/debuff 混合拍）：起手 = 突进，不叠加施法演出
-    if (kinds.includes('attack')) return;
-    if (kinds.includes('debuff')) {
+    // 攻击族（attack/heavy/execute/fixedAttack，含攻击+buff/debuff 混合拍）：
+    // 起手 = 突进，不叠加施法演出
+    if (kinds.some(isAttackKind)) return;
+    if (kinds.some(isDebuffKind)) {
       await curseShot(ctx, deps, { unit, player: cast.get('role:player') ?? null });
       return;
     }
-    if (kinds.includes('buff') || kinds.includes('heal')) {
+    if (kinds.some(isBuffKind) || kinds.includes('heal')) {
       await empowerCast(ctx, deps, { unit });
       return;
     }

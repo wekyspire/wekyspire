@@ -99,11 +99,11 @@ function slimeDef(id, { name, maxHp, difficulty, attackFirst, attackAmount, shie
     getIntention: (unit) => {
       const i = unit.actionIndex;
       if (id === 'slime' && i === 1) {
-        return { kinds: ['defend', 'buff'], note: '自身护盾+5、蓄势+4' };
+        return { kinds: ['defend', 'buff'], shield: 5, note: '自身护盾+5、蓄势+4' };
       }
       return (i % 2 === (attackFirst ? 0 : 1))
         ? { kinds: ['attack'], hits: 1, damage: attackAmount + unit.getStat('attack') }
-        : { kinds: ['defend'], note: `自身护盾+${shieldAmount}` };
+        : { kinds: ['defend'], shield: shieldAmount, note: `自身护盾+${shieldAmount}` };
     },
   });
 }
@@ -232,7 +232,7 @@ registerEnemy({
     if (unit.actionIndex === 0) return { kinds: ['buff'], note: '自身荆棘3' };
     const phase = (unit.actionIndex - 1) % 3;
     const atk = unit.getStat('attack');
-    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 4 + atk, note: '自身护盾+10' };
+    if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 4 + atk, shield: 10, note: '自身护盾+10' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + atk };
     return { kinds: ['buff'], note: '自身荆棘+3' };
   },
@@ -274,7 +274,7 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
     },
     getIntention: (unit) => {
       if (openingGuard && unit.actionIndex === 0) {
-        return { kinds: ['defend'], note: '蜷缩防御（下回合起正常行动）' };
+        return { kinds: ['defend'], shield: 8, note: '蜷缩防御（下回合起正常行动）' };
       }
       const gripsNow = !(delayedGrip && unit.actionIndex === 0);
       // 相位口径与 act 对齐（B 类同为 +2——⚠ 两处必须同步改，否则意图比 act 慢一拍，
@@ -283,12 +283,13 @@ function mossBallDef(id, delayedGrip, openingGuard = false) {
       const attacking = phase === 2;
       return {
         kinds: attacking
-          ? (gripsNow ? ['attack', 'debuff'] : ['attack'])
+          ? (gripsNow ? ['attack', 'strongDebuff'] : ['attack'])
           : (phase === 1
-            ? (gripsNow ? ['defend', 'buff', 'debuff'] : ['defend', 'buff'])
-            : (gripsNow ? ['debuff'] : [])),
+            ? (gripsNow ? ['defend', 'strongDebuff'] : ['defend', 'buff'])
+            : (gripsNow ? ['strongDebuff'] : [])),
         hits: attacking ? 1 : undefined,
         damage: attacking ? 7 + unit.getStat('attack') : undefined,
+        shield: !attacking && phase === 1 ? 8 : undefined,
         note: gripsNow ? '蔓延：你的手牌上限 -1（死亡时解除其全部紧勒）' : '迟滞蔓延（下回合起）',
       };
     },
@@ -334,7 +335,7 @@ function pufferToadDef(id) {
       const i = unit.actionIndex;
       if (i === 0) return { kinds: ['unknown'], note: '鼓腹（蓄力中）' };
       const amount = (i - 1 < steps.length) ? steps[i - 1] : cap;
-      return { kinds: ['attack'], hits: 1, damage: amount + atk };
+      return { kinds: [amount === cap ? 'heavy' : 'attack'], hits: 1, damage: amount + atk };
     },
   });
 }
@@ -380,11 +381,11 @@ function blastPodDef(id, cautious = false) {
       const fuse = unit.getEffectStacks('blastFuse');
       const boom = `爆炸引线${fuse}：归零时对玩家阵营全体炸 14（击杀它=拆弹）`;
       if (cautious && unit.actionIndex === 0) {
-        return { kinds: ['defend', 'buff'], note: `缩囊蓄势：护盾+4、蓄势+2。${boom}` };
+        return { kinds: ['defend', 'buff'], shield: 4, note: `缩囊蓄势：护盾+4、蓄势+2。${boom}` };
       }
       const phase = (((cautious ? unit.actionIndex - 1 : unit.actionIndex) % 3) + 3) % 3;
       if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 4 + atk, note: boom };
-      if (phase === 1) return { kinds: ['defend'], note: `护盾+6。${boom}` };
+      if (phase === 1) return { kinds: ['defend'], shield: 6, note: `护盾+6。${boom}` };
       return { kinds: ['unknown'], note: `准备引爆！${boom}` };
     },
   });
@@ -418,14 +419,14 @@ registerEnemy({
   getIntention: (unit) => {
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) {
-      return { kinds: ['defend'], note: '破茧：自身护盾+15' };
+      return { kinds: ['defend'], shield: 15, note: '破茧：自身护盾+15' };
     }
     if (unit.actionIndex === 1) {
       return { kinds: ['buff'], note: '蓄势+10' };
     }
     return unit.actionIndex === 2
-      ? { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+10' }
-      : { kinds: ['attack', 'defend'], hits: 1, damage: 3 + atk, note: '自身护盾+6' };
+      ? { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, shield: 10, note: '自身护盾+10' }
+      : { kinds: ['attack', 'defend'], hits: 1, damage: 3 + atk, shield: 6, note: '自身护盾+6' };
   },
 });
 
@@ -453,7 +454,7 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '缩壳：自身护盾+10、回复8、蓄势+3' }
+    ? { kinds: ['defend', 'buff'], shield: 10, note: '缩壳：自身护盾+10、回复8、蓄势+3' }
     : { kinds: ['attack'], hits: 4,
         damage: 1 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告
         note: `蓄势${unit.getEffectStacks('momentum')}：每段伤害+${unit.getEffectStacks('momentum')}` }),
@@ -532,7 +533,7 @@ function carrionBeetleDef(id, cautious = false) {
       }
       const phase = (((cautious ? unit.actionIndex - 1 : unit.actionIndex) % 3) + 3) % 3;
       return phase === 0
-        ? { kinds: ['debuff'], note: '啃食：吃掉你的牌库顶1张（本场消化）' }
+        ? { kinds: ['strongDebuff'], note: '啃食：吃掉你的牌库顶1张（本场消化）' }
         : { kinds: ['attack'], hits: 1, damage: 7 + atk };
     },
   });
@@ -570,9 +571,9 @@ registerEnemy({
     const atk = unit.getStat('attack');
     if (unit.actionIndex === 0) return { kinds: ['attack'], hits: 1, damage: 7 + atk, note: '突袭' };
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['defend'], note: '掘洞：自身护盾+20' };
+    if (phase === 0) return { kinds: ['defend'], shield: 20, note: '掘洞：自身护盾+20' };
     if (phase === 1) return { kinds: ['buff'], note: '掘洞恢复：回复16' };
-    return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
+    return { kinds: ['heavy'], hits: 1, damage: 18 + atk, note: '重击' };
   },
 });
 
@@ -608,11 +609,11 @@ function staticPuffDef(id, maxHp, startBeat = 0) {
       }
     },
     getIntention: (unit, battleState) => {
-      if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], note: '护盾+12' };
+      if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], shield: 12, note: '护盾+12' };
       const atk = unit.getStat('attack', battleState);
       const friends = battleState
         ? aliveEnemies(battleState).filter(u => u !== unit && !u.isDead()).length : 1;
-      return { kinds: ['attack', 'buff'], hits: 1,
+      return { kinds: ['attack', 'strongBuff'], hits: 1,
         damage: 4 + atk,   // 蓄势由 withMomentumBonus 统一计入预告
         note: `电动（友军${friends}名：攻击+${3 * friends}），友军全员蓄势+1` };
     },

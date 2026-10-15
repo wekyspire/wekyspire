@@ -10,7 +10,7 @@
 // 且总量十几个以内——CPU 双条件职责）。
 
 import * as THREE from 'three';
-import { defineParticleType } from './particleTypes.js';
+import { defineParticleType, getParticleType } from './particleTypes.js';
 import { createFloatFx } from '../floatFx.js';
 import { createAmbientEmitterBridge } from './ambientMotes.js';
 
@@ -36,18 +36,21 @@ export function createBurstFacade(worldPool, getCamera = null) {
     const colorHex = o.color ?? 0xff5533;
     const key = `${colorHex}|${speed}|${ttl}|${gravity}|${size}`;
     let typeId = BURST_TYPE_CACHE.get(key);
-    if (typeId == null) {
+    // 缓存兼容墓碑：闲置泵可能已回收该组合（在用组合每 2s 被摸活行保活，回收的
+    // 只会是淡出组合）——命中死 id 就重登记，缓存照常复用
+    if (typeId == null || !getParticleType(typeId)) {
       const c = new THREE.Color(colorHex);
       typeId = defineParticleType({
-        name: `burst${BURST_TYPE_CACHE.size}`,
+        name: `burst${key}`,
         space: 'world',
         cap: 128,
+        recyclable: true,   // 闲置泵可回收：一次性爆发，淡出组合不占常驻额度
         spawn: { rate: 0, ttl, ttlJit: 0.3, vel: [0, 0, 0], radial: speed * 0.9, gravity },
         render: { size, sizeEndK: 0.4, color: [c.r, c.g, c.b], ageHeat: 0.35 },
       });
       // 模块级共享（夜测 1002 [r2路8] 根因）：缓存原是每战斗实例一份，同组合每局重复
       // 登记新类型——全局注册表跨局只增不减，单局 >32 种组合即打满池类型行、之后爆发
-      // 全部静默丢失。共享后一组合一类型，跨局复用。
+      // 全部静默丢失。共享后一组合一类型，跨局复用（回收后重登记也走这里）。
       BURST_TYPE_CACHE.set(key, typeId);
     }
     worldPool.burst(typeId, o.count ?? 14, { at: [x, y, o.z ?? 70] });
@@ -59,6 +62,7 @@ export function createBurstFacade(worldPool, getCamera = null) {
     spawnSprite: floatFx.spawnSprite,
     spawnEmitter: (x, y, o) => (ambience ? ambience.spawnEmitter(x, y, o) : nullEmitter()),
     update: (dt) => { floatFx.update(dt); ambience?.update(dt); },
+    dispose: () => { ambience?.dispose(); },   // 桥拆：发射器类型登记就地回收（舞台 dispose 调，先于池 dispose）
     get sprites() { return floatFx.sprites; },
     get spritesUI() { return floatFx.spritesUI; },
     get activeSpriteCount() { return floatFx.activeSpriteCount; },

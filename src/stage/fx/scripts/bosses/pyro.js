@@ -21,6 +21,7 @@ import { arcProjectile, fireBurst, screenFlash, groundRing, lampPulse, dreadVeil
 import { registerEnemyHitBeat, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossHurtFx } from '../../bossStateFx.js';
+import { isAttackKind, isBuffKind, isDebuffKind } from '../../../../core/intentKinds.js';
 
 // 冲击波环纹理（按"厚/薄"两档缓存；additive 下黑=透明）
 //   fat  = 炽闪用的大光晕（宽带，几乎不出环）
@@ -564,8 +565,8 @@ async function pyroAttackCast(ctx, deps, { unit, player, heavy }) {
 // 是 ['buff']（蓄力预告）——buff 分支以 unit._bossPhase（P2 剧本首行置位）门控，
 // 转段拍静默让位给 pyroP2 大剧本。
 async function pyroAct({ ctx, deps, unit, player, kinds }) {
-  if (kinds.includes('attack')) {
-    await pyroAttackCast(ctx, deps, { unit, player, heavy: !kinds.includes('debuff') });
+  if (kinds.some(isAttackKind)) {
+    await pyroAttackCast(ctx, deps, { unit, player, heavy: !kinds.some(isDebuffKind) });
     return;
   }
   const H = unit._standeeHeight ?? 22;
@@ -585,7 +586,7 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
     }
     return;
   }
-  if (kinds.includes('debuff')) {
+  if (kinds.some(isDebuffKind)) {
     // P2「全场点燃」：大动作三段读——
     //   蓄（~0.95s）：世界先压暗半档（全场的火都向他倾）→ 后仰展身 + 余烬成批
     //     倒吸（渐密渐急）+ 环绕火球收进体内；
@@ -698,7 +699,7 @@ async function pyroAct({ ctx, deps, unit, player, kinds }) {
     await Promise.all(jobs);
     return;
   }
-  if (kinds.includes('buff')) {
+  if (kinds.some(isBuffKind)) {
     // 转段蓄力拍（kinds ['buff'] 但 _bossPhase 未置位）：让位给 pyroP2 大剧本
     if ((unit._bossPhase ?? 1) < 2) return;
     // P2「吸纳火焰」：全场的火被抽干——火从每个燃烧源身上撕出来

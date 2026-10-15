@@ -18,6 +18,7 @@
 //   shift    Shift 详情方标（文案由热区携带）
 
 import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
+import { isAttackKind, ATTACK_KIND_NAMES } from '../core/intentKinds.js';
 import { getSkillDefinition, hasSkill } from '../core/skills/registry.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
 import { getRelicDefinition, hasRelic } from '../core/relics/registry.js';
@@ -107,11 +108,14 @@ function intentionModel({ intention, unitName }) {
 
 // 意图释义：设计稿（ENEMIES_1.md「意图预告」列）的简略口径——词元碎片逗号相接，
 // 不写散文、不带 note 补充说明（「藤鞭：中毒2（春风……）」这类详情只在 headless
-// 文本界面保留，UI 不给）。与 UnitObject 意图条图标一一对应（剑/盾/升/降/星光/?）。
+// 文本界面保留，UI 不给）。与 UnitObject 意图条图标一一对应
+// （剑/阔剑/斧/钉剑/盾/升降箭头/星光/?）。
 const INTENTION_ACTS = Object.freeze({
-  defend: '护盾',
+  defend: '防御',
   buff: '强化',
+  strongBuff: '强大强化',
   debuff: '削弱',
+  strongDebuff: '强大削弱',
   summon: '召唤',
   stun: '晕眩',
 });
@@ -120,8 +124,13 @@ function intentionSentence(intention) {
   const kinds = (intention?.kinds?.length ? intention.kinds : ['unknown']).slice(0, 2);
   if (kinds.includes('unknown')) return '未知';
   return kinds.map((k) => {
-    if (k !== 'attack') return INTENTION_ACTS[k] ?? '行动';
-    if (intention.damage == null) return '攻击';
-    return intention.hits > 1 ? `攻击${intention.damage}×${intention.hits}` : `攻击${intention.damage}`;
+    if (isAttackKind(k)) {
+      if (intention.damage == null) return ATTACK_KIND_NAMES[k];
+      return intention.hits > 1
+        ? `${ATTACK_KIND_NAMES[k]}${intention.damage}×${intention.hits}`
+        : `${ATTACK_KIND_NAMES[k]}${intention.damage}`;
+    }
+    if (k === 'defend' && intention.shield != null) return `防御${intention.shield}`;
+    return INTENTION_ACTS[k] ?? '行动';
   }).join('，');
 }

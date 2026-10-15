@@ -6,6 +6,8 @@ import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
 
 // 恶魔 roll（银行机超额取款的代价）：灯池染暗红 + 词条卡片按等级分色（占位美术）
 const DEMON_LAMP = 0x9a2432;
+/** 二选一/三选一 billboard 的单件边长（世界单位）——取景总宽估算与此同源。 */
+const GIFT_ITEM_SIZE = 2.2;
 const DEMON_TIER_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
 const DEMON_TIER_NAME = { yellow: '黄色级', red: '红色级', black: '黑色级' };
 
@@ -232,7 +234,7 @@ export function createSlotMachine(ctx) {
     if (!machine) return false;
     // 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
     // 且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
-    const { spot, dist, fwd } = _billboardStage(machine, items.length * 3.0 + 4.35);
+    const { spot, dist, fwd } = _billboardStage(machine, items.length * GIFT_ITEM_SIZE + GIFT_ITEM_SIZE * 1.45);
     const position = spot.clone().addScaledVector(fwd, dist);
     const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
     ctx.startCamTween(
@@ -268,7 +270,7 @@ export function createSlotMachine(ctx) {
     if (gift) return;
     gift = new ChoiceBillboardObject({
       items: items.map(it => ({ id: it.id, name: it.name, sub: it.effect, tint: it.tint })),
-      size: 3.0,
+      size: GIFT_ITEM_SIZE,
       onPick: (id) => {
         ctx.intent({ action: 'slotTakeGift', choice: id });
         _removeGift();

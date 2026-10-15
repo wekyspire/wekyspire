@@ -39,6 +39,7 @@ const UI_TOP = UI_CAMERA_LOOK_AT_Y + WORLD_HEIGHT / 2;
 const Z = { BACKDROP: OVERLAY_Z, RAYS: OVERLAY_Z + 2, ITEM: OVERLAY_Z + 4, TEXT: OVERLAY_Z + 5, BUTTON: OVERLAY_Z + 6 };
 const DISMISS_ID = 'showcase:dismiss';
 const SKIP_ID = 'showcase:skip';
+const EQUIP_ID = 'showcase:equip';
 
 // 时序（秒）：淡入（含弹跳）→ 停住 → 淡出
 const T_IN = 0.62;
@@ -317,6 +318,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._onDismissShow = null;  // 本次 show 的出口回调（点击任意处 = 收下/关闭）
     this._autoDismissMs = 0;     // 本次 show 的自动收下时长（0 = 等点击）
     this._onSkipShow = null;     // 本次 show 的「跳过」出口（放弃产出）
+    this._onEquipShow = null;    // 本次 show 的「装备」出口（遗物即刻穿上；给了才显键）
     this._onCancelShow = null;   // 本次 show 的「程序化收场」出口（切幕强杀；链式编排方的中止信号）
     this._pendingShow = null;    // 忙碌期 show 的一件挂起（重放见 update 的 out 收尾）
     this._build();
@@ -377,10 +379,10 @@ export class ItemShowcaseObject extends THREE.Group {
     //    非遗物特写不传即隐藏）
     this._lines = [];
     for (const [key, spec] of Object.entries({
-      title: { y: TEXT.titleY, fontPx: 34, italic: false, tint: '#fdf6e3' },
-      desc: { y: TEXT.descY, fontPx: 20, italic: true, tint: '#d8e4f2' },
-      effect: { y: TEXT.effectY, fontPx: 22, italic: false, tint: '#ffe6ad' },
-      flavor: { y: TEXT.flavorY, fontPx: 19, italic: true, tint: '#c3cee0' },
+      title: { y: TEXT.titleY, fontPx: 34, italic: false, tint: '#f2f2f2' },
+      desc: { y: TEXT.descY, fontPx: 20, italic: true, tint: '#c2c2c2' },
+      effect: { y: TEXT.effectY, fontPx: 22, italic: false, tint: '#c2c2c2' },
+      flavor: { y: TEXT.flavorY, fontPx: 19, italic: true, tint: '#a8a8a8' },
     })) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
@@ -393,27 +395,39 @@ export class ItemShowcaseObject extends THREE.Group {
       this._lines.push(mesh);
     }
 
-    // ⑤ 「跳过」按钮（skippable 才显形；文字一次性烘死，开关只切 visible）
-    const skipPlate = new THREE.Mesh(
-      new THREE.PlaneGeometry(17, 6.2),
-      new THREE.MeshBasicMaterial({ color: 0x1a2236, transparent: true, opacity: 0.85 }),
-    );
-    const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 }),
-    );
-    if (typeof document !== 'undefined') {
-      const out = bakeBoldText('跳过 ▸', { fontPx: 20, tint: '#e6ecff' });
-      this._baked.push(out.texture);
-      label.material.map = out.texture;
-      label.scale.set(out.width * 0.1, out.height * 0.1, 1);
-    }
-    label.position.z = 0.06;
-    this._skipBtn = new THREE.Group();
+    // ⑤ 底部动作键（跳过 = 放弃产出 / 装备 = 遗物即刻穿上）：方角厚描边（UI_LANGUAGE）
+    //    ——近黑底 + 灰阶厚边；装备键文字用橙色强调（强调色白名单）
+    const makeActionBtn = (text, labelTint) => {
+      const border = new THREE.Mesh(
+        new THREE.PlaneGeometry(17.6, 6.8),
+        new THREE.MeshBasicMaterial({ color: 0x8a8a8a, transparent: true, opacity: 0.9 }),
+      );
+      border.position.z = -0.03;
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(17, 6.2),
+        new THREE.MeshBasicMaterial({ color: 0x141414, transparent: true, opacity: 0.92 }),
+      );
+      const label = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95 }),
+      );
+      if (typeof document !== 'undefined') {
+        const out = bakeBoldText(text, { fontPx: 20, tint: labelTint });
+        this._baked.push(out.texture);
+        label.material.map = out.texture;
+        label.scale.set(out.width * 0.1, out.height * 0.1, 1);
+      }
+      label.position.z = 0.06;
+      const g = new THREE.Group();
+      g.add(border, plate, label);
+      g.visible = false;
+      this.add(g);
+      return g;
+    };
+    this._equipBtn = makeActionBtn('装备 ▸', '#ff9d4d');
+    this._equipBtn.position.set(0, TEXT.effectY - 7.5, Z.BUTTON);
+    this._skipBtn = makeActionBtn('跳过 ▸', '#e6e6e6');
     this._skipBtn.position.set(0, TEXT.effectY - 7.5, Z.BUTTON);
-    this._skipBtn.add(skipPlate, label);
-    this._skipBtn.visible = false;
-    this.add(this._skipBtn);
   }
 
   /** 换一行文本：烘焙 → 贴到对应行（宽度/高度按烘焙像素换算世界单位）。 */
@@ -448,6 +462,7 @@ export class ItemShowcaseObject extends THREE.Group {
    *   artKey: 素材 key（assets/items|props，可空 → 色块代替）
    *   tint:   色块/托底色（可空 → 金）
    *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
+   *   onEquip: 装备出口（遗物特写：给了才显「装备」按钮——穿上并收下）
    *   autoDismissMs: >0 时停住这一时长后**自动收下**（售货机购买：出完货即自动收货，
    *                  不给一套"点击收货"的 UI）；缺省 0 = 等点击
    *   onDismiss / onSkip / onCancel: 三个出口的回调（点任意处 / 点跳过 / 程序化收场；
@@ -472,7 +487,13 @@ export class ItemShowcaseObject extends THREE.Group {
     this._onDismissShow = item.onDismiss ?? null;
     this._onSkipShow = item.onSkip ?? null;
     this._onCancelShow = item.onCancel ?? null;
-    if (this._skipBtn) this._skipBtn.visible = !!item.skippable;
+    this._onEquipShow = item.onEquip ?? null;
+    if (this._equipBtn) this._equipBtn.visible = !!item.onEquip;
+    if (this._skipBtn) {
+      this._skipBtn.visible = !!item.skippable;
+      // 装备键占 effect 行正下方主位；跳过键退到再下一行（两键同显时不叠位）
+      this._skipBtn.position.set(0, TEXT.effectY - (item.onEquip ? 15 : 7.5), Z.BUTTON);
+    }
     this._setLine('title', item.title ?? '');
     this._setLine('desc', item.desc ?? '');
     this._setLine('effect', item.effect ?? '');
@@ -536,8 +557,11 @@ export class ItemShowcaseObject extends THREE.Group {
     this._art.material.opacity = k;
     this._rays.material.opacity = 0.85 * k;
     for (const m of this._lines) m.material.opacity = k;
-    if (this._skipBtn) {
-      for (const m of this._skipBtn.children) m.material.opacity = (m === this._skipBtn.children[0] ? 0.85 : 0.95) * k;
+    // 动作键（边框/底板/文字三件，各按自峰值随整体透明度淡入淡出）
+    for (const btn of [this._skipBtn, this._equipBtn]) {
+      if (!btn?.visible) continue;
+      const peaks = [0.9, 0.92, 0.95];
+      btn.children.forEach((m, i) => { m.material.opacity = (peaks[i] ?? 0.95) * k; });
     }
   }
 
@@ -603,14 +627,21 @@ export class ItemShowcaseObject extends THREE.Group {
     if (!picker) return;
     // 全屏热区：点击任意处退出（与 CardScrollPickerObject 同一套 Picker 通道）
     picker.addPickable(DISMISS_ID, this._back, { kind: 'button', space: 'ui' });
-    // 「跳过」按钮热区（不可见时 Picker 的 visible 守卫使其不可命中）
+    // 「跳过 / 装备」按钮热区（不可见时 Picker 的 visible 守卫使其不可命中）
     if (this._skipBtn) picker.addPickable(SKIP_ID, this._skipBtn, { kind: 'button', space: 'ui' });
+    if (this._equipBtn) picker.addPickable(EQUIP_ID, this._equipBtn, { kind: 'button', space: 'ui' });
   }
 
-  /** 指针抬起命中（宿主转发）：命中跳过键 = 放弃；命中遮罩 = 点击任意处。 */
+  /** 指针抬起命中（宿主转发）：命中跳过键 = 放弃；命中装备键 = 装上并收下；命中遮罩 = 点击任意处。 */
   onClick(hit) {
     if (!this.busy) return false;
     if (hit?.id === SKIP_ID) return this.dismiss('skip');
+    if (hit?.id === EQUIP_ID) {
+      const cb = this._onEquipShow;
+      this.dismiss('dismiss');
+      cb?.();
+      return true;
+    }
     if (hit?.id !== DISMISS_ID) return false;
     return this.dismiss('dismiss');
   }

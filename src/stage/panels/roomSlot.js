@@ -38,7 +38,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   const pd = s.pending;
   if (pd) {
     w.push({ kind: 'gap' });
-    w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#e8eefb' : '#c3cee0',
+    w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#f2f2f2' : '#c2c2c2',
       text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
     if ((pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0) {
       w.push({
@@ -74,7 +74,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   if (s.spinning) {
     w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '🎰 …' });
   } else if (s.lastSpin) {
-    w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: slotPrizeText(s.lastSpin) });
+    w.push({ kind: 'text', align: 'center', tint: '#f2f2f2', text: slotPrizeText(s.lastSpin) });
   }
   w.push({
     kind: 'button', id: 'slot:spin', width: 260, size: 'main',

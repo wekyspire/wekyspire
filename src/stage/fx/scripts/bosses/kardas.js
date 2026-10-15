@@ -16,6 +16,7 @@ import { registerEnemyHitBeat, enemyImpactBeat } from '../../spells/enemyHitFx.j
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
 import { makeRageArcs } from '../../rageArcs.js';
+import { isAttackKind } from '../../../../core/intentKinds.js';
 
 // 电弧纹理（三档缓存：锯齿折线 + 白热内核 + 暗红晕。每次爆发随机取档 + 随机旋转，
 // 同一张折线复读太多次会读出「贴图感」，三档足够错开）。
@@ -379,7 +380,7 @@ async function kardasHitBeat(ctx, deps, args) {
 // 突进撕扑由伤害节拍的突进编排接棒。盾拍（盾10）= 植爪卸力（压宽一拍 + 电弧 + 扬尘）。
 // 嘶吼转段拍由 P2 剧本接管。
 async function kardasAct({ ctx, deps, unit, kinds, args }) {
-  if (kinds.includes('attack')) {
+  if (kinds.some(isAttackKind)) {
     const heavy = (args?.hits ?? 1) <= 1; // 撕碎（单发重击）：P1 15 / P2 27
     const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
     const H = unit._standeeHeight ?? 22;

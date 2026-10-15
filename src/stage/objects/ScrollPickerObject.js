@@ -346,25 +346,26 @@ export class ScrollPickerObject extends THREE.Group {
     for (const e of this._entries) e.obj.updateFx?.(dt);
   }
 
-  // 多选序号角标：淡蓝描边圆牌 + 白字序号（扁平，同按钮 active 主题色板）
+  // 多选序号角标：方角厚描边牌 + 白字序号（UI_LANGUAGE——0 圆角、无彩灰阶）
   _makeBadge() {
     const r = Math.max(0.9, Math.min(1.5, this._itemW * 0.12));
+    const side = r * 1.9;
     const g = new THREE.Group();
-    const outer = new THREE.Mesh(
-      new THREE.CircleGeometry(r, 28),
-      new THREE.MeshBasicMaterial({ color: 0x8fb6dd }),
+    const border = new THREE.Mesh(
+      new THREE.PlaneGeometry(side, side),
+      new THREE.MeshBasicMaterial({ color: 0x8a8a8a }),
     );
-    const inner = new THREE.Mesh(
-      new THREE.CircleGeometry(r * 0.78, 28),
-      new THREE.MeshBasicMaterial({ color: 0x34547e }),
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(side * 0.82, side * 0.82),
+      new THREE.MeshBasicMaterial({ color: 0x141414 }),
     );
-    inner.position.z = 0.01;
+    plate.position.z = 0.01;
     const fontPx = Math.round(r * 11);
-    const text = new TextBlockObject({ bakeText: this._bakeText, fontPx, tint: '#ffffff' });
+    const text = new TextBlockObject({ bakeText: this._bakeText, fontPx, tint: '#f2f2f2' });
     text.setText('1');
-    text.placeCenterTop(0, fontPx / 20);   // 行高 ≈ fontPx/10 世界单位，垂直居中于圆牌
+    text.placeCenterTop(0, fontPx / 20);   // 行高 ≈ fontPx/10 世界单位，垂直居中于角牌
     text.position.z = 0.02;
-    g.add(outer, inner, text);
+    g.add(border, plate, text);
     g.userData.r = r;
     g.userData.text = text;
     return g;
@@ -385,13 +386,13 @@ export class ScrollPickerObject extends THREE.Group {
       track: this._addNode(new THREE.Mesh(
         new THREE.PlaneGeometry(LAYOUT.barW, bandH),
         // 空闲态淡化（不再是不透明的粗条）：滚动时才由 _syncScrollbar 提亮
-        new THREE.MeshBasicMaterial({ color: 0x2b3552, transparent: true, opacity: 0.22 }),
+        new THREE.MeshBasicMaterial({ color: 0x2a2a2a, transparent: true, opacity: 0.22 }),
       ), { x: LAYOUT.barX, y: (LAYOUT.bandTop + LAYOUT.bandBottom) / 2, z: Z.CONTENT }),
       thumb: null,
     };
     this._bar.thumb = this._addNode(new THREE.Mesh(
       new THREE.PlaneGeometry(LAYOUT.barW + 0.28, 6),
-      new THREE.MeshBasicMaterial({ color: 0x7fa9d4, transparent: true, opacity: 0.5 }),
+        new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.5 }),
     ), { x: LAYOUT.barX, y: 0, z: Z.CONTENT + 0.1 });
     this._bar.thumbH = 6;
     // 滚动条可交互：轨道 + 滑块都注册成拾取件

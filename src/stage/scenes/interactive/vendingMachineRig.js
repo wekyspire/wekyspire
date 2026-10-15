@@ -285,6 +285,9 @@ export function createVendingMachineRig({
   let _lastDispensed = -1;
 
   function _playDispense(tile) {
+    // 出货时序单槽：已在演时新卖出件排 FIFO（双买并发时第一件不被腰斩——seq 被直接
+    // 覆盖会让第一件动画瞬消，其 shop-dispense 指令等不到回执只能烧保险丝）
+    if (st.seq) { (st.dispenseQueue ??= []).push(tile); return; }
     const y0 = tile.baseY;
     const yEnd = y0 - 2.4;                       // 掉到出货口一带
     _lastDispensed = tile.index;
@@ -316,7 +319,12 @@ export function createVendingMachineRig({
     if (q.t >= step.dur) {
       q.i += 1;
       q.t = 0;
-      if (q.i >= q.steps.length) { st.seq = null; return true; }
+      if (q.i >= q.steps.length) {
+        st.seq = null;
+        const next = st.dispenseQueue?.shift();
+        if (next) _playDispense(next);
+        return true;
+      }
     }
     return false;
   }

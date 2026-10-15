@@ -108,7 +108,7 @@ export class EndStage {
     // 标题 / 副题
     const victory = v.result === 'victory';
     push(this._addText(v.title ?? (victory ? '登顶成功' : '倒在了塔中'),
-      { y: 34, fontPx: 42, tint: victory ? '#e8eefb' : '#ff8f88' }), 0.55);
+      { y: 34, fontPx: 42, tint: victory ? '#f2f2f2' : '#ff8f88' }), 0.55);
     push(this._addText(v.subtitle ?? '', { y: 27.5, fontPx: 16, tint: '#8fa0bd' }), 0.30);
 
     // 分隔线

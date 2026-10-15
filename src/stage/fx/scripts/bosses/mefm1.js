@@ -21,6 +21,7 @@ import { registerEnemyHitBeat, enemyImpactBeat, registerEnemyNoLunge } from '../
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
 import { makeHexShield } from '../../hexShield.js';
+import { isAttackKind, isBuffKind, isDebuffKind } from '../../../../core/intentKinds.js';
 
 // 电火花纹理：横向拉长的白蓝炽核 + 尾迹（与 pyro 余烬拖影同构、换色温——冷电 vs 热火）
 let _sparkTex = null;
@@ -303,7 +304,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
   const to = player
     ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
     : null;
-  if (kinds.includes('attack')) {
+  if (kinds.some(isAttackKind)) {
     const hits = Math.max(1, Math.min(args?.hits ?? 1, 6));
     const p2 = (unit._bossPhase ?? 1) >= 2;
     const extras = p2 ? 10 : 5;           // 脱靶弹（P2 弹幕密度翻倍——狂躁）
@@ -397,7 +398,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
     await Promise.all(jobs);
     return;
   }
-  if (kinds.includes('debuff')) {
+  if (kinds.some(isDebuffKind)) {
     await arcProjectile(ctx, deps, {
       from, to,
       color: [0.55, 0.65, 0.8], hot: [0.85, 0.95, 1.25],
@@ -411,7 +412,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
     }
     return;
   }
-  if (kinds.includes('buff')) {
+  if (kinds.some(isBuffKind)) {
     const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
     if ((unit._bossPhase ?? 1) >= 2) {
       // —— 点火完成（炎魔2）：大动作前摇——火星倒吸回排焰口 + 机体绷紧
