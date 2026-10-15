@@ -4,7 +4,7 @@
 //   直播推流读取（tools/broadcast.mjs 的流式 tap）。本队列自身完全不碰它，
 //   本地播放路径行为与不存在该字段时逐字节一致（惰性载荷，见 enqueueInstruction）
 // - 可执行判定：位于 X 之前且与 X.waitTags 有交集的指令全部 finished，X 才能 start
-//   （默认 waitTags=['all'] = 等待所有前序；tags/waitTags 都自动含 'all'，
+//   （默认 waitTags=['all'] = 等待所有前序；tags 自动含 'all'（tagAll:false 退出），
 //    注意：'all' 标签使默认情况下指令严格串行；要并行需显式 waitTags: []）
 // - 结束：总线收到完成事件（finishedEvent，缺省 animation-instruction-finished）
 //   携带 { id }，或 durationMs 超时强杀
@@ -42,12 +42,15 @@ export default class AnimationSequencer {
     });
   }
 
-  enqueueInstruction({ tags = ['all'], waitTags, durationMs = Infinity, start, meta, wire = null } = {}) {
+  enqueueInstruction({ tags = ['all'], waitTags, durationMs = Infinity, start, meta, wire = null, tagAll = true } = {}) {
     const id = genId();
     this._instructions.push({
       id,
       status: 'pending',
-      tags: new Set([...(tags || []), 'all']),
+      // tagAll:false = 退出自动 'all'：默认等待者（waitTags ['all']）看不见本指令——
+      // 「只等非 X 的前序」用「让 X 退出 all 集合」表达（死亡拍旁挂即此形），
+      // 不引入负向集合语法。要等它的指令须把它的标签显式写进 waitTags。
+      tags: new Set(tagAll ? [...(tags || []), 'all'] : (tags || [])),
       waitTags: new Set(waitTags === undefined ? ['all'] : (waitTags || [])),
       durationMs,
       start: typeof start === 'function' ? start : () => {},

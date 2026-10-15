@@ -25,8 +25,9 @@ export function createBridgePresenter({
 }) {
   // 入队走 wire.js 的共用构造：同一条指令描述符既用于本地播放、也在直播推流时
   // 原样发给浏览器端重建（两边不会漂移）。durationMs 缺省 = ANIM_TIMING 同款兜底。
-  const anim = (event, payload) => {
-    enqueueAnimInstruction(sequencer, { event, payload });
+  // sched = 可选调度覆写（tags/waitTags/tagAll）——旁挂拍（死亡等）经此退出严格串行。
+  const anim = (event, payload, sched = null) => {
+    enqueueAnimInstruction(sequencer, { event, payload, ...(sched ?? {}) });
     markDirty();
   };
 
@@ -38,13 +39,14 @@ export function createBridgePresenter({
   // 不标脏 getSnapshot 会拿到缓存的旧投影。
   // 快照放 meta.payload（与放 start 闭包等价——两者都在入队时刻捕获），
   // 这样直播端能从描述符里原样重建出同一条 sync 节拍。
-  const syncState = () => {
+  const syncState = (sched = null) => {
     markDirty();
     const snapshot = getSnapshot();
     enqueueAnimInstruction(sequencer, {
       event: EventNames.ANIM_STATE_SYNC,
       payload: { snapshot },
       tags: ['state'],
+      ...(sched ?? {}),
     });
   };
 
@@ -63,7 +65,10 @@ export function createBridgePresenter({
     },
     battleEnd: ({ result }) => {
       markDirty();
-      syncState(); // 终局状态（死亡/结果）同步给显示层
+      // 终局两拍都等全体死亡播完（死亡拍 tagAll:false 旁挂，默认 'all' 等不到它们——
+      // 不补 'death' 的话幕间转场会把还在倾倒/焚毁的尸体切走）；死亡彼此并行，
+      // 等待时长 = 最长一条死亡链而非串行和
+      syncState({ waitTags: ['all', 'death'] }); // 终局状态（死亡/结果）同步给显示层
       // BATTLE_END 排队尾（S0）：死亡动画与终局 sync 全部完成后才发射，
       // run 层的幕间转场/切舞台不再打断尚未播完的终局演出。
       // 自完结指令：发射即 finish（同步泵起后续——如 endBattle 入队的幕间黑幕）
@@ -71,6 +76,7 @@ export function createBridgePresenter({
         meta: { event: WIRE_END_GATE },
         // 非可视化记账节拍：直播端按名特判（发本地 backendBus + 自完结），不当动画播
         wire: { event: WIRE_END_GATE, payload: { result } },
+        waitTags: ['all', 'death'],
         durationMs: 0,
         start: ({ id }) => {
           backendBus.emit(EventNames.BATTLE_END, { result });
@@ -107,15 +113,24 @@ export function createBridgePresenter({
     // 剧本引用的世界状态（单位位置等）以最近的 sync 为准，参数必须全标量（wire 过线）
     playScript: (p) => { anim(EventNames.ANIM_SCRIPT, p); },
     unitDeath: (p) => {
-      anim(EventNames.ANIM_UNIT_DEATH, p);
-      syncState();
+      const uid = p.unit?.uniqueID;
+      // 死亡拍旁挂（tagAll:false）：等致死一击等全部常规前序，但不等其它死亡
+      // （它们同样无 'all'）——群伤多杀并行倒地；后续常规拍也不等死亡（无 'all'
+      // 不再传递阻塞），尸体倾倒期间下一个敌人的行动照播
+      anim(EventNames.ANIM_UNIT_DEATH, p, { tags: ['death', `unit:${uid}`], tagAll: false });
+      // 死亡后的 sync 只等**本单位**的死亡拍（保「先演后变」：aura 收殓对齐尸体隐藏
+      // 时刻）；自身同样旁挂——否则死亡时长经 sync 的 'all' 标签传递性再串行全队。
+      // 乱序覆盖由显示时刻单调守卫兜底（更晚的快照天然含 isDead）
+      syncState({ tagAll: false, waitTags: ['all', `unit:${uid}`] });
       log(`${p.unit.name} 被击败！`, 'combat');
     },
 
-    // 单位生成（召唤）：入场类——先 sync（视图/槽位就位）再播「立起」演出
+    // 单位生成（召唤）：入场类——先 sync（视图/槽位就位）再播「立起」演出。
+    // 立起拍等同名单位的死亡拍：复活（假死→复苏）从倒地姿态起身的衔接；
+    // 新召唤无同名前序，waitTags 自然落空零影响
     unitSpawned: (p) => {
       syncState();
-      anim(EventNames.ANIM_UNIT_SPAWN, p);
+      anim(EventNames.ANIM_UNIT_SPAWN, p, { waitTags: ['all', `unit:${p.unit?.uniqueID}`] });
       log(p.source ? `${p.source.name} 召唤了 ${p.unit.name}！` : `${p.unit.name} 现身！`, 'combat');
     },
 

@@ -114,7 +114,7 @@ src/
 - **卡牌 modifier（`core/skills/cardModifiers.js`）** — 可挂载的卡牌修正，设计定稿 `quest_prompts/CARD_MODIFIERS.md`。要点：卡实例 `modifiers:[{modId,source,data}]`（存储序即优先级）；**有效卡视图 = def ⊕ patch fold 纯函数派生**（keywords 增删 / cost / cooldown；单条内 set→add→min→max；X 费免疫、无冷却卡以 0 为基；legacy 费用通道折视图末端）；费用/词条/冷却读点已全部换视图，**禁止直改字段的旁路**。行为面 `onAttach`/`onDetach`/`subscriptions`（`onDraw`/`turnEndInHand` 是糖）+ `mutesHand`/`unplayable` 旗标；订阅 owner = `uniqueID:mod:<modId>`，移除序 = 先注销订阅再 onDetach。作用域 = 落点即作用域（战斗克隆丢弃 / run 牌组持久，克隆与存档已深拷贝）。内建 `locked` = 焚毁烙印（**不拦出牌**，回合末仍在手则焚毁）。run 级挂载原语 = `runEffects.attachCardModifier/detachCardModifier`。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 产出同构注册表：skills/abilities/enemies/allies/relics/effects/events/cardModifiers。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。
-- **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。
+- **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。默认严格串行（tags 自动含 `'all'`）；并行出口 = `tagAll:false` + 语义标签（死亡拍先例：`['death','unit:<uid>']` 旁挂，「不等某类前序」用「让该类退出 all 集合」表达，不引入负向集合语法；要等旁挂拍的指令把标签显式写进 `waitTags`，如终局闸门等 `'death'`）。
 - **`content/`** — 内容实现（技能/敌人/能力/遗物/效果/盟友/事件/诅咒卡）。技能设计意图见 `skills/SKILL_DESIGN_PRINCIPLES.md`。晋升链分离：**局外晋升**（`promotion.js`）走 `promotesTo`，**局内转化链**走 `battlePromotesTo`——两者互不可见。
 
 ### Bridge（`src/bridge/`）
