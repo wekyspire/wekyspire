@@ -265,7 +265,7 @@ registerSkill({
 const cleaveCard = (id, name, tier, shield, picks, promotesTo = null, { series = 'handCleave' } = {}) => registerSkill({
   id, name, type: 'normal', tier, series, subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   promotesTo,
   use(sctx, stage) {
@@ -298,7 +298,7 @@ cleaveCard('perfectCleaveA', '完美花刀', 'A', 11, 2, null, { series: 'perfec
 const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'silverDance', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   promotesTo,
   use(sctx) {
@@ -317,14 +317,14 @@ const danceCard = (id, name, tier, per, promotesTo = null) => registerSkill({
   },
 });
 danceCard('silverDanceC', '刀舞', 'C', 5, 'silverDanceB');
-danceCard('silverDanceB', '刀舞', 'B', 7, 'silverDanceA');
-danceCard('silverDanceA', '刀舞', 'A', 9);
+danceCard('silverDanceB', '刀舞', 'B', 6, 'silverDanceA');
+danceCard('silverDanceA', '刀舞', 'A', 7);
 
 // 优雅刀舞（分支 A）：只弃「无法打出的」手牌，每张 10 护盾。
 registerSkill({
   id: 'graceDanceA', name: '优雅刀舞', type: 'normal', tier: 'A', series: 'graceDance', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
     for (const card of stuckHandCards(sctx)) {
@@ -369,7 +369,7 @@ cycloneCard('cycloneSlashA', '回旋斩', 'A', 14, 1, 0);   // 机制跃迁：�
 const horizontalCleave = (id, name, tier, damage, shards = 0, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'cleave', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo,
   use(sctx, stage) {
@@ -404,7 +404,7 @@ function bothSidesPresent(sctx) {
 const sideDaggerCard = (id, name, tier, damage, promotesTo = null) => registerSkill({
   id, name, type: 'normal', tier, series: 'flyingDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 1 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo,
   canUse: bothSidesPresent,
@@ -422,17 +422,17 @@ sideDaggerCard('flyingDaggerC', '飞刀', 'C', 13, 'flyingDaggerB');
 sideDaggerCard('flyingDaggerB', '飞刀', 'B', 17, 'flyingDaggerA');
 sideDaggerCard('flyingDaggerA', '飞刀', 'A', 21);
 
-// 回旋飞刀（B，设计稿未写费用 → 0费，冷却1）：13伤害，弃两侧牌，抽2牌插回两侧原位。
+// 回旋飞刀（B，0费）：10伤害，弃两侧牌，抽2牌插回两侧原位。
 // 两侧槽位按打出时点手位 i 计算（左=i-1、右=i）；原本无牌的一侧不凭空造位，
 // 对应抽到的牌留手牌末尾。
 registerSkill({
   id: 'returningDaggerB', name: '回旋飞刀', type: 'normal', tier: 'B', series: 'returningDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx, stage) {
     if (stage === 0) {
-      attackDamage(sctx, 13);
+      attackDamage(sctx, 10);
       const { left, right } = handNeighborsAtPlay(sctx);
       if (left) discardCard(sctx, left.uniqueID);
       if (right) discardCard(sctx, right.uniqueID);
@@ -455,27 +455,37 @@ registerSkill({
     });
     return true;
   },
-  describe: () => '13伤害，弃两侧牌，抽2牌插入两侧',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 13)}，弃两侧牌，抽2牌插入两侧`,
+  describe: () => '10伤害，弃两侧牌，抽2牌插入两侧',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 10)}，弃两侧牌，抽2牌插入两侧`,
 });
 
-// 精致飞刀（B，设计稿未写费用/冷却 → 0费无冷却）：15伤害，仅弃左侧（单侧轻量位）。
+// 精致飞刀（B，0费无冷却）：10伤害，选 1 张手牌焚毁（结算期选牌：段0请求，段1读应答焚毁）。
 registerSkill({
   id: 'fineDaggerB', name: '精致飞刀', type: 'normal', tier: 'B', series: 'fineDagger', subsystem: 'blade',
   cost: { mana: 0, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
-  use(sctx) {
-    attackDamage(sctx, 15);
-    const { left } = handNeighborsAtPlay(sctx);
-    if (left) discardCard(sctx, left.uniqueID);
+  use(sctx, stage) {
+    if (stage === 0) {
+      attackDamage(sctx, 10);
+      if (sctx.battleState.zones.hand.length === 0) return true;   // 无牌可选：直接收尾
+      sctx.self._pick = requestHandSelection(sctx, {
+        count: 1,
+        reason: '精致飞刀：选1张手牌焚毁',
+        flavor: 'burn',
+      });
+      return false;
+    }
+    const ids = selected(sctx.self._pick);
+    sctx.self._pick = null;
+    for (const uniqueID of ids) burnCard(sctx, uniqueID);
     return true;
   },
-  describe: () => '15伤害，弃左侧牌',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 15)}，弃左侧牌`,
+  describe: () => '10伤害，选1张手牌焚毁',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 10)}，选1张手牌焚毁`,
 });
 
-// 绝灭飞刀（A，设计稿未写费用/冷却 → 0费无冷却）：17伤害，焚毁两侧牌，
+// 绝灭飞刀（A，0费无冷却）：10伤害，焚毁两侧牌，
 // 寻找2牌插入两侧（结算期牌库选牌：段0焚两侧+请求，段1插回原位）。
 // 空牌库时寻找落空，不产生输入请求。
 registerSkill({
@@ -485,7 +495,7 @@ registerSkill({
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx, stage) {
     if (stage === 0) {
-      attackDamage(sctx, 17);
+      attackDamage(sctx, 10);
       const { left, right } = handNeighborsAtPlay(sctx);
       if (left) burnCard(sctx, left.uniqueID);
       if (right) burnCard(sctx, right.uniqueID);
@@ -513,8 +523,8 @@ registerSkill({
     });
     return true;
   },
-  describe: () => '17伤害，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧',
-  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 17)}，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧`,
+  describe: () => '10伤害，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧',
+  battleDescribe: (sctx) => `${resolvedDamageText(sctx, 10)}，/named{焚毁}两侧牌，/named{寻找}2牌插入两侧`,
 });
 
 // ==== 藏锋系列（斩杀）==========================================================
@@ -564,7 +574,7 @@ breathCard('breathB', '呼吸', 'B', { promotesTo: 'breathA' });
 breathCard('breathA', '呼吸', 'A', { exhaust: false });
 
 // ==== 归来系列（爆发过卡）======================================================
-// 怀念 C/B/A + 归来 S（全链消耗）：纯粹的大过牌——抽 3/4/5（S 带迷你，0 费用栏）。
+// 怀念 B/A + 归来 S（全链消耗）：纯粹的大过牌——抽 4/6/6（S 带迷你，0 费用栏）。
 // 速冷职责不在本系列（定向斩冷却归真空利刃系列）。
 const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = false, image = 'reminiscence', series = 'reminiscence' } = {}) => registerSkill({
   id, name, type: 'normal', tier, series, subsystem: 'blade', image,
@@ -580,10 +590,9 @@ const reminiscenceCard = (id, name, tier, draw, { promotesTo = null, mini = fals
   describe: () => `抽${draw}`,
   battleDescribe: () => `抽${draw}`,
 });
-reminiscenceCard('reminiscenceC', '怀念', 'C', 3, { promotesTo: 'reminiscenceB' });
 reminiscenceCard('reminiscenceB', '怀念', 'B', 4, { promotesTo: 'reminiscenceA' });
-reminiscenceCard('reminiscenceA', '怀念', 'A', 5, { promotesTo: 'homecomingS' });
-reminiscenceCard('homecomingS', '归来', 'S', 5, { mini: true, image: 'homecoming', series: 'homecoming' });
+reminiscenceCard('reminiscenceA', '怀念', 'A', 6, { promotesTo: 'homecomingS' });
+reminiscenceCard('homecomingS', '归来', 'S', 6, { mini: true, image: 'homecoming', series: 'homecoming' });
 
 // ==== 真空利刃系列（牌库污染换速冷）============================================
 // 利刃 C/B/A + 真空利刃 S：抽牌 + **令斩冷却 N**（定向速冷：SkillCooldownInstruction
@@ -591,7 +600,7 @@ reminiscenceCard('homecomingS', '归来', 'S', 5, { mini: true, image: 'homecomi
 const vacuumBladeCard = ({ id, name, tier, draw, slashCd, shards, ap = 0, promotesTo = null, image = 'vacuumBlade' }) => registerSkill({
   id, name, type: 'normal', tier, series: 'vacuumBlade', subsystem: 'blade', image,
   cost: { mana: 0, actionPoint: ap },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'none',
   promotesTo,
   use(sctx) {
@@ -647,12 +656,12 @@ honeBladeCard({ id: 'honeBladeC', tier: 'C', bonus: 2, promotesTo: 'honeBladeB' 
 honeBladeCard({ id: 'honeBladeB', tier: 'B', bonus: 3, promotesTo: 'honeBladeA' });
 honeBladeCard({ id: 'honeBladeA', tier: 'A', bonus: 3, chantWeight: 0 });
 
-// 锻刀术 C/B/A：咏唱1（C）/ 咏唱0（B 起）。你打出刀法牌时，**所有刀法牌**伤害
-// +1/+1/+2（手牌与牌库一起加——口径同开刃；打出的那张已离手不在区内）。
-function forgingBladeCard({ id, tier, weight, bonus, promotesTo = null }) {
+// 锻刀术 C/B/A（1/0/0 AP）：咏唱1/1/0。你打出刀法牌时，**所有刀法牌**伤害
+// +1（手牌与牌库一起加——口径同开刃；打出的那张已离手不在区内）。
+function forgingBladeCard({ id, tier, weight, bonus, ap = 0, promotesTo = null }) {
   registerSkill({
     id, name: '锻刀术', type: 'normal', tier, series: 'forgingBlade', subsystem: 'blade',
-    cost: { mana: 0, actionPoint: 0 },
+    cost: { mana: 0, actionPoint: ap },
     charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: weight,
     promotesTo,
@@ -675,9 +684,9 @@ function forgingBladeCard({ id, tier, weight, bonus, promotesTo = null }) {
     battleDescribe: () => `你打出刀法牌时，所有刀法牌伤害+${bonus}`,
   });
 }
-forgingBladeCard({ id: 'forgingBladeC', tier: 'C', weight: 1, bonus: 1, promotesTo: 'forgingBladeB' });
-forgingBladeCard({ id: 'forgingBladeB', tier: 'B', weight: 0, bonus: 1, promotesTo: 'forgingBladeA' });
-forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 2 });
+forgingBladeCard({ id: 'forgingBladeC', tier: 'C', weight: 1, bonus: 1, ap: 1, promotesTo: 'forgingBladeB' });
+forgingBladeCard({ id: 'forgingBladeB', tier: 'B', weight: 1, bonus: 1, promotesTo: 'forgingBladeA' });
+forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 1 });
 
 // ==== 开刃系列（斩进阶）========================================================
 

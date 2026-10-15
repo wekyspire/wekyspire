@@ -135,7 +135,7 @@ function burstChantCard({ id, name, tier, base, perMana, innate = true, promotes
   const def = {
     name, type: 'fire', tier, series: 'burst', subsystem: 'burst',
     cost: { mana: 1, actionPoint: 0 },
-    charges: { max: Infinity, cooldownTurns: 4 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'chant', chantWeight: 2,
     keywords: innate ? ['innate'] : [],
     use() { return true; }, // 无即时效果：蓄能靠 activated 订阅，爆发靠 onDisable
@@ -340,7 +340,7 @@ residualHeatCard({ id: 'residualHeatA', tier: 'A', name: '余热', per: 3, back:
 // S 位名「重燃」（与低阶同系列但有自己的名字）
 residualHeatCard({ id: 'residualHeatS', tier: 'S', name: '重燃', per: 3, back: 4 });
 
-// 淬炼 C/B/A（2魏，冷却1）：立刻回复 3 魏启，
+// 淬炼 C/B/A（2魏）：立刻回复 3 魏启，
 // 并获得 4/6/8 护盾——萃取系列的火系镜像，换「不延迟一回合」（萃取走纳气 =
 // 下回合开闸）。净蓝量为正（2 换 3）：在爆裂体系里「消耗 2」本身也是燃料——
 // 喂蓄能/旋风/余热台账，一次过蓝多份回报。
@@ -348,7 +348,7 @@ function fireTemperCard({ id, name, tier, mana, shield, promotesTo }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'fireTemper', subsystem: 'burst',
     cost: { mana: 2, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
     promotesTo,
     use(sctx) {
@@ -364,14 +364,14 @@ fireTemperCard({ id: 'fireTemperC', name: '淬炼', tier: 'C', mana: 3, shield: 
 fireTemperCard({ id: 'fireTemperB', name: '淬炼', tier: 'B', mana: 3, shield: 6, promotesTo: 'fireTemperA' });
 fireTemperCard({ id: 'fireTemperA', name: '淬炼', tier: 'A', mana: 3, shield: 8 });
 
-// 烫手 C/B/A（0费，冷却1）：自燃 3，抽 3/4/5——过牌的代价不是蓝量而是燃烧（自焚语言）。
-// 冷却限频保住「烫手山芋扔了又回来」的循环意象——爆裂体系的过牌引擎。
+// 烫手 C/B/A（0费）：自燃 3，抽 3/4/5——过牌的代价不是蓝量而是燃烧（自焚语言）。
+// 爆裂体系的过牌引擎。
 // 刻意的高斜率：抽到的牌仍要付蓝/AP 才变现，手牌上限是天然刹车。
 function hotHandsCard({ id, tier, burn, draw, promotesTo }) {
   registerSkill({
     id, name: '烫手', type: 'fire', tier, series: 'hotHands', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
     promotesTo,
     use(sctx) {
@@ -671,14 +671,14 @@ registerSkill({
 });
 
 
-// 浇油 C/B/A（独立焚抽链，全员冷却1）：选 1 手牌焚毁，抽 2/3/3；
-// C 1AP → B 1AP 加抽 → A 去行动点。全员冷却1 = 每回合限一次的烧牌过牌，节奏同烫手。
+// 浇油 C/B/A（独立焚抽链）：选 1 手牌焚毁，抽 2/3/3；
+// C 1AP → B 1AP 加抽 → A 去行动点。
 // 空手也可打出：无牌可焚时退化为纯抽牌（不焚毁直接抽）。
 function burnWindCard({ id, tier, actionPoint, draw, promotesTo = null }) {
   registerSkill({
     id, name: '浇油', type: 'fire', tier, series: 'pourOil', subsystem: 'burst',
     cost: { mana: 0, actionPoint },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'none',
     promotesTo,
     use(sctx, stage) {
@@ -942,21 +942,19 @@ function fireworkShowCard({ id, name, tier, manaBack = 0 }) {
     keywords: ['exhaust'],
     use(sctx) {
       // 提交不即执行（子节点在收尾后跑），快照仅为防御性写法。
-      // 抽出即完成冷却（爆裂咏唱 cd4 的通配钥匙——全部到手全部即刻可发动）
       for (const c of [...sctx.battleState.zones.deck]) {
         if (getSkillDefinition(c.defId)?.series === 'burst') {
-          c.currentCooldown = 0;
           sctx.kernel.submitInstruction(new MoveCardInstruction({ uniqueID: c.uniqueID, toZone: 'hand' }));
         }
       }
       if (manaBack > 0) sctx.kernel.submitInstruction(new GainManaInstruction({ amount: manaBack }));
       return true;
     },
-    describe: () => `/named{抽出}所有爆裂术并完成其冷却${manaBack ? `，回复${manaBack}魏启` : ''}`,
+    describe: () => `/named{抽出}所有爆裂术${manaBack ? `，回复${manaBack}魏启` : ''}`,
     battleDescribe: (sctx) => {
       const n = sctx.battleState.zones.deck
         .filter(c => getSkillDefinition(c.defId)?.series === 'burst').length;
-      return `/named{抽出}所有爆裂术并完成其冷却（牌库${n}张）${manaBack ? `，回复${manaBack}魏启` : ''}`;
+      return `/named{抽出}所有爆裂术（牌库${n}张）${manaBack ? `，回复${manaBack}魏启` : ''}`;
     },
   });
 }

@@ -272,7 +272,7 @@ manaJar('manaJarA', '冉牌魏启罐', 'A', 4);
 manaJar('manaJarS', '何猥魏启罐', 'S', 8);
 
 // ---- 激发系列（魏启 → AP 即时转换，消耗）----
-// 激发 B 2魏2AP / 爆发 A 2魏3AP / 充分激发 A 1魏2AP。
+// 激发 B 3魏2AP / 爆发 A 3魏3AP / 充分激发 A 2魏2AP。
 
 const stimulant = (id, name, tier, mana, ap) => registerSkill({
   id, name, type: 'normal', pack: 'common', tier,
@@ -288,9 +288,9 @@ const stimulant = (id, name, tier, mana, ap) => registerSkill({
   },
   describe: () => `获得${ap}行动点`,
 });
-stimulant('stimulantB', '激发', 'B', 2, 2);
-stimulant('stimulantBurstA', '爆发', 'A', 2, 3);
-stimulant('stimulantFullA', '充分激发', 'A', 1, 2);
+stimulant('stimulantB', '激发', 'B', 3, 2);
+stimulant('stimulantBurstA', '爆发', 'A', 3, 3);
+stimulant('stimulantFullA', '充分激发', 'A', 2, 2);
 
 // ---- 灵能护盾系列（MP 换纯护盾）----
 // 灵力护盾 C / 灵能护盾 B：1MP，冷却1：6/8 护盾。

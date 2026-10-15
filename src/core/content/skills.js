@@ -70,13 +70,13 @@ registerSkill({
   describe: () => '5护盾',
 });
 
-// ③ 施加/触发效果牌：余烬 + 燃烧（点火系列 C 位；0费冷却1，点火是余烬经济的启动器）
+// ③ 施加/触发效果牌：余烬 + 燃烧（点火系列 C 位；0费，点火是余烬经济的启动器）
 // 点火是火体系的燃烧入口——由首次点亮火灵脉时进阶获赠直发
 // （ascension.FIRST_ASCENSION_GRANT）。
 registerSkill({
   id: 'igniteC', name: '点火', type: 'fire', tier: 'C', series: 'ignite', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   targetMode: 'enemy',
   promotesTo: 'igniteB',

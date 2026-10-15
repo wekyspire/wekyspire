@@ -5,7 +5,7 @@ import {
   enterBattle, leaveBattle, deactivateChant, effectiveHandCount, handLimitOf,
   overloadLimitOf, pickOverflowVictims,
 } from '../skills/helpers.js';
-import { attachModifierInstance } from '../skills/cardModifiers.js';
+import { attachModifierInstance, keywordsOf } from '../skills/cardModifiers.js';
 import { ConsumeActionPointsInstruction } from './resources.js';
 import { tickCooldownOnEnterDeck } from './skill.js';
 
@@ -13,6 +13,9 @@ import { tickCooldownOnEnterDeck } from './skill.js';
 // 牌库底——无弃牌堆、无重洗）。一切 zone 迁移走 moveCard（数组唯一事实源）。
 // 咏唱离手不变量：激活的咏唱卡离开手牌（弃/焚/移/转化）必先熄灭（deactivateChant：
 // onDisable + 摘旗 + 注销订阅 + 播报）——「激活只在手牌中成立」由指令层统一保证。
+// 消耗咏唱：带消耗词条的激活咏唱退出激活状态即焚毁——弃牌/移牌落牌库时改提交
+// BurnCardInstruction 子节点展开（焚毁只此一个原语，veto/订阅全可见）；
+// 转化例外（身份换绑不是离手消费，见 TransformCardInstruction）。
 
 // battle.md §7.3（卡牌移动）：目标区为手牌而加权手牌已达**超载上限**时，改尝试进牌库；
 // 仍失败则焚毁。超载是唯一会让"移动失败"的约束（牌库/坟墓无上限）——容量（handLimitOf）
@@ -103,7 +106,16 @@ export class DiscardCardInstruction extends BattleInstruction {
       this.result = { card: null };
       return true;
     }
-    deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
+    const handCard = ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID);
+    // 消耗咏唱退出激活即焚毁（词条读有效视图）：焚毁走统一原语子节点展开——
+    // 斩的焚毁 veto、镜燃等 BurnCardInstruction 订阅对这类焚毁保持可见；
+    // 本指令照常完成（弃牌动作成立，弃牌类 POST 订阅照计），落点计数归焚方子节点。
+    if (handCard.isActivated && keywordsOf(handCard).includes('exhaust')) {
+      this.result = { card: handCard, burned: true };
+      ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: this.uniqueID }), this);
+      return true;
+    }
+    deactivateChant(ctx, handCard, 'leave-hand');
     const card = moveCard(ctx.battleState, this.uniqueID, 'deck'); // 落牌库底（数组尾）
     this.result = { card };
     ctx.battleState.history.turn.discarded += 1;
@@ -141,10 +153,19 @@ export class MoveCardInstruction extends BattleInstruction {
 
   execute(ctx) {
     const fromZone = zoneOf(ctx.battleState, this.uniqueID);
-    if (fromZone === 'hand') {
-      deactivateChant(ctx, ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID), 'leave-hand');
+    // 消耗咏唱退出激活即焚毁（词条读有效视图）：从手中移出落牌库时改走焚毁原语
+    // 子节点展开（斩焚毁 veto / 镜燃等 Burn 订阅可见；本指令照常完成）。
+    const handCard = fromZone === 'hand'
+      ? ctx.battleState.zones.hand.find(c => c.uniqueID === this.uniqueID)
+      : null;
+    const resolved = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    if (handCard?.isActivated && keywordsOf(handCard).includes('exhaust') && resolved === 'deck') {
+      this.result = { card: handCard, toZone: 'burnt' };
+      ctx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: this.uniqueID }), this);
+      return true;
     }
-    const toZone = resolveTargetZone(ctx, this.toZone); // §7.3：满手改入牌库
+    if (handCard) deactivateChant(ctx, handCard, 'leave-hand');
+    const toZone = resolved;
     const card = moveCard(ctx.battleState, this.uniqueID, toZone, { index: toZone === this.toZone ? this.index : null });
     this.result = { card, toZone };
     ctx.presenter?.cardMoved?.({ card, toZone });
