@@ -594,7 +594,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   }
 
   // ---- 拉杆 ----
-  function pull({ tier = 'minor', symbols = null } = {}) {
+  function pull({ tier = 'minor', symbols = null, onDone = null } = {}) {
     if (st.spin) return false;                      // 转轮中不能再拉（调用方另有防抖）
     st.pulling = true;
     st.leverRelease = 0;
@@ -615,6 +615,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       elapsed: 0,
       tier,
       locked: reels.map(() => false),
+      onDone,   // 落定回调（宿主回执编排器；update 收尾拍同步触发一次即弃）
       // 每轮的整段动画计划在拉杆瞬间一次算定（后端此时已给结果）——解析式求值，
       // 圈数让"自然停车位"落在槽位稍前方，末段卡入位把它拉回槽位。
       plans: reels.map((r, i) => {
@@ -737,6 +738,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         st.spin = null;
         st.win = { tier, t: 0, fx: TIER_FX[tier] ?? TIER_FX.none };
         if (st.win.fx.shake > 0) { st.shake = st.win.fx.seconds; st.shakeAmp = st.win.fx.shake; }
+        try { s.onDone?.(); } catch (err) { console.error('[slotRig] 落定回调异常:', err); }
       }
     } else if (st.spinEnergy > 0) {
       st.spinEnergy = Math.max(0, st.spinEnergy - dt * 1.6);       // 停轮后余震收干净

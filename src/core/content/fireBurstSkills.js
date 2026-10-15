@@ -21,7 +21,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
   drawCards, burnCard, discardCard, requestHandSelection, selected, gainPower, addCard, reactFx,
-  aoeAttack,
+  aoeAttack, AOE_TAGS,
 } from './cardKit.js';
 
 // ====================================================================

@@ -11,7 +11,7 @@
 //
 // 数据边界（THREE_UI_MIGRATION 铁律）：本舞台**不读 run 状态**——面板走 `setPanel(snap)`
 // 下行快照、点击走 `setPanelIntentHandler` 上行意图、状态栏走 `setStatus`。机器 rig 的输入
-// 只有"后端已定的结果"（拉杆落面/档位），rig 自己完成动画，播完回执 slotAnimDone。
+// 只有"后端已定的结果"（拉杆落面/档位），rig 自己完成动画，播完回执 playSlotSpin 的完成回调。
 //
 // **机器逻辑已按机器下沉到 `stage/machines/`**（老虎机/售货机/银行机/合并房陈设各一个模块）：
 // 本舞台只做通用舞台机制（相机聚焦机械/浮标/面板停靠/拾取主干/状态栏/逐帧骨架），
@@ -792,6 +792,12 @@ export class RoomStage {
    */
   playCrush() {
     for (const m of this._machines) { if (m.playCrush?.()) return true; }
+    return false;
+  }
+
+  /** 老虎机转轮（编排器直调宿主实现）：转发给实现了 playSlotSpin 的机器模块。 */
+  playSlotSpin(spin, onDone) {
+    for (const m of this._machines) { if (m.playSlotSpin?.(spin, onDone)) return true; }
     return false;
   }
 

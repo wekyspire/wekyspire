@@ -214,7 +214,11 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     /** UI 坐标点（面板按钮/卡片/常驻按钮在 uiScene 里，相机不同）。 */
     screenOfUi: (expr) => page.evaluate((e) => {
       const sm = window.__shell.stageManager;
-      const rs = window.__shell.ctrl.value.getRoomStage?.();
+      // 活动舞台序 = panelStage（battle ?? room，无 map 访问器时退 stageManager）：
+      // 选卡器画在**活动舞台**的 uiScene 上——只认 RoomStage 会点不到战斗舞台上的
+      // 选卡（bossRemove 删卡画在 battleStage，实抓「确认点击无声消失」）
+      const c = window.__shell.ctrl.value;
+      const rs = c.getBattleStage?.() ?? c.getRoomStage?.() ?? sm._stage ?? null;
       const fn = new Function('V', 'rs', `return (${e});`);
       const p = fn(sm.camera.position.constructor, rs);
       return p ? sm.worldToScreen(p.x, p.y, p.z, sm.uiCamera) : null;
@@ -276,12 +280,18 @@ export async function launch({ headless = true, viewport = { width: 1280, height
     clickPickerCard: async (i) => helpers.clickAt(await helpers.screenOfUi(
       `(() => { const e = rs?.cardPicker?._entries?.[${i}]; return e ? e.obj.getWorldPosition(new V()) : null; })()`,
     ), { settle: 200 }),
+    // 遗物侧同基类（ScrollPickerObject）：_entries/picker:confirm 同构，只差宿主实例
+    clickRelicCard: async (i) => helpers.clickAt(await helpers.screenOfUi(
+      `(() => { const e = rs?.relicPicker?._entries?.[${i}]; return e ? e.obj.getWorldPosition(new V()) : null; })()`,
+    ), { settle: 200 }),
     clickPickerConfirm: async () => helpers.clickAt(await page.evaluate(() => {
-      const rs = window.__shell.ctrl.value.getRoomStage?.();
+      // 活动舞台序同 screenOfUi：战斗舞台上的选卡（bossRemove）也点得着
+      const c = window.__shell.ctrl.value;
       const sm = window.__shell.stageManager;
+      const rs = c.getBattleStage?.() ?? c.getRoomStage?.() ?? sm._stage ?? null;
       // 结构定位：确认键在 _buttons 里的 key 恒为 'picker:confirm'
       // （按文案 /确认/ 匹配会漏「加入牌组」这类自定义标签——训练抓牌/卡包 confirmLabel 不含"确认"）
-      const b = rs?.cardPicker?._buttons?.get('picker:confirm');
+      const b = rs?.cardPicker?._buttons?.get('picker:confirm') ?? rs?.relicPicker?._buttons?.get('picker:confirm');
       if (!b) return null;
       const V = sm.camera.position.constructor;
       const w = b.getWorldPosition(new V());

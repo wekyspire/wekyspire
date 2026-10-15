@@ -263,15 +263,11 @@ function toTitle() {
 // 喂 RoomStage，否则会喂给不可见的 MapStage（它也建了同一份面板：tooltip 走全局总线
 // 照常弹、点击却在操作看不见的副本——用户报「种子包 hover/点选失效」的病灶）。
 // 离房路径的 ascension（completeRoom 已拆 roomStage）不满足 roomStage 存活条件，自然回地图。
+// 路由本体在 stageDirector（runController 持有，一处派生）；此处只做 ctrl 就绪前的回落。
 function activeStage() {
   const c = ctrl.value;
   if (!c) return null;
-  const battle = c.getBattleStage();
-  if (battle) return battle;   // 战斗 / 战后奖励：战斗舞台存在期间由它接管指针
-  const room = c.getRoomStage();
-  if (room && (c.run.gameStage === 'room' || c.run.gameStage === 'ascension')) return room;
-  if (c.run.gameStage === 'end') return c.getEndStage?.() ?? mapStage; // 终局结算屏（Three 层）
-  return mapStage;
+  return c.director?.inputStage(c.run.gameStage) ?? mapStage;
 }
 
 function onPointer(type) {

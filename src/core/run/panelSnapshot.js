@@ -143,8 +143,9 @@ export function ascensionSnapshot(run) {
 /**
  * 奖励房（房间层·模态面板）：训练场 / 营地 / 老虎机 / 事件房。
  *
- * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { anim, lastSpin } }`。
- * 它由 Shell 的 runController 持有（老虎机演出播放态），核心拿不到——
+ * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { lastSpin, spinning } }`。
+ * 它由 Shell 的 runController 持有（lastSpin = 揭示横幅；spinning = 转轮指令在播的
+ * 队列派生布尔），核心拿不到——
  * 但本函数仍是纯函数（只由入参决定输出，无副作用）。四房共用同一快照外壳：
  * `room` 决定形态，`training` / `camp` / `slot` 各带自己的载荷（事件房走幕间，无快照载荷）。
  */
@@ -258,7 +259,6 @@ export function roomSnapshot(run, extra = {}) {
       // 焚毁候选：整副牌组去掉 S 级（词条口径「不会焚 S 级卡」）
       burnCards: deckUpgradeCards(run).filter(c => getSkillDefinition(c.defId)?.tier !== 'S'),
     };
-    const anim = extra.slot?.anim ?? null;
     const lastSpin = extra.slot?.lastSpin ?? null;
     const view = slotView(run);
     const pending = run.slotPending;
@@ -277,15 +277,10 @@ export function roomSnapshot(run, extra = {}) {
       gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
         id: g.id, name: g.name, desc: g.desc, effect: g.effect, tint: g.tint,
       })) : null,
-      // 演出进行中：{ id, tier, kind }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）。
-      // ⚠ **tier 才是转轮灯效/落面的输入**（'major'/'minor'/'none'）；kind 只是奖项种类
-      // （moneySmall/heal/…）。早期只下发 kind，导致 rig 收到未知档位 → 落面退化成随机、
-      // 中奖灯效走 none 档（用户报"中了却没什么动静"的真凶）
-      spinning: anim ? {
-        id: anim.id,
-        tier: anim.prize?.tier ?? 'none',
-        kind: anim.prize?.kind ?? null,
-      } : null,
+      // 转轮在播（布尔）：事实源 = dedicatedSequencer 里还挂着 room:slot-spin 演出指令
+      // （panelExtras 的队列类型化查询）；Stage 播转轮不再读快照——编排器直调宿主
+      // playSlotSpin，落定回执走 sequencer。消费面只剩「转动中」置灰（面板/拉杆热区）。
+      spinning: extra.slot?.spinning || null,
       lastSpin,
       // 待处理产出：原始载荷原样带上，表现文案由 Stage 侧翻译（与战后奖励同一分工）
       pending: pending ? {

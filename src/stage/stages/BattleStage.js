@@ -1298,6 +1298,8 @@ export class BattleStage {
     this._composer = null;
     this._deferred?.dispose(); // deferred 实验路径：还原 twin/层位后释放 G-buffer 链
     this._deferred = null;
+    this.particles?.dispose(); // 粒子门面拆（发射器类型登记回收——先于池 dispose，登记表是全局的）
+    this.particles = null;
     this.particles2World?.dispose(); // 粒子池 v2（世界）
     this.particles2World = null;
     this.particles2Ui?.dispose(); // 粒子池 v2（UI 空间）

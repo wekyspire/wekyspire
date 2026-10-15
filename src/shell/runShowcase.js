@@ -4,42 +4,38 @@
 // 由 runController 构造（`createRunShowcase(ctx)`），ctx 里的引用一律**晚绑定**：
 //   · panelStage()/roomStage()/notify() —— runController 里这些 const/function 在本模块
 //     构造之后才初始化；箭头闭包捕获词法绑定，运行期才取值，初始化顺序安全。
-//   · actions（slotTake/slotDecline/leaveRoom）—— 同上，领域动作由 runController 注入。
-// 模块内的 core 调用（chooseDemonDebuff/buyShopItem/takeSlotGift）随函数一起搬进来。
+//   · actions（leaveRoom）—— 同上，领域动作由 runController 注入。
+// 模块内的 core 调用（chooseDemonDebuff/buyShopItem/answerQuestion）随函数一起搬进来。
 
 import { getRelicDefinition } from '../core/relics/registry.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { cardViewFromDef } from '../core/skills/cardView.js';
 import { withLabels } from '../stage/panels/shared.js';
 import { RARITY_COLORS } from '../stage/objects/RelicScrollPickerObject.js';
-import { slotPrizeText } from '../stage/panels/index.js';
 import { showcaseItemOf } from './runPresenter.js';
 import { chooseDemonDebuff, DEMON_DEBUFFS , takeBankOffer } from '../core/run/rooms/bank.js';
 import { buyShopItem } from '../core/run/rooms/shop.js';
-import { takeSlotGift, SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
+import { answerQuestion } from '../core/run/questions.js';
+import { SLOT_GIFTS } from '../core/run/rooms/slotMachine.js';
 import { tooltipHide } from './tooltipHub.js';
-import { FuseBag } from './fuse.js';
+import { enqueueFlowInstruction } from './flowInstruction.js';
 
 export function createRunShowcase(ctx) {
-  const { run, runPresenter, actions, slot } = ctx;
+  const { run, runPresenter, dedicatedSequencer, actions } = ctx;
 
   // ---- 获得遗物特写----
   // 遗物获取路径很多（奖励选包 / 商店货架 / 老虎机奖品 / 古尔帕斯 / 事件…），逐个接线必漏；
   // 这里统一在 notify 那一拍做**拥有集差分**：动作跑完后多出来的遗物 = 刚到手，播一次特写
   // （物品图查 `assets/relics/<遗物名>`，没素材就退化成色块——组件自带兜底）。
-  // 同一拍最多播一件：上一件还在播就先排队，等下一次 notify 继续（玩家点掉特写总伴随下一次
-  // 操作）；基准集在读档/入档时同步，不会把已有遗物当成"刚获得"。
-  let shownRelicIds = new Set(run.player.relics);
+  // 同一拍最多播一件：上一件还在播就排队（onDismiss 链式补排 + 空闲沿补排兜底）。
+  // 入队由授予源显式调 presentRelic（P4a 前置重整：内容触发下沉触发源，不再 notify 差分）。
   const relicShowcaseQueue = [];
-  // 售货机购买的演出协调（声明在 flushRelicShowcase 之前：那个闭包要读 shopDispensing）
-  const fuses = new FuseBag(); // 场景回执的兜底保险丝（key: 'demon' | 'shop'）
-  let shopPendingShow = null;   // 刚买下、等着播获得演出的那件
-  let shopDispensing = false;   // 出货演出进行中（挡住遗物差分的即时特写）
+  const isShopDispensing = () => !!dedicatedSequencer.findPending(i => i.meta?.event === 'room:shop-dispense');
   const flushRelicShowcase = () => {
     const stage = ctx.panelStage();                     // 当前活动舞台（battle ?? room ?? map，晚绑定）
     if (!stage?.showcaseItem || !relicShowcaseQueue.length || stage.showcasing) return false;
     if (run.gameStage === 'battle') return false;        // 战斗内不打断（差分已记，战后那拍再播）
-    if (shopDispensing) return false;                    // 售货机出货演出中：等场景回执再播（别盖住出货）
+    if (isShopDispensing()) return false;                // 售货机出货演出中：等场景回执再播（别盖住出货）
     const def = getRelicDefinition(relicShowcaseQueue.shift());
     if (!def) return false;
     return stage.showcaseItem({
@@ -50,23 +46,27 @@ export function createRunShowcase(ctx) {
       flavor: def.flavor ?? null,
       artKey: def.name ?? def.id,
       tint: parseInt((RARITY_COLORS[def.rarity] ?? RARITY_COLORS.C).slice(1), 16),
+      // 链式补排：这件被点掉后下一件即刻顶上（不依赖任何外部刷新节拍）
+      onDismiss: () => flushRelicShowcase(),
     });
   };
-  /** notify 末尾调用：拥有集差分 → 新遗物入队 → 尝试立刻播一件（见上方差分注释）。 */
-  const diffNewRelics = () => {
-    for (const id of run.player.relics) {
-      if (!shownRelicIds.has(id)) { shownRelicIds.add(id); relicShowcaseQueue.push(id); }
-    }
+  /** 授予源显式调：新遗物入队 + 尝试立刻播一件（忙碌时由链式/空闲沿补排）。 */
+  const presentRelic = (id) => {
+    if (!id || relicShowcaseQueue.includes(id)) return;
+    relicShowcaseQueue.push(id);
     flushRelicShowcase();
   };
 
   // ---- 恶魔 roll（银行机超额取款）----
   // 演出顺序 = 视角切到老虎机 → 关闸换恶魔盘（灯池染红）→ 自动转 → **在转盘上点一根盘
   // 承受词条**（转出来的那一面就是诅咒本身；悬停出 tooltip）→ 退场换回普通盘 →
-  // **获得演出**（先"获得"这个词条，再报那笔超额取款的金币）。场景那半在 RoomStage 的
-  // 状态机里，这里只记"选完词条后要播什么"，等场景回执 demonAnimDone 再播（否则特写会盖住退场演出）。
+  // **获得演出**（先"获得"这个词条，再报那笔超额取款的金币）。场景退场那半在 RoomStage 的
+  // 状态机里；这里挂一条「等场景回执」指令接住节拍（demonAnimDone 回执 / durationMs 保险丝
+  // 两路收尾），收尾拍再把特写链排成 'room:demon-flow' 流程指令——每拍 await 落定再走下一拍，
+  // 链对队列可见（单飞/静止断言），特写被切幕强杀（onCancel）即中止余下节拍，
+  // 附赠 offer 由问句驱动在下一拍 notify 兜底重呈现。
   const DEMON_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
-  let demonRewardShow = null;   // { gold, tier, name, desc }
+  let demonRewardShow = null;   // { gold, tier, name, desc, burnt }
   function bankDemonPick(id) {
     const pr = run.bank?.pendingRoll;
     const gold = pr?.gold ?? 0;
@@ -78,11 +78,87 @@ export function createRunShowcase(ctx) {
     // 之前随机焚卡零演出，玩家看不见损失了什么）
     const burnt = Array.isArray(res.immediate) ? res.immediate : [];
     demonRewardShow = { gold, tier: res.tier, name: res.name, desc: def?.desc ?? '', burnt };
+    // 金币走显示标量通道（§4.6 首个消费者）：core 已结算，显示按住旧值——
+    // 金币拍落定后的飞行拍才释放（下面 playDemonReward 的 flight）。
+    // ⚠ 裸 hold 的安全前提：紧随的 enqueue（reel-out 指令或 demon-flow）在同一同步
+    // 栈内完成——队列即刻非空，空闲对账冲不掉按住；改这段时不得在 hold 与 enqueue
+    // 之间插入任何可能触发 notify 的调用（吞噬侧用的是 holdBeat 指令化形态，见 runMachines）
+    if (gold > 0) ctx.scalars?.hold('money', gold);
     const inScene = !!ctx.roomStage() && run.currentRoom === 'slot';
-    if (!inScene) { showDemonReward(); return res; }
-    // 场景没回执（无场景/被拆）也要把特写放出来
-    fuses.arm('demon', 6000, showDemonReward);
+    if (!inScene) { enqueueDemonReward(); return res; }
+    // 等场景退场回执：回执（demonAnimDone 意图）或保险丝，谁先到都进特写链
+    dedicatedSequencer.enqueueInstruction({
+      meta: { event: 'room:demon-reel-out' },
+      durationMs: 6000,   // 场景没回执（被拆/异常）也要把特写放出来
+      onEnd: () => enqueueDemonReward(),
+    });
     return res;
+  }
+  /** 场景回执（demonAnimDone 意图）：收掉等待指令——onEnd 接力排特写链。 */
+  function demonAnimDone() {
+    const instr = dedicatedSequencer.findPending(i => i.meta?.event === 'room:demon-reel-out');
+    if (instr) dedicatedSequencer.finish(instr.id, { reason: 'frontend' });
+    return instr != null;
+  }
+  function enqueueDemonReward() {
+    return enqueueFlowInstruction(dedicatedSequencer, {
+      tag: 'demon-flow', meta: { event: 'room:demon-reward' },
+      entryOk: () => demonRewardShow != null,
+      play: playDemonReward,
+    });
+  }
+  /** 单拍特写：await 到落定。resolve 值为出口（'dismiss'|'skip'|'cancel'|'failed'）。 */
+  const showBeat = (item) => new Promise((resolve) => {
+    const stage = ctx.panelStage();
+    if (!stage?.showcaseItem) { resolve('failed'); return; }
+    stage.showcaseItem({ ...item, onDismiss: () => resolve('dismiss'), onSkip: () => resolve('skip'), onCancel: () => resolve('cancel') });
+  });
+  async function playDemonReward(done) {
+    const p = demonRewardShow;
+    demonRewardShow = null;
+    try {
+      if (!p) return;
+      // 拍序列（2026-09-30 用户定）：词条特写 → 逐张卡牌焚毁演出（不在场景的随机焚毁卡
+      // 在画面中央亮相后燃尽——cardBurnFlight，与战斗同款 C0 吞蚀视觉；舞台没有该能力时
+      // 退回「焚毁」文字特写拍）→ 金币 → （有附赠则）自动开选卡界面。
+      const beats = [{ title: p.name, effect: p.desc, tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black, autoDismissMs: 1900 }];
+      for (const b of p.burnt ?? []) beats.push({ burn: b });
+      beats.push({ title: `+${p.gold} 金币`, artKey: 'gold', tint: 0xffd75e, autoDismissMs: 1700 });
+      for (const beat of beats) {
+        if (beat.burn) {
+          // onDone 恰好一次（flight 自带兜底计时器，烧不尽也回调）——await 无悬死风险
+          const burnt = await new Promise((resolve) => {
+            const played = ctx.panelStage()?.playCardBurn?.({
+              defId: beat.burn.defId, view: beat.burn.view ?? null,
+              onDone: () => resolve(true),
+            });
+            if (!played) resolve(false);
+          });
+          if (burnt) continue;
+          const r = await showBeat({
+            title: `焚毁 ${beat.burn.name}`,
+            desc: '忘却的代价，这张卡牌离开了你的牌库',
+            artKey: beat.burn.defId, tint: 0xd96a4a, autoDismissMs: 1600,
+          });
+          if (r === 'cancel') return;   // 切幕强杀：链中止
+          continue;
+        }
+        const r = await showBeat(beat);
+        if (r === 'cancel') return;   // 切幕强杀：链中止（金币那拍没播不追账——core 已结算；
+        //                                按住的显示增量由空闲对账兜底贴回）
+      }
+      if (p.gold > 0) {
+        // 飞行拍（§4.6）：金币特写落定 → 粒子飞向顶栏（占位定时；粒子演出落地后替换）
+        // → 抵达拍释放显示增量，顶栏数字此刻才 +N
+        await ctx.scalars?.flight({ scalar: 'money', amount: p.gold });
+      }
+      // 链尾直开附赠选卡读 panelHost._snap：此刻 demon-flow 指令还在队（门控必跳过常规
+      // notify）——force 刷新，候选不得含已焚卡（幻影卡播完整演出后 core 拒账）
+      ctx.notify({ force: true });
+      openBankOfferPicker();   // 链尾：附赠 → 选卡界面
+    } finally {
+      done();
+    }
   }
   /**
    * 词条附赠的"**立马**做一件事"（浑浑噩噩=免费升级一张 / 忘却=自选焚毁一张）：
@@ -103,122 +179,19 @@ export function createRunShowcase(ctx) {
     // 别留一个没有任何入口的死 offer（面板按钮已删）。
     if (!opened && offer) { takeBankOffer(run); ctx.notify?.(); }
   }
-  /** 两拍获得演出：① 词条本身（诅咒就是这次轮盘的产物）② 那笔超额取款的金币。
-   *  金币那拍**不再写"代价：xxx"**（上一拍刚演过，纯冗余）。 */
-  function showDemonReward() {
-    fuses.clear('demon');
-    const p = demonRewardShow;
-    demonRewardShow = null;
-    if (!p) return false;
-    const stage = ctx.panelStage();
-    if (!stage?.showcaseItem) return false;
-    // 拍序列（2026-09-30 用户定）：词条特写 → 逐张**卡牌焚毁演出**（不在场景的
-    // 随机焚毁卡在画面中央亮相后燃尽——cardBurnFlight，与战斗同款 C0 吞蚀视觉；
-    // 舞台没有该能力时退回「焚毁」文字特写）→ 金币 → （有附赠则）自动开选卡界面。
-    const steps = [{ show: {
-      title: p.name,
-      effect: p.desc,
-      tint: DEMON_TINT[p.tier] ?? DEMON_TINT.black,
-      autoDismissMs: 1900,
-    } }];
-    for (const b of p.burnt ?? []) steps.push({ burn: b });
-    steps.push({ show: {
-      title: `+${p.gold} 金币`,
-      artKey: 'gold',   // 无素材时组件烘"金币堆"占位（要的观感）
-      tint: 0xffd75e,
-      autoDismissMs: 1700,
-    } });
-    const playFrom = (i) => {
-      if (i >= steps.length) { openBankOfferPicker(); return; }   // 链尾：附赠 → 选卡界面
-      const step = steps[i];
-      if (step.burn) {
-        const played = ctx.panelStage()?.playCardBurn?.({
-          defId: step.burn.defId, view: step.burn.view ?? null,
-          onDone: () => playFrom(i + 1),
-        });
-        if (played) return;
-        // 兜底：舞台无焚毁演出能力 → 文字特写拍
-        const item = {
-          title: `焚毁 ${step.burn.name}`,
-          desc: '忘却的代价，这张卡牌离开了你的牌库',
-          artKey: step.burn.defId,
-          tint: 0xd96a4a,
-          autoDismissMs: 1600,
-          onDismiss: () => playFrom(i + 1),
-        };
-        if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
-        return;
-      }
-      const item = { ...step.show, onDismiss: () => playFrom(i + 1) };
-      if (!ctx.panelStage()?.showcaseItem?.(item)) openBankOfferPicker();
-    };
-    playFrom(0);
-    return true;
-  }
+  /** 两拍获得演出的编排已指令化（见上方 playDemonReward）：词条 → 逐张焚毁 → 金币 → 附赠选卡。 */
 
-  /**
-   * 中奖落定 → **直接唤起获得演出**：产出不再由操纵条里的「领取」按钮
-   * 处理（"没有获得感"）。点任意处 = 收下（需要选一张的奖项：随后在面板/全屏选卡里选；
-   * 免费指定升级：随后自动开选卡界面）；点「跳过」= 放弃这份产出。
-   * 一次产出只播一次（按对象身份去重；领取/放弃后 pending 清空，自然复位）。
-   * 健壮化：**播成功才记已播**（此前先记后播，特写被占就永久漏播、产出只剩
-   * 面板兜底按钮）；并挂进 notify 链（runController），演出空闲时自动重唤起——面板上的
-   * 「领取/放弃」按钮因此得以全删（取消语义：跳过/返回 = 放弃）。
-   */
-  let shownSlotPrize = null;
-  function maybeShowSlotPrize() {
-    const p = run.slotPending;
-    if (!p) { shownSlotPrize = null; return false; }
-    if (p === shownSlotPrize) return false;
-    // 转轮还在转：等落定那拍 notify 再弹（core 先行结算，slotPending 在动画开拍时就挂上了，
-    // 不等就盖住转轮——「还没转完获得演出就蹦出来」的病根）。
-    // 落定路径：slot.anim 在 slotFinish（UI 回执/保险丝兜底）里清掉并补一次 notify。
-    if (slot?.anim) return false;
-    const stage = ctx.panelStage();
-    if (!stage?.showcaseItem) return false;
-    if (stage.uiBusy) return false;   // 特写/选卡界面在播：等下一拍 notify 再试（不记已播）
-    const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
-    const freeUpgrade = p.upgrade?.kind === 'free';
-    // 单件遗物奖不做「奖品箱」中转特写：直接领取，遗物差分特写（立绘/铭文）即获得演出。
-    // 领取在 notify 链内再入一次 notify——内层的 diffNewRelics 负责起播遗物特写
-    if (p.relicId && !needsPick && !freeUpgrade) {
-      actions.slotTake(null);
-      if (!run.slotPending) { shownSlotPrize = p; return true; }
-      return false;   // core 校验失败（脏档/竞态）：不记已播，下一拍 notify 重试
-    }
-    const major = p.tier === 'major';
-    const shown = stage.showcaseItem({
-      title: slotPrizeText(p),
-      effect: needsPick ? '收下之后挑一件带走'
-        : freeUpgrade ? '收下之后，选一张卡牌免费升级'
-          : null,
-      // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
-      // ＝特写美术区一块空白灰——夜测路7b 实报）
-      artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
-      tint: major ? 0xffd75e : 0xd8e2f4,
-      skippable: true,
-      onSkip: () => actions.slotDecline(),
-      onDismiss: () => {
-        if (freeUpgrade) { actions.slotTake(null); ctx.panelStage()?.openUpgradePicker?.('slot'); }
-        // 多选一奖项（统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
-        // 「返回」= 放弃——不再落回 dock 面板的内嵌卡行/按钮墙（旧逻辑已删）
-        else if (needsPick) ctx.panelStage()?.openSlotPrizePicker?.();
-        else actions.slotTake(null);
-      },
-    });
-    if (shown) shownSlotPrize = p;   // 播成功才记已播（被占时下一拍 notify 重试）
-    return !!shown;
-  }
+  // 老虎机产出的获得特写/多选一已移交问句驱动（runQuestions → openSlotPrizeShowcase，
+  //  等转轮落定拍才弹）；本文件不再管 slotPending 的呈现。
 
-  // 离房安慰奖（SLOT_MACHINE.md：同一层拉了 ≥4 次杆没中奖（D5） → 送可乐/鸡腿二选一）：
+  // 离房安慰奖（SLOT_MACHINE.md：同一层拉了 ≥3 次杆没中奖 → 送可乐/鸡腿二选一）：
   // 场景端播完"吐出→点选→飞出"后上行到这里结算，再播一次获得物特写（获得动画），
   // **然后自动把"离房"接着走完**：触发点就是玩家点「继续前进」，
   // 整条链是"离房 → 机器凑上来吐货 → 二选一 → 获得演出 → 离房切幕"，中间不需要玩家再点一次。
   const GIFT_TINT = { cola: 0xc0392b, chicken: 0xd9a05b };
   function slotTakeGift(choice) {
     if (run.gameStage !== 'room' || run.currentRoom !== 'slot') return;
-    const res = takeSlotGift(run, choice);
-    if (!res) return;
+    if (!answerQuestion(run, choice)) return;   // 欠着才有得答（不可放弃：义务门要求亲手领）
     ctx.notify();
     const g = SLOT_GIFTS[choice];
     ctx.panelStage()?.showcaseItem?.({
@@ -231,74 +204,46 @@ export function createRunShowcase(ctx) {
 
   // ---- 商店（售货机，SHOP.md §一）----
   // 商店房 = 一整间货房：点货架上的商品即买。**演出顺序**是
-  // 「机器出货（场景 rig）→ 物品获得特写」——所以这里买入只记下"待演出"，等场景回执
-  // `shopAnimDone` 再播特写；否则全屏特写会直接盖住出货的开门/掉落/翻板那几拍。
+  // 「机器出货（场景 rig）→ 物品获得特写」——所以买入时场景里真的有这张卡位才挂一条
+  // 「出货中」指令（等场景回执 shopAnimDone / durationMs 保险丝，两路收尾都补 notify）；
+  // 问句呈现（开包）与遗物差分特写都让位到它收尾（否则全屏特写会直接盖住出货的开门/
+  // 掉落/翻板那几拍）。逐商品一条指令、按序排队：并发购买各自的包各自等各自的回执。
   function shopBuy(index) {
     if (run.gameStage !== 'room' || !run.shop) return;
     const it = run.shop.items?.[index];
-    const res = buyShopItem(run, index);
+    // try/catch 硬化（同 bankDo/gurpasDo/slotTake 惯例）：场景端按快照的 sold/affordable
+    // 放行意图，P4a 门控把陈旧窗拉宽到出货指令全程（最长 4s）——陈旧窗内重复点已售
+    // 商品，core throw 不得炸穿点击链（pageerror），pending 留给下一次对账
+    let res = null;
+    try {
+      res = buyShopItem(run, index);
+    } catch (err) {
+      console.warn('[shop]', err.message);
+      return;
+    }
     tooltipHide(); // 购买结算拍清悬空 tooltip：商品视图即离场（药水等"买了立即生效"件
                    // 没有后续 picker 接力——不清会空货位挂框 ≥8s，夜测 r4路2 两跑实证）
-    // 买到的东西都要"到手那一拍"：卡包也走获得演出（展示卡包图 → 演完自动开包），
-    // 与药水/遗物同一条链（购买必须走获得演出）
-    shopPendingShow = it
-      ? { index, kind: it.kind, name: it.name, effect: it.effect, relicId: it.relicId ?? null }
-      : null;
-    // 场景里真的有这张卡片才会播出货演出 → 有回执；没有就当场播特写（headless/降级路径）
-    const hasTile = !!shopPendingShow && [...(ctx.roomStage()?.rigs?.values() ?? [])]
+    // 出货演出位：场景里真的有这张卡片才播（有回执）；开包呈现由 runQuestions
+    // 驱动——非出货路径本拍 notify 直接开，出货路径等回执那拍（别盖住掉落演出）
+    const hasTile = [...(ctx.roomStage()?.rigs?.values() ?? [])]
       .some(r => (r.goodsTargets?.() ?? []).some(t => t.index === index));
-    shopDispensing = hasTile;
-    fuses.clear('shop');
-    if (shopDispensing) {
-      // 场景没回执（无场景/被拆）也要把特写放出来
-      fuses.arm('shop', 4000, () => {
-        shopDispensing = false;
-        shopShowcase(shopPendingShow);
-        shopPendingShow = null;
+    if (hasTile) {
+      dedicatedSequencer.enqueueInstruction({
+        meta: { event: 'room:shop-dispense', index },
+        durationMs: 4000,   // 场景没回执（无场景/被拆）也要放行：收尾拍 notify 让问句驱动接手
+        onEnd: () => ctx.notify(),
       });
     }
     ctx.notify();
-    if (!shopDispensing) { shopShowcase(shopPendingShow); shopPendingShow = null; }
     return res;
   }
-  /** 场景回执：那件货已经掉进出货口了 → 播获得特写（遗物走全局差分那条线，口径统一）。 */
+  /** 场景回执：那件货已经掉进出货口 → 收掉对应出货指令（onEnd 补 notify 开包/差分特写）。 */
   function shopAnimDone(index) {
     if (run.gameStage !== 'room') return false;
-    fuses.clear('shop');
-    shopDispensing = false;
-    const p = shopPendingShow && (index == null || shopPendingShow.index === index) ? shopPendingShow : null;
-    shopPendingShow = null;
-    if (!p) { flushRelicShowcase(); return false; }   // 仍要放行被挡下的遗物特写
-    shopShowcase(p);
+    const instr = dedicatedSequencer.findPending(
+      i => i.meta?.event === 'room:shop-dispense' && i.meta.index === index);
+    if (instr) dedicatedSequencer.finish(instr.id, { reason: 'frontend' });
     return true;
-  }
-  const SHOP_TINT = { potion: 0xd94f4f, apple: 0x8fd45a, pack: 0xffd75e, relic: 0xc9a86a };
-  /** 买到手的那件东西的特写（单件遗物已改为**遗物包三选一**，
-   *  遗物直购不复存在，kind 'relic' 现在恒为遗物包：特写演完自动开三选一）。
-   *  出货演出播完即**自动收下**：机器那边已经演过一遍"出货"，
-   *  这里只是把到手的那件亮一下，不需要玩家再点一次"收货"——操纵条里也不另设收货 UI。 */
-  function shopShowcase(p) {
-    if (!p) return false;
-    const stage = ctx.panelStage();
-    if (!stage?.showcaseItem) return false;
-    const pack = p.kind === 'pack';
-    const relicPack = p.kind === 'relic';
-    // 卡包/遗物包**直接开包**（全屏三选一，可放弃）——机器出货演出已经把
-    // 「买了什么」交代过，中间再插一张包图特写是多余一跳（2026-10-09 用户定）。
-    // picker 开不起来（无该方法/降级路径）才回落包图特写
-    if (pack || relicPack) {
-      const opened = relicPack
-        ? stage.openShopRelicPackPicker?.()
-        : stage.openShopPackPicker?.();
-      if (opened) return true;   // 舞台级包装（panelHost）自备快照；false=无待开包
-    }
-    return !!stage.showcaseItem({
-      title: p.name ?? '买到的东西',
-      effect: p.effect ?? '',
-      artKey: pack ? 'pack' : p.kind,   // assets/items|props：pack / potion / apple / relic（没素材时组件烘占位）
-      tint: SHOP_TINT[p.kind] ?? 0xffe6ad,
-      autoDismissMs: 1700,
-    });
   }
 
   /** 播完 core 声明的获得物特写（见 runPresenter.js：内容只声明，时序归 Shell）。 */
@@ -309,6 +254,8 @@ export function createRunShowcase(ctx) {
       ctx.panelStage()?.roomUnitCommand?.(cmd);
     }
     for (const intent of runPresenter.drain()) {
+      // 遗物获得：走遗物特写队列（铭文/稀有度着色/逐件排队），不吃通用三行特写
+      if (intent?.kind === 'relic') { presentRelic(intent.defId); continue; }
       // 卡牌升级：播「变身收编」演出（原卡金闪变新卡后飞入牌库），不是三行文本特写。
       // 换面要**投影后的卡面视图**（裸 defId 会被 bakeFace 烘成空卡）——这里按面板同
       // 口径现投影（休息阶段语境，带 player 的应用前 describe）。
@@ -323,32 +270,31 @@ export function createRunShowcase(ctx) {
         });
         continue;
       }
-      ctx.panelStage()?.showcaseItem?.(showcaseItemOf(intent));
+      // 通用特写播完的补排钩子：特写播放不占队列（纯舞台态），期间入队的遗物特写
+      // 等不到空闲沿——点掉这拍顺势补排（与遗物自身 onDismiss 链同款语义）
+      ctx.panelStage()?.showcaseItem?.({ ...showcaseItemOf(intent), onDismiss: () => flushRelicShowcase() });
     }
   }
 
-  /** 离局清理：兜底保险丝必须清掉（否则离局后仍可能开火），挂起的待播演出/队列
-   *  一并弃掉（属于这一局，重进由检查点重建稳态）。 */
+  /** 离局清理：挂起的待播演出/队列一并弃掉（属于这一局，重进由检查点重建稳态）；
+   *  指令侧由 runController dispose 的 dedicatedSequencer.cancelAll() 一把收。 */
   function dispose() {
-    fuses.clearAll();
     demonRewardShow = null;
-    shopPendingShow = null;
-    shopDispensing = false;
     relicShowcaseQueue.length = 0;
   }
 
   return {
-    diffNewRelics, flushRelicShowcase,
-    bankDemonPick, showDemonReward,
-    maybeShowSlotPrize,
+    presentRelic, flushRelicShowcase,
+    bankDemonPick, demonAnimDone, openBankOfferPicker,
     shopBuy, shopAnimDone,
+    isShopDispensing,   // 问句呈现驱动的让位判据（= 出货指令在队）
     slotTakeGift,
     flushRunPresentations,
     dispose,
     intents: {
       buyShopItem: (i) => shopBuy(i.index),
       shopAnimDone: (i) => shopAnimDone(i.index),
-      demonAnimDone: () => showDemonReward(),   // 恶魔 roll 退场回执（非玩家意图）
+      demonAnimDone: () => demonAnimDone(),   // 恶魔 roll 退场回执（非玩家意图）
       slotTakeGift: (i) => slotTakeGift(i.choice),
     },
   };

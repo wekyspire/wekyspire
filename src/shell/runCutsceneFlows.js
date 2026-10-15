@@ -20,9 +20,10 @@ import { getSkillDefinition } from '../core/skills/registry.js';
 import { DIM_META } from '../stage/panels/index.js';
 import { eventArtUrlNamed } from './overlay/eventArt.js';
 import { duckWind } from './audio.js';
+import { enqueueFlowInstruction } from './flowInstruction.js';
 
 export function createRunCutsceneFlows(ctx) {
-  const { run, runCtx, runPresenter, cutscene, showcase, lifecycle } = ctx;
+  const { run, runCtx, runPresenter, cutscene, showcase, lifecycle, dedicatedSequencer } = ctx;
   // ctx.notify() 晚绑定；ctx.setRoomScenePending(v) 晚绑定
 
   // ---- 随机事件（**不做 3D 场景，也不用旧 UI 面板**）----
@@ -32,11 +33,16 @@ export function createRunCutsceneFlows(ctx) {
   // 进出都是幕间：进 = wipe step 后面的对话被"揭开"（切幕开始 → 事件画面就位 → 切幕结束，
   // 实报的同层问题）；出 = sceneTransition（黑幕中点做阶段迁移 + 刷新塔楼）。
   // `triggerEvent` 保留为**幂等入口**（面板安全阀/测试可用）：已在播或已结算则什么都不做。
-  let eventPlaying = false;
-  async function playEventScene() {
-    if (run.gameStage !== 'room' || run.currentRoom !== 'event') return false;
-    if (eventPlaying || run.roomData?.eventResolved) return false;
-    eventPlaying = true;
+  const eventEntryOk = () => run.gameStage === 'room' && run.currentRoom === 'event'
+    && !run.roomData?.eventResolved;
+  function playEventScene() {
+    return enqueueFlowInstruction(dedicatedSequencer, {
+      tag: 'event-flow', meta: { event: 'room:event-flow' },
+      entryOk: eventEntryOk,
+      play: playEventSceneChain,
+    });
+  }
+  async function playEventSceneChain(done) {
     try {
       duckWind(0);   // 事件房不算塔楼层：幕间期间风声压暗（finally 恢复，正常/异常出口同覆盖）
       const view = eventView(run, runCtx);      // 确定性抽事件（记进 roomData，重绘不重抽）
@@ -63,8 +69,9 @@ export function createRunCutsceneFlows(ctx) {
       // 退出切幕（cutscene 回塔楼本质上和场景切换没区别）：
       // 黑幕盖住 → 阶段迁移 + 塔楼刷新 → 揭幕；获得演出排在揭幕之后（不然会被黑幕吞掉半截）。
       // completeRoom 在此推进楼层 → 揭幕即排相机爬升（事件房不换台，swapRoomToMap 摸不到这里）。
+      // notify 由 transitionStage 中点纪律统一补（beforeSwap 内不再手放——同拍双发纯冗余）
       await lifecycle.exitSceneAfterCutscene(() => {
-        lifecycle.completeRoomAndNotify();
+        lifecycle.completeRoom();
         lifecycle.arriveMapFloor();
       });
       showcase.flushRunPresentations();          // 揭幕后播"到手那一拍"（内容在选中的那一拍声明的）
@@ -81,7 +88,7 @@ export function createRunCutsceneFlows(ctx) {
       ctx.notify();
       return false;
     } finally {
-      eventPlaying = false;
+      done();
       duckWind(1);   // 出事件房（含切幕出场/兜底离房）即恢复塔楼风声
       ctx.setRoomScenePending(false);
       // 未结算就退出（异常/无选择）→ 事件房还在：把面板（安全阀）还给塔楼层，别让玩家卡死
@@ -100,7 +107,7 @@ export function createRunCutsceneFlows(ctx) {
   // 形态：训练达标离开营地房 → 与房间迁移**同一段切幕**（黑幕中点迁移 + 换台，揭幕揭开的就是
   // 进阶对话）→ 旁白 + 「择维度」选项（对话选项，非面板）→ 结果页 → （首次 0→1）九选三面板收尾
   // → 结束时切幕回塔楼。美术：占位 CG，真素材丢 `src/assets/images/events/ascension.webp` 自动顶替。
-  let ascensionPlaying = false;
+
   /** 进阶选项（对话 choices）：所有可选维度 + 跳过（改记 1 点体修等级）。 */
   const ascensionChoices = () => [
     ...LEINO_DIMENSIONS.map((id) => {
@@ -178,11 +185,18 @@ export function createRunCutsceneFlows(ctx) {
    * @param fromRoom true = 从营地房直接接棒（黑幕中点做 completeRoom + 换台）；
    *                 false = 已在 ascension 阶段（调试/兜底）只做转场。
    */
-  async function playAscensionScene({ fromRoom = false } = {}) {
+  function playAscensionScene({ fromRoom = false } = {}) {
     // fromRoom：调用时阶段仍是 'room'（迁移在黑幕中点做）——所以守卫按来源分流
-    if (ascensionPlaying) return false;
-    if (!fromRoom && run.gameStage !== 'ascension') return false;
-    ascensionPlaying = true;
+    const entryOk = fromRoom
+      ? () => run.gameStage === 'room'
+      : () => run.gameStage === 'ascension';
+    return enqueueFlowInstruction(dedicatedSequencer, {
+      tag: 'ascension-flow', meta: { event: 'room:ascension-flow' },
+      entryOk,
+      play: (done) => playAscensionSceneChain(done, { fromRoom }),
+    });
+  }
+  async function playAscensionSceneChain(done, { fromRoom = false } = {}) {
     try {
       const bg = eventArtUrlNamed('ascension', '进阶');
       let picked = null;
@@ -190,8 +204,12 @@ export function createRunCutsceneFlows(ctx) {
         steps: [
           {
             type: 'wipe',
-            // 从房间来：全黑中点做阶段迁移 + 换台（房间→塔楼），揭幕揭开的就是进阶对话
-            atCover: fromRoom ? () => lifecycle.completeRoomSwapToMap() : undefined,
+            // 从房间来：全黑中点做阶段迁移 + 换台（房间→塔楼），揭幕揭开的就是进阶对话。
+            // 【单一入口豁免（成文）】这是**内容幕间**的 wipe step——对话内容依赖剧本的
+            // nextBox 机制在幕后就位，transitionStage（sceneTransition 形状）表达不了；
+            // 豁免代价自理：atCover 首拍手动 dismissModals（transitionStage 的中点
+            // 清算这里没有）+ notify 由 completeRoomSwapToMap 自带
+            atCover: fromRoom ? () => { ctx.dismissModals?.(); lifecycle.completeRoomSwapToMap(); } : undefined,
           },
           {
             type: 'dialogue', bg,
@@ -211,13 +229,13 @@ export function createRunCutsceneFlows(ctx) {
       await cutscene.play({ steps: [{ type: 'dialogue', bg, pages: [ascensionResultPage(picked)] }] });
       if (run.ascensionOffer?.length) await playAbilityOfferScene(bg); // 精英/大师能力授予
       // 进阶选择（onChoice）里 advanceFloor 已把楼层推上——退出揭幕即排相机爬升
-      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });   // 进阶结束 → 切幕回塔楼
+      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());   // 进阶结束 → 切幕回塔楼
       // 跳过进阶的删卡反哺：揭幕后就地弹全屏删卡（即时化——放弃即作废，机会不留存）。
       // 此时快照已是 prep（exit 中点 notify 过），cardRemoval 段在场。
       if (picked === 'skip') void ctx.playBossRemoveNow?.();
       return true;
     } finally {
-      ascensionPlaying = false;
+      done();
     }
   }
 
@@ -228,7 +246,7 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
+      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());
     })();
   }
   // 跳过进阶：不选灵脉，改记 1 点隐藏体修等级（故事模式暗线）
@@ -238,13 +256,16 @@ export function createRunCutsceneFlows(ctx) {
     ctx.notify();
     void (async () => {
       if (run.ascensionOffer?.length) await playAbilityOfferScene(eventArtUrlNamed('ascension', '进阶'));
-      await lifecycle.exitSceneAfterCutscene(() => { lifecycle.arriveMapFloor(); ctx.notify(); });
+      await lifecycle.exitSceneAfterCutscene(() => lifecycle.arriveMapFloor());
     })();
   }
 
   return {
     playEventScene, triggerEvent, leaveEvent,
     playAscensionScene, chooseAscensionDimension, skipAscension,
+    // 静止态断言（quiescence.js 消费）：幕间流已指令化（*-flow 在队 = 队列忙，断言器自然不采样），
+    // 手写幕间锁已删——本域无剩余无界泄漏位。
+    quiescenceFailures: () => [],
     intents: {
       triggerEvent: () => triggerEvent(),
       leaveEvent: () => leaveEvent(),

@@ -23,7 +23,7 @@
 //                 否则惰性创建的界面永远收不到 tooltip。
 //   · onIntent    (action) => void：确认/放弃时的上行出口（宿主自己转发给 runController）
 //   · getSequencer () => AnimationSequencer|null（「择卡得卡」演出的指令化挂点，见
-//                 cardGrantFlight.js；惰性取——runSequencer 由宿主后置注入）
+//                 cardGrantFlight.js；惰性取——dedicatedSequencer 由宿主后置注入）
 //   · getAnchor   () => ({x,y,z}) 得卡演出的收编锚点（塔楼/房间 = 玩家状态栏）
 //
 // 用法：`const kit = createStagePickerKit({...})`，宿主保留对外方法作薄转发（见三舞台）。
@@ -42,7 +42,7 @@ import { playCardBurnFlight } from './cardBurnFlight.js';
 import { nextCardSpot } from './cardSpot.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { cardViewFromDef } from '../core/skills/cardView.js';
-import { withLabels } from './panels/shared.js';
+import { withLabels, slotPrizeText } from './panels/shared.js';
 
 // ---- 「升级 / 焚毁 / 删除」类选卡入口的统一来源表 ----
 // 每项 = 从快照取候选段 + 确认后上行的意图 + 三行文案（标题/提示/确认键）。
@@ -562,6 +562,43 @@ export function createStagePickerKit({
     },
 
     /**
+     * 老虎机产出的**获得特写**（问句驱动：runQuestions 在转轮落定拍调）。
+     * 点任意处 = 收下（需选卡的奖项随后接 openSlotPrizePicker；免费指定升级随后
+     * 自动开选卡界面）；点「跳过」= 放弃这份产出。切幕强收走 cancel()（出口回调全免
+     * = defer，下一拍 notify 问句驱动重弹——ItemShowcaseObject.cancel 是该语义的实现点）。
+     * 单件遗物奖不进这里（问句驱动直接应答，遗物差分特写即获得演出）。
+     * @returns 是否真的播了（无产出 → false）
+     */
+    openSlotPrizeShowcase(snap = null) {
+      const p = snap?.slot?.pending;
+      if (!p) return false;
+      const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
+      const freeUpgrade = p.upgrade?.kind === 'free';
+      return !!this.showcaseItem({
+        title: slotPrizeText(p),
+        effect: needsPick ? '收下之后挑一件带走'
+          : freeUpgrade ? '收下之后，选一张卡牌免费升级'
+            : null,
+        // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint 色块
+        // ＝特写美术区一块空白灰——夜测路7b 实报）
+        artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
+        tint: p.tier === 'major' ? 0xffd75e : 0xd8e2f4,
+        skippable: true,
+        onSkip: () => onIntent?.({ action: 'slotDecline' }),
+        onDismiss: () => {
+          // 免费升级：收下后由编排器（machines.slotTake）检测 slotUpgradePending 就地开
+          // 升级选卡——不在这里链式打开：本闭包捕获的是开特写时的旧快照，slotTake 之后
+          // 候选才生成，旧快照开卡必空手（实测软锁：选卡永不弹、双 pending 挂死离房门）
+          if (freeUpgrade) onIntent?.({ action: 'slotTake' });
+          // 多选一奖项（统一）：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
+          // 「返回」= 放弃——不再落回 dock 面板的内嵌卡行/按钮墙（旧逻辑已删）
+          else if (needsPick) this.openSlotPrizePicker(snap);
+          else onIntent?.({ action: 'slotTake' });
+        },
+      });
+    },
+
+    /**
      * 老虎机中奖产出的**多选一**（统一：获得演出 dismiss 后接全屏 overlay，
      * 不再走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
      * 演出 → `slotTake(choice)`；「返回」= 放弃这份产出（`slotDecline`，与卡包同口径——
@@ -796,11 +833,13 @@ export function createStagePickerKit({
     /**
      * 切幕清算（wipe preStage 钩子调）：一键收起本舞台的全屏模态——获得特写淡出 +
      * 选卡/选遗物界面收起。只做视觉与输入面回收：picker.close 不触发 onCancel/onSkip
-     * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 dismiss
-     * （收下语义，奖励已落账）。夜测 1002 特写跨幕滞留族（[路4]/[r4路8]/[r6路6]）的根治位。
+     * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 cancel
+     * （收呈现不收账——onDismiss/onSkip 不替玩家做应答，defer 语义；本次 show 给了
+     * onCancel 的链式编排方收到中止信号）。夜测 1002 特写跨幕滞留族
+     * （[路4]/[r4路8]/[r6路6]）的根治位。
      */
     dismissModals() {
-      if (showcase?.busy) showcase.dismiss('dismiss');
+      if (showcase?.busy) showcase.cancel();
       showcase?.clearPending?.();   // 挂起件随切幕弃掉（舞台将死，不得重放）
       if (cardPicker?.opened) cardPicker.close();
       if (relicPicker?.opened) relicPicker.close();

@@ -41,7 +41,9 @@ export function installPanelHost(StageClass, { localActions = {}, allowSource = 
 
     openUpgradePicker(source, opts) {
       if (allowSource && !allowSource(source)) return false;
-      const ok = this._pickerKit.openUpgradePicker(source, this._snap, opts);
+      // opts.snap = 调用方现场投影的快照直喂（boss-remove 窗口期 gameStage 已离 reward，
+      // battleStage 的分布式面板是 null——读 _snap 必空手）；缺省仍读分布式快照
+      const ok = this._pickerKit.openUpgradePicker(source, opts?.snap ?? this._snap, opts);
       if (ok) onCardPickerOpened?.(this);
       return ok;
     },
@@ -55,6 +57,8 @@ export function installPanelHost(StageClass, { localActions = {}, allowSource = 
     openShopRelicPackPicker() { return this._pickerKit.openShopRelicPackPicker(this._snap); },
     /** 老虎机中奖产出的多选一（获得演出 dismiss 后接这里）。 */
     openSlotPrizePicker() { return this._pickerKit.openSlotPrizePicker(this._snap); },
+    /** 老虎机产出的获得特写（问句驱动：转轮落定拍由 runQuestions 调；收下/跳过即应答）。 */
+    openSlotPrizeShowcase() { return this._pickerKit.openSlotPrizeShowcase(this._snap); },
     /** 训练抓牌四选一（全屏 overlay；候选取自当前快照）。 */
     openTrainingDrawPicker() {
       const ok = this._pickerKit.openTrainingDrawPicker(this._snap);
@@ -75,7 +79,7 @@ export function installPanelHost(StageClass, { localActions = {}, allowSource = 
     // ---- 面板动作分流骨架 ----
     // local = 面板本地交互态（开选卡界面…）：舞台自己消化，不惊动 core；
     // grantCard = 得卡标记：摘下被点的卡 → 拆面板 → 播「择卡得卡」飞行（sequencer
-    // 指令化）→ 落袋才上行意图；其余（含 slotAnimDone 这类舞台演出回执）原样上行。
+    // 指令化）→ 落袋才上行意图；其余动作原样上行。
     // overlay 整体拆除而非藏起：隐形面板会被随后的同 kind 快照重绘但仍隐形
     // （PanelObject 只在 kind 变化时重建）。
     _onPanelAction(action, info) {

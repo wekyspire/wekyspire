@@ -57,31 +57,26 @@ function symbolsForTier(tier) {
 export function createSlotMachine(ctx) {
   let gift = null;              // 安慰奖二选一演出件（惰性；见 _playGift）
   let demon = null;             // 恶魔 roll 状态机（见 _stepDemonRoll）
-  let slotSpinId = null;        // 正在播的拉杆轮次 id（防重绘重播）
-  let slotPoll = null;          // 转轮播完的轮询定时器
+  let slotPoll = null;          // 转轮播完的轮询定时器（playSlotSpin 体）
 
-  /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
-  function _syncSpin() {
-    // 「继续前进」的明度在 RoomStage._tick 里逐帧算（模态覆盖层/房间欠账两档），这里不再重复设置
-    const s = ctx.snap()?.slot;
+  /**
+   * 拉一次转轮（编排器直调宿主实现，非快照 diff——快照只带「转动中」布尔做置灰）。
+   * rig.pull 自带回执回调（§9.13 吸收项：消轮询 API 不对称）——落定拍同步触发；
+   * 拉杆被拒（已在转）没有回调可挂，退回 isBusy 轮询兜底（唯一残存轮询）。
+   * @returns 是否接手（无 rig → false，编排器自行落定）
+   */
+  function playSlotSpin({ tier }, onDone) {
     const rig = ctx.rigs().get('slot');
-    if (!s || !rig) return;
-    // 计数器（翻牌）与进度满的"嘴张开"直接由快照驱动
-    if (s.devour) rig.setDevour?.(s.devour);
-    const spinning = s.spinning ?? null;
-    if (!spinning) { slotSpinId = null; return; }
-    if (spinning.id === slotSpinId) return;   // 同一轮已开播（重绘不重播）
-    slotSpinId = spinning.id;
-    const tier = spinning.tier ?? 'none';   // 'major' | 'minor' | 'none'（不是奖项种类）
-    rig.pull({ tier, symbols: symbolsForTier(tier) });
+    if (!rig) return false;
+    if (rig.pull({ tier, symbols: symbolsForTier(tier ?? 'none'), onDone })) return true;
     clearInterval(slotPoll);
     slotPoll = setInterval(() => {
       if (rig.isBusy()) return;
       clearInterval(slotPoll);
       slotPoll = null;
-      slotSpinId = null;
-      ctx.intent({ action: 'slotAnimDone', id: spinning.id });
+      onDone();
     }, 120);
+    return true;
   }
 
   // ---- 恶魔 roll（银行机超额取款的代价）----
@@ -328,11 +323,16 @@ export function createSlotMachine(ctx) {
       });
     },
 
-    /** 快照 → rig/演出状态（恶魔 roll 起止 + 拉杆轮次）。 */
+    /** 快照 → rig/演出状态（恶魔 roll 起止 + 吞噬计数器翻牌）。转轮播放在 playSlotSpin。 */
     sync() {
       _syncDemonRoll();
-      _syncSpin();
+      const s = ctx.snap()?.slot;
+      const rig = ctx.rigs().get('slot');
+      if (s?.devour) rig?.setDevour?.(s.devour);
     },
+
+    /** 转轮宿主实现（RoomStage.playSlotSpin 转发到这里）。 */
+    playSlotSpin,
 
     /** 帧驱动：恶魔相位机 + 安慰奖 billboard 面向相机 + 浮动。 */
     tick(dt) {

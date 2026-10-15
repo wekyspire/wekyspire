@@ -317,6 +317,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._onDismissShow = null;  // 本次 show 的出口回调（点击任意处 = 收下/关闭）
     this._autoDismissMs = 0;     // 本次 show 的自动收下时长（0 = 等点击）
     this._onSkipShow = null;     // 本次 show 的「跳过」出口（放弃产出）
+    this._onCancelShow = null;   // 本次 show 的「程序化收场」出口（切幕强杀；链式编排方的中止信号）
     this._pendingShow = null;    // 忙碌期 show 的一件挂起（重放见 update 的 out 收尾）
     this._build();
   }
@@ -449,7 +450,8 @@ export class ItemShowcaseObject extends THREE.Group {
    *   skippable: true = 下方给出「跳过」按钮（放弃这件产出）
    *   autoDismissMs: >0 时停住这一时长后**自动收下**（售货机购买：出完货即自动收货，
    *                  不给一套"点击收货"的 UI）；缺省 0 = 等点击
-   *   onDismiss / onSkip: 两个出口的回调（点任意处 / 点跳过；仅本次 show 有效）
+   *   onDismiss / onSkip / onCancel: 三个出口的回调（点任意处 / 点跳过 / 程序化收场；
+   *                  cancel 只发给显式给了 onCancel 的调用方；仅本次 show 有效）
    */
   show(item = {}) {
     // 忙碌期（含 out 收尾中）不得硬切：硬切会覆写在播件的 _onDismissShow/_onSkipShow，
@@ -469,6 +471,7 @@ export class ItemShowcaseObject extends THREE.Group {
     this._autoDismissMs = Math.max(0, Number(item.autoDismissMs) || 0);
     this._onDismissShow = item.onDismiss ?? null;
     this._onSkipShow = item.onSkip ?? null;
+    this._onCancelShow = item.onCancel ?? null;
     if (this._skipBtn) this._skipBtn.visible = !!item.skippable;
     this._setLine('title', item.title ?? '');
     this._setLine('desc', item.desc ?? '');
@@ -506,7 +509,12 @@ export class ItemShowcaseObject extends THREE.Group {
     return this._placeholders.get(key);
   }
 
-  /** 点击任意处 / 程序化关闭：进入快速淡出。reason 决定收尾回调（'dismiss' | 'skip'）。 */
+  /**
+   * 进入快速淡出。reason 决定收尾回调：'dismiss'（点任意处 = 收下）/ 'skip'（跳过）/
+   * 'cancel'（程序化收场：不走 onDismiss/onSkip——问句协议的「切幕收呈现不收账」，
+   * 切幕/dispose 不得替玩家做应答，defer 语义；本次 show 给了 onCancel 的才收到
+   * 中止信号，供链式编排方（dedicatedSequencer 流程指令内的 await）放弃余下节拍）。
+   */
   dismiss(reason = 'dismiss') {
     if (this._phase === 'idle' || this._phase === 'out') return false;
     this._phase = 'out';
@@ -514,6 +522,9 @@ export class ItemShowcaseObject extends THREE.Group {
     this._closeReason = reason;
     return true;
   }
+
+  /** 程序化收场（切幕 dismissModals / 舞台收尾）：走淡出，只触发 onCancel（见 dismiss）。 */
+  cancel() { return this.dismiss('cancel'); }
 
   /** 强制收场（切幕 dismissModals / dispose）：挂起件一并弃掉——舞台将死，不得重放。 */
   clearPending() { this._pendingShow = null; }
@@ -569,11 +580,13 @@ export class ItemShowcaseObject extends THREE.Group {
         this.visible = false;
         const reason = this._closeReason ?? 'dismiss';
         this._closeReason = null;
-        const cb = reason === 'skip' ? this._onSkipShow : this._onDismissShow;
+        const cb = reason === 'skip' ? this._onSkipShow
+          : reason === 'cancel' ? this._onCancelShow : this._onDismissShow;
         this._onDismissShow = null;
         this._onSkipShow = null;
+        this._onCancelShow = null;
         cb?.();
-        this._onDismiss?.();   // 构造期给的可选统一回调（缺省无动作）
+        this._onDismiss?.();   // 构造期给的可选统一回调（缺省无动作；清理语义，非应答）
         // 挂起重放：落定后仍空闲才播（回调链可能已直接占台——恶魔连拍从 onDismiss 接力）
         if (this._phase === 'idle' && this._pendingShow) {
           const p = this._pendingShow;

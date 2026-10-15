@@ -98,10 +98,13 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
   // 保鲜期只到所属剧本落幕的那个任务结束（尾闸里 setTimeout(0) 失效化）：紧随的转场
   // 在同一微任务链里取走它；玩家中途操作过别的界面后，旧内容不许再被当 hold 摆回屏上。
   // `play()` 开头也会清掉，保证一部新剧本不会继承上一部的残留。
-  let lastContent = null;
+  let lastContent = null;   // { script, step }——script 引用必须随行：转场 hold 接手时
+  // 原样恢复 state.script，否则 .box 的 key（state.script）变 null → 对话框整体重挂，
+  // 入场动画重放 = 事件末页"第二次出现"（1013 实报；重挂在无动画时代不可见，事件
+  // 交互批给了入场拍后才显形）
   const beginStep = (script, step) => {
     state.script = script; state.step = step; state.phase = null;
-    if (step?.type !== 'wipe') lastContent = step;
+    if (step?.type !== 'wipe') lastContent = { script, step };
   };
   /** 取走"刚播完、还没被转场接走"的那一拍内容（取走即清）。 */
   const takeLastContent = () => { const s = lastContent; lastContent = null; return s; };
@@ -138,7 +141,12 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             //   战斗→塔楼）。撤内容/换内容的时机在**全黑中点**——玩家看不到这次切换。
             //   此前这里一上来就 beginStep，于是内容先消失、露出背景，黑幕之后才盖上来
             //   （实报的节拍错位）。
-            if (step.hold) { state.step = step.hold; state.phase = null; }
+            if (step.hold) {
+              // 接手即原样复辟（含 script 引用）：key 不变 = Vue 不重挂、入场动画不重放
+              state.script = step.hold.script ?? null;
+              state.step = step.hold.step;
+              state.phase = null;
+            }
             wipeCtl.begin({ coverMs, revealMs });   // 黑幕由独立切幕层渲染（不在本 overlay 里）
             await wait(16);         // 让屏外初始 transform 渲染一帧，再起过渡
             wipeCtl.toCover();

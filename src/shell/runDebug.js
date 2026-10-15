@@ -53,6 +53,7 @@ export function createRunDebug(ctx) {
       after?.();
       syncMapStatus?.();
       notify?.();
+      ctx.settleStageEffects?.();   // 调试改状态也是阶段内变更：prep 期的检查点/战前预热随 act 刷新
       // 战斗内改动（上限类字段等）补一次战斗投影同步：run 级 notify 触不到 bridge 的
       // 标脏链，投影只在战斗指令事件时重拉——否则珠子/将弃预告停更到下一条指令
       //（qa 实测修复）。
@@ -84,8 +85,17 @@ export function createRunDebug(ctx) {
   const resetDeck = () => act('重置牌组', battleGuard('改牌组'), () => ops.resetDeck(run));
 
   // ---- 遗物 ----
-  const addRelic = (relicId) => act('加遗物', battleGuard('改遗物'), () => ops.grantRelicById(run, relicId));
-  const addRandomRelic = (rarity = null) => act('随机遗物', battleGuard('改遗物'), () => ops.grantRandomRelic(run, rarity));
+  const addRelic = (relicId) => act('加遗物', battleGuard('改遗物'), () => {
+    ops.grantRelicById(run, relicId);
+    ctx.presentRelic?.(relicId);   // 授予源显式特写（内容触发下沉后差分兜底已撤）
+  });
+  const addRandomRelic = (rarity = null) => act('随机遗物', battleGuard('改遗物'), () => {
+    // 前后留影捕获起草结果（core 内部 draft，返回值不定）：新增即授予源特写
+    const before = new Set(run.player.relics);
+    const msg = ops.grantRandomRelic(run, rarity);
+    for (const id of run.player.relics) if (!before.has(id)) ctx.presentRelic?.(id);
+    return msg;
+  });
   const removeRelic = (relicId) => act('移除遗物', battleGuard('改遗物'), () => ops.removeRelicById(run, relicId));
   const equip = (relicId) => act('装备遗物', battleGuard('改遗物'), () => ops.equipRelicById(run, relicId));
   const unequip = (relicId) => act('卸下遗物', battleGuard('改遗物'), () => ops.unequipRelicById(run, relicId));
