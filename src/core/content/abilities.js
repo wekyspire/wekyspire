@@ -8,21 +8,10 @@ import { PlayerTurnStartInstruction, PlayerTurnEndInstruction } from '../instruc
 import { aliveEnemies } from '../state/battleState.js';
 import { isBladeCard, gainPower } from './cardKit.js';
 
-// 战意：战斗开始时获得 1 层力量。不作为初始能力授予，
-// 保留定义供旧档兼容与后续奖励/事件投放使用。
-registerAbility({
-  id: 'battleFocus', name: '战意',
-  description: '战斗开始时获得 1 层力量。',
-  onBattleStart(ctx) {
-    ctx.player.addEffect('strength', 1);
-  },
-});
-
 // 火灵脉体系能力（FIRE_VEIN_CARDS §0）：首次点亮火灵脉时自动授予，
 // 战斗开始获得可燃1（燃烧结算每层减免 3 + 因燃烧掉血洗入余烬——
 // 基础能力是余烬经济的启动器）。
-// 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅），
-// 不能照抄战意的直改写法。
+// 订阅型效果必须经 AddEffectInstruction 入列（状态级 addEffect 不挂订阅，禁止直改）。
 registerAbility({
   id: 'fireVein', name: '火灵脉',
   description: '战斗开始时，获得可燃1。',
@@ -48,22 +37,20 @@ registerAbility({
 registerAbility({
   id: 'bladeSaint', requires: 'bladeMaster', name: '刀圣', grade: 'master',
   description: '你每弃 2 张牌，所有刀法牌伤害+1。',
-  subscriptions: () => {
-    let count = 0;
-    return [{
-      when: DiscardCardInstruction, phase: 'post',
-      filter: (instr) => Boolean(instr.result.card),
-      react: (instr, ctx) => {
-        count += 1;
-        if (count % 2 !== 0) return;
+  subscriptions: () => [{
+    when: DiscardCardInstruction, phase: 'post',
+    filter: (instr) => Boolean(instr.result.card),
+    react: (instr, ctx) => {
+      const s = ctx.battleState.scratch;
+      const count = s['ability:bladeSaint:discards'] = (s['ability:bladeSaint:discards'] ?? 0) + 1;
+      if (count % 2 !== 0) return;
         for (const zone of ['hand', 'deck']) {
           for (const card of ctx.battleState.zones[zone]) {
             if (isBladeCard(card)) gainPower(ctx, card, 1);
           }
         }
-      },
-    }];
-  },
+    },
+  }],
 });
 
 // ============================================================================
@@ -100,20 +87,17 @@ registerAbility({
 registerAbility({
   id: 'openerGambit', requires: 'pyroBlast', name: '起手式', grade: 'master',
   description: '战斗中，你打出的第一张攻击牌让你回复 3 魏启。',
-  subscriptions: () => {
-    let used = false; // 战斗窗口闭包：每场重置（订阅随战斗销毁）
-    return [{
-      when: UseSkillInstruction, phase: 'post',
-      filter: () => !used,
-      react: (instr, ctx) => {
-        const dealtToEnemy = (node) => node.children?.some(c =>
-          (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
-        if (!dealtToEnemy(instr)) return;
-        used = true;
-        ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: UseSkillInstruction, phase: 'post',
+    filter: (instr, ctx) => !ctx.battleState.scratch['ability:openerGambit:used'],
+    react: (instr, ctx) => {
+      const dealtToEnemy = (node) => node.children?.some(c =>
+        (c instanceof DealDamageInstruction && c.target?.side === 'enemy') || dealtToEnemy(c));
+      if (!dealtToEnemy(instr)) return;
+      ctx.battleState.scratch['ability:openerGambit:used'] = true;
+      ctx.kernel.submitInstruction(new GainManaInstruction({ amount: 3 }), instr);
+    },
+  }],
 });
 
 // 精英 **避火术**：战斗开始时，获得烈焰亲和4
@@ -215,52 +199,48 @@ registerAbility({
 registerAbility({
   id: 'boxer', name: '拳师', grade: 'elite',
   description: '每回合打出第 5 张牌后，回复 1 行动点。',
-  subscriptions: () => {
-    let count = 0; // 本回合出牌数（战斗窗口闭包，回合开始重置）
-    return [
-      {
-        when: UseSkillInstruction, phase: 'post',
-        filter: () => true,
-        react: (instr, ctx) => {
-          count += 1;
-          if (count === 5) {
-            ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }), instr);
-          }
-        },
+  subscriptions: () => [
+    {
+      when: UseSkillInstruction, phase: 'post',
+      filter: () => true,
+      react: (instr, ctx) => {
+        const s = ctx.battleState.scratch;
+        const count = s['ability:boxer:plays'] = (s['ability:boxer:plays'] ?? 0) + 1;
+        if (count === 5) {
+          ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }), instr);
+        }
       },
-      {
-        when: PlayerTurnStartInstruction, phase: 'post',
-        filter: () => true,
-        react: () => { count = 0; },
-      },
-    ];
-  },
+    },
+    {
+      when: PlayerTurnStartInstruction, phase: 'post',
+      filter: () => true,
+      react: (instr, ctx) => { ctx.battleState.scratch['ability:boxer:plays'] = 0; },
+    },
+  ],
 });
 
 // 大师 **拳王**：每回合打出第 9 张牌后，回复 1 AP（与拳师独立计数，同持双触发）。
 registerAbility({
   id: 'champion', requires: 'boxer', name: '拳王', grade: 'master',
   description: '每回合打出第 9 张牌后，回复 1 行动点。',
-  subscriptions: () => {
-    let count = 0;
-    return [
-      {
-        when: UseSkillInstruction, phase: 'post',
-        filter: () => true,
-        react: (instr, ctx) => {
-          count += 1;
-          if (count === 9) {
-            ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }), instr);
-          }
-        },
+  subscriptions: () => [
+    {
+      when: UseSkillInstruction, phase: 'post',
+      filter: () => true,
+      react: (instr, ctx) => {
+        const s = ctx.battleState.scratch;
+        const count = s['ability:champion:plays'] = (s['ability:champion:plays'] ?? 0) + 1;
+        if (count === 9) {
+          ctx.kernel.submitInstruction(new GainActionPointsInstruction({ amount: 1 }), instr);
+        }
       },
-      {
-        when: PlayerTurnStartInstruction, phase: 'post',
-        filter: () => true,
-        react: () => { count = 0; },
-      },
-    ];
-  },
+    },
+    {
+      when: PlayerTurnStartInstruction, phase: 'post',
+      filter: () => true,
+      react: (instr, ctx) => { ctx.battleState.scratch['ability:champion:plays'] = 0; },
+    },
+  ],
 });
 
 

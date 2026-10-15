@@ -79,6 +79,10 @@ export function awaitFloorArrive(sequencer, mapStage, { floor, totalFloors, ms =
     const settle = () => { if (settled) return; settled = true; resolve(); };
     instrId = sequencer.enqueueInstruction({
       meta: { event: 'tower:floor-arrive', floor },
+      // 爬升是背景演出：退出 'all' 且不等任何人——爬升期间遗物装卸/获得特写
+      // 照常播（notify 的忙判同样把 'floor-arrive' 排除在外）；后续剧本/进房
+      // 节拍本来就排在本指令 resolve 之后，不靠标签定序
+      tags: ['floor-arrive'], tagAll: false, waitTags: [],
       durationMs: ms,
       start: ({ id, emit }) => {
         // 楼层通过：刚清掉那层的敌人残影崩解——与爬升同拍起跑。回执 = 爬升落定
@@ -289,8 +293,10 @@ export function createRunController({ seed = (Date.now() >>> 0), stageManager = 
     // 谓词口径：pendingCount 含旁挂指令（battle-span 全程占队、scalar-hold 特写窗 ≤30s、
     // devour-tutor 让位窗）——「队列忙 = 演出在播」是近似而非等价。当前旁挂占队期间
     // 面板本就该静止（战斗期无 run 面板诉求 / 特写窗模态盖屏），近似成立是良性的；
-    // ⚠ 新增**长期占队**的旁挂指令类型时必须重估本门（勿靠巧合成立）
-    if (!opts?.force && dedicatedSequencer.pendingCount > 0) return;   // 忙：让位，空闲沿补发
+    // ⚠ 新增**长期占队**的旁挂指令类型时必须重估本门（勿靠巧合成立）。
+    // 'floor-arrive'（塔楼爬升）是显式例外：爬升是背景演出，不占屏——爬升期间
+    // 遗物装卸/面板刷新照常放行（否则 prep 期 5s 爬升压住一切显示刷新）
+    if (!opts?.force && dedicatedSequencer.findPending(i => !i.tags.has('floor-arrive'))) return;   // 忙：让位，空闲沿补发
     if (run.gameStage !== 'room') roomScenePending = false;
     syncMapStatus(); // 状态栏数值跟随每次迁移（魏启变化/层数推进）
     const snap = panelSnapshot(run, panelExtras()); // 面板内容跟随阶段迁移（同一快照推导）

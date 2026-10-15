@@ -82,7 +82,8 @@ registerSkill({
     // 回合结束链走（咏唱触发/盟友行动/回合末结算/尾弃照常）；跳过标记由回合循环消费
     const turn = sctx.kernel.stack.find(i => i instanceof PlayerTurnInstruction);
     if (turn) turn.endRequested = true;
-    sctx.battleState.skipEnemyTurns = (sctx.battleState.skipEnemyTurns ?? 0) + 1;
+    const s = sctx.battleState.scratch;
+    s.skipEnemyTurns = (s.skipEnemyTurns ?? 0) + 1;
     return true;
   },
   describe: () => '结束回合，并立刻开始你的新一回合。',

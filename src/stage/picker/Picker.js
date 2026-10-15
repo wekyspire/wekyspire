@@ -48,7 +48,12 @@ export class Picker {
   removePickable(id) {
     this._pickables.delete(id);
     if (this._hoverCard === id) this._hoverCard = null;
-    if (this._hoverToken?.id === id) this._hoverToken = null;
+    // 摘走正悬停的 token 源要补发 HIDE：hover 是指针移动驱动的轮询，对象消失而指针
+    // 不动时不会有下一次轮询，浮层会稳定悬空（遗物装卸重建、顶栏槽位移除等同路径）
+    if (this._hoverToken?.id === id) {
+      this._hoverToken = null;
+      this._bus.emit(EventNames.TOOLTIP_HIDE, {});
+    }
   }
 
   /**

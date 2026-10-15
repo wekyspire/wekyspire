@@ -8,7 +8,6 @@ import { EventNames } from '../../../bridge/events.js';
 import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
-import { DRAIN_FLIGHT_MS } from '../../fx/gpu/resourceDrainFx.js';
 import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
@@ -216,10 +215,10 @@ export const cardBeats = {
     const view = id != null ? this._views.get(id) : null;
     if (!view) { finish(); return; } // 非手牌来源（未来机制）：无展示载体，直接打节拍
     // 卡费消耗演出（fx/gpu/resourceDrainFx.js）：光珠从资源图标弧线飞进费用徽章——
-    // **节拍权威 = 光珠真到达 promise**（playCardCost 返回 done），卡牌起飞由
-    // projectile 完结时刻发送，不估算延迟。费用读定义/覆写口径（PRE 修饰的实付偏差
-    // 只影响装饰数量级；X 费取当前读数）
-    let drainWait = null;   // Promise | null
+    // **fire-and-forget，不门控起飞**（门控形态每次打出白付一段光珠飞行，连打时
+    // 还随发动拍串行叠加）。徽章目的地逐帧活追踪（badgeCenter 重算世界位），
+    // 光珠追着飞行中的卡跑；落地辉光照旧挂在真到达 promise 上。
+    // 费用读定义/覆写口径（PRE 修饰的实付偏差只影响装饰数量级；X 费取当前读数）
     if (this._drainFx) {
       const ov = payload?.skill?.costOverride;
       const rawMana = ov?.mana ?? payload?.def?.cost?.mana ?? 0;
@@ -227,7 +226,15 @@ export const cardBeats = {
       const mana = rawMana === 'X' ? (this._resources?.mana.current ?? 0) : +rawMana || 0;
       const ap = rawAp === 'X' ? (this._resources?.ap.current ?? 0) : +rawAp || 0;
       if (mana > 0 || ap > 0) {
-        drainWait = this._drainFx.playCardCost({ mana, ap, cardView: view }).done;
+        this._drainFx.playCardCost({ mana, ap, cardView: view }).done.then(() => {
+          if (this._disposed) return;   // 幽灵守卫：飞行中被拆台不再碰材质
+          const body = view?.fx?.body;
+          if (body?.costBadges?.length) {
+            gsap.fromTo(body.uCostGlow, { value: 1 }, {
+              value: 0, duration: 0.8, ease: 'power2.out', overwrite: 'auto',
+            });
+          }
+        });
       }
     }
     this._displayCard = { id };
@@ -275,27 +282,11 @@ export const cardBeats = {
         });
       }
     };
-    if (drainWait) {
-      // 光珠真到达 → 起飞（落地拍同步点亮徽章辉光）
-      drainWait.then(() => {
-        if (this._disposed) { finish(); return; }   // 幽灵守卫：飞行中被拆台直接落拍
-        const body = view?.fx?.body;
-        if (body?.costBadges?.length) {
-          gsap.fromTo(body.uCostGlow, { value: 1 }, {
-            value: 0, duration: 0.8, ease: 'power2.out', overwrite: 'auto',
-          });
-        }
-        this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
-          durationMs: 70,
-          onComplete: onArrived,
-        });
-      });
-    } else {
-      this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
-        durationMs: 70,
-        onComplete: onArrived,
-      });
-    }
+    // 起飞不再等光珠：发动拍首即飞展示位，汇聚演出并行追徽章
+    this.animator.animate(id, { x: HELD_ANCHOR.x, y: HELD_ANCHOR.y, z: HELD_ANCHOR.z, scale: HELD_ANCHOR.scale }, {
+      durationMs: 70,
+      onComplete: onArrived,
+    });
   },
   /**
    * 施术演出发起（fx/spells 模板系统的舞台接线）：装 deps 服务袋（世界场景/

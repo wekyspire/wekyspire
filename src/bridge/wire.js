@@ -116,6 +116,7 @@ export function instructionRecord(opts = {}) {
   const rec = { t: 'i', event: w.event, payload: toWire(w.payload) ?? null };
   if (opts.tags !== undefined) rec.tags = [...opts.tags];
   if (opts.waitTags !== undefined) rec.waitTags = [...opts.waitTags];
+  if (opts.tagAll !== undefined) rec.tagAll = opts.tagAll;
   if (Number.isFinite(opts.durationMs)) rec.durationMs = opts.durationMs;
   return rec;
 }
@@ -125,11 +126,12 @@ export function instructionRecord(opts = {}) {
  * durationMs 缺省按事件名取 ANIM_TIMING（presenter.js:27 同款兜底）。
  */
 export function enqueueAnimInstruction(sequencer, {
-  event, payload = null, tags, waitTags, durationMs,
+  event, payload = null, tags, waitTags, durationMs, tagAll,
 } = {}) {
   return sequencer.enqueueInstruction({
     ...(tags !== undefined ? { tags } : {}),
     ...(waitTags !== undefined ? { waitTags } : {}),
+    ...(tagAll !== undefined ? { tagAll } : {}),
     durationMs: durationMs ?? (ANIM_TIMING[event] ?? 2500),
     meta: { event, payload },
     wire: { event, payload },
@@ -145,10 +147,13 @@ export function enqueueAnimInstruction(sequencer, {
 export function replayWireInstruction(sequencer, { frontendBus, backendBus }, rec) {
   if (!rec?.event) return false;
   if (rec.event === WIRE_END_GATE) {
-    // 终局尾闸：与 presenter.js:71-78 同语义（发射即自完结，同步泵起后续）
+    // 终局尾闸：与 presenter.js:71-78 同语义（发射即自完结，同步泵起后续）。
+    // tags/waitTags 按记录重建（终局闸门等全体死亡拍的 'death' 等待由此过线）
     sequencer.enqueueInstruction({
       meta: { event: WIRE_END_GATE },
       wire: { event: rec.event, payload: rec.payload ?? null },
+      ...(rec.tags !== undefined ? { tags: rec.tags } : {}),
+      ...(rec.waitTags !== undefined ? { waitTags: rec.waitTags } : {}),
       durationMs: 0,
       start: ({ id }) => {
         backendBus.emit(EventNames.BATTLE_END, { result: rec.payload?.result ?? null });
@@ -163,6 +168,7 @@ export function replayWireInstruction(sequencer, { frontendBus, backendBus }, re
     tags: rec.tags,
     waitTags: rec.waitTags,
     durationMs: rec.durationMs,
+    tagAll: rec.tagAll,
   });
   return true;
 }

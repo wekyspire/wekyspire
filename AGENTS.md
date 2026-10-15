@@ -114,7 +114,7 @@ src/
 - **卡牌 modifier（`core/skills/cardModifiers.js`）** — 可挂载的卡牌修正，设计定稿 `quest_prompts/CARD_MODIFIERS.md`。要点：卡实例 `modifiers:[{modId,source,data}]`（存储序即优先级）；**有效卡视图 = def ⊕ patch fold 纯函数派生**（keywords 增删 / cost / cooldown；单条内 set→add→min→max；X 费免疫、无冷却卡以 0 为基；legacy 费用通道折视图末端）；费用/词条/冷却读点已全部换视图，**禁止直改字段的旁路**。行为面 `onAttach`/`onDetach`/`subscriptions`（`onDraw`/`turnEndInHand` 是糖）+ `mutesHand`/`unplayable` 旗标；订阅 owner = `uniqueID:mod:<modId>`，移除序 = 先注销订阅再 onDetach。作用域 = 落点即作用域（战斗克隆丢弃 / run 牌组持久，克隆与存档已深拷贝）。内建 `locked` = 焚毁烙印（**不拦出牌**，回合末仍在手则焚毁）。run 级挂载原语 = `runEffects.attachCardModifier/detachCardModifier`。
 - **注册表** — `registryFactory.js` 的 `createRegistry` 产出同构注册表：skills/abilities/enemies/allies/relics/effects/events/cardModifiers。内容是纯静态定义，由 `content/index.js` **显式 import 登记**（不用 `import.meta.glob`）。
 - **`sdk/driver.js`** — `BattleDriver`：headless 声明式战斗装配 + 链式出牌 + `runToEnd`，测试与批量验证用。
-- **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。
+- **`anim/sequencer.js`** — `AnimationSequencer`：演出指令队列，Shell 侧单协程消费，跨场景共享同一队列定序。默认严格串行（tags 自动含 `'all'`）；并行出口 = `tagAll:false` + 语义标签（死亡拍先例：`['death','unit:<uid>']` 旁挂，「不等某类前序」用「让该类退出 all 集合」表达，不引入负向集合语法；要等旁挂拍的指令把标签显式写进 `waitTags`，如终局闸门等 `'death'`）。
 - **`content/`** — 内容实现（技能/敌人/能力/遗物/效果/盟友/事件/诅咒卡）。技能设计意图见 `skills/SKILL_DESIGN_PRINCIPLES.md`。晋升链分离：**局外晋升**（`promotion.js`）走 `promotesTo`，**局内转化链**走 `battlePromotesTo`——两者互不可见。
 
 ### Bridge（`src/bridge/`）
@@ -174,10 +174,11 @@ src/
 - **series 是无等阶家族名**（如 `fireWhirl`/`blade`/`block`）：禁止带等阶后缀、禁止照搬链首卡 id。消费方 = `spells/index.js`、`spells/damageFx.js`、`chantSceneFx.js`、core 检索、奖励亲和、`cardArtCache` 回落层——改任一侧 series 值必须全量核对所有消费方。
 - 牌库顶 = 数组 index 0（FIFO：顶抽底还，**无弃牌堆、无重洗**；非消耗离手卡一律回牌库底 = 数组尾）；zone 不显式存储，`zoneOf/moveCard` 反查。
 - **pending 结算区惯例**：结算中的卡在 pending 区——发动卡在 `UseSkillInstruction` stage 1 离手，收尾落位；对发动卡的引用以 `sctx.self` + `handIndexAtPlay` 为准，**不扫 hand**。单节拍原子指令（弃/焚/移）不经 pending；未来跨节拍机制同惯例：先入 pending、末段 `zoneOf` 校验落位，落地指令对「目标不在预期区」静默落空。
-- **PRE/POST 反应纪律**：PRE 只做 payload 修饰或 veto，世界变更一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（每事件至多一次），其次 POST 追加。PRE 禁与被观察指令操作同一 zone/资源的变更指令。
+- **PRE/POST 反应纪律**：PRE 只做 payload 修饰或 veto，世界变更一律 POST 子节点提交；「额外一张」类计数语义优先改写被观察指令 payload（每事件至多一次），其次 POST 追加。PRE 禁与被观察指令操作同一 zone/资源的变更指令。**preview 干跑（卡面预估）会真实执行 PRE react**：其中任何直改世界状态的分支必须以 `ctx.isPreview` 短路（once 订阅干跑不注销，但监听器自身的副作用要自己挡）。
+- **焚毁唯一原语**：一切「到坟场」语义（消耗打出/消耗咏唱离手/锁定结算/敌方吞噬/`MoveCard` 落点 burnt）都展开到 `BurnCardInstruction` 子节点——焚毁 veto（斩）与焚毁订阅（业火）对全部来源同口径可见。威力提升同理唯一轨：`cardKit.gainPower` 提交 `GainCardPowerInstruction`，不裸改 `card.power`。
 - 伤害/面板修正三段式：`amount = 基础值 + getStat(面板)` → `payload = PRE 修饰流水线` → `execute`（减防御→护盾吸收→minHp 地板）。流水线顺序敏感，不做固定乘区。
 - 效果订阅由 `AddEffectInstruction` 首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；**咏唱冷却一律自终止起算**（`deactivateChant` 单点锚定，一切终止路径都锚定）；**咏唱的 POST 触发一旦产出效果必须 `reactFx(sctx, sctx.self, 'benefit', ...)` 打反馈**（触发无卡面动画 = 玩家看不见）；PRE 纯修饰型与自焚离场型不打；咏唱压力走手牌上限加权口径。
-- 卡牌计数器放 `skillRuntime`，不藏闭包；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
+- 计数器/一次性旗标不藏订阅闭包（重注册静默归零、dump 不可见）：卡级放 `skillRuntime`，战斗寿命的内容私有标量一律放 `battleState.scratch`（共享通道扁平语义键，私有键带内容 id 前缀如 `'ability:boxer:plays'`）；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
 - **设计稿术语口径**：裸写「效果X N」= 赋予自己；「赋予效果X / 目标获得X」= 赋予卡牌目标。术语不理解务必查权威文档：效果规则查 `battle_gameplay/skills/EFFECTS.md`、机制词查 `core/skills/namedTerms.js` 与体系设计稿——**禁止凭语感臆测**；NAMED 已定义的语义必须照办。**查不到定义的术语 = 不实现**，向用户上报待定义。
 - **卡面手牌数口径**：卡面写「手牌 / N 张手牌」一律按**裸张数**（激活咏唱算 1 张），不加权；只有明写「手牌压力」「超载」「咏唱容量」（named 术语）才走加权口径；「抽满手牌」类属容量语义（`drawToHandLimit`）。
 - **卡牌设计元逻辑（设计第一标准）**：① 交互紧密（每张新卡至少改变两张以上既有卡的价值，孤卡即缺陷）；② 机制统一（体系内共用少量机制动词参数化组合，不跨体系照搬）；③ 描述简单可归纳；④ 设计稿用**陈述式**（只写当前设计，论证归 commit）。

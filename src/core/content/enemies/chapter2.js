@@ -366,7 +366,7 @@ registerEnemy({
   id: 'ironGuard', name: '仪仗铁卫',
   createUnit: () => new Enemy({ defId: 'ironGuard', name: '仪仗铁卫', maxHp: 66 }),
   onBattleStart(ctx, unit) {
-    unit.shield += 15;
+    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 15 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'ram', stacks: 1 }));
   },

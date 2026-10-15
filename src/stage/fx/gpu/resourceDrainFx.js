@@ -1,8 +1,10 @@
 // 资源消耗汇聚特效——两层结构：
 //   · 主体能量 = projectile 光珠（uiScene mesh 面片，fx/spells 的 projectileShade
-//     语言）：每资源 3 珠，从资源图标弧线加速飞进卡面费用徽章。**节拍权威**：
-//     playCardCost 返回 { done } = 最后一珠真落地的 promise——卡牌起飞不靠
-//     DRAIN_FLIGHT_MS 估算，由 projectile 完结时刻发送（缺宿主的兜底路径才用常量）。
+//     语言）：每资源 3 珠，从资源图标弧线加速飞进卡面费用徽章。**fire-and-forget**
+//     ——不门控发动节拍（门控形态每次打出白付一段飞行，连打时串行叠加）；
+//     徽章目的地逐帧活追踪（badgeCenter 重算世界位），光珠追着飞行中的卡跑。
+//     playCardCost 返回的 { done } = 最后一珠真落地的 promise，调用方挂落地辉光
+//     之类的到达反馈用。
 //   · garnish = GPU 池碎星（uber burst + destination 汇聚）：资源「碎裂」的尘随，
 //     数量级低于主体（光珠承担主体读感）。
 // 非卡来源的消耗（维持费等）纯爆散（burst 不带目的锚）。
@@ -16,9 +18,6 @@ import { costBadgeUvs, COST_BADGE_RADIUS } from '../../richtext/cardFace.js';
 import { spellQuad, linearColor, warmSpellQuad } from '../spells/blocks.js';
 import { projectileShade } from '../spells/shaders.js';
 
-/** 兜底编排时长（无 uiScene/runScript 宿主时的固定等待；正常路径不读——
- *  节拍由光珠 done promise 真值发送）。 */
-export const DRAIN_FLIGHT_MS = 300;
 /** 每点费用的碎星数（garnish 档；主体读感由光珠承担）。 */
 const PARTICLES_PER_POINT = 10;
 const MAX_BURST = 60;

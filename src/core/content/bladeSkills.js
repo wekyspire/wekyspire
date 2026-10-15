@@ -21,6 +21,7 @@
 import { registerSkill, getSkillDefinition } from '../skills/registry.js';
 import { zoneOf } from '../state/battleState.js';
 import { canUseSkill, handNeighborsAtPlay, handIndexAtPlay } from '../skills/helpers.js';
+import { cooldownOf } from '../skills/cardModifiers.js';
 import BattleInstruction from '../kernel/BattleInstruction.js';
 import AwaitPlayerInputInstruction from '../instructions/input.js';
 import {
@@ -140,6 +141,9 @@ function transformSlashCard(sctx, card, parentInstr = null) {
   const nextId = def.battlePromotesTo;
   sctx.kernel.addSubscription({
     when: TransformCardInstruction, phase: 'post', window: 'once',
+    // owner 用 :advance 后缀——转化本身会对该卡 leaveBattle（拆裸 uniqueID/:chant/:mod:），
+    // 本订阅必须活过换绑才能在 POST 修正充能
+    owner: `${card.uniqueID}:advance`,
     filter: (instr) => instr.uniqueID === card.uniqueID && instr.result?.toDefId === nextId,
     react: () => {
       const nextDef = getSkillDefinition(card.defId);
@@ -690,8 +694,8 @@ forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 1 });
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术 B/A（3AP/2AP，消耗+短暂，咏唱6）：激活后 P5 触发斩进阶，P8 短暂回库
-// （激活态不豁免——filter 只看 zone，回库即熄灭）。每次激活恰一档，回库待再抽再付。
+// 含刃术 B/A（3AP/2AP，消耗+短暂，咏唱6）：激活后 P5 触发斩进阶。短暂只扫自由手牌——
+// 激活态驻手续唱不受扫掠，再打出解除时由消耗口径焚毁。
 const edgeBreathCard = ({ id, tier, ap, promotesTo = null }) => registerSkill({
   id, name: '含刃术', type: 'normal', tier, series: 'edgeBreath', subsystem: 'blade',
   keywords: ['exhaust', 'transient'],
@@ -778,7 +782,8 @@ whetCard('whetstoneA', '磨刀', 'A', 3);
 
 // 开刃（A，设计稿未写费用 → 0费，消耗）：所有刀法牌即刻冷却——手牌与牌库中
 // 的刀充能回满、计时清零（焚毁区的刀已离场不在范围）。deckCraft.test.js 的原型
-// 只作用于手牌，此处按设计稿字面「所有」扩到牌库。直改充能标量与原型同范式。
+// 只作用于手牌，此处按设计稿字面「所有」扩到牌库。冷却推进走 SkillCooldownInstruction
+// 定向展开（与磨刀同源，可被 PRE 修饰/veto），拍数按「清空当前计时 + 补齐缺段」估算。
 registerSkill({
   id: 'honeEdgeA', name: '开刃', type: 'normal', tier: 'A', series: 'honeEdge', subsystem: 'blade', deep: 'blade',
   keywords: ['exhaust'],
@@ -789,8 +794,12 @@ registerSkill({
     for (const zoneName of ['hand', 'deck']) {
       for (const card of sctx.battleState.zones[zoneName]) {
         if (!isBladeCard(card)) continue;
-        card.currentCooldown = 0;
-        card.remainingUses = getSkillDefinition(card.defId).charges?.max ?? card.remainingUses;
+        const max = getSkillDefinition(card.defId).charges?.max ?? Infinity;
+        if (card.remainingUses >= max) continue;
+        const ticks = card.currentCooldown + Math.max(0, max - card.remainingUses) * cooldownOf(card);
+        if (ticks > 0) {
+          sctx.kernel.submitInstruction(new SkillCooldownInstruction({ skill: card, delta: ticks }));
+        }
       }
     }
     return true;
@@ -800,7 +809,7 @@ registerSkill({
 });
 
 // 斩灭 A/S（全链 1AP，S 档不消耗）：下一次刀法牌伤害翻倍，不可叠加。
-// 挂起标记 bladeDoubleArmed（battleState）承载不可叠加；once 窗口 PRE 订阅把
+// 挂起标记 bladeDoubleArmed（battleState.scratch）承载不可叠加；once 窗口 PRE 订阅把
 // 「下一次玩家来源的、发生在刀法牌结算内」的伤害 payload 翻倍。刀法牌归属判定走
 // 内核栈回溯（DFS 路径上的 ActivateSkillInstruction 是否为刀法卡）。
 function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
@@ -812,8 +821,8 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      if (sctx.battleState.bladeDoubleArmed) return true;   // 不可叠加：已挂起则空转
-      sctx.battleState.bladeDoubleArmed = true;
+      if (sctx.battleState.scratch.bladeDoubleArmed) return true;   // 不可叠加：已挂起则空转
+      sctx.battleState.scratch.bladeDoubleArmed = true;
       sctx.kernel.addSubscription({
         when: DealDamageInstruction, phase: 'pre', window: 'once',
         filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
@@ -822,8 +831,11 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
             i => i instanceof ActivateSkillInstruction && isBladeCard(i.skill)),
         react: (instr, ctx) => {
           instr.setPayload('damage', instr.payload.damage * 2);
-          ctx.battleState.bladeDoubleArmed = false;
+          // 干跑探针（previewDamage）只取翻倍后的数字，不消耗挂起标记——
+          // preview 环境量纪律：直改世界状态的分支必须以 ctx.isPreview 短路
+          if (!ctx.isPreview) ctx.battleState.scratch.bladeDoubleArmed = false;
         },
+        owner: sctx.self.uniqueID,
       });
       return true;
     },

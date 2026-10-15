@@ -820,7 +820,8 @@ registerEnemy({
   id: 'divineShell', name: '神兵躯壳',
   createUnit: () => new Enemy({ defId: 'divineShell', name: '神兵躯壳', maxHp: 300 }),
   onBattleStart(ctx, unit) {
-    unit.shield += 200; // 灵脉护壳（如山存续）：只增不减，必须真打穿
+    // 灵脉护壳（如山存续）：只增不减，必须真打穿
+    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 200 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 3 }));
     const owner = `enemy:${unit.uniqueID}:divineShell`;
@@ -1066,7 +1067,8 @@ registerEnemy({
   id: 'intactDrone', name: '完好的无人战体',
   createUnit: () => new Enemy({ defId: 'intactDrone', name: '完好的无人战体', maxHp: 100 }),
   onBattleStart(ctx, unit) {
-    unit.shield += 150; // 灰烬装甲（完好无损）——如山存续，必须真打穿
+    // 灰烬装甲（完好无损）——如山存续，必须真打穿
+    ctx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 150 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'mountain', stacks: 1 }));
     ctx.kernel.submitInstruction(new AddEffectInstruction({ target: unit, effectId: 'pure', stacks: 4 }));
     const owner = `enemy:${unit.uniqueID}:drone`;

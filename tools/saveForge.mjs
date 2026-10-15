@@ -113,7 +113,7 @@ function mergeSpec(args) {
     extraRelics: [...args.relics],      // --relic：追加
     abilities: [...(spec.abilities ?? []), ...args.abilities],
     encounter: [...(spec.encounter ?? []), ...args.encounter],
-    relicsEquip: spec.relicsEquip !== false && f.relicsEquip !== 'false',
+    relicsEquip: spec.relicsEquip !== false && f.relicsEquip !== false && f.relicsEquip !== 'false',
   };
   return out;
 }

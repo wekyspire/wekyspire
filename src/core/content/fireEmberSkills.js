@@ -234,6 +234,7 @@ registerFireControlPair('fireControlScorchB', '控火术：灼', 'B', 2, 'enemy'
   use(sctx) {
     sctx.kernel.addSubscription({
       when: DealDamageInstruction, phase: 'post', window: 'once',
+      owner: sctx.self.uniqueID,
       filter: (instr) => instr.source === sctx.player
         && instr.type === 'major'
         && instr.target.side === 'enemy' && !instr.target.isDead(),

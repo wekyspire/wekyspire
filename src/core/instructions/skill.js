@@ -6,6 +6,7 @@ import {
 } from '../skills/helpers.js';
 import { keywordsOf, costOf, cooldownOf } from '../skills/cardModifiers.js';
 import { ConsumeManaInstruction, ConsumeActionPointsInstruction } from './resources.js';
+import { BurnCardInstruction } from './cards.js';
 import { refreshIntentions } from './aiAct.js';
 
 // 使用技能：四阶段。
@@ -101,7 +102,9 @@ export class UseSkillInstruction extends BattleInstruction {
             this.skill.isActivated = true;
             def.activated?.onEnable?.(sctx);
             for (const sub of def.activated?.subscriptions?.(sctx) ?? []) {
-              ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: this.skill.uniqueID });
+              // owner = 卡牌:chant（与常驻订阅的裸 uniqueID 分家——熄灭只拆激活订阅，
+              // 常驻订阅（短暂等）活到离场）
+              ctx.kernel.addSubscription({ window: 'battle', ...sub, owner: `${this.skill.uniqueID}:chant` });
             }
             // 激活演出描述符随节拍过线：有激活能力（activated 块）的卡点亮时播卡体演出——
             // 具体动画由卡自己决定（activated.anim），缺省放缩脉冲（数值缺省由表现层补全）
@@ -111,9 +114,11 @@ export class UseSkillInstruction extends BattleInstruction {
             });
           }
         } else if (keywordsOf(this.skill).includes('exhaust')) {
-          // 消耗卡（含咏唱解除）：→ 焚毁区（词条读有效视图——modifier 可挂/摘消耗）
-          moveCard(ctx.battleState, this.skill.uniqueID, 'burnt');
-          ctx.presenter?.cardBurnt?.({ card: this.skill });
+          // 消耗卡（含咏唱解除）：焚毁走统一原语子节点展开（焚毁只此一个原语——
+          // 斩焚毁 veto / 业火等 Burn 订阅 / 焚毁计数对出牌路径同口径可见）。
+          // 词条读有效视图（modifier 可挂/摘消耗）。
+          ctx.kernel.submitInstruction(
+            new BurnCardInstruction({ uniqueID: this.skill.uniqueID }), this);
         } else {
           // FIFO 循环：非消耗卡打出/解除咏唱后一律回牌库底（无弃牌堆，压力随离手释放）
           moveCard(ctx.battleState, this.skill.uniqueID, 'deck');

@@ -104,8 +104,8 @@ export class PreBattleInstruction extends BattleInstruction {
         }
       }
       // 敌人开场效果（Boss 设计需要「开场自带炎魔/暴怒/格挡」之类状态）。
-      // def.onBattleStart(ctx, unit)：订阅型效果必须经 AddEffectInstruction 入列（走正常
-      // 挂载管线），只有 shield 这类标量才适合直改字段（防御已效果化，同样走 AddEffect）。
+      // def.onBattleStart(ctx, unit)：此时内核活着（本指令执行中），一切世界变更
+      // 一律提交指令（AddEffect / GainShield……），PRE 修饰与播报同管线——不直改字段。
       for (const unit of aliveEnemies(battleState)) {
         getEnemyDefinition(unit.defId)?.onBattleStart?.(ctx, unit);
       }

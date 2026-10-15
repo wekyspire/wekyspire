@@ -46,15 +46,8 @@ export function canUseSkill(ctx, self) {
   // 费用取值统一走有效视图（def ⊕ modifier patch ⊕ legacy 通道末端合成，
   // 见 cardModifiers.costOf——X 费种对 modifier 免疫、覆写压制增量等口径都在那里）
   const { mana: manaCost, actionPoint: apCost } = costOf(self, makeSkillCtx(ctx, self));
-  // 免费窗口豁免：battleState.freePlays > 0 时费用检查放行——逍遥游「下 N 张打出的牌
-  // 无开销」挂在出牌侧 PRE 置 0，但若玩家资源低于牌面费用，canUse 会在结算前就拒绝
-  // 出牌，免费窗口对贵牌失效。计数器放 battleState（turnDrawBonus 同通道先例，
-  // 可序列化），扣减由出牌侧 PRE 按牌计数（同一张卡的 AP/蓝两次消耗只扣一份）。
-  // 万变拳的 PRE-only 旧口径不同步接入（只免 AP 且已知局限：3AP 卡仍需 3AP 在手
-  // 才能启动豁免——保留现状，不与全免通道混流）。
-  const freePlay = (ctx.battleState?.freePlays ?? 0) > 0;
-  const manaOk = free || freePlay || manaCost === 'X' || ctx.player.mana >= manaCost;
-  const apOk = free || freePlay || apCost === 'X' || ctx.player.actionPoints >= apCost;
+  const manaOk = free || manaCost === 'X' || ctx.player.mana >= manaCost;
+  const apOk = free || apCost === 'X' || ctx.player.actionPoints >= apCost;
   if (manaOk && apOk) return true;
   const budget = { manaOk, apOk };
   for (const id of ctx.player.abilities ?? []) {
@@ -115,7 +108,7 @@ export function handWeightOf(card) {
   return card.isActivated ? (getSkillDefinition(card.defId).chantWeight ?? 1) : 1;
 }
 
-// 共鸣石折扣（battleState.chantWeightDiscount，遗物挂载、随战斗消失）。
+// 共鸣石折扣（battleState.scratch.chantWeightDiscount，遗物挂载、随战斗消失）。
 // 口径：折扣只作用于**权重 > 1** 的激活咏唱——每点 -1，且下限为 1；权重 1 的咏唱
 // 纹丝不动（绝不砍到 0）；权重 0（牢大 A / 混元 A 的显式零容量压力）折扣同样
 // 不作用、也不会被钳回 1。
@@ -124,7 +117,7 @@ function chantWeightOf(card, battleState) {
   const w = handWeightOf(card);
   if (!card.isActivated) return w;
   if (w <= 0) return 0;
-  const discount = battleState?.chantWeightDiscount ?? 0;
+  const discount = battleState?.scratch?.chantWeightDiscount ?? 0;
   return discount > 0 ? Math.max(1, w - discount) : w;
 }
 
@@ -207,7 +200,7 @@ export function pickOverflowVictims(hand, ctx) {
 // 卡在手牌中调用（结算中的卡已离手，先放回再算）。
 export function chantActivationLegal(ctx, self, def = getSkillDefinition(self.defId)) {
   const base = def.chantWeight ?? 1;
-  const discount = ctx.battleState?.chantWeightDiscount ?? 0;
+  const discount = ctx.battleState?.scratch?.chantWeightDiscount ?? 0;
   // 折扣地板与 chantWeightOf 同口径：只削权重 >1（下限 1，权重 1 不砍到 0）；
   // 权重 0 = 显式零容量压力，折扣不作用。
   const weight = base <= 0 ? 0 : Math.max(1, base - discount);
@@ -221,7 +214,9 @@ export function freeChantToggle(def, self) {
 }
 
 /**
- * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 冷却锚定 → 按 owner 注销订阅 → 播报。
+ * 熄灭咏唱（唯一出口）：onDisable → 摘旗 → 冷却锚定 → 注销激活订阅 → 播报。
+ * 激活订阅 owner = `${uniqueID}:chant`——只拆激活这一组，常驻订阅（owner = 裸
+ * uniqueID，如短暂回库）活到离场，不被熄灭误拆。
  * 调用方：打出已激活咏唱（免费解除，随后按卡牌特性离场）、离手不变量
  * （弃/焚/移出/转化——任何离开手牌的路径先经此，卡还在手时调用）、沉默等远程熄灭。
  * 咏唱冷却自**终止**起算（激活/持续激活不计时）：一切终止路径统一在此锚定，
@@ -236,7 +231,7 @@ export function deactivateChant(ctx, skill, reason, target = null) {
   skill.isActivated = false;
   const cd = cooldownOf(skill); // 冷却时长走有效视图（modifier 可 patch）
   if (cd > 0) skill.currentCooldown = cd;
-  ctx.kernel.removeSubscriptionsByOwner(skill.uniqueID);
+  ctx.kernel.removeSubscriptionsByOwner(`${skill.uniqueID}:chant`);
   ctx.presenter?.chantToggled?.({ skill, on: false, reason });
   return true;
 }
@@ -276,10 +271,11 @@ export function enterBattle(ctx, self) {
   return self;
 }
 
-// 离开战斗（或转化时的换绑前奏）：注销该卡名下全部订阅（常驻 + activated 同 owner
-// + 每条 modifier 的 :mod: 订阅——前缀整体拆除）。
+// 离开战斗（或转化时的换绑前奏）：注销该卡名下全部订阅——常驻（owner = 裸 uniqueID）
+// + 激活咏唱（`${uniqueID}:chant`）+ 每条 modifier（`${uniqueID}:mod:` 前缀整体拆除）。
 export function leaveBattle(ctx, uniqueID) {
   ctx.kernel.removeSubscriptionsByOwner(uniqueID);
+  ctx.kernel.removeSubscriptionsByOwner(`${uniqueID}:chant`);
   ctx.kernel.removeSubscriptionsByOwnerPrefix(`${uniqueID}:mod:`);
 }
 
