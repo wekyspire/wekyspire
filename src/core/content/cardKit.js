@@ -8,7 +8,7 @@
 // requestHandSelection/requestDeckSelection 并 return false，段 N+1 读 selected(...)。
 // 参考实现：test/asyncInput.test.js、test/deckCraft.test.js。
 
-import { zoneOf, aliveEnemies } from '../state/battleState.js';
+import { aliveEnemies } from '../state/battleState.js';
 import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { handIndexAtPlay, handLimitOf, effectiveHandCount } from '../skills/helpers.js';
 import { DealDamageInstruction, GainShieldInstruction } from '../instructions/combat.js';
@@ -188,14 +188,18 @@ export function breakAllBlock(sctx, target = sctx.player) {
   return stacks;
 }
 
-// 【短暂】：回合结束时若仍滞留手牌则回牌库（打出走 FIFO 回库底，抽到不打出也不许
-// "攥着过夜"）。磨刀系与遗物生成的〈压制射击〉用这一形态。
+// 【短暂】：回合结束时若仍是自由手牌则回牌库（打出走 FIFO 回库底，抽到不打出也不许
+// "攥着过夜"）。只对自由手牌有效——激活中的咏唱不扫（占用形态豁免，退出激活后由
+// 消耗口径接管焚毁）。磨刀系与遗物生成的〈压制射击〉用这一形态。
 // ⚠ 短暂只有「在手」这一种形态——焚毁即彻底离场，无例外。
 export function leaveHandAtTurnEnd(sctx) {
   const uniqueID = sctx.self.uniqueID;
   return {
     when: PlayerTurnEndInstruction, phase: 'post',
-    filter: (instr, ctx) => zoneOf(ctx.battleState, uniqueID) === 'hand',
+    filter: (instr, ctx) => {
+      const card = ctx.battleState.zones.hand.find(c => c.uniqueID === uniqueID);
+      return !!card && !card.isActivated;
+    },
     react: (instr, ctx) => ctx.kernel.submitInstruction(
       new MoveCardInstruction({ uniqueID, toZone: 'deck' }), instr),
   };

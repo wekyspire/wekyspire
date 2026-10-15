@@ -690,8 +690,8 @@ forgingBladeCard({ id: 'forgingBladeA', tier: 'A', weight: 0, bonus: 1 });
 
 // ==== 开刃系列（斩进阶）========================================================
 
-// 含刃术 B/A（3AP/2AP，消耗+短暂，咏唱6）：激活后 P5 触发斩进阶，P8 短暂回库
-// （激活态不豁免——filter 只看 zone，回库即熄灭）。每次激活恰一档，回库待再抽再付。
+// 含刃术 B/A（3AP/2AP，消耗+短暂，咏唱6）：激活后 P5 触发斩进阶。短暂只扫自由手牌——
+// 激活态驻手续唱不受扫掠，再打出解除时由消耗口径焚毁。
 const edgeBreathCard = ({ id, tier, ap, promotesTo = null }) => registerSkill({
   id, name: '含刃术', type: 'normal', tier, series: 'edgeBreath', subsystem: 'blade',
   keywords: ['exhaust', 'transient'],
