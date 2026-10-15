@@ -178,7 +178,7 @@ src/
 - **焚毁唯一原语**：一切「到坟场」语义（消耗打出/消耗咏唱离手/锁定结算/敌方吞噬/`MoveCard` 落点 burnt）都展开到 `BurnCardInstruction` 子节点——焚毁 veto（斩）与焚毁订阅（业火）对全部来源同口径可见。威力提升同理唯一轨：`cardKit.gainPower` 提交 `GainCardPowerInstruction`，不裸改 `card.power`。
 - 伤害/面板修正三段式：`amount = 基础值 + getStat(面板)` → `payload = PRE 修饰流水线` → `execute`（减防御→护盾吸收→minHp 地板）。流水线顺序敏感，不做固定乘区。
 - 效果订阅由 `AddEffectInstruction` 首次获得时挂载（owner=`effect:{unit}:{effect}`），层数扣尽注销；技能订阅战斗开始注册一次，zone 限定写 filter；**咏唱冷却一律自终止起算**（`deactivateChant` 单点锚定，一切终止路径都锚定）；**咏唱的 POST 触发一旦产出效果必须 `reactFx(sctx, sctx.self, 'benefit', ...)` 打反馈**（触发无卡面动画 = 玩家看不见）；PRE 纯修饰型与自焚离场型不打；咏唱压力走手牌上限加权口径。
-- 卡牌计数器放 `skillRuntime`，不藏闭包；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
+- 计数器/一次性旗标不藏订阅闭包（重注册静默归零、dump 不可见）：卡级放 `skillRuntime`，战斗寿命的内容私有标量一律放 `battleState.scratch`（共享通道扁平语义键，私有键带内容 id 前缀如 `'ability:boxer:plays'`）；技能算伤害与 `describe` 显式读 `getStat`（同源不漂移）。
 - **设计稿术语口径**：裸写「效果X N」= 赋予自己；「赋予效果X / 目标获得X」= 赋予卡牌目标。术语不理解务必查权威文档：效果规则查 `battle_gameplay/skills/EFFECTS.md`、机制词查 `core/skills/namedTerms.js` 与体系设计稿——**禁止凭语感臆测**；NAMED 已定义的语义必须照办。**查不到定义的术语 = 不实现**，向用户上报待定义。
 - **卡面手牌数口径**：卡面写「手牌 / N 张手牌」一律按**裸张数**（激活咏唱算 1 张），不加权；只有明写「手牌压力」「超载」「咏唱容量」（named 术语）才走加权口径；「抽满手牌」类属容量语义（`drawToHandLimit`）。
 - **卡牌设计元逻辑（设计第一标准）**：① 交互紧密（每张新卡至少改变两张以上既有卡的价值，孤卡即缺陷）；② 机制统一（体系内共用少量机制动词参数化组合，不跨体系照搬）；③ 描述简单可归纳；④ 设计稿用**陈述式**（只写当前设计，论证归 commit）。

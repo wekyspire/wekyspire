@@ -358,19 +358,17 @@ registerRelic({
   id: 'adrenalineSyringe', name: '肾上腺素注射器', rarity: 'C', cost: 1,
   description: '每场战斗中，第一次单次造成超过 15 点伤害后，抽 3 牌。',
   flavor: '其中装填的的的确确是肾上腺素，不要怀疑',
-  subscriptions: () => {
-    let fired = false; // 每场战斗一次（subscriptions 工厂每场战斗调用一次）
-    return [{
-      when: DealDamageInstruction,
-      phase: 'post',
-      filter: (instr, c) => !fired && instr.source === c.player
-        && instr.type === 'major' && (instr.result?.dealt ?? 0) > 15,
-      react: (instr, c) => {
-        fired = true;
-        c.kernel.submitInstruction(new DrawCardsInstruction({ count: 3, reason: 'relic' }), instr);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: DealDamageInstruction,
+    phase: 'post',
+    filter: (instr, c) => !c.battleState.scratch['relic:adrenalineSyringe:fired']
+      && instr.source === c.player
+      && instr.type === 'major' && (instr.result?.dealt ?? 0) > 15,
+    react: (instr, c) => {
+      c.battleState.scratch['relic:adrenalineSyringe:fired'] = true;
+      c.kernel.submitInstruction(new DrawCardsInstruction({ count: 3, reason: 'relic' }), instr);
+    },
+  }],
 });
 
 registerRelic({
@@ -379,19 +377,17 @@ registerRelic({
   // 铭刻（flavor：tooltip 效果描述后另起一段展示）——叠炎体系
   // 「与燃烧博弈」的设计哲学注脚：收益与风险并存
   flavor: '不要玩火，不要玩火，玩火必自焚',
-  subscriptions: () => {
-    let plays = 0;
-    return [{
-      when: UseSkillInstruction,
-      phase: 'post',
-      filter: (instr) => instr.skill?.defId != null,
-      react: (instr, c) => {
-        plays += 1;
-        if (plays !== 3) return;
-        c.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'relic' }), instr);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: UseSkillInstruction,
+    phase: 'post',
+    filter: (instr) => instr.skill?.defId != null,
+    react: (instr, c) => {
+      const s = c.battleState.scratch;
+      const plays = s['relic:masterInsight:plays'] = (s['relic:masterInsight:plays'] ?? 0) + 1;
+      if (plays !== 3) return;
+      c.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'relic' }), instr);
+    },
+  }],
 });
 
 // S 级「诸神」恩赐：仅事件获得（acquisition: ['event']，故不进抽取/商店池）
@@ -446,33 +442,31 @@ registerRelic({
   id: 'ceciliaBlessing', name: '塞西莉亚之恩赐', rarity: 'S', cost: 1, acquisition: ['event'],
   description: '每场战斗一次：你将死亡时，改为保留 1 点生命并获得奇迹 1（自己回合结束时奇迹 -1，归零即死亡）。',
   flavor: '生命之倔强',
-  subscriptions: () => {
-    let used = false; // 每场战斗重置：subscriptions 在战前装配时调用一次
-    return [{
-      when: ApplyDamageInstruction,
-      phase: 'pre',
-      // 致命判定写在 react 而不是 filter：内核 _collect 先对所有订阅跑 filter、再按
-      // priority 排序跑 react，故 filter 里读到的是**所有伤害修饰之前**的 payload。
-      // priority -100 让本 react 排到所有修饰 react（priority 0）之后。
-      priority: -100,
-      filter: (instr, c) => !used
-        && instr.target === c.player
-        && !instr.tags?.includes('miracle')
-        && c.player.getEffectStacks('miracle') <= 0,
-      react: (instr, c) => {
-        if (!wouldBeLethal(instr, c.player)) return;
-        used = true;
-        const p = c.player;
-        c.kernel.veto(instr, 'cecilia', [
-          new DealDamageInstruction({
-            source: instr.source, target: p,
-            amount: Math.max(p.hp - 1, 0) + p.shield, fixed: true, tags: ['ceciliaGuard'], type: 'minor',
-          }),
-          new AddEffectInstruction({ target: p, effectId: 'miracle', stacks: 1 }),
-        ]);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: ApplyDamageInstruction,
+    phase: 'pre',
+    // 致命判定写在 react 而不是 filter：内核 _collect 先对所有订阅跑 filter、再按
+    // priority 排序跑 react，故 filter 里读到的是**所有伤害修饰之前**的 payload。
+    // priority -100 让本 react 排到所有修饰 react（priority 0）之后。
+    priority: -100,
+    filter: (instr, c) => !c.battleState.scratch['relic:ceciliaBlessing:used']
+      && instr.target === c.player
+      && !instr.tags?.includes('miracle')
+      && c.player.getEffectStacks('miracle') <= 0,
+    react: (instr, c) => {
+      if (!wouldBeLethal(instr, c.player)) return;
+      // preview 环境量纪律：veto 照常（预览须看到改判结果），一次性旗标不消耗
+      if (!c.isPreview) c.battleState.scratch['relic:ceciliaBlessing:used'] = true;
+      const p = c.player;
+      c.kernel.veto(instr, 'cecilia', [
+        new DealDamageInstruction({
+          source: instr.source, target: p,
+          amount: Math.max(p.hp - 1, 0) + p.shield, fixed: true, tags: ['ceciliaGuard'], type: 'minor',
+        }),
+        new AddEffectInstruction({ target: p, effectId: 'miracle', stacks: 1 }),
+      ]);
+    },
+  }],
 });
 
 // ====================================================================
@@ -538,27 +532,25 @@ registerRelic({
   id: 'frostBrooch', name: '霜雪胸针', rarity: 'S', cost: 1, acquisition: ['gurpas'], // SHOP.md §二：仅在古尔帕斯的店出售
   description: '每场战斗一次：当你的生命降至一半以下时，获得力量 3，防御 3 与格挡 3。',
   flavor: '特殊的胸针。到底有多特殊？',
-  subscriptions: () => {
-    let used = false; // 每场战斗一次（工厂每场调用一次）
-    return [{
-      when: ApplyDamageInstruction,
-      phase: 'post',
-      filter: (instr, c) => !used && instr.target === c.player && c.player.hp > 0
-        && c.player.hp * 2 <= c.player.maxHp,
-      react: (instr, c) => {
-        used = true;
-        c.kernel.submitInstruction(
-          new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
-        // 防御 3 = 防御效果层（battleRoot 起防御已效果化：战中增减一律 AddEffect，
-        // 直改/applyBattleModifier 写 p.defense 字段无人读 = 死写入）
-        c.kernel.submitInstruction(
-          new AddEffectInstruction({ target: c.player, effectId: 'defense', stacks: 3 }), instr);
-        // 格挡 3 = block 效果层（非护盾池）
-        c.kernel.submitInstruction(
-          new AddEffectInstruction({ target: c.player, effectId: 'block', stacks: 3 }), instr);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: ApplyDamageInstruction,
+    phase: 'post',
+    filter: (instr, c) => !c.battleState.scratch['relic:frostBrooch:used']
+      && instr.target === c.player && c.player.hp > 0
+      && c.player.hp * 2 <= c.player.maxHp,
+    react: (instr, c) => {
+      c.battleState.scratch['relic:frostBrooch:used'] = true;
+      c.kernel.submitInstruction(
+        new AddEffectInstruction({ target: c.player, effectId: 'strength', stacks: 3 }), instr);
+      // 防御 3 = 防御效果层（battleRoot 起防御已效果化：战中增减一律 AddEffect，
+      // 直改/applyBattleModifier 写 p.defense 字段无人读 = 死写入）
+      c.kernel.submitInstruction(
+        new AddEffectInstruction({ target: c.player, effectId: 'defense', stacks: 3 }), instr);
+      // 格挡 3 = block 效果层（非护盾池）
+      c.kernel.submitInstruction(
+        new AddEffectInstruction({ target: c.player, effectId: 'block', stacks: 3 }), instr);
+    },
+  }],
 });
 
 registerRelic({
@@ -796,18 +788,15 @@ registerRelic({
   id: 'scavengerPouch', name: '拾荒者的口袋', rarity: 'B', cost: 1,
   description: '每回合你第一次弃牌时，抽 1 张牌。',
   flavor: '破铜烂铁也是钱',
-  subscriptions: () => {
-    let lastTurn = -1;
-    return [{
-      when: DumpCardsInstruction,
-      phase: 'post',
-      filter: (instr, c) => c.battleState.turn.count !== lastTurn,
-      react: (instr, c) => {
-        lastTurn = c.battleState.turn.count;
-        c.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'scavengerPouch' }), instr);
-      },
-    }];
-  },
+  subscriptions: () => [{
+    when: DumpCardsInstruction,
+    phase: 'post',
+    filter: (instr, c) => c.battleState.turn.count !== (c.battleState.scratch['relic:scavengerPouch:lastTurn'] ?? -1),
+    react: (instr, c) => {
+      c.battleState.scratch['relic:scavengerPouch:lastTurn'] = c.battleState.turn.count;
+      c.kernel.submitInstruction(new DrawCardsInstruction({ count: 1, reason: 'scavengerPouch' }), instr);
+    },
+  }],
 });
 
 // 架势镜（C·1槽）——完美轴：你的完美卡伤害 +10。
@@ -875,7 +864,8 @@ registerRelic({
   description: '你权重高于1的激活的咏唱卡权重 -1。',
   flavor: '万籁同频',
   onBattleStart(ctx) {
-    ctx.battleState.chantWeightDiscount = (ctx.battleState.chantWeightDiscount ?? 0) + 1;
+    const s = ctx.battleState.scratch;
+    s.chantWeightDiscount = (s.chantWeightDiscount ?? 0) + 1;
   },
 });
 
@@ -891,7 +881,8 @@ registerRelic({
     phase: 'post',
     filter: (instr, c) => c.battleState.zones.hand.filter(x => !x.isActivated).length <= 2,
     react: (instr, c) => {
-      c.battleState.turnDrawBonus = (c.battleState.turnDrawBonus ?? 0) + 1;
+      const s = c.battleState.scratch;
+      s.turnDrawBonus = (s.turnDrawBonus ?? 0) + 1;
     },
   }],
 });

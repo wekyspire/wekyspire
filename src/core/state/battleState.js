@@ -35,8 +35,13 @@ export function createBattleState({ enemies = [], allies = [], seed = 1 } = {}) 
     debuffs: { blind: false, drawPenaltyTurns: 0, noManaRegenTurns: 0, deathAtTurnEnd: 0, dotFromTurn: null },
     swapCount: 0,       // 本场换牌次数（换牌费用 = swapBaseCost + swapCount）
     swapCostCap: null,  // 换牌费用上限（保留给未来的能力/效果设置；null = 无上限）
-    bladeDoubleArmed: false, // 斩灭的「下一次刀法牌伤害翻倍」挂起标记（不可叠加的载体）
-    selfImmolateDouble: false, // 自焚：本场战斗中玩火卡牌效果翻倍
+    // 战斗寿命的内容私有标量收纳位（计数器/一次性旗标/回合标记/内容↔core 共享通道），
+    // 随 battleState 一起消失，不需要任何战后回滚。共享通道用扁平语义键
+    // （skipEnemyTurns/turnDrawBonus/chantWeightDiscount/bladeDoubleArmed/selfImmolateDouble），
+    // 内容私有键带内容 id 前缀防碰撞（'ability:boxer:plays'）。
+    // 纪律：这类状态一律放这里——不藏订阅闭包（重注册静默归零、dump 不可见），
+    // 不在顶层惰性裸写字段。
+    scratch: {},
     history: freshHistory(),
     rng: createRng(seed),
   };

@@ -107,8 +107,8 @@ export class PlayerTurnInstruction extends BattleInstruction {
           const room = handLimitOf(ctx) - effectiveHandCount(ctx);
           // turnDrawBonus：遗物/效果给的「下回合抽牌 +N」（囤囤鼠之宝藏：尾手自由牌 ≤2 时记 1），
           // 加在 room 上 = 可以顶过容量抽（占用超载空间、当回合有效），随取用清零
-          const bonus = ctx.battleState.turnDrawBonus ?? 0;
-          ctx.battleState.turnDrawBonus = 0;
+          const bonus = ctx.battleState.scratch.turnDrawBonus ?? 0;
+          ctx.battleState.scratch.turnDrawBonus = 0;
           const count = Math.max(0, Math.min(ctx.battleState.config.drawPerTurn, room + bonus) - penalty);
           // 回合抽牌指令**无条件提交**（count 0 = 空抽）：「回合抽牌之后再抽一次」类
           // 效果（润滑油：第二回合开始时抽 4）挂本指令 POST 即得稳定时点，不必新增
@@ -207,8 +207,8 @@ export class TurnLoopInstruction extends BattleInstruction {
     // 额外回合（〈盗取时间〉）：本拍轮到敌方回合时消费跳过标记，不提交任何回合指令，
     // 下一次执行落在偶数位 = 立刻开始玩家的下一个回合（敌方回合整段不发生，
     // 含其回合开始效果 tick 与意图刷新）
-    if (this._stage % 2 === 1 && (ctx.battleState.skipEnemyTurns ?? 0) > 0) {
-      ctx.battleState.skipEnemyTurns -= 1;
+    if (this._stage % 2 === 1 && (ctx.battleState.scratch.skipEnemyTurns ?? 0) > 0) {
+      ctx.battleState.scratch.skipEnemyTurns -= 1;
       return false;
     }
     if (this._stage % 2 === 0) {

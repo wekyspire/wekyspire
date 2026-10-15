@@ -809,7 +809,7 @@ registerSkill({
 });
 
 // 斩灭 A/S（全链 1AP，S 档不消耗）：下一次刀法牌伤害翻倍，不可叠加。
-// 挂起标记 bladeDoubleArmed（battleState）承载不可叠加；once 窗口 PRE 订阅把
+// 挂起标记 bladeDoubleArmed（battleState.scratch）承载不可叠加；once 窗口 PRE 订阅把
 // 「下一次玩家来源的、发生在刀法牌结算内」的伤害 payload 翻倍。刀法牌归属判定走
 // 内核栈回溯（DFS 路径上的 ActivateSkillInstruction 是否为刀法卡）。
 function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
@@ -821,8 +821,8 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      if (sctx.battleState.bladeDoubleArmed) return true;   // 不可叠加：已挂起则空转
-      sctx.battleState.bladeDoubleArmed = true;
+      if (sctx.battleState.scratch.bladeDoubleArmed) return true;   // 不可叠加：已挂起则空转
+      sctx.battleState.scratch.bladeDoubleArmed = true;
       sctx.kernel.addSubscription({
         when: DealDamageInstruction, phase: 'pre', window: 'once',
         filter: (instr, ctx) => instr.source === ctx.player && !instr.fixed
@@ -833,7 +833,7 @@ function annihilatingEdgeCard({ id, tier, ap, exhaust, promotesTo = null }) {
           instr.setPayload('damage', instr.payload.damage * 2);
           // 干跑探针（previewDamage）只取翻倍后的数字，不消耗挂起标记——
           // preview 环境量纪律：直改世界状态的分支必须以 ctx.isPreview 短路
-          if (!ctx.isPreview) ctx.battleState.bladeDoubleArmed = false;
+          if (!ctx.isPreview) ctx.battleState.scratch.bladeDoubleArmed = false;
         },
         owner: sctx.self.uniqueID,
       });

@@ -22,7 +22,7 @@ import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCar
 
 // ==== 自焚系列（§2.1：自伤换高伤）==============================================
 // 玩火 C/B/A：0 费攻击；伤害 11/14/17，自燃烧全阶统一 4。
-// 「效果翻倍」buff（自焚卡）：battleState.selfImmolateDouble 置位后伤害与燃烧都 ×2。
+// 「效果翻倍」buff（自焚卡）：battleState.scratch.selfImmolateDouble 置位后伤害与燃烧都 ×2。
 function selfImmolate({ id, name, tier, base, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'selfImmolate', subsystem: 'blaze',
@@ -31,7 +31,7 @@ function selfImmolate({ id, name, tier, base, promotesTo = null }) {
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {
-      const mult = sctx.battleState.selfImmolateDouble ? 2 : 1;
+      const mult = sctx.battleState.scratch.selfImmolateDouble ? 2 : 1;
       attackDamage(sctx, base * mult);
       addEffect(sctx, 'burn', 4 * mult); // 默认 target = sctx.player：代价给自己
       reactFx(sctx, sctx.self, 'backfire');
@@ -39,7 +39,7 @@ function selfImmolate({ id, name, tier, base, promotesTo = null }) {
     },
     describe: () => `${base}伤害，/effect{燃烧}4`,
     battleDescribe: (sctx) => {
-      const mult = sctx.battleState.selfImmolateDouble ? 2 : 1;
+      const mult = sctx.battleState.scratch.selfImmolateDouble ? 2 : 1;
       return `${resolvedDamageText(sctx, base * mult)}，/effect{燃烧}${4 * mult}`;
     },
   });
@@ -59,11 +59,11 @@ function selfImmolateRite({ id, tier, exhaust, promotesTo = null }) {
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      sctx.battleState.selfImmolateDouble = true;
+      sctx.battleState.scratch.selfImmolateDouble = true;
       return true;
     },
     describe: () => '本场战斗中，你所有玩火卡牌的效果翻倍',
-    battleDescribe: (sctx) => sctx.battleState.selfImmolateDouble
+    battleDescribe: (sctx) => sctx.battleState.scratch.selfImmolateDouble
       ? '玩火卡牌效果已翻倍' : '本场战斗中，你所有玩火卡牌的效果翻倍',
   });
 }
