@@ -79,9 +79,15 @@ export const cardBeats = {
     const s = src._baseScale ?? 1;
     const mouth = { x: src.position.x, y: src.position.y + 3.1 * s, z: src.position.z ?? 0 };
     const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
-    const crumbs = (n) => this.particles.spawn(mouth.x, mouth.y, {
-      count: n, color: 0xd8c8a8, speed: 9, ttl: 0.5, gravity: -26, size: 0.8, z: mouth.z,
-    });
+    const crumbs = (n) => {
+      // 双层：迸射纸屑 + 慢速悬屑（咬碎的卡面残片）
+      this.particles.spawn(mouth.x, mouth.y, {
+        count: n, color: 0xd8c8a8, speed: 9, ttl: 0.5, gravity: -26, size: 0.8, z: mouth.z,
+      });
+      this.particles.spawn(mouth.x, mouth.y, {
+        count: Math.round(n * 0.5), color: 0xb8a880, speed: 3.5, ttl: 1.1, gravity: -8, size: 1.1, z: mouth.z,
+      });
+    };
     // 咬合：甲虫前扑一啄（姿态通道，同步差分不踩）+ 卡面骤缩 + 碎屑
     const bite = (k) => {
       src.setPose({ squash: 0.9, widen: 1.1, lean: 0.10 });

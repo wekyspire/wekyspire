@@ -5,9 +5,9 @@
 // 姿态纪律：体态一律走 _pose 通道（setPose，出口归中 + onKill 同口径归中）——
 // 后续突进（_damageHit 的突进编排）从干净姿态起跳；单位锚点口径与既有敌方
 // 特效同源（胸口 3.4×s / 头 4.9×s / 脚 0.6×s，s = _baseScale）。
-import * as THREE from 'three';
-import { arcProjectile } from '../../spells/blocks.js';
-import { playCastConverge, ringTexture } from '../../gainFx.js';
+import { arcProjectile, lampPulse } from '../../spells/blocks.js';
+import { playCastConverge } from '../../gainFx.js';
+import { wailRing, fuseRing, chargeOrb, dustLanding } from './fxPieces.js';
 
 const sOf = (u) => u._baseScale ?? 1;
 /** 世界锚点：胸口（k=1）——投射物起点/聚能落点。 */
@@ -49,9 +49,7 @@ function settlePose(ctx, unit, ms = 170) {
 export function strikeWindup(style, opts = {}) {
   const { color = 0xc8b89a, heavy = false } = opts;
   return async ({ ctx, deps, unit, player }) => {
-    const s = sOf(unit);
     const k = heavy ? 1.35 : 1.0; // 重击全身幅度放大
-    const feet = feetOf(unit);
     if (style === 'blob') {
       await ctx.custom(unit.uniqueID, {
         durationMs: 150, ease: 'power2.in',
@@ -83,7 +81,8 @@ export function strikeWindup(style, opts = {}) {
         }),
       });
       if (heavy) {
-        deps.particles?.spawn?.(feet.x, feet.y, { color, count: 8, speed: 7, size: 1.4, ttl: 0.7, gravity: -7, z: feet.z });
+        // 重击蓄力：落地双层尘 + 暖灯（大动作的地面存在感）
+        dustLanding(ctx, deps, { at: feetOf(unit), color, count: 14, lampIntensity: 380 });
       }
       await settlePose(ctx, unit, 150);
       return;
@@ -108,7 +107,7 @@ export function strikeWindup(style, opts = {}) {
       });
       const ch = chestOf(unit);
       for (const dir of [-1, 1]) {
-        deps.particles?.spawn?.(ch.x + dir * 2.2 * s, ch.y + 0.8 * s, {
+        deps.particles?.spawn?.(ch.x + dir * 2.2 * sOf(unit), ch.y + 0.8 * sOf(unit), {
           color, count: 4, speed: 5, size: 0.6, ttl: 0.35, gravity: -3, z: ch.z,
         });
       }
@@ -126,7 +125,7 @@ export function strikeWindup(style, opts = {}) {
       onUpdate: (t) => unit.setPose({ lean: leanBack + (-leanBack * 1.4) * t, squash: 1.05 - 0.1 * t }),
     });
     const hd = headOf(unit);
-    deps.particles?.spawn?.(hd.x, hd.y - 1.5 * s, { color, count: 5, speed: 12, size: 0.6, ttl: 0.3, gravity: 0, z: hd.z });
+    deps.particles?.spawn?.(hd.x, hd.y - 1.5 * sOf(unit), { color, count: 5, speed: 12, size: 0.6, ttl: 0.3, gravity: 0, z: hd.z });
     await settlePose(ctx, unit, 130);
   };
 }
@@ -159,36 +158,41 @@ export function spitGlob(opts = {}) {
 }
 
 /**
- * 聚能族（自强化/蓄势）：光点环收束进胸口 + 吸气鼓身。payoff（扫描光带）
- * 由效果结算节拍承接，本族只给「聚」的起手。
+ * 聚能族（自强化/蓄势）：光点环收束（粒子层）+ 胸口蓄能光球（shader 形体主体，
+ * 涨峰收包络 + 借池灯 punch）。payoff（扫描光带）由效果结算节拍承接。
  */
 export function chargeUpFx(opts = {}) {
-  const { color = 0xffe0a0, holdMs = 90 } = opts;
+  const { color = 0xffe0a0, orb = [1.0, 0.78, 0.40], hot = [1.3, 1.05, 0.65], holdMs = 90, size = 5.0 } = opts;
   return async ({ ctx, deps, unit }) => {
     playCastConverge(unit, deps.particles, color);
+    const ch = chestOf(unit);
+    const job = chargeOrb(ctx, deps, {
+      at: ch, color: orb, hot, size: size * Math.max(0.7, sOf(unit)), ms: 380, lampIntensity: 520,
+    });
     await ctx.custom(unit.uniqueID, {
       durationMs: 240, ease: 'power2.out',
       onUpdate: (t) => unit.setPose({ squash: 1 - 0.06 * t, widen: 1 + 0.06 * t }),
     });
     await ctx.wait(holdMs);
-    await settlePose(ctx, unit, 170);
+    await Promise.all([job, settlePose(ctx, unit, 170)]);
   };
 }
 
 /**
- * 蜷缩防御族：快速伏低（ duck ）+ 一定身 + 过冲回中。护盾地环由结算节拍自播。
+ * 蜷缩防御族：快速伏低 + 落地双层尘（迸射粗粒 + 慢速浮尘 + 暖灯 punch）+
+ * 过冲回中。护盾地环由结算节拍自播。
  */
 export function hunkerFx(opts = {}) {
-  const { dustColor = 0, depth = 1 } = opts;
+  const { dustColor = 0xb0a088, depth = 1 } = opts;
   return async ({ ctx, deps, unit }) => {
     const feet = feetOf(unit);
     await ctx.custom(unit.uniqueID, {
       durationMs: 140, ease: 'power2.out',
       onUpdate: (t) => unit.setPose({ squash: 1 - 0.22 * depth * t, widen: 1 + 0.12 * depth * t }),
     });
-    if (dustColor) {
-      deps.particles?.spawn?.(feet.x, feet.y, { color: dustColor, count: 7, speed: 6, size: 1.2, ttl: 0.55, gravity: -6, z: feet.z });
-    }
+    dustLanding(ctx, deps, {
+      at: feet, color: dustColor, count: Math.round(10 + 6 * depth), lampIntensity: 260,
+    });
     await ctx.wait(130);
     await settlePose(ctx, unit, 200);
   };
@@ -219,11 +223,11 @@ export function dazeSway(opts = {}) {
 }
 
 /**
- * 嚎叫族（雪狼嚎/怨灵啸）：仰头 → 头部三道错峰扩散的声波环 + 浮游微粒 → 回中。
- * 声波环 = 世界空间 sprite 扩张淡出（尖啸的「扩散」读感主体）。
+ * 嚎叫族（雪狼嚎/怨灵啸）：仰头 → 头部声波环（shader 形体：三道错峰谐波瓣
+ * 扩散环）+ 双层浮游微粒 + 冷色灯 punch → 回中。
  */
 export function wailFx(opts = {}) {
-  const { color = 0xbfd8ff, rings = 3, upMotes = 6 } = opts;
+  const { color = [0.65, 0.78, 1.10], ringColor, upMotes = 6, rings = 3 } = opts;
   return async ({ ctx, deps, unit, player }) => {
     const lean = leanToward(unit, player, -0.13);
     await ctx.custom(unit.uniqueID, {
@@ -232,49 +236,41 @@ export function wailFx(opts = {}) {
     });
     settlePose(ctx, unit, 260); // 不 await：回中与声波并行
     const hd = headOf(unit);
-    const jobs = [];
-    for (let i = 0; i < rings; i++) {
-      jobs.push((async () => {
-        await ctx.wait(i * 95);
-        if (typeof document === 'undefined') return;
-        const mat = new THREE.SpriteMaterial({
-          map: ringTexture(), color: new THREE.Color(color).multiplyScalar(1.25),
-          blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.85, fog: false,
-        });
-        const spr = new THREE.Sprite(mat);
-        spr.position.set(hd.x, hd.y, (hd.z ?? 0) + 1.2);
-        spr.scale.set(1.5, 1.5, 1);
-        deps.scene?.add?.(spr);
-        ctx.onKill(() => { spr.parent?.remove(spr); mat.dispose(); });
-        const st = { t: 0 };
-        await ctx.tweenRaw(st, { t: 1 }, {
-          durationMs: 520, ease: 'power1.out',
-          onUpdate: () => {
-            const sc = 1.5 + st.t * 11;
-            spr.scale.set(sc, sc, 1);
-            mat.opacity = 0.85 * (1 - st.t) ** 1.4;
-          },
-          onComplete: () => { spr.parent?.remove(spr); mat.dispose(); },
-        });
-      })());
-    }
-    deps.particles?.spawn?.(hd.x, hd.y, { color, count: upMotes, speed: 4, size: 0.7, ttl: 0.8, gravity: 6, z: hd.z });
-    await Promise.all(jobs);
+    const s = sOf(unit);
+    // 声波环（shader 形体主体；rings>3 时给更大画布装第三道外圈）
+    const ring = wailRing(ctx, deps, {
+      at: hd, color: ringColor ?? color,
+      size: (14 + rings * 1.6) * Math.max(0.7, s), ms: 620 + rings * 80,
+    });
+    // 双层微粒：快上浮 + 慢漂尘
+    deps.particles?.spawn?.(hd.x, hd.y, { color: 0xd8e6f5, count: upMotes, speed: 6, size: 0.8, ttl: 0.6, gravity: 9, z: hd.z });
+    deps.particles?.spawn?.(hd.x, hd.y - 1, { color: 0x9ab5cc, count: Math.round(upMotes * 0.7), speed: 2.5, size: 1.3, ttl: 1.4, gravity: 2, z: hd.z });
+    // 冷色灯 punch（借池）
+    ctx.spawn((c) => lampPulse(c, deps, {
+      name: 'light:fx0', at: { x: hd.x, y: hd.y, z: (hd.z ?? 0) + 2 },
+      color: ringColor ?? color, peak: 560, attackMs: 140, decayMs: 560,
+    }));
+    await ring;
   };
 }
 
 /**
- * 震颤预警族（爆囊待爆/引线将尽）：高频碎颤 + 红光点外渗——「要炸了」的体表读感，
- * 与引线 aura（recipes.js blastFuse）叠加成完整倒计时语言。
+ * 震颤预警族（爆囊待爆/引线将尽）：贴地引线收束圈（shader 形体：内向收束暗红环
+ * + 裂纹透光，与胸口 fuseGlow 心跳同律搏动）+ 高频碎颤 + 火花随搏外渗。
  */
 export function trembleWarn(opts = {}) {
-  const { color = 0xff5a3a, durMs = 520 } = opts;
+  const { durMs = 620 } = opts;
   return async ({ ctx, deps, unit }) => {
     const ch = chestOf(unit, 1.15);
+    const feet = feetOf(unit);
+    const ring = fuseRing(ctx, deps, { at: feet, size: 13 * Math.max(0.7, sOf(unit)), ms: durMs });
     ctx.spawn(async (c) => {
-      for (let i = 0; i < 3; i++) {
-        deps.particles?.spawn?.(ch.x, ch.y, { color, count: 3, speed: 5, size: 0.7, ttl: 0.4, gravity: 3, z: ch.z });
-        await c.wait(150);
+      // 火花随心跳加密外渗（搏动节拍两连发 ×2 组）
+      for (let g = 0; g < 2; g++) {
+        await c.wait(120);
+        deps.particles?.spawn?.(ch.x, ch.y, { color: 0xff7a40, count: 4, speed: 7, size: 0.7, ttl: 0.35, gravity: 8, z: ch.z });
+        await c.wait(140);
+        deps.particles?.spawn?.(ch.x, ch.y, { color: 0xff5a3a, count: 3, speed: 9, size: 0.6, ttl: 0.3, gravity: 12, z: ch.z });
       }
     });
     await ctx.custom(unit.uniqueID, {
@@ -284,6 +280,6 @@ export function trembleWarn(opts = {}) {
         unit.setPose({ lean: 0.02 * j, squash: 1 + 0.05 * Math.abs(j), widen: 1 + 0.05 * Math.abs(j) });
       },
     });
-    await settlePose(ctx, unit, 120);
+    await Promise.all([ring, settlePose(ctx, unit, 120)]);
   };
 }
