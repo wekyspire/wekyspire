@@ -24,13 +24,13 @@ import { enemyTarget, dealDamage, attackDamage, addEffect, gainShield, addCard, 
 
 // ==== 点火系列（基石：点火 C/B/A）=============================================
 // 点火 C 已在 skills.js 定义；此处补 B/A 两阶。
-// 点火是余烬经济的启动器：0 费、冷却1，「洗入1余烬 + 施加燃烧」（燃烧 5/7/9）。
+// 点火是余烬经济的启动器：0 费，「洗入1余烬 + 施加燃烧」（燃烧 5/7/9）。
 
-// 点火 B：0费，冷却1，洗入1余烬，施加燃烧 7。
+// 点火 B：0费，洗入1余烬，施加燃烧 7。
 registerSkill({
   id: 'igniteB', name: '点火', type: 'fire', tier: 'B', series: 'ignite', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   promotesTo: 'igniteA',
   use(sctx) {
@@ -44,11 +44,11 @@ registerSkill({
   battleDescribe: () => '/named{洗入1}/card{emberMoteC}，赋予/effect{燃烧}7',
 });
 
-// 点火 A：0费，冷却1，洗入1余烬，施加燃烧 9（点火链顶点，无晋升）。
+// 点火 A：0费，洗入1余烬，施加燃烧 9（点火链顶点，无晋升）。
 registerSkill({
   id: 'igniteA', name: '点火', type: 'fire', tier: 'A', series: 'ignite', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal', targetMode: 'enemy',
   use(sctx) {
     const target = enemyTarget(sctx);
@@ -384,12 +384,12 @@ registerFireControlPair('fireControlShiftA', '控火术：变', 'A', 2, 'none', 
 // 被突袭时一张即时大盾都没有——本系列补这个洞。
 // 加成判据 = 牌库余烬存量——火墙读的是余烬经济（叠炎的资源轴）。
 // 护盾基础值三阶分化 6/9/12 + 牌库每张余烬 +2。
-// 全阶 1AP + 冷却 1（0 费盾不冷却 = 白嫖盾墙）。
+// 全阶 1AP。
 function fireWallCard({ id, tier, base, promotesTo = null }) {
   registerSkill({
     id, name: '火墙', type: 'fire', tier, series: 'fireWall', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 1 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
     promotesTo,
     // 条件满足金光（视图期判定同结算口径：牌库有余烬即加成成立）

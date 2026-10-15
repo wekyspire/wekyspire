@@ -50,12 +50,12 @@ sparkCard({ id: 'sparkS', name: '终极火花', tier: 'S', damage: 5, hits: 7 })
 // 余烬 = 火系的造牌语言：0 费即抛的燃烧施加。造出来的牌吃焚烧翻倍、鬼火传播、
 // 控火散/收/聚的一切搬运——叠炎的节奏件。火种 C 直分岔到 B 双选。
 
-// 火种 C：1魏 冷却1——向牌库随机位洗入 3 张「余烬」，抽2（升级：抽3——升级收益
+// 火种 C：1魏——向牌库随机位洗入 3 张「余烬」，抽2（升级：抽3——升级收益
 // = 抽牌加一，不增加洗入余烬数量）。
 registerSkill({
   id: 'emberSeedC', name: '火种', type: 'fire', tier: 'C', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   promotesTo: 'emberSeedB',
   use(sctx) {
@@ -67,12 +67,12 @@ registerSkill({
   battleDescribe: (sctx) => `/named{洗入3}/card{emberMoteC}，抽${sctx.self.promoted ? 3 : 2}`,
 });
 
-// 火种 B：1魏 冷却1——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
+// 火种 B：1魏——洗入 3 张余烬，抽3（升级：抽4——同火种口径，
 // 加抽牌不洗更多余烬）。
 registerSkill({
   id: 'emberSeedB', name: '火种', type: 'fire', tier: 'B', series: 'ember', subsystem: 'blaze',
   cost: { mana: 1, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
     for (let i = 0; i < 3; i++) addCard(sctx, 'emberMoteC', { index: 'random' });
@@ -83,11 +83,11 @@ registerSkill({
   battleDescribe: (sctx) => `/named{洗入3}/card{emberMoteC}，抽${sctx.self.promoted ? 4 : 3}`,
 });
 
-// 不灭火种 A：0费 冷却1——洗入 3 张余烬并抽 3（潜伏量的即时兑现分岔）。
+// 不灭火种 A：0费——洗入 3 张余烬并抽 3（潜伏量的即时兑现分岔）。
 registerSkill({
   id: 'emberEternalA', name: '不灭火种', type: 'fire', tier: 'A', series: 'ember', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: 0 },
-  charges: { max: 1, cooldownTurns: 1 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
   use(sctx) {
     for (let i = 0; i < 3; i++) addCard(sctx, 'emberMoteC', { index: 'random' });
@@ -192,14 +192,14 @@ registerSkill({
 
 // ==== 自焚流的节奏与斩杀件（散卡，挂现有链）====
 
-// 急燃 C/B/A（0费 冷却1）：获得 2/3/4 魏启，自身燃烧4
+// 急燃 C/B/A（0费）：获得 2/3/4 魏启，自身燃烧4
 // （一次性、立刻兑现的自焚节奏件——自焚是代价也是燃料——镜燃/焰愈/灼脉都吃它。
 //  C 位是火路线起始牌组的回蓝件——随开局直发）。
 function flashBurnCard({ id, tier, mana, promotesTo }) {
   registerSkill({
     id, name: '急燃', type: 'fire', tier, series: 'fever', subsystem: 'burst',
     cost: { mana: 0, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
@@ -269,22 +269,22 @@ heatWaveCard({ id: 'heatWaveC', tier: 'C', bonus: 8, promotesTo: 'heatWaveB' });
 heatWaveCard({ id: 'heatWaveB', tier: 'B', bonus: 12, promotesTo: 'heatWaveA' });
 heatWaveCard({ id: 'heatWaveA', tier: 'A', bonus: 16 });
 
-// 铲灰链 C/B/A（0费 冷却1）：抽 2 牌；坟墓里有至少 4/3/3 张牌时
+// 铲灰链 C/B/A（0费）：抽 1 牌；坟墓里有至少 4/3/3 张牌时
 // 再抽 2/2/3——火系的坟场语言从前期就有踪迹。
 function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
   registerSkill({
     id, name: '铲灰', type: 'fire', tier, series: 'ashRake', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal',
     promotesTo,
     use(sctx) {
-      drawCards(sctx, 2);
+      drawCards(sctx, 1);
       if (sctx.battleState.zones.burnt.length >= threshold) drawCards(sctx, extraDraw);
       return true;
     },
-    describe: () => `抽2；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
-    battleDescribe: (sctx) => `抽2；坟墓不少于${threshold}张牌时，再抽${extraDraw}（坟墓${sctx.battleState.zones.burnt.length}张）`,
+    describe: () => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}`,
+    battleDescribe: (sctx) => `抽1；坟墓不少于${threshold}张牌时，再抽${extraDraw}（坟墓${sctx.battleState.zones.burnt.length}张）`,
   });
 }
 ashRakeCard({ id: 'ashRakeC', tier: 'C', threshold: 4, extraDraw: 2, promotesTo: 'ashRakeB' });

@@ -21,13 +21,13 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import { attackDamage, addEffect, randomAliveEnemy, resolvedDamageText, buildCardSelectionRequest, reactFx } from './cardKit.js';
 
 // ==== 自焚系列（§2.1：自伤换高伤）==============================================
-// 玩火 C/B/A：0 费攻击，冷却 1；伤害 11/14/17，自燃烧全阶统一 4。
+// 玩火 C/B/A：0 费攻击；伤害 11/14/17，自燃烧全阶统一 4。
 // 「效果翻倍」buff（自焚卡）：battleState.selfImmolateDouble 置位后伤害与燃烧都 ×2。
 function selfImmolate({ id, name, tier, base, promotesTo = null }) {
   registerSkill({
     id, name, type: 'fire', tier, series: 'selfImmolate', subsystem: 'blaze',
     cost: { mana: 0, actionPoint: 0 },
-    charges: { max: 1, cooldownTurns: 1 },
+    charges: { max: Infinity, cooldownTurns: 0 },
     cardMode: 'normal', targetMode: 'enemy',
     promotesTo,
     use(sctx) {
@@ -104,19 +104,17 @@ flameHealSkill({ id: 'flameHealA', name: '焰愈', tier: 'A', base: 10, per: 1 }
 flameHealSkill({ id: 'flameHealS', name: '涅槃', tier: 'S', base: 10, per: 2 });
 
 // ==== 焚烧系列（燃烧层数倍增）=================================================
-// 焚烧 B/A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍），全系列冷却 2
-// （倍增器复读是火系最强的爆发推手；链内 AP 2/2/1、倍率 2/2/3、冷却持平。
-// 注意冷却只约束同一张：打出回库底须重抽，大牌组里
-// 冷却常被抽牌循环盖过，多份同回合不受限——多份密度归 S 直出频率管）。系列 B 起步。
+// 焚烧 B/A / 星炎 S｜**所有燃烧层数翻倍**（星炎翻 3 倍）
+// （倍增器复读是火系最强的爆发推手；链内 AP 2/2/1、倍率 2/2/3）。系列 B 起步。
 // 作用域按设计稿字面「所有」= 全场存活单位（含自己与盟友身上的燃烧——
 // 火焰体系的自焚是常态，翻倍自焚是这张牌的代价面）。
 // 实现 = 对每个有燃烧的单位追加等量层数（AddEffect 正层数；燃烧的逐层递减是另一条订阅）。
 const burnDoubler = ({ id, name, tier, ap, mult, promotesTo = null, mini = false }) => registerSkill({
   id, name, type: 'fire', tier, series: 'burnDoubler', subsystem: 'blaze',
   cost: { mana: 0, actionPoint: ap },
-  charges: { max: 1, cooldownTurns: 2 },
+  charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'normal',
-  // 迷你（A/S 档专属）：计 0 张手牌——冷却大牌捏在手里不占手位
+  // 迷你（A/S 档专属）：计 0 张手牌——大牌捏在手里不占手位
   keywords: mini ? ['mini'] : [],
   promotesTo,
   use(sctx) {

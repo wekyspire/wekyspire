@@ -199,7 +199,7 @@ function slimeletDef(id, firstIsAttack) {
 slimeletDef('slimeletA', false); // A 类：拍1 塞粘液 → 拍2 攻4
 slimeletDef('slimeletB', true);  // B 类：拍1 攻4 → 拍2 塞粘液
 
-// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻9 → 荆棘3。44 血。
+// 针鼠：荆棘教学——首拍竖刺（荆棘3），此后三拍循环：攻4+盾10 → 攻9 → 荆棘2。44 血。
 registerEnemy({
   difficulty: { base: 2, floorMin: 2, floorMax: 16 },
   id: 'hedgehog', name: '针鼠',
@@ -224,7 +224,7 @@ registerEnemy({
       actx.kernel.submitInstruction(new GainShieldInstruction({ target: unit, amount: 10 }));
     } else {
       actx.kernel.submitInstruction(new AddEffectInstruction({
-        target: unit, effectId: 'thorns', stacks: 3,
+        target: unit, effectId: 'thorns', stacks: 2,
       }));
     }
   },
@@ -234,7 +234,7 @@ registerEnemy({
     const atk = unit.getStat('attack');
     if (phase === 0) return { kinds: ['attack', 'defend'], hits: 1, damage: 4 + atk, shield: 10, note: '自身护盾+10' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + atk };
-    return { kinds: ['buff'], note: '自身荆棘+3' };
+    return { kinds: ['buff'], note: '自身荆棘+2' };
   },
 });
 
