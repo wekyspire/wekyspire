@@ -13,7 +13,7 @@ import { gainMaxMana, gainMaxHp } from './prep.js';
 
 // 可升级维度：当前仅火（木/空两系卡牌已移除，待重做后再开）。
 // 体修不再是灵脉维度——它走隐藏的 player.bodyLevel（进阶事件「跳过」时 +1）。
-// player.leino 仍保留四键（旧档兼容），totalLeino 照旧求和（body 恒 0）。
+// player.leino 仍保留四键（旧档兼容；body 恒 0）。
 export const LEINO_DIMENSIONS = ['fire'];
 
 export const ASCENSION_PLACEHOLDER = {
@@ -30,11 +30,6 @@ export const FIRST_ASCENSION_GRANT = Object.freeze({
   fire: Object.freeze({ cards: ['igniteC', 'fireBallC'], ability: 'fireVein' }),
 });
 
-export function totalLeino(run) {
-  const l = run.player.leino;
-  return l.fire + l.wood + l.air + l.body;
-}
-
 // 触发判定（训练开始时调用，见 beginTraining；completeRoom 留作离房兜底）：训练次数达到
 // 下一次进阶门槛且未封顶。门槛曲线：首进阶 1 次训练（第 2 层），此后每 2 次训练 +1 级
 // （累计 1/3/5/7/9…）。
@@ -48,7 +43,7 @@ export function ascensionReady(run) {
 
 // 能力授予池（设计稿 FIRE_VEIN_CARDS §1.4/§2.3 + BODY §1.4/§2.5/§3.4）：
 //   灵脉 2 级 → 该维度**精英**池；3 级 + 体系内已持 ≥2 精英 → **大师**池
-//   用户定：大师需双精英垫背，不再是等级一到就开的捷径）；体修看隐藏 bodyLevel（同门槛）。
+//   （大师需双精英垫背，不是等级一到就开的捷径）；体修看隐藏 bodyLevel（同门槛）。
 // 每次进阶至多授予一项（对话选择制）；已持有的不再出现，同池其余能力留给后续进阶
 // 慢慢取（设计：一局后期约可解锁两个子体系卡池——想多取就得多投入进阶机会）。
 const ABILITY_POOLS = Object.freeze({
@@ -95,9 +90,7 @@ export function abilityOffering(run) {
 // 跳过同样消耗一次进阶机会——这是故事模式暗线（体修大成）的成长通道。
 // 跳过补偿：**只给 +3 生命上限与一次可选删卡**——不回血、
 // 不提魏启。体修吃**牌组纯净度**，删卡就是这条路线的成型资源；血量/魏启这类通用
-// 资源不再白送（此前四项全给，六路试玩里全跳过路线横扫 44/38/32 三席，「难成型、
-// 成型后极强」的定位倒挂成最易成型路线）。第 7 轮裁决的 +3 生命上限保留——跳过
-// 需要一根即时的、不依赖卡池的补偿杠杆。
+// 资源不白送，+3 生命上限是跳过路线唯一的即时、不依赖卡池的补偿杠杆。
 export function chooseAscension(run, dimension = null) {
   if (run.gameStage !== 'ascension') {
     throw new Error(`run 阶段不符：期望 'ascension'，实际 '${run.gameStage}'`);
@@ -109,7 +102,7 @@ export function chooseAscension(run, dimension = null) {
     throw new Error('进阶次数已封顶');
   }
   // 能力授予待选时同一次进阶事件不可再点火——否则「跳过（留着能力抉择）→ dim 火」
-  // 一次事件吃两份奖励（shop 试玩报告抓出的双吃）。
+  // 一次事件吃两份奖励。
   if (run.ascensionOffer) throw new Error('能力授予尚未选定');
 
   run.player.ascensionCount += 1;
@@ -118,7 +111,7 @@ export function chooseAscension(run, dimension = null) {
     run.player.bodyLevel = (run.player.bodyLevel ?? 0) + 1; // 跳过 → 精进体修（隐藏）
     gainMaxHp(run, 3); // 跳过补偿：+3 生命上限（走 gainMaxHp 抬 baseStats，PreBattle 重算不抹）
     // 跳过反哺：再赠一次**可选**删卡机会——与 Boss 奖励同一计数器；幕间收尾时
-    // 就地弹全屏删卡，放弃即作废（机会不留存，2026-10-13 用户定）。
+    // 就地弹全屏删卡，放弃即作废（机会不留存）。
     run.pendingCardRemoval = (run.pendingCardRemoval ?? 0) + 1;
     return proceedAfterLevelUp(run);
   }

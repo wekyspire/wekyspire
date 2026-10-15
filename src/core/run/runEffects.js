@@ -81,13 +81,13 @@ export function grantManaBonus(ctx, amount = 1, { source = '' } = {}) {
 }
 
 /**
- * 获得遗物。**不声明特写**：Shell 在 notify 里 diff `run.player.relics` 自动补特写
- * （见 runController 的遗物差分），这里再声明一次会演两遍。
+ * 获得遗物。声明获得特写意图（kind 'relic'，Shell 的遗物特写队列承接——时序归 Shell）。
  * 一局内遗物唯一 → 可能重复触发的事件请在 `choices`/`requires` 里用 hasRelic 先挡。
  */
 export function gainRelic(ctx, relicId, { source = '' } = {}) {
   grantRelic(ctx.run, relicId);
   recordEffect(ctx, { kind: 'relic', relicId, name: getRelicDefinition(relicId).name, source });
+  ctx.presenter.showcase({ kind: 'relic', defId: relicId });
   return relicId;
 }
 
@@ -168,6 +168,6 @@ export const hasFlag = (run, key) => !!(run.eventFlags ?? {})[key];
  * @param {...object} cmds 单位指令描述符（逐条排队，Shell 按序执行）
  */
 export function unitAction(ctx, ...cmds) {
-  for (const cmd of cmds) ctx.presenter.unitCommand?.(cmd);
+  for (const cmd of cmds) ctx.presenter.unitCommand(cmd);
   return cmds;
 }

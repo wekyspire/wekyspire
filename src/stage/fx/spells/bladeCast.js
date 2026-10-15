@@ -1,4 +1,4 @@
-// 刀法施术模板（blade 体系默认，2026-10-02）：冷白刀光语言，与体修暖象牙拳风、
+// 刀法施术模板（blade 体系默认）：冷白刀光语言，与体修暖象牙拳风、
 // 火系橙红爆燃三分色相。命中斩痕在伤害节拍（damageFx slash 按卡名分方向），
 // 本模板只管「出刀」读感——刀光飞行体与命中斩痕一前一后（火球链同款结构）。
 // 五模式（params.mode，缺省按目标口径自动路由）：
@@ -48,7 +48,7 @@ export const bladeCast = {
             jobs.push((async () => {
               await ctx.wait(s * 90);
               await blade(ctx, origin, deps.unitAnchor(u), {
-                // 体量/拖尾双抬（三轮验收「找不到飞刀」整改）：小刀也要读出破空
+                // 体量/拖尾双抬：小刀也要读出破空
                 size: 2.6, ms: 170, stretch: 3.6, arcH: 1.2, yOff: offs[s % offs.length],
                 lamp: 120,
               });
@@ -81,7 +81,7 @@ export const bladeCast = {
       }
 
       if (mode === 'cleaveC') {
-        // 场景级横劈（2026-10-07 用户定：群伤刀 = 场景里劈一次 + 敌人依次受伤——
+        // 场景级横劈（群伤刀 = 场景里劈一次 + 敌人依次受伤——
         // 依次受伤由 core aoe 逐敌伤害拍白送，施术拍只演那一记横贯巨刀光）
         const foes = deps.allEnemies?.() ?? targets;
         const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 240, scale: 1.5 });
@@ -94,9 +94,9 @@ export const bladeCast = {
         }
         ay /= foes.length; az /= foes.length;
         // 弦全宽（moonArc 的 x 两端 = 弧心 ± spanW/2）：敌阵两端各探 spanExtra——
-        // 够长优先（2026-10-07 用户定再拉升）；高阶劈探出更大（链路差异维度之一）
+        // 够长优先；高阶劈探出更大（链路差异维度之一）
         const spanW = Math.max(46, (xMax - xMin) + (prm.spanExtra ?? 20));
-        const cleaveMs = prm.cleaveMs ?? 225;   // 2026-10-07 用户定：动画压到 66%
+        const cleaveMs = prm.cleaveMs ?? 225;
         await flareJob;
         // 劈落瞬间一记微震（高阶才有：强力劈 0.8 / 裂空劈 1.3——链路差异维度之二）
         if (prm.cleaveShake) {

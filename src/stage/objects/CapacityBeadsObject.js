@@ -1,11 +1,10 @@
-// CapacityBeadsObject：手牌容量指示条（批次 13，用户定；2026-09-30 改序列驱动）。
+// CapacityBeadsObject：手牌容量指示条。
 // 一排小圆角方片（轮廓呼应卡牌），按投影 handCapacity.slots（core handCapacitySlots
 // 唯一事实源）**从左到右排成三段**：
 //   [空咏唱容量] + 组间隙 + [手牌序占用] + 组间隙 + [空手牌容量 | 超载红珠]。
 // 手牌序段与手牌内卡牌一一对应（相对顺序 = 手牌从左到右）：普通卡 = 绿珠、
 // 激活咏唱 = 权重颗蓝珠（容量吃满的溢出颗黄）、迷你卡 = 淡紫细竖线；超载红珠
-// **归属将弃卡本尊的序列位**（hover 超载卡即亮它自己的红珠——无主聚合红珠
-// 曾致「hover 无高亮」报障）。
+// **归属将弃卡本尊的序列位**（hover 超载卡即亮它自己的红珠）。
 // 迷你幻影槽（计 0 容量）：独立的小步进槽（宽度 ≈ 1/3 颗珠，左右空位极少）——
 // 「插在两张卡中间的竖线」，不占手牌容量的形态即由此而来。
 // hover 联动：指针压着的卡 → 它占用的珠/竖线改 HDR 色（基色 ×5，越过 bloom
@@ -20,7 +19,7 @@ const BEAD_H = 2.3;        // 方片高（宽高比 ≈ 卡牌 26:35.1 的轮廓
 const BEAD_R = 0.5;        // 圆角半径
 const BEAD_STEP = 2.15;    // 珠距（间隙 0.45——紧凑排）
 const GROUP_GAP = 1.1;     // 三段之间的额外间隔（空咏唱|手牌序|空容量）
-const TICK_W = 0.3;        // 竖线宽（首版 0.16 在屏上仅 ~2px 不可见）
+const TICK_W = 0.3;        // 竖线宽（再细在屏上仅约 2px，不可见）
 const TICK_H = 1.7;        // 竖线高（珠高的 ~0.74，小一号读作「记号」而非「占用」）
 const TICK_EDGE = 0.14;    // 竖线与相邻珠的边距（极窄——迷你槽总宽 ≈ 0.58，不足珠宽 1/3）
 
@@ -129,7 +128,7 @@ export class CapacityBeadsObject extends THREE.Group {
   /**
    * 摆位：单行从左到右排 slot。行进量 = 前件半宽 + 边距 + 后件半宽（**不是**统一
    * 步进——竖线半宽远小于珠，tick 后按固定步进推进会叫下一颗珠的半宽反向吃掉
-   * 整条竖线，「珠盖线」实报过）；竖线两侧边距用极窄的 TICK_EDGE（「插在两张卡
+   * 整条竖线）；竖线两侧边距用极窄的 TICK_EDGE（「插在两张卡
    * 中间的细线」形态），跨段（空咏唱|手牌序|尾段）边距加 GROUP_GAP。
    * 行宽取包围盒口径（首末件半宽计入），组自身居中于挂点。
    */
@@ -141,7 +140,7 @@ export class CapacityBeadsObject extends THREE.Group {
       const edge = (a.type === 'mini' || b.type === 'mini') ? TICK_EDGE : BEAD_STEP - BEAD_W;
       // 蓝珠（咏唱容量占用）与右侧卡牌容量点之间不拉组间隙：蓝珠在玩家读法里属
       // 容量链，卡牌容量点（占/空皆然）应紧随其后——咏唱居手牌末位时蓝珠与空容量
-      // 珠间会凭空多出一段宽缝（实报）。
+      // 珠间会凭空多出一段宽缝。
       const capacityChain = a.type === 'chant' || a.type === 'chantOverflow';
       return edge + (!capacityChain && ZONE_OF(a.type) !== ZONE_OF(b.type) ? GROUP_GAP : 0);
     };

@@ -2,12 +2,12 @@
 // 火焰旋风 = 环境余烬/火屑飘荡 + 场景暖调（后处理 uTint）+ 结构光压暗火光反抬
 // （lighting.mood 口径）+ 火龙卷粒子绕身（fireWhirlOrbit，GPU 池 custom 类型）；
 // 贴身气流粒子环绕（qiOrbit）仅 qiFlow 使用。
-// drift/ring 发射器经 particles.spawnEmitter → gpu/ambientMotes.js（2026-10-07 全量
-// 迁 GPU：单 custom 类型承载、同一风场）。主题表写法不变（rate 随包络、锚点布局）。
+// drift/ring 发射器经 particles.spawnEmitter → gpu/ambientMotes.js（单 custom 类型
+// 承载、同一风场）。主题表口径：rate 随包络、按锚点布局。
 // 驱动 = **快照对账**（不依赖 ANIM 事件）：hand 里 isActivated 的卡经主题注册表
 // 解析出 (主题, 强度k)，激活集合变化即重定包络目标——读档恢复/观战重连/任何
 // 离手熄灭路径天然一致（状态是唯一事实源）。
-// 双持合成（2026-10-07 用户定）：同一条进阶链（promotesTo 链）的多张激活咏唱只按
+// 双持合成：同一条进阶链（promotesTo 链）的多张激活咏唱只按
 // 最强者计；不同链同主题 = 强度叠加（cap 1）；不同主题 = 并存复合——每主题一条
 // 包络槽（各自建/拆件、各自包络），全场输出（mood/tint/染灯）由基值 + 全部活槽
 // 逐帧重算复合，槽全部退尽才一次性写回基值（单槽退场不碰全场，避免互相踩踏）。
@@ -29,13 +29,13 @@ const THEMES = {
     dimDrop: 0.24, fireGainUp: 1.6,
     lightWarm: [1.0, 0.48, 0.16], lightWarmK: 0.8,
     ringAt: 0.7,
-    // 持续段「息旋涡」：低强度火龙卷粒子常驻绕身（与激活施术拍同语言——
-    // 2026-10-07 圆柱面片方案废弃换 GPU 粒子；常驻走 CHANT 段不与爆发抢 uniform）
+    // 持续段「息旋涡」：低强度火龙卷粒子常驻绕身（与激活施术拍同语言；常驻走
+    // CHANT 段不与爆发抢 uniform）
     orbit: { kind: 'fire', radiusK: 0.30 },
     // 高撒布布局：出生中心 dy（立牌高分数）× 2D 圆盘半径 0.45H → 垂直覆盖
     // dy±0.45H，0.2H~1.3H 从脚底撒到头顶上空（「空中飞荡」）；vby 续升偏置。
     // z 一律贴机位可见带（dz 相对锚偏移）——敌锚纵深 z≈-56，那边的粒子缩成
-    // 亚像素尘纯属浪费（首轮验收「空中为零」的病根：半量发射器钉在敌纵深）
+    // 亚像素尘纯属浪费，勿把发射器钉在敌纵深
     drift: [
       // [锚, dz, 高度分数, 率, 尺寸, 色] —— 锚：self=骑士 / mid=中场
       // 小而亮 = 火星（急升），大而暗红 = 火屑（缓升）——大小两档空中飞荡
@@ -46,15 +46,15 @@ const THEMES = {
       { at: 'mid', dz: -6, dy: 0.9, rate: 16, size: 2.2, color: 0xe05018, speed: 3, ttl: 4.0, gravity: 3, vby: 5 },
       { at: 'mid', dz: -16, dy: 0.6, rate: 12, size: 2.0, color: 0xd04515, speed: 3, ttl: 3.8, gravity: 3.5, vby: 6 },
       // 头顶抽吸带（画面上 1/4 不空）：出生即在头顶上（1.0H~1.9H）+ 强升尾流——
-      // 上轮锚 mid 高度 1.25H 仍够不到 y<200 屏区，改锚 self 近机位深度保尺寸
+      // 锚 mid 高度 1.25H 够不到画面上部屏区，锚 self 近机位深度保尺寸
       { at: 'self', dz: -6, dy: 1.45, rate: 14, size: 2.4, color: 0xffe0b0, speed: 3.5, ttl: 4.2, gravity: 3, vby: 10 },
       { at: 'foeAir', dz: 0, dy: 1.2, rate: 8, size: 2.2, color: 0xffd0a0, speed: 3.5, ttl: 3.6, gravity: 3, vby: 9 },  // 右半区高空（撒布不偏左）
     ],
     // 热浪环（≥ringAt 才发）：环周上升热气——参数随主题走（qiFlow = 地气环）
     ring: { color: 0xffa050, speed: 6, size: 1.5, ttl: 1.6, gravity: 5, vby: 8, rate: 30 },
   },
-  // qiFlow（体修「气」场）：**贴身主题，不染全场**（2026-10-02 用户定——体修咏唱
-  // 作用于自身，非火焰旋风的战场级现象）：tint/mood/染灯三个全场输出一律关掉
+  // qiFlow（体修「气」场）：**贴身主题，不染全场**（体修咏唱作用于自身，
+  // 非火焰旋风的战场级现象）：tint/mood/染灯三个全场输出一律关掉
   // （null/0 = 主题声明「我没有全场输出」，update 按字段存在性门控）；表现全在
   // 贴身件——环绕气流粒子（orbit，本表唯一使用者）+ 自体锚淡雾微点 + 高档（太极
   // k1.0）地气环。
@@ -65,8 +65,8 @@ const THEMES = {
     ringAt: 0.9,
     drift: [
       // 淡雾微点：小而软、慢而低（贴身气场，只锚自身）——点径对齐 orbit 粒子量级
-      // （1.4~1.8 ≈ 0.30~0.38 世界单位；原 2.6~3.6 会渲染成 2~2.5 倍的散景大光斑），
-      // 散布盒收贴身（rk/zk ≈ 0.15，原 0.45 是战场级撒布——「凭空出现」的根源）
+      // （1.4~1.8 ≈ 0.30~0.38 世界单位；超过会渲染成 2~2.5 倍的散景大光斑），
+      // 散布盒收贴身（rk/zk ≈ 0.15；0.45 是战场级撒布——「凭空出现」的根源）
       { at: 'self', dz: 0, dy: 0.35, rate: 10, size: 1.6, color: 0xdde8f8, speed: 1.8, ttl: 3.2, gravity: 1.0, vby: 1.6, rk: 0.16, zk: 0.12 },
       { at: 'self', dz: -10, dy: 0.6, rate: 8, size: 1.4, color: 0xcfdcf2, speed: 2.0, ttl: 3.0, gravity: 1.2, vby: 2.0, rk: 0.20, zk: 0.12 },
       { at: 'self', dz: 8, dy: 0.2, rate: 8, size: 1.8, color: 0xe6eefb, speed: 1.4, ttl: 3.4, gravity: 0.8, vby: 1.2, rk: 0.14, zk: 0.10 },
@@ -74,7 +74,7 @@ const THEMES = {
     // 地气环（太极档）：淡白慢速环周流转——「气沉丹田，周流不息」
     ring: { color: 0xd8e4f8, speed: 3.2, size: 1.4, ttl: 2.4, gravity: 1.2, vby: 2.0, rate: 18 },
   },
-  // feverHeat（高热/白炽「自体发烧」场，2026-10-07）：自燃换纳气的咏唱——火在
+  // feverHeat（高热/白炽「自体发烧」场）：自燃换纳气的咏唱——火在
   // 自己身上烧（身体燃烧的 L1 舔火已在，主题补的是「热到发烫」的环境层）。
   // 贴身主题（同 qiFlow 口径）：tint/mood/染灯三个全场输出全关，表现 = 贴身
   // 热浪蒸腾 + 火星上冒 + 头顶热气；白炽档（k≥ringAt）热浪环绕上升。
@@ -84,7 +84,7 @@ const THEMES = {
     ringAt: 0.72,
     drift: [
       // [锚, dz, 高度分数, 率, 尺寸, 色]——小亮火星急升（烧得急），淡红蒸汽大而软
-      // 慢升（热浪蒸腾），头顶热气（发烧读感）。尺寸 = 旧 floatFx 点径口径
+      // 慢升（热浪蒸腾），头顶热气（发烧读感）。尺寸 = floatFx 点径口径
       //（桥内统一换算成池世界单位，勿按世界单位直写——见 ambientMotes.js 头注）
       { at: 'self', dz: 0, dy: 0.55, rate: 22, size: 1.7, color: 0xffb060, speed: 6.5, ttl: 2.4, gravity: 6, vby: 7 },
       { at: 'self', dz: -8, dy: 0.65, rate: 16, size: 2.0, color: 0xd85020, speed: 4.5, ttl: 3.2, gravity: 3.5, vby: 6 },

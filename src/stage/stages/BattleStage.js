@@ -195,7 +195,7 @@ export class BattleStage {
     this.layout.registerContainer('hand', {
       minX: -40.5, maxX: 58.5,        // 横界：满手外缘不压牌库图标（中心 9 不变）
       baseY: -51.3,                   // 随卡高放大（保持已验收的下潜比例 ≈9% 卡高）
-      minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3：重叠率与旧版一致（≈52% 可见）
+      minStep: 13.5, maxStep: 27.3,   // 步长随卡宽 ×1.3（重叠率 ≈52% 可见）
       radius: 95,
       // 总弧角（度）：≤4 张恒 5°（近乎放平），第 4 张起线性增至满手 52°
       arcDegMin: 5, arcGrowFrom: 4, arcDegFull: 52,
@@ -271,7 +271,7 @@ export class BattleStage {
 
     // 受击全屏演出（non-blocking FX，同粒子律不占队列节拍）：
     // 震荡是相机导演的一路**叠加偏移通道**（与运镜可合成：转段推镜途中受击照样震，
-    // 不会把在途镜头钉住，也不会用过期基位把相机拷回——旧模型的转段跃变病灶）；
+    // 不会把在途镜头钉住，也不会用过期基位把相机拷回——避免转段跃变）；
     // 渐晕是友军受击专属的视角边缘压暗压红覆盖面（uiScene 顶层）
     this.shake = new ScreenShake({ director: stageManager.cameraDirector });
     this._vignette = new DamageVignette();
@@ -364,12 +364,11 @@ export class BattleStage {
       this._updateBurning(dt);
       for (const view of this._views.values()) view.updateFx(dt); // 卡面特效层（脉冲回程/盖纱呼吸/流光轨道）
       // 选卡覆盖层的临时候选（instantiate 模式）不在 _views 里——选中高亮是 C0 档
-      // （setVisualState 只设目标值，收敛在 updateFx），漏泵则点了没反应（实报病灶）
-      if (this._pick) for (const e of this._pick.temp.values()) e.object.updateFx?.(dt);
+      // （setVisualState 只设目标值，收敛在 updateFx），漏泵则点了没反应
+      if (this._pick) for (const e of this._pick.temp.values()) e.object.updateFx(dt);
       // 常驻 HUD 按钮同为 C0 shader 档（setVisualState 只设目标值，收敛在 updateFx）——
-      // 帧泵不补这一口，终局/模态的压暗目标永远停在 0（夜测 r3路4 probe 实锤：败北现场
-      // _dimT=1 而 _dim=0、updateFx 每秒被泵 0 次——r2 的奖励侧"压暗"实为全屏背板读数）
-      for (const btn of Object.values(this._buttons)) btn?.updateFx?.(dt);
+      // 帧泵不补这一口，终局/模态的压暗目标会永远停在 0（_dimT=1 而 _dim=0）
+      for (const btn of Object.values(this._buttons)) btn.updateFx(dt);
       this._pickerKit.update(dt);  // 特写 + 全屏选卡/选遗物的候选卡 fx（选中高亮收敛靠它）
       this._chantSceneFx.update(dt); // 咏唱场景演出包络（暖调/余烬/火流环绕逐帧派生）
       this._panel?.update(dt);       // 模态面板卡阵的 fx（奖励三选一 hover 高亮收敛）
@@ -412,10 +411,10 @@ export class BattleStage {
     this.uiScene.add(this._deckChip);
     this.picker.addPickable('deckChip', this._deckChip, { kind: 'deckChip', space: 'ui' });
 
-    // 手牌容量指示条（批次 13，用户定；2026-09-30 序列化改版）：手牌扇**上方**一排——
+    // 手牌容量指示条：手牌扇**上方**一排——
     // [空咏唱容量]+组隙+[手牌序占用（与手牌卡一一对应）]+组隙+[空手牌容量]；迷你卡 =
     // 细紫竖线小槽。数据=投影 handCapacity.slots。
-    // 摆位铁律：旧版摆在扇内 y=-56.5 被 26×35 的卡面永久盖住（"永远看不见"病灶）——卡顶缘
+    // 摆位铁律：不能摆在扇内（y=-56.5 处会被 26×35 的卡面永久盖住）——卡顶缘
     // ≈ baseY+半高 = -33.75，取 y=-30 落在扇形上缘与战线（-20）之间的空带；x=9 = 扇形中心
     // （minX/maxX 中点）。z=20：压过静息手牌（10+n·0.5 ≤ 15）、低于悬浮/瞄准牌（30.5+）——
     // 与状态栏 z=24 同惯例（悬浮牌可临时盖住，静息永不盖）。
@@ -440,13 +439,13 @@ export class BattleStage {
     this._btnHover = {};  // 每个按钮的悬停态（直接挂舞台的按钮需要自己喂）
     // 弃牌模式（D3 一键全弃：点弃牌按钮进入 = 全选所有手牌，
     // 主按钮变「弃掉全部N张」作确认步（兼误触防护）；阶梯费照旧付一次。
-    // 旧制为逐张多选，已随 D3 废除——诅咒/状态卡的卡手设计由此重新长牙）
+    // 诅咒/状态卡的卡手设计靠这条流程重新生效）
     this._dumpMode = false;
     this._dumpSel = new Set();
     // ---- 战后奖励面板宿主----
     // 战斗结束后**不换舞台**：奖励 overlay 直接画在战斗舞台的 uiScene 上，背景仍是战斗房间；
     // 领取/跳过之后由 runController 在**切幕中点**把舞台换成塔楼层——这样"战斗房 → 塔楼"的
-    // 场景切换被黑幕盖住（此前是战斗一结束就瞬切塔楼，奖励面板浮在塔楼前，节拍对不上）。
+    // 场景切换被黑幕盖住（战斗一结束就瞬切塔楼的话，奖励面板会浮在塔楼前，节拍对不上）。
     this._panel = null;      // PanelObject（modal 形态：全屏背板 + 居中内容）
     this._snap = null;       // 当前快照（存在即"面板模态中"：吞掉一切指针）
     this._onIntent = null;   // 面板意图上行出口（runController 注入，与 MapStage 同契约）
@@ -455,7 +454,7 @@ export class BattleStage {
     // 全屏选卡界面（战后奖励的 Boss 删卡机会入口）：三舞台共用套件 stagePickerKit.js。
     // 战斗内的获得演出由 bridge 节拍驱动；**战后奖励期**的 run 级入账（Boss 掉落遗物）
     // 特写也走这里——reward 阶段活动舞台是战斗舞台（见 runController 的 panelStage 路由）。
-    // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙是按值传的；旧实现漏传它 → 候选卡面隐身）。
+    // ⚠ 必须在 `_bakeFace` 就位之后建（卡面烘焙按值传，漏传它 = 候选卡面隐身）。
     this._pickerKit = createStagePickerKit({
       uiScene: this.uiScene,
       getPicker: () => this.picker,
@@ -468,7 +467,7 @@ export class BattleStage {
     // 「结束回合」的**已点过**标记：动画积压期也允许点结束回合
     // （后端其实是同步结算完的，只是在放动画），点完立刻上灰，直到**下一回合开始**的
     // 快照落定才解锁——避免"动画没放完就点不动按钮，只能干等"。
-    // 用户定 这枚标记同时是**手牌交互锁**——点击之后到下一回合快照落定之前，
+    // 这枚标记同时是**手牌交互锁**——点击之后到下一回合快照落定之前，
     // 整手压灰、打牌/换卡全部关闭（后端早已推进到下一回合的 WAIT，不锁就能"抢着"打出
     // 下一回合的牌：结算没错，但画面还在放上一回合的动画，纯误操作）。
     this._endTurnRequested = false;
@@ -549,9 +548,9 @@ export class BattleStage {
     this._panel.attachPicker(this.picker);
     this._panel.setWidgets(snap.kind, entry.build(snap));
     // 模态吞点击是既定语义（拖牌/瞄准/战场点击全被面板截获）——常驻 HUD 按钮
-    // （结束回合/弃牌）的视觉要同步压暗，否则全亮可点样式误导（夜测路4b 实报：
-    // 奖励期点「结束回合」无任何反馈）。终局后无新 sync 覆盖，压暗保持到舞台拆除。
-    for (const btn of Object.values(this._buttons)) btn?.setVisualState?.('disabled');
+    // （结束回合/弃牌）的视觉要同步压暗，否则全亮可点样式误导（点了无任何反馈）。
+    // 终局后无新 sync 覆盖，压暗保持到舞台拆除。
+    for (const btn of Object.values(this._buttons)) btn.setVisualState('disabled');
   }
 
   get panel() { return this._panel; }
@@ -561,7 +560,7 @@ export class BattleStage {
   _removePanel() {
     // 面板收起 = 全屏选卡界面也不该留在屏幕上；**只 close 不 dispose**（实例复用，
     // 与塔楼层/房间层同律）——真正释放交给 dispose() 里的 kit.dispose()。
-    this._pickerKit?.cardPicker?.close();
+    this._pickerKit.cardPicker?.close();
     if (!this._panel) return;
     this.uiScene.remove(this._panel);
     this._panel.dispose();
@@ -575,14 +574,14 @@ export class BattleStage {
     // D3 一键全弃：进模式即全选当前手牌——主按钮的「弃掉全部N张」
     // 是确认步（误触防护）；窗口中途手牌变动由快照对账摘除（见 syncSnapshot）。
     // 只选自由牌（激活咏唱不可弃）；迷你卡照常入选——迷你只管手牌
-    // 计数（计 0 张容量），与弃牌无关（同日用户裁定解耦）
+    // 计数（计 0 张容量），与弃牌无关（两者解耦）
     if (on) for (const c of this._snapshot.hand ?? []) {
       if (!c.isActivated) this._dumpSel.add(c.uniqueID);
     }
     else this._dumpSel.clear();
     this._syncButtons(this._snapshot); // 激活态上按钮面
     this._layoutAndTrack();            // 手牌高亮态
-    this._applyFlexGlows();            // 灵活卡金光（弃牌模式专属提示）
+    this._applyHandGlows();            // 手牌金光按高亮语境重涂（弃牌语境灵活卡亮）
   }
 
   // 立牌纹理补挂：缓存命中才设置，未命中等共享缓存订阅回调统一补
@@ -680,7 +679,7 @@ export class BattleStage {
     this._pick = pick;
     if (pick.mode === 'instantiate') {
       // 模态遮罩（池/牌库来源的发现类选卡）：压暗战场与手牌、只留候选阵与确认键——
-      // 没有它时「候选直铺战场 + 打出的卡悬在中央发灰」读作界面坏了（2026-10-01 实报）。
+      // 没有它时「候选直铺战场 + 打出的卡悬在中央发灰」读作界面坏了。
       // 深度分层：手牌(~15)/按钮(0)/held 展示卡(60→临时压到 26) 在遮罩(28) 之下被压暗；
       // 候选(30) 与 HUD 确认键（_openPick 临时抬到 35）在其上。
       const bd = new THREE.Mesh(
@@ -692,7 +691,7 @@ export class BattleStage {
       this.uiScene.add(bd);
       pick.backdrop = bd;
       // 结算中的发动卡停在 held 展示位（z=60，盖过候选阵 z=30）——压到遮罩下
-      // 同暗，关层时还原（用户 2026-10-02：「打出的卡牌在选卡发现层次上」）。
+      // 同暗，关层时还原（「打出的卡牌在选卡发现层次上」）。
       // 此时到位于静息（到达补间已完、弹簧已 release），直写 z 无驱动方争抢。
       pick.lowered = [];
       for (const [cid, view] of this._views) {
@@ -705,13 +704,13 @@ export class BattleStage {
       this._buttons.main.position.z = 35;
       this._buttons.swap.position.z = 35;
       const anchors = this._pickAnchors(ids.length);
-      // 标题口径（2026-10-02 用户定：去冗余——不再写卡名+效果复述，一行道出数量）：
+      // 标题口径（去冗余——不写卡名+效果复述，一行道出数量）：
       // 「选择 N 张卡牌」（min=max）/「选择 N 到 M 张卡牌」（区间）。request.reason 被
       // 此口径取代——逐卡手写文案（「攻杀控火术：发现一张控火术」）是 UI 文字冗余。
       if (typeof document !== 'undefined' && anchors.length) {
         const lo = pick.min, hi = pick.max;
         const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
-        const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
+        const t = bakeBoldText(title, { fontPx: 17, tint: '#f2f2f2' });
         const hint = new THREE.Mesh(
           new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
           new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, fog: false }),
@@ -742,9 +741,18 @@ export class BattleStage {
     } else if (typeof document !== 'undefined') {
       // 手牌多选覆盖层（候选 = 手牌扇自身，无候选阵）：提示悬在手牌扇上方——
       // z 40 盖过悬浮抬升的手牌（静息 ≤15 / 抬升 ≤36），不与 instantiate 分支共用锚点
+      // 结算中的发动卡（held 展示位 z=60）同样压到候选网格（z=30）之下——打出的卡
+      // 不得盖住选牌界面；关层还原（与 instantiate 分支同一名册机制）。
+      pick.lowered = [];
+      for (const [cid, view] of this._views) {
+        if (this.model.getZone(cid) === 'held' && view?.position) {
+          pick.lowered.push([view, view.position.z]);
+          view.position.z = 26;
+        }
+      }
       const lo = pick.min, hi = pick.max;
       const title = lo === hi ? `选择 ${lo} 张卡牌` : `选择 ${lo} 到 ${hi} 张卡牌`;
-      const t = bakeBoldText(title, { fontPx: 17, tint: '#e8eefb' });
+      const t = bakeBoldText(title, { fontPx: 17, tint: '#f2f2f2' });
       const hint = new THREE.Mesh(
         new THREE.PlaneGeometry(t.width * PICK_HINT_SCALE, t.height * PICK_HINT_SCALE),
         new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, depthWrite: false, depthTest: false, fog: false }),
@@ -836,14 +844,14 @@ export class BattleStage {
     // 目标资格 = zone 'hand'（deck=牌库停车不发目标——所有权由 zone 记录）+
     // 发动展示分流的 held 主语卡（_heldByDisplay：展示位锚点是它的静息位——
     // 选牌 WAIT 等长结算窗里始终停在屏幕中央，不会滞留/滑回手牌扇形）。
-    // 池选遮罩期（pick.backdrop）held 卡被手工压到遮罩下（z 26），弹簧不对它发目标
-    // ——否则 z 通道会被锚点拽回 60 顶穿遮罩；关层后 z 归位、目标自然恢复
+    // 选卡覆盖层开着（任意模式）held 卡被手工压到候选层之下（z 26），弹簧不对它发
+    // 目标——否则 z 通道会被锚点拽回 60 顶穿选牌界面；关层后 z 归位、目标自然恢复
     const targets = new Map();
     for (const id of onStage) {
       const a = this.layout.getAnchor(id);
       if (a && this.model.getZone(id) === 'hand') targets.set(id, a);
     }
-    if (!this._pick?.backdrop) {
+    if (!this._pick) {
       for (const id of this._heldByDisplay) {
         if (this.model.getZone(id) === 'held' && this._views.has(id)) targets.set(id, HELD_ANCHOR);
       }
@@ -920,7 +928,7 @@ export class BattleStage {
         const sel = this._pick.selection.includes(e.uniqueID);
         e.object.setVisualState(sel ? 'highlighted' : 'normal');
         // gsapTween 口径：目标 = 物体根，scale 键是等比缩放、y 走 position（传子对象会被
-        // 当成根再取 .position → undefined，补间静默失效——上面实测病灶）
+        // 当成根再取 .position → undefined，补间静默失效）
         this._tweenFactory(e.object, {
           y: e.baseY + (sel ? 2.4 : 0),
           scale: e.baseScale * (sel ? 1.16 : 1.0),
@@ -1070,7 +1078,7 @@ export class BattleStage {
 
   /** 手牌被上限挡下：整手牌红色脉冲 + 骑士头顶**思索泡泡**自语。 */
   _handPressureHint(text = HAND_FULL_LINE) {
-    for (const view of this._views.values()) view.fx?.pulse?.({ color: 0xff3b30, durationMs: 520, scale: 1.03, mode: 1, intensity: 0.9 });
+    for (const view of this._views.values()) view.fx.pulse({ color: 0xff3b30, durationMs: 520, scale: 1.03, mode: 1, intensity: 0.9 });
     const proj = this._snapshot;
     if (!proj?.player) return;
     this.say(proj.player.uniqueID, { text, kind: 'thought', duration: 2.8, tint: 0xe8ecfa });
@@ -1081,7 +1089,7 @@ export class BattleStage {
   }
 
   // 牌库图标脉冲（库中卡冷却节拍的落点）。⚠ 反馈必须在 UI 空间：粒子层挂在世界场景，
-  // 往 UI 坐标（80,-55）打粒子肉眼不可见——0.7.13「斩弃回牌库无特效」的真凶。
+  // 往 UI 坐标（80,-55）打粒子肉眼不可见（「斩弃回牌库无特效」即此因）。
   // 故反馈 = 图标染色闪光（ZonePileObject.pulse）+ 缩放弹跳（动画器注册名 pile:deck）。
   _pulseDeckPile(color) {
     const pile = this._piles?.deck;
@@ -1105,6 +1113,9 @@ export class BattleStage {
     const id = payload?.card?.uniqueID ?? payload?.uniqueID ?? null;
     const view = id != null ? this._views.get(id) : null;
     if (!view) return finish();
+    // 牌库卡不可见（锻刀/养刀的批量威力提升会打到全区刀法牌）：跳过反应节拍，
+    // 不为看不见的卡空转队列时长；威力数值照常入账（sync 重烘时数字已更新）
+    if (this.model.getZone(id) === 'deck') return finish();
     const mode = cardReactMode(view._cardData, payload?.kind);
     view.fx.react({ mode, intensity: Math.min(1.4, 0.75 + (payload?.magnitude ?? 1) * 0.12) });
     const s0 = view.scale.x || 1;
@@ -1194,7 +1205,7 @@ export class BattleStage {
 
   _openViewer(zone) {
     this._closeViewer();
-    this._pickerKit?.closeDeckViewer?.(); // 与卡组画廊互斥（对开 = 两层全屏模态叠罗汉）
+    this._pickerKit.closeDeckViewer(); // 与卡组画廊互斥（对开 = 两层全屏模态叠罗汉）
     const proj = this._snapshot;
     if (!proj) return;
     const list = proj.zones[zone] ?? [];
@@ -1227,7 +1238,7 @@ export class BattleStage {
   }
 
   // 悬停差分：指针压着的卡（手牌/咏唱/查看器画廊）喂通用 Shift 详情（setShiftHover，
-  // 卡内与全局键态合成——2026-10-07 起详情面是 CardObject 级通用件，picker 等所有
+  // 卡内与全局键态合成——详情面是 CardObject 级通用件，picker 等所有
   // owner 同款）。切换即差分（无全量重烘）。
   _refreshShiftFace() {
     const obj = this._overCardId != null
@@ -1269,9 +1280,9 @@ export class BattleStage {
     }
     this._viewer.rebake(); // 查看器内的卡同享到图重烘（关闭态为空操作）
     // 面板（奖励三选一 overlay）与全屏选卡界面的候选卡不在卡组、未经预热，
-    // 首拍常为无图占位——一并重烘（实报"选卡空白卡，手牌却有图"）
-    this._panel?.rebakeCards?.();
-    this._pickerKit?.rebakeCards?.();
+    // 首拍常为无图占位——一并重烘（否则选卡空白卡、手牌却有图）
+    this._panel?.rebakeCards();
+    this._pickerKit.rebakeCards();
   }
 
   // 渲染端支持的最大各向异性（假 renderer/无 WebGL 环境回退 1）
@@ -1298,6 +1309,8 @@ export class BattleStage {
     this._composer = null;
     this._deferred?.dispose(); // deferred 实验路径：还原 twin/层位后释放 G-buffer 链
     this._deferred = null;
+    this.particles?.dispose(); // 粒子门面拆（发射器类型登记回收——先于池 dispose，登记表是全局的）
+    this.particles = null;
     this.particles2World?.dispose(); // 粒子池 v2（世界）
     this.particles2World = null;
     this.particles2Ui?.dispose(); // 粒子池 v2（UI 空间）

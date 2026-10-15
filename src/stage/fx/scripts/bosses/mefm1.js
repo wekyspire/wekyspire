@@ -21,6 +21,7 @@ import { registerEnemyHitBeat, enemyImpactBeat, registerEnemyNoLunge } from '../
 import { registerEnemyAct } from '../enemyAct.js';
 import { registerBossStateFx, registerBossHurtFx } from '../../bossStateFx.js';
 import { makeHexShield } from '../../hexShield.js';
+import { isAttackKind, isBuffKind, isDebuffKind } from '../../../../core/intentKinds.js';
 
 // 电火花纹理：横向拉长的白蓝炽核 + 尾迹（与 pyro 余烬拖影同构、换色温——冷电 vs 热火）
 let _sparkTex = null;
@@ -148,7 +149,7 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
   // —— 告警红灯（跟随点光，故障段正弦扫射；停机段熄灭；点火段换橙色熔炉光起燃）——
   // 从舞台光池借（light:fx0）：常驻灯统一走 fx0——瞬态灯脉冲（punchImpact 的
   // lampPulse）走 fx1，借同一盏会在转段后把熔炉灯拽去命中点。池灯入场即在场景里，
-  // 重挂到单位不触发重编译（add 灯 = 全场景着色器重编译，实测 1.2s 冻帧，09-24）
+  // 重挂到单位不触发重编译（add 灯 = 全场景着色器重编译冻帧）
   const alarm = cast.get('light:fx0');
   if (alarm) {
     alarm.color.set(0xff3a3a);
@@ -263,13 +264,13 @@ async function mefm1P2({ ctx, args, cast, particles, shake, vignette, camera, on
     }
   });
 
-  // 演出机位退场：先补间飞回基准（flyHome 连 fov），再弹栈——瞬时硬切是病灶（09-24 修）
+  // 演出机位退场：先补间飞回基准（flyHome 连 fov），再弹栈——瞬时硬切是病灶
   await camera?.flyHome?.({ durationMs: 720, ease: 'power2.inOut' }) ?? null;
   camera?.popOverride?.('mefm1P2');
   unit.restoreColor?.();
 }
 
-// —— 命中 beat（钢铁电蚀主题，2026-10-09 补齐）：弹链/普攻都是金属撞击的
+// —— 命中 beat（钢铁电蚀主题）：弹链/普攻都是金属撞击的
 // 白蓝电火花（不是血肉撞击），多段连发时读成「挨了一梭子」。共享底座
 // enemyImpactBeat，garnish 复用本文件的 burstSparks（电火花 + 拖影）。
 async function mefm1HitBeat(ctx, deps, args) {
@@ -289,7 +290,7 @@ async function mefm1HitBeat(ctx, deps, args) {
   });
 }
 
-// —— 起手 beat：攻击拍 = 金色弹雨扫射（v2 2026-10-13：狂躁化）——实弹数 = 伤害段数，
+// —— 起手 beat：攻击拍 = 金色弹雨扫射（狂躁化）——实弹数 = 伤害段数，
 // 脱靶弹三族：贴地跳弹（落点迸土石）/ 过顶飞弹 / 侧墙流弹（外观与实弹一致、不做区分；
 // 压迫感来自弹幕密度而非命中数）。脱靶弹按 x 排成一条扫线（方向随机）= 弹着点从一侧
 // 扫到另一侧的「压着枪口扫」，实弹均布插进弹链藏起。每发配枪口焰（四芒星闪 + 迸射
@@ -303,7 +304,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
   const to = player
     ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
     : null;
-  if (kinds.includes('attack')) {
+  if (kinds.some(isAttackKind)) {
     const hits = Math.max(1, Math.min(args?.hits ?? 1, 6));
     const p2 = (unit._bossPhase ?? 1) >= 2;
     const extras = p2 ? 10 : 5;           // 脱靶弹（P2 弹幕密度翻倍——狂躁）
@@ -372,7 +373,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
         await arcProjectile(c, deps, {
           from: muzzle, to: tgt,
           color: [1.05, 0.75, 0.26], hot: [1.65, 1.3, 0.6],
-          // 远场口径（同 pyro 流星教训）：Boss 在 z≈-56 远端——曳光弹给 2.2wu + 大拉伸
+          // 远场口径：Boss 在 z≈-56 远端——曳光弹给 2.2wu + 大拉伸
           // 读「成串钢芯弹」，靠 ms/间隔而非尺寸表达「小快灵」
           size: p2 ? 2.8 : 2.6, ms: flyMs, arcH: tgt?.ground ? 0.25 : 0.6, stretch: 2.6, darting: 0.12,
           lampName: null,
@@ -397,7 +398,7 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
     await Promise.all(jobs);
     return;
   }
-  if (kinds.includes('debuff')) {
+  if (kinds.some(isDebuffKind)) {
     await arcProjectile(ctx, deps, {
       from, to,
       color: [0.55, 0.65, 0.8], hot: [0.85, 0.95, 1.25],
@@ -411,10 +412,10 @@ async function mefm1Act({ ctx, deps, unit, player, kinds, args }) {
     }
     return;
   }
-  if (kinds.includes('buff')) {
+  if (kinds.some(isBuffKind)) {
     const ux = unit.position.x, uy = unit.position.y, uz = unit.position.z;
     if ((unit._bossPhase ?? 1) >= 2) {
-      // —— 点火完成（炎魔2，2026-10-13）：大动作前摇——火星倒吸回排焰口 + 机体绷紧
+      // —— 点火完成（炎魔2）：大动作前摇——火星倒吸回排焰口 + 机体绷紧
       // 下压 + 熔炉灯先憋暗，顶点憋一拍（高频微颤）；再三口排焰同时全开：火柱 +
       // 电火花风暴 + 冲击炽闪 + 熔炉灯冲顶回落 + 机体弹性回胀。
       const VENTS = [

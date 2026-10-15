@@ -9,10 +9,10 @@ import { sharedCardArtCache } from '../stage/art/cardArtCache.js';
 import { allEnemies } from '../core/enemies/registry.js';
 import { unitHeightFactor, sharedUnitArtCache } from '../stage/art/unitArt.js';
 
-// —— 本批变更清单（2026-10-11 美术大批；与 git status 对账维护）——
+// —— 本批变更清单（与 git status 对账维护）——
 const NEW_KEYS = ['blackBomb','bloodFlame','blueBomb','burnOff','distort','evilHex','fireControlDetonate','fireControlFinderAcroC','fireControlFinderAtkC','fireControlFinderGuardC','fireControlGather','fireControlHarvest','fireControlShift','fireControlSpread','fireWhirlS','forget','giantFireball','greatSweep','heavenFireball','homecoming','hush','impulse','malice','painCurse','pourOil','redBomb','redCloud','reminiscence','selfImmolateRite','sparkStormS','stackFirewood','stealTime','transcend','turbo','vacuumBlade','vacuumBladeS','whiteBomb'];
 const MOD_KEYS = ['berserkStance','bladeArt','burnWound','burstStimulant','cleave','counterDraw','cycloneSlash','defensePrep','doubleStrike','drawQi','duckHead','edgeBreath','elbowReturn','elbowStrike','endure','expand','fineDagger','fireMastery','flyingDagger','fullCharge','fullStimulant','graceDance','handCleave','heatWave','helicopter','highFever','holdOut','honeBlade','inkBlot','instantCooldown','instantThousand','manaJarRoyal','martialStance','nirvana','novice','perfectCleave','perfectDagger','powerStance','prepareMove','quickDrawShield','rapidFire','redHotBlade','shatterHit','shock','silverDance','smeltCard','stimulant','storeEdge','swiftManaJar','swiftManaJarPlus','warmUp','wildPunch'];
-// 返工2（2026-10-11 用户第二轮全量反馈：32 不合格重设计/重抽 + endure 换图 + 5 改进尝试）
+// 返工2 批次（第二轮全量反馈的不合格重设计/重抽 + endure 换图 + 少量改进尝试）
 const R2_KEYS = ['berserkStance','blackBomb','bladeArt','breath','burnSnap','burnWound','edgeBreath','endure','expand','fistPress','fineDagger','fireBolt','fireControlDetonate','fireControlFinderAtkC','fireControlShift','fireControlSupreme','fullCharge','greaterFireBall','greatSweep','giantFireball','handCleave','heatSurge','helicopter','highFever','instantCooldown','novice','perfectCleave','pluckStar','prepareMove','rapidFire','relief','residualHeatPlus','returningDagger','shock','shockCard','snakeFist','spark','sparkStormS','stealTime','wildFlurry'];
 const PROC_KEYS = ['cleave'];
 const NEW_UNITS = ['kardas','mefm1','pangolinKing','corruptSource','rottenRoot','rottenTreeHeart','youngRakshasa','bigSlime','knightCommander','courtSquire','candleWarden','bishopMarchand'];
@@ -147,8 +147,8 @@ function copyBtn(text) {
 
 // —— 本批候选（返工批 39 + 拆名批 49，各 2 抽）：三选一点选 + 一键导出 ——
 const SPLIT_KEYS = ['rapidCombo','stormCombo','bronzeCity','berserkMastery','pierceHeart','comboStrike','quadrupleHit','powerCleave','riftCleave','guardStance','mysticTurtle','squeezeQi','perfectBlock','fierceElbow','strongElbow','pureElbow','deepExtract','limitExtract','collapseFistS','fireBall','fireStream','smallBurst','karadiaBurst','firstArrow','firstFireBall','fullSpirit','veilCleave','heatBallPlus','heatBallMaster','whirlLeg','whiteFever','hunYuanS','taijiS','heavenStance','meltCollapse','leopardFist','tigerFist','peerlessS','greaterPsiShield','deepPurify','peakPurify','goldHotBlade','whiteHotBlade','shatterHead','doomBlast','concealEdge','rainFist','thousandHands','myriadHands'];
-// 2026-10-11 第三轮后待审清单（47 键）：修复批 26（重设计/i2i/重抽）+ 保留现行待家族对齐 19 + 精通/大火球（家族/fail 记录）2。
-// 已部署且无遗留问题的键已按用户指示移除。
+// 第三轮后待审清单（47 键）：修复批 26（重设计/i2i/重抽）+ 保留现行待家族对齐 19 + 精通/大火球（家族/fail 记录）2。
+// 已部署且无遗留问题的键已移除。
 const CAND_BATCH = [
   // 第六轮迭代 5 键（白炽/金热/白热已程序化改色直发；其余通过键已移除）
   'fireBall', 'smallBurst', 'karadiaBurst', 'leverage', 'martialStance',
@@ -250,7 +250,7 @@ async function renderCands() {
   }
 }
 
-// —— 同名统一（2026-10-11 用户定：同名必同图，等阶变体不算数）：逐组点选一键 ——
+// —— 同名统一（同名必同图，等阶变体不算数）：逐组点选一键 ——
 const NAMESEL = JSON.parse(localStorage.getItem('artNameSel') || '{}'); // 名字 -> 文件键
 const saveNameSel = () => localStorage.setItem('artNameSel', JSON.stringify(NAMESEL));
 

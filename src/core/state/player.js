@@ -8,8 +8,7 @@ export const PLAYER_BASE_MONEY = 30;
 // 初始行动力上限。体修路线经基础能力 +1 实质维持 4（「体修吃 AP、法师吃魏启」的分工轴）。
 // 与 HP/金币同口径：一切建局入口引用此常量，禁止再写裸数字。
 export const PLAYER_BASE_AP = 3;
-// 初始魏启上限（2026-09-30 魏启痛点平衡批：3→4，REBALANCE_2026_09.md「初始 4」）。
-// 入战半满 = floor(4/2) = 2（原 1）；进阶 +1 与封顶逻辑均为相对增量，不受基值影响。
+// 初始魏启上限。入战半满 = floor(4/2) = 2；进阶 +1 与封顶逻辑均为相对增量，不受基值影响。
 export const PLAYER_BASE_MANA = 4;
 
 // 玩家：run 级实体，跨战斗存活。hp/money/deck/abilities/leino 是持久状态；

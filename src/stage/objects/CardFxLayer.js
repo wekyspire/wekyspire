@@ -1,5 +1,5 @@
 // CardFxLayer：卡牌特效统一宿主 —— 牌面叠加特效的统一管理者（CardObject 组合子）。
-// 对位单位侧 UnitFxLayer（VFX 结构大更新 Phase 3，收口为固定 C0–C3 层级）。
+// 对位单位侧 UnitFxLayer（固定 C0–C3 层级）。
 // 全部时间驱动（update(dt) 自算时间线），不依赖 gsap/tween 注入，也没有外部寄生状态。
 // 固定层级（C = Card；z 为牌面局部纵深，牌面 z=0）：
 //   C0 牌面 shader —— face 材质补丁（fx/cardBodyFx.js，构造即挂常驻）：uBurn 焚毁
@@ -23,14 +23,13 @@ import {
   vec2, vec3, vec4, float, mix, clamp, abs, max, min, pow, floor, fract,
   sin, dot, length, exp, step, smoothstep, oneMinus,
 } from 'three/tsl';
-import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：veil/edgeGlow 的 colorNode 必须挂 Node 材质
+import { MeshBasicNodeMaterial } from 'three/webgpu'; // veil/edgeGlow 的 colorNode 必须挂 Node 材质
 import { UI_FONT } from '../richtext/uiFont.js';
 
 const VEIL_LERP = 7;       // 覆盖高度收敛速率（/s——拍数推进时前沿平滑爬行的动画）
 // 脉冲面片外扩边距（冲击环越过牌边的余韵空间；边缘熄灭窗贴真面片边缘防断层）
 const PULSE_MARGIN = 4;
-// 冷却拍数水印：牌面中央低透明度平面白字（平面型水印，
-// 驳回大号发光 counter 与色块徽章两版）
+// 冷却拍数水印：牌面中央低透明度平面白字（平面型水印）
 const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
 // 将弃描边：警示红 + 急促呼吸（1.2s 周期——逼近的截止感）；暗化盖纱让牌面"沉"下去
 // （颜色烘常量 vec3 进 shader——彩层 uniform 跨会话非确定失显铁律；0xd84848≈(0.847,0.282,0.282)）
@@ -42,8 +41,8 @@ const LOCK_MARGIN = 2;   // 括号面片外扩边距（臂端外缘 1.45 留软�
 const EDGE_MARGIN = 5;
 const EDGE_FADE_IN = 3.5;
 
-// ---- WebGPU 迁移：veil / edgeGlow 两件内嵌 shader 平移成 TSL ----
-// 范式与 fx/unitBodyFx.js 同源：uniform = TSL uniform() 节点（`{ uX: { value } }` 推值
+// ---- veil / edgeGlow 的 TSL 着色范式（与 fx/unitBodyFx.js 同源）----
+// uniform = TSL uniform() 节点（`{ uX: { value } }` 推值
 // 口径不变，update 推流点零改动）；着色链 = TSL Fn 组合；材质改 MeshBasicNodeMaterial，
 // colorNode 全量接管输出（vec4 的 a 通道即片元透明度——veil 写 alpha、edgeGlow 恒 1）。
 // 纪律：If/Discard/Loop 必须待在 Fn 栈内；WGSL smoothstep 反向边一律改正向 + oneMinus。
@@ -54,12 +53,12 @@ const sdRoundBox = Fn(([p, b, r]) => {
   return length(max(q, vec2(0.0))).add(min(max(q.x, q.y), 0.0)).sub(r);
 });
 
-// 咏唱边缘流光（原 EDGE_GLOW_FRAG 逐式平移）：呼吸 rimlight（圆角矩形 SDF 内收外溢
+// 咏唱边缘流光：呼吸 rimlight（圆角矩形 SDF 内收外溢
 // 双边带）+ 3 颗沿边巡游的彗星光点（头部高斯光晕 + 沿 rim 的渐熄拖尾，亮度并入
 // rimlight）。加色混合、alpha 恒 1，rgb 直接输出 HDR（峰值 >1 radiance）交给 bloom。
 const vHash = Fn(([p]) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453)));
 
-// 矩形周长参数路径（t∈[0,1)，顶边左→右起顺时针）——GLSL 早退链改 If/Else 嵌套
+// 矩形周长参数路径（t∈[0,1)，顶边左→右起顺时针）
 const edgePath = Fn(([t, hf]) => {
   const w = hf.x.mul(2.0), h = hf.y.mul(2.0);
   const d = fract(t).mul(2.0).mul(w.add(h)).toVar();
@@ -136,7 +135,7 @@ const edgeShade = Fn(([vUv, uTime, uFade, uCard, uPlane, uColor, uComets]) => {
   return vec4(uColor.mul(energy).mul(uFade).mul(edgeFade), 1.0);
 });
 
-// 冷却薄纱（原 VEIL_FRAG 逐式平移；「别弄纯色块覆盖」）：
+// 冷却薄纱（「别弄纯色块覆盖」）：
 // 覆盖区 = 顶部 uFrac 高。
 //   冷却中（uMode 0）：霜冻膜——霜蓝斑驳 + 竖向冷凝垂纹 + 霜晶闪点（缓闪）+ 冰蓝前沿线；
 //   衰败过（uMode 1，冷却被反向推深）：腐蚀膜——暗红血管纹理搏动 + 犬牙侵蚀前沿 + 余烬闪点（急闪）。
@@ -212,11 +211,11 @@ const veilShade = Fn(([vUv, uTime, uFrac, uMode, uCard]) => {
   return vec4(col, min(alpha, 0.92));
 });
 
-// ---- 将弃/锁定标记面片（shader 化：旧实现为 5/8 件 mesh 条 + JS 逐帧写透明度呼吸）----
-// 形状全在 shader 内 SDF 绘制、呼吸由 uTime 驱动（相位口径与旧 JS 循环一致：doom 框
+// ---- 将弃/锁定标记面片 ----
+// 形状全在 shader 内 SDF 绘制、呼吸由 uTime 驱动（doom 框
 // 0.45~0.95 急促（2π/1.2≈5.236）、盖纱反相 0.22~0.34；lock 0.45~0.95 慢（2π/2.4≈2.618)）。
 
-// 将弃描框：圆角矩形环带（心线外扩 0.6、带粗 1.1——同旧四边条几何），加色发光件
+// 将弃描框：圆角矩形环带（心线外扩 0.6、带粗 1.1），加色发光件
 const doomFrameShade = Fn(([vUv, uTime, uCard]) => {
   const p = vUv.sub(0.5).mul(uCard.add(DOOM_MARGIN * 2));
   const d = sdRoundBox(p, uCard.mul(0.5).add(0.6), 1.5);
@@ -233,7 +232,7 @@ const doomVeilShade = Fn(([vUv, uTime, uCard]) => {
   return vec4(vec3(0.102, 0.031, 0.031), corner.mul(float(0.34).sub(k.mul(0.12))));
 });
 
-// 锁定括号：四角 L 形瞄准框（外扩 1.0、条粗 0.9、臂长 5——同旧八条几何；abs 镜像折叠
+// 锁定括号：四角 L 形瞄准框（外扩 1.0、条粗 0.9、臂长 5；abs 镜像折叠
 // 到第一象限后取横竖两臂盒 SDF 之并），加色发光件
 const lockShade = Fn(([vUv, uTime, uCard]) => {
   const p = vUv.sub(0.5).mul(uCard.add(LOCK_MARGIN * 2));
@@ -247,9 +246,9 @@ const lockShade = Fn(([vUv, uTime, uCard]) => {
   return vec4(vec3(0.910, 0.635, 0.235).mul(mask).mul(float(0.45).add(k.mul(0.5))), 1.0);
 });
 
-// ---- 一次性加色脉冲 shader（2026-10-09 重做，替代纯色半透明方块）----
+// ---- 一次性加色脉冲 shader ----
 // 单 shader + scalar uniform 组驱动三种能量演出（控制量打包：uVecA = [prog, mode, intensity, seed]，
-// uVecB = [cardW, cardH, reach, 0]——r185 实测 Fn 参数 ≤4 才安全，超参会整体猝死）：
+// uVecB = [cardW, cardH, reach, 0]——TSL Fn 参数 ≤4 才安全，超参会整体猝死）：
 //   mode 0 涌动（默认）：能量自卡心涌出——冲击波亮环外扩（外锋锐/内尾拖、环宽随行渐阔）、
 //     中心注能闪、边框共振（环越过牌边时逐片元「充电」，与环位天然相位锁定）、环带闪点；
 //   mode 1 汇聚：能量向卡心内坍——环自牌缘加速收缩 + 末段中心迸发（负向/压制语义：衰败/挤压）；
@@ -374,7 +373,7 @@ export class CardFxLayer extends THREE.Group {
   /**
    * 一次性加色脉冲（冷却推进/衰败反向/威力提升/施术起手）。
    * mode：0 涌动（默认）| 1 汇聚（负向/压制）| 2 流扫（镀金/晋升）；
-   * intensity：HDR 强度（环锋/闪点乘算过 1.45 bloom 阈）；scale 折算环程系数（兼容旧口径）。
+   * intensity：HDR 强度（环锋/闪点乘算过 1.45 bloom 阈）；scale 折算环程系数。
    * 包络在 shader 内由 uProg 驱动；重触发即重置时间线（新脉冲顶掉旧脉冲）。
    */
   pulse({ color = 0xffffff, durationMs = 220, scale = 1.2, mode = 0, intensity = 1 } = {}) {
@@ -399,7 +398,7 @@ export class CardFxLayer extends THREE.Group {
     const u = this._pulseUniforms;
     u.uColor.value.set(color);
     u.uVecA.value.set(0, mode, intensity, Math.random() * 97.0);
-    u.uVecB.value.z = 0.55 + 0.45 * scale;   // 旧 scale 口径 → 环程系数
+    u.uVecB.value.z = 0.55 + 0.45 * scale;   // scale 参数折算环程系数
     this._pulseTl = { elapsed: 0, duration: Math.max(0.001, durationMs / 1000) };
     this._pulse.visible = true;
   }
@@ -410,7 +409,6 @@ export class CardFxLayer extends THREE.Group {
   /**
    * C0 牌面状态档：normal | disabled（去饱和压暗）| highlighted（提暖呼吸）。
    * 只设目标值——update 里向目标 lerp 收敛（切换带一拍过渡，不瞬跳）。幂等。
-   * 调用口径与旧材质颜色占位版一致（CardObject.setVisualState 门面转发）。
    */
   setVisualState(state) {
     this._dimT = state === 'disabled' ? 1 : 0;
@@ -494,7 +492,7 @@ export class CardFxLayer extends THREE.Group {
     if (on) {
       this._setCondMesh(false);
       ({ mesh: this._edgeGlow, uniforms: this._edgeUniforms } = this._makeEdgeMesh(
-        new THREE.Color(0.58, 0.76, 1.05), 1)); // 咏唱蓝（原暖金让位给条件金光）
+        new THREE.Color(0.58, 0.76, 1.05), 1)); // 咏唱蓝（金色留给条件金光）
     } else {
       this._disposeEdgeMesh();
       if (this._condOn) this._setCondMesh(true);
@@ -535,8 +533,8 @@ export class CardFxLayer extends THREE.Group {
     mat.colorNode = edgeShade(uv(), u.uTime, u.uFade, u.uCard, u.uPlane, u.uColor, u.uComets);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat);
     // z=0.4：低于手牌扇相邻卡间隔（静息 z=10+n·0.5）——透明队列按中心深度排序，
-    // 凸出 0.6 的旧值让光环排在右侧邻牌（+0.5）之后绘制 = 永远挡住邻牌（
-    // 用户报修）。0.4 < 0.5 → 邻牌盖住本卡时连同光环外溢一起盖住。同时高于牌面
+    // 若高过邻牌间隔，光环会画在右侧邻牌之上、永远挡住邻牌。
+    // 0.4 < 0.5 → 邻牌盖住本卡时连同光环外溢一起盖住。同时高于牌面
     // 内层件（veil 0.35），rim 内收带仍可读。
     mesh.position.z = 0.4;
     this.add(mesh);
@@ -704,7 +702,7 @@ export class CardFxLayer extends THREE.Group {
         this._veilUniforms.uTime.value = this._t; // 呼吸/闪烁/纹理漂移全在 shader 内
       }
     }
-    // 将弃/锁定：呼吸全在 shader 内（相位口径与旧 JS 循环一致），只推统一时钟
+    // 将弃/锁定：呼吸全在 shader 内，只推统一时钟
     if (this._doomUniforms) this._doomUniforms.uTime.value = this._t;
     if (this._lockUniforms) this._lockUniforms.uTime.value = this._t;
     for (const u of [this._edgeUniforms, this._condUniforms]) {

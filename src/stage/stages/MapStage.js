@@ -134,7 +134,7 @@ export class MapStage {
     this._loadout = null;  // 面板里的遗物装卸区（prep custom widget；每次重绘后重接）
     this._panelUi = null;  // 面板本地交互态（勾选缓冲等；换面板即清空）
     this._snap = null;     // 当前面板快照（本地重绘用）
-    this._slotRoll = null;  // 老虎机转轮演出对象（演出即结果揭示的闸门）
+    this._slotRoll = null;  // 老虎机转轮演出对象（playSlotSpin 惰性创建）
     // 全屏选卡/选遗物界面 + 获得物特写：三舞台共用套件（stagePickerKit.js）。
     // bus 传 getter：总线在 attachInput 里才注入，而界面是惰性创建的——传快照值会让
     // 之后创建的界面永远拿不到 tooltip 出口。
@@ -201,7 +201,6 @@ export class MapStage {
     // 构造时还没拿到 stageManager._renderer）。非 WebGPU 后端恒 null，演出静默降级
     this._fxPool = null;
     this._bus = null;       // 事件总线（选卡界面发 tooltip 用）
-    this._slotRollId = null; // 正在播放的轮次 id（防重绘重播）
     this._onIntent = null; // 面板点击上行出口（setPanelIntentHandler 注入）
     this._runSequencer = null;  // run 级动画队列（runController 后置注入：得卡演出指令化）
     this._grantBusy = false;    // 「择卡得卡」演出进行中：吞掉面板动作（见 _onPanelAction）
@@ -254,7 +253,6 @@ export class MapStage {
     this._panel.attachPicker(this._picker);
     this._panel.setWidgets(kind, entry.build(snap, { selected: this._panelUi?.selected }));
     this._bindLoadout();
-    this._syncSlotRoll();
   }
 
   /**
@@ -524,13 +522,10 @@ export class MapStage {
     this._slotMeter.position.set(r.x1 + 1.6 + 6.5, (r.y0 + r.y1) / 2, 8);
   }
 
-  // ---- 老虎机转轮（演出即闸门）----  // 快照里出现新的 spinning 就播一次；播完上报 slotAnimDone（runController 据此
-  // 揭示结果并推进 sequencer 队列）。演出态本身不进快照（裁决：播放进度留 Stage）。
-  _syncSlotRoll() {
-    const spinning = this._snap?.slot?.spinning ?? null;
-    if (!spinning) { this._slotRoll?.reset(); this._slotRollId = null; return; }
-    if (spinning.id === this._slotRollId) return; // 同一轮已在播（重绘不重播）
-    this._slotRollId = spinning.id;
+  // ---- 老虎机转轮（降级宿主实现）----
+  // 编排器直调（runMachines 转轮指令 → panelStage().playSlotSpin），播完回执 sequencer；
+  // 不再从快照 diff spinning（快照只带「转动中」布尔做置灰，播放进度留 Stage）。
+  playSlotSpin(spin, onDone) {
     if (!this._slotRoll) {
       this._slotRoll = new SlotRollObject({ bakeText: this._bakeLabel });
       // 必须挂在 PANEL_ABOVE_Z 之上：老虎机是模态面板，转轮低于面板背板就会被挡住
@@ -538,9 +533,10 @@ export class MapStage {
       this.uiScene.add(this._slotRoll);
     }
     this._slotRoll.play(() => {
-      this._slotRollId = null;
-      this._onIntent?.({ action: 'slotAnimDone', id: spinning.id });
+      this._slotRoll.reset();   // 结果揭示后收起（下一次 spin 会重新 play）
+      onDone();
     });
+    return true;
   }
 
   // 卡图异步到图后重烘面板内卡面（与战场 addOnLoad 重烘同语言）；无面板/无卡时不订阅。
@@ -1035,7 +1031,6 @@ export class MapStage {
     });
     const fromFloor = this._cameraFloor; // 雪相插值起点（跨 11→12 爬升时雪渐变成风暴配方）
     this._cameraFloor = floor;
-    this._settleRise(); // 串行队列下理论不可达，防御上一段未收的爬升
     const proxy = { k: 0 };
     const finish = () => { this._floorChrome.markLanded(floor); onDone?.(); };
     this._riseDone = finish;
@@ -1098,6 +1093,7 @@ installPanelHost(MapStage, {
     openShop() { this._panelUi.shopOpen = true; this._renderPanel(); },
     openShopPack() { this.openShopPackPicker(); },
     openShopRelicPack() { this.openShopRelicPackPicker(); },
+    openSlotPrize() { this.openSlotPrizePicker(); },
   },
   onCardPickerOpened(stage) { stage._syncCardArtSub(); },
 });

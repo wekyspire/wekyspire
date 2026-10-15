@@ -241,8 +241,7 @@ flameEdgeCard({ id: 'selfImmolateGoldB', name: '金热焰刃', tier: 'B', bonus:
 flameEdgeCard({ id: 'selfImmolateWhiteA', name: '白热焰刃', tier: 'A', bonus: 15 });
 
 // 热浪链 C/B/A（1魏，深入·爆炎）：4 群伤；敌方燃烧 ≥5 层的敌人额外 +8/+12/+16
-// （2026-10-10 火系大改：单体 8 伤 → 4 群伤逐敌条件加成；自点火系列移出、归爆炎
-// 深入卡——「火候到了」的全场收口）。门槛恒 5，档位差全在加成斜率。
+// ——「火候到了」的全场收口。门槛恒 5，档位差全在加成斜率。
 function heatWaveCard({ id, tier, bonus, promotesTo }) {
   registerSkill({
     id, name: '热浪', type: 'fire', tier, series: 'heatWave', subsystem: 'burst',
@@ -271,8 +270,7 @@ heatWaveCard({ id: 'heatWaveB', tier: 'B', bonus: 12, promotesTo: 'heatWaveA' })
 heatWaveCard({ id: 'heatWaveA', tier: 'A', bonus: 16 });
 
 // 铲灰链 C/B/A（0费 冷却1）：抽 2 牌；坟墓里有至少 4/3/3 张牌时
-// 再抽 2/2/3（2026-10-10 火系大改：自爆炎散卡移入叠炎系列、数值上调——
-// 火系的坟场语言从前期就有踪迹）。
+// 再抽 2/2/3——火系的坟场语言从前期就有踪迹。
 function ashRakeCard({ id, tier, threshold, extraDraw, promotesTo }) {
   registerSkill({
     id, name: '铲灰', type: 'fire', tier, series: 'ashRake', subsystem: 'blaze',

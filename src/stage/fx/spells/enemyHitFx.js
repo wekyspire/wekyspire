@@ -1,4 +1,4 @@
-// 敌方攻击命中演出（2026-10-06 五模板通配方案）：与玩家卡 damageFx.js 同位的
+// 敌方攻击命中演出：与玩家卡 damageFx.js 同位的
 // 「敌方来源」决议器——_damageHit 在 resolveDamageFx（玩家技能表）落空时回落到这里。
 // 三式：normal（普攻撞击）/ rapid（连击小快）/ heavy（重击大冲击+震屏+尘）。
 // 判据优先级：ENEMY_HIT_SPELLS 逐敌覆写 → 伤害 tags['heavy']（内容数据，长期正解）
@@ -12,7 +12,7 @@ import { punchScaleFor } from './damageFx.js';
 export const ENEMY_HIT_SPELLS = Object.freeze({
 });
 
-// 逐敌专属命中 beat（Boss 主题化，2026-10-09）：defId → async (ctx, deps, {fx, unit, dealt, fromX})。
+// 逐敌专属命中 beat（Boss 主题化）：defId → async (ctx, deps, {fx, unit, dealt, fromX})。
 // fx.tier 仍是三档决议（normal/rapid/heavy），Boss beat 只换视觉皮（palette + garnish），
 // 共享底座是导出的 enemyImpactBeat。注册口给 fx/scripts/bosses/ 一文件一 Boss
 // （内容归属原则）；未注册 = 三式通配。注册随 BattleStage 模块加载发生，早于任何战斗。

@@ -21,7 +21,7 @@ import { ChantTriggerInstruction } from '../instructions/turn.js';
 import {
   enemyTarget, dealDamage, attackDamage, resolvedDamageText, gainShield, addEffect,
   drawCards, burnCard, discardCard, requestHandSelection, selected, gainPower, addCard, reactFx,
-  aoeAttack,
+  aoeAttack, AOE_TAGS,
 } from './cardKit.js';
 
 // ====================================================================
@@ -218,7 +218,7 @@ meltCard({ id: 'meltA', name: '熔毁', tier: 'A', weak: 3, per: 3 });
 
 // 炎魔决（A，4魏，深入）：获得炎魔2——主级伤害每次命中附带燃烧
 // （效果 flameDemon，与体系能力同款、可叠层）。多段卡（火花/炽流/连珠火）与火球链
-// 每击皆触发，「撑到收割」的过程同时变成铺燃烧。2026-10-10 自散卡移入深入。
+// 每击皆触发，「撑到收割」的过程同时变成铺燃烧。
 registerSkill({
   id: 'burstPactA', name: '炎魔决', type: 'fire', tier: 'A', series: 'burst', subsystem: 'burst', deep: 'burst',
   cost: { mana: 4, actionPoint: 0 },
@@ -364,11 +364,9 @@ fireTemperCard({ id: 'fireTemperC', name: '淬炼', tier: 'C', mana: 3, shield: 
 fireTemperCard({ id: 'fireTemperB', name: '淬炼', tier: 'B', mana: 3, shield: 6, promotesTo: 'fireTemperA' });
 fireTemperCard({ id: 'fireTemperA', name: '淬炼', tier: 'A', mana: 3, shield: 8 });
 
-// 烫手 C/B/A（冷却1）：抽 3/4/4，A 档费用 2魏→1魏（阶差 = 「C→B 抽数、B→A 费用」）。
+// 烫手 C/B/A（0费，冷却1）：自燃 3，抽 3/4/5——过牌的代价不是蓝量而是燃烧（自焚语言）。
 // 冷却限频保住「烫手山芋扔了又回来」的循环意象——爆裂体系的过牌引擎。
 // 刻意的高斜率：抽到的牌仍要付蓝/AP 才变现，手牌上限是天然刹车。
-// 烫手 C/B/A（0费，冷却1）：自燃 3，抽 3/4/5。2026-10-10 火系大改：去魏启费——
-// 过牌的代价从蓝量改为燃烧（自焚语言），A 阶抽 5。
 function hotHandsCard({ id, tier, burn, draw, promotesTo }) {
   registerSkill({
     id, name: '烫手', type: 'fire', tier, series: 'hotHands', subsystem: 'burst',
@@ -818,10 +816,11 @@ bloodFlameCard({ id: 'bloodFlameA', tier: 'A', per: 4 });
 
 // 突破极限（A，消耗，咏唱1）：
 // 激活期间蓝量大于 0 即可透支出牌（费用缺口由资源指令
-// 的 clamp 兜底，蓝量扣到 0 为止）。放行钩子走 helpers.canUseSkill 的「已激活咏唱
-// activated.canUseSkill」裁决环——卡牌级费用豁免，与能力的 canUseSkill 同语义。
+// 的 clamp 兜底，蓝量扣到 0 为止）。放行钩子走 helpers.canUseSkill 的裁决链
+// 第二环——已激活咏唱的 activated.canUseSkill，卡牌级费用豁免，与能力的
+// canUseSkill 同语义。
 registerSkill({
-  id: 'depthBreakA', name: '突破极限', type: 'fire', tier: 'A', series: 'depth', subsystem: 'burst', subsystem: 'burst',
+  id: 'depthBreakA', name: '突破极限', type: 'fire', tier: 'A', series: 'depth', subsystem: 'burst',
   cost: { mana: 4, actionPoint: 0 },
   charges: { max: Infinity, cooldownTurns: 0 },
   cardMode: 'chant', chantWeight: 1,
@@ -863,7 +862,6 @@ echoingFlamesCard({ id: 'depthEchoA', tier: 'A', draw: 5 });
 
 // 一战 B/A（消耗）：焚毁所有未激活咏唱的手牌（/named{自由}手牌），每张回 1 魏启，
 // 抽 3/4。已激活的咏唱卡豁免——点亮的咏唱是构筑引擎本身，烧引擎换蓝等于自拆台。
-// 2026-10-10 火系大改：自深入卡降为散卡（原「背水一战」更名，去精英门禁）。
 function lastStandCard({ id, tier, draw }) {
   registerSkill({
     id, name: '一战', type: 'fire', tier, series: 'lastStand', subsystem: 'burst',
@@ -1029,8 +1027,8 @@ registerSkill({
   describe: () => '手牌上限+1，/effect{燃烧}5',
 });
 
-// 灭火 B/A（1AP / A 档 0AP）：驱散自身燃烧，每 4 层向牌库洗入 1 张余烬。
-// 2026-10-10 火系大改：纯保命泄压阀加余烬回收——火灭成烬。不再消耗（循环件）。
+// 灭火 B/A（1AP / A 档 0AP）：驱散自身燃烧，每 4 层向牌库洗入 1 张余烬——
+// 保命泄压阀带余烬回收（火灭成烬）。不消耗（循环件）。
 function douseFlameCard({ id, tier, ap, promotesTo = null }) {
   registerSkill({
     id, name: '灭火', type: 'fire', tier, series: 'common',

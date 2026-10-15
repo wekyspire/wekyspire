@@ -27,13 +27,13 @@ export const syncBeats = {
     this._snapshot = snapshot;
     // 终局那拍（verdict 落定）直接压暗常驻 HUD 按钮：终局后 sync 停更，停在最后
     // 一拍的按钮态是"玩家回合亮态"（奖励模态有 setPanel 压暗兜着，败北面板是
-    // Vue 层不走 setPanel——夜测 r2路2 实测败北侧按钮全亮可点样式误导）。
+    // Vue 层不走 setPanel，不在此压暗则按钮全亮可点、样式误导）。
     if (snapshot.verdict != null) {
       for (const btn of Object.values(this._buttons)) btn?.setVisualState?.('disabled');
     }
     // 换回合解锁「结束回合」的已点标记：**只认新的玩家回合**（'player:N' 变化）。
     // 敌方侧快照（side 变 'enemy'）不能解锁——否则敌方阶段的动画积压期手牌提前解禁，
-    // 又能"抢着"打出下一回合的牌（实报的误操作窗口）
+    // 又能"抢着"打出下一回合的牌
     const key = `${snapshot.turn?.side ?? '?'}:${snapshot.turn?.count ?? -1}`;
     if (this._endTurnRequested && snapshot.turn?.side === 'player' && key !== this._endTurnLockKey) {
       this._endTurnRequested = false;
@@ -79,12 +79,11 @@ export const syncBeats = {
     const remi = proj.allies.find(a => a.defId === 'remi');
     this._statusBar.setRemi(remi ? { present: true, hp: remi.hp } : { present: false });
     this._piles.deck.setCount(proj.counts.deck);
-    this._capacityBeads.setValue(proj.handCapacity); // 灯珠（批次 13）：与投影同口径，旧快照无此字段时静默跳过
+    this._capacityBeads.setValue(proj.handCapacity); // 灯珠：与投影同口径，旧快照无此字段时静默跳过
     this._capacityBeads.setHover(this._overCardId); // 手牌变动后 hover 重匹配（slot 序列随占用重排）
     this._layoutAndTrack();
     this._updatePendingPips(); // 悬浮卡可能已离场/资源已变，重算高亮
     this._refreshShiftFace();  // 详情态目标可能已离场（差分自动还原）
-    this._updateDoomMarks();   // 将弃名单随快照变化（新视图补挂/离场视图摘除）
     this._updateLockMarks();   // 锁定名单随快照变化（常驻标记，同上对账）
   },
   _syncUnits(proj) {
@@ -155,15 +154,15 @@ export const syncBeats = {
     proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
     this._syncPlayerSwordArt(proj);
     // L0 本体补丁程序入场预热：首个同步批就把变体编好（compileAsync 走
-    // KHR_parallel_shader_compile 不冻主线程——charBurn 的 715ms 教训；单位本体是
+    // KHR_parallel_shader_compile 不冻主线程；单位本体是
     // MeshBasicMaterial 小 shader，但一次性成本照样不留进演出）
     if (!this._bodyFxWarmed && this._units.size > 0) {
       this._bodyFxWarmed = true;
       const r = this._sm?._renderer;
       const warm = r?.compileAsync?.(this.scene, this._sm.camera);
       if (!warm) r?.compile?.(this.scene, this._sm.camera);
-      // 施术面片预热（2026-10-06）：按卡组 defId 建代表性 shade 变体并编译——
-      // WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法面片黑一拍（charBurn 同款）
+      // 施术面片预热：按卡组 defId 建代表性 shade 变体并编译——
+      // WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法面片黑一拍
       try {
         warmDrainOrbs();   // 扣费光珠常色两变体（须在 warmSpellFx 之前——compile 在其尾部）
         warmSpellFx((proj.zones?.deck ?? []).map(c => c.defId).filter(Boolean),
@@ -190,7 +189,7 @@ export const syncBeats = {
    * 尸体稳态收殓：把「快照已判死、视图却仍站着」的单位直接落到死后稳态（隐藏）。
    * 正常路径不受影响（死亡演出播毕已隐藏，本方法幂等跳过）。
    * 用途：**中途接入/跳段的播放端**——死亡演出节拍不在队列里，只剩快照的 isDead，
-   * 不补的话尸体会带着 0/xx 血条一直站着（观战端重放/接入已见）。
+   * 不补的话尸体会带着 0/xx 血条一直站着（观战端重放/接入即此情形）。
    * 与「动画不可序列化 → 读档/恢复落到稳态」同一口径，故实现在 Stage 而非某个页面。
    * @returns 本次收殓的尸体数
    */,
@@ -203,8 +202,8 @@ export const syncBeats = {
       if (!u?.isDead) continue;
       const view = this._units.get(u.uniqueID);
       if (!view || view.visible === false) continue;
-      view.hideIntention?.();
-      view.hideStatus?.();
+      view.hideIntention();
+      view.hideStatus();
       if (u.reviving) {
         // 假死稳态：落到 82° 倒地留尸（跳段/中途接入端与实时端同一稳态语言）
         view.billboard.rotation.x = -THREE.MathUtils.degToRad(82);
@@ -292,6 +291,7 @@ export const syncBeats = {
   _syncCardContents(proj) {
     const present = new Map();
     for (const c of proj.hand) present.set(c.uniqueID, { card: c, zone: 'hand' });
+    const glowCtx = this._handGlowContext();
 
     for (const [id, { card, zone }] of present) {
       const entry = this.model.get(id);
@@ -320,9 +320,8 @@ export const syncBeats = {
       entry.prevPower = card.power ?? 0;
       // 咏唱激活态 → 边缘流光（双态开关：手牌中的 isActivated 卡，幂等）
       view.setActiveGlow(zone === 'hand' && !!card.isActivated);
-      // 条件满足金光：condMet（def.condition 成立）∨ 弃牌模式下的灵活卡；
-      // 与咏唱流光在特效层内互斥（咏唱优先）
-      view.setCondGlow(!!card.condMet || (this._dumpMode && !!card.flexible));
+      // 条件金光按高亮语境三态（见 _handGlowContext）；与咏唱流光在特效层内互斥（咏唱优先）
+      view.setCondGlow(zone === 'hand' && this._glowOn(glowCtx, card));
       // 冷却薄纱（特效层持久指示，高度 = 剩余冷却比例：全灰=刚入冷、半灰=冷了一半）+
       // 剩余拍数水印（第三版视觉）；衰败推深超基准 = 暗红薄纱
       const max = card.charges?.max ?? Infinity;
@@ -340,11 +339,29 @@ export const syncBeats = {
     }
   },
 
-  // 弃牌模式切换时灵活卡金光重涂（无 sync 节拍的本地驱动；condMet 部分沿用快照值）
-  _applyFlexGlows() {
+  /** 手牌高亮语境（三态，回答「现在手牌在被用来做什么」）：
+   *  'play'   打牌语境（无选卡挂起、非弃牌模式）——条件满足卡（condMet）亮金光；
+   *  'discard' 弃牌语境（弃牌模式 ∨ 手牌选卡请求带 flavor:'discard'——花刀/刀法
+   *            咏唱的选弃、发起方在 cardKit.buildCardSelectionRequest 声明）——
+   *            灵活卡（flexible，碎铁类弃了不亏的卡）亮、condMet 熄；
+   *  'select' 其它选卡语境（万变拳/焚毁目标等）——全熄（此时「可用性」不是有效信息）。 */
+  _handGlowContext() {
+    if (this._dumpMode) return 'discard';
+    const req = this._snapshot?.pendingInput?.request;
+    if (req && (req.picker === 'overlay' || req.count != null)) {
+      return req.flavor === 'discard' ? 'discard' : 'select';
+    }
+    return 'play';
+  },
+  /** 语境 × 卡投影 → 金光开关（三态公式单源，_syncCardContents 与 _applyHandGlows 共用）。 */
+  _glowOn(ctx, card) {
+    return ctx === 'play' ? !!card.condMet : ctx === 'discard' ? !!card.flexible : false;
+  },
+  // 高亮语境切换时手牌金光重涂（弃牌模式开关是无 sync 节拍的本地驱动）
+  _applyHandGlows() {
+    const ctx = this._handGlowContext();
     for (const c of this._snapshot?.hand ?? []) {
-      this._views.get(c.uniqueID)?.setCondGlow(
-        !!c.condMet || (this._dumpMode && !!c.flexible));
+      this._views.get(c.uniqueID)?.setCondGlow(this._glowOn(ctx, c));
     }
   },
   _syncButtons(proj) {

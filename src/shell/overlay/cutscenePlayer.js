@@ -93,15 +93,17 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
                            // 指令卡住，mode 永不回 idle 导致 overlay 常驻阻塞交互）
 
   // 最近一次"有画面"的 step（fade/image/dialogue）——**退出切幕**要带着它一起盖：
-  // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（实报：事件结果页播完后
-  // 先露出背后的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent）。
+  // 黑幕没盖满之前，屏幕上必须留着上一拍的画面（否则事件结果页播完会先露出背后
+  // 的塔楼、然后才起幕）。由 `sceneTransition` 一次性取走（见 takeLastContent）。
   // 保鲜期只到所属剧本落幕的那个任务结束（尾闸里 setTimeout(0) 失效化）：紧随的转场
   // 在同一微任务链里取走它；玩家中途操作过别的界面后，旧内容不许再被当 hold 摆回屏上。
   // `play()` 开头也会清掉，保证一部新剧本不会继承上一部的残留。
-  let lastContent = null;
+  let lastContent = null;   // { script, step }——script 引用必须随行：转场 hold 接手时
+  // 原样恢复 state.script，否则 .box 的 key（state.script）变 null → 对话框整体重挂，
+  // 入场动画重放 = 事件末页"第二次出现"（交互批给了入场拍后才显形）
   const beginStep = (script, step) => {
     state.script = script; state.step = step; state.phase = null;
-    if (step?.type !== 'wipe') lastContent = step;
+    if (step?.type !== 'wipe') lastContent = { script, step };
   };
   /** 取走"刚播完、还没被转场接走"的那一拍内容（取走即清）。 */
   const takeLastContent = () => { const s = lastContent; lastContent = null; return s; };
@@ -137,8 +139,13 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             //   （`sceneTransition` 从刚播完的剧本里取来的）；没有就什么都不显示（面板路径、
             //   战斗→塔楼）。撤内容/换内容的时机在**全黑中点**——玩家看不到这次切换。
             //   此前这里一上来就 beginStep，于是内容先消失、露出背景，黑幕之后才盖上来
-            //   （实报的节拍错位）。
-            if (step.hold) { state.step = step.hold; state.phase = null; }
+            //   （节拍错位）。
+            if (step.hold) {
+              // 接手即原样复辟（含 script 引用）：key 不变 = Vue 不重挂、入场动画不重放
+              state.script = step.hold.script ?? null;
+              state.step = step.hold.step;
+              state.phase = null;
+            }
             wipeCtl.begin({ coverMs, revealMs });   // 黑幕由独立切幕层渲染（不在本 overlay 里）
             await wait(16);         // 让屏外初始 transform 渲染一帧，再起过渡
             wipeCtl.toCover();
@@ -286,8 +293,8 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
             }
             // lastContent 保鲜期只到本任务结束：紧随其后的转场在同一微任务链里就把它
             // 取走；留到以后的皆是历史——玩家若先操作过别的界面（选卡/特写/面板），
-            // 离房切幕会把早已收掉的旧对话当 hold 摆回屏上（实报：粉碎/升级对话在
-            // 切幕开始瞬间重弹）。
+            // 离房切幕会把早已收掉的旧对话当 hold 摆回屏上（粉碎/升级对话在切幕
+            // 开始瞬间重弹的病根）。
             if (activeScripts === 0 && lastContent) {
               const stale = lastContent;
               setTimeout(() => { if (lastContent === stale) lastContent = null; }, 0);
@@ -325,21 +332,19 @@ export function createCutscenePlayer({ sleep = null, sequencer = null, wipe = nu
     return true;
   }
 
-  let transitionBusy = false;
   /**
    * 便捷入口：标准幕间转场（wipe step），swap 在全黑中点执行。返回 Promise，reveal 结束 resolve。
-   * 转场重叠时退化为直切（不卡流程、不排二次黑幕）。
+   * **唯一调用方是 transitionStage**（runController）：转场串行由队列 'transition' 家族
+   * 标签互等担保，本函数不自带单飞——并发直调即两段 wipe 交错，属调用方违约。
    * `hold` = 刚播完的那一拍内容（若本转场是"某段 cutscene 的退出"）：黑幕会**带着它一起盖下来**，
-   * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（实报的节拍错位）。
+   * 盖满后才撤——否则会先露出背景（塔楼/战场）再起幕（节拍错位）。
    */
   function sceneTransition(swap = null, { coverMs, revealMs, holdMs } = {}) {
-    if (transitionBusy) { swap?.(); return Promise.resolve(); }
-    transitionBusy = true;
     const hold = takeLastContent();
     return play({
       id: '__transition__', // 内联剧本，不入触发规则；played flag 不拦匿名转场
       steps: [{ type: 'wipe', hold, atCover: swap ?? undefined, ...(coverMs != null ? { coverMs } : {}), ...(revealMs != null ? { revealMs } : {}), ...(holdMs != null ? { holdMs } : {}) }],
-    }).finally(() => { transitionBusy = false; });
+    });
   }
 
   /** 触发规则查询：返回命中且未播过的剧本 id 列表（流程侧手动 play 的依据）。 */

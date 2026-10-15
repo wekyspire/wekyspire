@@ -1,4 +1,4 @@
-// 天斩模板 v2（2026-10-01 用户定全演出谱，实体锁口径——全程演完才 notify）：
+// 天斩模板（实体锁口径——全程演完才 notify）：
 //   ① 压迫段：界面径向压暗渐至大幅暗淡（dreadVeil）+ 相机 fov 拉大（广角压迫）
 //     + 镜头持续微震渐强（ScreenShake.sustain）；
 //   ② 斩落：巨幅白刃一闪而过（slashSweep HDR 白热）+ 全屏白闪 + 大震一记；
@@ -37,7 +37,7 @@ export const heavenCleave = {
         deps.cardView?.setVisualState?.('normal');
       });
       // ① 压迫段：幕起 + fov 拉大 + 微震连续爬升 + 卡面蓄势——全部走**连续缓入**
-      //    （微震阶梯步进与卡面双脉冲的离眨眼读感已废弃）：卡面高亮态与幕同一条
+      //    （阶梯步进/双脉冲会读出离眨眼感）：卡面高亮态与幕同一条
       //    渐入曲线爬满，斩落一瞬才转成一记白热脉冲
       const veil = dreadVeil(ctx, deps);
       const ramp = veil.set(g.veil, g.dreadMs, 'sine.in');
@@ -53,7 +53,7 @@ export const heavenCleave = {
         });
       }
       const view = deps.cardView;
-      view?.setVisualState?.('highlighted');   // C0 收敛通道：高亮随压迫段平滑爬满
+      view?.setVisualState?.('highlighted');   // 高亮态随压迫段平滑爬满
       await ramp;
       // ② 斩落：蓄势转白热脉冲 + 白刃一闪 + 全屏白闪（带短攻击沿）+ 大震一记（微震就此收口）
       view?.setVisualState?.('normal');

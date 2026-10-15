@@ -6,7 +6,7 @@
     <div class="bg" :class="{ story: isStory }" :style="{ backgroundImage: `url(${startBg})` }"></div>
     <div v-if="isStory" ref="snowLayer" class="snow-layer"></div>
     <div class="contents">
-      <div class="dev-banner">开发中版本，内容随时变更</div>
+      <div v-if="!isStory" class="dev-banner">Alpha持续开发版（{{VERSION_PREFIX}}），内容随时变更</div>
       <!-- 定高槽位：两种模式的元素各占固定高度容器，切换时排版不跳动 -->
       <div class="slot title-slot">
         <Transition name="swing-fade" mode="out-in">
@@ -67,6 +67,11 @@ import { readSave } from '../saves';
 import { ROUTES, ROUTE_IDS } from '../../core/run/routes.js';
 import { playMusic, stopMusic } from '../audio';
 import startBg from '../../assets/images/start-screen.webp';
+
+import { APP_VERSION } from '../version';
+
+// 版本行：v{版本}
+const VERSION_PREFIX = `v${APP_VERSION}`;
 
 const props = defineProps({
   saves: {
@@ -219,7 +224,12 @@ onBeforeUnmount(() => {
   font-weight: unset;
 }
 .subtitle { font-size: 24px; letter-spacing: 4px; color: #ff7b23; vertical-align: super; }
-.dev-banner { font-size: 22px; color: #ff6b63; letter-spacing: 4px; font-family: var(--font-display); }
+.dev-banner { 
+  font-size: 22px; color: #ff6b63; letter-spacing: 4px; font-family: var(--font-display); 
+  position: fixed;
+  right: 5px;
+  bottom: 5px;
+}
 
 /* 按钮通用：标题字族 + 相对定位（承载粗粝纹理叠层）；hover 一律压暗（UI 语言） */
 .main-btn-story, .main-btn-rogue, .continue-btn, .route-chip {

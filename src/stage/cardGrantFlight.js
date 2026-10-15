@@ -1,9 +1,9 @@
 // 「择卡得卡」演出（公共组件）：三选一类界面确认得卡后的统一表演。
 //
-// 背景（实报）：战后奖励三选一选完卡毫无反馈——面板直接消失进切幕，
+// 背景：战后奖励三选一选完卡毫无反馈——面板直接消失进切幕，
 // 卡静悄悄进牌组。本组件给出统一的两拍语言：
-//   ① 选中脉冲：**只放缩**（「就是这张」的一拍；不打金色闪光——用户同日报：
-//      金闪与升级特效撞语言，耀眼到像 bug，闪光类语言专属升级/power 变化）；
+//   ① 选中脉冲：**只放缩**（「就是这张」的一拍；不打金色闪光——金闪与升级特效
+//      撞语言，闪光类语言专属升级/power 变化）；
 //   ② 收编飞行：贝塞尔弧线飞向收编锚点 + 途中缩小 + 尾段淡出 + 中段微倾
 //      （同 BattleStage._cardFlight/_addCardBeat 的飞行语言），落位销毁。
 // 整段作为**一条指令挂上 animation sequencer**（宿主注入，可空 = 直接播），与后续的
@@ -56,9 +56,8 @@ export function playCardGrantFlight({ card, target, sequencer = null, onDone = n
     // 兜底：tween 链断裂（异常/外部清场）也不吞上行——意图延迟可以，丢失不行
     const safety = setTimeout(settle, TOTAL_MS + 400);
 
-    // ① 选中脉冲：只放缩、**不打金色卡面闪光**（实报：金色脉冲与卡牌升级
-    // 特效撞语言，"过于明显和耀眼、看起来反而像是有 bug"——得卡的一拍留给放缩 + 飞行，
-    // 闪光类语言从此专属「升级/power 变化」）。
+    // ① 选中脉冲：只放缩、**不打金色卡面闪光**（金色脉冲与卡牌升级特效撞语言，
+    // 得卡的一拍留给放缩 + 飞行，闪光类语言专属「升级/power 变化」）。
     const s0 = card.scale.x || 1;
     tweens.push(gsap.to(card.scale, {
       x: s0 * 1.18, y: s0 * 1.18,
@@ -107,9 +106,8 @@ export function playCardGrantFlight({ card, target, sequencer = null, onDone = n
 }
 
 /**
- * 「择卡得卡」惯用法（2026-10-07 收敛：kit 三个 confirmHook + 三舞台 grantCard 分支
- * 原各抄一份，仅上行出口不同）：忙标记置位 → 卡挂进场景 → 播得卡飞行 → 落袋清忙并
- * 上行意图。空摘（entry 缺失，双击竞态）不播演出、同步清忙上行——与各原实现一致。
+ * 「择卡得卡」惯用法：忙标记置位 → 卡挂进场景 → 播得卡飞行 → 落袋清忙并
+ * 上行意图。空摘（entry 缺失，双击竞态）不播演出、同步清忙上行。
  * @param {object} o
  *   entry:  摘出的条目（PanelObject.takeCard = { object }；ScrollPickerObject.takeEntry
  *           = { obj }；或直接传 CardObject）

@@ -1,4 +1,4 @@
-// 银行机（bank）：屏幕文本 + 存/取款面板。逻辑自 RoomStage 原样下沉。
+// 银行机（bank）：屏幕文本 + 存/取款面板。
 import { createBankMachineRig } from '../scenes/interactive/bankMachineRig.js';
 import { buildBankPanel } from '../panels/index.js';
 

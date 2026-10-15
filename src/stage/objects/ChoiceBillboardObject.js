@@ -4,7 +4,7 @@
 //
 // 规格：一件 = 色块 billboard（`tint`）+ 边框 + 名称（白字黑边，印在色块上）+ 可选的副标题
 // （如恶魔词条的「黑色级」）；整组面向相机（billboard，每帧对齐）、轻微浮动与自转；
-// hover 抬起放大；选中后：选中件朝镜头放大飞出（淡出）、其余缩没，播完回调宿主。
+// hover 抬起放大；选中后：选中件轻沉淡出、其余缩没，播完回调宿主。
 //
 // 美术未到位 → 纯色块占位（先占位纯色块）。结算与获得物特写都在宿主侧。
 
@@ -80,7 +80,9 @@ export class ChoiceBillboardObject extends THREE.Group {
       g.userData.item = it;
       g.userData.block = block;
       this.add(g);
-      this._items.push({ id: it.id, group: g, block, tint, baseX: 0, index: i });
+      const mats = [];
+      g.traverse((o) => { if (o.isMesh) mats.push(o.material); });   // 选中/复位的整组淡入淡出
+      this._items.push({ id: it.id, group: g, block, mats, tint, baseX: 0, index: i });
     });
     // 排列：整体居中（本件原点 = 组中心）
     const step = gap ?? size * 1.45;
@@ -134,20 +136,21 @@ export class ChoiceBillboardObject extends THREE.Group {
         const lift = this._hover === it.id ? 0.35 : 0;
         it.group.position.set(it.baseX, bob + lift, 0);
         it.group.scale.setScalar(1 + (this._hover === it.id ? 0.06 : 0));
-        it.block.material.opacity = 1;
+        for (const m of it.mats) m.opacity = 1;
       } else if (chosen) {
-        const k = Math.min(1, this._take.t / 0.55);
-        it.group.position.set(it.baseX * (1 - k), bob + k * 2.4, k * 6);   // 向镜头方向飞出
-        it.group.scale.setScalar(1 + k * 0.9);
-        it.block.material.opacity = 1 - k * 0.85;
+        // 选中收下：轻沉 + 快速淡出（不膨胀、不朝镜头飞——选中件进一步放大 reads as 夸张）
+        const k = Math.min(1, this._take.t / 0.3);
+        it.group.position.set(it.baseX, bob - k * 0.6, 0);
+        it.group.scale.setScalar(1 - k * 0.2);
+        for (const m of it.mats) m.opacity = 1 - k;
       } else if (other) {
-        const k = Math.min(1, this._take.t / 0.35);
+        const k = Math.min(1, this._take.t / 0.3);
         it.group.scale.setScalar(1 - 0.9 * k);
-        it.block.material.opacity = 1 - k;
+        for (const m of it.mats) m.opacity = 1 - k;
       }
     }
     if (this._take) this._take.t += dt;   // ⚠ 必须在循环外推进（在循环里每帧会按件数翻倍）
-    if (this._take && this._take.t >= 0.6) {
+    if (this._take && this._take.t >= 0.35) {
       const id = this._take.id;
       this._take = null;
       this._done = 1;

@@ -1,9 +1,9 @@
-// 格挡/架势施术模板（block 体系默认，2026-10-02）：防御语言与攻击语言分家——
+// 格挡/架势施术模板（block 体系默认）：防御语言与攻击语言分家——
 // 攻击链（掌/腿/破架）在 index.js 逐卡映射到 fistCast（体修同源），本模板只管
 // 「守」的两态（params.mode，缺省 ring）：
 //   ward  加盾链（guard/屏障/铜城/灵能盾…）：起手卡面脉冲 + 单位身前一亮即止——
 //         「盾」的读法由护盾罩（fx/shieldDome.js，随盾量常驻的 L2 罩件）在增益
-//         同步拍呈现；施术侧不许再立「墙」（白柱假墙廉价穿帮，用户 2026-10-02 定）
+//         同步拍呈现；施术侧不许再立「墙」（白柱假墙廉价穿帮）
 //   ring  架势/气场链（龟守/武者/天一/狂战/聚力/集结…）：脚下气场环扩散 + 主色
 //         灯——读「进架」。主题色经 params 换（狂战红/集结金/默认灵蓝）
 import { getSkillDefinition } from '../../../core/skills/registry.js';
@@ -22,7 +22,7 @@ export const blockCast = {
     return async (ctx, deps, notify) => {
       const player = deps.playerUnit?.();
       const flareJob = cardFlare(ctx, deps, { color: prm.core, ms: 220, scale: 1.3 });
-      // 前段即放行（2026-10-09 用户定）：卡面闪烁一触发就 notify——增益拍（盾的
+      // 前段即放行：卡面闪烁一触发就 notify——增益拍（盾的
       // 放缩动画/罩体呈现）与起手演出**并行**，盾系手感提速；灯/环余韵后台散尽
       // （模板协程独立于节拍，notify 只放行队列不杀演出）。
       notify();
@@ -50,8 +50,8 @@ export const blockCast = {
         return;
       }
 
-      // ring：脚下气场环——**真贴地**（quad 平躺 + 环流纹 + 破边，2026-10-06 审计
-      // 重制：竖直 billboard 假压扁环读「光滩/门环」）。粒子压低（架势是「沉」不是
+      // ring：脚下气场环——**真贴地**（quad 平躺 + 环流纹 + 破边；竖直 billboard
+      // 假压扁环读「光滩/门环」）。粒子压低（架势是「沉」不是
       // 「爆」）；尺寸要大到环探出主角轮廓（站姿 5.6 宽 × 立绘高 ~7）
       const feet = deps.unitFeet(player);
       const ringJob = groundRing(ctx, deps, {

@@ -24,12 +24,13 @@
 
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { DEFERRED_ON, applyGbufHardTest } from '../post/gbufDepth.js'; // WebGPU 迁移：本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
+import { DEFERRED_ON, applyGbufHardTest } from '../post/gbufDepth.js'; // 本体特效挂 colorNode 的材质必须显式是 Node 材质（three.core 单例共享，混用安全）
 import { UnitFxLayer } from '../fx/unitFxLayer.js';
 import { makeShieldDome, shieldDomeLevel } from '../fx/shieldDome.js';
 import { BLOOM_LAYER } from '../fx/bloomOffset.js';
 import { deferDisposeTexture } from '../deferredDispose.js';
 import { UI_FONT } from '../richtext/uiFont.js';
+import { isAttackKind } from '../../core/intentKinds.js';
 
 const SIDE_COLORS = Object.freeze({
   player: 0x4a6fa5,
@@ -47,7 +48,7 @@ const HP_BAR_HEIGHT = 1.5;
 const SHIELD_FRAME_PAD = 0.45;  // 保护框相对血条的外扩
 const SHIELD_FRAME_COLOR = 0x5aa8ff;
 const SHIELD_POP_DUR = 0.28;    // 数值变更放缩跳动时长（牌库脉冲同语言）
-// 血量条补间（2026-10-09 用户定）：受伤/治疗不做瞬变——先快后慢（cubic-out），
+// 血量条补间：受伤/治疗不做瞬变——先快后慢（cubic-out），
 // 时长随变动幅度走（大伤/大疗看得见过程，小变动快闪即达）
 const HP_ANIM_MIN_MS = 240;
 const HP_ANIM_SPAN_MS = 660;
@@ -101,7 +102,7 @@ export class UnitObject extends THREE.Group {
     for (let i = 0; i < uniqueID.length; i++) _h = (_h * 31 + uniqueID.charCodeAt(i)) | 0;
     this._boardYawBias = BOARD_YAW_BIAS * ((_h & 1) ? 1 : -1);
 
-    // 命名部件表（多部件敌人，fx Phase 5）：key → Object3D（环绕火球/浮游炮等挂接件）。
+    // 命名部件表（多部件敌人）：key → Object3D（环绕火球/浮游炮等挂接件）。
     // 剧本经 partOrRoot(key) 寻址——部件不存在回落根节点（内容演进不炸旧剧本）
     this.parts = new Map();
     this._tickFns = new Set(); // 附件的逐帧钩子（环绕轨道等），update 统一驱动
@@ -110,8 +111,8 @@ export class UnitObject extends THREE.Group {
     // faceCamera 逐帧水平 yaw 转向相机（立牌形/圆柱 billboard，只 yaw——斜视下
     // 立牌不转正会被透视压斜；立面保持垂直地面，球面 pitch 后仰已弃）。
     // 脚下的假透视水平件（金环/护盾地环等）也挂这里：它们只有 yaw 对准相机后
-    // 椭圆长轴才与立牌底边平行——贴地不参与是旧错误约定，2026-10-02 用户指正后
-    // 统一收口；倾倒（死亡倾倒/假死留尸）只作用 billboard，status 与地面件不跟着倒
+    // 椭圆长轴才与立牌底边平行；倾倒（死亡倾倒/假死留尸）只作用 billboard，
+    // status 与地面件不跟着倒
     this._rig = new THREE.Group();
     this._rig.name = 'rig';
     this._rig.rotation.order = 'YXZ';
@@ -150,8 +151,8 @@ export class UnitObject extends THREE.Group {
     this._bodyColorBase = this._body.material.color.clone(); // 焚毁改色后的恢复基准（restoreBody）
     this._standee.add(this._body);
 
-    // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（脚底=地板，旧稿"站台下方"
-    // 在真 3D 地板下会被地面裁掉，故上移叠腿前，z 微抬避免与立牌 z-fight）
+    // HP 条：底槽 + 左锚定填充 + 数字文本，叠在脚踝前方（贴脚底会被真 3D 地板
+    // 裁掉，故上移叠腿前，z 微抬避免与立牌 z-fight）
     // （rig 层：不随尸体倾倒）
     this._hpBar = new THREE.Group();
     this._hpBar.name = 'hpBar';
@@ -242,7 +243,7 @@ export class UnitObject extends THREE.Group {
     this._intention.name = 'intention';
     this._intention.position.set(0, standeeHeight + INTENTION_LIFT + INTENTION_STRIP_H / 2, 0.4);
     this._intention.visible = false;
-    this._rig.add(this._intention);   // rig 层：假死尸体倒平后「?」仍立着（2026-10-07 用户定）
+    this._rig.add(this._intention);   // rig 层：假死尸体倒平后「?」仍立着
     this._intentionSig = null;
     this._name = '';
     this._intentionT = Math.random() * Math.PI * 2;
@@ -271,7 +272,7 @@ export class UnitObject extends THREE.Group {
     this._body.material.map = texture;
     this._body.material.color.set(0xffffff);
     this._body.material.needsUpdate = true;
-    this._fxLayer?.body?.rebind?.(); // L0 着色链在立绘落地后建（旧 USE_MAP 变体重编的同位时机）
+    this._fxLayer?.body?.rebind?.(); // L0 着色链在立绘落地后建（USE_MAP 变体重编的同位时机）
     deferDisposeTexture(old);
     this._body.geometry.dispose();
     this._body.geometry = new THREE.PlaneGeometry(this._standeeHeight * aspect, this._standeeHeight);
@@ -540,7 +541,7 @@ export class UnitObject extends THREE.Group {
    */
   faceCamera(camDir) {
     this._rig.rotation.y = Math.atan2(camDir.x, camDir.z);
-    // 立牌固有偏航（2026-10-07 用户定）：不完全正对相机——正对视角下绕脚倒伏/
+    // 立牌固有偏航：不完全正对相机——正对视角下绕脚倒伏/
     // 摆动的透视压扁读不出幅度；偏一个固定角后倒伏带横向位移分量，读感立体。
     // 偏航写 billboard（倾倒组）：status/地面件仍在 rig 层保持正对相机
     this._billboard.rotation.y = this._boardYawBias;
@@ -549,8 +550,8 @@ export class UnitObject extends THREE.Group {
   /** 帧驱动：附件钩子（环绕轨道等）+ idle 呼吸 + 意图标签浮动 + 闪红窗口衰减 + 盾徽数值跳动衰减。 */
   update(dt) {
     // 逐件 try/catch：tick 件全是视觉装饰，一件抛错不许拖死主循环——且必须就地
-    // 摘除病灶（毒雾 s 字段撞名教训：异常逃出 update 把 rAF 主循环整链打断，
-    // 画面冻结但 gsap 继续推 uniform，数据断言全绿、视觉已死，极难察觉）
+    // 摘除病灶件（异常逃出 update 会把 rAF 主循环整链打断：画面冻结但 gsap 继续
+    // 推 uniform，数据断言全绿、视觉已死，极难察觉）
     for (const fn of this._tickFns) {
       try { fn(dt); } catch (e) {
         this._tickFns.delete(fn);
@@ -611,7 +612,7 @@ export class UnitObject extends THREE.Group {
 
   /** 目标标注高亮（拖牌指定目标时）：地面金环（平贴地板但**挂 rig**——
    *  椭圆环是「假透视圆」（长轴压扁比模拟俯视），必须随立牌 yaw 对准相机，
-   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜（2026-10-02 用户指正）。
+   *  否则长轴固定世界朝向、与 billboard 底边不平行，读感歪斜。
    *  rig 只 yaw 不 pitch，水平环 yaw 后仍贴地；尸体倾倒也不掀环（rig 层不吃倾倒）。 */
   setHighlight(on) {
     if (on === !!this._ring) return;
@@ -640,7 +641,7 @@ export class UnitObject extends THREE.Group {
 
   dispose() {
     this._fxLayer.dispose(); // fx 宿主先收：overlay 件摘钩销材质，L0 随本体材质消亡
-    // 部件自检（fx Phase 5）：部件把收尾挂在 userData.dispose（orbs 等）——
+    // 部件自检：部件把收尾挂在 userData.dispose（orbs 等）——
     // 单位视图消亡（死亡移除/舞台销毁）时统一摘部件、停 tick、释放部件材质
     for (const part of this.parts.values()) { try { part.userData?.dispose?.(); } catch (_) {} }
     this.parts.clear();
@@ -717,13 +718,28 @@ function shieldIconTexture() {
 }
 
 // ---- 意图图标条烘焙 ----
-// 基础意图两两组合：攻（剑 + N×M 数字）/防（盾）/增强（升双箭头，绿）/
-// 削弱（降双箭头，紫）/召唤（四芒星）/晕眩（螺旋，不行动）/未知（?）。
+// 基础意图两两组合：攻（剑 + N×M 数字）/重击（阔剑 + 数字）/处决（斧 + 数字）/
+// 固定伤害攻击（石板钉剑 + 数字）/防（盾 + N 数字）/增强（升双箭头，绿）/
+// 强大强化（升三箭）/削弱（降双箭头，紫）/强大削弱（降三箭）/召唤（四芒星）/
+// 晕眩（螺旋，不行动）/未知（?）。每段 = 图标 + 可选紧跟数字（攻击族与防御带值）。
 // 全程序化矢量绘制——emoji 位图字在缩小
 // 采样下发糊且跨平台风格不可控，弃用；数字与 bakeBoldText 同语言（白粗体深描边）。
 const INTENTION_STRIP_H = 6.8;   // 图标条世界高（wu）——放大一倍便于阅读
 const INTENTION_GAP = 0.55;      // 图标/数字间距（wu）
 const INTENTION_LIFT = 0.9;      // 图标条底缘离头顶间隙（wu）：中心位 = 头顶 + 间隙 + 半高
+
+// 各意图段的数字文本（attack 族按 hits×damage；defend 按 shield）与数字特征色
+function intentionSegText(intention, kind) {
+  if (isAttackKind(kind) && intention.damage != null) {
+    return intention.hits > 1 ? `${intention.hits}×${intention.damage}` : `${intention.damage}`;
+  }
+  if (kind === 'defend' && intention.shield != null) return `${intention.shield}`;
+  return null;
+}
+const INTENTION_NUM_TINT = {
+  attack: '#ffe3e3', heavy: '#ffc9c9', execute: '#ffb0b0',
+  fixedAttack: '#dcdcdc', defend: '#cfe6ff',
+};
 
 function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   if (typeof document === 'undefined') return defaultBakeLabel();
@@ -731,14 +747,12 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const H = INTENTION_STRIP_H * ppw; // 逻辑像素高
   const gap = INTENTION_GAP * ppw;
   const fontPx = H * 0.6; // 数字字号 = 图标高的 60%（图标不变）
-  const attackText = kinds.includes('attack') && intention.damage != null
-    ? `${intention.hits > 1 ? `${intention.hits}×` : ''}${intention.damage}`
-    : null;
+  const segTexts = kinds.map(k => intentionSegText(intention, k));
   // 先量宽再开正式画布（canvas 定宽后改尺寸会重置绘制状态）
   const mctx = document.createElement('canvas').getContext('2d');
   mctx.font = `${fontPx}px ${UI_FONT}`;
-  const textW = attackText ? mctx.measureText(attackText).width : 0;
-  const W = kinds.length * H + (kinds.length - 1) * gap + (attackText ? gap + textW : 0);
+  const textWs = segTexts.map(t => (t ? gap + mctx.measureText(t).width : 0));
+  const W = kinds.length * H + (kinds.length - 1) * gap + textWs.reduce((a, b) => a + b, 0);
 
   const S = 4; // 超采样
   const canvas = document.createElement('canvas');
@@ -747,21 +761,23 @@ function bakeIntentionStrip(intention, ppw, anisotropy = 0) {
   const ctx = canvas.getContext('2d');
   ctx.scale(S, S);
   let x = 0;
-  for (const k of kinds) {
+  kinds.forEach((k, i) => {
     drawIntentionGlyph(ctx, k, x, 0, H);
-    x += H + gap;
-  }
-  if (attackText) {
-    ctx.font = `${fontPx}px ${UI_FONT}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(3, fontPx * 0.18);
-    ctx.strokeStyle = 'rgba(5, 7, 12, 0.9)';
-    ctx.strokeText(attackText, x, H * 0.55);
-    ctx.fillStyle = '#ffe3e3';
-    ctx.fillText(attackText, x, H * 0.55);
-  }
+    x += H + (i < kinds.length - 1 ? gap : 0);
+    const t = segTexts[i];
+    if (t) {
+      ctx.font = `${fontPx}px ${UI_FONT}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(3, fontPx * 0.18);
+      ctx.strokeStyle = 'rgba(5, 7, 12, 0.9)';
+      ctx.strokeText(t, x + gap * 0.4, H * 0.55);
+      ctx.fillStyle = INTENTION_NUM_TINT[k] ?? '#ffe3e3';
+      ctx.fillText(t, x + gap * 0.4, H * 0.55);
+      x += textWs[i];
+    }
+  });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = anisotropy;
@@ -799,6 +815,98 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       ctx.fillRect(cx - s * 0.055, guardY + s * 0.1, s * 0.11, s * 0.18);
       break;
     }
+    case 'heavy': {
+      // 重击：阔剑（刃宽近三倍 + 暖红剑格）——比普通剑明显粗重
+      const cx = x + s / 2;
+      const bw = s * 0.3;
+      const bladeTop = y + s * 0.04;
+      const guardY = y + s * 0.74;
+      const grad = ctx.createLinearGradient(cx - bw, 0, cx + bw, 0);
+      grad.addColorStop(0, '#8a8f9a');
+      grad.addColorStop(0.5, '#e6dfe4');
+      grad.addColorStop(1, '#7c8290');
+      ctx.beginPath();
+      ctx.moveTo(cx, bladeTop);
+      ctx.lineTo(cx + bw, bladeTop + s * 0.32);
+      ctx.lineTo(cx + bw * 0.72, guardY);
+      ctx.lineTo(cx - bw * 0.72, guardY);
+      ctx.lineTo(cx - bw, bladeTop + s * 0.32);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.6, s * 0.045);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.8)';
+      ctx.stroke();
+      ctx.fillStyle = '#a03434';
+      ctx.fillRect(cx - s * 0.26, guardY, s * 0.52, s * 0.13);
+      ctx.beginPath();
+      ctx.arc(cx, guardY + s * 0.3, s * 0.08, 0, Math.PI * 2);
+      ctx.fillStyle = '#d84848';
+      ctx.fill();
+      break;
+    }
+    case 'execute': {
+      // 处决：单手斧（竖柄 + 一侧弧刃，暖红刃口）——致死量级的攻击读法
+      const cx = x + s * 0.42;
+      const topY = y + s * 0.05;
+      const botY = y + s * 0.95;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(2.4, s * 0.09);
+      ctx.strokeStyle = '#6b5640';
+      ctx.beginPath();
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(cx, botY);
+      ctx.stroke();
+      ctx.lineWidth = Math.max(1.4, s * 0.04);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.75)';
+      ctx.beginPath();
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(cx, botY);
+      ctx.stroke();
+      const bx = cx + s * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(bx, topY);
+      ctx.quadraticCurveTo(bx + s * 0.46, topY + s * 0.14, bx + s * 0.4, topY + s * 0.34);
+      ctx.quadraticCurveTo(bx + s * 0.22, topY + s * 0.3, bx, topY + s * 0.34);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(bx, topY, bx + s * 0.4, topY + s * 0.34);
+      grad.addColorStop(0, '#e8e0e0');
+      grad.addColorStop(1, '#b45252');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.6, s * 0.045);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.8)';
+      ctx.stroke();
+      break;
+    }
+    case 'fixedAttack': {
+      // 固定伤害攻击：石板底 + 钉住的细剑——「数值焊死」的读法（格挡/虚弱不动它）
+      const p = s * 0.06;
+      ctx.fillStyle = '#3a3f46';
+      ctx.fillRect(x + p, y + p, s - 2 * p, s - 2 * p);
+      ctx.lineWidth = Math.max(1.6, s * 0.05);
+      ctx.strokeStyle = '#788089';
+      ctx.strokeRect(x + p, y + p, s - 2 * p, s - 2 * p);
+      const cx = x + s / 2;
+      const bw = s * 0.1;
+      const bladeTop = y + s * 0.12;
+      const guardY = y + s * 0.72;
+      ctx.beginPath();
+      ctx.moveTo(cx, bladeTop);
+      ctx.lineTo(cx + bw, bladeTop + s * 0.26);
+      ctx.lineTo(cx + bw * 0.7, guardY);
+      ctx.lineTo(cx - bw * 0.7, guardY);
+      ctx.lineTo(cx - bw, bladeTop + s * 0.26);
+      ctx.closePath();
+      ctx.fillStyle = '#c9ced6';
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.2, s * 0.035);
+      ctx.strokeStyle = 'rgba(10, 12, 18, 0.75)';
+      ctx.stroke();
+      ctx.fillStyle = '#9aa3ad';
+      ctx.fillRect(cx - s * 0.13, guardY, s * 0.26, s * 0.09);
+      break;
+    }
     case 'defend': {
       // 盾（蓝渐变纹章盾，与盾徽/状态面板盾图标同语言）
       const w = s * 0.78;
@@ -828,10 +936,24 @@ function drawIntentionGlyph(ctx, kind, x, y, s) {
       drawChevron(ctx, x, y, s, 0.52, '#5ecb6e', false);
       break;
     }
+    case 'strongBuff': {
+      // 强大强化：绿色升三箭（更密的叠加读作「更强」）
+      drawChevron(ctx, x, y, s, 0.1, '#3fbf52', false);
+      drawChevron(ctx, x, y, s, 0.38, '#3fbf52', false);
+      drawChevron(ctx, x, y, s, 0.66, '#3fbf52', false);
+      break;
+    }
     case 'debuff': {
       // 削弱：紫色降双箭头
       drawChevron(ctx, x, y, s, 0.84, '#b26ee8', true);
       drawChevron(ctx, x, y, s, 0.48, '#b26ee8', true);
+      break;
+    }
+    case 'strongDebuff': {
+      // 强大削弱：紫红降三箭（更密的叠加读作「更强」）
+      drawChevron(ctx, x, y, s, 0.9, '#a04ad0', true);
+      drawChevron(ctx, x, y, s, 0.62, '#a04ad0', true);
+      drawChevron(ctx, x, y, s, 0.34, '#a04ad0', true);
       break;
     }
     case 'summon': {

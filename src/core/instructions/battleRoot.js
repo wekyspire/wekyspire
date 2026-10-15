@@ -49,12 +49,12 @@ export class PreBattleInstruction extends BattleInstruction {
       // 魏启为战斗内资源——入战置 0、回合 1 自动回 1（见下方 player.mana 赋值行）
       player.shield = 0;
       // debug 无敌是「面板开关」语义（开了就该一直无敌直到手动关）——跨战斗边界
-      // 保活，不随下面的效果清空消失（夜测 r2路2 探针实报：战前开启进战斗即失效）
+      // 保活，不随下面的效果清空消失
       const keepInvuln = player.getEffect?.('invulnerable') != null;
       player.clearEffects();
       if (keepInvuln) player.addEffect('invulnerable', 1);
       player.actionPoints = player.maxActionPoints;
-      // 入战魏启固定 0（2026-10-07 用户定）：回合 1 开始自动回 1，实际 1 魏启开局。
+      // 入战魏启固定 0：回合 1 开始自动回 1，实际 1 魏启开局。
       player.mana = 0;
       // 老虎机安慰奖「可乐」：下一场战斗开始时额外恢复 N 魏启——一次性挂载，这里消费即清
       const manaGift = runState.pendingManaBonus ?? 0;

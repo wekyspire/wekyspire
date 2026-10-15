@@ -1,4 +1,4 @@
-// 场景火焰发射提案（2026-10-06 燃烧系统的 GPU↔GPU 零 CPU 通路）：
+// 场景火焰发射提案（燃烧系统的 GPU↔GPU 零 CPU 通路）：
 // 写端 = 燃烧部件材质的 fragment shader（combustion.js 挂的 modifier 尾部）——
 // 按火势逐像素概率抢槽，把世界坐标 + 强度写进提案表；读端 = sceneFire 粒子类型
 // 的 spawn 段（custom dispatch）。清零 = 池 update 序列尾一条 1-invocation compute

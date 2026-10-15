@@ -1,10 +1,9 @@
-// 护盾罩（L2 笼罩层，2026-10-02 v2 质量重做）：护盾不是一次性演出，是单位身上的
-// **长久存在**的半透明能量罩——盾量在则罩在。v1 被判「过分廉价」（细灰弧线 + 无体积
-// + 哑光），v2 的质量语言：
-//   · 体积读法 = 四层叠印：锐利罩缘（HDR 推过 bloom 阈起辉，用户定：要辉光直接输出
+// 护盾罩（L2 笼罩层）：护盾不是一次性演出，是单位身上的
+// **长久存在**的半透明能量罩——盾量在则罩在。质量语言：
+//   · 体积读法 = 四层叠印：锐利罩缘（HDR 推过 bloom 阈起辉——要辉光直接输出
 //     HDR 色，不必另拉通道）+ 罩缘内侧宽晕（伪菲涅尔，读出曲面）+ 极淡罩内染色
 //     （底亮顶淡 + 缓慢上流微光）+ 周期上扫的扫描线（能量盾的「活」感）；
-//   · 落地读法 = 脚下水平地环（罩缘与地面的交线——v1「两根浮空弧线」廉价感的根治）；
+//   · 落地读法 = 脚下水平地环（罩缘与地面的交线——浮空弧线会读廉价）；
 //   · 厚度读法 = 盾越厚罩缘越凝实越亮（rim 的 alpha/HDR 双双随 level 走）。
 // 生命周期四态（驱动见 UnitObject.setUnit 与伤害节拍 units.js）：
 //   · 获得/加厚 → pulse()：亮锋自脚底扫上 + 罩缘一亮；
@@ -33,7 +32,7 @@ import { gsap } from 'gsap';
 const DOME_W_FACTOR = 1.32;   // 罩宽 = 本体牌宽 × 此系数
 const DOME_H_FACTOR = 1.12;   // 罩高 = 立牌高 × 此系数
 // 椭圆（uv 空间）：半径x / 心y / 半径y——心 y 上移（0.10）让罩读「蛋形裹人」
-// 而非正半球坐地（2026-10-02 用户定）；底缘仍探出 quad 下边坐进脚线
+// 而非正半球坐地；底缘仍探出 quad 下边坐进脚线
 const RX = 0.45, CY = 0.10, RY = 0.78;
 const RIMK = 260.0;           // 罩缘带锐度（越大越细）
 const RIM_BASE = 0.34, RIM_GAIN = 0.66; // 罩缘凝实度 = BASE + GAIN × level
@@ -41,8 +40,8 @@ const FILL_BASE = 0.025, FILL_GAIN = 0.045; // 罩内染色强度（宁薄勿厚
 const GLOW_BASE = 0.10, GLOW_GAIN = 0.22;   // 罩缘内晕（伪菲涅尔）强度
 const SHIELD_LEVEL_REF = 24;  // 盾量 → level 归一基准（此值即满凝实）
 const MIN_LEVEL = 0.16;       // 1 点盾也要读得出罩存在
-// 罩缘/地环角向「若隐若现」：三瓣亮弧随双频正弦游走，永不成完整闭环（用户定：
-// 不搞完全闭合的罩子圆弧，边界若隐若现暗示存在即可）。谷底 = BASE + GAIN × level
+// 罩缘/地环角向「若隐若现」：三瓣亮弧随双频正弦游走，永不成完整闭环
+//（不搞完全闭合的罩子圆弧，边界若隐若现暗示存在即可）。谷底 = BASE + GAIN × level
 //（盾越厚瓣越亮、谷越浅，但谷底封顶 BASE+GAIN——缺口恒在）
 const ARC_VALLEY_BASE = 0.25, ARC_VALLEY_GAIN = 0.30;
 const GROUND_VALLEY_BASE = 0.30, GROUND_VALLEY_GAIN = 0.25;
@@ -51,12 +50,12 @@ const PULSE_MS = 720;         // 获得扫光时长
 const HIT_MS = 480;           // 受击涟漪时长
 const HIT_Y = 0.55;           // 受击点高度（uv.y，罩面中上部）
 // 受击点 x 锚在**罩缘**（椭圆 d=1）上：波纹自护盾边界向罩内扩散。锚在 quad 角落
-// （0.93/0.07，d≈1.12 在罩外）会读成「从立牌纹理边缘泛起」（2026-10-10 用户指正）
+// （0.93/0.07，d≈1.12 在罩外）会读成「从立牌纹理边缘泛起」
 const hitRimX = (fromRight) => 0.5 + (fromRight ? 1 : -1)
   * RX * Math.sqrt(Math.max(0, 1 - ((HIT_Y - CY) / RY) ** 2));
 const VANISH_MS = 860;        // 自然消散时长
-// 破碎 v2（2026-10-10 重做——旧版只有爆闪+淡出，与自然消失拉不开读法）：
-// 裂纹炸开 → 冲击波 → 扇区错峰剥落（碎片外抛下坠）
+// 破碎：裂纹炸开 → 冲击波 → 扇区错峰剥落（碎片外抛下坠）——
+// 与自然消失的「蒸发上升」拉开读法
 const SHATTER_MS = 720;          // 破碎时长（扇区错峰要留出节奏）
 const SHATTER_SECTORS = 7;       // 碎裂扇区数（奇数——碎片不规则）
 const SHATTER_DEATH_LO = 0.10;   // 最早扇区开始剥落的时刻（时间线分数）
@@ -120,7 +119,7 @@ function buildDomeColorNode(u, tint, hot, mid) {
     const swept = oneMinus(smoothstep(frontY.sub(0.02), frontY.add(0.14), vUv.y))
       .mul(duringPulse).add(oneMinus(duringPulse)).toVar();
     // 受击：罩缘着弹点闪光 + 涟漪自边界向罩内扩散。hitEnv 必须 sin 包络（首尾皆 0）——
-    // (1-uHit)² 在闲置 uHit=0 时=1，涟漪项会恒成着弹点亮斑（实测穿帮）
+    // (1-uHit)² 在闲置 uHit=0 时=1，涟漪项会恒成着弹点亮斑
     const rhit = vUv.sub(vec2(u.uHitX, float(HIT_Y))).length().toVar();
     const hitEnv = sin(clamp(u.uHit, 0.0, 1.0).mul(3.14159)).toVar();
     const ringR = u.uHit.mul(1.25).toVar();
@@ -134,11 +133,11 @@ function buildDomeColorNode(u, tint, hot, mid) {
     const evapY = u.uFade.mul(1.15).sub(0.075).toVar();
     const evap = exp(vUv.y.sub(evapY).mul(vUv.y.sub(evapY)).mul(-320.0))
       .mul(inside).mul(u.uFade).mul(fadeAll).mul(6.0).toVar();
-    // 破碎 v2：与自然消失拉开读法——消失 = 蒸发上升整体淡出；破碎 = 裂纹自罩缘
+    // 破碎：与自然消失拉开读法——消失 = 蒸发上升整体淡出；破碎 = 裂纹自罩缘
     // 着弹点炸开 → 白热爆闪 + 冲击波环 → 扇区错峰剥落（边缘一亮后带残光熄灭，
     // 位移侧碎片外抛下坠）。shFlash 必须升沿起步（两段 smoothstep 夹峰）——
     // 单段 oneMinus(smoothstep(0,…,uShatter)) 在闲置 uShatter=0 时=1，
-    // 全罩 rgb 恒乘爆闪系数 = 整罩恒过曝（实测 1/10 白罩病根）
+    // 全罩 rgb 恒乘爆闪系数 = 整罩恒过曝
     const shFlash = smoothstep(0.0, 0.06, u.uShatter)
       .mul(oneMinus(smoothstep(0.08, 0.30, u.uShatter))).toVar();
     const shFade = oneMinus(smoothstep(0.18, 0.90, u.uShatter)).toVar();
@@ -216,7 +215,7 @@ function buildGroundColorNode(u, tint, hot) {
     const pool = exp(r.mul(r).mul(-3.0)).toVar(); // 环内极淡光池
     const breathe = sin(u.uTime.mul(1.1)).mul(0.15).add(0.85).toVar();
     // 受击震亮：sin 包络（闲置 uHit=0 时=0）——(1-uHit)² 反边形式闲置恒 1，
-    // 地环常亮 1.8× 且受击时反而变暗（方向反了，2026-10-10 随受击返工一并修）
+    // 地环会常亮 1.8× 且受击时反而变暗
     const hitEnv = sin(clamp(u.uHit, 0.0, 1.0).mul(3.14159)).toVar();
     const fadeAll = oneMinus(u.uFade).mul(oneMinus(smoothstep(0.18, 0.90, u.uShatter))).toVar();
     const gAng = atan(q.y, q.x).toVar();
@@ -292,8 +291,8 @@ export function makeShieldDome(layer, {
   group.add(mesh);
   unit._standee.add(group);
   // 地环（挂 rig 组：水平假透视椭圆必须随 yaw 对准相机——长轴与立牌底边
-  // 平行才读「一圈环坐地上」，固定世界朝向会歪斜（2026-10-02 用户指正的老问题，
-  // 与目标标注金环同一修法）；rig 只 yaw 不 pitch，环 yaw 后仍贴地、尸体倾倒不掀环）
+  // 平行才读「一圈环坐地上」，固定世界朝向会歪斜；
+  // rig 只 yaw 不 pitch，环 yaw 后仍贴地、尸体倾倒不掀环）
   const gMat = new MeshBasicNodeMaterial();
   gMat.colorNode = buildGroundColorNode(u, tintV, hotV);
   gMat.transparent = true; gMat.depthWrite = false; gMat.fog = false;

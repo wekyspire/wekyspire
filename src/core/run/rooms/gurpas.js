@@ -54,7 +54,7 @@ export function ensureGurpasStock(run) {
       if (has.has(def.id) || out.some(x => x.relicId === def.id)) continue;
       out.push({
         id: `relic:${def.id}`, kind: 'relic', relicId: def.id, rarity: def.rarity,
-        label: `${def.name}（${def.rarity}）`,   // 具体名在前、档位括注（2026-10-02 用户定格式）
+        label: `${def.name}（${def.rarity}）`,   // 具体名在前、档位括注
         sub: def.description ?? '',
         price: intIn(GURPAS.prices[priceKey], run.rng),
         sold: false,
@@ -114,7 +114,6 @@ export function gurpasView(run) {
  * 面板重绘一次价格变一次，且与实际卖出价漂移、白白消耗 rng 流。
  */
 export function sellPrice(run, def) {
-  if (!def) return 0;
   const range = GURPAS.sell[def.rarity];
   if (!range) throw new Error('她只收 A 级与 S 级遗物');
   const g = ensureGurpasStock(run);
@@ -157,9 +156,7 @@ export function buyGurpas(run, index) {
     it.sold = true;   // S 级不补货；其余卖光也不补（同层货架）
     return { kind: 'relic', relicId: it.relicId };
   }
-  // 兜底：未知商品类型
-  it.sold = true;
-  return { kind: it.kind };
+  throw new Error(`古尔帕斯货架上出现未知商品类型：${it.kind}`);
 }
 
 /** 卡包收尾：三选一挑一张入组。 */

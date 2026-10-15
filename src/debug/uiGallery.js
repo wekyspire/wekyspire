@@ -68,7 +68,7 @@ function buildRun() {
     r.storyMode = opt('story', '0') === '1';
     r.player.money = Number(opt('money', '20'));
     ensureShopStock(r);
-    roomUi = { slot: { anim: null, lastSpin: null } };
+    roomUi = { slot: { spinning: null, lastSpin: null } };
     if (r.currentRoom === 'slot') r.player.money = Number(opt('money', '20'));
   } else if (PANEL === 'ascension') {
     // 进阶事件：进 ascension 阶段（只剩维度抉择面板）
@@ -142,9 +142,7 @@ mapStage.setPanelIntentHandler((intent) => {
       }
       else if (a === 'spin') {
         const prize = spinSlot(run);
-        roomUi.slot = { anim: { id: `a${Date.now()}`, prize }, lastSpin: null };
-      } else if (a === 'slotAnimDone') {
-        roomUi.slot = { anim: null, lastSpin: roomUi.slot.anim?.prize ?? null };
+        roomUi.slot = { spinning: null, lastSpin: null };   // 画廊无转轮可等：不进「转动中」
       } else if (a === 'slotTake') takeSlotPrize(run, intent.choice ?? null);
       else if (a === 'slotDecline') declineSlotPrize(run);
       else if (a === 'slotPickUpgrade') slotUpgrade(run, intent.uniqueID);

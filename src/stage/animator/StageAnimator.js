@@ -1,11 +1,11 @@
-// StageAnimator（§4.5）：旧 utils/animator.js 的 three 版重写。
-// 注册表 uniqueID → { object3D, state, currentTweens }。两态模型（2026-10-11 统一）：
+// StageAnimator（§4.5）。
+// 注册表 uniqueID → { object3D, state, currentTweens }。两态模型：
 //   free（idle）    无租约——常驻驱动权归 HandSprings（朝 zone 静止位收敛）
 //   leased（animating | dragging）指令动画/玩家拖拽临时租借；租约结束
 //                    （onComplete 或被顶杀）自动回落 free，弹簧从当前姿态零速收养
 // zone 是所有权记录：卡「属于哪里」只看 DisplayModel 的 zone；animator 只回答
-// 「此刻谁在驾驶它」。手持卡的全部平滑归位由弹簧层承担（旧 tracking 归位补间
-// 与之职责重叠，已删）。
+// 「此刻谁在驾驶它」。手持卡的全部平滑归位由弹簧层承担（归位补间与弹簧职责重叠，
+// 不做）。
 //
 // 完成契约（杀不死）：gsap kill 不放 onComplete，而节拍的 finish / await 链挂在
 // onComplete 上——被顶杀的补间若吞掉回调，等待方挂死等保险丝。故 onInterrupt

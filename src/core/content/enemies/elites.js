@@ -73,14 +73,13 @@ registerEnemy({
     }
     const phase = (unit.actionIndex - 1) % 3;
     if (phase === 0) return { kinds: ['debuff'], note: '向你的手牌塞入2张「震慑」' };
-    if (phase === 1) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, note: '自身护盾+14' };
+    if (phase === 1) return { kinds: ['attack', 'defend'], hits: 1, damage: 6 + atk, shield: 14, note: '自身护盾+14' };
     return { kinds: ['attack'], hits: 3, damage: 6 + atk };
   },
 });
 
 // ⑫ 沼泽伏击者（第 1 章精英）：爆发——开局自带护盾20（防首回合
 // 被斩杀），首拍扑咬 24；随后三拍循环：盾15+中毒8 → 盾15+攻12 → 晕眩发呆（破盾窗口）。
-//（2026-10-10 加强：中毒固定伤化后 6→8、攻 10→12，对齐 ENEMIES_1.md 新稿）
 registerEnemy({
   difficulty: { base: 10, floorMin: 4, floorMax: 10, elite: true },
   id: 'swampAmbusher', name: '沼泽伏击者',
@@ -117,8 +116,8 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '自身开局自带护盾20' };
     }
     const phase = (unit.actionIndex - 1) % 3;
-    if (phase === 0) return { kinds: ['defend', 'debuff'], note: '自身护盾15，赋予玩家中毒8' };
-    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 12 + atk, note: '自身护盾15' };
+    if (phase === 0) return { kinds: ['defend', 'debuff'], shield: 15, note: '自身护盾15，赋予玩家中毒8' };
+    if (phase === 1) return { kinds: ['defend', 'attack'], hits: 1, damage: 12 + atk, shield: 15, note: '自身护盾15' };
     return { kinds: ['stun'], note: '晕眩（不行动）' };
   },
 });
@@ -149,13 +148,13 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['defend', 'buff'], note: '蓄力：自身护盾+15、蓄势+5' }
+    ? { kinds: ['defend', 'buff'], shield: 15, note: '蓄力：自身护盾+15、蓄势+5' }
     : { kinds: ['attack'], hits: 1,
         damage: 5 + unit.getStat('attack'),   // 蓄势由 withMomentumBonus 统一计入预告——手动再加=双计
         note: `冲锋（蓄势${unit.getEffectStacks('momentum')}：伤害+${unit.getEffectStacks('momentum')}）` }),
 });
 
-// ㉑ 幼年罗刹（第 1 章精英；ENEMIES_1.md 2026-10-09 新增，文档 id 栏是模板复制残留）：
+// ㉑ 幼年罗刹（第 1 章精英；ENEMIES_1.md 的 id 栏是模板复制残留，以代码为准）：
 // 惩罚不可控攻击节奏——开局暴怒1（被打就长力量），三拍复读：攻3×3 → 攻3×4+暴怒1
 // → 力量2。高爆发/可控的牌组打起来通顺，蹭刀流会把它喂起来。
 registerEnemy({
@@ -236,7 +235,7 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
     }
     if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 13 + unit.getStat('attack') };
-    return { kinds: ['defend'], note: '自身护盾+8' };
+    return { kinds: ['defend'], shield: 8, note: '自身护盾+8' };
   },
 });
 
@@ -262,7 +261,7 @@ registerEnemy({
   getIntention: (unit, battleState) => {
     const master = aliveEnemies(battleState).find(footmanMasterOf);
     return (unit.actionIndex % 2 === 0 && master)
-      ? { kinds: ['defend', 'buff'], note: '护主：主君护盾+5' }
+      ? { kinds: ['defend', 'buff'], shield: 5, note: '护主：主君护盾+5' }
       : { kinds: ['attack'], hits: 1, damage: 4 + unit.getStat('attack') };
   },
 });
@@ -353,7 +352,7 @@ registerEnemy({
     if (phase === 0) return { kinds: ['debuff'], note: '将「红色炸弹」「蓝色炸弹」洗入你的牌库' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + atk };
     if (phase === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 7 + atk, note: '向你的手牌塞入「白色炸弹」「黑色炸弹」' };
-    return { kinds: ['attack'], hits: 1, damage: 21 + atk, note: '重击' };
+    return { kinds: ['heavy'], hits: 1, damage: 21 + atk, note: '重击' };
   },
 });
 
@@ -406,7 +405,7 @@ registerEnemy({
     const phase = (unit.actionIndex - 1) % 4;
     if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 15 + atk };
     if (phase === 1) return { kinds: ['attack'], hits: 5, damage: 3 + atk };
-    if (phase === 2) return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
+    if (phase === 2) return { kinds: ['heavy'], hits: 1, damage: 24 + atk, note: '重击' };
     return { kinds: ['debuff'], note: '赋予玩家干扰1；将 4 张「虚无」洗入你的牌库' };
   },
 });

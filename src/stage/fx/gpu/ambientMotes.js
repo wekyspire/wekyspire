@@ -6,14 +6,15 @@
 // 抖动/重力/风——零新 shader 面）：rate 语义 = 类型行 rate=1 × rateScale=handle.rate；
 // 位置 = spawnPos 逐帧同步（setPosition/建位）；spread 盒抖动近似旧 radius 圆盘 +
 // zJitter 纵深；outward 环向发射走 radial。风场天然同源（windK）。
-// ⚠ 类型行预算：每 handle 独占一行（位置互异不可共享），并发上限 16 +
-// burst/场景/环绕等 ≈ 28 < 32/池——新增常驻发射器大户时核对预算。
+// ⚠ 类型行预算：每 handle 独占一行（位置互异不可共享），并发上限 16；**额度靠回收**——
+// 停/桥拆即退役（登记墓碑还 64 额度、池行 ttl 到期还 32 行额度），长战多次 spawn
+// 不再累计（2026-10-15 前 stop 只摘句柄不回收，两场 soak 即打满 64——实报修复）。
 // 弃案存档（2026-10-07 两轮实测）：单 custom 类型 + uniform/storage 发射器参数表
 // 均不可行——TSL 不支持 uniform(数组)（NodeBuilder 抛「Uniform "null" not
 // implemented」且同步抛在帧内打死 rAF）；storage 表 CPU 写 needsUpdate 后 shader
 // 读回仍全零（分区表零 → 发射器槽落空 → ttl 兜底 0.05s 即死）。
 import * as THREE from 'three';
-import { defineParticleType } from './particleTypes.js';
+import { defineParticleType, releaseParticleType } from './particleTypes.js';
 
 export const MAX_AMBIENT_EMITTERS = 16;   // 并发发射器上限（≈类型行预算的 ambient 份额）
 
@@ -57,6 +58,7 @@ export function createAmbientEmitterBridge(pool, getCamera = null) {
         name: `ambient${seq++}`,
         space: 'world',
         cap: 256,
+        recyclable: true,   // 属主显式回收（停/桥拆）+ 闲置泵兜底（漏 stop 的句柄）
         // render.size 已换算为池世界单位（旧口径 ÷ proj11）
         // rate=1 × rateScale：handle.rate 即每秒发射数（可逐帧直写/补间）
         spawn: {
@@ -90,7 +92,10 @@ export function createAmbientEmitterBridge(pool, getCamera = null) {
       for (let i = emitters.length - 1; i >= 0; i--) {
         const h = emitters[i];
         if (h.stopped) {
-          pool.setTypeActive(h._typeId, 0);   // 在飞粒子自然活到 ttl
+          // 类型回收（登记 64/池行 32 两层额度都靠这一拍还）：先退役池行（停发、
+          // 在飞粒子 ttl 寿终、行与段惰性回收），再回收登记（id 打墓碑，额度还池）
+          pool.retireType(h._typeId);
+          releaseParticleType(h._typeId);
           emitters.splice(i, 1);
           continue;
         }
@@ -98,6 +103,15 @@ export function createAmbientEmitterBridge(pool, getCamera = null) {
         pool.setTypeRateScale(h._typeId, h.rate);
         pool.setTypeSpawnPos(h._typeId, h.x, h.y, h._z);
       }
+    },
+
+    /** 桥拆（舞台 dispose 调）：全部发射器就地回收——池将亡也不跳过（登记表是全局的）。 */
+    dispose() {
+      for (const h of emitters) {
+        pool.retireType(h._typeId);
+        releaseParticleType(h._typeId);
+      }
+      emitters.length = 0;
     },
 
     get count() { return emitters.length; },

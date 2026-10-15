@@ -15,6 +15,7 @@ import { getRelicDefinition } from '../relics/registry.js';
 import { draftRelic } from '../relics/draft.js';
 import { applyRoute } from './routes.js';
 import { recordKills } from './runStats.js';
+import { currentQuestion } from './questions.js';
 
 // run 层流程：普通确定性状态机，不套结算指令树（RUN_DESIGN §6）。
 // 阶段机：prep（战前准备/地图）→ battle → reward（战后固定奖励）→ room（奖励房）
@@ -26,11 +27,11 @@ export const FLOORS_PER_CHAPTER = 11;               // 10 普通层 + 1 Boss 层
 export const TOTAL_FLOORS = FLOORS_PER_CHAPTER * 4; // 44 层 = 4 章
 
 export const isBossFloor = (floor) => floor % FLOORS_PER_CHAPTER === 0;
-// Boss 掉落遗物的稀有度带（按章爬坡）——第 7 轮裁决定案：设计稿的「Boss 掉遗物」从未实装，
-// 遗物实际来源只剩老虎机/商店/古尔帕斯，正常局一局只见 0-2 件（遗物系统对玩家不可见）。
-// Boss 掉落是结构修复而非加餐。
-// 第 8 轮裁决（R8-F/B/D 三方互证：章1 并集等概率一半掉 C = 「大锤/馕饼 ≈ 空气」）：
-// rarity 数组改配 weights——Boss 是里程碑，掉落该有获得感；章1 B 占 65%、章3 A 占 50%。
+// Boss 掉落遗物的稀有度带（按章爬坡）。除 Boss 掉落外，遗物来源只剩
+// 老虎机/商店/古尔帕斯，正常局一局只见 0-2 件（遗物系统对玩家不可见）——
+// Boss 掉落是遗物的结构来源而非加餐。Boss 是里程碑，掉落该有获得感：
+// rarity 数组配 weights（章1 B 占 65%、章3 A 占 50%），等概率一半掉 C
+// 会让掉落形同空气。
 export const BOSS_RELIC_DROP = Object.freeze({
   11: { rarity: ['C', 'B'], weights: { C: 35, B: 65 } },
   22: { rarity: ['B'] },
@@ -74,9 +75,10 @@ export function buildRoomTable(seed, totalFloors = TOTAL_FLOORS) {
   return table;
 }
 
-/** 本层房型（消费口径）：优先房间表；无表（手写 fixture/旧档兜底）维持旧现场随机。 */
+/** 本层房型（消费口径）：读房间表——createRun 与 restoreRunFromSave 两入口必写；
+ * 缺表即契约破裂（显式炸，不回落现场随机——那会静默消耗 rng 主账本）。 */
 export function roomOf(run, floor) {
-  return run.roomTable?.[floor] ?? roomOfFloor(floor, run.rng);
+  return run.roomTable[floor];
 }
 
 // 遭遇生成：floorEnemyGenerator 按楼层分段池 + HP/攻击缩放产出可序列化描述符。
@@ -195,15 +197,21 @@ export function completeRewards(run) {
 }
 
 // room 阶段完成（房间内部逻辑在 rooms/，本函数只迁移阶段）。
-// 训练 = 必做阶段且先于篝火——campTraining/training 房未训练不许离房；
-// 抓卡尾款（pendingUpgrade）未清不许离房。进阶事件已在训练开始时房内先行（beginTraining），
-// 下面的达标检查保留为兜底（编排层异常漏播时离房仍能接上）。
+// 训练 = 必做阶段且先于篝火——campTraining/training 房未训练不许离房。进阶事件已在
+// 训练开始时房内先行（beginTraining），下面的达标检查保留为兜底（编排层异常漏播时
+// 离房仍能接上）。
+// 离房义务门（问句协议单一执法点）：任何待答问句（包未开/产出未领/词条未选/尾款
+// 未清……）都不许离房——答案可以是放弃，但必须玩家亲手给出。shell/场景端的检查
+// 只是提示 UX，执法在这里（headless 直调同样被拦）。
 export function completeRoom(run) {
   expectStage(run, 'room');
   const room = run.currentRoom;
-  if (room === 'training' || room === 'campTraining') {
-    if (!run.roomData?.trained) throw new Error('训练是必做阶段：先完成训练才能离开');
-    if (run.roomData?.pendingUpgrade) throw new Error('抓到的卡还欠一次升级，不能离开房间');
+  if ((room === 'training' || room === 'campTraining') && !run.roomData?.trained) {
+    throw new Error('训练是必做阶段：先完成训练才能离开');
+  }
+  const question = currentQuestion(run);
+  if (question) {
+    throw new Error(`房间还有未决事项（${question.kind}）：先处理完再离开`);
   }
   run.currentRoom = null;
   run.roomData = null;

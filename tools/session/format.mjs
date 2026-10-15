@@ -35,7 +35,8 @@ export const intentText = (u) => {
   // 语义性意图（只有 unknown 一种 kind 且有说明）：直接显示说明，不套「未知（…）」
   if (it.kinds?.length === 1 && it.kinds[0] === 'unknown' && it.note) return it.note;
   const kind = (it.kinds ?? []).map(k => ({
-    attack: '攻击', defend: '防御', buff: '强化', debuff: '削弱',
+    attack: '攻击', heavy: '重击', execute: '处决', fixedAttack: '固定伤害攻击',
+    defend: '防御', buff: '强化', strongBuff: '强大强化', debuff: '削弱', strongDebuff: '强大削弱',
     summon: '召唤', unknown: '未知', stun: '晕眩',
   }[k] ?? k)).join('+');
   // 多段攻击附总额——「攻击 9×2」要自己心算 18 是 P0 的血线误判源（R8-A）

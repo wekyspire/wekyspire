@@ -46,8 +46,8 @@ export const MOON_QUALITY_PRESETS = Object.freeze({
  *  深度纹理采样/像素，在共享内存 iGPU（~34GB/s）上是带宽怪兽（用户笔记本实测只有
  *  房间层/战斗掉帧——塔楼层 MapStage 无此链，天然对照组）。mid = 0.5 分辨率
  *  （带宽 ÷4）；low = 0.375（÷7）。**步数不砍**：12 步实测光柱能量腰斩——窗棂
- *  切碎的窄光带宽小于 2×步长，稀疏采样点跨过光带 = 欠采样丢能量（glm-flash
- *  三档 A/B 实锤，结构级劣化非柔和度）；分辨率与步数无关，只降分辨率无此风险
+ *  切碎的窄光带宽小于 2×步长，稀疏采样点跨过光带 = 欠采样丢能量（结构级劣化
+ *  非柔和度）；分辨率与步数无关，只降分辨率无此风险
  *  （EMA 本就在抹噪）。菜单「渲染性能」三档同源（settings → StageManager →
  *  舞台建 composer 时取），URL 档优先（排障口径）。 */
 export function moonQualityFromUrl() {

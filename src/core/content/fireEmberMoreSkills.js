@@ -178,9 +178,8 @@ willOWispCard({ id: 'willOWispA', tier: 'A', chantWeight: 1, ap: 0 });
 
 // ==== 业火系列（§2.1：焚毁反哺）=================================================
 // 业火 B/A｜咏唱1：你的卡牌被焚毁时，向随机敌人（B）/ 所有敌人（A）施加 2 层燃烧。
-// 2026-10-10 火系大改：触发从「获得燃烧」（原镜燃）改为「卡牌焚毁」——与烧却/狂焰/
-// 炼化时代价付掉的每一张牌都变成场上的火。全场只可能焚毁玩家侧的卡（敌方干扰牌
-// 也进玩家牌库），无需再过滤归属。
+// 触发 = 「卡牌焚毁」——与烧却/狂焰/炼化时代价付掉的每一张牌都变成场上的火。
+// 全场只可能焚毁玩家侧的卡（敌方干扰牌也进玩家牌库），无需再过滤归属。
 function karmaFireCard({ id, tier, spread }) {
   registerSkill({
     id, name: '业火', type: 'fire', tier, series: 'mirrorBurn', subsystem: 'blaze', image: 'mirrorBurn',
@@ -310,9 +309,8 @@ const flameCloakCard = ({ id, tier, shield, promotesTo = null }) => registerSkil
 flameCloakCard({ id: 'fireChantCloakB', tier: 'B', shield: 4, promotesTo: 'fireChantCloakA' });
 flameCloakCard({ id: 'fireChantCloakA', tier: 'A', shield: 6 });
 
-// 炼化 B/A｜1AP/0AP，咏唱1：每回合 P5 获得 1/2 魏启并洗入 2 张余烬。
-// 2026-10-10 火系大改：不再选牌焚毁（焚毁反哺交给业火），炼化变成余烬经济的
-// 每回合稳定泵——蓝量与余烬双产。
+// 炼化 B/A｜1AP/0AP，咏唱1：每回合 P5 获得 1/2 魏启并洗入 2 张余烬——
+// 余烬经济的每回合稳定泵，蓝量与余烬双产。
 function smeltChantCard({ id, tier, mana, chantWeight, ap, promotesTo }) {
   registerSkill({
     id, name: '炼化', type: 'fire', tier, series: 'fireChant', subsystem: 'blaze',

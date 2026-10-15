@@ -45,12 +45,12 @@ function attachPressureCounter(kernel, unit, owner) {
 registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'pyro', name: '燃焰术士',
-  // 血量口径：难度制 v2 固定数值，基础值即实战值——220（2026-10-09 文档同步）
+  // 血量口径：难度制固定数值，基础值即实战值——220
   createUnit: () => new Enemy({ defId: 'pyro', name: '燃焰术士', maxHp: 220 }),
-  // 多部件（fx Phase 5 首件试点）：本体 + 3 团环绕火球
+  // 多部件：本体 + 3 团环绕火球
   // （程序化焰身/光晕/彗尾 sprite + 点光，无美术素材；P2 剧本推 heat 催成狂暴态）
   // 尺度口径：Boss billboard 实际 ≈20u 高（origin 在脚），轨道必须按体量给——
-  // 小数值会全部埋没在袍子躯干里（实拍教训 09-23）
+  // 小数值会全部埋没在袍子躯干里
   orbs: { count: 3, color: 0xff8a3a, radius: 8, height: 11, size: 3.2, speed: 1.5, bob: 1.2 },
   // Boss 房间覆写（composeRoom 深合并进 boss 配方）：
   // 一阶段全场压暗 + 火光微抬——转段「亮起来」才有明暗落差；木质装饰品大增 = 满房燃料，
@@ -146,16 +146,16 @@ registerEnemy({
     const atk = unit.getStat('attack');
     if (!unit._phase2) {
       const beat = unit.actionIndex % 4;
-      if (beat === 0) return { kinds: ['defend', 'debuff'], note: '护盾+6，塞2张灼伤入你牌库' };
+      if (beat === 0) return { kinds: ['defend', 'debuff'], shield: 6, note: '护盾+6，塞2张灼伤入你牌库' };
       if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '赋予燃烧5' };
       if (beat === 2) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '塞1张灼伤进手牌' };
-      return { kinds: ['attack'], hits: 1, damage: 18 + atk, note: '重击' };
+      return { kinds: ['heavy'], hits: 1, damage: 18 + atk, note: '重击' };
     }
     const beat = (unit._phaseBeat ?? 0) % 4;
-    if (beat === 0) return { kinds: ['debuff'], note: '赋予所有单位燃烧11（含它自己）' };
+    if (beat === 0) return { kinds: ['strongDebuff'], note: '赋予所有单位燃烧11（含它自己）' };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 9 + atk, note: '塞1张灼伤进手牌' };
     if (beat === 2) return { kinds: ['buff'], note: '消耗全场燃烧，每层回复3血' };
-    return { kinds: ['attack'], hits: 1, damage: 24 + atk, note: '重击' };
+    return { kinds: ['heavy'], hits: 1, damage: 24 + atk, note: '重击' };
   },
 });
 
@@ -216,13 +216,13 @@ registerEnemy({
       const beat = unit.actionIndex % 4;
       if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 4 + atk };
       if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
-      if (beat === 2) return { kinds: ['attack', 'buff'], hits: 1, damage: 15 + atk, note: '暴怒1' };
-      return { kinds: ['defend'], note: '自身护盾+10' };
+      if (beat === 2) return { kinds: ['heavy', 'buff'], hits: 1, damage: 15 + atk, note: '暴怒1' };
+      return { kinds: ['defend'], shield: 10, note: '自身护盾+10' };
     }
     const beat = (unit._phaseBeat ?? 0) % 3;
     if (beat === 0) return { kinds: ['attack'], hits: 2, damage: 6 + atk };
     if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 5 + atk };
-    return { kinds: ['attack'], hits: 1, damage: 27 + atk, note: '撕碎' };
+    return { kinds: ['heavy'], hits: 1, damage: 27 + atk, note: '撕碎' };
   },
 });
 
@@ -304,7 +304,7 @@ registerEnemy({
   },
 });
 
-// ②‴′ 11 层 Boss · 穿山甲王（章1 装甲主题；BOSSES_1.md 2026-10-09 新增）：
+// ②‴′ 11 层 Boss · 穿山甲王（章1 装甲主题）：
 // 简单的无干扰循环，考验玩家启动与输出强度。
 // 一阶段：首拍增强（防御2）；此后**无护盾时**上甲（盾50 + 脆弱如山1——护盾不过夜
 // 但破盾那拍眩晕自罚），有甲则三拍复读：攻12 → 攻3×3 → 荆棘2。装甲循环的节奏账：
@@ -381,17 +381,17 @@ registerEnemy({
     if (!unit._phase2 && unit.hp < 190) return { kinds: ['unknown'], note: '恼怒' };
     if (!unit._phase2) {
       if (unit.actionIndex === 0) return { kinds: ['buff'], note: '增强：防御2' };
-      if (unit.shield <= 0) return { kinds: ['defend', 'buff'], note: '护盾50，脆弱如山' };
+      if (unit.shield <= 0) return { kinds: ['defend', 'buff'], shield: 50, note: '护盾50，脆弱如山' };
       const beat = (unit._beat ?? 0) % 3;
       if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 12 + atk };
       if (beat === 1) return { kinds: ['attack'], hits: 3, damage: 3 + atk };
       return { kinds: ['buff'], note: '荆棘2' };
     }
-    return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '重击，蓄势+5' };
+    return { kinds: ['heavy', 'buff'], hits: 1, damage: 9 + atk, note: '重击，蓄势+5' };
   },
 });
 
-// ②‴″ 11 层 Boss · 腐败之源（章1 召唤干扰流；BOSSES_1.md 2026-10-09 新增）：
+// ②‴″ 11 层 Boss · 腐败之源（章1 召唤干扰流）：
 // 首拍不动作（酝酿窗）；四拍循环：
 //   ① 召唤：rottenRootT / thornWeedT 随机补到友军 ≥3（受 maxEnemies 上限约束）；
 //     已有 3 友军 → 改为赋予全员力量3
@@ -469,13 +469,13 @@ registerEnemy({
     const beat = (unit.actionIndex - 1) % 4;
     if (beat === 0) {
       return allies >= 3
-        ? { kinds: ['buff'], note: '全员力量3' }
+        ? { kinds: ['strongBuff'], note: '全员力量3' }
         : { kinds: ['summon'], note: '召唤（腐败根须/刺刺草）' };
     }
-    if (beat === 1) return { kinds: ['debuff'], note: '虚弱1，脆弱1' };
+    if (beat === 1) return { kinds: ['strongDebuff'], note: '虚弱1，脆弱1' };
     if (beat === 2) {
       return allies > 0
-        ? { kinds: ['buff'], note: '全员恢复15血' }
+        ? { kinds: ['strongBuff'], note: '全员恢复15血' }
         : { kinds: ['summon'], note: '召唤1个' };
     }
     return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack') };
@@ -547,7 +547,7 @@ registerEnemy({
     if (phase < 2) {
       return { kinds: ['attack'], hits: 1, damage: 16 + unit.getStat('attack'), note: '亲征' };
     }
-    return { kinds: ['defend'], note: '亲征：自身护盾+10' };
+    return { kinds: ['defend'], shield: 10, note: '亲征：自身护盾+10' };
   },
 });
 
@@ -573,7 +573,7 @@ registerEnemy({
     }
     const master = aliveEnemies(battleState).find(e => e.defId === 'knightCommander');
     return master
-      ? { kinds: ['defend'], note: '护驾：骑士长护盾+10' }
+      ? { kinds: ['defend'], shield: 10, note: '护驾：骑士长护盾+10' }
       : { kinds: ['attack'], hits: 1, damage: 5 + unit.getStat('attack') };
   },
 });
@@ -637,7 +637,7 @@ registerEnemy({
         note: `烛火：燃烧${phase2 ? 3 : 2}；${bell}` };
     }
     if (beat === 1) return { kinds: ['attack'], hits: 1, damage: 14 + atk, note: bell };
-    return { kinds: ['defend'], note: `添烛：自身护盾+${phase2 ? 16 : 12}；${bell}` };
+    return { kinds: ['defend'], shield: phase2 ? 16 : 12, note: `添烛：自身护盾+${phase2 ? 16 : 12}；${bell}` };
   },
 });
 
@@ -758,8 +758,8 @@ registerEnemy({
   },
 });
 
-// ②‴ 44 层终塔 Boss · 神兵躯壳（孤身神机 · 三阶段 · 300 血 + 200 盾；
-// 设计稿，取代旧占位「塔心」）。本注释即设计定稿。
+// ②‴ 44 层终塔 Boss · 神兵躯壳（孤身神机 · 三阶段 · 300 血 + 200 盾）——
+// 设计以本注释为准。
 //
 // 背景（wekyland 技术谱系）：古南圣国军事遗留的自律兵器，魏启驱动的造物。谱系三代——
 //   MEFM-1（11 层）残次原型，铁壳积热、笨重带锈 →
@@ -1012,22 +1012,22 @@ registerEnemy({
     };
     if (phase === 1) {
       const b = beat % 4;
-      if (b === 0) return { kinds: ['defend', 'attack'], hits: 1, damage: 20 + atk, note: '直觉：自身护盾+40' };
+      if (b === 0) return { kinds: ['defend', 'attack'], hits: 1, damage: 20 + atk, shield: 40, note: '直觉：自身护盾+40' };
       if (b === 1) return { kinds: ['attack', 'debuff'], hits: 5, damage: 5 + atk, note: '蓄能：锁定你最先抽到的3张牌（回合结束时仍在手则焚毁）' };
       if (b === 2) return { kinds: ['attack'], hits: 1, damage: 50 + atk, note: '光能炮' };
       return { kinds: ['buff'], note: '错误重启：力量+4' };
     }
     if (phase === 2) {
       if (beat === 0) return { kinds: ['debuff'], note: '回忆：向你牌库洗入7张【躲闪】' };
-      if (beat === 1) return scatterPreview(5, 10, '羽翼扫射：自身护盾+15', ['attack', 'defend']);
-      if (beat === 2) return { kinds: ['defend', 'buff'], note: '腾空：闪避+3，自身护盾+30' };
+      if (beat === 1) return { ...scatterPreview(5, 10, '羽翼扫射：自身护盾+15', ['attack', 'defend']), shield: 15 };
+      if (beat === 2) return { kinds: ['defend', 'buff'], shield: 30, note: '腾空：闪避+3，自身护盾+30' };
       if (beat === 3) return scatterPreview(8, 10, '羽翼风暴');
       if (beat === 4) return { kinds: ['attack'], hits: 1, damage: 65 + atk, note: '轰落' };
       if (beat === 5) return { kinds: ['buff'], note: '怜悯：净化自身全部效果，本拍不攻击' };
       if ((unit._pressure ?? 0) > SHELL_OVERHEAT) {
-        return { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${SHELL_OVERHEAT}，取消扫射，自身护盾+50` };
+        return { kinds: ['defend'], shield: 50, note: `过热自保：本回合生命值伤害已超 ${SHELL_OVERHEAT}，取消扫射，自身护盾+50` };
       }
-      return scatterPreview(4, 14, `处决扫射：穿透伤害（本回合生命值伤害 >${SHELL_OVERHEAT} 则改为起盾 50）`);
+      return scatterPreview(4, 14, `处决扫射：穿透伤害（本回合生命值伤害 >${SHELL_OVERHEAT} 则改为起盾 50）`, ['execute']);
     }
     if (beat === 0) return { kinds: ['buff'], note: '过载重启：回满生命值（此形态不再加盾）' };
     if (beat === 1) return scatterPreview(4, 14, '高热：焚毁你的全部手牌', ['attack', 'debuff']);
@@ -1220,18 +1220,18 @@ registerEnemy({
       return { kinds: ['attack'], hits: 1, damage: 20 + atk, note: '错错错误：自爆！' };
     }
     if (unit.getEffectStacks('stasis') > 0 || unit._phase2Pending) {
-      return { kinds: ['buff'], note: '系统统统错误，最终预案启动：净化自身全部效果，护盾+50' };
+      return { kinds: ['buff'], shield: 50, note: '系统统统错误，最终预案启动：净化自身全部效果，护盾+50' };
     }
     if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '徘徊' };
     if (!unit._phase2) {
       const beat = (unit.actionIndex - 1) % 3;
       if (beat === 0) return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：锁定手中3张牌（回合结束时仍在手则焚毁）' };
-      if (beat === 1) return { kinds: ['defend'], note: '劝诫：自身护盾+30' };
+      if (beat === 1) return { kinds: ['defend'], shield: 30, note: '劝诫：自身护盾+30' };
       return { kinds: ['attack', 'debuff'], hits: 1, damage: 10 + atk, note: '解除威胁：焚毁牌库顶2张' };
     }
     const beat = unit._redBeat % 3;
     if (beat === 0) return (unit._pressure ?? 0) > DRONE_OVERHEAT
-      ? { kinds: ['defend'], note: `过热自保：本回合生命值伤害已超 ${DRONE_OVERHEAT}，取消开火，自身护盾+50` }
+      ? { kinds: ['defend'], shield: 50, note: `过热自保：本回合生命值伤害已超 ${DRONE_OVERHEAT}，取消开火，自身护盾+50` }
       : { kinds: ['attack'], hits: 1, damage: 35 + atk, note: `锁定要害，清除：穿透伤害，自身格挡+1（本回合生命值伤害 >${DRONE_OVERHEAT} 则改为起盾 50）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 7, damage: 5 + atk, note: '反反反反制：锁定你的全部手牌' };
     return { kinds: ['unknown'], note: '重启....失失失失败' };
@@ -1242,7 +1242,7 @@ registerEnemy({
 // 南孚妖蝶——D 级、空/暗双属性、「本体脆弱，麻烦在于如何命中」）。设定升级：庄园温室
 // 自长风高原引种了宿主植物，妖蝶随之入栖；魔化百年、暗脉觉醒（大陆仅 1.59‱ 的附属
 // 灵脉），虫群意识凝成单一的「之后」——场上的每一只蝶都是它（分布的自我）。
-// 核心体验（v2 用户定稿）：**同律集群**——母体与子体打同一套招式语言（蝶针/鳞粉/孕卵），
+// 核心体验：**同律集群**——母体与子体打同一套招式语言（蝶针/鳞粉/孕卵），
 // 拍子与份量不同，读谱一次掌握全场；无真伪、无换位，身份一目了然。
 //   母体三拍：鳞粉（中毒3）→ 蝶针 20 → 孕卵（子体不足2时补位；满员改自愈12）；
 //   子体两拍：蝶针 8 ↔ 鳞屑（中毒2）；
@@ -1499,13 +1499,13 @@ registerEnemy({
     const beat = (unit._beat ?? 0) % 3;
     if (phase === 1) {
       if (beat === 0) return { kinds: ['attack'], hits: 1, damage: 9 + atk, note: '灵压' };
-      if (beat === 1) return { kinds: ['defend', 'buff'], note: '架势：盾8、格挡2' };
+      if (beat === 1) return { kinds: ['defend', 'buff'], shield: 8, note: '架势：盾8、格挡2' };
       return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + atk, note: '虹吸：偷取2魏启' };
     }
     if (phase === 2) {
       if (beat === 0) return { kinds: ['debuff'], note: '灵脉虹吸：偷取你的一个增益的全部层数' };
       if (beat === 1) return { kinds: ['attack'], hits: 2, damage: 8 + atk, note: '谵妄突袭' };
-      return { kinds: ['defend', 'buff'], note: '戒断：盾12、格挡2' };
+      return { kinds: ['defend', 'buff'], shield: 12, note: '戒断：盾12、格挡2' };
     }
     if (beat === 0) return { kinds: ['attack'], hits: 3, damage: 6 + atk, note: `灵潮倾泻（每拍过载：自伤4换力量+1）` };
     if (beat === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 8 + atk, note: '掠夺成性：偷2魏启，力量+1' };

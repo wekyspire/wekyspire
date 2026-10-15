@@ -12,7 +12,7 @@
 //（BattleStage 届时瞬移落位牌库图标处并销毁）。
 
 import * as THREE from 'three';
-import { MeshBasicNodeMaterial } from 'three/webgpu'; // WebGPU 迁移：C0 着色链挂 colorNode，牌面材质须为 Node 材质
+import { MeshBasicNodeMaterial } from 'three/webgpu'; // C0 着色链挂 colorNode，牌面材质须为 Node 材质
 import { additiveLight } from '../post/passes.js';
 import { CardFxLayer } from './CardFxLayer.js';
 import { hitTestRegions } from '../richtext/layout.js';
@@ -27,9 +27,8 @@ const EMBER_COLORS = [
   [1.0, 0.95, 0.60],
 ];
 
-// ---- Shift 详情态（全局通用，2026-10-07 用户定：到处生效）----------------------
-// 曾是 BattleStage 私有差分（只接手牌/查看器画廊），picker/发现界面的候选卡全漏。
-// 下沉为卡对象级行为：模块级全局 shift 态 + 活卡注册表；任何 owner（手牌路由/
+// ---- Shift 详情态（全局通用：任何持卡界面都生效）----------------------
+// 卡对象级行为：模块级全局 shift 态 + 活卡注册表；任何 owner（手牌路由/
 // picker/_setHovered/画廊……）只喂 setShiftHover(进/出)，卡对象自己合成
 // shift×hover×textAlt → setAltMode。键监听随首张活卡惰性安装（浏览器环境）。
 const _liveCards = new Set();

@@ -23,7 +23,7 @@
 //                 否则惰性创建的界面永远收不到 tooltip。
 //   · onIntent    (action) => void：确认/放弃时的上行出口（宿主自己转发给 runController）
 //   · getSequencer () => AnimationSequencer|null（「择卡得卡」演出的指令化挂点，见
-//                 cardGrantFlight.js；惰性取——runSequencer 由宿主后置注入）
+//                 cardGrantFlight.js；惰性取——dedicatedSequencer 由宿主后置注入）
 //   · getAnchor   () => ({x,y,z}) 得卡演出的收编锚点（塔楼/房间 = 玩家状态栏）
 //
 // 用法：`const kit = createStagePickerKit({...})`，宿主保留对外方法作薄转发（见三舞台）。
@@ -42,16 +42,16 @@ import { playCardBurnFlight } from './cardBurnFlight.js';
 import { nextCardSpot } from './cardSpot.js';
 import { getSkillDefinition } from '../core/skills/registry.js';
 import { cardViewFromDef } from '../core/skills/cardView.js';
-import { withLabels } from './panels/shared.js';
+import { withLabels, slotPrizeText } from './panels/shared.js';
 
 // ---- 「升级 / 焚毁 / 删除」类选卡入口的统一来源表 ----
 // 每项 = 从快照取候选段 + 确认后上行的意图 + 三行文案（标题/提示/确认键）。
 // 本次合并取**并集**（塔楼层多出 gurpasRemove/bossRemove，房间层多出 slot），
-// 文案漂移一律以玩家可见的一致性为准（删卡统一「删除」，不再有「移除」）。
+// 文案漂移一律以玩家可见的一致性为准（删卡统一用「删除」，不用「移除」）。
 const UPGRADE_SOURCES = {
   // upgrade: true = 晋升类入口：确认时先播「卡牌升级」变身演出（原卡金闪变新卡后飞入
   // 牌库），演完才上行意图（confirmHook 接管，见 openUpgradePicker）。焚毁/删除类不标。
-  // （camp 源 随 D4「营地不再能升级卡」移除——升级全部走训练房尾款。）
+  // （无 camp 源——营地不能升级卡，升级全部走训练房尾款。）
   training: {
     upgrade: true,
     cards: (s) => s?.training?.upgradeCards,
@@ -70,8 +70,9 @@ const UPGRADE_SOURCES = {
   bankBurn: {
     cards: (s) => s?.bank?.burnCards,   // 焚毁候选（含 S 级豁免过滤；**不看晋升 enabled**——见下方 anyCard）
     anyCard: true,
-    burn: true,   // 确认 = 摘下选中卡**原地燃尽**（playCardBurnFlight）再上行意图   // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
-                     // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来（2026-09-30 实锤）
+    burn: true,   // 确认 = 摘下选中卡**原地燃尽**（playCardBurnFlight）再上行意图；
+                     // 焚毁不看「可晋升」——deckUpgradeCards 的 enabled 是晋升门禁口径，
+                     // 无过门卡的局里全 false，误过滤 = 焚毁界面永远开不出来
     intent: (uniqueID) => ({ action: 'bankBurnOffer', uniqueID }),
     title: '选择要焚毁的卡牌', confirmLabel: '确认焚毁',
     hint: '恶魔令你忘却',
@@ -114,6 +115,8 @@ export function createStagePickerKit({
   let relicPicker = null;  // 全屏选遗物（老虎机粉碎遗物入口）
   let showcase = null;     // 获得物特写（遗物/药水/奖励到手时播一次）
   let deckViewer = null;   // 卡组 build 画廊（「卡组」chip 进；复用 CardGalleryObject）
+  let promoteViewer = null; // 卡组画廊的升级方向子层（点卡弹「升上去是什么」；叠在画廊上）
+  let deckPromotes = new Map(); // 画廊条目拾取 id → promotes 段（点卡弹子层的数据源）
   let pickerRef = null;    // 最近一次 attachPicker 注入的拾取器（惰性创建时优先用它）
   let bakeCache;           // 本地文本烘焙缓存（undefined = 还没算过；null = node 无 document）
   // 当前界面的「确认 / 取消」出口（按入口切换：同一份界面服务多个入口）
@@ -144,7 +147,7 @@ export function createStagePickerKit({
     if (bakeCache !== undefined) return bakeCache;
     bakeCache = (typeof document === 'undefined')
       ? null
-      : (text, { fontPx = 16, tint = '#cdd6f4', maxWidth } = {}) => renderRichTextBlock(text, {
+      : (text, { fontPx = 16, tint = '#c2c2c2', maxWidth } = {}) => renderRichTextBlock(text, {
         maxWidth: maxWidth ?? 4000,
         scale: 3,
         style: { fontSize: fontPx, lineHeight: Math.round(fontPx * 1.3), color: tint },
@@ -152,7 +155,7 @@ export function createStagePickerKit({
     return bakeCache;
   }
 
-  /** 惰性建选卡界面（**bakeFace + bakeText + bus 三样齐全**——BattleStage 那份曾漏前两样）。 */
+  /** 惰性建选卡界面（bakeFace + bakeText + bus 三样齐全——缺 bakeFace/bakeText 候选卡隐身）。 */
   function ensureCardPicker() {
     if (cardPicker) return cardPicker;
     cardPicker = new CardScrollPickerObject({
@@ -185,7 +188,7 @@ export function createStagePickerKit({
    * 惰性建卡组 build 画廊（第四件）：复用 CardGalleryObject（渲染/拾取/悬浮与战斗
    * 同栈），idPrefix 'deckview:' 与战斗牌堆查看器（'viewer:'）的拾取 id 互不撞车；
    * bgZ 压过全屏选卡/面板模态（OVERLAY_Z 族）→ 可开在选卡界面**之上**——训练升级/
-   * 卡包三选一/战后选卡时按出来看一眼构筑再关回去（SLOW TODO 的动机场景）。
+   * 卡包三选一/战后选卡时按出来看一眼构筑再关回去。
    */
   function ensureDeckViewer() {
     if (deckViewer) return deckViewer;
@@ -199,7 +202,39 @@ export function createStagePickerKit({
     return deckViewer;
   }
 
-  function closeDeckViewer() { deckViewer?.close(); }
+  function closeDeckViewer() {
+    deckViewer?.close();
+    closePromoteViewer();   // 子层随画廊一起收（chip toggle / 切幕不会留下孤儿层）
+  }
+
+  /**
+   * 升级方向子层（卡组画廊点卡进入）：全屏只摆这张卡能升级到的目标卡（分叉并排），
+   * 点空白处返回画廊（画廊保持开着——源卡在底下可对照）。复用 CardGalleryObject
+   * 第四件同款渲染/拾取/hover 栈，bgZ 压画廊（175 > 170），idPrefix 独立不撞车。
+   */
+  function ensurePromoteViewer() {
+    if (promoteViewer) return promoteViewer;
+    promoteViewer = new CardGalleryObject({
+      cardWidth: CARD_WIDTH, cardHeight: CARD_HEIGHT,
+      bakeFace,
+      picker: pickerNow(),
+      idPrefix: 'deckpromote:', bgZ: DECK_VIEW_Z.GALLERY_BG + 5,
+    });
+    scene()?.add(promoteViewer);
+    return promoteViewer;
+  }
+
+  function openPromoteViewer(promotes) {
+    const viewer = ensurePromoteViewer();
+    viewer.attachPicker(pickerNow());
+    const cards = promotes.targets.map(t => ({ uniqueID: t.defId, ...withLabels(t.view) }));
+    viewer.open(cards, {
+      title: `升级方向 · ${promotes.name}`,
+      hint: '点击空白处返回卡组',
+    });
+  }
+
+  function closePromoteViewer() { promoteViewer?.close(); }
 
   /**
    * 卡牌升级演出（通用入口，cardUpgradeFlight.js 的宿主侧包装）：原卡金闪变身新卡，
@@ -298,16 +333,11 @@ export function createStagePickerKit({
     get deckViewer() { return deckViewer; },
     /** 特写是否在播（宿主据此吞掉面板输入 / 压暗常驻按钮）。 */
     get showcasing() { return !!showcase?.busy; },
-    /** 卡牌升级变身演出是否在播（宿主据此压暗常驻按钮）。 */
-    get upgrading() { return upgradeBusy; },
-    /** 卡牌焚毁演出是否在播（宿主据此压暗常驻按钮）。 */
-    get burning() { return burnBusy; },
     /**
      * 卡图异步到图后重烘选卡界面（宿主在 cardArt.addOnLoad 里调；合批由宿主负责）。
-     * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白
-     * （实报"三选一/训练场/选卡界面空白卡，手牌却有图"）。
+     * 候选卡不在卡组、未经战斗预热，首拍多为无图占位——不补烘就永远空白。
      */
-    rebakeCards() { cardPicker?.rebakeCards?.(); deckViewer?.rebake(); },
+    rebakeCards() { cardPicker?.rebakeCards?.(); deckViewer?.rebake(); promoteViewer?.rebake(); },
     /** 是否有套件级模态覆盖层在屏幕上（特写/升级演出在播或某个全屏界面开着）——宿主据此压暗常驻按钮。 */
     get uiBusy() { return grantBusy || upgradeBusy || burnBusy || !!showcase?.busy || !!cardPicker?.opened || !!relicPicker?.opened || !!deckViewer?.opened; },
 
@@ -320,7 +350,7 @@ export function createStagePickerKit({
     /**
      * 打开「选卡」界面；`source` 决定候选段、上行意图与文案（见 UPGRADE_SOURCES）。
      * 所有入口都只列**可用**候选（`enabled !== false`：升级入口的 enabled = 有晋升目标，
-     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标——实报）。
+     * 把不可升级的卡也画成灰卡会让玩家在一堆灰卡里找目标）。
      * **晋升分叉**：确认的卡带多个晋升目标时不直接上行，换开
      * 「选择晋升方向」子面板（候选 = 各分叉目标卡面），确认才带 targetId 上行；
      * 子面板「返回」= 回上一级重选（不消费升级机会——意图未上行，core 未结算）。
@@ -429,7 +459,7 @@ export function createStagePickerKit({
           fire(ids[0]);
         };
         // 返回 = 只收起界面（不做放弃）；调用方传 opts.onSkip 则接手（银行词条 offer：
-        // 面板按钮已删，返回/关闭 = 放弃这份附赠，由 onSkip 消费掉 offer）
+        // 返回/关闭 = 放弃这份附赠，由 onSkip 消费掉 offer）
         cancelFn = opts.onSkip ?? null;
         picker.open({
           title: picks > 1 ? `${def.title}（${picks} 张）` : def.title,
@@ -562,8 +592,45 @@ export function createStagePickerKit({
     },
 
     /**
-     * 老虎机中奖产出的**多选一**（统一：获得演出 dismiss 后接全屏 overlay，
-     * 不再走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
+     * 老虎机产出的**获得特写**（问句驱动：runQuestions 在转轮落定拍调）。
+     * 点任意处 = 收下（需选卡的奖项随后接 openSlotPrizePicker；免费指定升级随后
+     * 自动开选卡界面）；点「跳过」= 放弃这份产出。切幕强收走 cancel()（出口回调全免
+     * = defer，下一拍 notify 问句驱动重弹——ItemShowcaseObject.cancel 是该语义的实现点）。
+     * 单件遗物奖不进这里（问句驱动直接应答，遗物差分特写即获得演出）。
+     * @returns 是否真的播了（无产出 → false）
+     */
+    openSlotPrizeShowcase(snap = null) {
+      const p = snap?.slot?.pending;
+      if (!p) return false;
+      const needsPick = (p.choices?.length ?? 0) > 0 || (p.relicChoices?.length ?? 0) > 0;
+      const freeUpgrade = p.upgrade?.kind === 'free';
+      return !!this.showcaseItem({
+        title: slotPrizeText(p),
+        effect: needsPick ? '收下之后挑一件带走'
+          : freeUpgrade ? '收下之后，选一张卡牌免费升级'
+            : null,
+        // 金币奖 → "金币堆"占位；择卡奖 → "卡包"占位（artKey 落 null 会退回纯 tint
+        // 色块＝特写美术区一块空白灰）
+        artKey: p.money != null ? 'gold' : ((p.choices?.length ?? 0) > 0 ? 'pack' : null),
+        tint: p.tier === 'major' ? 0xffd75e : 0xd8e2f4,
+        skippable: true,
+        onSkip: () => onIntent?.({ action: 'slotDecline' }),
+        onDismiss: () => {
+          // 免费升级：收下后由编排器（machines.slotTake）检测 slotUpgradePending 就地开
+          // 升级选卡——不在这里链式打开：本闭包捕获的是开特写时的旧快照，slotTake 之后
+          // 候选才生成，旧快照开卡必空手（否则软锁：选卡永不弹、双 pending 挂死离房门）
+          if (freeUpgrade) onIntent?.({ action: 'slotTake' });
+          // 多选一奖项：dismiss 后直接接全屏 overlay 候选（选卡/选遗物），
+          // 「返回」= 放弃（不落回 dock 面板的内嵌卡行/按钮墙）
+          else if (needsPick) this.openSlotPrizePicker(snap);
+          else onIntent?.({ action: 'slotTake' });
+        },
+      });
+    },
+
+    /**
+     * 老虎机中奖产出的**多选一**（获得演出 dismiss 后接全屏 overlay，
+     * 不走 dock 面板里的内嵌卡行/按钮墙）。卡类奖项与卡包同节拍：确认 = 择卡得卡
      * 演出 → `slotTake(choice)`；「返回」= 放弃这份产出（`slotDecline`，与卡包同口径——
      * 演出里的「跳过」也是放弃，两条出口殊途同归）。遗物类奖项走 RelicScrollPicker。
      * @returns 是否真的打开了（非多选奖项 / 无候选 → false）
@@ -681,8 +748,13 @@ export function createStagePickerKit({
      * @returns 是否打开（恒 true；条目空 = 画廊显示「空空如也」背板）
      */
     openDeckViewer(entries = []) {
+      // 升级方向索引（拾取 id → promotes 段）：点卡时查这里弹子层
+      deckPromotes = new Map();
       const cards = entries.map(e => {
         const base = { uniqueID: e.uniqueID, defId: e.defId, power: e.power ?? 0 };
+        if (e.promotes?.targets?.length) {
+          deckPromotes.set(`deckview:${e.uniqueID}`, e.promotes);
+        }
         return e.view ? { ...base, ...withLabels(e.view) } : base;
       });
       const viewer = ensureDeckViewer();
@@ -719,12 +791,13 @@ export function createStagePickerKit({
       cardPicker?.update(dt);
       relicPicker?.update(dt);
       deckViewer?.update(dt);
+      promoteViewer?.update(dt);
     },
 
     /** 滚轮：全屏界面开着才消费（返回是否真的动了；全屏界面是模态，滚轮只作用于它）。 */
     handleWheel(deltaY) {      if (cardPicker?.opened) return cardPicker.scrollBy(deltaY / 100);
       if (relicPicker?.opened) return relicPicker.scrollBy(deltaY / 100);
-      if (deckViewer?.opened) return true;   // 卡组画廊 v1 无滚动：吞掉防下层选卡界面联动
+      if (deckViewer?.opened) return true;   // 卡组画廊（含其升级方向子层）无滚动：吞掉防下层选卡界面联动
       return false;
     },
 
@@ -735,11 +808,15 @@ export function createStagePickerKit({
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的 hover 逻辑）
      */
     routeHover(hit, x, y) {
+      if (promoteViewer?.opened) {
+        promoteViewer.setHovered(promoteViewer.ownsHit(hit) ? hit.id : null);
+        return true;
+      }
       if (deckViewer?.opened) {
         deckViewer.setHovered(deckViewer.ownsHit(hit) ? hit.id : null);
         return true;
       }
-      if (grantBusy || upgradeBusy) return true;
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (showcase?.busy) return true;
       if (cardPicker?.opened) { cardPicker.onHover(hit, x, y); return true; }
       if (relicPicker?.opened) { relicPicker.onHover(hit, x, y); return true; }
@@ -752,11 +829,21 @@ export function createStagePickerKit({
      * @returns 是否已被 kit 消费（true = 宿主不要再做自己的点击逻辑）
      */
     routeClick(hit) {
-      if (deckViewer?.opened) {
-        if (!deckViewer.ownsHit(hit)) closeDeckViewer();
+      if (promoteViewer?.opened) {
+        if (!promoteViewer.ownsHit(hit)) closePromoteViewer();   // 点空白返回画廊（画廊还开着）
         return true;
       }
-      if (grantBusy || upgradeBusy) return true;
+      if (deckViewer?.opened) {
+        // 点卡 = 弹这张卡的升级方向子层（无目标卡不响应——画廊保持原样）
+        if (deckViewer.ownsHit(hit)) {
+          const promotes = deckPromotes.get(hit.id);
+          if (promotes) openPromoteViewer(promotes);
+        } else {
+          closeDeckViewer();
+        }
+        return true;
+      }
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (showcase?.busy) { showcase.onClick(hit); return true; }
       if (cardPicker?.opened) { cardPicker.onClick(hit); return true; }
       if (relicPicker?.opened) { relicPicker.onClick(hit); return true; }
@@ -769,8 +856,8 @@ export function createStagePickerKit({
      * 开着的全屏界面（当前只有选卡界面的滚动条用；卡组画廊无按下语义，只吞；其余返回 false）。
      */
     routePointerDown(hit, x, y) {
-      if (deckViewer?.opened) return true;
-      if (grantBusy || upgradeBusy) return true;
+      if (deckViewer?.opened) return true;   // 画廊与其子层都无按下语义，只吞
+      if (grantBusy || upgradeBusy || burnBusy) return true;
       if (cardPicker?.opened) return cardPicker.onPointerDown?.(hit, x, y) ?? false;
       if (relicPicker?.opened) return relicPicker.onPointerDown?.(hit, x, y) ?? false;
       return false;
@@ -784,6 +871,7 @@ export function createStagePickerKit({
       pickerRef = picker ?? null;
       for (const inst of [cardPicker, relicPicker, showcase]) inst?.attachPicker?.(picker ?? null);
       deckViewer?.attachPicker(picker ?? null);
+      promoteViewer?.attachPicker(picker ?? null);
     },
 
     /** 两个选卡/选遗物界面的按钮动作合并查询（契约测试用；都没有则 null）。 */
@@ -796,15 +884,16 @@ export function createStagePickerKit({
     /**
      * 切幕清算（wipe preStage 钩子调）：一键收起本舞台的全屏模态——获得特写淡出 +
      * 选卡/选遗物界面收起。只做视觉与输入面回收：picker.close 不触发 onCancel/onSkip
-     * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 dismiss
-     * （收下语义，奖励已落账）。夜测 1002 特写跨幕滞留族（[路4]/[r4路8]/[r6路6]）的根治位。
+     * 流程语义（离开场景 = 中止呈现；待办尾款由各面板重入按钮兜底），特写走 cancel
+     * （收呈现不收账——onDismiss/onSkip 不替玩家做应答，defer 语义；本次 show 给了
+     * onCancel 的链式编排方收到中止信号）。
      */
     dismissModals() {
-      if (showcase?.busy) showcase.dismiss('dismiss');
+      if (showcase?.busy) showcase.cancel();
       showcase?.clearPending?.();   // 挂起件随切幕弃掉（舞台将死，不得重放）
       if (cardPicker?.opened) cardPicker.close();
       if (relicPicker?.opened) relicPicker.close();
-      if (deckViewer?.opened) deckViewer.close();
+      if (deckViewer?.opened) closeDeckViewer();   // 连带升级方向子层一起收
     },
 
     /** 释放已创建的实例（宿主 dispose 时调用；未创建的无事发生）。 */
@@ -816,6 +905,8 @@ export function createStagePickerKit({
       }
       // CardGalleryObject 的整清口是 close()（幂等：背板/条目/文本/pickable 全收），无 dispose
       if (deckViewer) { scene()?.remove(deckViewer); deckViewer.close(); deckViewer = null; }
+      if (promoteViewer) { scene()?.remove(promoteViewer); promoteViewer.close(); promoteViewer = null; }
+      deckPromotes = new Map();
       cardPicker = null;
       relicPicker = null;
       showcase = null;
@@ -824,6 +915,7 @@ export function createStagePickerKit({
       pickerRef = null;
       grantBusy = false;
       upgradeBusy = false;
+      burnBusy = false;
     },
   };
 }

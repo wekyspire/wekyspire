@@ -1,4 +1,4 @@
-// 资源汲取施术模板（2026-10-02，经济卡语言）：能量流汇向主角胸口——与 resourceDrain
+// 资源汲取施术模板（经济卡语言）：能量流汇向主角胸口——与 resourceDrain
 // 的「扣费爆散」反向同色（魏启=蓝 / 行动力=黄，资源色相即 UI 色相）。
 // params.from 三态：
 //   enemy  萃取链（从敌方向抽出——「取」）
@@ -16,7 +16,7 @@ export const manaCast = {
     streams: 4, size: 4.2, projMs: 300, staggerMs: 65,
     pillar: false,
     fire: false,             // 火调行（重燃/余热/回响烈焰）：流股走 fireOrbShade 火面核
-    shape: 'orb',            // 能量形状（2026-10-09 通用资源获得语言）：'orb' 光珠（缺省，
+    shape: 'orb',            // 能量形状：'orb' 光珠（缺省，
                              // AP 金珠/肾上腺素同款）；'crystal' 晶片（回蓝——魏启蓝异形粒）
   },
   build(p) {

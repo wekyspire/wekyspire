@@ -3,7 +3,7 @@
 // 它存在的意义不只是好看——**它是结果揭示的闸门**：旧实现在 RoomPanel.vue 里用 CSS
 // 关键帧 + DOM `@animationend` 当完成信号，面板一迁走这个信号就没了。现在完成信号
 // 由本对象自己给出（update 推进到时长即回执），宿主据此调 runController 的
-// reportSlotAnimDone 开闸，保持「roll 落定才揭示结果」的渐进揭示语义。
+// playSlotSpin 的完成回调回执 sequencer，保持「roll 落定才揭示结果」的渐进揭示语义。
 //
 // 用 dt 驱动而不是 gsap/rAF：①与舞台 tick 同一时钟（MapStage.onEnter 已订 tick）；
 // ②headless 里可直接 update(dt) 推演到完成，不必依赖 rAF（契约测试前提）。

@@ -18,6 +18,7 @@ import { getRelicDefinition } from '../relics/registry.js';
 import { getSkillDefinition, hasSkill } from '../skills/registry.js';
 import { cardViewFromDef } from '../skills/cardView.js';
 import { isBossFloor, FLOORS_PER_CHAPTER } from './runFlow.js';
+import { currentQuestion } from './questions.js';
 import { PACKS } from './rewards.js';
 import {
   LEINO_DIMENSIONS, ASCENSION_PLACEHOLDER,
@@ -28,7 +29,7 @@ import { slotView, devourableRelics, devourableCards, slotGiftDue, SLOT_GIFTS } 
 import { canBuy, isShopFloor, shopItemTip } from './rooms/shop.js';
 import { bankView, pendingDebuffViews } from './rooms/bank.js';
 import { gurpasView } from './rooms/gurpas.js';
-import { gatedPromotionTargets } from './promotion.js';
+import { gatedPromotionTargets, previewPromotionTargets } from './promotion.js';
 import { usedSlots } from './prep.js';
 
 /**
@@ -90,7 +91,6 @@ export function prepSnapshot(run) {
           && usedSlots(run) + cost <= p.relicSlots,
       };
     }),
-    canStartBattle: true,
   };
 }
 
@@ -143,15 +143,18 @@ export function ascensionSnapshot(run) {
 /**
  * 奖励房（房间层·模态面板）：训练场 / 营地 / 老虎机 / 事件房。
  *
- * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { anim, lastSpin } }`。
- * 它由 Shell 的 runController 持有（老虎机演出播放态），核心拿不到——
+ * `extra` 是**舞台侧瞬态**（不属于 run）：`{ slot: { lastSpin, spinning } }`。
+ * 它由 Shell 的 runController 持有（lastSpin = 揭示横幅；spinning = 转轮指令在播的
+ * 队列派生布尔），核心拿不到——
  * 但本函数仍是纯函数（只由入参决定输出，无副作用）。四房共用同一快照外壳：
  * `room` 决定形态，`training` / `camp` / `slot` 各带自己的载荷（事件房走幕间，无快照载荷）。
  */
 export function roomSnapshot(run, extra = {}) {
   const room = run.currentRoom;
   const p = run.player;
-  const snap = { kind: 'room', room, money: p.money, relicUses: undefined };
+  // duty = 待答问句种类（questions.js 单一事实源）：场景端义务门（继续键压暗/拦截提示）
+  // 的统一判据——机器模块不再各自枚举 pending 字段，新增问句种类自动进门。
+  const snap = { kind: 'room', room, money: p.money, relicUses: undefined, duty: currentQuestion(run)?.kind ?? null };
 
   // 售货机（商店房 = room === 'shop'）：货架 + 卡包开出的三选一挂起时优先呈现
   if (isShopFloor(run.floor) && run.shop) {
@@ -258,7 +261,6 @@ export function roomSnapshot(run, extra = {}) {
       // 焚毁候选：整副牌组去掉 S 级（词条口径「不会焚 S 级卡」）
       burnCards: deckUpgradeCards(run).filter(c => getSkillDefinition(c.defId)?.tier !== 'S'),
     };
-    const anim = extra.slot?.anim ?? null;
     const lastSpin = extra.slot?.lastSpin ?? null;
     const view = slotView(run);
     const pending = run.slotPending;
@@ -277,15 +279,10 @@ export function roomSnapshot(run, extra = {}) {
       gift: slotGiftDue(run) ? Object.values(SLOT_GIFTS).map(g => ({
         id: g.id, name: g.name, desc: g.desc, effect: g.effect, tint: g.tint,
       })) : null,
-      // 演出进行中：{ id, tier, kind }；Stage 播完动画后回执，才揭示结果（渐进揭示语义）。
-      // ⚠ **tier 才是转轮灯效/落面的输入**（'major'/'minor'/'none'）；kind 只是奖项种类
-      // （moneySmall/heal/…）。早期只下发 kind，导致 rig 收到未知档位 → 落面退化成随机、
-      // 中奖灯效走 none 档（用户报"中了却没什么动静"的真凶）
-      spinning: anim ? {
-        id: anim.id,
-        tier: anim.prize?.tier ?? 'none',
-        kind: anim.prize?.kind ?? null,
-      } : null,
+      // 转轮在播（布尔）：事实源 = dedicatedSequencer 里还挂着 room:slot-spin 演出指令
+      // （panelExtras 的队列类型化查询）；Stage 播转轮不再读快照——编排器直调宿主
+      // playSlotSpin，落定回执走 sequencer。消费面只剩「转动中」置灰（面板/拉杆热区）。
+      spinning: extra.slot?.spinning || null,
       lastSpin,
       // 待处理产出：原始载荷原样带上，表现文案由 Stage 侧翻译（与战后奖励同一分工）
       pending: pending ? {
@@ -353,15 +350,26 @@ export function cardRemovalSnapshot(run) {
  * 卡组 build 视图条目（「卡组」按钮的全屏画廊）：run 牌组原样平铺，array order 即展示序。
  * 视图 = 应用前口径（cardViewFromDef），战斗内克隆的临时状态（冷却/威力/激活/局内转化）
  * 一律不进——那些属于战斗牌库查看器（bridge 投影 zones.deck），两者是不同语义的视图。
+ * promotes = 本卡的升级方向（previewPromotionTargets——**预览口径不过等阶门禁**：
+ * 未解锁等阶的目标照示，玩家规划「怎么升级最赚」要看全链；无目标（S/Z/路线外填充卡）
+ * = 空数组）。行动侧（训练升级候选）仍走 deckUpgradeCards 的 gatedPromotionTargets。
  */
 export function deckViewEntries(run) {
   const p = run.player;
-  return p.deck.map(rt => ({
-    uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
-    // def 未注册（如大改名前的旧档残留 id）退 null view → 画廊按 defId 占位烘焙，
-    // 不拦开界面（与 stagePickerKit 的兜底契约一致）
-    view: hasSkill(rt.defId) ? cardViewFromDef(getSkillDefinition(rt.defId), { player: p }) : null,
-  }));
+  return p.deck.map(rt => {
+    const def = getSkillDefinition(rt.defId);
+    const targetIds = def ? previewPromotionTargets(run, def) : [];
+    return {
+      uniqueID: rt.uniqueID, defId: rt.defId, power: rt.power ?? 0,
+      // def 未注册（如大改名前的旧档残留 id）退 null view → 画廊按 defId 占位烘焙，
+      // 不拦开界面（与 stagePickerKit 的兜底契约一致）
+      view: hasSkill(rt.defId) ? cardViewFromDef(def, { player: p }) : null,
+      promotes: {
+        name: def?.name ?? rt.defId,
+        targets: targetIds.map(id => ({ defId: id, view: cardViewFromDef(getSkillDefinition(id), { player: p }) })),
+      },
+    };
+  });
 }
 
 export function deckUpgradeCards(run) {

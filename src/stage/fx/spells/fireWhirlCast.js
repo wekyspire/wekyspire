@@ -1,7 +1,6 @@
-// 火焰旋风模板（fireWhirl 群伤，2026-10-07 粒子化重做——圆柱噪声面片方案被用户
-// 废弃，换 GPU 粒子火旋风：fx/gpu/fireWhirlOrbit.js，「类太极但更精致」）：主体 =
-// 主角周身拔起的粒子龙卷（三族：火芯螺旋/外缘火舌/逆行余焰；涡剪+漏斗+螺旋臂），
-// 轴心白热柱与贴地破边火环降为配合件。逐敌落地火仍在伤害节拍（damageFx
+// 火焰旋风模板（fireWhirl 群伤）：主体 = GPU 粒子火旋风
+//（fx/gpu/fireWhirlOrbit.js）——主角周身拔起的粒子龙卷（三族：火芯螺旋/外缘火舌/逆行余焰；涡剪+漏斗+螺旋臂），
+// 轴心白热柱与贴地破边火环为配合件。逐敌落地火仍在伤害节拍（damageFx
 // fireWhirl → fireburst ground），施术拍只演「风起于己」。rings = 2（S 焰流飓风）：
 // 包络抬到 1.3（更密更快）+ 二段反向地环（叠浪读感）。
 import { cardFlare, lightPillar, groundRing, SPELL_DEBUG } from './blocks.js';

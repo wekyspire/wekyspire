@@ -40,7 +40,11 @@ registerEvent({
       // 走 runEffects 原语（改 run + 记流水 + 声明「卡牌升级」变身演出——揭幕后播）
       const rt = upgradeCard(ctx, pick.uniqueID, null, { source: '演武残机 · 投币' });
       const after = getSkillDefinition(rt.defId).name;
-      return { pages: [{ speaker: '旁白', text: `（它开始和你过招——「${before}」豁然贯通，化作「${after}」。）` }] };
+      if(before == after) {
+        return { pages: [{ speaker: '旁白', text: `（它开始和你过招—— ${before} 豁然贯通，等阶提升了。）` }] };
+      } else {
+        return { pages: [{ speaker: '旁白', text: `（它开始和你过招—— ${before} 豁然贯通，化作 ${after}。）` }] };
+      }
     }
     if (choiceId === 'spar') {
       const lost = damagePlayer(ctx, 6, { source: '演武残机：过招' });

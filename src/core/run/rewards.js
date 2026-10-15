@@ -42,7 +42,7 @@ export function rewardTierCap(channel = 'normal') {
 
 // ---- 卡包（维度）定义：id 与 player.leino 的键同名 ----
 export const PACKS = Object.freeze({
-  body: Object.freeze({ id: 'body', name: '基础', desc: '体修与通用混合池' }),   // desc 会烘上奖励瓦片（~10 汉字宽），长句硬裁（夜测 r3路8）
+  body: Object.freeze({ id: 'body', name: '基础', desc: '体修与通用混合池' }),   // desc 会烘上奖励瓦片（~10 汉字宽），长句硬裁
   fire: Object.freeze({ id: 'fire', name: '火灵脉', desc: '爆发与燃烧' }),
   common: Object.freeze({ id: 'common', name: '通用', desc: '跨体系功能卡' }),
 });
@@ -62,10 +62,8 @@ export function packOf(def) {
 // 卡包等级：体修看隐藏的 player.bodyLevel（跳过进阶 +1），灵脉看 leino[维度]
 export function packLevel(run, packId) {
   if (packId === 'body') {
-    // 体修门禁 = 隐藏的 player.bodyLevel，**只看它**（体修单立等级后灵脉不反哺）；
-    // 灵脉玩家想看体修高阶卡，走「跳过进阶」这条体修快车道）。沿革：反哺当年是为
-    // 「不跳进阶的玩家永远 0 级、体修 B/A 对灵脉路线永久不可见」开的口子，同日
-    // 曾先修过「反哺至多到 A、S 体修独占」，如今整条撤销、回归单立。
+    // 体修门禁 = 隐藏的 player.bodyLevel，**只看它**（体修单立等级，灵脉不反哺）；
+    // 灵脉玩家想看体修高阶卡，走「跳过进阶」这条体修快车道。
     return run?.player?.bodyLevel ?? 0;
   }
   return run?.player?.leino?.[packId] ?? 0;
@@ -115,8 +113,8 @@ export function deckGateOpen(run, def) {
   return ids.some(id => owned.has(id));
 }
 
-// 持卡亲和参数（2026-10-10 用户定：卡包不再做子系统亲和——奖励流不偏向既有构筑，
-// 仅剩 def 显式声明的持卡亲和这一种特殊修正）。
+// 持卡亲和参数（卡包不做子系统亲和——奖励流不偏向既有构筑，
+// 仅剩 def 显式声明的持卡亲和这一种修正）。
 export const DECK_AFFINITY = Object.freeze({ perCard: 0.35, maxCount: 4 });
 
 /** 持卡亲和乘数：1 + perCard × min(牌组中 affinityCards 卡的张数, maxCount)。 */
@@ -321,8 +319,8 @@ export function spawnableCardPool(run = null) {
 }
 
 // 包内抽 3 选 1 候选（走 run rng，确定性；不重复；等阶分布按来源通道
-// REWARD_TIER_TABLE，与体系等级脱钩；档内均匀，仅 def 声明的持卡亲和加权——
-// 子系统亲和已撤（2026-10-10 用户定：奖励流不偏向既有构筑，build 选项保持开放））。
+// REWARD_TIER_TABLE，与体系等级脱钩；档内均匀，仅 def 声明的持卡亲和加权，
+// 不做子系统亲和——奖励流不偏向既有构筑，build 选项保持开放）。
 // opts.channel = 'normal'（普通战后/默认）| 'elite'（精英/Boss 战后、老虎机大奖——
 // 该通道才有 A 直出）。
 export function rollSkillChoices(run, packId = 'body', count = REWARDS_PLACEHOLDER.skillChoiceCount, { channel = 'normal' } = {}) {

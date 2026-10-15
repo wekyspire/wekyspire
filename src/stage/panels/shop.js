@@ -51,7 +51,7 @@ export function buildShopPanel(snap, { standalone = false, buttons = standalone 
     });
   }
   // 商品**已经在 3D 货柜里**（billboard + 价签，可直接点买）——场景版（dock 操纵条）不再把
-  // 货柜内容复述一遍列表（实报："下方UI又把货柜内的物品描述了一遍，很蠢"）。
+  // 货柜内容复述一遍列表（复述 = 同屏两份商品描述）。
   // 只有无场景的占位版（standalone，眼前没有 3D 货架）才需要列表 + 购买按钮作为唯一入口。
   if (buttons) {
     for (const it of shop.items) {

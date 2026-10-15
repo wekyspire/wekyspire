@@ -62,7 +62,7 @@ export const unitBeats = {
     const chargeLean = -Math.sign(ddx || 1) * 0.30;
 
     const h = runScript(async (ctx) => {
-      // 命中演出（伤害节拍驱动，2026-09-30 泛化）：伤害量/攻击来向在这里才有真值——
+      // 命中演出（伤害节拍驱动）：伤害量/攻击来向在这里才有真值——
       // 尺寸随伤害缩放、方向语义按卡名/体系（刀光斩向、拳面镜像、火系落点爆）；
       // 多段伤害逐拍触发 = 连击/乱拳的密集命中白送。fire-and-forget
       // （_fxRunScript 舞台寿命锚）：不占本节拍时序，受击既有演出（突进/击退/闪光）照常。
@@ -112,7 +112,7 @@ export const unitBeats = {
       if (lunging && remiCharge) {
         // 冲撞四拍：蹲伏蓄势 → 全距离冲刺（小跳弧+前扑）→ 撞击 → 高弹后跳+二跳回家。
         // 被打断（收拍/拆台）经 onKill 归位归零，不晾在半路上（正常结束也过这，幂等）。
-        ctx.onKill(() => { src.position.x = sx; src.position.y = sy; src.position.z = sz; src.resetPose?.(); });
+        ctx.onKill(() => { src.position.x = sx; src.position.y = sy; src.position.z = sz; src.resetPose(); });
         // ① 蹲伏蓄势（下压 + 撑宽 + 微后仰）
         await ctx.custom(srcId, {
           durationMs: 170, ease: 'power2.out',
@@ -140,7 +140,7 @@ export const unitBeats = {
         src.setPose({ squash: 0.82, widen: 1.14, lean: chargeLean });
       } else if (lunging) {
         // 突进被打断（收拍/拆台）不许把攻击方晾在半路上：归位 + 姿态清零（正常结束也过这，幂等）
-        ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose?.(); });
+        ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose(); });
         // ① 蓄势后拉（反向微仰）
         await ctx.custom(srcId, {
           durationMs: 70, ease: 'power1.out',
@@ -243,7 +243,7 @@ export const unitBeats = {
 
       if (dealt > 0) {
         const flashed = r.flash != null;
-        if (flashed) unit.flash?.(r.flash);
+        if (flashed) unit.flash(r.flash);
         for (const s of r.sparks) {
           this.particles.spawn(unit.position.x, unit.position.y + 2, { ...s, z: unit.position.z });
         }
@@ -268,7 +268,7 @@ export const unitBeats = {
           const x0 = unit.position.x;
           const srcX = payload?.source?.uniqueID != null
             ? (this._units.get(payload.source.uniqueID)?.position.x ?? null) : null;
-          // 击退方向 = 远离伤害源（旧版恒 +x：敌方恰好正确，我方被打成"迎着攻击踉跄"）；
+          // 击退方向 = 远离伤害源；无来源（环境/附级）按阵营默认：我方朝左、敌方朝右
           // 无来源（环境/附级）按阵营默认：我方朝左、敌方朝右
           const dir = srcX != null
             ? (Math.sign(x0 - srcX) || (unit.side === 'enemy' ? 1 : -1))
@@ -280,7 +280,7 @@ export const unitBeats = {
             const y0 = unit.position.y;
             const back = 2.0 + Math.min(dealt, 20) * 0.09; // 冲击击退（随伤害缩放）
             const leanBack = -dir * 0.14;                  // 后仰角：立牌顶倒向远离伤害源
-            ctx.onKill(() => { unit.position.x = x0; unit.position.y = y0; unit.resetPose?.(); });
+            ctx.onKill(() => { unit.position.x = x0; unit.position.y = y0; unit.resetPose(); });
             // ① 冲击：快速击退 + 后仰
             await ctx.custom(unit.uniqueID, { durationMs: 80, ease: 'power2.out', onUpdate: (t) => {
               unit.position.x = x0 + dir * back * t;
@@ -310,17 +310,17 @@ export const unitBeats = {
               unit.setPose({ lean: lf * (1 - t) });
             } });
             await Promise.all([home, recover ?? Promise.resolve()]);
-            if (flashed) unit.restoreColor?.();
+            if (flashed) unit.restoreColor();
             return;
           }
-          // 重击（敌方，2026-10-07 用户定）：击退 + 绕脚后仰 → 衰减摇晃弹回——立牌
+          // 重击（敌方）：击退 + 绕脚后仰 → 衰减摇晃弹回——立牌
           // 「差点被拍倒」的语言（后仰角与死亡倾倒同轴，重击 = 没倒成的死亡前半程）。
           // 致死重击不在此演：后仰/击退归死亡节拍的「撑不住」链，不叠两段
           if (payload?.heavy && unit.side === 'enemy') {
             if (!payload?.killed) {
               const knock = 2.4 + Math.min(dealt, 40) * 0.06;                          // 2.4~4.8
               const lean = THREE.MathUtils.degToRad(16 + Math.min(dealt, 40) * 0.28);  // 16°~27°
-              ctx.onKill(() => { unit.position.x = x0; unit.billboard.rotation.x = 0; unit.resetPose?.(); });
+              ctx.onKill(() => { unit.position.x = x0; unit.billboard.rotation.x = 0; unit.resetPose(); });
               // ① 受击后仰（~110ms）：击退 + 绕脚仰到 lean 角 + 冲击压扁（果冻痛感的重击档）
               await ctx.custom(unit.uniqueID, { durationMs: 110, ease: 'power2.out', onUpdate: (t) => {
                 unit.position.x = x0 + dir * knock * t;
@@ -342,12 +342,12 @@ export const unitBeats = {
             } else {
               await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]);
             }
-            if (flashed) unit.restoreColor?.();
+            if (flashed) unit.restoreColor();
             return;
           }
           // 通用击退（敌方/主角）：幅度随伤害缩放（与震荡同语言）——轻伤轻晃、重伤踉跄
           const knock = 1.1 + Math.min(dealt, 20) * 0.055;
-          // 果冻痛感（2026-10-07 用户定：任何伤害都要「痛一下」）：受击瞬压扁 →
+          // 果冻痛感（任何伤害都要「痛一下」）：受击瞬压扁 →
           // 回弹拉长 → 晃稳（衰减余弦，与召唤起立的 squash-stretch 同语言）——
           // 敌方专属（主角的受击反馈由卡牌演出承担）
           let flinch = null;
@@ -369,10 +369,10 @@ export const unitBeats = {
             recover ?? Promise.resolve(),
           ]);
           if (flinch && !payload?.killed) unit.setPose({ squash: 1 });   // 收尾硬化（阻尼尾巴不残留）
-          if (flashed) unit.restoreColor?.();
+          if (flashed) unit.restoreColor();
           return;
         }
-        // minor 路径的 flash 还原在节拍等待之后（此前在首个 await 前还原 = 同帧
+        // minor 路径的 flash 还原在节拍等待之后（在首个 await 前还原 = 同帧
         // 设置同帧还原，染色不可见——中毒 tick 染绿靠这个时点）
         // 附级 tick 的轻痛感（敌方）：短促小幅度压弹——「任何伤害」口径的下半场
         if (unit.side === 'enemy') {
@@ -385,51 +385,15 @@ export const unitBeats = {
           });
           await Promise.all([ctx.wait(r.beatMs), flinch, recover ?? Promise.resolve()]);
           unit.setPose({ squash: 1 });
-          if (flashed) unit.restoreColor?.();
+          if (flashed) unit.restoreColor();
           return;
         }
         await Promise.all([ctx.wait(r.beatMs), recover ?? Promise.resolve()]); // 附级：短节拍即收
-        if (flashed) unit.restoreColor?.();
+        if (flashed) unit.restoreColor();
         return;
       }
       // 全吸收：无击退链，短停一拍让吸收数字可读后收节拍
       await Promise.all([ctx.wait(80), recover ?? Promise.resolve()]);
-    }, { animator: this.animator });
-    this._fxScripts.add(h);
-    h.promise.then(() => {
-      this._fxScripts.delete(h);
-      finish();
-    });
-  },
-  // 行动姿态节拍（防御/增强/削弱）：立牌绕脚「蓄势 → 定势 → 弹回」，
-  // 配姿态色立牌染色（flash → 收尾 restoreColor）。取代旧通用缩放脉冲——同等时长量级，
-  // 但三种行动各有身体语言。姿态起点恒为中立（节拍串行，上一拍已归位）；
-  // 被打断（收拍/拆台）经 onKill 归零姿态 + 复原染色，不留半蹲（正常结束也过这，幂等）。
-  _poseBeat(unit, pose, finish) {
-    if (unit._dead) { finish(); return; } // 尸体不摆姿态
-    // 削弱前倾朝向对方阵营：敌方（右侧）前倾 = 朝左 = +lean；我方 = 朝右 = -lean
-    const lean = pose.lean * (unit.side === 'enemy' ? 1 : -1);
-    const h = runScript(async (ctx) => {
-      ctx.onKill(() => { unit.resetPose?.(); unit.restoreColor?.(); });
-      unit.flash?.(pose.flash);
-      await ctx.custom(unit.uniqueID, {
-        durationMs: pose.inMs, ease: 'power2.out',
-        onUpdate: (t) => unit.setPose({
-          lean: lean * t,
-          squash: 1 + (pose.squash - 1) * t,
-          widen: 1 + (pose.widen - 1) * t,
-        }),
-      });
-      await ctx.wait(pose.holdMs);
-      // 弹回带一点过冲（back.out）：定势不是硬切回中立，而是松开后微微晃稳
-      await ctx.custom(unit.uniqueID, {
-        durationMs: pose.outMs, ease: 'back.out(1.7)',
-        onUpdate: (t) => unit.setPose({
-          lean: lean * (1 - t),
-          squash: 1 + (pose.squash - 1) * (1 - t),
-          widen: 1 + (pose.widen - 1) * (1 - t),
-        }),
-      });
     }, { animator: this.animator });
     this._fxScripts.add(h);
     h.promise.then(() => {
@@ -451,8 +415,8 @@ export const unitBeats = {
     // 复活接入（假死尸体起立）：恢复可见/影子/读数/材质（兜底：若走了
     // 焚毁链，restoreBody 把透明焦黑材质复原），从**当前倾角**起立——假死尸停在 82°，
     // 正好以「从地上挣起来」的同一语言复苏；普通召唤 rotation.x≈0 时维持原 78° 平躺起立。
-    unit.restoreBody?.();
-    unit.showStatus?.();
+    unit.restoreBody();
+    unit.showStatus();
     const startRad = Math.abs(billboard.rotation.x) > 0.1
       ? Math.abs(billboard.rotation.x)
       : THREE.MathUtils.degToRad(78);
@@ -492,7 +456,7 @@ export const unitBeats = {
   // 单位死亡演出：立牌「以脚为轴」向后倾倒（重力加速）→
   // 落地扬尘 + 一次阻尼回弹 → 焚毁（焦黑化 + alphaTest 侵蚀淡出 + 余烬升腾）→
   // 整体隐藏收殓。节拍阻塞至收殓，其后的 sync 才应用 isDead 面色（先演后变）。
-  // 倾倒作用于 billboard 的 X 轴（yaw 在 rig 层——2026-10-07 层级重构后两轴分层，
+  // 倾倒作用于 billboard 的 X 轴（yaw 在 rig 层——两轴分层，
   // 逐帧 yaw 不吃掉倾倒角），旋转轴过脚底——立牌物理感的根源；牌面立面底部锚定，
   // 绕原点转即天然「栽倒」而非「缩没」。
   _unitDeathBeat(unit, payload, finish) {
@@ -501,7 +465,7 @@ export const unitBeats = {
     // 倒地留尸不焚毁：复苏时 ANIM_UNIT_SPAWN 从倒地姿态重新立起。判据读 **payload
     // 里 core unit 的复活倒计时**（结算内同步挂上，实时）；不能用本舞台快照——
     // unitDied 是「先 anim 后 sync」，死亡节拍播放时快照还是旧投影（reviving 未至），
-    // 误判走真死焚毁链（病灶：复苏后立起的是焚毁透明立牌）。
+    // 误判走真死焚毁链——复苏后立起的就是焚毁透明立牌。
     if ((payload?.unit?._reviveCountdown ?? 0) > 0) {
       this._cleaveSplit?.delete(id);   // 复苏者不裂——标记不跨假死
       return this._unitFakeDeathBeat(unit, payload, finish);
@@ -539,7 +503,7 @@ export const unitBeats = {
       },
     });
   },
-  // 重击前两拍（heavy 标记共用段，2026-10-07 用户定）：① 击退 + 绕脚后仰到 30°
+  // 重击前两拍（heavy 标记共用段）：① 击退 + 绕脚后仰到 30°
   //（与死亡倾倒同轴——重击 = 差点被拍倒）→ ② 撑不住的挣扎（衰减摇晃 ±7° + 重心
   // 二次缓缓下沉——还想站稳但已经不行了）。拍毕调 onFall（从当前角继续倒）。
   _heavyStruggle(unit, onFall) {

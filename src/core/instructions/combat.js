@@ -66,7 +66,7 @@ export class DealDamageInstruction extends BattleInstruction {
     }
     // 结算原语未被取消 → 插入应用原语（子节点）。**两段式**（return false）：应用原语
     // 连同其 POST 子树完整结算后本指令才完成——本原语的 POST 订阅才能读到回填后的
-    // 结算明细。旧版此处 return true：POST 先于子节点执行，result 恒为占位 0
+    // 结算明细。若此处直接 return true，POST 会先于子节点执行，result 恒为占位 0
     // （dealt>0 类订阅全部静默失效：肾上腺素/以攻为守/炎魔/控火灼）。
     if (this._stage === 0) {
       const apply = new ApplyDamageInstruction({
@@ -174,7 +174,7 @@ export class ApplyDamageInstruction extends BattleInstruction {
       // payload.damage 已被 PRE 改写，不能用）
       gross: this.amount, defenseBlocked, shieldAbsorbed, pierce,
       // 伤害出处卡（标量 id，可序列化）：日志/观战按它归属「哪张牌打的」——
-      // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡（r21-a6 实报）。
+      // 爆裂咏唱终止类伤害不带名字时，读日志会误归因给上一张直伤卡。
       // skillDefId 覆写优先：斩链打出拍「先变身后结算」，self.defId 已是下一阶名
       skillDefId: this.skillDefId ?? this.skill?.defId ?? null,
       // 演出语义透传：附级伤害（燃烧/中毒/荆棘 tick）
@@ -193,7 +193,7 @@ export class ApplyDamageInstruction extends BattleInstruction {
         const def = getEnemyDefinition(target.defId);
         def?.onDeath?.({ ...ctx, unit: target, def });
       }
-      // 假死净化（2026-10-07 用户定）：亡语后仍挂复活倒计时的单位（reviveKit 类假死）
+      // 假死净化：亡语后仍挂复活倒计时的单位（reviveKit 类假死）
       // 效果全清——复苏不带旧状态归来。走 AddEffectInstruction 负层：订阅注销与
       // 播报都在指令层，与「层数扣尽移除」同一管线。
       if ((target._reviveCountdown ?? 0) > 0) {
@@ -220,7 +220,7 @@ export function wouldBeLethal(instr, target) {
   return target.hp - dmg <= target.getStat('minHp');
 }
 
-/** 重击判定（演出语义，2026-10-07 用户定）：单发生命值伤害 ≥ max(12, 目标最大生命 25%)
+/** 重击判定（演出语义）：单发生命值伤害 ≥ max(12, 目标最大生命 25%)
  * ——舞台「受重击后仰弹回摇晃」「重击致死撑不住倒下」与死亡节拍 heavy 标记共用口径。 */
 export function isHeavyDamage(dealt, target) {
   return dealt >= Math.max(12, (target?.maxHp ?? 0) * 0.25);

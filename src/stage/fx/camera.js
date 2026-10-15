@@ -1,4 +1,4 @@
-// 相机导演（fx 架构脊柱之三，；09-23 改单点合成）：
+// 相机导演（fx 架构脊柱之三）：
 // 四件事——命名机位库、flyTo 运镜、override 栈、**叠加偏移通道**。
 //   pose 库：registerPose('bossIntro', { position, lookAt })，内容一律住 fx/scripts/
 //   （Boss 专属机位跟 Boss 剧本同文件；通用机位住 scripts/cameras/）——本类只持栈与原语。
@@ -9,9 +9,9 @@
 //   偏移通道：setOffset(id, x, y, z) 登记一路「只叠不改基位」的瞬时位移（受击震荡、
 //   推镜余震、命中顶撞…），多路各自独立、互不覆盖。
 // ★ 单一落笔源纪律：**世界相机的位姿只有 commit() 一处写**。运镜写 pose、瞬时位移写
-//   通道，渲染前一次性合成 ⇒ 任意多路写入者天然可叠加。旧模型让大家各自
+//   通道，渲染前一次性合成 ⇒ 任意多路写入者天然可叠加。若各写入者直接
 //   cam.position = 绝对值，两路一撞就翻车：受击震荡在推镜途中启动会把画面钉在起跳位、
-//   收尾再把相机硬拷回过期基位（= pyro 转段起点那一下肉眼可感的跳跃，09-23 定位）。
+//   收尾再把相机硬拷回过期基位。
 // 未接管时（无飞行 / 无覆写 / 无偏移）导演完全透明，不碰相机——塔楼与休息房
 //   那些直接搬相机的舞台照旧自便；它们要是想被叠加，把位移写成一路 offset 即可。
 // 铁律沿用 StageManager：借用相机的舞台退出时必须清空栈 + restoreBaseCamera()。
@@ -57,7 +57,7 @@ export class CameraDirector {
   /**
    * 取景量尺（垂直视场角 + 宽高比）——剧本按**真实视野**反解机位用。
    * 为什么暴露这个：战斗相机是 24° 长焦，视野高度 ≈ 0.42×距离，凭经验写死
-   * 「退到 34u」这类坐标必然翻车（pyro 特写实拍成半张脸，09-23 教训）。
+   * 「退到 34u」这类坐标必然翻车。
    * 要框住高度 H 的主体、占画框 f 比例 → 距离 = H / (f × 2·tan(fov/2))。
    */
   get framing() {
@@ -67,7 +67,7 @@ export class CameraDirector {
 
   /**
    * 基准战斗取景（position / lookAt / fov）——剧本要「在默认机位的基础上改」时用它，
-   * 别自己抄一份球坐标常数（fov/俯角一改，抄的数就全废，09-23 已踩过两次）。
+   * 别自己抄一份球坐标常数（fov/俯角一改，抄的数就全废）。
    * lookAt 用与 flyHome 同一口径：沿基准视向推进「到原点的距离」。
    */
   get basePose() {
@@ -87,7 +87,7 @@ export class CameraDirector {
    * 正常到位 resolve(true)；被后来的 flyTo 抢飞 / dispose 掐断 resolve(false)
    * （契约同 runScript：await 它的剧本协程永不停在半空）。
    * 补间对象是权威取景（pose/_lookAt），不是相机本体——震荡之类的叠加层
-   * 因此可以在运镜全程继续生效（旧版会被运镜覆盖掉，或者反过来把运镜钉住）。
+   * 因此可以在运镜全程继续生效（补间相机本体则会被运镜覆盖，或反过来把运镜钉住）。
    */
   flyTo(poseOrName, { durationMs = 600, ease = 'power2.inOut' } = {}) {
     const pose = typeof poseOrName === 'string' ? this._poses.get(poseOrName) : poseOrName;
@@ -122,7 +122,7 @@ export class CameraDirector {
 
   /** 回基准机位（补间版 restoreBaseCamera——舞台退场的收尾运镜）。fov 一并飞回：
    *  长焦对抗机位（duelPose 压过 fov）若只飞位不飞焦，弹栈的 restoreBaseCamera 仍会
-   *  瞬切视场角（随 kardas 收尾硬切一并修）。 */
+   *  瞬切视场角。 */
   flyHome(opts = {}) {
     const base = this._sm.cameraBase;
     if (!base) return Promise.resolve(false);
@@ -153,7 +153,7 @@ export class CameraDirector {
   get offsetSum() { return this._sum; }
 
   /**
-   * FOV 偏移通道（2026-10-06 与 setOffset 对称）：渲染期 fov = 权威取景 fov +
+   * FOV 偏移通道（与 setOffset 对称）：渲染期 fov = 权威取景 fov +
    * Σ 各通道（度）。场景级缓变（sceneMood.fovAdd）走这里——不碰 _pose.fov，
    * 运镜/flyHome 照旧拥有权威值，多路写入者可加和。
    */
@@ -283,7 +283,7 @@ export class CameraDirector {
  * 压小、俯角压平，并按新 fov 反解距离以保住原来的取景范围。
  * 为什么走这条路而不是把镜头怼到主体脸上：对抗感来自**透视压缩**——远机位 + 窄视场
  * 会把前后两排拉到同一层平面上（长焦的老手艺），而推近特写只是把队友挤出画框、
- * 把回合制对撞拍成了大头照（pyro P2 实拍定论 ）。
+ * 把回合制对撞拍成了大头照。
  * @param {{position:{x,y,z}, lookAt:{x,y,z}, fov:number}} base 基准取景（CameraDirector#basePose）
  * @param {number} fovScale 视场角缩放（<1 = 更长焦）
  * @param {number} elScale 俯角缩放（<1 = 更平视）

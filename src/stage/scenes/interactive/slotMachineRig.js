@@ -28,7 +28,7 @@ const FLAP_DUR = 0.44;   // 翻牌一次（上叶折下 + 新叶落下）的时�
 const TMP_M4 = new THREE.Matrix4();
 const TMP_V3 = new THREE.Vector3();
 
-// ---- 粉碎口「口内炉火」（2026-10-12 用户定：可粉碎时口的闪烁要明显得多）----
+// ---- 粉碎口「口内炉火」（可粉碎时口的闪烁要明显得多）----
 // 喉腔（box，有 uv）换 node 材质：进度满 = 口里一炉压着的火在喘——双频呼吸（主频
 // 慢喘 + 高频细颤）+ 热区随呼吸涨缩，橙金 HDR 峰值推过 bloom 阈值起晕；hover = 整口
 // 提亮 + 口缘金描边（非 ready 时也亮描边 = 「这口是活的」弱提示）；粉碎瞬间 = 冲白红。
@@ -430,7 +430,10 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     t: 0,
     phase: Math.random() * 10,
     hover: 0,            // 0..1 hover 权重（平滑过渡）
+    hoverTarget: 0,
     focus: 0,            // 0..1 追光权重（相机怼脸时抑制抖动，见 calm）
+    focusTarget: 0,
+    demonWant: 0,        // 0..1 恶魔风格权重目标值（demonK 向它收敛）
     pulling: false,
     leverAngle: 0,       // 0 = 静止，负 = 拉下
     leverRelease: 0,     // 弹起进度（0..1）
@@ -469,8 +472,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   const bulbDim = (t) => brighten(t, 3);
   const bulbLit = (t) => brighten(t, 18);
 
-  function paintBulbs(level = 0) {
-    // level 0 = 常态（暗金呼吸）；>0 = 中奖灯效强度
+  function paintBulbs() {
     for (let i = 0; i < bulbTints.length; i++) {
       const tint = bulbTints[i];
       const breathe = 0.5 + 0.5 * Math.sin(st.t * 1.6 + i * 0.5);
@@ -560,8 +562,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   }
 
   // ---- 恶魔选择辉光：转轮窗分格框「框发热」呼吸 ----
-  // 选择阶段「轮盘即选项」的可交互暗示。旧版在转轮前叠一张加色大红面片（逆天的
-  // 红方块，视觉验收实毙）；现在框本身就是光源：换**独立材质实例**（族单例禁改——
+  // 选择阶段「轮盘即选项」的可交互暗示。框本身就是光源：换**独立材质实例**（族单例禁改——
   // 染红的是全场 unlit 件），vertexColors 关掉脱开金框顶点色，material.color 直出
   // 恶魔红 HDR——呼吸只推这一个 uniform（振幅正弦），峰值推过 bloom 阈 1.45 起晕、
   // 谷值压回阈下（明灭），线性色不经过任何叠加面片。「框发光、图案不发光」是道具
@@ -594,8 +595,17 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   }
 
   // ---- 拉杆 ----
-  function pull({ tier = 'minor', symbols = null } = {}) {
-    if (st.spin) return false;                      // 转轮中不能再拉（调用方另有防抖）
+  function pull({ tier = 'minor', symbols = null, onDone = null } = {}) {
+    if (st.spin) {
+      // 转轮中不能再拉（编排器另有 findPending 防双扣）——这杆并进在转的那圈：
+      // 落定回调串到当前 spin 的收尾拍（编排器侧等的就是「rig 落定」这一拍，
+      // 并圈与「等它转完再回执」等时，且免轮询）。落面按在转那圈的计划揭示。
+      if (onDone) {
+        const prev = st.spin.onDone;
+        st.spin.onDone = prev ? () => { prev(); onDone(); } : onDone;
+      }
+      return true;
+    }
     st.pulling = true;
     st.leverRelease = 0;
     st.win = null;
@@ -615,6 +625,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       elapsed: 0,
       tier,
       locked: reels.map(() => false),
+      onDone,   // 落定回调（宿主回执编排器；update 收尾拍同步触发一次即弃）
       // 每轮的整段动画计划在拉杆瞬间一次算定（后端此时已给结果）——解析式求值，
       // 圈数让"自然停车位"落在槽位稍前方，末段卡入位把它拉回槽位。
       plans: reels.map((r, i) => {
@@ -629,7 +640,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
   function update(dt) {
     st.t += dt;
     stepSeq(dt);                                   // 闸口/换盘时序
-    st.demonK += ((st.demonWant ?? 0) - st.demonK) * Math.min(1, dt * 3.5);
+    st.demonK += (st.demonWant - st.demonK) * Math.min(1, dt * 3.5);
     st.choiceGlow += (st.choiceGlowTarget - st.choiceGlow) * Math.min(1, dt * 6);
     stepFrameGlow();                                 // 分格框恶魔红 HDR 呼吸（见其注释）
     if (gate) gate.position.y = gateOpenY + (gateClosedY - gateOpenY) * st.gateK;
@@ -637,7 +648,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     applyReelArt();     // 轮盘图案同理
     // 追光（相机怼脸）时抑制抖动：屏幕上的位移在近景会被放大得"晃得厉害"，
     // 此时机器只该有极轻微的呼吸感（再缩一倍 → calm ≈ 0.16）。
-    st.focus += ((st.focusTarget ?? 0) - st.focus) * Math.min(1, dt * 5);
+    st.focus += (st.focusTarget - st.focus) * Math.min(1, dt * 5);
     const calm = 1 - 0.84 * st.focus;
 
     // ---- 横向拨针：被转轮带着抖/偏，停轮后弹簧归位----
@@ -674,7 +685,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     body.rotation.z = (Math.sin(st.t * 7.3 + st.phase) * 0.004 + shakeZ * 0.02
       + (st.spinEnergy > 0.001 ? Math.sin(st.t * 41) * 0.0035 * st.spinEnergy : 0)) * calm;
     // hover：轻微上浮放大（配合灯提亮）
-    st.hover += ((st.hoverTarget ?? 0) - st.hover) * Math.min(1, dt * 8);
+    st.hover += (st.hoverTarget - st.hover) * Math.min(1, dt * 8);
     const hoverBoost = 1 + 0.025 * st.hover;
     body.scale.setScalar(baseScale * hoverBoost);
 
@@ -737,6 +748,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
         st.spin = null;
         st.win = { tier, t: 0, fx: TIER_FX[tier] ?? TIER_FX.none };
         if (st.win.fx.shake > 0) { st.shake = st.win.fx.seconds; st.shakeAmp = st.win.fx.shake; }
+        try { s.onDone?.(); } catch (err) { console.error('[slotRig] 落定回调异常:', err); }
       }
     } else if (st.spinEnergy > 0) {
       st.spinEnergy = Math.max(0, st.spinEnergy - dt * 1.6);       // 停轮后余震收干净
@@ -805,7 +817,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
       coinMesh.instanceMatrix.needsUpdate = true;
       if (coinState.t >= coinState.life) coinMesh.visible = false;
     }
-    paintBulbs(st.win ? 1 : 0);
+    paintBulbs();
   }
 
   return {
@@ -816,7 +828,6 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     setFocus: (on) => { st.focusTarget = on ? 1 : 0; },
     // 恶魔 roll（宿主编排；美术未到位时转盘走占位暗红）
     demonEnter, demonExit,
-    isDemon: () => !!st.reelsDemon || (st.demonWant ?? 0) > 0,
     setDemonStyle: (k) => { st.demonWant = Math.max(0, Math.min(1, k)); },
     /** 恶魔选择辉光开关（choose 阶段宿主调）：分格框恶魔红 HDR 呼吸，收场自动还原金框。 */
     demonChoiceGlow: (on) => { st.choiceGlowTarget = on ? 1 : 0; },
@@ -827,7 +838,7 @@ export function createSlotMachineRig({ object, parts, seed = 'slot' }) {
     crush,
     /** 可点热区（宿主射线拾取用）：投料口暗腔 + 计数器面板。 */
     /** 粉碎入口热区 = 投料口拾取代理（罩住喉腔+金牙；——计数器翻牌
-     *  只是显示件，此前混进热区会让玩家「点到 7 上也进了粉碎」）。 */
+     *  只是显示件，混进热区会让玩家「点到 7 上也进了粉碎」）。 */
     crusherTargets: () => [mawProxy ?? throat].filter(Boolean),
     /** 三根转轮鼓（恶魔 roll 选择用：**转出来的那一面就是诅咒本身**，悬停/点击都在盘上）。 */
     demonTargets: () => reels.filter(Boolean),

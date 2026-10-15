@@ -1,5 +1,4 @@
 // 老虎机（slot）：转轮演出 + **恶魔 roll**（银行机超额取款的代价，演在老虎机上）+ **离房安慰奖**。
-// 逻辑自 RoomStage 原样下沉——RoomStage 只做通用舞台机制，本模块不认识任何别的机器。
 import * as THREE from 'three';
 import { createSlotMachineRig } from '../scenes/interactive/slotMachineRig.js';
 import { buildSlotPanel } from '../panels/index.js';
@@ -7,6 +6,8 @@ import { ChoiceBillboardObject } from '../objects/ChoiceBillboardObject.js';
 
 // 恶魔 roll（银行机超额取款的代价）：灯池染暗红 + 词条卡片按等级分色（占位美术）
 const DEMON_LAMP = 0x9a2432;
+/** 二选一/三选一 billboard 的单件边长（世界单位）——取景总宽估算与此同源。 */
+const GIFT_ITEM_SIZE = 2.2;
 const DEMON_TIER_TINT = { yellow: 0xb08a3a, red: 0x9a3a3a, black: 0x3a2440 };
 const DEMON_TIER_NAME = { yellow: '黄色级', red: '红色级', black: '黑色级' };
 
@@ -57,35 +58,21 @@ function symbolsForTier(tier) {
 export function createSlotMachine(ctx) {
   let gift = null;              // 安慰奖二选一演出件（惰性；见 _playGift）
   let demon = null;             // 恶魔 roll 状态机（见 _stepDemonRoll）
-  let slotSpinId = null;        // 正在播的拉杆轮次 id（防重绘重播）
-  let slotPoll = null;          // 转轮播完的轮询定时器
 
-  /** 快照出现新的 spinning → 让机器自己转；播完回执 slotAnimDone（后端才揭示结果）。 */
-  function _syncSpin() {
-    // 「继续前进」的明度在 RoomStage._tick 里逐帧算（模态覆盖层/房间欠账两档），这里不再重复设置
-    const s = ctx.snap()?.slot;
+  /**
+   * 拉一次转轮（编排器直调宿主实现，非快照 diff——快照只带「转动中」布尔做置灰）。
+   * rig.pull 自带回执回调：拉杆落定拍同步触发一次即弃；转轮在转时
+   * 拒拉即并圈（回调串到在转那圈的收尾拍，rig 内部消化，宿主零轮询）。
+   * @returns 是否接手（无 rig → false，编排器自行落定）
+   */
+  function playSlotSpin({ tier }, onDone) {
     const rig = ctx.rigs().get('slot');
-    if (!s || !rig) return;
-    // 计数器（翻牌）与进度满的"嘴张开"直接由快照驱动
-    if (s.devour) rig.setDevour?.(s.devour);
-    const spinning = s.spinning ?? null;
-    if (!spinning) { slotSpinId = null; return; }
-    if (spinning.id === slotSpinId) return;   // 同一轮已开播（重绘不重播）
-    slotSpinId = spinning.id;
-    const tier = spinning.tier ?? 'none';   // 'major' | 'minor' | 'none'（不是奖项种类）
-    rig.pull({ tier, symbols: symbolsForTier(tier) });
-    clearInterval(slotPoll);
-    slotPoll = setInterval(() => {
-      if (rig.isBusy()) return;
-      clearInterval(slotPoll);
-      slotPoll = null;
-      slotSpinId = null;
-      ctx.intent({ action: 'slotAnimDone', id: spinning.id });
-    }, 120);
+    if (!rig) return false;
+    return rig.pull({ tier, symbols: symbolsForTier(tier ?? 'none'), onDone });
   }
 
   // ---- 恶魔 roll（银行机超额取款的代价）----
-  // 用户定 超额取款 → **视角立刻切到老虎机** → 机器切恶魔形态（关闸 → 换暗红盘
+  // 超额取款 → **视角立刻切到老虎机** → 机器切恶魔形态（关闸 → 换暗红盘
   // → 开闸，灯池同时染暗红）→ 自动开转 → 停稳后弹出三张词条卡片 → 点选其一 → 退场
   // （换回普通盘、灯效复原）→ 回银行机并回执宿主播"奖励到手"特写（那笔超额取款的金币）。
   // 状态机由 tick 推进（dt 驱动，与所有演出同一时基；不用定时器，免得被 rAF 节流坑）。
@@ -153,8 +140,7 @@ export function createSlotMachine(ctx) {
   /**
    * 恶魔 roll 的选择：**轮盘本身就是选项**。
    * 三根转轮各认一个词条——"轮盘转出来的东西就是诅咒本身"，所以悬停转轮弹该词条的 tooltip、
-   * 点转轮即承受。此前是机器身前另浮出三张卡片，与转盘割裂，操纵条里又列一遍同样的信息
-   * （报"重复呈现"）。取景用 `ctx.focusMachine('slot')` 的怼脸机位（slotSubject 已框住转轮窗），
+   * 点转轮即承受。取景用 `ctx.focusMachine('slot')` 的怼脸机位（slotSubject 已框住转轮窗），
    * 不再另拉一次相机。
    */
   function _armDemonChoice(d) {
@@ -198,9 +184,8 @@ export function createSlotMachine(ctx) {
       ctx.picker().addPickable(id, proxy, { kind: 'demon' });
       d.picks.push({ id, optionId: o.id, proxy });
     });
-    // 可交互暗示（2026-09-30 用户定重做）：分格框恶魔红 HDR 呼吸辉光——由 rig 的
-    // demonChoiceGlow 驱动（材质 uniform 直出、峰值过 bloom 阈起晕），不再叠加色
-    // 红面片（首版大红方块视觉验收实毙）。等阶区分交给 tooltip 文字。
+    // 可交互暗示：分格框恶魔红 HDR 呼吸辉光——由 rig 的 demonChoiceGlow 驱动
+    // （材质 uniform 直出、峰值过 bloom 阈起晕）。等阶区分交给 tooltip 文字。
     ctx.rigs().get('slot')?.demonChoiceGlow?.(true);
   }
 
@@ -237,7 +222,7 @@ export function createSlotMachine(ctx) {
    * **离房安慰奖演出**：点「继续前进」且快照里欠着安慰奖时，
    * ① 相机推到**出料口**；② 机器"吐出"两件 billboard（可乐/鸡腿，暂无美术 = 纯色块 + 白字）；
    * ③ 点选其一 → 选中件朝镜头飞出、另一件缩没；④ 播完上行 `slotTakeGift`（宿主结算 +
-   * 播获得物特写，**并自动把这次离房接着走完**——用户定 领取不进任何 UI，
+   * 播获得物特写，**并自动把这次离房接着走完**——领取不进任何 UI，
    * 面板里既没有进度也没有按钮，玩家点一次「继续前进」就把整条链走到底）。
    * @returns 是否已接手这次点击（true = 别离房，等演出与获得特写跑完由宿主离房）
    */
@@ -249,7 +234,7 @@ export function createSlotMachine(ctx) {
     if (!machine) return false;
     // 取景以**两件货**为主体：摆位 = 机器腰高、身前 6.5（贴出料口摆会被底部操纵条盖住，
     // 且镜头对着出料口时两件货在画面外），机器留在背景里当上下文
-    const { spot, dist, fwd } = _billboardStage(machine, items.length * 3.0 + 4.35);
+    const { spot, dist, fwd } = _billboardStage(machine, items.length * GIFT_ITEM_SIZE + GIFT_ITEM_SIZE * 1.45);
     const position = spot.clone().addScaledVector(fwd, dist);
     const m = new THREE.Matrix4().lookAt(position, spot, new THREE.Vector3(0, 1, 0));
     ctx.startCamTween(
@@ -285,10 +270,10 @@ export function createSlotMachine(ctx) {
     if (gift) return;
     gift = new ChoiceBillboardObject({
       items: items.map(it => ({ id: it.id, name: it.name, sub: it.effect, tint: it.tint })),
-      size: 3.0,
+      size: GIFT_ITEM_SIZE,
       onPick: (id) => {
         ctx.intent({ action: 'slotTakeGift', choice: id });
-        _removeGift(0.5);
+        _removeGift();
       },
     });
     gift.position.copy(spot);
@@ -301,11 +286,6 @@ export function createSlotMachine(ctx) {
     ctx.room()?.group.remove(gift);
     gift.dispose();
     gift = null;
-  }
-
-  function _onExit() {
-    clearInterval(slotPoll);
-    slotPoll = null;
   }
 
   return {
@@ -328,11 +308,16 @@ export function createSlotMachine(ctx) {
       });
     },
 
-    /** 快照 → rig/演出状态（恶魔 roll 起止 + 拉杆轮次）。 */
+    /** 快照 → rig/演出状态（恶魔 roll 起止 + 吞噬计数器翻牌）。转轮播放在 playSlotSpin。 */
     sync() {
       _syncDemonRoll();
-      _syncSpin();
+      const s = ctx.snap()?.slot;
+      const rig = ctx.rigs().get('slot');
+      if (s?.devour) rig?.setDevour?.(s.devour);
     },
+
+    /** 转轮宿主实现（RoomStage.playSlotSpin 转发到这里）。 */
+    playSlotSpin,
 
     /** 帧驱动：恶魔相位机 + 安慰奖 billboard 面向相机 + 浮动。 */
     tick(dt) {
@@ -400,16 +385,20 @@ export function createSlotMachine(ctx) {
       rig?.setLeverHover?.(leverOk);
     },
 
-    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'，
-     *  qa 修：此前 pending 挂着照样能离房，产出静默丢弃成幽灵奖项）。 */
-    pendingDuty: () => (ctx.snap()?.bank?.pendingRoll ? 'demon'
-      : (ctx.snap()?.slot?.pending ? 'prize' : null)),
+    /** 义务门贡献：恶魔 roll 挂着 = 硬拦离房（'demon'）；产出没处理完也拦（'prize'）。
+     *  判据走快照 duty（= currentQuestion 种类，共存态自动按问句优先序取先）；
+     *  slotGift 不在此列——点继续由 _playGift 拦截演出（领完自动续上离房）。 */
+    pendingDuty: () => {
+      const d = ctx.snap()?.duty;
+      return d === 'demonRoll' ? 'demon' : (d === 'slotPrize' ? 'prize' : null);
+    },
 
     /** 点「继续前进」时接管：恶魔词条未选 → 拉回镜头提示；产出未处理 → 同样拉回提示；
      *  安慰奖未领 → 演完再离房。 */
     onContinue() {
-      if (ctx.snap()?.bank?.pendingRoll) { _nudgeDemonRoll(); return true; }
-      if (ctx.snap()?.slot?.pending) {
+      const d = ctx.snap()?.duty;
+      if (d === 'demonRoll') { _nudgeDemonRoll(); return true; }
+      if (d === 'slotPrize') {
         if (ctx.focused() !== 'slot') ctx.focusMachine('slot');
         const entry = ctx.entryOf('slot');
         if (entry) ctx.bubbles().say('room:slot', {
@@ -437,9 +426,7 @@ export function createSlotMachine(ctx) {
       return true;
     },
 
-    onExit() { _onExit(); },
     dispose() {
-      _onExit();
       _removeGift();
       _disarmDemonChoice();
     },

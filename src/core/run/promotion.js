@@ -40,6 +40,14 @@ export function gatedPromotionTargets(run, def) {
   });
 }
 
+// 升级方向**预览**（卡组画廊点卡弹层）：不走等阶门禁——预览是规划视角，
+// 未解锁等阶的目标照示（玩家要看「升上去是什么」来决定怎么升级最赚）。
+// 填充拳/盾的路线门与 S 过滤保留（示一个永不可达的升级方向是误导）。
+export function previewPromotionTargets(run, def) {
+  if (FILLER_STARTERS.has(def?.id) && run.route !== 'body') return [];
+  return promotionTargets(def).filter(id => getSkillDefinition(id).tier !== 'S');
+}
+
 // deck 内某张 runtime 是否可升级（需传 run 以过等阶门禁）
 export function canPromoteRuntime(runtime, run) {
   return gatedPromotionTargets(run, getSkillDefinition(runtime.defId)).length > 0;

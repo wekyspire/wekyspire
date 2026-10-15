@@ -38,7 +38,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 1) return { kinds: ['defend', 'buff'], note: '全体友军护盾+16，自身力量+2' };
+    if (phase === 1) return { kinds: ['defend', 'buff'], shield: 16, note: '全体友军护盾+16，自身力量+2' };
     return { kinds: ['attack'], hits: 1, damage: (phase === 0 ? 10 : 14) + unit.getStat('attack') };
   },
 });
@@ -105,7 +105,7 @@ registerEnemy({
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
     if (phase === 0) return { kinds: ['buff'], note: '拂尘：净化全体友军的中毒与燃烧' };
-    if (phase === 2) return { kinds: ['defend'], note: '自身护盾+8' };
+    if (phase === 2) return { kinds: ['defend'], shield: 8, note: '自身护盾+8' };
     return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
   },
 });
@@ -203,7 +203,7 @@ registerEnemy({
     if (beat === 0 || beat === 3) {
       return { kinds: ['attack'], hits: 1, damage: (beat === 0 ? 26 : 28) + unit.getStat('attack'), note: '大振' };
     }
-    return { kinds: ['defend'], note: '失谐（自身盾4）' };
+    return { kinds: ['defend'], shield: 4, note: '失谐（自身盾4）' };
   },
 });
 
@@ -257,7 +257,7 @@ registerEnemy({
     const phase = t % 3;
     if (phase === 0) return { kinds: ['attack'], hits: 1, damage: 10 + 2 * t + unit.getStat('attack'), note: `低伤锤（随回合增强，当前+${2 * t}）` };
     if (phase === 1) return { kinds: ['attack', 'debuff'], hits: 1, damage: 6 + unit.getStat('attack'), note: '塞2墨渍' };
-    return { kinds: ['attack', 'defend'], hits: 1, damage: 14 + 2 * t + unit.getStat('attack'), note: `重压（随回合增强，当前+${2 * t}）+自身盾10` };
+    return { kinds: ['attack', 'defend'], hits: 1, damage: 14 + 2 * t + unit.getStat('attack'), shield: 10, note: `重压（随回合增强，当前+${2 * t}）+自身盾10` };
   },
 });
 
@@ -363,7 +363,7 @@ registerEnemy({
     const beat = unit.actionIndex % 4;
     if (beat === 3) return { kinds: ['debuff'], note: '镜映：将敌方全体的负面状态复制给你' };
     if (beat % 2 === 0) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
-    return { kinds: ['defend'], note: '蓄能：自身盾8' };
+    return { kinds: ['defend'], shield: 8, note: '蓄能：自身盾8' };
   },
 });
 
@@ -433,7 +433,7 @@ registerEnemy({
       amount: 13 + (hoarding ? 6 : 0) + unit.getStat('attack') }));
   },
   getIntention: (unit, bs) => {
-    if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], note: '记账（自身盾6）' };
+    if (unit.actionIndex % 2 === 1) return { kinds: ['defend'], shield: 6, note: '记账（自身盾6）' };
     const capacity = unit._seenCapacity ?? 6;
     const hoarding = (bs?.zones?.hand?.length ?? 0) >= capacity - 1;
     return {
@@ -513,13 +513,13 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['defend', 'buff'], note: '竖盾：全体友军盾+16' };
+    if (phase === 0) return { kinds: ['defend', 'buff'], shield: 16, note: '竖盾：全体友军盾+16' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
-    return { kinds: ['defend', 'buff'], note: '稳固：自身盾12+力量1' };
+    return { kinds: ['defend', 'buff'], shield: 12, note: '稳固：自身盾12+力量1' };
   },
 });
 
-// ⑫ 仪典祭坛（群体增益核心）：两拍循环「祝圣（全体友军力量+2、盾+8）↔ 蓄能（自盾14）」。
+// ⑫ 仪典祭坛（群体增益核心）：两拍循环「祝圣（全体友军力量+2、盾+12）↔ 蓄能（自盾18）」。
 // 输出为零但每两拍让全队攻击 +2——3 个循环后多段怪每段 +6。必须优先处理，但它自盾最厚。
 registerEnemy({
   difficulty: { base: 5, floorMin: 36, floorMax: 43 },
@@ -538,8 +538,8 @@ registerEnemy({
     }
   },
   getIntention: (unit) => (unit.actionIndex % 2 === 0
-    ? { kinds: ['buff'], note: '祝圣：全体友军力量+2、盾+8' }
-    : { kinds: ['defend'], note: '蓄能：自身盾14' }),
+    ? { kinds: ['buff'], shield: 12, note: '祝圣：全体友军力量+2、盾+12' }
+    : { kinds: ['defend'], shield: 18, note: '蓄能：自身盾18' }),
 });
 
 // ⑬ 风刃魔像（闪避+大口径多段）：两拍循环「起风（自身闪避拉到 3——蒸发口径照旧，
@@ -594,7 +594,7 @@ registerEnemy({
   },
   getIntention: (unit) => {
     const phase = unit.actionIndex % 3;
-    if (phase === 0) return { kinds: ['defend', 'buff'], note: '装填：盾16+力量2' };
+    if (phase === 0) return { kinds: ['defend', 'buff'], shield: 16, note: '装填：盾16+力量2' };
     if (phase === 1) return { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };
     const per = 7 + unit.getStat('attack');
     return { kinds: ['attack'], hits: 3, damage: per, note: `齐射（共${per * 3}）` };

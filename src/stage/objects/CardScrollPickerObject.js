@@ -1,7 +1,7 @@
 // CardScrollPickerObject：全屏**选卡**界面（竖向滚动 + 滚动条 + 返回/确认）。
 //
 // 用途：营地/训练场「免费升级一张卡」、老虎机粉碎选卡、银行焚毁、古尔帕斯/Boss 删卡。
-// 用户定的形态：
+// 形态：
 //   · 进入**全屏**界面，把候选卡渲染出来（不可用的置灰、不可选）
 //   · hover 展示该卡的**预览**（tooltip 走 card 整卡预览：发 tooltip 事件给总线，与卡面热区
 //     同一套浮层）；升级入口传的是**升级后**的 defId，所以预览的就是升阶后的卡面
@@ -38,7 +38,7 @@ export class CardScrollPickerObject extends ScrollPickerObject {
   /**
    * 卡图异步到图后重烘（宿主舞台经 stagePickerKit 在 cardArt.addOnLoad 里调）：
    * 候选卡不在卡组里、没被 preloadBattleArt 预热，首拍常是占位卡面——
-   * 不补这一手，选卡界面会永远停在无图占位（实报"选卡界面空白卡"）。
+   * 不补这一手，选卡界面会永远停在无图占位。
    */
   rebakeCards() {
     if (!this._opened) return;

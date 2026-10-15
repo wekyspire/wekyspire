@@ -26,7 +26,7 @@ const saved = readJson(KEY) ?? {};
 // 调试/故事两个开关只活在线下开发（import.meta.env.DEV 构建期常量，部署版恒 false）：
 // 部署版不渲染这两个复选框，持久化里的旧勾选也一律不落回（默认关闭）。
 // 线上排障仍可用 ?debug=1 显式打开（运行时赋值，不受此门控）。
-const IS_DEV = import.meta.env.DEV;
+const IS_DEV = import.meta.env?.DEV ?? false;   // 可选链：node 冒烟可直接 import shell 模块（无 env = 等价部署版 false）
 
 export const settings = reactive({
   soundOn: saved.soundOn !== false, // 默认开启

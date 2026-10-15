@@ -424,7 +424,7 @@ export function buildTowerClouds({
     uWarpAmt: uniform(params.warpAmt),       // offset 场域扭曲幅度（世界单位）
     uWarpFreq: uniform(params.warpFreq),     // offset 场频率
     uGustBoost: uniform(params.gustBoost),   // 云内阵风倍率（相机在云内时 detail/warp advect 加速）
-    uInnerStepScale: uniform(params.innerStep), // 云内步长收紧倍率（近场细节更密，用户定特调）
+    uInnerStepScale: uniform(params.innerStep), // 云内步长收紧倍率（近场细节更密）
     // 场景深度（composeFrame 每帧接 rtScene 深度纹理与相机参数）
     uSceneDepth: tSceneDepth,
     uNoise: noiseTex,                      // 烘焙云噪声 3D 纹理（cloudNoise.js，裸纹理——texture3D() 只认实例）

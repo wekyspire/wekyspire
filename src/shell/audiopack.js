@@ -11,6 +11,17 @@
 
 let urlMap = null;   // Map<产物文件名, blobUrl>；null = 未启用/失败 → 全透传
 
+/** 只取包元信息（不下载包体）：加载界面把音频字节提前并入总分母（统一进度条）。 */
+export async function audioPackInfo() {
+  try {
+    const url = new URL('audiopack-manifest.js', document.baseURI).href;
+    const m = await import(/* @vite-ignore */ url);
+    return Number.isFinite(m.PACK_TOTAL) && m.PACK_TOTAL > 0 ? { total: m.PACK_TOTAL } : null;
+  } catch {
+    return null;   // dev / 未部署包
+  }
+}
+
 /** URL 换汇：包内文件换 blob URL，其余（dev 原路径 / 未入包）透传。 */
 export function resolveAudioUrl(url) {
   if (!urlMap || !url || url.startsWith('data:') || url.startsWith('blob:')) return url;

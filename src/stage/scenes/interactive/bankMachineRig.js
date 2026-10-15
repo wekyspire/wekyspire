@@ -56,8 +56,8 @@ export function createBankMachineRig({ object, parts, seed = 'bank' }) {
   const bulbs = parts?.bulbs ?? [];
   // 资产侧只有 kit 共享材质；屏幕/扫描线/指示灯的逐帧改色由 rig 持独立材质。
   //
-  // 屏幕正文走**专用贴片**，不是把字烘在屏幕盒子上（实报"zoom-out 字体
-  // z-fighting、zoom-in 完全看不见余额"的成因）：屏幕是 BoxGeometry，同一张贴图会铺满
+  // 屏幕正文走**专用贴片**，不是把字烘在屏幕盒子上（否则 zoom-out 字体
+  // z-fighting、zoom-in 完全看不见余额）：屏幕是 BoxGeometry，同一张贴图会铺满
   // 六个面（侧面把字压成条纹、正反面在远景抢深度），且贴图背景透明而盒子材质不透明时
   // 整屏会被背景吃掉。改为：盒子只当发光底（呼吸/闪烁照旧），文字另挂一张与屏面同比例、
   // `transparent` 的 PlaneGeometry 贴片——项目里烘焙文本的通行做法（顶端栏/按钮同款）。

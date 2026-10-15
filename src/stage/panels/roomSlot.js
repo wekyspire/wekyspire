@@ -38,7 +38,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   const pd = s.pending;
   if (pd) {
     w.push({ kind: 'gap' });
-    w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#e8eefb' : '#c3cee0',
+    w.push({ kind: 'text', align: 'center', tint: pd.tier === 'major' ? '#f2f2f2' : '#c2c2c2',
       text: (pd.tier === 'major' ? '★ 大奖：' : '') + slotPrizeText(pd) });
     if ((pd.choices?.length ?? 0) > 0 || (pd.relicChoices?.length ?? 0) > 0) {
       w.push({
@@ -74,7 +74,7 @@ export function slotWidgets(w, snap, { sceneChoice = false } = {}) {
   if (s.spinning) {
     w.push({ kind: 'sub', align: 'center', tint: '#77809a', text: '🎰 …' });
   } else if (s.lastSpin) {
-    w.push({ kind: 'text', align: 'center', tint: '#e8eefb', text: slotPrizeText(s.lastSpin) });
+    w.push({ kind: 'text', align: 'center', tint: '#f2f2f2', text: slotPrizeText(s.lastSpin) });
   }
   w.push({
     kind: 'button', id: 'slot:spin', width: 260, size: 'main',
@@ -184,7 +184,7 @@ export function bankWidgets(w, snap, { sceneChoice = false } = {}) {
   }
   // 词条附赠（upgrade/burn offer）**不再摆按钮**：获得演出链尾自动开全屏选卡界面
   // （返回/关闭 = 放弃，runShowcase.discardBankOffer 消费 offer）——与训练/老虎机
-  // 「面板不留操作按钮、一切 overlay 化」同口径（2026-09-30 用户裁定）。
+  // 「面板不留操作按钮、一切 overlay 化」同口径。
 }
 
 /** **老虎机面板**（场景式休息房：点机身 → 开这一份）。 */

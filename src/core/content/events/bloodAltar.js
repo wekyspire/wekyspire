@@ -48,6 +48,6 @@ registerEvent({
         { speaker: '旁白', text: `（最后一声脆响后，它吐出遗物：${name}。）` }
       ] };
     }
-    return { pages: [{ speaker: '旁白', text: '（你向来不相信神秘仪式。）' }] };
+    return { pages: [{ speaker: '旁白', text: '（故弄玄虚的仪式对如今的你有些太幼稚了。）' }] };
   },
 });

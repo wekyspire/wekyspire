@@ -44,8 +44,8 @@ export class TopResourceBarObject extends THREE.Group {
     this._relicArtPending = false;
     this._deckChip = null;   // 卡组按钮（attachDeckChip 注入，只摆位不持有）
     // 立绘晚到补烘（PropArtCache 契约）：setRelics 是签名去重的——冷加载首拍若赶在
-    // 立绘解码前，特征字占位会被签名挡住永不重烘（prep 顶栏「黑」字徽章固化的病根，
-    // 夜测 r3路3）。订阅任意加载完成，占位行就绪后整行重建。
+    // 立绘解码前，特征字占位会被签名挡住永不重烘（prep 顶栏「黑」字徽章固化的病根）。
+    // 订阅任意加载完成，占位行就绪后整行重建。
     this._unsubArt = sharedRelicArtCache.addOnLoad(() => {
       if (!this._relicArtPending) return;
       const relics = this._relics;

@@ -17,7 +17,7 @@ import { DEFAULT_COLOR_TABLE } from './layout.js';
 export const TIER_COLORS = Object.freeze({
   D: '#8a8f9d', C: '#5aa2e8', B: '#a06ee8', A: '#e8b34c', S: '#e85a5a', Z: '#4a3a5a',
 });
-// 系列类型色（旧主题源，现作 series 未归口时的回落）；未知回落体修灰
+// 系列类型色（series 未归口时的回落）；未知回落体修灰
 const TYPE_COLORS = Object.freeze({
   normal: '#8a8f9d',
   fire: '#e85a5a',
@@ -38,7 +38,7 @@ const LEINO_THEME = Object.freeze({
   air: '#7ad0e8',   // 风
 });
 // 通用灰卡（pack='common'）：中灰主题色——靠「无彩色」与体系卡拉开距离。
-// 不许太亮：近白边框会让最普通的卡在一手牌里最抢眼（2026-10-11 用户验收，自 #e8e6e0 压暗）
+// 不许太亮：近白边框会让最普通的卡在一手牌里最抢眼
 const COMMON_THEME = '#9a9da6';
 // series（技能家族）→ 灵脉归口：新体系内容落定后在此补一行；未归口回落类型色
 const SERIES_LEINO = Object.freeze({
