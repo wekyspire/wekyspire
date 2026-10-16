@@ -40,6 +40,19 @@ async function gelCompress({ ctx, unit }) {
   });
 }
 
+// 史莱姆蓄势拍（护盾+蓄势）：纯姿态蓄劲一息（压下再弹回）——护盾罩与增益
+// 扫描光带由效果结算节拍自播，本拍不加粒子不加形体。
+async function gelBrace({ ctx, unit }) {
+  ctx.onKill(() => unit.resetPose());
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 300, ease: 'power2.inOut',
+    onUpdate: (t) => unit.setPose({
+      squash: 1 - 0.16 * Math.sin(Math.PI * t),
+      widen: 1 + 0.14 * Math.sin(Math.PI * t),
+    }),
+  });
+}
+
 // 史莱姆突进覆写「弹射→回巢」：拔长末态（squash≈1.38）弧线跳出 + 快回巢
 // （落地压扁 → 一次过冲归中）。契约同通用三段（approach 末帧 = 锋尖抵近；
 // onKill 归位归零）。
@@ -330,31 +343,24 @@ function blastDeath(stage, unit, payload, finish) {
 // 液滴四溅 → 原地液化淡出（材质褪湿色 + alpha 侵蚀收干）。
 function slimeMeltDeath(stage, unit, payload, finish) {
   if (payload?.heavy) return false; // 重击致死仍走击退倒牌（力道压过融化）
-  const { x: px, y: py, z: pz } = unit.position;
   unit.hideIntention();
   const bodyMat = unit.body.material;
   bodyMat.transparent = true;
   bodyMat.needsUpdate = true;
   const startColor = bodyMat.color.clone();
   const wetColor = new THREE.Color(0x4a6a3a);
+  // 纯液化：塌软成滩（湿色浸染）→ 原地蒸干淡出——无粒子（基座喷点是噪音）
   stage.animator.animateCustom(unit.uniqueID, {
-    durationMs: 560, ease: 'power2.in',
+    durationMs: 620, ease: 'power2.in',
     onUpdate: (t) => {
       unit.setPose({ squash: 1 - 0.68 * t, widen: 1 + 0.55 * t });
       bodyMat.color.copy(startColor).lerp(wetColor, t * 0.6);
     },
     onComplete: () => {
-      // 双层：迸射液滴 + 贴地湿雾（液化扩散）
-      stage.particles.spawn(px, py + 0.5, {
-        count: 16, color: 0x86c86a, speed: 10, ttl: 0.7, gravity: -24, size: 1.2, z: pz,
-      });
-      stage.particles.spawn(px, py + 0.2, {
-        count: 9, color: 0x5a8a4a, speed: 3.5, ttl: 1.6, gravity: -2, size: 1.8, z: pz,
-      });
       unit.hideStatus();
       unit.body.castShadow = false;
       stage.animator.animateCustom(unit.uniqueID, {
-        durationMs: 420, ease: 'power1.in',
+        durationMs: 460, ease: 'power1.in',
         onUpdate: (t) => { bodyMat.opacity = 1 - t; },
         onComplete: () => {
           bodyMat.color.copy(startColor);
@@ -418,7 +424,7 @@ export function registerChapter1EnemyFx() {
         color: [0.45, 0.85, 0.35], hot: [0.8, 1.15, 0.65], size: 1.3, ms: 380, arcH: 3,
         trailColor: 0x6aba50, impactColor: 0x8ad06a, impactCount: 10,
       })(a); // 塞粘液（吐弹族重做排队中，ENEMY_FX.md）
-      if (has(kinds, 'buff')) return chargeUpFx({ color: 0x9fe08a })(a); // 蓄势拍
+      if (has(kinds, 'buff')) return gelBrace(a); // 蓄势拍（纯姿态）
       if (has(kinds, 'defend')) return hunkerFx({ depth: 0.85 })(a);
       return 'generic';
     });
