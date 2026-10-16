@@ -9,7 +9,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, uv as uvOf, texture as texOf,
   vec2, vec3, vec4, float, pow, abs, sin, cos, length, exp, smoothstep, oneMinus,
-  fract, max, min, atan,
+  fract, max, atan,
 } from 'three/tsl';
 import { spellQuad, lampPulse } from '../../spells/blocks.js';
 import { projectileShade } from '../../spells/shaders.js';
@@ -367,77 +367,6 @@ export async function gooPool(ctx, deps, { at, size = 9.5, growMs = 420, holdMs 
     },
     onComplete: () => release(),
   });
-}
-
-// ============ 粘弹胶丝（史莱姆弹射断裂主体）============
-// 竖直 quad（height=1、scale.y=距离实时摆）：双细丝中段随拉伸掐细（uProg=伸长
-// 比），uSnap 驱动断裂——颈点渐宽熄灭 + 残珠下坠缩径 + 整丝淡出。pre-snap 颈线
-// 本就是最细处（顺势读「将断」）。
-export const gooStrandShade = Fn(([vUv, uProg, uSnap, uColor]) => {
-  const p = vUv.sub(vec2(0.5));
-  const v = p.y.add(0.5);
-  const pinch = min(uProg.mul(1.4), float(1.0)).mul(sin(v.mul(Math.PI)));
-  const th = float(0.100).add(sin(v.mul(Math.PI)).mul(0.038))
-    .mul(float(1.0).sub(pinch.mul(0.72)));
-  const dx1 = p.x.sub(0.20).div(th);
-  const f1 = exp(dx1.mul(dx1).mul(-5.0));
-  const c1 = exp(dx1.mul(dx1).mul(-18.0));
-  const dx2 = p.x.add(0.20).div(th);
-  const f2 = exp(dx2.mul(dx2).mul(-5.0));
-  const c2 = exp(dx2.mul(dx2).mul(-18.0));
-  const gap = uSnap.mul(0.35);
-  const keep = smoothstep(gap, gap.add(0.08), abs(v.sub(0.48)));
-  const bv = v.sub(float(0.48).sub(uSnap.mul(0.25)));
-  const bead = exp(bv.mul(bv).mul(-320.0))
-    .mul(exp(p.x.mul(p.x).mul(-240.0))).mul(uSnap).mul(2.6);
-  const fade = pow(oneMinus(uSnap), float(0.7))
-    .mul(smoothstep(float(0.0), float(0.08), v));
-  const edge = oneMinus(smoothstep(float(0.38), float(0.50), abs(p.x)))
-    .mul(oneMinus(smoothstep(float(0.40), float(0.50), abs(p.y))));
-  const rgb = uColor.mul(f1.add(f2).mul(2.2))
-    .add(vec3(0.72, 1.05, 0.50).mul(c1.add(c2).mul(2.6)))
-    .add(vec3(0.85, 1.15, 0.60).mul(bead));
-  return vec4(rgb.mul(keep).mul(fade).mul(edge), float(1.0));
-});
-
-/**
- * 粘弹胶丝（from 池位 → 身体实时跟随）。返回 { update(to), snap() }：
- * update 在飞行 onUpdate 里逐帧调（重摆 midpoint/rotation/scale.y）；
- * snap() 演断裂（130ms 后自清）。未被 snap 时 lifeMs 兜底自清。
- */
-export function gooStrand(ctx, deps, { from, color = [0.30, 0.85, 0.32], refLen = 5.0, lifeMs = 460 }) {
-  if (!from) return { update: () => {}, snap: async () => {} };
-  const uProg = uniform(0.0);
-  const uSnap = uniform(0.0);
-  const { quad, release } = spellQuad({
-    shade: gooStrandShade(uvOf(), uProg, uSnap, vec3(color[0], color[1], color[2])),
-    width: 3.4, height: 1, name: 'spellFx:gooStrand',
-  });
-  deps.scene.add(quad);
-  ctx.onKill(() => release());
-  const cur = { x: from.x, y: from.y, z: from.z ?? 0 };
-  const place = () => {
-    const dx = cur.x - from.x;
-    const dy = cur.y - from.y;
-    const d = Math.hypot(dx, dy) || 0.001;
-    quad.position.set((from.x + cur.x) / 2, (from.y + cur.y) / 2, ((from.z ?? 0) + (cur.z ?? 0)) / 2 + 1.1);
-    quad.rotation.z = Math.atan2(dy, dx) - Math.PI / 2;
-    quad.scale.set(1, d, 1);
-    uProg.value = Math.min(1, d / refLen);
-  };
-  place();
-  ctx.spawn(async (c) => { await c.wait(lifeMs); release(); });
-  return {
-    update(to) { cur.x = to.x; cur.y = to.y; cur.z = to.z ?? 0; place(); },
-    async snap() {
-      const s = { k: 0 };
-      await ctx.tweenRaw(s, { k: 1 }, {
-        durationMs: 130, ease: 'power1.in',
-        onUpdate: () => { uSnap.value = s.k; },
-        onComplete: () => release(),
-      });
-    },
-  };
 }
 
 // ============ 胶冠溅（史莱姆命中主体）============
