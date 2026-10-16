@@ -12,6 +12,7 @@ import { bossHurtFxOf } from '../../fx/bossStateFx.js';
 import { enemyDeathBeatOf, enemySpawnGarnishOf } from '../../fx/enemyLifeFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
+import { unitH } from '../../fx/scripts/enemies/fxPieces.js';
 
 export const unitBeats = {
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
@@ -228,10 +229,10 @@ export const unitBeats = {
 
       if (absorbed > 0) {
         // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
-        this.particles.spawn(unit.position.x, unit.position.y + 2, {
+        this.particles.spawn(unit.position.x, unit.position.y + unitH(unit) * 0.50, {
           count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
         });
-        const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
+        const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, unitH(unit) * 0.55);
         this.particles.spawnText(p.x, p.y, `-${absorbed}`, {
           fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
           vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
@@ -253,7 +254,7 @@ export const unitBeats = {
         const flashed = r.flash != null;
         if (flashed) unit.flash(r.flash);
         for (const s of r.sparks) {
-          this.particles.spawn(unit.position.x, unit.position.y + 2, { ...s, z: unit.position.z });
+          this.particles.spawn(unit.position.x, unit.position.y + unitH(unit) * 0.50, { ...s, z: unit.position.z });
         }
         // DoT tick 专属演出（燃烧/中毒，配方表 r.tick 声明）：fire-and-forget 不占节拍
         if (r.tick) {
@@ -262,7 +263,7 @@ export const unitBeats = {
           }));
         }
         // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
-        const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
+        const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, unitH(unit) * (0.50 + Math.random() * 0.08));
         this.particles.spawnText(p.x, p.y, `-${dealt}`, {
           fontSize: Math.min(r.number.base + dealt * r.number.per, r.number.max) * r.numberScale,
           color: r.number.color,

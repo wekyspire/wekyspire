@@ -6,7 +6,8 @@
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
 import { arcProjectile } from '../spells/blocks.js';
 import { isAttackKind, isBuffKind, isDebuffKind } from '../../../core/intentKinds.js';
-import { playCastConverge } from '../gainFx.js';
+import { gatherFocus } from './enemies/families.js';
+import { playEdgeSurge, unitH } from './enemies/fxPieces.js';
 
 // 逐敌专属起手（Boss 主题化）：defId → async ({ctx, deps, args, unit, player, kinds})。
 // 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
@@ -18,9 +19,9 @@ export function registerEnemyAct(defId, fn) { ENEMY_ACT_BEATS.set(defId, fn); }
 // 咒击式（赋予削弱）：暗紫咒弹从施法者胸口划弧飞向玩家，抵达小爆——
 // 削弱系（虚弱/中毒/塞牌）的「被下咒」读感主体，后续玩家佝偻姿态接续
 async function curseShot(ctx, deps, { unit, player }) {
-  const from = { x: unit.position.x, y: unit.position.y + 3.4 * (unit._baseScale ?? 1), z: unit.position.z };
+  const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.52, z: unit.position.z };
   const to = player
-    ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
+    ? { x: player.position.x, y: player.position.y + unitH(player) * 0.52, z: player.position.z }
     : null;
   await arcProjectile(ctx, deps, {
     from, to,
@@ -36,12 +37,20 @@ async function curseShot(ctx, deps, { unit, player }) {
   }
 }
 
-// 施法增益式（增强自身或友军）：光点环收束进施法者胸口（聚能起手，fx/gainFx）
-// ——payoff 语言放在起手位读不通（脚下光柱读「被捅」）。增益落点
-// （受方 buff 扫描光带/粒子）由后续节拍承接
-async function empowerCast(ctx, deps, { unit, light = false }) {
-  playCastConverge(unit, deps.particles, light ? 0x9ecbff : 0xffe0a0);
-  await ctx.wait(200);   // 起手拍短停（收束可读即可，不占戏）
+// 施法增益式（增强自身或友军）：聚能缩配（汇流纹小号向胸口收束，buff/治疗
+// 的内汇语义）；防御/召唤走低亮剪影边光一拍——结果侧已有护盾罩/召唤立起，
+// 起手不抢戏。增益落点（受方 buff 扫描光带）由后续节拍承接
+async function empowerCast(ctx, deps, { unit, light = false, heal = false }) {
+  if (light) {
+    playEdgeSurge(unit, 0x9ecbff, { durMs: 400 });
+    await ctx.wait(180);
+    return;
+  }
+  await gatherFocus({
+    vein: heal ? [0.48, 0.78, 0.48] : [0.62, 0.55, 0.40],
+    moteColor: heal ? 0x7ac87a : 0xd8c8a0,
+    size: 9.5, motes: 4,
+  })({ ctx, deps, unit });
 }
 
 export function registerEnemyActScript(registerScript) {
@@ -62,7 +71,7 @@ export function registerEnemyActScript(registerScript) {
       return;
     }
     if (kinds.some(isBuffKind) || kinds.includes('heal')) {
-      await empowerCast(ctx, deps, { unit });
+      await empowerCast(ctx, deps, { unit, heal: !kinds.some(isBuffKind) });
       return;
     }
     // 防御/召唤：轻量版（结果侧已有护盾罩/蜷缩姿态/召唤立起，起手只给一闪）

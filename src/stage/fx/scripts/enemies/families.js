@@ -4,16 +4,19 @@
 // 由后续结算节拍承接（battleBeats.js），族模板不重复画结果。
 // 姿态纪律：体态一律走 _pose 通道（setPose，出口归中 + onKill 同口径归中）——
 // 后续突进（_damageHit 的突进编排）从干净姿态起跳；单位锚点口径与既有敌方
-// 特效同源（胸口 3.4×s / 头 4.9×s / 脚 0.6×s，s = _baseScale）。
+// 特效同源（高度感知：胸 0.52H / 头 0.92H / 脚 0.05H，H = 立牌高×scale）。
 import { arcProjectile, lampPulse } from '../../spells/blocks.js';
-import { playCastConverge } from '../../gainFx.js';
-import { wailRing, fuseRing, chargeOrb, dustLanding } from './fxPieces.js';
+import { glowTexture } from '../../orbs.js';
+import {
+  wailRing, fuseRing, dustLanding, unitH,
+  pulseEdgeSurge, drainVeins, pressureBurst, playEdgeSurge,
+} from './fxPieces.js';
 
 const sOf = (u) => u._baseScale ?? 1;
-/** 世界锚点：胸口（k=1）——投射物起点/聚能落点。 */
-const chestOf = (u, k = 1) => ({ x: u.position.x, y: u.position.y + 3.4 * sOf(u) * k, z: u.position.z ?? 0 });
-const headOf = (u) => ({ x: u.position.x, y: u.position.y + 4.9 * sOf(u), z: u.position.z ?? 0 });
-const feetOf = (u) => ({ x: u.position.x, y: u.position.y + 0.6 * sOf(u), z: u.position.z ?? 0 });
+/** 世界锚点（高度感知，unitH 口径）：胸 ≈ 0.52H（k 缩放）、头 ≈ 0.92H、脚 ≈ 0.05H。 */
+const chestOf = (u, k = 1) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.52 * k, z: u.position.z ?? 0 });
+const headOf = (u) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.92, z: u.position.z ?? 0 });
+const feetOf = (u) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.05, z: u.position.z ?? 0 });
 /** 朝向玩家的前倾 lean 值符号（右位敌人面向左 = 正；与 _damageHit 的 strikeLean 同口径）。 */
 const leanToward = (unit, player, mag) =>
   -Math.sign((player?.position.x ?? unit.position.x - 1) - unit.position.x || -1) * mag;
@@ -158,23 +161,147 @@ export function spitGlob(opts = {}) {
 }
 
 /**
- * 聚能族（自强化/蓄势）：光点环收束（粒子层）+ 胸口蓄能光球（shader 形体主体，
- * 涨峰收包络 + 借池灯 punch）。payoff（扫描光带）由效果结算节拍承接。
+ * 爆怒族（rage/力量蓄，ENEMY_FX.md 迭代#3）：内压外溢——剪影搏动升温（频率
+ * 加速、末段过曝）+ 蓄压段体表火星（头侧/双肩，蒸汽上冒）+ 末拍胸口怒压爆环 +
+ * 暖红灯双段。低频签名档（四要素满配）。约 660ms。
  */
-export function chargeUpFx(opts = {}) {
-  const { color = 0xffe0a0, orb = [1.0, 0.78, 0.40], hot = [1.3, 1.05, 0.65], holdMs = 90, size = 5.0 } = opts;
+export function rageSwell(opts = {}) {
+  const { edge = 0xe0705a, vein = [1.0, 0.45, 0.32], ember = 0xe85840 } = opts;
   return async ({ ctx, deps, unit }) => {
-    playCastConverge(unit, deps.particles, color);
+    const s = sOf(unit);
+    pulseEdgeSurge(unit, edge, { ms: 520 });
     const ch = chestOf(unit);
-    const job = chargeOrb(ctx, deps, {
-      at: ch, color: orb, hot, size: size * Math.max(0.7, sOf(unit)), ms: 380, lampIntensity: 520,
+    // ① 后仰吸气
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 120, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ lean: -0.06 * t, squash: 1 + 0.03 * t }),
+    });
+    // ② 前躬蓄压：颤频随进度爬（与边光加速同律）
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 280, ease: 'none',
+      onUpdate: (t) => unit.setPose({
+        squash: 0.94 + 0.012 * Math.sin(t * Math.PI * (4 + 8 * t)),
+        widen: 1.10 + 0.010 * Math.sin(t * Math.PI * (4 + 8 * t)),
+        lean: -0.06 + 0.10 * t,
+      }),
+    });
+    // 体表火星（头侧+双肩三锚点上冒，非基座）：快层细红 + 慢层暗烟
+    for (const ax of [-1.7, 0, 1.7]) {
+      const px = ch.x + ax * s;
+      const py = ch.y + (ax === 0 ? 1.6 : 0.6) * s;
+      deps.particles?.spawn?.(px, py, {
+        color: ember, count: 3, speed: 4, size: 0.7, ttl: 0.4, gravity: 8, z: ch.z,
+      });
+      deps.particles?.spawn?.(px, py - 0.4 * s, {
+        color: 0x8a3828, count: 2, speed: 2, size: 1.3, ttl: 1.0, gravity: 3, z: ch.z,
+      });
+    }
+    // ③ 炸开：怒压爆环 + 暖红峰灯 + 展姿一瞬
+    const ring = pressureBurst(ctx, deps, { at: ch, color: vein, size: 13 * Math.max(0.7, s), ms: 260 });
+    lampPulse(ctx, deps, {
+      name: 'light:fx0', at: { x: ch.x, y: ch.y, z: ch.z + 1.5 }, color: vein,
+      peak: 300, attackMs: 60, decayMs: 300,
     });
     await ctx.custom(unit.uniqueID, {
-      durationMs: 240, ease: 'power2.out',
-      onUpdate: (t) => unit.setPose({ squash: 1 - 0.06 * t, widen: 1 + 0.06 * t }),
+      durationMs: 120, ease: 'power3.out',
+      onUpdate: (t) => unit.setPose({ widen: 1.22 - 0.10 * t, squash: 0.96 + 0.02 * t, lean: 0.04 * (1 - t) }),
     });
-    await ctx.wait(holdMs);
-    await Promise.all([job, settlePose(ctx, unit, 170)]);
+    await Promise.all([ring, settlePose(ctx, unit, 180)]);
+  };
+}
+
+/**
+ * 聚能族（蓄势/蓄力，ENEMY_FX.md 迭代#3）：环境内汇——螺旋汇流纹向胸口焦点
+ * 加速收束（焦点阶梯增亮、末拍一闪）+ 体周微尘内飘（随机角非均布）+ 主题色
+ * 低峰灯。静与汇：姿态克制（吸气压缩、微低头、静持）。约 560ms。
+ */
+export function gatherFocus(opts = {}) {
+  const { vein = [0.86, 0.80, 0.62], motes = 7, moteColor = 0xd8c8a0, size = 13.0 } = opts;
+  return async ({ ctx, deps, unit }) => {
+    const s = sOf(unit);
+    const ch = chestOf(unit);
+    const veins = drainVeins(ctx, deps, { at: ch, color: vein, size: size * Math.max(0.7, s), ms: 560 });
+    // 体周微尘内飘：随机角生成、直线直达胸口（ttl = 路程/速度，到达即融入焦点）
+    // headless（无 document）跳过——glowTexture 要画布
+    if (typeof document !== 'undefined') {
+      const tint = '#' + moteColor.toString(16).padStart(6, '0');
+      for (let i = 0; i < motes; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const R = (5.5 + Math.random() * 2.5) * s;
+        const x = ch.x + Math.cos(a) * R;
+        const y = ch.y + Math.sin(a) * R * 0.6;
+        const d = Math.hypot(ch.x - x, ch.y - y) || 1;
+        const sp = 3.4 + Math.random() * 1.8;
+        deps.particles?.spawnSprite?.(x, y, {
+          texture: glowTexture(tint), width: 0.9, height: 0.9,
+          vx: ((ch.x - x) / d) * sp, vy: ((ch.y - y) / d) * sp,
+          gravity: 0, drag: 0, ttl: d / sp + 0.1, fadeIn: true, z: (ch.z ?? 0) + 0.5,
+        });
+      }
+    }
+    lampPulse(ctx, deps, {
+      name: 'light:fx1', at: { x: ch.x, y: ch.y, z: ch.z + 1.5 }, color: vein,
+      peak: 260, attackMs: 300, decayMs: 320,
+    });
+    // 姿态：吸气压缩 + 微低头 → 静持（焦点末拍一闪承担视觉收束）
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 200, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ squash: 1 - 0.05 * t, widen: 1 + 0.04 * t, lean: 0.04 * t }),
+    });
+    await ctx.wait(160);
+    await Promise.all([veins, settlePose(ctx, unit, 200)]);
+  };
+}
+
+/**
+ * 竖刺族（hedgehog 竖刺/补刺）：剪影边光双波上爬（刺从轮廓里竖起来）+
+ * 蓄紧两记微颤。高频轻配，无粒子无灯——边光就是刺。
+ */
+export function bristleFx(opts = {}) {
+  const { color = 0xd8c060 } = opts;
+  return async ({ ctx, deps, unit }) => {
+    playEdgeSurge(unit, color, { durMs: 560 });
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 240, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ squash: 1 - 0.05 * t, widen: 1 + 0.06 * t }),
+    });
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 140, ease: 'none',
+      onUpdate: (t) => unit.setPose({
+        squash: 0.95 + 0.012 * Math.sin(t * Math.PI * 4),
+        widen: 1.06 - 0.008 * Math.sin(t * Math.PI * 4),
+      }),
+    });
+    await settlePose(ctx, unit, 170);
+  };
+}
+
+/**
+ * 硬化族（甲虫B 硬化）：伏低锁壳（hunker 浅档）+ 低亮边光一拍。硬化是壳的
+ * 事——不聚能不发光球。
+ */
+export function hardenFx(opts = {}) {
+  const { color = 0xb0a890 } = opts;
+  return async (a) => {
+    playEdgeSurge(a.unit, color, { durMs: 420 });
+    return hunkerFx({ depth: 0.55 })(a);
+  };
+}
+
+/**
+ * 掘洞休整族（鼹鼠掘洞恢复）：下沉蓄 + 挖地扬尘 + 回中。恢复的绿意交给
+ * 结算拍 gainSweep（已有）。
+ */
+export function burrowRest(opts = {}) {
+  const { color = 0xa89070 } = opts;
+  return async ({ ctx, deps, unit }) => {
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 180, ease: 'power2.in',
+      onUpdate: (t) => unit.setPose({ squash: 1 - 0.12 * t, widen: 1 + 0.08 * t }),
+    });
+    dustLanding(ctx, deps, { at: feetOf(unit), color, count: 12 });
+    await ctx.wait(220);
+    await settlePose(ctx, unit, 200);
   };
 }
 

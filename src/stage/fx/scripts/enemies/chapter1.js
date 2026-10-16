@@ -12,9 +12,10 @@ import {
 } from '../../spells/enemyHitFx.js';
 import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
 import { fireBurst, impactBurst, groundRing, lampPulse } from '../../spells/blocks.js';
-import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooCrown } from './fxPieces.js';
+import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooCrown, unitH } from './fxPieces.js';
 import {
-  strikeWindup, spitGlob, chargeUpFx, hunkerFx, dazeSway, wailFx, trembleWarn,
+  strikeWindup, spitGlob, hunkerFx, dazeSway, wailFx, trembleWarn,
+  rageSwell, gatherFocus, bristleFx, hardenFx, burrowRest,
 } from './families.js';
 
 const sOf = (u) => u._baseScale ?? 1;
@@ -105,7 +106,7 @@ function slimeGooImpact() {
     await ctx.wait(110);
     const { unit } = args;
     const s = unit._baseScale ?? 1;
-    const at = { x: unit.position.x, y: unit.position.y + 3.6 * s, z: unit.position.z };
+    const at = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z };
     const crown = gooCrown(ctx, deps, { at, color: [0.30, 0.34, 0.32], size: 9.5, ms: 340 });
     deps.particles?.spawn?.(at.x, at.y, { color: 0x8a908a, count: 9, speed: 14, size: 0.8, ttl: 0.45, gravity: -30, z: at.z });
     deps.particles?.spawn?.(at.x, at.y - 1, { color: 0x4a504c, count: 4, speed: 5, size: 1.3, ttl: 1.0, gravity: -14, z: at.z });
@@ -127,7 +128,7 @@ function slimeGooImpact() {
 // 与后续 ladder 攻击的 blob 起手构成「越鼓越大」的长线叙事。
 async function pufferInflate({ ctx, deps, unit }) {
   const s = sOf(unit);
-  const throat = { x: unit.position.x, y: unit.position.y + 2.6 * s, z: unit.position.z ?? 0 };
+  const throat = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.42, z: unit.position.z ?? 0 };
   // 深吸气：先收再涨（蓄气的呼吸节拍）+ 喉部光球起聚（涨随呼吸）
   const orb = chargeOrb(ctx, deps, {
     at: throat, color: [0.72, 0.95, 0.45], hot: [1.15, 1.35, 0.75],
@@ -179,7 +180,7 @@ async function pufferInflate({ ctx, deps, unit }) {
 async function zapChainFx({ ctx, deps, unit }) {
   const { scene, particles, cast } = deps;
   if (typeof document === 'undefined' || !scene) return;
-  const from = { x: unit.position.x, y: unit.position.y + 3.2 * sOf(unit), z: unit.position.z ?? 0 };
+  const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.52, z: unit.position.z ?? 0 };
   const targets = [];
   for (const { handle: t } of cast?.query?.('unit:') ?? []) {
     if (t && t !== unit && t.side === 'enemy' && !t._dead) targets.push(t);
@@ -194,7 +195,7 @@ async function zapChainFx({ ctx, deps, unit }) {
   // 每靶一道电弧（错峰起弧）+ 跳变循环（每 110ms 重掷折点相位 = 「电在跳」）
   const arcs = [];
   for (const [i, tgt] of targets.entries()) {
-    const to = { x: tgt.position.x, y: tgt.position.y + 3.2 * sOf(tgt), z: tgt.position.z ?? 0 };
+    const to = { x: tgt.position.x, y: tgt.position.y + unitH(tgt) * 0.52, z: tgt.position.z ?? 0 };
     const arc = zapArc(ctx, deps, {
       from, to, color: [0.55, 0.72, 1.30], width: 7.0, lifeMs: 620 + i * 90, reachMs: 170,
     });
@@ -236,7 +237,7 @@ async function wingDust({ ctx, deps, unit, player }) {
       unit.setPose({ squash: 1 + 0.05 * f, widen: 1 - 0.06 * f, lean: dir * 0.05 * Math.sin(t * Math.PI * 3) });
     },
   });
-  const ch = { x: unit.position.x, y: unit.position.y + 3.2 * s, z: unit.position.z ?? 0 };
+  const ch = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.52, z: unit.position.z ?? 0 };
   deps.particles?.spawn?.(ch.x, ch.y, { color: 0xd8c088, count: 14, speed: 7, size: 0.9, ttl: 0.8, gravity: -3, z: ch.z });
   deps.particles?.spawn?.(ch.x + dir * 2.4 * s, ch.y, { color: 0xc0a860, count: 8, speed: 10, size: 0.7, ttl: 0.6, gravity: -5, z: ch.z });
   deps.particles?.spawn?.(ch.x, ch.y + 1.2, { color: 0xa89058, count: 6, speed: 2, size: 1.4, ttl: 1.5, gravity: -1, z: ch.z }); // 慢速浮尘层
@@ -271,7 +272,7 @@ async function gnawAntic({ ctx, deps, unit, player }) {
 // 「看不见的紧勒」用地面蔓延雾读——压迫感走空间而不是数值。
 async function spreadGrip({ ctx, deps, unit, player }) {
   const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
-  const feet = { x: unit.position.x, y: unit.position.y + 0.8 * sOf(unit), z: unit.position.z ?? 0 };
+  const feet = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.06, z: unit.position.z ?? 0 };
   await ctx.custom(unit.uniqueID, {
     durationMs: 200, ease: 'power2.out',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * t, widen: 1 + 0.12 * t }),
@@ -301,7 +302,7 @@ async function spreadGrip({ ctx, deps, unit, player }) {
 // + 落地双层尘 + 暖灯 punch。冲锋拍本身走通用突进（lunge 即「滚进」）。
 async function pangolinCurl({ ctx, deps, unit }) {
   const s = sOf(unit);
-  const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z ?? 0 };
+  const feet = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.05, z: unit.position.z ?? 0 };
   const curl = ctx.custom(unit.uniqueID, {
     durationMs: 360, ease: 'power3.inOut',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.3 * t, widen: 1 + 0.34 * t }),
@@ -468,7 +469,7 @@ export function registerChapter1EnemyFx() {
   registerEnemyAct('hedgehog', async (a) => {
     const { kinds } = a;
     if (isAtk(kinds)) return strikeWindup('rear', { color: 0xc8b060 })(a);
-    if (isBuf(kinds)) return chargeUpFx({ color: 0xc8d078 })(a); // 竖刺/补刺
+    if (isBuf(kinds)) return bristleFx({ color: 0xd8c060 })(a); // 竖刺/补刺
     if (has(kinds, 'defend')) return hunkerFx({ depth: 1.0 })(a);
     return 'generic';
   });
@@ -548,7 +549,7 @@ export function registerChapter1EnemyFx() {
   registerEnemyAct('stoneCocoon', async (a) => {
     const { kinds } = a;
     if (isAtk(kinds)) return strikeWindup('rear', { color: 0xb0a890 })(a);
-    if (isBuf(kinds)) return chargeUpFx({ color: 0xd8c8a0 })(a);
+    if (isBuf(kinds)) return gatherFocus({ vein: [0.85, 0.80, 0.64], moteColor: 0xd8c8a0 })(a); // 蓄势
     if (has(kinds, 'defend')) return hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })(a);
     return 'generic';
   });
@@ -604,7 +605,7 @@ export function registerChapter1EnemyFx() {
       const { kinds } = a;
       if (kinds.includes('strongDebuff')) return gnawAntic(a); // 啃牌起手（正餐在焚毁拍）
       if (isAtk(kinds)) return strikeWindup('rear', { color: 0xb09060 })(a);
-      if (isBuf(kinds)) return chargeUpFx({ color: 0xc0b090 })(a); // B 类硬化
+      if (isBuf(kinds)) return hardenFx({ color: 0xb0a890 })(a); // B 类硬化
       return 'generic';
     });
     registerEnemyHitTheme(id, {
@@ -625,7 +626,7 @@ export function registerChapter1EnemyFx() {
     if (kinds.includes('heavy')) return strikeWindup('crouch', { color: 0x9a7a52, heavy: true })(a);
     if (isAtk(kinds)) return strikeWindup('crouch', { color: 0x9a7a52 })(a);
     if (has(kinds, 'defend')) return hunkerFx({ depth: 1.1, dustColor: 0x9a7a52 })(a);
-    if (isBuf(kinds)) return chargeUpFx({ color: 0xa8d8a0 })(a); // 掘洞恢复
+    if (isBuf(kinds)) return burrowRest({ color: 0xa89070 })(a); // 掘洞恢复
     return 'generic';
   });
   registerEnemySpawnGarnish('diggerMole', moleEmergeGarnish);
@@ -678,7 +679,7 @@ export function registerChapter1EnemyFx() {
     registerEnemyAct(id, async (a) => {
       const { kinds } = a;
       if (isAtk(kinds)) return strikeWindup('lash', { color: 0x7a8a4a })(a);
-      if (isBuf(kinds)) return chargeUpFx({ color: 0x9a8a5a })(a);
+      if (isBuf(kinds)) return gatherFocus({ vein: [0.60, 0.54, 0.35], moteColor: 0x9a8a5a })(a); // 蓄力
       return 'generic';
     });
     if (id !== 'rottenRootT') registerEnemySpawnGarnish(id, rotRootGarnish);
@@ -689,7 +690,7 @@ export function registerChapter1EnemyFx() {
   registerEnemyAct('rottenTreeHeart', async (a) => {
     const { kinds } = a;
     if (isAtk(kinds)) return strikeWindup('lash', { color: 0x7a8a4a })(a);
-    if (isBuf(kinds)) return chargeUpFx({ color: 0x9a8a5a })(a);
+    if (isBuf(kinds)) return gatherFocus({ vein: [0.60, 0.54, 0.35], moteColor: 0x9a8a5a })(a); // 蓄力
     if (has(kinds, 'defend')) return hunkerFx({ depth: 0.7 })(a);
     return 'generic';
   });
@@ -762,7 +763,7 @@ export function registerChapter1EnemyFx() {
   // 幼年罗刹：狂乱连爪/力量蓄
   registerEnemyAct('youngRakshasa', async (a) => {
     const { kinds } = a;
-    if (isBuf(kinds)) return chargeUpFx({ color: 0xe0705a })(a); // 力量2（暴怒红）
+    if (isBuf(kinds)) return rageSwell({})(a); // 力量2（爆怒）
     if (isAtk(kinds)) return strikeWindup('crouch', { color: 0xd08868 })(a);
     return 'generic';
   });

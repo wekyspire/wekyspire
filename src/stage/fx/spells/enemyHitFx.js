@@ -7,6 +7,7 @@
 // 配色走暗铜橙系——与玩家拳的白亮（帅）和受击红闪（疼）三方都不同调（威胁）。
 import { punchImpact, screenFlash } from './blocks.js';
 import { punchScaleFor } from './damageFx.js';
+import { unitH } from '../scripts/enemies/fxPieces.js';
 
 // 逐敌覆写（未来特殊敌人）：defId → 'none'（关闭）| { tier: 'normal'|'rapid'|'heavy', ...params }
 export const ENEMY_HIT_SPELLS = Object.freeze({
@@ -123,7 +124,7 @@ export async function runEnemyHitBeat(ctx, deps, args) {
 export async function enemyImpactBeat(ctx, deps, { fx, unit, dealt, swing = null, fromX = null, pal = {}, garnish = null }) {
   const t = ENEMY_HIT_TIERS[fx.tier] ?? ENEMY_HIT_TIERS.normal;
   const s = unit._baseScale ?? 1;
-  const at = { x: unit.position.x, y: unit.position.y + 4.9 * s, z: unit.position.z };
+  const at = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z }; // 中弹位=躯干
   const dir = fromX != null ? Math.sign(unit.position.x - fromX) || 1 : 1;
   const heavy = fx.tier === 'heavy';
   // 量级按 swing（出手重量，盾吞/闪避时 = gross）——dealt=0 不缩成无物

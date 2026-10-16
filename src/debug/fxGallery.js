@@ -140,7 +140,9 @@ function placeUnits() {
 }
 function applyArt(view, defId, side) {
   const img = sharedUnitArtCache.get(defId, side, null);
-  if (img && !view.hasArt) view.setArt(img);
+  if (!img || view._artFor === defId) return; // 图未到/已是当前敌的图：幂等跳过
+  view.setArt(img);
+  view._artFor = defId; // 换敌后图晚到也补挂（addOnLoad 批次再查）
 }
 function setEnemySlot(i, defId) {
   const def = getEnemyDefinition(defId);
@@ -231,8 +233,11 @@ group('起手族 · strikeWindup（五体态）', [
 group('起手族 · 施法/防御/发呆', [
   { label: 'spitGlob 毒液吐弹（绿）', run: () => famPlay(() => fam.spitGlob({ color: [0.35, 0.75, 0.30], hot: [0.7, 1.05, 0.55], size: 1.2 })) },
   { label: 'spitGlob 咒弹（紫）', run: () => famPlay(() => fam.spitGlob({ color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30] })) },
-  { label: 'chargeUp 聚能（金）', run: () => famPlay(() => fam.chargeUpFx({ color: 0xffe0a0 })) },
-  { label: 'chargeUp 暴怒（红）', run: () => famPlay(() => fam.chargeUpFx({ color: 0xe0705a, orb: [1.0, 0.45, 0.3], hot: [1.4, 0.55, 0.4] })) },
+  { label: '聚能 gatherFocus（石茧）', run: () => famPlay(() => fam.gatherFocus({ vein: [0.85, 0.80, 0.64], moteColor: 0xd8c8a0 })) },
+  { label: '爆怒 rageSwell（罗刹）', run: () => famPlay(() => fam.rageSwell({})) },
+  { label: '竖刺 bristleFx（针鼠）', run: () => famPlay(() => fam.bristleFx({ color: 0xd8c060 })) },
+  { label: '硬化 hardenFx（甲虫B）', run: () => famPlay(() => fam.hardenFx({ color: 0xb0a890 })) },
+  { label: '掘洞休整 burrowRest（鼹鼠）', run: () => famPlay(() => fam.burrowRest({ color: 0xa89070 })) },
   { label: 'hunker 蜷缩防御（深）', run: () => famPlay(() => fam.hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })) },
   { label: 'dazeSway 发呆摇晃', run: () => famPlay(() => fam.dazeSway({})) },
   { label: 'wailFx 冰嚎（蓝环）', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.78, 0.98], rings: 4, upMotes: 10 })) },
@@ -405,7 +410,8 @@ function renderGroups() {
       b.addEventListener('click', async () => {
         try {
           setStatus(`播放：${item.label}`);
-          await item.run();
+          // runWith 返回 {ctx,promise,kill}——等真 promise（曾直接 await 对象 = 状态标签瞬跳「完」）
+          await (item.run()?.promise ?? null);
           setStatus(`完：${item.label}`);
         } catch (e) {
           console.error('[fxGallery] 播放异常', e);

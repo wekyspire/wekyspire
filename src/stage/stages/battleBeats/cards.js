@@ -10,7 +10,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
 import { lampPulse } from '../../fx/spells/blocks.js';
-import { shredBurst } from '../../fx/scripts/enemies/fxPieces.js';
+import { shredBurst, unitH } from '../../fx/scripts/enemies/fxPieces.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -80,7 +80,7 @@ export const cardBeats = {
       view.visible = true;
     }
     const s = src._baseScale ?? 1;
-    const mouth = { x: src.position.x, y: src.position.y + 3.1 * s, z: src.position.z ?? 0 };
+    const mouth = { x: src.position.x, y: src.position.y + unitH(src) * 0.38, z: src.position.z ?? 0 };
     const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
     const deps = this._spellDeps();
     // 啃蚀 uniforms（C0 补丁）：种子随卡、先吃甲虫那一侧的缘
@@ -413,7 +413,7 @@ export const cardBeats = {
         let cx = 0, cy = 0, cz = 0;
         for (const v of list) {
           const s = v._baseScale ?? 1;
-          cx += v.position.x; cy += v.position.y + 3.4 * s; cz += v.position.z;
+          cx += v.position.x; cy += v.position.y + unitH(v) * 0.50; cz += v.position.z;
         }
         cx /= list.length; cy /= list.length; cz /= list.length;
         let spread = 0;
@@ -455,8 +455,7 @@ export const cardBeats = {
         const id = this._snapshot?.player?.uniqueID;
         const v = id != null ? (this._units.get(id) ?? null) : null;
         if (!v) return null;
-        const s = v._baseScale ?? 1;
-        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
+        return { x: v.position.x, y: v.position.y + unitH(v) * 0.62, z: v.position.z }; // 抬手高度
       },
     };
   },
@@ -473,16 +472,10 @@ export const cardBeats = {
           : this._targetPool('enemy').map(u => u.uniqueID);   // 缺省全体存活敌（显示态口径）
         return ids.map(id2 => this._units.get(id2)).filter(Boolean);
       },
-      // 单位锚 = 立绘中心（血条同款高度基准 3.4×scale，z 随单位真实深度）
-      unitAnchor: (unit) => {
-        const s = unit._baseScale ?? 1;
-        return { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
-      },
+      // 单位锚 = 立绘中心（高度感知 0.5H，z 随单位真实深度）
+      unitAnchor: (unit) => ({ x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z }),
       // 单位脚锚 = 落地爆心（火向上烧的爆发/光柱底部坐这里）
-      unitFeet: (unit) => {
-        const s = unit._baseScale ?? 1;
-        return { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
-      },
+      unitFeet: (unit) => ({ x: unit.position.x, y: unit.position.y + unitH(unit) * 0.05, z: unit.position.z }),
       // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
       // 火弹/投射物从这里起飞
       cardTipWorld: () => {

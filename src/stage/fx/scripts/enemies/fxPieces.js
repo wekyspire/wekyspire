@@ -9,10 +9,16 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, uv as uvOf, texture as texOf,
   vec2, vec3, vec4, float, pow, abs, sin, cos, length, exp, smoothstep, oneMinus,
-  fract, max, atan,
+  fract, max, atan, clamp,
 } from 'three/tsl';
 import { spellQuad, lampPulse } from '../../spells/blocks.js';
 import { projectileShade } from '../../spells/shaders.js';
+
+// ============ 单位高度锚（高度感知定位，1016 用户裁定）============
+// unit.position = 立牌脚下中心，不是身体中心；有效视觉高 = _standeeHeight ×
+// _baseScale。一切「身体高度」锚（胸/头/受击中弹位/口部）按 H 比例取——旧固定
+// 3.4/4.9×s 只对平均体型成立，大个子会锚到胫骨。
+export const unitH = (u) => (u._standeeHeight ?? 22) * (u._baseScale ?? 1);
 
 // ============ 电弧束（静电毛球 zapChain 主体）============
 // 竖直 quad 沿航线拉伸。fragment 主笔：中线偏移（双频 sin + uTime 离散跳变）+
@@ -299,6 +305,116 @@ export function dustLanding(ctx, deps, { at, color = 0xb0a088, count = 16, lampI
   }
 }
 
+// ============ 汇流纹（聚能 gatherFocus 主体，ENEMY_FX.md 迭代#3）============
+// 以胸口焦点为中心的螺旋内流光带：极角随半径偏转（内圈偏转多 = 吸积感）；
+// 双频 sin 复合幂次锐化出不等宽亮带（随机相位/频率每实例烘焙——构造期字面量
+// 进节点图，严禁等距均布）；亮带只存在于收束头部以内，头部亮唇 + 内向渐亮；
+// 焦点小亮核随 uCharge 阶梯增亮。Fn 3 参（vUv/uProg/uCharge），色与相位烘常量。
+export function makeDrainVeinsShade([cr, cg, cb], seed, f1, f2, swirlK) {
+  return Fn(([vUv, uProg, uCharge]) => {
+    const p = vUv.sub(vec2(0.5, 0.40));                 // 焦点：quad 中下（胸口位）
+    const r = length(p).mul(2.0);
+    const a0 = atan(p.y, p.x);
+    const sw = a0.add(float(swirlK).mul(oneMinus(r))); // 螺旋偏转
+    const l1 = sin(sw.mul(float(f1)).add(float(seed))).mul(0.5).add(0.5);
+    const l2 = sin(sw.mul(float(f2)).sub(float(seed).mul(1.7))).mul(0.5).add(0.5);
+    // 乘法锐化（pow 纪律）：l1 四次方出窄脊，l2 平方调制出不等宽
+    const lane = l1.mul(l1).mul(l1).mul(l1).mul(l2).mul(l2);
+    const head = oneMinus(uProg).mul(0.85).add(0.15);   // 收束头 1.0→0.15
+    const inHead = oneMinus(smoothstep(head.sub(float(0.03)), head, r));
+    const inward = oneMinus(smoothstep(float(0.02), head, r)); // 内向渐亮
+    const d = r.sub(head);
+    const lip = exp(d.mul(d).mul(-900.0)).mul(lane);    // 头部亮唇
+    // 沿半径的内向行波（读「被吸过去」；单次演出件，非循环）
+    const flow = sin(r.mul(float(26.0)).sub(uProg.mul(float(30.0)))).mul(0.5).add(0.5)
+      .mul(0.30).add(0.70);
+    const band = lane.mul(inHead).mul(inward.mul(0.7).add(0.3)).mul(flow);
+    const fade = smoothstep(float(0.0), float(0.12), uProg)
+      .mul(oneMinus(smoothstep(float(0.85), float(1.0), uProg)));
+    const rr = r.mul(r);
+    const core = exp(rr.mul(-900.0)).mul(uCharge.mul(2.6).add(0.3)); // 焦点核
+    const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(vUv.sub(vec2(0.5)))));
+    const rgb = vec3(cr, cg, cb).mul(band.mul(2.3).mul(fade))
+      .add(vec3(cr, cg, cb).mul(lip.mul(1.1).mul(fade)))
+      .add(vec3(1.25, 1.12, 0.85).mul(lip.mul(2.0).mul(fade)))
+      .add(vec3(cr, cg, cb).mul(core))
+      .add(vec3(1.3, 1.2, 1.0).mul(core.mul(0.55)));
+    return vec4(rgb.mul(edge), float(1.0));
+  });
+}
+
+/** 汇流纹（竖直 billboard，at = 胸口焦点）。uCharge 由编排阶梯推进（末拍尖峰）。 */
+export async function drainVeins(ctx, deps, {
+  at, color = [0.86, 0.80, 0.62], size = 13.0, ms = 560, focusPeak = 1.5,
+}) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uCharge = uniform(0.0);
+  const shade = makeDrainVeinsShade(
+    color,
+    Math.random() * 6.28,
+    5.2 + Math.random() * 1.2,   // 亮带数（每圈脊线 ≈ f1）
+    3.0 + Math.random() * 0.8,   // 宽度调制（不等宽）
+    2.2 + Math.random() * 0.9,   // 螺旋卷绕
+  );
+  const { quad, release } = spellQuad({ shade: shade(uvOf(), uProg, uCharge), width: size, height: size * 1.05, name: 'spellFx:drainVeins' });
+  quad.position.set(at.x, at.y, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power1.in',   // 收束加速（吸积越近越快）
+    onUpdate: () => {
+      uProg.value = st.t;
+      // 焦点阶梯增亮（三档），末拍尖峰一闪
+      const q = st.t < 0.3 ? 0.25 : st.t < 0.62 ? 0.55 : st.t < 0.86 ? 0.85 : focusPeak;
+      uCharge.value = q;
+    },
+    onComplete: () => release(),
+  });
+}
+
+// ============ 怒压爆环（爆怒 rageSwell 末拍主体，ENEMY_FX.md 迭代#3）============
+// 胸口横向椭圆单环急速外扩（单拍）：角向 12 尖毛刺调制环宽（爆开的不稳定边）+
+// 环脊白热 HDR，随 uProg 扩张同步熄灭。横向压扁由 quad 高宽比给（横向气压）。
+export const pressureBurstShade = Fn(([vUv, uProg, uColor, uSeed]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const a = atan(p.y, p.x);
+  const R = uProg.mul(0.70).add(0.16);                  // 环半径 0.16→0.86
+  const dr = r.sub(R);
+  const spike = sin(a.mul(12.0).add(uSeed)).mul(0.5).add(0.5);
+  const w = float(42.0).add(spike.mul(150.0));          // 尖处环更宽（毛刺边）
+  const ring = exp(dr.mul(dr).mul(w).mul(-1.0));
+  const fade = oneMinus(uProg).mul(uProg.mul(6.0).clamp(0.0, 1.0)); // 快入快出
+  const edge = oneMinus(smoothstep(float(0.42), float(0.50), length(p)));
+  const rgb = uColor.mul(ring.mul(2.8).mul(fade))
+    .add(vec3(1.4, 0.9, 0.6).mul(ring.mul(ring).mul(3.2).mul(fade)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/** 怒压爆环（竖直 billboard 横椭圆，at = 胸口）。 */
+export async function pressureBurst(ctx, deps, {
+  at, color = [1.0, 0.45, 0.32], size = 13.0, ms = 260,
+}) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const { quad, release } = spellQuad({
+    shade: pressureBurstShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    width: size, height: size * 0.6, name: 'spellFx:pressureBurst',
+  });
+  quad.position.set(at.x, at.y, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.out',
+    onUpdate: () => { uProg.value = st.t; },
+    onComplete: () => release(),
+  });
+}
+
 // ============ 胶冠溅（史莱姆命中主体）============
 // 竖直 billboard：6 瓣异速外抛液滴（拉长泪滴、头亮尾细）+ 底部溅幕椭圆 + 首 30%
 // 白绿热核闪。uProg 走 power2.out（液滴减速外抛）。
@@ -370,14 +486,15 @@ export function playEdgeSurge(unit, colorHex = 0xd8a860, { durMs = 560 } = {}) {
     // 剪影边缘带：alpha 0.25→0.55 上升沿减 0.55→0.80 下降沿（立绘 AA 边即边线）
     const edgeBand = smoothstep(float(0.25), float(0.55), a)
       .mul(oneMinus(smoothstep(float(0.55), float(0.80), a)));
-    // 双波上行（0.35 相位差：第二道波追着第一道爬）
+    // 双波上行（0.35 相位差：第二道波追着第一道爬）——窄浪纪律：波间静默，
+    // 只读到「亮波在爬」，不做整身罩染（软边立绘的宽边缘带会读成染色）
     const d1 = vUv.y.sub(uPulse);
-    const w1 = exp(d1.mul(d1).mul(-120.0));
+    const w1 = exp(d1.mul(d1).mul(-240.0));
     const d2 = vUv.y.sub(fract(uPulse.add(float(0.35))));
-    const w2 = exp(d2.mul(d2).mul(-120.0));
+    const w2 = exp(d2.mul(d2).mul(-240.0));
     // 体表底透光（甲片缝隙感，非纯边线）
-    const inner = smoothstep(float(0.80), float(0.95), a).mul(0.28);
-    const rgb = vec3(c.r, c.g, c.b).mul(edgeBand.mul(max(w1, w2).mul(3.0).add(0.6)))
+    const inner = smoothstep(float(0.80), float(0.95), a).mul(0.16);
+    const rgb = vec3(c.r, c.g, c.b).mul(edgeBand.mul(max(w1, w2).mul(3.2).add(0.12)))
       .add(vec3(1.2, 0.9, 0.45).mul(edgeBand.mul(w1).mul(2.2)))
       .add(vec3(c.r, c.g, c.b).mul(inner));
     return vec4(rgb, float(1.0));
@@ -393,6 +510,59 @@ export function playEdgeSurge(unit, colorHex = 0xd8a860, { durMs = 560 } = {}) {
     el += dt;
     const p = Math.min(1, el / (durMs / 1000));
     uPulse.value = -0.3 + p * 1.6;
+    if (p >= 1 || unit._dead) {
+      untick();
+      mesh.parent?.remove(mesh);
+      mat.dispose();
+    }
+  });
+  return true;
+}
+
+// ============ 怒意搏动边光（爆怒 rageSwell 主体①，ENEMY_FX.md 迭代#3）============
+// playEdgeSurge 的搏动版：不是双波上爬，而是全轮廓亮度按搏动驱动、频率加速
+// （JS 侧相位积分，2→5.5Hz ramp——怒在积攒），末段 sin 脉冲过曝（血往头上涌）。
+export function pulseEdgeSurge(unit, colorHex = 0xe0705a, { ms = 520 } = {}) {
+  if (typeof document === 'undefined' || !unit || unit._dead) return false;
+  const bodyMesh = unit._body;
+  const map = bodyMesh.material.map;
+  if (!map?.image) return false;
+  const texNode = texOf(map);
+  const uBeat = uniform(0.0);
+  const uBurst = uniform(0.0);
+  const c = new THREE.Color(colorHex).multiplyScalar(1.8);
+  const mat = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false });
+  mat.blending = THREE.AdditiveBlending;
+  mat.colorNode = (() => {
+    const vUv = uvOf();
+    const a = texNode.sample(vUv).a;
+    const edgeBand = smoothstep(float(0.28), float(0.58), a)
+      .mul(oneMinus(smoothstep(float(0.58), float(0.82), a)));
+    const inner = smoothstep(float(0.80), float(0.95), a);
+    const lift = uBeat.mul(0.85).add(uBurst.mul(2.2)).add(0.20); // 谷底也留亮（怒意不熄）
+    // 内透只给微暖 + 末拍爆闪——边光才是主体（整身染色读成「粉红泡泡」）
+    const core = uBeat.mul(0.35).add(uBurst.mul(2.4)).add(0.05);
+    const rgb = vec3(c.r, c.g, c.b).mul(edgeBand.mul(lift).mul(3.2))
+      .add(vec3(1.3, 0.55, 0.35).mul(edgeBand.mul(lift).mul(1.6)))
+      .add(vec3(c.r, c.g, c.b).mul(inner.mul(core).mul(0.30)));
+    return vec4(rgb, float(1.0));
+  })();
+  const mesh = new THREE.Mesh(bodyMesh.geometry, mat);
+  mesh.name = 'pulseEdgeSurge';
+  mesh.position.copy(bodyMesh.position);
+  mesh.position.z += 0.9;
+  mesh.renderOrder = 1;
+  unit._standee.add(mesh);
+  let el = 0;
+  let phase = 0;
+  const untick = unit.addTick((dt) => {
+    el += dt;
+    const p = Math.min(1, el / (ms / 1000));
+    phase += dt * (2.0 + 3.5 * p);                      // 频率 ramp（积分相位纪律）
+    const b = Math.sin(phase * Math.PI * 2);
+    uBeat.value = b > 0 ? b * Math.sqrt(b) : 0;         // 半波整流（搏动非振荡）
+    const bp = (p - 0.82) / 0.18;                        // 末段过曝脉冲
+    uBurst.value = bp > 0 ? Math.sin(Math.min(bp, 1) * Math.PI) : 0;
     if (p >= 1 || unit._dead) {
       untick();
       mesh.parent?.remove(mesh);
