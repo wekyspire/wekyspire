@@ -8,8 +8,8 @@ import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, uv as uvOf, texture as texOf,
-  vec2, vec3, vec4, float, pow, abs, sin, length, exp, smoothstep, oneMinus,
-  fract, max, atan,
+  vec2, vec3, vec4, float, pow, abs, sin, cos, length, exp, smoothstep, oneMinus,
+  fract, max, min, atan,
 } from 'three/tsl';
 import { spellQuad, lampPulse } from '../../spells/blocks.js';
 import { projectileShade } from '../../spells/shaders.js';
@@ -297,6 +297,198 @@ export function dustLanding(ctx, deps, { at, color = 0xb0a088, count = 16, lampI
       peak: lampIntensity, attackMs: 60, decayMs: 240,
     });
   }
+}
+
+// ============ 胶质压力池（史莱姆蓄压主体，ENEMY_FX.md 迭代#1）============
+// 贴地平躺 quad：半径随 uProg 涨缩（蓄压渗胶 / 弹射前收回归体）；角向三频慢漂
+// = 有机边缘；体内双层流动焦散 + 三个轨道漂移上升微泡（fract 相位，到顶增亮
+// 后消）；外沿亮唇线带呼吸。深绿低亮——胶是渗出物不是能量球，亮度随成形度走。
+export const gooPoolShade = Fn(([vUv, uProg, uTime, uSeed]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const a = atan(p.y, p.x);
+  const R = uProg.mul(0.30).add(0.20);
+  const wob = sin(a.mul(3.0).add(uSeed)).mul(0.10)
+    .add(sin(a.mul(5.0).sub(uTime.mul(0.9))).mul(0.06))
+    .add(sin(a.mul(8.0).add(uTime.mul(1.7))).mul(0.04));
+  const rw = R.mul(wob.add(1.0));
+  const dr = r.sub(rw);
+  const body = oneMinus(smoothstep(float(-0.10), float(0.02), dr));
+  const ca = sin(a.mul(6.0).add(r.mul(14.0)).sub(uTime.mul(2.1)))
+    .mul(sin(a.mul(4.0).sub(r.mul(9.0)).add(uTime.mul(1.3))));
+  const rr2 = r.mul(r);
+  const causs = ca.mul(ca).mul(exp(rr2.mul(-1.6)));
+  const lip = exp(dr.mul(dr).mul(-260.0)).mul(smoothstep(float(-0.04), float(0.02), dr));
+  const lipBr = float(1.35).add(sin(uTime.mul(3.1).add(uSeed)).mul(0.4));
+  // 微泡 ×3（JS 循环静态展开）：慢轨道漂移 + fract 相位上升，到顶增亮后消
+  const bub = (i) => {
+    const ph = fract(uTime.mul(0.30).add(float(i * 0.37)).add(uSeed.mul(0.13)));
+    const th = uSeed.mul(2.0).add(float(i * 2.1)).add(uTime.mul(0.12));
+    const rad = rw.mul(ph.mul(0.50).add(0.15)).mul(0.5);
+    const bd = length(p.sub(vec2(cos(th), sin(th)).mul(rad)));
+    return exp(bd.mul(bd).mul(-380.0))
+      .mul(sin(ph.mul(Math.PI)))
+      .mul(ph.mul(0.65).add(0.35))
+      .mul(body);
+  };
+  const bubs = bub(0).add(bub(1)).add(bub(2));
+  const dim = smoothstep(float(0.0), float(0.35), uProg);
+  const rgb = vec3(0.05, 0.16, 0.06).mul(body.mul(dim))
+    .add(vec3(0.10, 0.30, 0.10).mul(causs.mul(dim).mul(2.4)))
+    .add(vec3(0.28, 0.85, 0.30).mul(lip.mul(lipBr).mul(dim)))
+    .add(vec3(0.50, 1.00, 0.45).mul(bubs.mul(dim).mul(1.6)));
+  const edge = oneMinus(smoothstep(float(0.85), float(1.00), r));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/** 贴地压力池：uProg = 涨→持→收三段（grow/hold/collapse），胶感时间连续驱动。 */
+export async function gooPool(ctx, deps, { at, size = 9.5, growMs = 420, holdMs = 40, collapseMs = 130 }) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uTime = uniform(Math.random() * 40);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const { quad, release } = spellQuad({
+    shade: gooPoolShade(uvOf(), uProg, uTime, uSeed),
+    width: size, height: size, name: 'spellFx:gooPool',
+  });
+  quad.position.set(at.x, at.y + 0.2, (at.z ?? 0) + 0.5);
+  quad.rotation.x = -Math.PI / 2;
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const total = growMs + holdMs + collapseMs;
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: total, ease: 'linear',
+    onUpdate: () => {
+      uTime.value = performance.now() / 1000;
+      const ms = st.t * total;
+      uProg.value = ms < growMs ? ms / growMs : ms < growMs + holdMs
+        ? 1 : 1 - (ms - growMs - holdMs) / collapseMs;
+    },
+    onComplete: () => release(),
+  });
+}
+
+// ============ 粘弹胶丝（史莱姆弹射断裂主体）============
+// 竖直 quad（height=1、scale.y=距离实时摆）：双细丝中段随拉伸掐细（uProg=伸长
+// 比），uSnap 驱动断裂——颈点渐宽熄灭 + 残珠下坠缩径 + 整丝淡出。pre-snap 颈线
+// 本就是最细处（顺势读「将断」）。
+export const gooStrandShade = Fn(([vUv, uProg, uSnap, uColor]) => {
+  const p = vUv.sub(vec2(0.5));
+  const v = p.y.add(0.5);
+  const pinch = min(uProg.mul(1.4), float(1.0)).mul(sin(v.mul(Math.PI)));
+  const th = float(0.100).add(sin(v.mul(Math.PI)).mul(0.038))
+    .mul(float(1.0).sub(pinch.mul(0.72)));
+  const dx1 = p.x.sub(0.20).div(th);
+  const f1 = exp(dx1.mul(dx1).mul(-5.0));
+  const c1 = exp(dx1.mul(dx1).mul(-18.0));
+  const dx2 = p.x.add(0.20).div(th);
+  const f2 = exp(dx2.mul(dx2).mul(-5.0));
+  const c2 = exp(dx2.mul(dx2).mul(-18.0));
+  const gap = uSnap.mul(0.35);
+  const keep = smoothstep(gap, gap.add(0.08), abs(v.sub(0.48)));
+  const bv = v.sub(float(0.48).sub(uSnap.mul(0.25)));
+  const bead = exp(bv.mul(bv).mul(-320.0))
+    .mul(exp(p.x.mul(p.x).mul(-240.0))).mul(uSnap).mul(2.6);
+  const fade = pow(oneMinus(uSnap), float(0.7))
+    .mul(smoothstep(float(0.0), float(0.08), v));
+  const edge = oneMinus(smoothstep(float(0.38), float(0.50), abs(p.x)))
+    .mul(oneMinus(smoothstep(float(0.40), float(0.50), abs(p.y))));
+  const rgb = uColor.mul(f1.add(f2).mul(2.2))
+    .add(vec3(0.72, 1.05, 0.50).mul(c1.add(c2).mul(2.6)))
+    .add(vec3(0.85, 1.15, 0.60).mul(bead));
+  return vec4(rgb.mul(keep).mul(fade).mul(edge), float(1.0));
+});
+
+/**
+ * 粘弹胶丝（from 池位 → 身体实时跟随）。返回 { update(to), snap() }：
+ * update 在飞行 onUpdate 里逐帧调（重摆 midpoint/rotation/scale.y）；
+ * snap() 演断裂（130ms 后自清）。未被 snap 时 lifeMs 兜底自清。
+ */
+export function gooStrand(ctx, deps, { from, color = [0.30, 0.85, 0.32], refLen = 5.0, lifeMs = 460 }) {
+  if (!from) return { update: () => {}, snap: async () => {} };
+  const uProg = uniform(0.0);
+  const uSnap = uniform(0.0);
+  const { quad, release } = spellQuad({
+    shade: gooStrandShade(uvOf(), uProg, uSnap, vec3(color[0], color[1], color[2])),
+    width: 3.4, height: 1, name: 'spellFx:gooStrand',
+  });
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const cur = { x: from.x, y: from.y, z: from.z ?? 0 };
+  const place = () => {
+    const dx = cur.x - from.x;
+    const dy = cur.y - from.y;
+    const d = Math.hypot(dx, dy) || 0.001;
+    quad.position.set((from.x + cur.x) / 2, (from.y + cur.y) / 2, ((from.z ?? 0) + (cur.z ?? 0)) / 2 + 1.1);
+    quad.rotation.z = Math.atan2(dy, dx) - Math.PI / 2;
+    quad.scale.set(1, d, 1);
+    uProg.value = Math.min(1, d / refLen);
+  };
+  place();
+  ctx.spawn(async (c) => { await c.wait(lifeMs); release(); });
+  return {
+    update(to) { cur.x = to.x; cur.y = to.y; cur.z = to.z ?? 0; place(); },
+    async snap() {
+      const s = { k: 0 };
+      await ctx.tweenRaw(s, { k: 1 }, {
+        durationMs: 130, ease: 'power1.in',
+        onUpdate: () => { uSnap.value = s.k; },
+        onComplete: () => release(),
+      });
+    },
+  };
+}
+
+// ============ 胶冠溅（史莱姆命中主体）============
+// 竖直 billboard：6 瓣异速外抛液滴（拉长泪滴、头亮尾细）+ 底部溅幕椭圆 + 首 30%
+// 白绿热核闪。uProg 走 power2.out（液滴减速外抛）。
+export const gooCrownShade = Fn(([vUv, uProg, uColor, uSeed]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const lobe = (i) => {
+    const A = float((i - 2.5) * 0.55).add(sin(uSeed.add(float(i * 1.7))).mul(0.15));
+    const dir = vec2(sin(A), cos(A));
+    const sp = uProg.mul(float(0.55 + 0.18 * Math.sin(i * 1.3))).mul(0.85).add(0.15);
+    const d = length(p.sub(dir.mul(sp.mul(0.5))));
+    const dd = d.mul(d);
+    const blob = exp(dd.mul(float(-240.0).add(uProg.mul(150.0))));
+    const head = exp(dd.mul(float(-960.0).add(uProg.mul(600.0))));
+    const fd = pow(oneMinus(uProg), float(1.2));
+    return uColor.mul(blob.mul(1.5))
+      .add(vec3(0.75, 1.08, 0.55).mul(head.mul(1.9))).mul(fd);
+  };
+  const lobes = lobe(0).add(lobe(1)).add(lobe(2)).add(lobe(3)).add(lobe(4)).add(lobe(5));
+  const py = p.y.add(0.22);
+  const sheet = exp(py.mul(py).mul(-26.0)).mul(exp(p.x.mul(p.x).mul(-7.0)))
+    .mul(pow(oneMinus(uProg), float(2.0))).mul(0.55);
+  const core = exp(r.mul(r).mul(-90.0))
+    .mul(oneMinus(smoothstep(float(0.0), float(0.30), uProg)));
+  const edge = oneMinus(smoothstep(float(0.42), float(0.50), length(p)));
+  const rgb = lobes
+    .add(uColor.mul(sheet))
+    .add(vec3(0.88, 1.18, 0.72).mul(core.mul(2.2)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/** 命中液冠（竖直 billboard，命中点）。 */
+export async function gooCrown(ctx, deps, { at, color = [0.20, 0.50, 0.16], size = 12.0, ms = 460 }) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const { quad, release } = spellQuad({
+    shade: gooCrownShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    width: size, height: size * 0.78, name: 'spellFx:gooCrown',
+  });
+  quad.position.set(at.x, at.y, (at.z ?? 0) + 1.3);
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.out',
+    onUpdate: () => { uProg.value = st.t; },
+    onComplete: () => release(),
+  });
 }
 
 // ============ 剪影蓄能边光（穿山甲卷甲 / 硬化类 buff 的形体主体）============

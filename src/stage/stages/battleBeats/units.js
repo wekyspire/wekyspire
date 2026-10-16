@@ -7,7 +7,7 @@ import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
-import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed } from '../../fx/spells/enemyHitFx.js';
+import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed, enemyLungeOverrideOf } from '../../fx/spells/enemyHitFx.js';
 import { bossHurtFxOf } from '../../fx/bossStateFx.js';
 import { enemyDeathBeatOf, enemySpawnGarnishOf } from '../../fx/enemyLifeFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
@@ -61,6 +61,8 @@ export const unitBeats = {
     // 瑞米冲撞参数：全距离贴身（留 4.2 身位间隙防穿模）；前倾角加大（小身板大动作才读得出）
     const chargeTravel = Math.max(dist - 4.2, dist * 0.55);
     const chargeLean = -Math.sign(ddx || 1) * 0.30;
+    // 逐敌签名飞行（史莱姆跳扑等，ENEMY_FX.md）：覆写通用「后拉→突进→回位」三段
+    const lungeChoreo = lunging && !remiCharge ? enemyLungeOverrideOf(src._defId) : null;
 
     const h = runScript(async (ctx) => {
       // 命中演出（伤害节拍驱动）：伤害量/攻击来向在这里才有真值——
@@ -139,6 +141,9 @@ export const unitBeats = {
         });
         // ③ 撞击瞬间：挤进身位 + 撞扁（起手帧，命中段与④并行接上）
         src.setPose({ squash: 0.82, widen: 1.14, lean: chargeLean });
+      } else if (lunging && lungeChoreo) {
+        // 签名飞行：末帧 = 锋尖抵近，受击演出自此起（契约同通用②）
+        await lungeChoreo.approach(ctx, this._spellDeps(), { src, sx, sy, sz, ux, uz, reach, dist, unit });
       } else if (lunging) {
         // 突进被打断（收拍/拆台）不许把攻击方晾在半路上：归位 + 姿态清零（正常结束也过这，幂等）
         ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose(); });
@@ -190,7 +195,9 @@ export const unitBeats = {
               },
             });
           })()
-        : ctx.custom(srcId, {
+        : lungeChoreo
+          ? lungeChoreo.recover(ctx, this._spellDeps(), { src, sx, sy, sz, ux, uz, reach })
+          : ctx.custom(srcId, {
           durationMs: 220, ease: 'power2.out',
           onUpdate: (t) => {
             src.position.x = sx + ux * reach * (1 - t);

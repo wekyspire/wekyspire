@@ -33,6 +33,15 @@ const ENEMY_NO_LUNGE = new Set();
 export function registerEnemyNoLunge(defId) { ENEMY_NO_LUNGE.add(defId); }
 export function enemyLungeSuppressed(defId) { return ENEMY_NO_LUNGE.has(defId); }
 
+// 逐敌突进覆写：defId → { approach(ctx, deps, g), recover(ctx, deps, g) }，
+// g = { src, sx, sy, sz, ux, uz, reach, dist, unit }。契约同通用三段：approach
+// 在命中前 await 演完（末帧 = 锋尖抵近，受击演出自此起），recover 返回 promise
+// 与受击并行收尾；onKill 自理归位归零。签名飞行语言（史莱姆跳扑等，
+// ENEMY_FX.md）注册在 fx/scripts/enemies/。
+const ENEMY_LUNGE_OVERRIDES = new Map();
+export function registerEnemyLunge(defId, choreo) { ENEMY_LUNGE_OVERRIDES.set(defId, choreo); }
+export function enemyLungeOverrideOf(defId) { return ENEMY_LUNGE_OVERRIDES.get(defId) ?? null; }
+
 // 重击内容数据标签（DealDamageInstruction tags）：敌方 def 的 act 里提交伤害时
 // 带上即入重击档——意图 note 里的「重击」文案不进演出判定（文案解析脆）。
 export const HEAVY_TAG = 'heavy';

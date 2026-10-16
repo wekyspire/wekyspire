@@ -7,10 +7,12 @@
 import * as THREE from 'three';
 import { isAttackKind, isDebuffKind, isBuffKind } from '../../../../core/intentKinds.js';
 import { registerEnemyAct } from '../enemyAct.js';
-import { registerEnemyHitTheme, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
+import {
+  registerEnemyHitTheme, registerEnemyNoLunge, registerEnemyLunge, registerEnemyHitBeat, enemyImpactBeat,
+} from '../../spells/enemyHitFx.js';
 import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
 import { fireBurst, impactBurst, groundRing, lampPulse } from '../../spells/blocks.js';
-import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding } from './fxPieces.js';
+import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooPool, gooStrand, gooCrown } from './fxPieces.js';
 import {
   strikeWindup, spitGlob, chargeUpFx, hunkerFx, dazeSway, wailFx, trembleWarn,
 } from './families.js';
@@ -22,6 +24,136 @@ const isDeb = (kinds) => kinds.some(isDebuffKind);
 const isBuf = (kinds) => kinds.some(isBuffKind);
 
 // ====== 种族签名动作 ======
+
+// 史莱姆弹性打击（ENEMY_FX.md 迭代#1）：材料 = 粘弹性流体，叙事四拍
+// 蓄压→弹射→胶冠→果冻回巢。本函数 = 起手拍「蓄压」：体积压缩蓄能 + 贴地压力池
+// 形体（随压缩渗胶、弹射前收回）+ 颤振渐强（储能到顶）+ 体侧慢坠胶珠。
+// 出口深压缩静止（squash≈0.55），交棒 slimePounce 的突进覆写。
+async function gelCompress({ ctx, deps, unit }) {
+  const s = sOf(unit);
+  const feet = { x: unit.position.x, y: unit.position.y + 0.5 * s, z: unit.position.z ?? 0 };
+  const pool = gooPool(ctx, deps, {
+    at: feet, size: 9.5 * Math.max(0.75, s), growMs: 420, holdMs: 40, collapseMs: 130,
+  });
+  ctx.spawn((c) => lampPulse(c, deps, {
+    name: 'light:fx0', at: { x: feet.x, y: feet.y + 1.0, z: (feet.z ?? 0) + 1.2 },
+    color: [0.30, 0.80, 0.36], peak: 340, attackMs: 380, decayMs: 300,
+  }));
+  // 压缩（被压下去：慢起快收）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 250, ease: 'power2.in',
+    onUpdate: (t) => unit.setPose({ squash: 1 - 0.42 * t, widen: 1 + 0.36 * t }),
+  });
+  // 颤振渐强（储能到顶；末段再压一格）+ 体侧渗胶滴落
+  ctx.spawn(async (c) => {
+    for (let i = 0; i < 2; i++) {
+      await c.wait(280 + i * 90);
+      deps.particles?.spawn?.(unit.position.x + (i % 2 ? 1 : -1) * 1.4 * s, unit.position.y + 2.2 * s, {
+        color: 0x7ab84e, count: 2, speed: 1.2, size: 1.1, ttl: 1.0, gravity: -12, z: unit.position.z,
+      });
+    }
+  });
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 170, ease: 'none',
+    onUpdate: (t) => {
+      const amp = 0.012 + 0.020 * t;
+      const j = Math.sin(t * Math.PI * 3);
+      unit.setPose({ squash: 0.58 - 0.03 * t + amp * j, widen: 1.36 + 0.03 * t - amp * j * 1.2 });
+    },
+  });
+  // 池收回（渗胶归体；颤振随收渐弱 = 能量已收满待发）
+  await ctx.custom(unit.uniqueID, {
+    durationMs: 130, ease: 'none',
+    onUpdate: (t) => {
+      const amp = 0.032 * (1 - t);
+      const j = Math.sin(t * Math.PI * 2);
+      unit.setPose({ squash: 0.55 + amp * j, widen: 1.39 - amp * j * 1.2 });
+    },
+  });
+  await pool;
+}
+
+// 史莱姆突进覆写「弹射→回巢」：蓄压末态（squash≈0.55）起跳——弧线拉伸跳 +
+// 胶丝（池位→身体实时跟随，t≈0.62 断裂甩珠）；命中后反弹回巢 + 果冻衰减振荡。
+// 契约同通用三段（approach 末帧 = 锋尖抵近；onKill 归位归零）。
+function slimePounce() {
+  return {
+    async approach(ctx, deps, { src, sx, sy, sz, ux, uz, reach }) {
+      const s = src._baseScale ?? 1;
+      ctx.onKill(() => { src.position.x = sx; src.position.y = sy; src.position.z = sz; src.resetPose(); });
+      const strand = gooStrand(ctx, deps, { from: { x: sx, y: sy + 1.0 * s, z: sz }, refLen: 4.6 * s });
+      const hop = 2.2 * (0.75 + 0.25 * s);
+      const leanTo = -Math.sign(ux || 1) * 0.16;
+      let snapped = false;
+      await ctx.custom(src.uniqueID, {
+        durationMs: 170, ease: 'power2.in',
+        onUpdate: (t) => {
+          src.position.x = sx + ux * reach * t;
+          src.position.z = sz + uz * reach * t;
+          src.position.y = sy + Math.sin(Math.PI * t) * hop;
+          // 胶体拉伸：压缩末态 → 飞行拉长（前 60% 完成拉伸）
+          const st = Math.min(1, t * 1.6);
+          src.setPose({ squash: 0.55 + 0.91 * st * st, widen: 1.39 - 0.52 * st, lean: leanTo * st });
+          strand.update({ x: src.position.x, y: src.position.y + 0.5, z: sz });
+          if (t >= 0.62 && !snapped) {
+            snapped = true;
+            strand.snap();
+            // 断裂甩脱双层胶珠（快层细疾 / 慢层大缓）
+            deps.particles?.spawn?.(sx, sy + 1.5 * s, { color: 0x86c86a, count: 8, speed: 7, size: 0.7, ttl: 0.5, gravity: -20, z: sz });
+            deps.particles?.spawn?.(sx, sy + 1.0 * s, { color: 0x5f9a45, count: 4, speed: 3, size: 1.3, ttl: 1.1, gravity: -8, z: sz });
+          }
+        },
+      });
+    },
+    async recover(ctx, deps, { src, sx, sy, sz, ux, uz, reach }) {
+      const cx = sx + ux * reach;
+      const cz = sz + uz * reach;
+      // 反弹小弧回巢（拉长 → 落地压扁）
+      await ctx.custom(src.uniqueID, {
+        durationMs: 130, ease: 'power1.out',
+        onUpdate: (t) => {
+          src.position.x = cx + (sx - cx) * t;
+          src.position.z = cz + (sz - cz) * t;
+          src.position.y = sy + Math.sin(Math.PI * t) * 0.9;
+          src.setPose({ squash: 1.46 - 0.72 * t, widen: 0.87 + 0.33 * t, lean: 0 });
+        },
+      });
+      // 果冻衰减振荡（落地压扁 → 过冲拉高 → 归中）
+      await ctx.custom(src.uniqueID, {
+        durationMs: 220, ease: 'none',
+        onUpdate: (t) => {
+          const w = Math.sin(t * Math.PI * 3.4) * (1 - t);
+          src.setPose({ squash: 0.74 + 0.26 * t + 0.22 * w, widen: 1.20 - 0.20 * t - 0.20 * w });
+        },
+      });
+    },
+  };
+}
+
+// 史莱姆命中主题「胶冠溅」：等 approach 抵近（150ms ≈ 突进 170ms 的锋尖帧）再放
+// ——punchImpact 胶绿换肤 + gooCrown 液冠形体（6 瓣异速外抛泪滴 + 溅幕 + 热核闪）
+// + 双层胶珠（gravity 落）。
+function slimeGooImpact() {
+  return async (ctx, deps, args) => {
+    await ctx.wait(150);
+    const { unit } = args;
+    const s = unit._baseScale ?? 1;
+    const at = { x: unit.position.x, y: unit.position.y + 3.6 * s, z: unit.position.z };
+    const crown = gooCrown(ctx, deps, { at, color: [0.20, 0.50, 0.16], size: 12.0 });
+    deps.particles?.spawn?.(at.x, at.y, { color: 0x86c86a, count: 12, speed: 15, size: 0.8, ttl: 0.5, gravity: -30, z: at.z });
+    deps.particles?.spawn?.(at.x, at.y - 1, { color: 0x5f9a45, count: 5, speed: 5, size: 1.4, ttl: 1.1, gravity: -14, z: at.z });
+    await Promise.all([
+      crown,
+      enemyImpactBeat(ctx, deps, {
+        ...args,
+        pal: {
+          color: [0.34, 0.78, 0.30], hot: [0.95, 1.20, 0.72], rim: [0.42, 0.85, 0.40],
+          sparkColor: 0x9fe070, sparkSpeed: 14,
+        },
+      }),
+    ]);
+  };
+}
 
 // 蟾蜍鼓气（pufferToad 首拍）：深吸气 → 急剧膨胀（撑到变形 + 喉部气压光球
 // shader 主体 + 借池灯）→ 憋住微颤（峰压一圈声波环）→ 泄气回中。
@@ -329,42 +461,22 @@ async function runBlastBurst(ctx, stage, at, s) {
 // ====== 逐敌注册 ======
 
 export function registerChapter1EnemyFx() {
-  // -- 史莱姆族（胶质）--
-  for (const id of ['slime', 'slimeB']) {
+  // -- 史莱姆族（胶质：弹性打击全套，ENEMY_FX.md 迭代#1）--
+  for (const id of ['slime', 'slimeB', 'slimeletA', 'slimeletB']) {
     registerEnemyAct(id, async (a) => {
       const { kinds } = a;
-      if (isAtk(kinds)) return strikeWindup('blob', { color: 0x86c86a, dropletColor: 0x9fe07a })(a);
+      if (isAtk(kinds)) return gelCompress(a);
+      if (isDeb(kinds)) return spitGlob({
+        color: [0.45, 0.85, 0.35], hot: [0.8, 1.15, 0.65], size: 1.3, ms: 380, arcH: 3,
+        trailColor: 0x6aba50, impactColor: 0x8ad06a, impactCount: 10,
+      })(a); // 塞粘液（吐弹族重做排队中，ENEMY_FX.md）
       if (has(kinds, 'buff')) return chargeUpFx({ color: 0x9fe08a })(a); // 蓄势拍
       if (has(kinds, 'defend')) return hunkerFx({ depth: 0.85 })(a);
       return 'generic';
     });
-    registerEnemyDeathBeat(id, slimeMeltDeath);
-    registerEnemyHitTheme(id, {
-      pal: { color: [0.62, 0.95, 0.45], hot: [0.95, 1.25, 0.75], rim: [0.5, 0.9, 0.5], sparkColor: 0x9fe070 },
-      garnish: (c, d, { at, heavy }) => {
-        d.particles?.spawn?.(at.x, at.y, {
-          color: 0x86c86a, count: heavy ? 12 : 7, speed: 9, size: 1.0, ttl: 0.6, gravity: -22, z: at.z,
-        });
-        d.particles?.spawn?.(at.x, at.y, {
-          color: 0x86c86a, count: Math.round((heavy ? 12 : 7) * 0.5), speed: (9) * 0.4, size: (1.0) * 1.4, ttl: (0.6) * 2.2, gravity: (-22) * 0.3, z: at.z,
-        });
-      },
-    });
-  }
-  // -- 小史莱姆（塞粘液）--
-  for (const id of ['slimeletA', 'slimeletB']) {
-    registerEnemyAct(id, async (a) => {
-      const { kinds } = a;
-      if (isAtk(kinds)) return strikeWindup('blob', { color: 0x86c86a })(a);
-      if (isDeb(kinds)) return spitGlob({
-        color: [0.45, 0.85, 0.35], hot: [0.8, 1.15, 0.65], size: 1.3, ms: 380, arcH: 3,
-        trailColor: 0x6aba50, impactColor: 0x8ad06a, impactCount: 10,
-      })(a);
-      return 'generic';
-    });
-    registerEnemyHitTheme(id, {
-      pal: { color: [0.62, 0.95, 0.45], hot: [0.95, 1.25, 0.75], sparkColor: 0x9fe070 },
-    });
+    registerEnemyLunge(id, slimePounce());
+    registerEnemyHitBeat(id, slimeGooImpact());
+    if (id === 'slime' || id === 'slimeB') registerEnemyDeathBeat(id, slimeMeltDeath);
   }
   // -- 怨灵（远程：洗虚无/虚弱）--
   for (const id of ['wraithA', 'wraithB']) {
