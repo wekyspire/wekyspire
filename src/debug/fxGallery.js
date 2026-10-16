@@ -234,7 +234,6 @@ group('起手族 · 施法/防御/发呆', [
   { label: '吐弹 毒液（绿·彗星）', enemy: 'thornWeed', run: () => famPlay(() => fam.spitGlob({})) },
   { label: '吐弹 粘液（灰·史莱姆）', enemy: 'slimeletA', run: () => famPlay(() => fam.spitGlob({ color: [0.55, 0.62, 0.58], hot: [0.88, 0.96, 0.92], size: 4.0, trailColor: 0x565c58, impactColor: 0x6e7671, muzzleK: 0.52 })) },
   { label: '咒弹 双环（紫）', enemy: 'wraithA', run: () => runWith((ctx) => fam.curseBolt(ctx, stageStub._spellDeps(), { unit: focusView(), player: playerView })) },
-  { label: 'spitGlob 咒弹（紫）', run: () => famPlay(() => fam.spitGlob({ color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30] })) },
   { label: '聚能 gatherFocus（石茧）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.gatherFocus({ vein: [0.85, 0.80, 0.64], moteColor: 0xd8c8a0 })) },
   { label: '爆怒 rageSwell（罗刹）', enemy: 'youngRakshasa', run: () => famPlay(() => fam.rageSwell({})) },
   { label: '竖刺 bristleFx（针鼠）', enemy: 'hedgehog', run: () => famPlay(() => fam.bristleFx({ color: 0xd8c060 })) },
@@ -261,7 +260,8 @@ group('形体件（fxPieces 单件）', [
   { label: 'wailRing 声波环（蓝）', enemy: 'snowwolf', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.78, 0.98] })) },
   { label: 'wailRing 声波环（紫）', enemy: 'wraithA', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90] })) },
   { label: 'fuseRing 引线收束圈', enemy: 'blastPod', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
-  { label: 'mossWave 蔓延雾锋（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossWave(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1 })) },
+  { label: 'mossCreep 蔓延爬苔（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossCreep(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1, size: 26, dist: 20 }).promise) },
+  { label: 'mossGrip 缠踝爬须（玩家脚下）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossGrip(ctx, stageStub._spellDeps(), { at: feet(playerView) })) },
   { label: 'chargeOrb 蓄能光球（金）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()) })) },
   { label: 'chargeOrb 喉压光球（绿）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()), color: [0.72, 0.95, 0.45], hot: [1.15, 1.35, 0.75] })) },
   { label: 'edgeSurge 剪影边光（金）', enemy: 'rockPangolin', run: () => { fxp.playEdgeSurge(focusView(), 0xd8a860); toast('边光播放（约 0.6s 自清）'); } },
@@ -282,7 +282,10 @@ function refreshEnemySelect() {
   if (prev) enemySelect.value = prev;
 }
 refreshEnemySelect();
-enemySelect.addEventListener('change', () => setEnemySlot(focusIdx, enemySelect.value));
+enemySelect.addEventListener('change', () => {
+  setEnemySlot(focusIdx, enemySelect.value);
+  rebuildBeats();   // 逐敌逐拍组跟随下拉重建（换敌后拍的注册表分发也换人）
+});
 
 /** 逐拍枚举：logic 偶走 actionIndex 0..7 读 getIntention 的 kinds（去重）。 */
 function beatsOf(defId) {

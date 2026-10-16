@@ -12,7 +12,7 @@ import {
 } from '../../spells/enemyHitFx.js';
 import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
 import { fireBurst, impactBurst, groundRing, lampPulse } from '../../spells/blocks.js';
-import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooCrown, unitH } from './fxPieces.js';
+import { zapArc, wailRing, mossCreep, mossGrip, playEdgeSurge, chargeOrb, dustLanding, gooCrown, unitH } from './fxPieces.js';
 import {
   strikeWindup, spitGlob, hunkerFx, dazeSway, wailFx, trembleWarn,
   rageSwell, gatherFocus, bristleFx, hardenFx, burrowRest,
@@ -267,9 +267,10 @@ async function gnawAntic({ ctx, deps, unit, player }) {
   });
 }
 
-// 苔球蔓延（mossBall 紧勒拍）：压实一拍 → 贴地蔓延雾锋（mossWave shader 形体：
-// 行进锋面 + fbm 起伏 + 亮绿锋唇）自苔球漫向玩家 + 锋面迸土粒 + 慢速浮孢。
-// 「看不见的紧勒」用地面蔓延雾读——压迫感走空间而不是数值。
+// 苔球蔓延（mossBall 紧勒拍，ENEMY_FX.md 迭代#6）：压实一拍（苔自球体挤出）→
+// 贴地爬苔（mossCreep：指状前探须 + 苔毯沉积 + 亮唇）按实际间距铺向玩家 →
+// 抵达拍 mossGrip（玩家脚下缠踝爬须）+ 孢尘。size 按间距取：锋面必须真爬过
+// 玩家（旧版 size 22 半途消失 = 叙事断尾的根因）。
 async function spreadGrip({ ctx, deps, unit, player }) {
   const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
   const feet = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.06, z: unit.position.z ?? 0 };
@@ -277,7 +278,10 @@ async function spreadGrip({ ctx, deps, unit, player }) {
     durationMs: 200, ease: 'power2.out',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * t, widen: 1 + 0.12 * t }),
   });
-  const wave = mossWave(ctx, deps, { at: feet, dir, size: 22 * Math.max(0.7, sOf(unit)), ms: 880 });
+  const dist = player ? Math.abs(player.position.x - unit.position.x) : 20;
+  const size = Math.max(12, dist + 4);   // 波程：爬到玩家再溢出 4 单位
+  const MS = 880;
+  const { promise: wave, arriveU } = mossCreep(ctx, deps, { at: feet, dir, size, ms: MS, dist });
   // 锋面行进途中的两波土粒（读「苔在爬」）+ 常驻浮孢
   ctx.spawn(async (c) => {
     for (let i = 0; i < 2; i++) {
@@ -290,6 +294,18 @@ async function spreadGrip({ ctx, deps, unit, player }) {
   deps.particles?.spawn?.(feet.x + dir * 3, feet.y + 1, {
     color: 0x87a55e, count: 7, speed: 2, size: 1.2, ttl: 1.6, gravity: 2, z: feet.z,
   });
+  // 抵达拍：锋面爬过玩家（按头相位换算时刻）——脚下缠须 + 孢尘
+  if (player) {
+    ctx.spawn(async (c) => {
+      await c.wait(Math.round(arriveU * MS));
+      if (c.killed) return;
+      const pf = { x: player.position.x, y: player.position.y + unitH(player) * 0.03, z: player.position.z ?? 0 };
+      deps.particles?.spawn?.(pf.x, pf.y + 0.6, {
+        color: 0x7a9a4f, count: 8, speed: 9, size: 1.0, ttl: 0.5, gravity: -8, z: pf.z,
+      });
+      await mossGrip(c, deps, { at: pf, size: 8 * Math.max(0.7, sOf(player)) });
+    });
+  }
   await wave;
   await ctx.custom(unit.uniqueID, {
     durationMs: 240, ease: 'power2.out',

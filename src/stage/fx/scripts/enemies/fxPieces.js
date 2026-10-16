@@ -203,51 +203,115 @@ export async function fuseRing(ctx, deps, { at, color = [1.0, 0.30, 0.10], size 
   });
 }
 
-// ============ 蔓延雾锋（苔球 spreadGrip 主体）============
-// 贴地平躺 quad（单位→玩家方向定向）：行进雾锋（front 锐亮 + 指数拖尾）+
-// fbm 起伏（sin 叠读「苔在爬」）+ 双层色（深绿雾体 + 亮绿锋缘唇线）。
-export const mossWaveShade = Fn(([vUv, uProg, uColor, uSeed]) => {
+// ============ 蔓延爬苔（苔球 spreadGrip 主体，ENEMY_FX.md 迭代#6）============
+// 贴地平躺 quad（背缘贴苔球、铺向玩家）：① 前缘「爬行指须」——锋线 x 随 y 双频位移
+// 锐化出几根前探指状触须，须尖亮；② 锋后「苔毯沉积」——越过即留 blotch 斑块毯
+// （暗色常驻），整件末段 15% 统一退场；③ 锋唇亮线（湿苔反光）。
+export const mossCreepShade = Fn(([vUv, uProg, uColor, uSeed]) => {
   const p = vUv.sub(vec2(0.5));
-  const x = p.x.add(float(0.5));                     // 0(单位)→1(玩家向)
-  const head = uProg.mul(0.92).add(0.06);
+  const x = p.x.add(float(0.5));                     // 0(苔球)→1(玩家向)
+  // 爬行指须：锋线 x 随 y 双频位移（fing² 锐化出疏密指状）
+  const fing = sin(p.y.mul(9.0).add(uSeed)).mul(0.5).add(0.5);
+  const fing2 = sin(p.y.mul(21.0).sub(uSeed.mul(1.7))).mul(0.5).add(0.5);
+  const finger = fing.mul(fing).mul(0.055).add(fing2.mul(0.025));
+  // 推进段 0→72% 走完全程（爬得快→慢压迫），其后锋面驻留远端——留出「缠上」的读秒
+  const adv = clamp(uProg.mul(1.389), 0.0, 1.0);
+  const head = adv.mul(0.92).add(0.06).add(finger);
   const rel = head.sub(x);
-  const front = smoothstep(float(-0.06), float(0.02), rel);
-  const tail = exp(rel.mul(-5.5)).mul(front);
-  // fbm 起伏（横纹 × 纵向窜动——雾不是矩形墙）
-  const wob = sin(x.mul(19.0).add(uSeed)).mul(0.5).add(0.5)
-    .mul(sin(p.y.mul(7.0).sub(uSeed.mul(2.0))).mul(0.5).add(0.5));
+  // 苔毯沉积：越过即留（blotch 斑块），不再衰减成雾
+  const mat = smoothstep(float(-0.10), float(0.02), rel);
+  const blotch = sin(x.mul(23.0).add(uSeed)).mul(0.5).add(0.5)
+    .mul(sin(p.y.mul(17.0).sub(uSeed.mul(2.3))).mul(0.5).add(0.5))
+    .mul(sin(x.mul(9.0).sub(p.y.mul(11.0)).add(uSeed)).mul(0.5).add(0.5));
   // 纵向包络：中线厚两侧薄
   const ay = p.y.mul(2.0);
   const band = exp(ay.mul(ay).mul(-0.9));
-  const body = tail.mul(band.mul(wob.mul(0.55).add(0.45)));
-  // 锋缘亮线（最前沿一道亮——「正在漫过来」）
-  const lip = exp(rel.mul(rel).mul(-700.0)).mul(front).mul(band);
+  // 整件末段退场（苔干枯消散）
+  const fade = oneMinus(smoothstep(float(0.82), float(1.0), uProg));   // 驻留后整件退场
+  // 锋唇亮线 + 须尖增亮（只有指状处亮）
+  const lip = exp(rel.mul(rel).mul(-260.0)).mul(band).mul(fade);
+  const lipGain = fing.mul(0.6).add(0.5);
   const edge = oneMinus(smoothstep(float(0.42), float(0.50), abs(p.x)))
     .mul(oneMinus(smoothstep(float(0.40), float(0.50), abs(p.y))));
-  const rgb = uColor.mul(body.mul(1.5))
-    .add(vec3(0.62, 0.95, 0.42).mul(lip.mul(2.6)));
+  const body = mat.mul(blotch.mul(0.55).add(0.45)).mul(band).mul(fade);
+  const rgb = uColor.mul(body.mul(1.15))
+    .add(vec3(0.62, 0.95, 0.42).mul(lip.mul(lipGain).mul(2.6)));
   return vec4(rgb.mul(edge), float(1.0));
 });
 
-/** 贴地蔓延雾（dir = ±1 漫向）。 */
-export async function mossWave(ctx, deps, {
-  at, dir = 1, color = [0.34, 0.52, 0.22], size = 20.0, ms = 900,
+/**
+ * 贴地蔓延爬苔（dir = ±1 漫向）。quad 背缘贴 at（苔球），width = 波程（调用方按
+ * 实际间距取——size 不足会让锋面半途消失）。返回 { promise, arriveU }——
+ * arriveU = 锋面爬过 dist 对应的 uProg（0..1），抵达拍按此定时刻。
+ */
+export function mossCreep(ctx, deps, {
+  at, dir = 1, color = [0.34, 0.52, 0.22], size = 20.0, ms = 900, dist = null,
 }) {
-  if (!at) return;
+  const arriveU = dist != null && size > 0
+    ? Math.min(0.97, Math.max(0.15, (dist / size - 0.06) / 0.92 / 1.389))
+    : 0.65;
+  if (!at) return { promise: Promise.resolve(), arriveU };
   const uProg = uniform(0.0);
   const uSeed = uniform(Math.random() * 6.28 + 0.01);
   const { quad, release } = spellQuad({
-    shade: mossWaveShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
-    width: size, height: size * 0.7, name: 'spellFx:mossWave',
+    shade: mossCreepShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    width: size, height: size * 0.7, name: 'spellFx:mossCreep',
   });
-  quad.position.set(at.x + dir * size * 0.22, at.y + 0.2, (at.z ?? 0) + 0.5);
+  quad.position.set(at.x + dir * size * 0.5, at.y + 0.2, (at.z ?? 0) + 0.5);
   quad.rotation.x = -Math.PI / 2;
   quad.rotation.z = dir < 0 ? Math.PI : 0;
   deps.scene.add(quad);
   ctx.onKill(() => { release(); });
   const st = { t: 0 };
+  const promise = ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power1.in',   // 越爬越快（压迫感）
+    onUpdate: () => { uProg.value = st.t; },
+    onComplete: () => { release(); },
+  });
+  return { promise, arriveU };
+}
+
+// ============ 缠踝爬须（苔球抵达拍 mossGrip，ENEMY_FX.md 迭代#6）============
+// 竖直 billboard（脚底对齐）：4 根 S 形爬须向上缠升（窄 x 高斯条 + sin 弯 + 向上
+// 渐熄 + 底基湿晕）；生长包络前 35% 起、60% 后淡出；单次演出无驻留。
+export const mossGripShade = Fn(([vUv, uProg, uColor, uSeed]) => {
+  const p = vUv.sub(vec2(0.5, 0.0));                  // p.y: 0(脚底)→1(须顶)
+  const grow = smoothstep(float(0.0), float(0.35), uProg);
+  const fade = oneMinus(smoothstep(float(0.6), float(1.0), uProg));
+  const tend = (i) => {
+    const x0 = float((i - 1.5) * 0.22).add(sin(uSeed.add(float(i * 2.1))).mul(0.07));
+    const bend = sin(p.y.mul(5.5).add(float(i * 1.9)).add(uSeed)).mul(0.11);
+    const dx = p.x.sub(x0).sub(bend);
+    const w = float(700.0 - i * 70.0);
+    const core = exp(dx.mul(dx).mul(w.mul(-1.0)));
+    const top = oneMinus(smoothstep(float(0.50 + i * 0.06), float(0.78 + i * 0.05), p.y));
+    return core.mul(top).mul(float(0.95 - i * 0.09));
+  };
+  const acc = tend(0).add(tend(1)).add(tend(2)).add(tend(3));
+  const base = exp(p.y.mul(p.y).mul(-34.0));
+  const edge = oneMinus(smoothstep(float(0.42), float(0.50), abs(p.x)))
+    .mul(oneMinus(smoothstep(float(0.44), float(0.50), p.y)));   // 顶部熄灭（底缘即地面不切）
+  const rgb = uColor.mul(acc.mul(1.9).add(base.mul(0.8))).mul(grow).mul(fade);
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/** 缠踝爬须（竖直 billboard，at = 玩家脚下）。 */
+export async function mossGrip(ctx, deps, {
+  at, color = [0.45, 0.68, 0.30], size = 8.0, ms = 380,
+}) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const { quad, release } = spellQuad({
+    shade: mossGripShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    width: size, height: size * 1.2, name: 'spellFx:mossGrip',
+  });
+  quad.position.set(at.x, at.y + size * 0.6, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => { release(); });
+  const st = { t: 0 };
   await ctx.tweenRaw(st, { t: 1 }, {
-    durationMs: ms, ease: 'power1.in',   // 越漫越快（压迫感）
+    durationMs: ms, ease: 'power1.out',
     onUpdate: () => { uProg.value = st.t; },
     onComplete: () => { release(); },
   });
