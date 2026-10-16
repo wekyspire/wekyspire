@@ -12,7 +12,7 @@ import {
 } from '../../spells/enemyHitFx.js';
 import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
 import { fireBurst, impactBurst, groundRing, lampPulse } from '../../spells/blocks.js';
-import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooPool, gooCrown } from './fxPieces.js';
+import { zapArc, wailRing, mossWave, playEdgeSurge, chargeOrb, dustLanding, gooCrown } from './fxPieces.js';
 import {
   strikeWindup, spitGlob, chargeUpFx, hunkerFx, dazeSway, wailFx, trembleWarn,
 } from './families.js';
@@ -25,14 +25,10 @@ const isBuf = (kinds) => kinds.some(isBuffKind);
 
 // ====== 种族签名动作 ======
 
-// 史莱姆弹性打击（ENEMY_FX.md 迭代#1，1016 返简）：老 blob 的节奏骨架
-// （快压缩 → 拔长预备）+ 跳扑本体语言；地面胶涌一闪（压缩的地面存在感），
-// 不加颤振/渗胶/胶丝等戏——高频基础攻击要快而少元素。
-async function gelCompress({ ctx, deps, unit }) {
-  const s = sOf(unit);
-  const feet = { x: unit.position.x, y: unit.position.y + 0.5 * s, z: unit.position.z ?? 0 };
-  // 地面胶涌：与起手同寿命（涨 190 → 收 70，总计 = 起手 260ms），弹射即散尽
-  gooPool(ctx, deps, { at: feet, size: 8.5 * Math.max(0.75, s), growMs: 190, holdMs: 0, collapseMs: 70 });
+// 史莱姆弹性打击（ENEMY_FX.md 迭代#1，1016 二次返简）：老 blob 的节奏骨架
+// （快压缩 → 拔长预备）+ 跳扑本体语言。纯姿态演出——地面胶涌与弹射绿闪已按
+// 用户反馈删除（闪烁读噪）；高频基础攻击要快而少元素。
+async function gelCompress({ ctx, unit }) {
   await ctx.custom(unit.uniqueID, {
     durationMs: 150, ease: 'power2.in',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.38 * t, widen: 1 + 0.30 * t }),
@@ -52,11 +48,6 @@ function slimePounce() {
     async approach(ctx, deps, { src, sx, sy, sz, ux, uz, reach }) {
       const s = src._baseScale ?? 1;
       ctx.onKill(() => { src.position.x = sx; src.position.y = sy; src.position.z = sz; src.resetPose(); });
-      // 弹射灯 punch（快起快收，一闪）
-      ctx.spawn((c) => lampPulse(c, deps, {
-        name: 'light:fx0', at: { x: sx, y: sy + 1.2 * s, z: sz + 1 },
-        color: [0.30, 0.80, 0.36], peak: 520, attackMs: 50, decayMs: 220,
-      }));
       await ctx.custom(src.uniqueID, {
         durationMs: 140, ease: 'power2.in',
         onUpdate: (t) => {
