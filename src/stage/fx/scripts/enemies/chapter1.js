@@ -97,24 +97,25 @@ function slimePounce() {
   };
 }
 
-// 史莱姆命中主题「胶冠溅」：等 approach 抵近（110ms ≈ 突进 140ms 的锋尖帧）再放
-// ——punchImpact 胶绿换肤 + gooCrown 液冠形体（小快版）+ 双层胶珠（gravity 落）。
+// 史莱姆命中主题「墨色胶冠溅」：等 approach 抵近（110ms ≈ 突进 140ms 的锋尖帧）
+// 再放——punchImpact 灰黑换肤 + gooCrown 墨色液冠 + 双层灰胶珠（gravity 落）。
+// 色彩事实源：史莱姆 = 灰黑（2026-10-16 用户定），无绿。
 function slimeGooImpact() {
   return async (ctx, deps, args) => {
     await ctx.wait(110);
     const { unit } = args;
     const s = unit._baseScale ?? 1;
     const at = { x: unit.position.x, y: unit.position.y + 3.6 * s, z: unit.position.z };
-    const crown = gooCrown(ctx, deps, { at, color: [0.20, 0.50, 0.16], size: 9.5, ms: 340 });
-    deps.particles?.spawn?.(at.x, at.y, { color: 0x86c86a, count: 9, speed: 14, size: 0.8, ttl: 0.45, gravity: -30, z: at.z });
-    deps.particles?.spawn?.(at.x, at.y - 1, { color: 0x5f9a45, count: 4, speed: 5, size: 1.3, ttl: 1.0, gravity: -14, z: at.z });
+    const crown = gooCrown(ctx, deps, { at, color: [0.30, 0.34, 0.32], size: 9.5, ms: 340 });
+    deps.particles?.spawn?.(at.x, at.y, { color: 0x8a908a, count: 9, speed: 14, size: 0.8, ttl: 0.45, gravity: -30, z: at.z });
+    deps.particles?.spawn?.(at.x, at.y - 1, { color: 0x4a504c, count: 4, speed: 5, size: 1.3, ttl: 1.0, gravity: -14, z: at.z });
     await Promise.all([
       crown,
       enemyImpactBeat(ctx, deps, {
         ...args,
         pal: {
-          color: [0.34, 0.78, 0.30], hot: [0.95, 1.20, 0.72], rim: [0.42, 0.85, 0.40],
-          sparkColor: 0x9fe070, sparkSpeed: 14,
+          color: [0.38, 0.44, 0.42], hot: [0.95, 1.02, 0.98], rim: [0.42, 0.50, 0.47],
+          sparkColor: 0xaab2ac, sparkSpeed: 14,
         },
       }),
     ]);
@@ -341,6 +342,9 @@ function blastDeath(stage, unit, payload, finish) {
 
 // 史莱姆融化死亡（slime/slimeB）：塌软成滩而非倒牌——缓慢下塌（squash 到底）→
 // 液滴四溅 → 原地液化淡出（材质褪湿色 + alpha 侵蚀收干）。
+// 史莱姆融化死亡（灰黑）：塌软成滩而非倒牌——缓慢下塌（squash 到底）+ 湿色浸染
+// （深灰）+ 轮廓边缘坠落的深色胶珠（融化从摊开的边缘掉珠，非基座喷点）→
+// 原地蒸干淡出。
 function slimeMeltDeath(stage, unit, payload, finish) {
   if (payload?.heavy) return false; // 重击致死仍走击退倒牌（力道压过融化）
   unit.hideIntention();
@@ -348,13 +352,23 @@ function slimeMeltDeath(stage, unit, payload, finish) {
   bodyMat.transparent = true;
   bodyMat.needsUpdate = true;
   const startColor = bodyMat.color.clone();
-  const wetColor = new THREE.Color(0x4a6a3a);
-  // 纯液化：塌软成滩（湿色浸染）→ 原地蒸干淡出——无粒子（基座喷点是噪音）
+  const wetColor = new THREE.Color(0x2e3330);
+  const rim = stage.particles;
+  const drops = [0.32, 0.46, 0.58, 0.7, 0.82, 0.92]; // 边缘坠珠的摊开进度阈值
+  let di = 0;
   stage.animator.animateCustom(unit.uniqueID, {
     durationMs: 620, ease: 'power2.in',
     onUpdate: (t) => {
       unit.setPose({ squash: 1 - 0.68 * t, widen: 1 + 0.55 * t });
-      bodyMat.color.copy(startColor).lerp(wetColor, t * 0.6);
+      bodyMat.color.copy(startColor).lerp(wetColor, t * 0.65);
+      // 融化从摊开的轮缘掉珠（阈值跨越式：帧率无关、总量确定、位置随 widen 外扩）
+      while (di < drops.length && t >= drops[di]) {
+        const side = di % 2 ? 1 : -1;
+        di += 1;
+        rim.spawn(unit.position.x + side * (2.0 + t * 2.4), unit.position.y + 0.8, {
+          count: 1, color: 0x3a403c, speed: 1.5, size: 1.0, ttl: 1.1, gravity: -14, z: unit.position.z,
+        });
+      }
     },
     onComplete: () => {
       unit.hideStatus();
@@ -421,9 +435,9 @@ export function registerChapter1EnemyFx() {
       const { kinds } = a;
       if (isAtk(kinds)) return gelCompress(a);
       if (isDeb(kinds)) return spitGlob({
-        color: [0.45, 0.85, 0.35], hot: [0.8, 1.15, 0.65], size: 1.3, ms: 380, arcH: 3,
-        trailColor: 0x6aba50, impactColor: 0x8ad06a, impactCount: 10,
-      })(a); // 塞粘液（吐弹族重做排队中，ENEMY_FX.md）
+        color: [0.55, 0.62, 0.58], hot: [0.88, 0.96, 0.92], size: 1.3, ms: 380, arcH: 3,
+        trailColor: 0x565c58, impactColor: 0x6e7671, impactCount: 10,
+      })(a); // 塞粘液（灰黑史莱姆本色；吐弹族重做排队中，ENEMY_FX.md）
       if (has(kinds, 'buff')) return gelBrace(a); // 蓄势拍（纯姿态）
       if (has(kinds, 'defend')) return hunkerFx({ depth: 0.85 })(a);
       return 'generic';

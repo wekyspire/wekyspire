@@ -315,7 +315,7 @@ export const gooCrownShade = Fn(([vUv, uProg, uColor, uSeed]) => {
     const head = exp(dd.mul(float(-960.0).add(uProg.mul(600.0))));
     const fd = pow(oneMinus(uProg), float(1.2));
     return uColor.mul(blob.mul(1.5))
-      .add(vec3(0.75, 1.08, 0.55).mul(head.mul(1.9))).mul(fd);
+      .add(vec3(0.82, 0.88, 0.84).mul(head.mul(1.9))).mul(fd);
   };
   const lobes = lobe(0).add(lobe(1)).add(lobe(2)).add(lobe(3)).add(lobe(4)).add(lobe(5));
   const py = p.y.add(0.22);
@@ -326,7 +326,7 @@ export const gooCrownShade = Fn(([vUv, uProg, uColor, uSeed]) => {
   const edge = oneMinus(smoothstep(float(0.42), float(0.50), length(p)));
   const rgb = lobes
     .add(uColor.mul(sheet))
-    .add(vec3(0.88, 1.18, 0.72).mul(core.mul(2.2)));
+    .add(vec3(0.90, 0.95, 0.92).mul(core.mul(2.2)));
   return vec4(rgb.mul(edge), float(1.0));
 });
 
