@@ -83,15 +83,20 @@ export const cardBeats = {
     const mouth = { x: src.position.x, y: src.position.y + 3.1 * s, z: src.position.z ?? 0 };
     const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
     const deps = this._spellDeps();
-    // 咬合：前啄（姿态脉冲）+ 卡面破坏档（小=crush / 大=对折）+ 纸屑迸裂 + 浮尘双层
+    // 咬合：前啄（姿态脉冲）+ 卡面破坏档（小=crush / 大=对折）+ 纸屑迸裂 + 浮尘双层。
+    // gsapTween 口径：目标 = 卡根对象 + 语义键（scale/rotation/x,y→position）——
+    // 传裸 Vector3 会走 z 缺省兜底读 .position → undefined 抛错（曾致链路全断）。
     const bite = (big) => {
       src.setPose({ squash: big ? 0.86 : 0.90, widen: 1.08, lean: 0.10 });
       gsap.delayedCall(big ? 0.14 : 0.11, () => src.resetPose());
       const sc = view.scale.x;
-      this._tweenFactory(view.scale,
-        big ? { x: sc * 0.55, y: sc * 0.82 } : { x: sc * 0.82, y: sc * 0.82 },
-        { durationMs: big ? 130 : 110, ease: big ? 'power2.in' : 'power3.out' });
-      this._tweenFactory(view.rotation, { z: (Math.random() - 0.5) * 0.5 }, { durationMs: 110 });
+      if (big) {
+        // 对折是横纵异比的，走裸 gsap 直补 view.scale
+        gsap.to(view.scale, { x: sc * 0.55, y: sc * 0.82, duration: 0.13, ease: 'power2.in' });
+      } else {
+        this._tweenFactory(view, { scale: sc * 0.82 }, { durationMs: 110, ease: 'power3.out' });
+      }
+      this._tweenFactory(view, { rotation: (Math.random() - 0.5) * 0.5 }, { durationMs: 110 });
       this._fxRunScript((c) => shredBurst(c, deps, { at: mouth, size: big ? 10 : 6.4, ms: big ? 380 : 300 }));
       this.particles.spawn(mouth.x, mouth.y, {
         count: big ? 8 : 4, color: 0xd8c8a8, speed: 10, ttl: 0.5, gravity: -26, size: 0.7, z: mouth.z,
@@ -115,9 +120,9 @@ export const cardBeats = {
         gsap.delayedCall(0.19, () => bite(true));
         gsap.delayedCall(0.42, () => {
           // 咽下：残片向口内收拢（朝甲虫身体侧）+ 旋偏 + 缩小淡出 → 收殓
-          this._tweenFactory(view.position, { x: ui.x + 0.8, y: ui.y - 1.0 }, { durationMs: 240, ease: 'power2.in' });
-          this._tweenFactory(view.rotation, { z: view.rotation.z + 0.35 }, { durationMs: 240, ease: 'power2.in' });
-          this._tweenFactory(view.scale, { x: 0.15, y: 0.15 }, { durationMs: 240, ease: 'power2.in' });
+          this._tweenFactory(view, { x: ui.x + 0.8, y: ui.y - 1.0 }, { durationMs: 240, ease: 'power2.in' });
+          this._tweenFactory(view, { rotation: view.rotation.z + 0.35 }, { durationMs: 240, ease: 'power2.in' });
+          this._tweenFactory(view, { scale: 0.15 }, { durationMs: 240, ease: 'power2.in' });
           this._tweenFactory(view.faceMesh.material, { opacity: 0 }, {
             durationMs: 240, ease: 'power2.in',
             onComplete: () => {
