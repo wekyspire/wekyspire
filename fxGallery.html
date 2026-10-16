@@ -36,6 +36,21 @@
         background: #10141f; color: #cfd8e3; border: 1px solid #3a465c;
         border-radius: 3px; padding: 2px 4px; font: 12px monospace; max-width: 130px;
       }
+      #fx-side .btnrow button { display: inline-block; width: auto; margin-right: 4px; padding: 2px 8px; }
+      #fx-side .fx-item { display: flex; gap: 3px; margin: 2px 0; }
+      #fx-side .fx-item > button.fx-play {
+        flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      #fx-side .fx-item > button.fx-v, #fx-side .fx-item > button.fx-copy {
+        flex: 0 0 22px; width: 22px; padding: 3px 0; text-align: center;
+      }
+      #fx-side .fx-item.is-fail > .fx-play { border-color: #7a3040; background: #1d1016; color: #e8a0ac; }
+      #fx-side .fx-item.is-pass > .fx-play { border-color: #2f5c46; background: #0f1a14; color: #9ed0b2; }
+      #fx-side .fx-item.playing > .fx-play { outline: 1px solid #8fa8d0; color: #fff; }
+      #fx-side .fx-item.kbd-active > .fx-play { outline: 1px dashed #6a7a9c; }
+      #fx-side .fx-item.is-fail > .fx-v.fail { background: #3a1822; color: #ff9caf; border-color: #7a3040; }
+      #fx-side .fx-item.is-pass > .fx-v.pass { background: #14261c; color: #8fd8a8; border-color: #2f5c46; }
+      #fx-vstats { color: #9ab5cc; }
       #fx-side .row { margin: 3px 0; }
       #fx-side .hint { color: #78879c; font-size: 11px; margin: 2px 0 6px; }
       #fx-side .enemy-picks input { max-width: 40px; }
@@ -58,6 +73,18 @@
         <select id="fx-enemy"></select>
         <button id="fx-reset" style="display:inline-block;width:auto">重置单位</button>
       </div>
+      <div class="row"><span id="fx-vstats"></span>
+        <label style="margin-left:8px"><input type="checkbox" id="fx-only-fail">只看不通过</label>
+      </div>
+      <div class="row btnrow">
+        <button id="fx-copy-fails">复制不通过清单</button>
+        <button id="fx-copy-report">复制验收报告</button>
+      </div>
+      <div class="row btnrow">
+        <button id="fx-loop">循环重播：关</button>
+        <button id="fx-clear-verdicts">清除标记</button>
+      </div>
+      <div class="hint">↑↓ 选 · Enter 播放 · X 不通过 · V 通过 · C 复制名 · Esc 停循环</div>
       <div id="fx-groups"></div>
       <h2>主题战生成器</h2>
       <div class="hint">多选编成 → 生成调试存档 → 跳真实战斗（saveForge 链路）</div>

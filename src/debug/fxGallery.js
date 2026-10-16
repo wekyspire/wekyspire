@@ -213,7 +213,7 @@ function runWith(fn) {
 
 // 播放目录（分组渲染）。每项 = { label, run(ctx) }；run 里用 focusView() 拿目标敌。
 const PREVIEWS = [];
-const group = (title, items) => PREVIEWS.push({ title, items });
+const group = (title, items) => { const g = { title, items }; PREVIEWS.push(g); return g; };
 
 // ---- 起手族（families）----
 const fam = await import('../stage/fx/scripts/enemies/families.js');
@@ -308,12 +308,14 @@ function beatsOf(defId) {
   }
   return out;
 }
-// 「逐敌逐拍」目录 = 当前下拉敌人的真实拍列表（切敌人时重建）
+// 「逐敌逐拍」目录 = 当前下拉敌人的真实拍列表（切敌人时重建；标题带敌人名——
+// 验收标记的 key 要自描述，贴回来的清单能直接定位）
 const beatsGroupEl = { items: [] };
-group('逐敌逐拍（当前目标敌 · 真分发）', beatsGroupEl.items);
+const beatsGroup = group('逐敌逐拍（当前目标敌 · 真分发）', beatsGroupEl.items);
 function rebuildBeats() {
   beatsGroupEl.items.length = 0;
   const id = enemySelect.value;
+  beatsGroup.title = `逐敌逐拍（${getEnemyDefinition(id)?.name ?? id}）`;
   for (const b of beatsOf(id)) {
     beatsGroupEl.items.push({
       label: `拍${b.i} ${b.kinds.join('+')}${b.note ? ' · ' + b.note : ''}`,
@@ -401,37 +403,200 @@ group('aura 主题（目标敌身上）', [
   { label: '清空 aura', run: () => { for (const h of auraHosts.splice(0)) h.set(new Map()); } },
 ]);
 
-// ============ 目录 UI 渲染 ============
+// ============ 目录 UI 渲染 + 验收标记 ============
+// 验收流：逐项播放 → ✓/✗ 标记（localStorage 持久，再点同键取消）→ 顶栏一键
+// 复制「不通过清单 / 验收报告」贴回给开发。键盘：↑↓ 选 · Enter 播 · X/V 标 · C 复制名。
 const groupsEl = document.getElementById('fx-groups');
+const VERDICT_KEY = 'fxGallery:verdicts';
+let verdicts = {};
+try { verdicts = JSON.parse(localStorage.getItem(VERDICT_KEY) || '{}') ?? {}; } catch { verdicts = {}; }
+const saveVerdicts = () => { try { localStorage.setItem(VERDICT_KEY, JSON.stringify(verdicts)); } catch { /* 隐私模式等 */ } };
+const itemKey = (g, item) => `${g.title} / ${item.label}`;
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let onlyFail = false;   // 只看不通过（过滤重渲染）
+let loopOn = false;     // 循环重播当前项（动作质量要反复看）
+let playGen = 0;        // 播放代际：换播/Esc/关循环 = 递增，旧循环自然退出
+let kbdIdx = -1;        // 键盘选中项（平面索引，跨渲染保持位置）
+
+const visibleItems = () => PREVIEWS.flatMap((g) => g.items.map((it) => ({ g, it })));
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* 走降级 */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand('copy');
+  ta.remove();
+  return ok;
+}
+
+function markPlaying(row) {
+  for (const el of groupsEl.querySelectorAll('.fx-item.playing')) el.classList.remove('playing');
+  row?.classList.add('playing');
+}
+function highlightKbd() {
+  for (const el of groupsEl.querySelectorAll('.fx-item.kbd-active')) el.classList.remove('kbd-active');
+  const it = visibleItems()[kbdIdx]?.it;
+  if (it?._row) { it._row.classList.add('kbd-active'); it._row.scrollIntoView({ block: 'nearest' }); }
+}
+
+function setVerdict(g, item, v) {
+  const key = itemKey(g, item);
+  const next = verdicts[key] === v ? null : v;   // 同键再点 = 取消标记
+  if (next) verdicts[key] = next; else delete verdicts[key];
+  saveVerdicts();
+  renderGroups();
+  highlightKbd();
+  toast(`${next ? (v === 'fail' ? '已标记不通过' : '已标记通过') : '已取消标记'}：${item.label}`);
+}
+
+async function playItem(g, item) {
+  const gen = ++playGen;
+  let round = 0;
+  try {
+    do {
+      round++;
+      // 预览项绑了消费者敌人 → 自动换装到该立绘（「不同 fx 用对应敌人播」）
+      if (item.enemy && focusView()._defId !== item.enemy) {
+        setEnemySlot(focusIdx, item.enemy);
+        enemySelect.value = item.enemy; // 下拉静默同步（不触发 beats 重建）
+        await sleepMs(160);
+      }
+      setStatus(loopOn ? `循环 ${round}：${item.label}` : `播放：${item.label}`);
+      // runWith 返回 {ctx,promise,kill}——等真 promise（曾直接 await 对象 = 状态标签瞬跳「完」）
+      const r = item.run();
+      await (r?.promise ?? sleepMs(900)); // 无 promise 的 fire-and-forget 项给固定窗
+      if (gen !== playGen) return;
+      if (!loopOn) break;
+      await sleepMs(650);
+    } while (gen === playGen);
+    setStatus(`完：${item.label}`);
+  } catch (e) {
+    console.error('[fxGallery] 播放异常', e);
+    toast('播放异常（见控制台）');
+  }
+}
+
+function appendItemRow(g, item) {
+  const key = itemKey(g, item);
+  const v = verdicts[key];
+  const row = document.createElement('div');
+  row.className = 'fx-item' + (v === 'fail' ? ' is-fail' : v === 'pass' ? ' is-pass' : '');
+  const play = document.createElement('button');
+  play.className = 'fx-play';
+  play.textContent = item.label;
+  play.title = item.label;
+  play.addEventListener('click', () => { markPlaying(row); playItem(g, item); });
+  row.appendChild(play);
+  const mkBtn = (cls, txt, title, fn) => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.textContent = txt;
+    b.title = title;
+    b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    row.appendChild(b);
+  };
+  mkBtn('fx-v fail', '✗', '标记不通过', () => setVerdict(g, item, 'fail'));
+  mkBtn('fx-v pass', '✓', '标记通过', () => setVerdict(g, item, 'pass'));
+  mkBtn('fx-copy', '⧉', '复制效果名称', async () => {
+    if (await copyText(item.label)) toast('已复制：' + item.label);
+  });
+  item._row = row;
+  groupsEl.appendChild(row);
+}
+
+function refreshVStats() {
+  const cur = visibleItems();
+  const nP = cur.filter(({ g, it }) => verdicts[itemKey(g, it)] === 'pass').length;
+  const nF = cur.filter(({ g, it }) => verdicts[itemKey(g, it)] === 'fail').length;
+  document.getElementById('fx-vstats').textContent = `验收 ✓${nP} ✗${nF} 未验${cur.length - nP - nF}`;
+}
+
 function renderGroups() {
   groupsEl.innerHTML = '';
   for (const g of PREVIEWS) {
+    const items = onlyFail ? g.items.filter((it) => verdicts[itemKey(g, it)] === 'fail') : g.items;
+    if (!items.length) continue;
+    const nFail = g.items.filter((it) => verdicts[itemKey(g, it)] === 'fail').length;
     const h = document.createElement('h2');
-    h.textContent = g.title;
+    h.textContent = g.title + (nFail ? ` ✗${nFail}` : '');
     groupsEl.appendChild(h);
-    for (const item of g.items) {
-      const b = document.createElement('button');
-      b.textContent = item.label;
-      b.addEventListener('click', async () => {
-        try {
-          // 预览项绑了消费者敌人 → 自动换装到该立绘（「不同 fx 用对应敌人播」）
-          if (item.enemy && focusView()._defId !== item.enemy) {
-            setEnemySlot(focusIdx, item.enemy);
-            await new Promise((r) => setTimeout(r, 160));
-          }
-          setStatus(`播放：${item.label}`);
-          // runWith 返回 {ctx,promise,kill}——等真 promise（曾直接 await 对象 = 状态标签瞬跳「完」）
-          await (item.run()?.promise ?? null);
-          setStatus(`完：${item.label}`);
-        } catch (e) {
-          console.error('[fxGallery] 播放异常', e);
-          toast('播放异常（见控制台）');
-        }
-      });
-      groupsEl.appendChild(b);
-    }
+    for (const item of items) appendItemRow(g, item);
   }
+  refreshVStats();
 }
+
+// ---- 顶栏工具条 ----
+document.getElementById('fx-only-fail').addEventListener('change', (e) => {
+  onlyFail = e.target.checked;
+  kbdIdx = -1;
+  renderGroups();
+});
+const loopBtn = document.getElementById('fx-loop');
+loopBtn.addEventListener('click', () => {
+  loopOn = !loopOn;
+  if (!loopOn) playGen++;
+  loopBtn.textContent = `循环重播：${loopOn ? '开' : '关'}`;
+});
+const stamp = () => new Date().toLocaleString('zh-CN', { hour12: false });
+const failedKeys = () => Object.keys(verdicts).filter((k) => verdicts[k] === 'fail');
+const passedKeys = () => Object.keys(verdicts).filter((k) => verdicts[k] === 'pass');
+document.getElementById('fx-copy-fails').addEventListener('click', async () => {
+  const fails = failedKeys();
+  if (!fails.length) { toast('还没有不通过标记'); return; }
+  const text = `fxGallery 不通过（${stamp()}）：\n${fails.map((k) => `- ${k}`).join('\n')}`;
+  if (await copyText(text)) toast(`已复制 ${fails.length} 项不通过`);
+});
+document.getElementById('fx-copy-report').addEventListener('click', async () => {
+  const fails = failedKeys();
+  const passes = passedKeys();
+  if (!fails.length && !passes.length) { toast('还没有任何标记'); return; }
+  const sect = (title, keys) => `${title} ${keys.length}：\n${keys.length ? keys.map((k) => `- ${k}`).join('\n') : '（无）'}`;
+  const text = `fxGallery 验收报告（${stamp()}）\n${sect('不通过', fails)}\n${sect('通过', passes)}`;
+  if (await copyText(text)) toast('已复制验收报告');
+});
+const clearBtn = document.getElementById('fx-clear-verdicts');
+let clearArmed = 0;
+clearBtn.addEventListener('click', () => {
+  if (Date.now() - clearArmed > 2500) { clearArmed = Date.now(); toast('再点一次确认清除全部标记'); return; }
+  clearArmed = 0;
+  verdicts = {};
+  saveVerdicts();
+  renderGroups();
+  toast('已清除全部标记');
+});
+
+// ---- 键盘验收流 ----
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof Element && e.target.closest('input, select, textarea')) return;
+  const items = visibleItems();
+  if (!items.length) return;
+  const cur = items[Math.min(kbdIdx, items.length - 1)];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    kbdIdx = Math.min(items.length - 1, Math.max(0, (kbdIdx < 0 ? 0 : kbdIdx) + (e.key === 'ArrowDown' ? 1 : -1)));
+    highlightKbd();
+  } else if (e.key === 'Enter') {
+    if (kbdIdx < 0) { kbdIdx = 0; highlightKbd(); }
+    const pick = items[kbdIdx];
+    markPlaying(pick.it._row);
+    playItem(pick.g, pick.it);
+  } else if (e.key === 'x' || e.key === 'X') {
+    if (cur) setVerdict(cur.g, cur.it, 'fail');
+  } else if (e.key === 'v' || e.key === 'V') {
+    if (cur) setVerdict(cur.g, cur.it, 'pass');
+  } else if (e.key === 'c' || e.key === 'C') {
+    if (cur && cur.it?._row) copyText(cur.it.label).then((ok) => { if (ok) toast('已复制：' + cur.it.label); });
+  } else if (e.key === 'Escape') {
+    playGen++;
+    setStatus('已停止');
+  }
+});
+
 document.getElementById('fx-reset').addEventListener('click', resetUnits);
 rebuildBeats();
 renderGroups();
