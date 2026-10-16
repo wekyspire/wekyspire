@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { readFileSync, existsSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
 
 // 调试存档服务（**dev only**）：把 tmp/saves/*.json 挂在 /debug-saves/ 下，
 // 供调试模式用 `?debug=1&save=<名>` 直接从造好的存档起跑（tools/saveForge.mjs 产出）。
@@ -20,6 +21,48 @@ function debugSavesPlugin(root) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.end(readFileSync(file, 'utf-8'));
+      });
+      // 主题战生成（fxGallery.html 的生成器后端，**dev only**）：
+      // POST { enemies: [defId...], floor, hp } → spawn saveForge 造档 → { save: 名 }。
+      // 存档名服务端起（fxwork-<时间戳>），不接受客户端命名（无路径注入面）。
+      server.middlewares.use('/forge-save', (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        let body = '';
+        req.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
+        req.on('end', () => {
+          try {
+            const { enemies, floor, hp } = JSON.parse(body || '{}');
+            if (!Array.isArray(enemies) || !enemies.length || enemies.length > 6
+              || enemies.some((id) => typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id))
+              || !Number.isInteger(Number(floor)) || !Number.isInteger(Number(hp))) {
+              throw new Error('bad request');
+            }
+            const name = `fxwork-${Date.now().toString(36)}`;
+            const args = [
+              'tools/saveForge.mjs', '--out', name,
+              '--floor', String(Math.min(Math.max(Number(floor), 1), 43)),
+              '--hp', String(Math.min(Math.max(Number(hp), 1), 999)),
+              '--seed', String(Math.floor(Math.random() * 1e6)),
+            ];
+            for (const id of enemies) args.push('--enemy', id);
+            const child = spawn('node', args, { cwd: root, shell: process.platform === 'win32' });
+            let err = '';
+            child.stderr.on('data', (c) => { err += c; });
+            child.on('error', (e) => { err += e.message; });
+            child.on('close', (code) => {
+              if (code !== 0) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: 'saveForge 失败：' + err.slice(0, 300) }));
+                return;
+              }
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify({ save: name }));
+            });
+          } catch (e) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'bad request' }));
+          }
+        });
       });
     },
   };

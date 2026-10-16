@@ -35,6 +35,15 @@ npm test           # 随机自对弈 fuzz（见「测试」节）
 - 契约层：`src/bridge/wire.js`（指令描述符 ↔ 重建）、`src/bridge/remoteBridge.js`、`src/core/anim/sequencer.js`（指令的可选 `wire` 字段）、`src/bridge/stateSync.js`（标脏/补同步调度器）。
 - **公网观战**：`https://wekyspire.hineven.site/watch.html`。链路 = 服务器观战页 → Apache 反代 `/relay/`（`flushpackets=on` 是 SSE 必备）→ SSH 反向隧道 `ssh -N -R 127.0.0.1:5199:127.0.0.1:5199 hineven.site` → 本机 `node tools/broadcast.mjs --origin https://wekyspire.hineven.site`。观战页在非 localhost 主机下自动走同源 `/relay`。
 
+## 战斗特效预览台（dev 工具）
+
+`fxGallery.html`——敌人演出/战斗特效的点播验收工作台（`src/debug/fxGallery.js`，dev only 不进产物）：
+
+- **真渲染环境**：composeRoom 战场 + 战斗机位 + 月光 composer + GPU 粒子池 + 震屏（迷你导演偏移通道）——与 BattleStage 同链路，无 bridge/core 战斗开销。
+- **目录点播**：起手族（families 五体态/施法/嚎叫/震颤）、形体件（fxPieces 电弧/声波环/引线圈/雾锋/光球/边光）、**逐敌逐拍**（下拉选敌 → 真实意图枚举拍列表 → enemyAct 注册表真分发）、命中三式+逐敌主题、生死拍（unitBeats 真代码 mixin + 死亡覆写 + 复苏 garnish）、aura 主题（burn/poison/stun/blastFuse）。
+- **主题战生成器**：勾选编成+层数 → POST `/forge-save`（dev 中间件 spawn saveForge）→ 跳 `?debug=1&save=fxwork-*` 真战斗。
+- 探针：`node tmp/play/check-fxgallery.mjs`（点播抽播+端点+截图）。
+
 ## 调试模式与存档制作器（dev 工具）
 
 **调试模式** = 游戏内一块 Vue 浮层面板，把 run 当表拨：层数/资源/卡组/遗物/灵脉/房间/战斗一击即改。
