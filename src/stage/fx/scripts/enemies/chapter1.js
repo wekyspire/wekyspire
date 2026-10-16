@@ -232,28 +232,23 @@ async function wingDust({ ctx, deps, unit, player }) {
   });
 }
 
-// 甲虫啃食起手（carrionBeetle 啃牌拍）：嗅探（朝牌库侧探身两下）→ 张合颚预备。
-// 正餐（被焚卡飞向口部咬碎）由 ANIM_CARD_BURNT 的 _gnawOut 在结算拍接手。
+// 甲虫啃食起手（carrionBeetle 啃牌拍，ENEMY_FX.md 迭代#2）：两记触角点叩
+// （朝玩家——要动你的牌了）→ 仰身张颚候餐（卡从上方牌库来）。正餐（焚卡飞口
+// 咬碎）由 ANIM_CARD_BURNT 的 _gnawOut 接手。出口轻度候餐位（焚毁被斩 veto
+// 时残留不可读为 bug）。
 async function gnawAntic({ ctx, deps, unit, player }) {
   const dir = Math.sign((player?.position.x ?? 0) - unit.position.x) || 1;
-  // 嗅探两下（探身 + 缩回）
+  ctx.onKill(() => unit.resetPose());
   for (let i = 0; i < 2; i++) {
     await ctx.custom(unit.uniqueID, {
-      durationMs: 160, ease: 'power2.out',
-      onUpdate: (t) => unit.setPose({ lean: dir * 0.12 * Math.sin(Math.PI * t), widen: 1 + 0.05 * Math.sin(Math.PI * t) }),
+      durationMs: 140, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ lean: -dir * 0.10 * Math.sin(Math.PI * t) }),
     });
   }
-  // 张合颚（widen 两脉冲——口器开合读感）+ 前方碎屑星子
-  deps.particles?.spawn?.(unit.position.x + dir * 2 * sOf(unit), unit.position.y + 2.6 * sOf(unit), {
-    color: 0xc0a878, count: 5, speed: 4, size: 0.5, ttl: 0.4, gravity: -8, z: unit.position.z,
-  });
+  // 仰身张颚（候餐）：缓开到位保持，交棒飞递
   await ctx.custom(unit.uniqueID, {
-    durationMs: 300, ease: 'none',
-    onUpdate: (t) => unit.setPose({ widen: 1 + 0.10 * Math.abs(Math.sin(t * Math.PI * 4)), lean: dir * 0.08 }),
-  });
-  await ctx.custom(unit.uniqueID, {
-    durationMs: 160, ease: 'power2.out',
-    onUpdate: (t) => unit.setPose({ lean: dir * 0.08 * (1 - t), widen: 1 }),
+    durationMs: 270, ease: 'power2.inOut',
+    onUpdate: (t) => unit.setPose({ squash: 1 + 0.04 * t, widen: 1 + 0.10 * t, lean: dir * 0.05 * t }),
   });
 }
 

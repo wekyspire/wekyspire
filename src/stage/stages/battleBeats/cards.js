@@ -9,6 +9,8 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
+import { lampPulse } from '../../fx/spells/blocks.js';
+import { shredBurst } from '../../fx/scripts/enemies/fxPieces.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -68,9 +70,10 @@ export const cardBeats = {
     this.model.setZone(id, 'deck'); // 状态在节拍时点推进（模型权威）
     this._flyOut(id, view, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, finish);
   },
-  // 啃食焚毁（腐食甲虫 gnawDeck）：被焚的卡从牌库顶被叼走——弧线飞递到甲虫口部
-  // （世界口位经 worldToUI 换算进卡牌 UI 平面）→ 两口咬碎（卡面骤缩震颤 + 碎屑迸溅
-  // + 甲虫前扑咬合姿态）→ 残余咽下（缩小淡出）。节拍阻塞至咽下收尾（同焚毁链）。
+  // 啃食焚毁（腐食甲虫 gnawDeck，ENEMY_FX.md 迭代#2）：被焚的卡从牌库顶被叼走
+  // ——弧线飞递到甲虫口部（世界口位经 worldToUI 换算进卡牌 UI 平面）→ 两口咬碎
+  // （第一口 crush；第二口卡对折 + 纸屑迸裂形体 shredBurst + 一记硬光 + 微震）
+  // → 残余咽下（向口内收拢缩小淡出）。节拍阻塞至咽下收尾（同焚毁链）。
   _gnawOut(id, view, src, payload, finish) {
     if (!view.visible && payload?.cardView) {
       view.setCard(payload.cardView); // 牌库卡从未烘面（同中立焚毁的显形理由）
@@ -79,34 +82,44 @@ export const cardBeats = {
     const s = src._baseScale ?? 1;
     const mouth = { x: src.position.x, y: src.position.y + 3.1 * s, z: src.position.z ?? 0 };
     const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
-    const crumbs = (n) => {
-      // 双层：迸射纸屑 + 慢速悬屑（咬碎的卡面残片）
-      this.particles.spawn(mouth.x, mouth.y, {
-        count: n, color: 0xd8c8a8, speed: 9, ttl: 0.5, gravity: -26, size: 0.8, z: mouth.z,
-      });
-      this.particles.spawn(mouth.x, mouth.y, {
-        count: Math.round(n * 0.5), color: 0xb8a880, speed: 3.5, ttl: 1.1, gravity: -8, size: 1.1, z: mouth.z,
-      });
-    };
-    // 咬合：甲虫前扑一啄（姿态通道，同步差分不踩）+ 卡面骤缩 + 碎屑
-    const bite = (k) => {
-      src.setPose({ squash: 0.9, widen: 1.1, lean: 0.10 });
-      gsap.delayedCall(0.12, () => src.resetPose());
+    const deps = this._spellDeps();
+    // 咬合：前啄（姿态脉冲）+ 卡面破坏档（小=crush / 大=对折）+ 纸屑迸裂 + 浮尘双层
+    const bite = (big) => {
+      src.setPose({ squash: big ? 0.86 : 0.90, widen: 1.08, lean: 0.10 });
+      gsap.delayedCall(big ? 0.14 : 0.11, () => src.resetPose());
       const sc = view.scale.x;
-      this._tweenFactory(view.scale, { x: sc * (1 - 0.22 * k), y: sc * (1 - 0.22 * k) }, { durationMs: 110, ease: 'power3.out' });
-      this._tweenFactory(view.rotation, { z: (Math.random() - 0.5) * 0.4 }, { durationMs: 110 });
-      crumbs(5 + k * 3);
+      this._tweenFactory(view.scale,
+        big ? { x: sc * 0.55, y: sc * 0.82 } : { x: sc * 0.82, y: sc * 0.82 },
+        { durationMs: big ? 130 : 110, ease: big ? 'power2.in' : 'power3.out' });
+      this._tweenFactory(view.rotation, { z: (Math.random() - 0.5) * 0.5 }, { durationMs: 110 });
+      this._fxRunScript((c) => shredBurst(c, deps, { at: mouth, size: big ? 10 : 6.4, ms: big ? 380 : 300 }));
+      this.particles.spawn(mouth.x, mouth.y, {
+        count: big ? 8 : 4, color: 0xd8c8a8, speed: 10, ttl: 0.5, gravity: -26, size: 0.7, z: mouth.z,
+      });
+      this.particles.spawn(mouth.x, mouth.y, {
+        count: big ? 4 : 2, color: 0xb8a880, speed: 3.5, ttl: 1.1, gravity: -8, size: 1.1, z: mouth.z,
+      });
+      if (big) {
+        // 断口一瞬：硬光一记 + 微震（单次脉冲，不循环）
+        this.shake.impulse(0.5);
+        this._fxRunScript((c) => lampPulse(c, deps, {
+          name: 'light:fx1', at: { x: mouth.x, y: mouth.y, z: mouth.z + 1.2 }, color: [1.0, 0.82, 0.5],
+          peak: 600, attackMs: 60, decayMs: 260,
+        }));
+      }
     };
     this._cardFlight(id, { x: ui.x, y: ui.y, z: 50, scale: 0.85 }, {
       arc: 15, tilt: 0.18, ease: 'power1.in', durationMs: 380,
       onDone: () => {
-        bite(1);
-        gsap.delayedCall(0.17, () => bite(2));
-        gsap.delayedCall(0.36, () => {
-          // 咽下：残余缩小淡出 → 收殓（同 _burnOut 的对象终结路径）
-          this._tweenFactory(view.scale, { x: 0.15, y: 0.15 }, { durationMs: 200, ease: 'power2.in' });
+        bite(false);
+        gsap.delayedCall(0.19, () => bite(true));
+        gsap.delayedCall(0.42, () => {
+          // 咽下：残片向口内收拢（朝甲虫身体侧）+ 旋偏 + 缩小淡出 → 收殓
+          this._tweenFactory(view.position, { x: ui.x + 0.8, y: ui.y - 1.0 }, { durationMs: 240, ease: 'power2.in' });
+          this._tweenFactory(view.rotation, { z: view.rotation.z + 0.35 }, { durationMs: 240, ease: 'power2.in' });
+          this._tweenFactory(view.scale, { x: 0.15, y: 0.15 }, { durationMs: 240, ease: 'power2.in' });
           this._tweenFactory(view.faceMesh.material, { opacity: 0 }, {
-            durationMs: 200, ease: 'power2.in',
+            durationMs: 240, ease: 'power2.in',
             onComplete: () => {
               this.model.removeCard(id);
               this._views.delete(id);

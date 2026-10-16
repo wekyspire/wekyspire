@@ -401,3 +401,54 @@ export function playEdgeSurge(unit, colorHex = 0xd8a860, { durMs = 560 } = {}) {
   });
   return true;
 }
+
+// ============ 纸屑迸裂（甲虫啃牌咬碎主体，ENEMY_FX.md 迭代#2）============
+// 竖直 billboard：8 瓣旋转局部系里的带锥度矩形纸片（两瓣暗金点缀）随 uProg
+// 异速外抛 + 各自转，单次迸裂单调淡出——无循环项、无呼吸，一次性力度件。
+export const shredBurstShade = Fn(([vUv, uProg, uColor, uSeed]) => {
+  const p = vUv.sub(vec2(0.5));
+  const shard = (i, tone) => {
+    const dirA = float((i - 3.5) * 0.38).add(sin(uSeed.add(float(i * 2.3))).mul(0.12));
+    const dir = vec2(sin(dirA), cos(dirA));
+    const sp = float(0.50 + 0.20 * Math.sin(i * 1.7));
+    const c = dir.mul(uProg.mul(sp).mul(0.42).add(0.06));
+    const q = p.sub(c);
+    const th = uSeed.add(float(i * 1.9)).add(uProg.mul(float((i % 2 ? 1 : -1) * 5.0)));
+    const ct = cos(th);
+    const st = sin(th);
+    const qx = q.x.mul(ct).add(q.y.mul(st));
+    const qy = q.y.mul(ct).sub(q.x.mul(st));
+    const lenMask = exp(qx.mul(qx).mul(-80.0));            // 轴向半长 ~0.11
+    const taper = float(0.7).add(abs(qx).mul(2.6));        // 端部更宽的叶形纸片
+    const widMask = exp(qy.mul(qy).mul(float(-450.0).div(taper)));
+    return tone.mul(lenMask.mul(widMask));
+  };
+  const cream = uColor;
+  const gold = uColor.mul(vec3(0.80, 0.68, 0.45));         // 两瓣暗金点缀
+  const acc = shard(0, cream).add(shard(1, cream)).add(shard(2, gold))
+    .add(shard(3, cream)).add(shard(4, cream)).add(shard(5, gold))
+    .add(shard(6, cream)).add(shard(7, cream));
+  const fd = pow(oneMinus(uProg), float(1.1));
+  const edge = oneMinus(smoothstep(float(0.42), float(0.50), length(p)));
+  return vec4(acc.mul(1.4).mul(fd).mul(edge), float(1.0));
+});
+
+/** 咬碎纸屑迸裂（一次性）。size/ms 分大小档（第一口小、第二口大）。 */
+export async function shredBurst(ctx, deps, { at, size = 9.5, ms = 340, color = [0.85, 0.78, 0.62] }) {
+  if (!at) return;
+  const uProg = uniform(0.0);
+  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const { quad, release } = spellQuad({
+    shade: shredBurstShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    width: size, height: size * 0.8, name: 'spellFx:shredBurst',
+  });
+  quad.position.set(at.x, at.y, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => release());
+  const st = { t: 0 };
+  await ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.out',
+    onUpdate: () => { uProg.value = st.t; },
+    onComplete: () => release(),
+  });
+}
