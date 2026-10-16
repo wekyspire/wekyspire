@@ -4,10 +4,9 @@
 // 纯施法类给施法者一拍「进架」语言——命中侧反馈（受方姿态/粒子/护盾罩）由
 // ANIM_EFFECT/ANIM_SHIELD 等既有节拍承接，本剧本只补施法者的动作侧。
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
-import { arcProjectile } from '../spells/blocks.js';
 import { isAttackKind, isBuffKind, isDebuffKind } from '../../../core/intentKinds.js';
-import { gatherFocus } from './enemies/families.js';
-import { playEdgeSurge, unitH } from './enemies/fxPieces.js';
+import { gatherFocus, curseBolt } from './enemies/families.js';
+import { playEdgeSurge } from './enemies/fxPieces.js';
 
 // 逐敌专属起手（Boss 主题化）：defId → async ({ctx, deps, args, unit, player, kinds})。
 // 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
@@ -15,27 +14,6 @@ import { playEdgeSurge, unitH } from './enemies/fxPieces.js';
 // 一文件一 Boss（内容归属原则），替代旧的 SKIP_ACT_FX 整体跳过名单。
 const ENEMY_ACT_BEATS = new Map();
 export function registerEnemyAct(defId, fn) { ENEMY_ACT_BEATS.set(defId, fn); }
-
-// 咒击式（赋予削弱）：暗紫咒弹从施法者胸口划弧飞向玩家，抵达小爆——
-// 削弱系（虚弱/中毒/塞牌）的「被下咒」读感主体，后续玩家佝偻姿态接续
-async function curseShot(ctx, deps, { unit, player }) {
-  const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.52, z: unit.position.z };
-  const to = player
-    ? { x: player.position.x, y: player.position.y + unitH(player) * 0.52, z: player.position.z }
-    : null;
-  await arcProjectile(ctx, deps, {
-    from, to,
-    color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30],
-    size: 1.6, ms: 420, arcH: 4.5, stretch: 1.2,
-    lampIntensity: 420,
-    trail: { color: 0x9a5ae0, speed: 3, size: 0.55, ttl: 0.3 },
-  });
-  if (to) {
-    deps.particles?.spawn?.(to.x, to.y, {
-      color: 0xb26ee8, count: 12, speed: 8, size: 0.7, ttl: 0.6, gravity: -4, z: to.z,
-    });
-  }
-}
 
 // 施法增益式（增强自身或友军）：聚能缩配（汇流纹小号向胸口收束，buff/治疗
 // 的内汇语义）；防御/召唤走低亮剪影边光一拍——结果侧已有护盾罩/召唤立起，
@@ -67,7 +45,7 @@ export function registerEnemyActScript(registerScript) {
     // 起手 = 突进，不叠加施法演出
     if (kinds.some(isAttackKind)) return;
     if (kinds.some(isDebuffKind)) {
-      await curseShot(ctx, deps, { unit, player: cast.get('role:player') ?? null });
+      await curseBolt(ctx, deps, { unit, player: cast.get('role:player') ?? null });
       return;
     }
     if (kinds.some(isBuffKind) || kinds.includes('heal')) {

@@ -145,6 +145,70 @@ export const crystalShade = Fn(([vUv, uProgress, uColor, uHot]) => {
 });
 
 /**
+ * 液弹彗星（吐弹族形状，ENEMY_FX.md 迭代#4）：+x = 前向（quad 按速度方向拉伸）。
+ *  · 主体 = 前圆后收的液滴（椭圆距离场；角向六瓣慢转 = 液面蠕动边界）；
+ *  · 表面张力亮膜环（贴边一圈亮）+ 内部双频漩涡（液体流动感）+ 前核热斑（过阈）；
+ *  · 尾部拖尖（后向窄条渐熄）——飞行方向语言；边缘熄灭 mask。
+ *  · 4 参纪律同 projectileShade（vUv / uProgress / uColor / uHot）。
+ */
+export const globShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  // 主体椭圆（头略前移）：横向压 2.05 倍读「比宽长」
+  const rr = length(vec2(p.x.sub(float(0.06)).mul(1.30), p.y.mul(2.05)));
+  const ang = atan(p.y, p.x.sub(float(0.06)));
+  const wob = sin(ang.mul(6.0).add(uProgress.mul(22.0))).mul(0.5).add(0.5);
+  const bodyR = float(0.64).add(wob.mul(0.07));
+  const body = oneMinus(smoothstep(bodyR.sub(float(0.16)), bodyR, rr));
+  // 表面张力亮膜：贴边一窄环（由内向外渐亮、被 body 截断）
+  const film = smoothstep(bodyR.sub(float(0.36)), bodyR.sub(float(0.12)), rr).mul(body);
+  // 内部双频漩涡（液体内脏流动）
+  const sw1 = sin(p.x.mul(10.0).add(p.y.mul(5.0)).sub(uProgress.mul(30.0))).mul(0.5).add(0.5);
+  const sw2 = sin(p.x.mul(6.0).sub(p.y.mul(9.0)).add(uProgress.mul(24.0))).mul(0.5).add(0.5);
+  const swirl = sw1.mul(sw2).mul(body);
+  // 尾部拖尖：后向窄条（横向收窄 + 后半权重 + 尖端熄灭）
+  const tailY = oneMinus(smoothstep(float(0.03), float(0.15), abs(p.y)));
+  const tailBack = oneMinus(smoothstep(float(-0.46), float(-0.10), p.x));
+  const tailTip = smoothstep(float(-0.50), float(-0.34), p.x);
+  const tail = tailY.mul(tailBack).mul(tailTip);
+  // 前核热斑
+  const cx = p.x.sub(float(0.10));
+  const core = exp(cx.mul(cx).mul(-26.0).add(p.y.mul(p.y).mul(-50.0)));
+  const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(p)));
+  const rgb = uColor.mul(body.mul(0.30).add(film.mul(1.80)))
+    .add(uColor.mul(tail.mul(1.90)))
+    .add(uHot.mul(swirl.mul(0.75)))
+    .add(uHot.mul(core.mul(2.30)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/**
+ * 咒印双环（咒弹形状，ENEMY_FX.md 迭代#4）：外环三瓣折线正转（六角咒印轮廓）、
+ * 内环五瓣反转（双环扭）；环脊白热过 bloom、环间暗域 + 核心热斑；整体色走 uColor。
+ * 4 参纪律同 projectileShade。
+ */
+export const hexSigilShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const a = atan(p.y, p.x);
+  const w1 = sin(a.mul(3.0).add(uProgress.mul(7.0))).mul(0.5).add(0.5);
+  const R1 = float(0.74).add(w1.mul(0.09));
+  const d1 = r.sub(R1);
+  const ring1 = exp(d1.mul(d1).mul(-420.0));
+  const w2 = sin(a.mul(-5.0).sub(uProgress.mul(11.0))).mul(0.5).add(0.5);
+  const R2 = float(0.46).add(w2.mul(0.06));
+  const d2 = r.sub(R2);
+  const ring2 = exp(d2.mul(d2).mul(-560.0));
+  const inner = oneMinus(smoothstep(float(0.32), float(0.42), r));   // 环内暗域
+  const hot = exp(r.mul(r).mul(-30.0));
+  const edge = oneMinus(smoothstep(float(0.47), float(0.50), length(p)));
+  const rgb = uColor.mul(ring1.mul(1.60).add(ring2.mul(1.15)))
+    .add(uHot.mul(ring1.mul(ring1).mul(2.0)))
+    .add(uColor.mul(inner.mul(0.22)))
+    .add(uHot.mul(hot.mul(1.6)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/**
  * 落点冲击闪光：宽晕 + 热核 + 扩张冲击环（uProgress = 爆发进度 0..1，环随进度
  * 扩张读「冲击波」）。4 参纪律（见 projectileShade 头注）。内孔压暗（halo 在
  * r<0.5 渐灭、热核保留）——环与核之间留出暗隙，环读「环」不读「脚下 一滩光」。

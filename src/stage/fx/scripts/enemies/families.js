@@ -133,17 +133,27 @@ export function strikeWindup(style, opts = {}) {
   };
 }
 
+/** 弹体色（线性 floats）→ 十六进制（×255 近似）：默认拖尾/出口/溅落色从弹体色
+ *  派生——拖尾必须与弹体同色系（「绿弹紫尾」为默认值雷，迭代#4 根除）。 */
+function hexOf([r, g, b]) {
+  const q = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255);
+  return (q(r) << 16) | (q(g) << 8) | q(b);
+}
+
 /**
- * 吐弹族（远程削弱/施法）：后仰吸气 → 胸口喷出一枚弧弹 → 落点小爆。
- * 覆盖毒液/虚无/粉尘/粘液等「从身上射出什么」的语义；配色逐敌注入。
+ * 吐弹族（毒液/粘液/毒雾，ENEMY_FX.md 迭代#4）：后仰吸气 → 口部成形的**液弹
+ * 彗星**（globShade：头圆尾收 + 液面蠕动 + 张力膜环 + 内漩涡）→ 弧线飞向玩家
+ * → 落点溅落。出身修正：口部锚 0.60H（吐=从嘴）+ 发射段淡入生长 +
+ * 出口雾一撮——不再是身体中线凭空出现的全尺寸光点。拖尾 = 黏稠液珠（默认同色）。
  */
 export function spitGlob(opts = {}) {
   const {
-    color = [0.62, 0.38, 0.95], hot = [0.95, 0.80, 1.30], size = 1.6, ms = 420,
-    arcH = 4.5, trailColor = 0x9a5ae0, impactColor = 0xb26ee8, impactCount = 12,
+    color = [0.35, 0.75, 0.30], hot = [0.70, 1.05, 0.55], size = 4.6, ms = 470,
+    arcH = 4.2, trailColor = hexOf(color), impactColor = hexOf(hot), impactCount = 15,
+    muzzleK = 0.60,
   } = opts;
   return async ({ ctx, deps, unit, player }) => {
-    const from = chestOf(unit);
+    const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * muzzleK, z: unit.position.z ?? 0 };
     const to = player ? chestOf(player) : null;
     // 后仰吸气（胸腹鼓起的半拍）
     await ctx.custom(unit.uniqueID, {
@@ -152,12 +162,45 @@ export function spitGlob(opts = {}) {
     });
     settlePose(ctx, unit, 200); // 挂 kill 归中（不 await——与飞行并行回中）
     if (!to) return;
-    await arcProjectile(ctx, deps, {
-      from, to, color, hot, size, ms, arcH, stretch: 1.2, lampIntensity: 420,
-      trail: { color: trailColor, speed: 3, size: 0.55, ttl: 0.3 },
+    // 出口雾：弹体离体的物理动机（口部一撮短尘）
+    deps.particles?.spawn?.(from.x, from.y, {
+      color: trailColor, count: 4, speed: 3.5, size: 0.8, ttl: 0.3, gravity: -2, z: from.z,
     });
-    deps.particles?.spawn?.(to.x, to.y, { color: impactColor, count: impactCount, speed: 8, size: 0.7, ttl: 0.6, gravity: -4, z: to.z });
+    await arcProjectile(ctx, deps, {
+      from, to, color, hot, size, ms, arcH, stretch: 1.45, lampIntensity: 460,
+      trail: { color: trailColor, speed: 2.6, size: 0.75, ttl: 0.42 },
+      shape: 'glob', fadeInMs: 100,
+    });
+    deps.particles?.spawn?.(to.x, to.y, { color: impactColor, count: impactCount, speed: 8, size: 0.8, ttl: 0.6, gravity: -4, z: to.z });
   };
+}
+
+/**
+ * 咒弹（enemyAct 未注册 debuff 兜底，ENEMY_FX.md 迭代#4）：紫**咒印双环**从施法者
+ * 胸口弧线飞向玩家（hexSigilShade：外环三瓣正转 / 内环五瓣反转），发射段淡入生长
+ * + 胸口出口雾。
+ */
+export async function curseBolt(ctx, deps, { unit, player }) {
+  const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.56, z: unit.position.z ?? 0 };
+  const to = player
+    ? { x: player.position.x, y: player.position.y + unitH(player) * 0.52, z: player.position.z }
+    : null;
+  deps.particles?.spawn?.(from.x, from.y, {
+    color: 0x9a5ae0, count: 3, speed: 3, size: 0.75, ttl: 0.28, gravity: -2, z: from.z,
+  });
+  await arcProjectile(ctx, deps, {
+    from, to,
+    color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30],
+    size: 4.8, ms: 470, arcH: 4.5, stretch: 1.0,
+    lampIntensity: 460,
+    trail: { color: 0x9a5ae0, speed: 2.4, size: 0.6, ttl: 0.35 },
+    shape: 'sigil', fadeInMs: 110,
+  });
+  if (to) {
+    deps.particles?.spawn?.(to.x, to.y, {
+      color: 0xb26ee8, count: 14, speed: 8, size: 0.75, ttl: 0.6, gravity: -4, z: to.z,
+    });
+  }
 }
 
 /**
@@ -306,22 +349,60 @@ export function burrowRest(opts = {}) {
 }
 
 /**
- * 蜷缩防御族：快速伏低 + 落地双层尘（迸射粗粒 + 慢速浮尘 + 暖灯 punch）+
- * 过冲回中。护盾地环由结算节拍自播。
+ * 蜷缩防御族（ENEMY_FX.md 迭代#5）：蹲 = 重心砸进地面，尘从被挤压的地面横向挤出。
+ * ① 下沉蓄力（压扁 + position.y 同步下沉——纯压扁读不出「蹲」）→ ② 触底拍：两侧
+ * 快尘 + 身下小股 + 慢浮尘（与触底同帧，读「体重砸地、尘被挤开」）→ ③ 果冻微回弹
+ * → ④ 憋劲静持 → 起身回中 + 过冲收敛。护盾地环由结算节拍自播，本族不抢。
  */
 export function hunkerFx(opts = {}) {
   const { dustColor = 0xb0a088, depth = 1 } = opts;
   return async ({ ctx, deps, unit }) => {
-    const feet = feetOf(unit);
+    const y0 = unit.position.y;
+    const sink = 1.4 * depth;
+    const R = (unit._groundRadius ?? 5) * 0.75;
+    const z = unit.position.z ?? 0;
+    ctx.onKill(() => { unit.position.y = y0; unit.resetPose(); });
+    // ① 下沉蓄力（重心掉下去）
     await ctx.custom(unit.uniqueID, {
-      durationMs: 140, ease: 'power2.out',
-      onUpdate: (t) => unit.setPose({ squash: 1 - 0.22 * depth * t, widen: 1 + 0.12 * depth * t }),
+      durationMs: 120, ease: 'power2.in',
+      onUpdate: (t) => {
+        unit.position.y = y0 - sink * t;
+        unit.setPose({ squash: 1 - 0.24 * depth * t, widen: 1 + 0.10 * depth * t });
+      },
     });
-    dustLanding(ctx, deps, {
-      at: feet, color: dustColor, count: Math.round(10 + 6 * depth), lampIntensity: 260,
+    // ② 触底（与下沉收尾同帧）：尘从身体两侧被挤开（快层）+ 身下小股 + 慢浮尘
+    for (const side of [-1, 1]) {
+      deps.particles?.spawn?.(unit.position.x + side * R, y0 + 0.6, {
+        color: dustColor, count: 7, speed: 13, size: 1.0, ttl: 0.32, gravity: -9, z,
+      });
+    }
+    deps.particles?.spawn?.(unit.position.x, y0 + 0.4, {
+      color: dustColor, count: 5, speed: 5, size: 1.2, ttl: 0.6, gravity: -5, z,
     });
-    await ctx.wait(130);
-    await settlePose(ctx, unit, 200);
+    deps.particles?.spawn?.(unit.position.x, y0 + 0.8, {
+      color: dustColor, count: 3, speed: 2.5, size: 1.6, ttl: 1.1, gravity: -1.5, z,
+    });
+    // ③ 果冻微回弹 → ④ 憋劲静持
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 90, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({
+        squash: (1 - 0.24 * depth) + 0.05 * depth * t,
+        widen: (1 + 0.10 * depth) - 0.02 * depth * t,
+      }),
+    });
+    await ctx.wait(140);
+    // ⑤ 起身回中（位置/姿态同步归位）+ 过冲收敛
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 200, ease: 'power2.out',
+      onUpdate: (t) => {
+        unit.position.y = y0 - sink * (1 - t);
+        unit.setPose({
+          squash: (1 - 0.19 * depth) + 0.19 * depth * t,
+          widen: (1 + 0.08 * depth) - 0.08 * depth * t,
+        });
+      },
+    });
+    await settlePose(ctx, unit, 170);
   };
 }
 

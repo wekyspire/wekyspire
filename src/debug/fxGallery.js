@@ -223,26 +223,28 @@ function famPlay(maker, view = focusView()) {
   return runWith(async (ctx) => { await maker()({ ...A(view), ctx }); });
 }
 group('起手族 · strikeWindup（五体态）', [
-  { label: 'blob 胶质压团（绿）', run: () => famPlay(() => fam.strikeWindup('blob', { color: 0x86c86a })) },
-  { label: 'crouch 兽类伏低（土）', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52 })) },
-  { label: 'crouch 重击档', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52, heavy: true })) },
-  { label: 'rear 虫类扬头（琥珀）', run: () => famPlay(() => fam.strikeWindup('rear', { color: 0xb09060 })) },
-  { label: 'hover 飞行扑翼（黄）', run: () => famPlay(() => fam.strikeWindup('hover', { color: 0xd8c088 })) },
-  { label: 'lash 藤蔓预弹（绿）', run: () => famPlay(() => fam.strikeWindup('lash', { color: 0x8aba60 })) },
+  { label: 'blob 胶质压团（绿）', enemy: 'slime', run: () => famPlay(() => fam.strikeWindup('blob', { color: 0x86c86a })) },
+  { label: 'crouch 兽类伏低（土）', enemy: 'diggerMole', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52 })) },
+  { label: 'crouch 重击档', enemy: 'youngRakshasa', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52, heavy: true })) },
+  { label: 'rear 虫类扬头（琥珀）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.strikeWindup('rear', { color: 0xb09060 })) },
+  { label: 'hover 飞行扑翼（黄）', enemy: 'buzzbugA', run: () => famPlay(() => fam.strikeWindup('hover', { color: 0xd8c088 })) },
+  { label: 'lash 藤蔓预弹（绿）', enemy: 'thornWeed', run: () => famPlay(() => fam.strikeWindup('lash', { color: 0x8aba60 })) },
 ]);
 group('起手族 · 施法/防御/发呆', [
-  { label: 'spitGlob 毒液吐弹（绿）', run: () => famPlay(() => fam.spitGlob({ color: [0.35, 0.75, 0.30], hot: [0.7, 1.05, 0.55], size: 1.2 })) },
+  { label: '吐弹 毒液（绿·彗星）', enemy: 'thornWeed', run: () => famPlay(() => fam.spitGlob({})) },
+  { label: '吐弹 粘液（灰·史莱姆）', enemy: 'slimeletA', run: () => famPlay(() => fam.spitGlob({ color: [0.55, 0.62, 0.58], hot: [0.88, 0.96, 0.92], size: 4.0, trailColor: 0x565c58, impactColor: 0x6e7671, muzzleK: 0.52 })) },
+  { label: '咒弹 双环（紫）', enemy: 'wraithA', run: () => runWith((ctx) => fam.curseBolt(ctx, stageStub._spellDeps(), { unit: focusView(), player: playerView })) },
   { label: 'spitGlob 咒弹（紫）', run: () => famPlay(() => fam.spitGlob({ color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30] })) },
-  { label: '聚能 gatherFocus（石茧）', run: () => famPlay(() => fam.gatherFocus({ vein: [0.85, 0.80, 0.64], moteColor: 0xd8c8a0 })) },
-  { label: '爆怒 rageSwell（罗刹）', run: () => famPlay(() => fam.rageSwell({})) },
-  { label: '竖刺 bristleFx（针鼠）', run: () => famPlay(() => fam.bristleFx({ color: 0xd8c060 })) },
-  { label: '硬化 hardenFx（甲虫B）', run: () => famPlay(() => fam.hardenFx({ color: 0xb0a890 })) },
-  { label: '掘洞休整 burrowRest（鼹鼠）', run: () => famPlay(() => fam.burrowRest({ color: 0xa89070 })) },
-  { label: 'hunker 蜷缩防御（深）', run: () => famPlay(() => fam.hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })) },
-  { label: 'dazeSway 发呆摇晃', run: () => famPlay(() => fam.dazeSway({})) },
-  { label: 'wailFx 冰嚎（蓝环）', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.78, 0.98], rings: 4, upMotes: 10 })) },
-  { label: 'wailFx 怨灵啸（紫环）', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.48, 0.90], rings: 3 })) },
-  { label: 'trembleWarn 引线震颤', run: () => famPlay(() => fam.trembleWarn({})) },
+  { label: '聚能 gatherFocus（石茧）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.gatherFocus({ vein: [0.85, 0.80, 0.64], moteColor: 0xd8c8a0 })) },
+  { label: '爆怒 rageSwell（罗刹）', enemy: 'youngRakshasa', run: () => famPlay(() => fam.rageSwell({})) },
+  { label: '竖刺 bristleFx（针鼠）', enemy: 'hedgehog', run: () => famPlay(() => fam.bristleFx({ color: 0xd8c060 })) },
+  { label: '硬化 hardenFx（甲虫B）', enemy: 'carrionBeetleB', run: () => famPlay(() => fam.hardenFx({ color: 0xb0a890 })) },
+  { label: '掘洞休整 burrowRest（鼹鼠）', enemy: 'diggerMole', run: () => famPlay(() => fam.burrowRest({ color: 0xa89070 })) },
+  { label: 'hunker 蜷缩防御（深）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })) },
+  { label: 'dazeSway 发呆摇晃', enemy: 'swampAmbusher', run: () => famPlay(() => fam.dazeSway({})) },
+  { label: 'wailFx 冰嚎（蓝环）', enemy: 'snowwolf', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.78, 0.98], rings: 4, upMotes: 10 })) },
+  { label: 'wailFx 怨灵啸（紫环）', enemy: 'wraithA', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.48, 0.90], rings: 3 })) },
+  { label: 'trembleWarn 引线震颤', enemy: 'blastPod', run: () => famPlay(() => fam.trembleWarn({})) },
 ]);
 
 // ---- 形体件（fxPieces 单件）----
@@ -251,19 +253,19 @@ const chest = (v) => ({ x: v.position.x, y: v.position.y + 3.4 * (v._baseScale ?
 const feet = (v) => ({ x: v.position.x, y: v.position.y + 0.6 * (v._baseScale ?? 1), z: v.position.z });
 const head = (v) => ({ x: v.position.x, y: v.position.y + 4.9 * (v._baseScale ?? 1), z: v.position.z });
 group('形体件（fxPieces 单件）', [
-  { label: 'zapArc 电弧（毛球→玩家）', run: () => runWith(async (ctx) => {
+  { label: 'zapArc 电弧（毛球→玩家）', enemy: 'staticPuff', run: () => runWith(async (ctx) => {
     const a = fxp.zapArc(ctx, stageStub._spellDeps(), { from: chest(focusView()), to: chest(playerView) });
     for (let i = 0; i < 5; i++) { a.jolt(); await ctx.wait(110); }
     await a.promise;
   }) },
-  { label: 'wailRing 声波环（蓝）', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.78, 0.98] })) },
-  { label: 'wailRing 声波环（紫）', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90] })) },
-  { label: 'fuseRing 引线收束圈', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
-  { label: 'mossWave 蔓延雾锋（向玩家）', run: () => runWith((ctx) => fxp.mossWave(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1 })) },
+  { label: 'wailRing 声波环（蓝）', enemy: 'snowwolf', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.78, 0.98] })) },
+  { label: 'wailRing 声波环（紫）', enemy: 'wraithA', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90] })) },
+  { label: 'fuseRing 引线收束圈', enemy: 'blastPod', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
+  { label: 'mossWave 蔓延雾锋（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossWave(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1 })) },
   { label: 'chargeOrb 蓄能光球（金）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()) })) },
   { label: 'chargeOrb 喉压光球（绿）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()), color: [0.72, 0.95, 0.45], hot: [1.15, 1.35, 0.75] })) },
-  { label: 'edgeSurge 剪影边光（金）', run: () => { fxp.playEdgeSurge(focusView(), 0xd8a860); toast('边光播放（约 0.6s 自清）'); } },
-  { label: 'dustLanding 双层落地尘', run: () => runWith((ctx) => fxp.dustLanding(ctx, stageStub._spellDeps(), { at: feet(focusView()), count: 18, lampIntensity: 420 })) },
+  { label: 'edgeSurge 剪影边光（金）', enemy: 'rockPangolin', run: () => { fxp.playEdgeSurge(focusView(), 0xd8a860); toast('边光播放（约 0.6s 自清）'); } },
+  { label: 'dustLanding 双层落地尘', enemy: 'diggerMole', run: () => runWith((ctx) => fxp.dustLanding(ctx, stageStub._spellDeps(), { at: feet(focusView()), count: 18, lampIntensity: 420 })) },
 ]);
 
 // ---- 逐敌逐拍（真分发：enemyAct 注册表 + 真实意图枚举）----
@@ -409,6 +411,11 @@ function renderGroups() {
       b.textContent = item.label;
       b.addEventListener('click', async () => {
         try {
+          // 预览项绑了消费者敌人 → 自动换装到该立绘（「不同 fx 用对应敌人播」）
+          if (item.enemy && focusView()._defId !== item.enemy) {
+            setEnemySlot(focusIdx, item.enemy);
+            await new Promise((r) => setTimeout(r, 160));
+          }
           setStatus(`播放：${item.label}`);
           // runWith 返回 {ctx,promise,kill}——等真 promise（曾直接 await 对象 = 状态标签瞬跳「完」）
           await (item.run()?.promise ?? null);

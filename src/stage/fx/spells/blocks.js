@@ -20,7 +20,7 @@ import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
-import { slashShade, darkSlashShade, projectileShade, crystalShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
+import { slashShade, darkSlashShade, projectileShade, crystalShade, globShade, hexSigilShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
@@ -142,7 +142,10 @@ export async function arcProjectile(ctx, deps, {
   fire = false,   // 火系投射物：换 fireOrbShade（fbm 火面+头尾不对称+破边）——
                   // 平滑高斯「发光团」不够审美线
   shape = 'orb',  // 能量形状：'orb' = projectileShade 光珠（缺省）；'crystal' =
-                  // crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）
+                  // crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）；
+                  // 'glob' = globShade 液弹彗星（吐弹族）；'sigil' = hexSigilShade 咒印双环
+  fadeInMs = 0,   // >0：发射段生长（0.15→1 的 smoothstep）——弹体从口部「成形-长大-飞出」，
+                  // 不再全尺寸于身体中线凭空蹦出（ENEMY_FX.md 迭代#4）
 } = {}) {
   let arrive = null;
   if (track) {
@@ -171,7 +174,11 @@ export async function arcProjectile(ctx, deps, {
       ? fireOrbShade(uv(), uPhase, uColor, uHot, uSeed)
       : shape === 'crystal'
         ? crystalShade(uv(), uPhase, uColor, uHot)
-        : projectileShade(uv(), uPhase, uColor, uHot),
+        : shape === 'glob'
+          ? globShade(uv(), uPhase, uColor, uHot)
+          : shape === 'sigil'
+            ? hexSigilShade(uv(), uPhase, uColor, uHot)
+            : projectileShade(uv(), uPhase, uColor, uHot),
     width: size, height: size, name: 'spellFx:projectile',
   });
   quad.position.set(from.x, from.y, from.z ?? 0);
@@ -231,7 +238,10 @@ export async function arcProjectile(ctx, deps, {
       const sx = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
       const sy = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
       quad.rotation.z = Math.atan2(vy + ny * sy, vx + nx * sx);
-      quad.scale.set(stretch, 1.0, 1);
+      // 发射段生长（fadeInMs）：从 0.15 长到 1（smoothstep 加速）——口部成形的读感
+      const g = fadeInMs > 0 ? Math.min(1, (t * ms) / fadeInMs) : 1;
+      const gs = g < 1 ? 0.15 + 0.85 * (g * g * (3 - 2 * g)) : 1;
+      quad.scale.set(stretch * gs, gs, 1);
       uPhase.value = t * 20;   // shader 闪烁相位（单调即可）
       if (lamp) {
         lamp.position.copy(quad.position);

@@ -436,9 +436,9 @@ export function registerChapter1EnemyFx() {
       const { kinds } = a;
       if (isAtk(kinds)) return gelCompress(a);
       if (isDeb(kinds)) return spitGlob({
-        color: [0.55, 0.62, 0.58], hot: [0.88, 0.96, 0.92], size: 1.3, ms: 380, arcH: 3,
-        trailColor: 0x565c58, impactColor: 0x6e7671, impactCount: 10,
-      })(a); // 塞粘液（灰黑史莱姆本色；吐弹族重做排队中，ENEMY_FX.md）
+        color: [0.55, 0.62, 0.58], hot: [0.88, 0.96, 0.92], size: 4.0, ms: 460, arcH: 3.2,
+        trailColor: 0x565c58, impactColor: 0x6e7671, impactCount: 12, muzzleK: 0.52,
+      })(a); // 塞粘液（灰黑史莱姆本色；迭代#4 液弹彗星）
       if (has(kinds, 'buff')) return gelBrace(a); // 蓄势拍（纯姿态）
       if (has(kinds, 'defend')) return hunkerFx({ depth: 0.85 })(a);
       return 'generic';
@@ -589,9 +589,9 @@ export function registerChapter1EnemyFx() {
       const { kinds } = a;
       if (isAtk(kinds)) return strikeWindup('lash', { color: 0x8aba60 })(a);
       if (isDeb(kinds)) return spitGlob({
-        color: [0.35, 0.75, 0.30], hot: [0.7, 1.05, 0.55], size: 1.2, ms: 400, arcH: 3.5,
-        trailColor: 0x5a9a40, impactColor: 0x7aba50, impactCount: 10,
-      })(a);
+        color: [0.35, 0.75, 0.30], hot: [0.7, 1.05, 0.55], size: 4.6, ms: 480, arcH: 3.8,
+        trailColor: 0x5a9a40, impactColor: 0x7aba50, impactCount: 14,
+      })(a); // 毒液（迭代#4 液弹彗星）
       return 'generic';
     });
     if (id !== 'thornWeedT') registerEnemySpawnGarnish(id, springBudGarnish); // T 类无复苏
@@ -731,9 +731,9 @@ export function registerChapter1EnemyFx() {
     if (kinds.includes('stun')) return dazeSway({ color: 0xa8c890 })(a);
     if (isDeb(kinds) && !isAtk(kinds)) {
       return spitGlob({
-        color: [0.4, 0.7, 0.35], hot: [0.75, 1.0, 0.55], size: 2.0, ms: 460, arcH: 4,
+        color: [0.4, 0.7, 0.35], hot: [0.75, 1.0, 0.55], size: 5.0, ms: 510, arcH: 4.2,
         trailColor: 0x5a8a4a, impactColor: 0x7aba5a, impactCount: 18,
-      })(a);
+      })(a); // 毒雾（迭代#4 大弹彗星——雾弹体积更大）
     }
     if (isAtk(kinds)) return strikeWindup('crouch', { color: 0x7a9a5a, heavy: true })(a);
     if (has(kinds, 'defend')) return hunkerFx({ depth: 1.1 })(a);
