@@ -9,7 +9,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   Fn, uniform, uv as uvOf, texture as texOf,
   vec2, vec3, vec4, float, pow, abs, sin, cos, length, exp, smoothstep, oneMinus,
-  fract, max, atan, clamp,
+  fract, max, atan, clamp, floor,
 } from 'three/tsl';
 import { spellQuad, lampPulse } from '../../spells/blocks.js';
 import { projectileShade } from '../../spells/shaders.js';
@@ -403,6 +403,136 @@ export function dustLanding(ctx, deps, { at, color = 0xb0a088, count = 16, lampI
     });
   }
 }
+
+// ============ 竖刺（bristleFx 主体，迭代 #13）============
+// 受惊的刺猬把刺啪地竖起——轮廓从圆滑变锯齿、光在刺尖上走。角域畸变造不均距
+// 刺列，每刺长度双频抖动；竖起带角域相位差（一排排弹起）；刺 = 体缘椭圆外推的
+// 细锥射线（弧宽随进度收紧 = 尖端细）；tip 热斑随起立闪烁。色/相位烘常量，
+// Fn 2 参（vUv/uRise）。包络纪律（#12）：淡入起 / 尾 1/4 退。
+export function makeQuillRiseShade([cr, cg, cb], seed) {
+  const col = vec3(cr, cg, cb);
+  return Fn(([vUv, uRise]) => {
+    const p = vUv.sub(vec2(0.5));
+    const r = length(p).mul(2.0);                    // 0 中心 → 1 画布缘
+    const a = atan(p.y, p.x);
+    // 角域畸变（不均距）+ 长度抖动（双频烘常量）
+    const aw = a.add(sin(a.mul(2.6).add(float(seed))).mul(0.32))
+      .add(sin(a.mul(5.3).sub(float(seed * 2.0))).mul(0.18));
+    const lenJ = sin(aw.mul(3.1).add(float(seed * 3.0))).mul(0.5).add(0.5)
+      .mul(sin(aw.mul(7.7).add(float(seed))).mul(0.5).add(0.5)).mul(0.5).add(0.75); // 0.75..1.25
+    // 体缘（宽扁椭圆两瓣调制）与刺长
+    const base = float(0.54).sub(cos(a.mul(2.0)).mul(0.07));
+    const L = float(0.30).mul(lenJ);
+    // 竖起扫掠：角域相位差 + power 收锋（snap）
+    const k = sin(aw.mul(1.8).sub(float(seed))).mul(0.5).add(0.5).mul(0.28);
+    const rise = clamp(uRise.mul(1.9).sub(k), 0.0, 1.0);
+    const tip = base.add(L.mul(pow(rise, float(0.7))));
+    // 刺轨：最近刺的角距（弧长近似）→ 锥形截面（越靠尖越窄）
+    const rail = fract(aw.mul(float(24.0 / (Math.PI * 2)))).sub(0.5);
+    const dArc = rail.mul(r);
+    const s = clamp(r.sub(base).div(tip.sub(base).add(float(1e-4))), 0.0, 1.0);
+    const widK = float(300.0).add(s.mul(500.0));
+    const xsec = exp(dArc.mul(dArc).mul(widK).mul(-1.0));
+    const shaft = smoothstep(0.0, 0.18, s).mul(oneMinus(pow(s, float(0.35))));
+    const quill = xsec.mul(shaft).mul(smoothstep(0.02, 0.06, rise));   // 未竖起的刺不可见
+    // 刺尖走光：tip 热斑 × 起立期间闪烁
+    const dtip = r.sub(tip);
+    const glint = exp(dtip.mul(dtip).mul(-2400.0)).mul(rise).mul(rise)
+      .mul(sin(uRise.mul(24.0).add(aw.mul(3.0))).mul(0.3).add(0.8));
+    const env = smoothstep(0.0, 0.10, uRise).mul(oneMinus(smoothstep(0.78, 1.0, uRise)));
+    const edge = oneMinus(smoothstep(float(0.46), float(0.50), length(p)));
+    const rgb = col.mul(quill.mul(1.15)).add(col.mul(xsec.mul(shaft).mul(glint).mul(1.4)))
+      .add(vec3(1.25, 1.18, 0.95).mul(glint.mul(2.4)));
+    return vec4(rgb.mul(env).mul(edge), float(1.0));
+  });
+}
+
+/** 竖刺（at = 脚位；h = 单位视觉高。画布 1.7×h 宽、1.3×h 高——刺要伸出轮廓）。 */
+export function quillRise(ctx, deps, { at, h = 22, color = 0xd8c060, ms = 880 }) {
+  if (!at) return null;
+  const uRise = uniform(0.0);
+  const seed = Math.random() * 6.28 + 0.01;
+  const c = new THREE.Color(color);
+  const { quad, release } = spellQuad({
+    shade: makeQuillRiseShade([c.r, c.g, c.b], seed)(uvOf(), uRise),
+    width: h * 1.7, height: h * 1.3, name: 'spellFx:quillRise',
+  });
+  quad.position.set(at.x, at.y + h * 0.52, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => { release(); });
+  const st = { t: 0 };
+  const promise = ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power3.out',   // 刺是弹起来的（snap 起手）
+    onUpdate: () => { uRise.value = st.t; },
+    onComplete: () => { release(); },
+  });
+  return { promise };
+}
+
+// ============ 甲片合缝（hardenFx 主体，迭代 #14）============
+// 甲虫硬化 = 背甲甲片逐层锁合：剪影椭圆域内径向×角域分带成梯形甲片（角域畸变
+// 去均格），uSeal 自底缘向上扫——每层锁合瞬间缝线热闪 + 片面整亮一拍；合完短窗
+// 保持各片 hash 微差亮度（甲片 specular 差异）后淡出。色/相位烘常量，Fn 2 参。
+export function makePlateSealShade([cr, cg, cb], seed) {
+  const col = vec3(cr, cg, cb);
+  return Fn(([vUv, uSeal]) => {
+    const p = vUv.sub(vec2(0.5));
+    // 剪影椭圆域（宽扁：x 半轴 0.36 / y 半轴 0.42）
+    const r2 = p.x.mul(p.x).mul(7.7).add(p.y.mul(p.y).mul(5.7));
+    const inside = oneMinus(smoothstep(0.90, 1.0, r2));
+    // 分带：径向 3 层 × 角域 7 区（畸变去均格）
+    const a = atan(p.y, p.x);
+    const aw = a.add(sin(a.mul(2.2).add(float(seed))).mul(0.35));
+    const band = clamp(floor(r2.mul(2.6)), 0.0, 2.0);
+    const sec = aw.mul(float(3.2 / Math.PI)).add(float(4.0));
+    const sector = floor(sec);
+    // 片面 hash 微差
+    const hsh = fract(sin(band.mul(12.99).add(sector.mul(78.23)).add(float(seed))).mul(437.585));
+    // 合缝扫掠：自底缘向上（vn 0 底 → 1 顶），层间再错相位
+    const vn = clamp(p.y.mul(2.0).add(1.0), 0.0, 1.0);
+    const seal = clamp(uSeal.mul(1.6).sub(vn.mul(0.45).add(band.mul(0.16))), 0.0, 1.0);
+    const sealed = smoothstep(0.05, 0.35, seal);            // 片面亮起（锁合完成）
+    const flash = exp(seal.sub(0.75).mul(seal.sub(0.75)).mul(-260.0));  // 锁合瞬间的窄峰
+    // 缝线：带间 + 区间边界的亮线
+    const fb = fract(r2.mul(2.6));
+    const db = oneMinus(abs(fb.sub(0.5)));                   // 距边界 0..0.5
+    const seamR = exp(db.mul(db).mul(-140.0));
+    const fs = fract(sec);
+    const ds = oneMinus(abs(fs.sub(0.5)));
+    const seamS = exp(ds.mul(ds).mul(-120.0));
+    const seam = seamR.add(seamS);
+    // 组装：锁住的片面（hash 微差）+ 锁合闪（缝线强化）+ 暖热缝线
+    const plate = col.mul(sealed.mul(hsh.mul(0.22).add(0.30)));
+    const rgb = plate
+      .add(col.mul(flash).mul(sealed).mul(0.8))
+      .add(vec3(1.2, 1.08, 0.88).mul(flash.mul(seam).mul(2.6)));
+    const env = smoothstep(0.0, 0.08, uSeal).mul(oneMinus(smoothstep(0.80, 1.0, uSeal)));
+    return vec4(rgb.mul(env).mul(inside), float(1.0));
+  });
+}
+
+/** 甲片合缝（at = 脚位；h = 单位视觉高。画布 1.5×h 宽、1.1×h 高贴剪影）。 */
+export function plateSeal(ctx, deps, { at, h = 22, color = 0xb0a890, ms = 620 }) {
+  if (!at) return null;
+  const uSeal = uniform(0.0);
+  const seed = Math.random() * 6.28 + 0.01;
+  const c = new THREE.Color(color);
+  const { quad, release } = spellQuad({
+    shade: makePlateSealShade([c.r, c.g, c.b], seed)(uvOf(), uSeal),
+    width: h * 1.5, height: h * 1.1, name: 'spellFx:plateSeal',
+  });
+  quad.position.set(at.x, at.y + h * 0.52, (at.z ?? 0) + 1.2);
+  deps.scene.add(quad);
+  ctx.onKill(() => { release(); });
+  const st = { t: 0 };
+  const promise = ctx.tweenRaw(st, { t: 1 }, {
+    durationMs: ms, ease: 'power2.inOut',   // 锁合是机械的（匀进、末段压）
+    onUpdate: () => { uSeal.value = st.t; },
+    onComplete: () => { release(); },
+  });
+  return { promise };
+}
+
 
 // ============ 汇流纹（聚能 gatherFocus 主体，ENEMY_FX.md 迭代#3）============
 // 以胸口焦点为中心的螺旋内流光带：极角随半径偏转（内圈偏转多 = 吸积感）；

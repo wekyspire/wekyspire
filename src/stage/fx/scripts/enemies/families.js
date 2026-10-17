@@ -8,8 +8,8 @@
 import { arcProjectile, lampPulse } from '../../spells/blocks.js';
 import { glowTexture } from '../../orbs.js';
 import {
-  wailRing, fuseRing, unitH,
-  pulseEdgeSurge, drainVeins, pressureBurst, playEdgeSurge,
+  wailRing, fuseRing, unitH, quillRise, plateSeal,
+  pulseEdgeSurge, drainVeins, pressureBurst,
 } from './fxPieces.js';
 
 const sOf = (u) => u._baseScale ?? 1;
@@ -306,13 +306,18 @@ export function gatherFocus(opts = {}) {
 }
 
 /**
- * 竖刺族（hedgehog 竖刺/补刺）：剪影边光双波上爬（刺从轮廓里竖起来）+
- * 蓄紧两记微颤。高频轻配，无粒子无灯——边光就是刺。
+ * 竖刺族（hedgehog 竖刺/补刺，迭代 #13）：刺**啪地竖起来**——quillRise 形体件
+ * （不均距锥形放射列 + 角域相位差扫掠 + 刺尖走光）替代旧彩边；配压缩蓄紧
+ * （身体收圆）+ 两记紧绷微颤。无粒子无灯——刺就是主体。
  */
 export function bristleFx(opts = {}) {
   const { color = 0xd8c060 } = opts;
   return async ({ ctx, deps, unit }) => {
-    playEdgeSurge(unit, color, { durMs: 560 });
+    const H = unitH(unit);
+    const quills = quillRise(ctx, deps, {
+      at: { x: unit.position.x, y: unit.position.y, z: unit.position.z ?? 0 },
+      h: H, color, ms: 880,
+    });
     await ctx.custom(unit.uniqueID, {
       durationMs: 240, ease: 'power2.out',
       onUpdate: (t) => unit.setPose({ squash: 1 - 0.05 * t, widen: 1 + 0.06 * t }),
@@ -324,19 +329,32 @@ export function bristleFx(opts = {}) {
         widen: 1.06 - 0.008 * Math.sin(t * Math.PI * 4),
       }),
     });
+    await quills?.promise;
     await settlePose(ctx, unit, 170);
   };
 }
 
 /**
- * 硬化族（甲虫B 硬化）：伏低锁壳（hunker 浅档）+ 低亮边光一拍。硬化是壳的
- * 事——不聚能不发光球。
+ * 硬化族（甲虫B 硬化，迭代 #14）：背甲**甲片逐层锁合**（plateSeal 形体件——底缘
+ * 向上扫、层锁瞬间缝线热闪 + 片面 hash 微差）替代旧彩边；配 hunker 浅档伏低与
+ * 合拢一记锐缩闷震。
  */
 export function hardenFx(opts = {}) {
   const { color = 0xb0a890 } = opts;
   return async (a) => {
-    playEdgeSurge(a.unit, color, { durMs: 420 });
-    return hunkerFx({ depth: 0.55 })(a);
+    const { ctx, deps, unit } = a;
+    const H = unitH(unit);
+    const seal = plateSeal(ctx, deps, {
+      at: { x: unit.position.x, y: unit.position.y, z: unit.position.z ?? 0 },
+      h: H, color, ms: 620,
+    });
+    await Promise.all([hunkerFx({ depth: 0.55 })(a), seal?.promise ?? Promise.resolve()]);
+    // 合拢闷震：一记锐缩（壳锁死的一下）
+    await ctx.custom(unit.uniqueID, {
+      durationMs: 110, ease: 'power2.out',
+      onUpdate: (t) => unit.setPose({ squash: 0.97 - 0.03 * Math.sin(Math.PI * t) }),
+    });
+    await settlePose(ctx, unit, 160);
   };
 }
 
