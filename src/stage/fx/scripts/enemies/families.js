@@ -13,11 +13,6 @@ import {
 } from './fxPieces.js';
 
 const sOf = (u) => u._baseScale ?? 1;
-/** 颜色提亮（液滴/火星要比本体色亮一档才离得开暗场）——通道各自钳 255。 */
-const liftHex = (hex, k) => {
-  const ch = (s) => Math.min(255, Math.round(s * k));
-  return (ch((hex >> 16) & 255) << 16) | (ch((hex >> 8) & 255) << 8) | ch(hex & 255);
-};
 /** 世界锚点（高度感知，unitH 口径）：胸 ≈ 0.52H（k 缩放）、头 ≈ 0.92H、脚 ≈ 0.05H。 */
 const chestOf = (u, k = 1) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.52 * k, z: u.position.z ?? 0 });
 const headOf = (u) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.92, z: u.position.z ?? 0 });
@@ -46,37 +41,30 @@ function settlePose(ctx, unit, ms = 170) {
 }
 
 /**
- * 攻击起手族（突进前的「预告」）：五种体态。
- *   blob   胶质（史莱姆族）：下压成团 → 向上拔长甩出液滴 → 果冻回落
- *   crouch 兽类（狼/鼹鼠）：伏低后坐 + 蓄力颤 → 回中
- *   rear   虫/甲壳（甲虫/针鼠）：后仰扬头 + 头顶微粒
- *   hover  飞行（嗡嗡虫）：高频扑翼抖 + 翼侧气流粒
- *   lash   藤蔓（刺刺草）：后仰蓄 → 末梢预弹（鞭梢甩出的前半拍）
- * opts: { color, heavy, dropletColor, scale } heavy = 重击档（更长蓄力 + 落地尘 + 微震）
+ * 攻击起手族（突进前的「预告」）：五种体态。**体态拍一律纯体态**（迭代 #9 用户
+ * 裁定：粒子不许当水桶——单点全向爆点只换颜色 = 无物理动机 = 不加；crouch 重击
+ * 的落地挤尘是唯一保留，那是体重砸地的实物）。
+ *   blob   胶质（史莱姆/苔球/蟾蜍）：下压成团 → 向上拔长 → 果冻回落
+ *   crouch 兽类（狼/鼹鼠）：伏低后坐 + 蓄力颤 → 回中（heavy = 落地挤尘）
+ *   rear   虫/甲壳（甲虫/针鼠）：后仰扬头 + 停顿蓄势
+ *   hover  飞行（嗡嗡虫）：高频扑翼抖
+ *   lash   藤蔓（刺刺草）：后仰蓄 → 末梢预弹（鞭梢先行的前半拍）
+ * opts: { color, heavy, scale } heavy = 重击档（更长蓄力 + 落地挤尘 + 微震）
  */
 export function strikeWindup(style, opts = {}) {
   const { color = 0xc8b89a, heavy = false } = opts;
   return async ({ ctx, deps, unit, player }) => {
     const k = heavy ? 1.35 : 1.0; // 重击全身幅度放大
     if (style === 'blob') {
+      // 纯体态（迭代 #9 用户裁定：液滴太小不如不加——体态拍不配粒子）
       await ctx.custom(unit.uniqueID, {
         durationMs: 150, ease: 'power2.in',
         onUpdate: (t) => unit.setPose({ squash: 1 - 0.28 * k * t, widen: 1 + 0.18 * k * t }),
       });
-      // 弹射甩沫（迭代 #7）：拔长 whip 起点从压缩冠部定向锥抛液滴——运动方向继承
-      // 弹射本身（向上带出 + 重力拉回成弧）；全向 radial 会读成胸口炸火花。
-      // 尺寸/弧高按池直读校准：emitter size 经 ÷projFactor(~4.7) 折池单位，
-      // 需 ~4 才有 7px 级读数；vby 20 / g -55 → 升幅 ~3.6wu、升 0.36s 坠 0.4s。
-      const fling = deps.particles?.spawnEmitter?.(unit.position.x, unit.position.y + unitH(unit) * 0.72, {
-        vby: 20, speed: 4.5, gravity: -55, ttl: 0.78, ttlJit: 0.15,
-        size: 4.2, color: opts.dropletColor ?? liftHex(color, 1.3), rate: 36, z: unit.position.z ?? 0,
-      });
-      if (fling) ctx.onKill(() => fling.stop());
       await ctx.custom(unit.uniqueID, {
         durationMs: 120, ease: 'power2.out',
         onUpdate: (t) => unit.setPose({ squash: (1 - 0.28 * k) + (0.28 * k + 0.16 * k) * t, widen: (1 + 0.18 * k) - (0.18 * k + 0.12 * k) * t }),
       });
-      fling?.stop();
       await settlePose(ctx, unit, 190);
       return;
     }
@@ -127,24 +115,16 @@ export function strikeWindup(style, opts = {}) {
         durationMs: 190, ease: 'power2.out',
         onUpdate: (t) => unit.setPose({ lean: lean * t, squash: 1 + 0.08 * k * t }),
       });
-      const hd = headOf(unit);
-      deps.particles?.spawn?.(hd.x, hd.y, { color, count: 5, speed: 4, size: 0.7, ttl: 0.5, gravity: 5, z: hd.z });
-      await ctx.wait(60);
+      await ctx.wait(60);   // 扬到位的停顿（蓄势一拍）
       await settlePose(ctx, unit, 160);
       return;
     }
     if (style === 'hover') {
-      // 扑翼高频抖（squash 快速微振）+ 翼侧气流（两翼位各一股）
+      // 扑翼高频抖（squash 快速微振）——纯体态
       await ctx.custom(unit.uniqueID, {
         durationMs: 300, ease: 'none',
         onUpdate: (t) => unit.setPose({ squash: 1 + 0.06 * Math.sin(t * Math.PI * 7), widen: 1 - 0.04 * Math.sin(t * Math.PI * 7) }),
       });
-      const ch = chestOf(unit);
-      for (const dir of [-1, 1]) {
-        deps.particles?.spawn?.(ch.x + dir * 2.2 * sOf(unit), ch.y + 0.8 * sOf(unit), {
-          color, count: 4, speed: 5, size: 0.6, ttl: 0.35, gravity: -3, z: ch.z,
-        });
-      }
       await settlePose(ctx, unit, 110);
       return;
     }
@@ -158,8 +138,6 @@ export function strikeWindup(style, opts = {}) {
       durationMs: 80, ease: 'power3.in',
       onUpdate: (t) => unit.setPose({ lean: leanBack + (-leanBack * 1.4) * t, squash: 1.05 - 0.1 * t }),
     });
-    const hd = headOf(unit);
-    deps.particles?.spawn?.(hd.x, hd.y - 1.5 * sOf(unit), { color, count: 5, speed: 12, size: 0.6, ttl: 0.3, gravity: 0, z: hd.z });
     await settlePose(ctx, unit, 130);
   };
 }
