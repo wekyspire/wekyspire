@@ -29,6 +29,7 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y, UI_CAMERA_Z } from '../stage/StageMa
 // core 侧（敌人注册表 + 逻辑偶——逐拍枚举读 getIntention）
 import '../core/content/index.js';
 import { allEnemies, getEnemyDefinition } from '../core/enemies/registry.js';
+import { isAttackKind } from '../core/intentKinds.js';
 
 // ============ 渲染底座（roomGallery 同骨架） ============
 const canvas = document.createElement('canvas');
@@ -101,12 +102,30 @@ const runFx = (fn) => runScript(fn, { animator });
 
 // unitBeats 的舞台桩：生死拍直接跑真实方法（零拷贝复用 BattleStage 代码）
 const stageStub = {
-  animator, particles, cast, scene, uiScene,
+  animator, particles, cast, scene, uiScene, shake,
   _units: new Map(),
   _cleaveSplit: new Set(),
   _enemyHitRecent: new Map(),
   _snapshot: null,
   _fxRunScript: runFx,
+  _fxScripts: new Set(),               // _damageHit 收账（宿主件）
+  _displayShieldOf: () => 0,           // 画廊无盾：护盾罩/破碎链静默跳过
+  _shieldBreakFx: () => {},
+  _vignette: { pulse() {} },           // 受击渐晕（真舞台的 DOM 渐晕层，画廊免）
+  notify: () => {},
+  _unitToUI: (unit, dx = 0, dy = 0) => {  // 伤害数字定位：世界→屏幕→ui 正交世界（z 近平面）
+    const m = camera.matrixWorldInverse.elements, p = camera.projectionMatrix.elements;
+    const wx = unit.position.x + dx, wy = unit.position.y + dy, wz = unit.position.z ?? 0;
+    const vv = [0, 1, 2, 3].map(i => m[i]*wx + m[4+i]*wy + m[8+i]*wz + m[12+i]);
+    const cw = p[3]*vv[0] + p[7]*vv[1] + p[11]*vv[2] + p[15]*vv[3];
+    const sx = (p[0]*vv[0] + p[4]*vv[1] + p[8]*vv[2] + p[12]*vv[3]) / cw;
+    const sy = (p[1]*vv[0] + p[5]*vv[1] + p[9]*vv[2] + p[13]*vv[3]) / cw;
+    const u = uiCamera.projectionMatrixInverse.elements;
+    return {
+      x: u[0]*sx + u[4]*sy - u[8] + u[12] + uiCamera.position.x,
+      y: u[1]*sx + u[5]*sy - u[9] + u[13] + uiCamera.position.y,
+    };
+  },
   _spellDeps: () => ({ scene, uiScene, particles, cast, shake, notify: null, worldPool: particles2World }),
   ...unitBeats,
 };
@@ -320,8 +339,22 @@ function beatsOf(defId) {
   }
   return out;
 }
+/** 攻击节拍（真实 _damageHit 全链路：后拉→突进→命中→击退→回位 + 伤害数字）。 */
+function playDamageBeat(kinds, hits = 1) {
+  const dmg = kinds.includes('heavy') ? 18 : 8;
+  stageStub._snapshot = {
+    enemies: [{ uniqueID: focusView().uniqueID, intention: { kinds, hits, damage: dmg } }],
+    player: { uniqueID: 'p' },
+  };
+  return new Promise((res) => stageStub._damageHit(playerView, {
+    dealt: dmg, shieldAbsorbed: 0, type: 'major',
+    source: { uniqueID: focusView().uniqueID, side: 'enemy', defId: focusView()._defId },
+  }, res));
+}
+
 // 「逐敌逐拍」目录 = 当前下拉敌人的真实拍列表（切敌人时重建；标题带敌人名——
-// 验收标记的 key 要自描述，贴回来的清单能直接定位）
+// 验收标记的 key 要自描述，贴回来的清单能直接定位）。攻击类拍自动补伤害
+// 节拍——攻击的可视主体（突进/命中/击退/数字）在 damage 拍，不在 act 剧本。
 const beatsGroupEl = { items: [] };
 const beatsGroup = group('逐敌逐拍（当前目标敌 · 真分发）', beatsGroupEl.items);
 function rebuildBeats() {
@@ -345,12 +378,22 @@ function rebuildBeats() {
             unitById: (x) => (x === focusView().uniqueID ? focusView() : null),
             scene, uiScene,
           });
+          if (isAttackKind(b.kinds)) await playDamageBeat(b.kinds, 1);
         });
       },
     });
   }
   renderGroups();
 }
+
+// ---- 攻击全链路（速播：起手不占时，突进+命中一气呵成）----
+group('攻击全链路（当前敌 → 玩家）', [
+  { label: '普攻全链（突进+命中 8 伤）', run: () => runWith(() => playDamageBeat(['attack'], 1)) },
+  { label: '重击全链（18 伤）', run: () => runWith(() => playDamageBeat(['attack', 'heavy'], 1)) },
+  { label: '连击全链 ×3', run: () => runWith(async () => {
+    for (let i = 0; i < 3; i++) await playDamageBeat(['attack'], 3);
+  }) },
+]);
 
 // ---- 命中三式 + 主题 ----
 group('命中三式（受击者 = 玩家）', [
