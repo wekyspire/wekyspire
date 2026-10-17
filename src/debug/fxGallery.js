@@ -251,8 +251,8 @@ group('起手族 · 施法/防御/发呆', [
   { label: '掘洞休整 burrowRest（鼹鼠）', enemy: 'diggerMole', run: () => famPlay(() => fam.burrowRest({ color: 0xa89070 })) },
   { label: 'hunker 蜷缩防御（深）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.hunkerFx({ depth: 1.2, dustColor: 0xb8a98c })) },
   { label: 'dazeSway 发呆摇晃', enemy: 'swampAmbusher', run: () => famPlay(() => fam.dazeSway({})) },
-  { label: 'wailFx 冰嚎（蓝环）', enemy: 'snowwolf', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.78, 0.98], rings: 4, upMotes: 10 })) },
-  { label: 'wailFx 怨灵啸（紫环）', enemy: 'wraithA', run: () => famPlay(() => fam.wailFx({ color: [0.62, 0.48, 0.90], rings: 3 })) },
+  { label: 'wailFx 冰嚎（晶棱环）', enemy: 'snowwolf', run: () => famPlay(() => fam.wailFx({ theme: 'ice', rings: 4, upMotes: 8 })) },
+  { label: 'wailFx 怨灵啸（阴波环）', enemy: 'wraithA', run: () => famPlay(() => fam.wailFx({ theme: 'wraith', rings: 3 })) },
   { label: 'trembleWarn 引线震颤', enemy: 'blastPod', run: () => famPlay(() => fam.trembleWarn({})) },
 ]);
 
@@ -267,8 +267,9 @@ group('形体件（fxPieces 单件）', [
     for (let i = 0; i < 5; i++) { a.jolt(); await ctx.wait(110); }
     await a.promise;
   }) },
-  { label: 'wailRing 声波环（蓝）', enemy: 'snowwolf', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.78, 0.98] })) },
-  { label: 'wailRing 声波环（紫）', enemy: 'wraithA', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90] })) },
+  { label: 'wailRing 晶棱环（冰）', enemy: 'snowwolf', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.78, 0.98], mode: 'crystal' })) },
+  { label: 'wailRing 阴波环（怨灵）', enemy: 'wraithA', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90], mode: 'wraith' })) },
+  { label: 'wailRing 气压环（素）', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.65, 0.78, 1.10], mode: 'plain' })) },
   { label: 'fuseRing 引线收束圈', enemy: 'blastPod', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
   { label: 'mossCreep 蔓延爬苔（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossCreep(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1, size: 26, dist: 20 }).promise) },
   { label: 'mossGrip 缠踝爬须（玩家脚下）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossGrip(ctx, stageStub._spellDeps(), { at: feet(playerView) })) },

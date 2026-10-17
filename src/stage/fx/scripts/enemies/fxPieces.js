@@ -104,41 +104,70 @@ export function zapArc(ctx, deps, {
   return { promise, jolt };
 }
 
-// ============ 声波环（wailFx 主体）============
-// 竖直 billboard 三道错峰扩散环：半径随 uProg 各相扩张、角向双谐波瓣（声波
-// 不是完美圆）、环身行进波纹（读「声音在推」）、边缘熄灭。
-export const wailRingShade = Fn(([vUv, uProg, uColor, uSeed]) => {
-  const p = vUv.sub(vec2(0.5));
-  const r = length(p).mul(2.0);
-  const a = atan(p.y, p.x);
-  // 三道环展开（相位错开 1/3；JS 循环静态展开——TSL 无控制流纪律不破）
-  const ph0 = fract(uProg);
-  const ph1 = fract(uProg.add(float(1.0 / 3.0)));
-  const ph2 = fract(uProg.add(float(2.0 / 3.0)));
-  const ringOf = (ph) => {
-    const rr = ph.mul(0.92);
-    const dr = r.sub(rr);
-    const ring = exp(dr.mul(dr).mul(-340.0));
-    const skirt = exp(dr.mul(dr).mul(-60.0));
-    const lobed = sin(a.mul(5.0).add(uSeed.mul(7.0))).mul(0.5).add(0.5)
-      .mul(sin(a.mul(9.0).sub(uSeed)).mul(0.5).add(0.5)).mul(0.7).add(0.5);
-    const ripple = sin(dr.mul(90.0).sub(ph.mul(24.0))).mul(0.5).add(0.5).mul(0.35).add(0.75);
-    const fade = oneMinus(pow(ph, float(0.8)));
-    return uColor.mul(skirt.mul(1.5).mul(lobed).mul(fade))
-      .add(vec3(0.92, 0.97, 1.15).mul(ring.mul(3.2).mul(lobed).mul(ripple).mul(fade)));
-  };
-  const acc = ringOf(ph0).add(ringOf(ph1)).add(ringOf(ph2));
-  const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(p)));
-  return vec4(acc.mul(edge), float(1.0));
-});
+// ============ 声波环族（wailFx 主体，迭代 #11 主题分家）============
+// 竖直 billboard 三道错峰扩散环。**环 = 全向广播语义专用**（嚎叫/气压/威慑）；
+// 攻击性声波禁用环（无指向性像施法）——要走定向波前模板。三 mode 构图期分支
+// （色/相位/瓣形烘常量进节点图，运行时无控制流）：
+//   plain   气压谐波环（短嚎/蟾蜍峰压/通用）
+//   crystal 冰晶棱面（高频角向瓣幂次锐化 + 密纹波 + 冷白亮唇）
+//   wraith  阴波荡开（环缘角向行波 + 软缘宽裙 + 内芯扣暗）
+export function makeWailRingShade([cr, cg, cb], seed, mode = 'plain') {
+  const col = vec3(cr, cg, cb);
+  const hot = mode === 'crystal' ? vec3(0.85, 0.95, 1.30)
+    : mode === 'wraith' ? vec3(0.98, 0.90, 1.25)
+    : vec3(0.92, 0.97, 1.15);
+  return Fn(([vUv, uProg]) => {
+    const p = vUv.sub(vec2(0.5));
+    const r = length(p).mul(2.0);
+    const a = atan(p.y, p.x);
+    // 三道环展开（相位错开 1/3；JS 循环静态展开——TSL 无控制流纪律不破）
+    const ph0 = fract(uProg);
+    const ph1 = fract(uProg.add(float(1.0 / 3.0)));
+    const ph2 = fract(uProg.add(float(2.0 / 3.0)));
+    const ringOf = (ph) => {
+      const rr = ph.mul(0.92);
+      const dr = r.sub(rr);
+      const ring = exp(dr.mul(dr).mul(-340.0));
+      const skirt = exp(dr.mul(dr).mul(mode === 'wraith' ? -38.0 : -60.0));
+      // 瓣形按 mode 构图期定型
+      let lobed;
+      if (mode === 'crystal') {
+        lobed = sin(a.mul(7.0).add(float(seed * 7.0))).mul(0.5).add(0.5).pow(2.2)
+          .mul(sin(a.mul(13.0).sub(float(seed))).mul(0.5).add(0.5).pow(1.6))
+          .mul(1.15).add(0.28); // 星芒棱面：瓣间深谷 + 尖峰
+      } else if (mode === 'wraith') {
+        lobed = sin(a.mul(3.0).add(uProg.mul(9.0)).add(float(seed * 7.0))).mul(0.5).add(0.5)
+          .mul(0.45).add(0.55); // 角向行波：环缘边扩边荡
+      } else {
+        lobed = sin(a.mul(5.0).add(float(seed * 7.0))).mul(0.5).add(0.5)
+          .mul(sin(a.mul(9.0).sub(float(seed))).mul(0.5).add(0.5)).mul(0.7).add(0.5);
+      }
+      const ripple = mode === 'crystal'
+        ? sin(dr.mul(110.0).sub(ph.mul(30.0))).mul(0.5).add(0.5).mul(0.4).add(0.7)
+        : mode === 'wraith'
+          ? sin(dr.mul(50.0).sub(ph.mul(14.0))).mul(0.5).add(0.5).mul(0.25).add(0.8)
+          : sin(dr.mul(90.0).sub(ph.mul(24.0))).mul(0.5).add(0.5).mul(0.35).add(0.75);
+      const fade = oneMinus(pow(ph, float(0.8)));
+      return col.mul(skirt.mul(mode === 'wraith' ? 1.9 : 1.5).mul(lobed).mul(fade))
+        .add(hot.mul(ring.mul(mode === 'wraith' ? 2.1 : 3.2).mul(lobed).mul(ripple).mul(fade)));
+    };
+    const acc = ringOf(ph0).add(ringOf(ph1)).add(ringOf(ph2));
+    // 阴波内芯扣暗：环心一团墨色（怨灵啸的「吸走」读感）
+    const dark = mode === 'wraith'
+      ? oneMinus(smoothstep(float(0.06), float(0.20), r)).mul(vec3(0.05, 0.03, 0.10)).mul(oneMinus(uProg.mul(0.6)))
+      : vec3(0.0, 0.0, 0.0);
+    const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(p)));
+    return vec4(acc.add(dark).mul(edge), float(1.0));
+  });
+}
 
-/** 声波环（单位头部，竖直 billboard）。粒子/灯由编排侧叠。 */
-export async function wailRing(ctx, deps, { at, color = [0.65, 0.78, 1.10], size = 16.0, ms = 760 }) {
+/** 声波环（单位头部，竖直 billboard）。mode 见 makeWailRingShade；粒子/灯由编排侧叠。 */
+export async function wailRing(ctx, deps, { at, color = [0.65, 0.78, 1.10], size = 16.0, ms = 760, mode = 'plain' }) {
   if (!at) return;
   const uProg = uniform(0.0);
-  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  const seed = Math.random() * 6.28 + 0.01;
   const { quad, release } = spellQuad({
-    shade: wailRingShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
+    shade: makeWailRingShade(color, seed, mode)(uvOf(), uProg),
     width: size, height: size, name: 'spellFx:wailRing',
   });
   quad.position.set(at.x, at.y, (at.z ?? 0) + 1.4);

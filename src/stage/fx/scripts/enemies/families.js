@@ -480,24 +480,78 @@ export function dazeSway(opts = {}) {
 }
 
 /**
- * 嚎叫族（雪狼嚎/怨灵啸）：仰头 → 头部声波环（shader 形体：三道错峰谐波瓣
- * 扩散环）+ 双层浮游微粒 + 冷色灯 punch → 回中。
+ * 嚎叫族（迭代 #11 主题分家）：**环 = 全向广播语义专用**（威慑/宣示/气压外扩），
+ * 攻击性声波禁用环——无指向性像施法，要走定向波前模板。
+ *   ice    冰嚎（雪狼）：仰头嚎 + 晶棱环 + 呼气冷雾（口部朝玩家低漂）+ 霜粒下落
+ *   wraith 怨灵啸：俯首颤嚎（怨灵不是狼）+ 阴波荡环（内芯扣暗）+ 贴地阴雾涌动
+ *   plain  气压短嚎（通用）：谐波环 + 双层浮游微粒
  */
 export function wailFx(opts = {}) {
-  const { color = [0.65, 0.78, 1.10], ringColor, upMotes = 6, rings = 3 } = opts;
+  const { color, theme = 'plain', upMotes = 6, rings = 3 } = opts;
+  const themeColor = color
+    ?? (theme === 'wraith' ? [0.62, 0.48, 0.90] : theme === 'ice' ? [0.62, 0.78, 0.98] : [0.65, 0.78, 1.10]);
   return async ({ ctx, deps, unit, player }) => {
+    const s = sOf(unit);
+    const hd = headOf(unit);
+    const toward = Math.sign((player?.position.x ?? unit.position.x + 1) - unit.position.x) || 1;
+    const ringMs = 620 + rings * 80;
+    if (theme === 'wraith') {
+      // 俯首颤嚎 + 阴波荡环 + 贴地阴雾（形态物质散逸，朝玩家侧爬）
+      await ctx.custom(unit.uniqueID, {
+        durationMs: 220, ease: 'power2.out',
+        onUpdate: (t) => unit.setPose({ lean: leanToward(unit, player, 0.09) * t, squash: 1 - 0.06 * t }),
+      });
+      settlePose(ctx, unit, 300);
+      const ring = wailRing(ctx, deps, {
+        at: hd, color: themeColor, mode: 'wraith',
+        size: (14 + rings * 1.6) * Math.max(0.7, s), ms: ringMs,
+      });
+      const mist = deps.particles?.spawnEmitter?.(unit.position.x + toward * 2, unit.position.y + 1.2, {
+        vbx: toward * 2.2, vby: 1.2, speed: 1.2, gravity: -1.5, ttl: 1.5, ttlJit: 0.3,
+        size: 4.6, color: 0x4a3a6a, rate: 9, z: unit.position.z ?? 0,
+      });
+      if (mist) ctx.onKill(() => mist.stop());
+      await ring;
+      mist?.stop();
+      return;
+    }
+    if (theme === 'ice') {
+      // 仰头嚎 + 晶棱环（口部为心）+ 呼气冷雾 + 霜粒下落 + 冷灯
+      const lean = leanToward(unit, player, -0.13);
+      await ctx.custom(unit.uniqueID, {
+        durationMs: 200, ease: 'power2.out',
+        onUpdate: (t) => unit.setPose({ lean: lean * t, squash: 1 + 0.07 * t }),
+      });
+      settlePose(ctx, unit, 260);
+      const mouth = { x: hd.x + toward * 1.2 * s, y: hd.y - 2.2 * s, z: hd.z };
+      const ring = wailRing(ctx, deps, {
+        at: mouth, color: themeColor, mode: 'crystal',
+        size: (14 + rings * 1.6) * Math.max(0.7, s), ms: ringMs,
+      });
+      const breath = deps.particles?.spawnEmitter?.(mouth.x, mouth.y, {
+        vbx: toward * 3.2, vby: 0.4, speed: 1.4, gravity: -1.2, ttl: 1.1, ttlJit: 0.25,
+        size: 3.8, color: 0xbfd8ea, rate: 16, z: mouth.z,
+      });
+      if (breath) ctx.onKill(() => breath.stop());
+      deps.particles?.spawn?.(hd.x, hd.y, { color: 0xd8ecf8, count: Math.max(4, upMotes - 2), speed: 2.2, size: 1.1, ttl: 1.0, gravity: -14, z: hd.z });
+      ctx.spawn((c) => lampPulse(c, deps, {
+        name: 'light:fx0', at: { x: mouth.x, y: mouth.y, z: (mouth.z ?? 0) + 2 },
+        color: [0.55, 0.72, 1.30], peak: 300, attackMs: 90, decayMs: 420,
+      }));
+      await ring;
+      breath?.stop();
+      return;
+    }
+    // plain（气压短嚎）
     const lean = leanToward(unit, player, -0.13);
     await ctx.custom(unit.uniqueID, {
       durationMs: 200, ease: 'power2.out',
       onUpdate: (t) => unit.setPose({ lean: lean * t, squash: 1 + 0.07 * t }),
     });
     settlePose(ctx, unit, 260); // 不 await：回中与声波并行
-    const hd = headOf(unit);
-    const s = sOf(unit);
-    // 声波环（shader 形体主体；rings>3 时给更大画布装第三道外圈）
     const ring = wailRing(ctx, deps, {
-      at: hd, color: ringColor ?? color,
-      size: (14 + rings * 1.6) * Math.max(0.7, s), ms: 620 + rings * 80,
+      at: hd, color: themeColor,
+      size: (14 + rings * 1.6) * Math.max(0.7, s), ms: ringMs,
     });
     // 双层微粒：快上浮 + 慢漂尘
     deps.particles?.spawn?.(hd.x, hd.y, { color: 0xd8e6f5, count: upMotes, speed: 6, size: 0.8, ttl: 0.6, gravity: 9, z: hd.z });
@@ -505,7 +559,7 @@ export function wailFx(opts = {}) {
     // 冷色灯 punch（借池）
     ctx.spawn((c) => lampPulse(c, deps, {
       name: 'light:fx0', at: { x: hd.x, y: hd.y, z: (hd.z ?? 0) + 2 },
-      color: ringColor ?? color, peak: 560, attackMs: 140, decayMs: 560,
+      color: themeColor, peak: 560, attackMs: 140, decayMs: 560,
     }));
     await ring;
   };

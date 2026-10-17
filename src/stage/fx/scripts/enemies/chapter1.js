@@ -466,7 +466,7 @@ export function registerChapter1EnemyFx() {
   // -- 怨灵（远程：洗虚无/虚弱）--
   for (const id of ['wraithA', 'wraithB']) {
     registerEnemyAct(id, async (a) => {
-      if (isDeb(a.kinds)) return wailFx({ color: [0.62, 0.48, 0.90], rings: 3 })(a); // 怨灵啸（紫环）
+      if (isDeb(a.kinds)) return wailFx({ theme: 'wraith', rings: 3 })(a); // 怨灵啸（阴波环）
       return 'generic'; // 攻击拍：通用突进（怨灵扑脸即「鬼上身」）
     });
     registerEnemyHitTheme(id, {
@@ -721,10 +721,10 @@ export function registerChapter1EnemyFx() {
   registerEnemyAct('snowwolf', async (a) => {
     const { kinds } = a;
     if (isDeb(kinds) && !isAtk(kinds)) {
-      return wailFx({ color: [0.62, 0.78, 0.98], rings: 4, upMotes: 10 })(a); // 塞震慑拍：冰嚎
+      return wailFx({ theme: 'ice', rings: 4, upMotes: 8 })(a); // 塞震慑拍：冰嚎（晶棱环）
     }
     if (isDeb(kinds) && isAtk(kinds)) {
-      await wailFx({ color: [0.68, 0.80, 0.96], rings: 2, upMotes: 4 })(a); // 开局压制：短嚎
+      await wailFx({ theme: 'ice', rings: 2, upMotes: 4 })(a); // 开局压制：短嚎
       return strikeWindup('crouch', { color: 0xc8d8e0 })(a); // → 伏低（咬随伤害拍）
     }
     if (isAtk(kinds)) return strikeWindup('crouch', { color: 0xc8d8e0, heavy: kinds.includes('heavy') })(a);
