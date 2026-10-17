@@ -416,15 +416,16 @@ export function makeQuillRiseShade([cr, cg, cb], seed) {
     const r = length(p).mul(2.0);                    // 0 中心 → 1 画布缘
     const a = atan(p.y, p.x);
     // 角域畸变（不均距）+ 长度抖动（双频烘常量）
-    const aw = a.add(sin(a.mul(2.6).add(float(seed))).mul(0.32))
-      .add(sin(a.mul(5.3).sub(float(seed * 2.0))).mul(0.18));
-    const lenJ = sin(aw.mul(3.1).add(float(seed * 3.0))).mul(0.5).add(0.5)
-      .mul(sin(aw.mul(7.7).add(float(seed))).mul(0.5).add(0.5)).mul(0.5).add(0.75); // 0.75..1.25
+    // 角频率全整数（切口连续纪律，#15）：畸变 3/5、长度 3×8 组合——不规则靠相位
+    const aw = a.add(sin(a.mul(3.0).add(float(seed))).mul(0.32))
+      .add(sin(a.mul(5.0).sub(float(seed * 2.0))).mul(0.18));
+    const lenJ = sin(aw.mul(3.0).add(float(seed * 3.0))).mul(0.5).add(0.5)
+      .mul(sin(aw.mul(8.0).add(float(seed))).mul(0.5).add(0.5)).mul(0.5).add(0.75); // 0.75..1.25
     // 体缘（宽扁椭圆两瓣调制）与刺长
     const base = float(0.54).sub(cos(a.mul(2.0)).mul(0.07));
     const L = float(0.30).mul(lenJ);
     // 竖起扫掠：角域相位差 + power 收锋（snap）
-    const k = sin(aw.mul(1.8).sub(float(seed))).mul(0.5).add(0.5).mul(0.28);
+    const k = sin(aw.mul(2.0).sub(float(seed))).mul(0.5).add(0.5).mul(0.28);
     const rise = clamp(uRise.mul(1.9).sub(k), 0.0, 1.0);
     const tip = base.add(L.mul(pow(rise, float(0.7))));
     // 刺轨：最近刺的角距（弧长近似）→ 锥形截面（越靠尖越窄）
@@ -482,9 +483,9 @@ export function makePlateSealShade([cr, cg, cb], seed) {
     const inside = oneMinus(smoothstep(0.90, 1.0, r2));
     // 分带：径向 3 层 × 角域 7 区（畸变去均格）
     const a = atan(p.y, p.x);
-    const aw = a.add(sin(a.mul(2.2).add(float(seed))).mul(0.35));
+    const aw = a.add(sin(a.mul(3.0).add(float(seed))).mul(0.35));   // 整数频率（切口连续，#15）
     const band = clamp(floor(r2.mul(2.6)), 0.0, 2.0);
-    const sec = aw.mul(float(3.2 / Math.PI)).add(float(4.0));
+    const sec = aw.mul(float(7.0 / (Math.PI * 2))).add(float(4.0)); // 整数扇区数
     const sector = floor(sec);
     // 片面 hash 微差
     const hsh = fract(sin(band.mul(12.99).add(sector.mul(78.23)).add(float(seed))).mul(437.585));
@@ -540,13 +541,18 @@ export function plateSeal(ctx, deps, { at, h = 22, color = 0xb0a890, ms = 620 })
 // 进节点图，严禁等距均布）；亮带只存在于收束头部以内，头部亮唇 + 内向渐亮；
 // 焦点小亮核随 uCharge 阶梯增亮。Fn 3 参（vUv/uProg/uCharge），色与相位烘常量。
 export function makeDrainVeinsShade([cr, cg, cb], seed, f1, f2, swirlK) {
+  // 角频率一律取整（atan ±π 切口连续纪律）：非整数 k 的 sin(k·a) 在分支切割
+  // 线上相位跳变 = 一条径向裂缝（gatherFocus「四象限裂纹」根因，#15）。
+  // 不规则感由整数频率组合 + seed 相位 + 乘法锐化承担。
+  const F1 = Math.max(2, Math.round(f1));
+  const F2 = Math.max(2, Math.round(f2));
   return Fn(([vUv, uProg, uCharge]) => {
     const p = vUv.sub(vec2(0.5, 0.40));                 // 焦点：quad 中下（胸口位）
     const r = length(p).mul(2.0);
     const a0 = atan(p.y, p.x);
     const sw = a0.add(float(swirlK).mul(oneMinus(r))); // 螺旋偏转
-    const l1 = sin(sw.mul(float(f1)).add(float(seed))).mul(0.5).add(0.5);
-    const l2 = sin(sw.mul(float(f2)).sub(float(seed).mul(1.7))).mul(0.5).add(0.5);
+    const l1 = sin(sw.mul(float(F1)).add(float(seed))).mul(0.5).add(0.5);
+    const l2 = sin(sw.mul(float(F2)).sub(float(seed).mul(1.7))).mul(0.5).add(0.5);
     // 乘法锐化（pow 纪律）：l1 四次方出窄脊，l2 平方调制出不等宽
     const lane = l1.mul(l1).mul(l1).mul(l1).mul(l2).mul(l2);
     const head = oneMinus(uProg).mul(0.85).add(0.15);   // 收束头 1.0→0.15
