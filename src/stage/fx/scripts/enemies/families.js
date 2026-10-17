@@ -13,6 +13,11 @@ import {
 } from './fxPieces.js';
 
 const sOf = (u) => u._baseScale ?? 1;
+/** 颜色提亮（液滴/火星要比本体色亮一档才离得开暗场）——通道各自钳 255。 */
+const liftHex = (hex, k) => {
+  const ch = (s) => Math.min(255, Math.round(s * k));
+  return (ch((hex >> 16) & 255) << 16) | (ch((hex >> 8) & 255) << 8) | ch(hex & 255);
+};
 /** 世界锚点（高度感知，unitH 口径）：胸 ≈ 0.52H（k 缩放）、头 ≈ 0.92H、脚 ≈ 0.05H。 */
 const chestOf = (u, k = 1) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.52 * k, z: u.position.z ?? 0 });
 const headOf = (u) => ({ x: u.position.x, y: u.position.y + unitH(u) * 0.92, z: u.position.z ?? 0 });
@@ -58,14 +63,20 @@ export function strikeWindup(style, opts = {}) {
         durationMs: 150, ease: 'power2.in',
         onUpdate: (t) => unit.setPose({ squash: 1 - 0.28 * k * t, widen: 1 + 0.18 * k * t }),
       });
-      // 拔长瞬间甩液滴（胶质甩脱的飞沫）
-      deps.particles?.spawn?.(chestOf(unit, 1.2).x, chestOf(unit, 1.2).y, {
-        color: opts.dropletColor ?? color, count: 6, speed: 8, size: 0.8, ttl: 0.5, gravity: -18, z: unit.position.z,
+      // 弹射甩沫（迭代 #7）：拔长 whip 起点从压缩冠部定向锥抛液滴——运动方向继承
+      // 弹射本身（向上带出 + 重力拉回成弧）；全向 radial 会读成胸口炸火花。
+      // 尺寸/弧高按池直读校准：emitter size 经 ÷projFactor(~4.7) 折池单位，
+      // 需 ~4 才有 7px 级读数；vby 20 / g -55 → 升幅 ~3.6wu、升 0.36s 坠 0.4s。
+      const fling = deps.particles?.spawnEmitter?.(unit.position.x, unit.position.y + unitH(unit) * 0.72, {
+        vby: 20, speed: 4.5, gravity: -55, ttl: 0.78, ttlJit: 0.15,
+        size: 4.2, color: opts.dropletColor ?? liftHex(color, 1.3), rate: 36, z: unit.position.z ?? 0,
       });
+      if (fling) ctx.onKill(() => fling.stop());
       await ctx.custom(unit.uniqueID, {
         durationMs: 120, ease: 'power2.out',
         onUpdate: (t) => unit.setPose({ squash: (1 - 0.28 * k) + (0.28 * k + 0.16 * k) * t, widen: (1 + 0.18 * k) - (0.18 * k + 0.12 * k) * t }),
       });
+      fling?.stop();
       await settlePose(ctx, unit, 190);
       return;
     }

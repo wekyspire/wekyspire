@@ -225,7 +225,7 @@ function famPlay(maker, view = focusView()) {
   return runWith(async (ctx) => { await maker()({ ...A(view), ctx }); });
 }
 group('起手族 · strikeWindup（五体态）', [
-  { label: 'blob 胶质压团（绿）', enemy: 'slime', run: () => famPlay(() => fam.strikeWindup('blob', { color: 0x86c86a })) },
+  { label: 'blob 胶质压团（绿）', enemy: 'mossBallA', run: () => famPlay(() => fam.strikeWindup('blob', { color: 0x7a9a5a })) },
   { label: 'crouch 兽类伏低（土）', enemy: 'diggerMole', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52 })) },
   { label: 'crouch 重击档', enemy: 'youngRakshasa', run: () => famPlay(() => fam.strikeWindup('crouch', { color: 0x9a7a52, heavy: true })) },
   { label: 'rear 虫类扬头（琥珀）', enemy: 'stoneCocoon', run: () => famPlay(() => fam.strikeWindup('rear', { color: 0xb09060 })) },
