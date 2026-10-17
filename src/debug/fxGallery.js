@@ -30,6 +30,7 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y, UI_CAMERA_Z } from '../stage/StageMa
 import '../core/content/index.js';
 import { allEnemies, getEnemyDefinition } from '../core/enemies/registry.js';
 import { isAttackKind } from '../core/intentKinds.js';
+import { attachUnitParts } from '../stage/fx/unitParts.js';
 
 // ============ 渲染底座（roomGallery 同骨架） ============
 const canvas = document.createElement('canvas');
@@ -89,9 +90,9 @@ scene.add(particles.sprites);
 uiScene.add(particles.spritesUI);
 const shake = new ScreenShake({ director });
 const cast = new Cast();
-// fx 灯池（BattleStage 同款两口）：剧本借 light:fx0/1 只推参数——画廊缺这层时
-// 一切灯 punch（lampPulse）静默降级不可验收
-for (let i = 0; i < 2; i++) {
+// fx 灯池（BattleStage 同款三口）：剧本借 light:fx0/1/2 只推参数——画廊缺这层时
+// 一切灯 punch（lampPulse）/飞行投射物携灯静默降级不可验收
+for (let i = 0; i < 3; i++) {
   const l = new THREE.PointLight(0xffffff, 0, 40, 1.8);
   l.name = `fxPool${i}`;
   scene.add(l);
@@ -148,7 +149,7 @@ const logicEnemies = [];
 let focusIdx = 0; // 当前点播目标敌下标
 
 const CH1 = allEnemies()
-  .filter(d => d.getIntention && d.difficulty && (d.difficulty.floorMax ?? 0) <= 16)
+  .filter(d => d.getIntention && d.difficulty && (d.difficulty.floorMax ?? 0) <= 21)
   .sort((a, b) => (a.difficulty.base ?? 0) - (b.difficulty.base ?? 0));
 const BOSSES = allEnemies().filter(d => d.orbs || /纵火|卡达斯|MEFM|穿山甲王|腐败之源/.test(d.name ?? ''));
 
@@ -183,6 +184,10 @@ function setEnemySlot(i, defId) {
   v.resetPose();
   v.billboard.rotation.x = 0;
   applyArt(v, defId, 'enemy');
+  // 多部件（内容 def 声明 unitParts）：换敌先收旧部件（tick/材质/贴图），再挂新敌的
+  for (const part of v.parts.values()) { try { part.userData?.dispose?.(); } catch (_) {} }
+  v.parts.clear();
+  if (def.unitParts) attachUnitParts(v, def.unitParts);
   stageStub._units.set(v.uniqueID, v);
   cast.register(`unit:${v.uniqueID}`, v);
   logicEnemies[i] = def.createUnit();
@@ -281,6 +286,7 @@ const fxp = await import('../stage/fx/scripts/enemies/fxPieces.js');
 const chest = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.52, z: v.position.z });
 const feet = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.05, z: v.position.z });
 const head = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.92, z: v.position.z });
+const throat = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.42, z: v.position.z });
 group('形体件（fxPieces 单件）', [
   { label: 'zapArc 电弧（毛球→玩家）', enemy: 'staticPuff', run: () => runWith(async (ctx) => {
     const a = fxp.zapArc(ctx, stageStub._spellDeps(), { from: chest(focusView()), to: chest(playerView) });
@@ -293,10 +299,13 @@ group('形体件（fxPieces 单件）', [
   { label: 'fuseRing 引线收束圈', enemy: 'blastPod', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
   { label: 'mossCreep 蔓延爬苔（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossCreep(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1, size: 26, dist: 20 }).promise) },
   { label: 'mossGrip 缠踝爬须（玩家脚下）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossGrip(ctx, stageStub._spellDeps(), { at: feet(playerView) })) },
-  { label: 'chargeOrb 蓄能光球（金）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()) })) },
-  { label: 'chargeOrb 喉压光球（绿）', run: () => runWith((ctx) => fxp.chargeOrb(ctx, stageStub._spellDeps(), { at: chest(focusView()), color: [0.72, 0.95, 0.45], hot: [1.15, 1.35, 0.75] })) },
+  { label: 'mossBurst 湿苔迸裂（玩家命中点）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossBurst(ctx, stageStub._spellDeps(), { at: chest(playerView), size: 16, seed: 1.7 })) },
+  { label: 'throatPuff 喉囊充气（绿）', enemy: 'pufferToadA', run: () => runWith((ctx) => fxp.throatPuff(ctx, stageStub._spellDeps(), { at: throat(focusView()), h: fxp.unitH(focusView()), dir: Math.sign(playerView.position.x - focusView().position.x) || -1 })) },
+  { label: 'weightSwirl 坠尘旋进（金）', enemy: 'rockPangolin', run: () => runWith((ctx) => fxp.weightSwirl(ctx, stageStub._spellDeps(), { at: feet(focusView()), h: fxp.unitH(focusView()) })) },
   { label: 'edgeSurge 剪影边光（金）', enemy: 'rockPangolin', run: () => { fxp.playEdgeSurge(focusView(), 0xd8a860); toast('边光播放（约 0.6s 自清）'); } },
-  { label: 'dustLanding 双层落地尘', enemy: 'diggerMole', run: () => runWith((ctx) => fxp.dustLanding(ctx, stageStub._spellDeps(), { at: feet(focusView()), count: 18, lampIntensity: 420 })) },
+  { label: 'dustLanding 全域落地尘', enemy: 'diggerMole', run: () => runWith((ctx) => fxp.dustLanding(ctx, stageStub._spellDeps(), { at: feet(focusView()), unit: focusView(), dir: Math.sign(playerView.position.x - focusView().position.x) || -1, count: 18, lampIntensity: 420 })) },
+  { label: 'scaleDust 鳞粉锋（妖蝶→玩家）', enemy: 'nymph', run: () => runWith((ctx) => fxp.scaleDust(ctx, stageStub._spellDeps(), { from: chest(focusView()), to: chest(playerView) }).promise) },
+  { label: 'arriveDust 抵达粉晕（玩家胸口）', enemy: 'nymph', run: () => runWith((ctx) => fxp.arriveDust(ctx, stageStub._spellDeps(), { at: chest(playerView) })) },
 ]);
 
 // ---- 逐敌逐拍（真分发：enemyAct 注册表 + 真实意图枚举）----
@@ -316,9 +325,16 @@ refreshEnemySelect();
 enemySelect.addEventListener('change', () => {
   setEnemySlot(focusIdx, enemySelect.value);
   rebuildBeats();   // 逐敌逐拍组跟随下拉重建（换敌后拍的注册表分发也换人）
+  // 同步回地址栏：刷新/热更新后仍停在当前敌
+  const u = new URL(location.href);
+  u.searchParams.set('enemy', enemySelect.value);
+  history.replaceState(null, '', u);
 });
 
-/** 逐拍枚举：logic 偶走 actionIndex 0..7 读 getIntention 的 kinds（去重）。 */
+/** 逐拍枚举：logic 偶走 actionIndex 0..7 读 getIntention 的 kinds（去重）。
+ *  battleState 给最小桩——召唤判定类 getIntention（bigSlime/motherNymph）硬读
+ *  turn.count/enemies，传 null 会 TypeError 中断重建、目录残留上一敌的旧按钮。 */
+const BEAT_BS = { turn: { count: 1 }, enemies: [], allies: [], config: { maxEnemies: 4 } };
 function beatsOf(defId) {
   const def = getEnemyDefinition(defId);
   if (!def?.getIntention) return [];
@@ -330,7 +346,8 @@ function beatsOf(defId) {
     lu.intention = {};
     lu.getStat = () => 0;
     lu.getEffectStacks = () => 0;
-    const it = def.getIntention(lu, null) ?? {};
+    lu.lastSummonTurn = BEAT_BS.turn.count; // 召唤冷却中 → 目录显示战斗循环拍（召唤拍走通用兜底）
+    const it = def.getIntention(lu, BEAT_BS) ?? {};
     const kinds = it.kinds ?? ['unknown'];
     const key = kinds.join('+') + '|' + (it.note ?? '');
     if (seen.has(key)) continue;
@@ -378,7 +395,8 @@ function rebuildBeats() {
             unitById: (x) => (x === focusView().uniqueID ? focusView() : null),
             scene, uiScene,
           });
-          if (isAttackKind(b.kinds)) await playDamageBeat(b.kinds, 1);
+          // isAttackKind 是单 kind 谓词（intentKinds.js），数组判定要 some
+          if (b.kinds.some(isAttackKind)) await playDamageBeat(b.kinds, 1);
         });
       },
     });
@@ -748,5 +766,19 @@ renderer.setAnimationLoop(() => {
   renderer.autoClear = true;
   window.__ready = true;
 });
+
+// URL 参数（刷新/热更新保持现场）：
+//   ?enemy=<defId>  预选目标敌（下拉同步；换敌后地址栏自动更新）
+//   ?phase=2        预设 Boss 相（MEFM 等：逐拍 attack 走 P2 支路）
+{
+  const params = new URLSearchParams(location.search);
+  const want = params.get('enemy');
+  if (want && getEnemyDefinition(want)) {
+    enemySelect.value = want;
+    setEnemySlot(focusIdx, want);
+    rebuildBeats();
+    if (params.get('phase') === '2') enemyViews[focusIdx]._bossPhase = 2;
+  }
+}
 
 window.__fxGallery = { scene, uiScene, renderer, camera, enemyViews, playerView, stageStub };

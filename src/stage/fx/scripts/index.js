@@ -10,6 +10,9 @@
 //   particles / shake / vignette   舞台 FX 服务
 //   camera     CameraDirector（flyTo/pushOverride；Boss 专属机位写本文件 poses）
 //   notify     PCG 道具单向事件口（fx/notify.js）
+//   releaseBeat()  **提前放行本 ANIM_SCRIPT 节拍**（幂等）：sequencer 立刻泵后续指令，
+//              剧本自身继续跑完剩余演出——「扫射半途就播命中拍」这类并行演出用。
+//              不按时调用则由剧本结束时自动放行（默认阻塞语义）。
 //   onStageDispose(fn)  舞台寿命钩子——**常驻**效果（场景覆写/emitter/烧痕）的收尾
 //              挂这里；ctx.onKill 在剧本正常收尾也会触发，挂它会误收常驻演出
 //   unitById(uniqueID) → UnitObject|null（多部件寻址：unit.parts.get(key) ?? unit，
@@ -24,6 +27,7 @@ import { registerPangolinKingScripts } from './bosses/pangolinKing.js';
 import { registerCorruptSourceScripts } from './bosses/corruptSource.js';
 import { registerEnemyActScript } from './enemyAct.js';
 import { registerChapter1EnemyFx } from './enemies/chapter1.js';
+import { registerChapter2EnemyFx } from './enemies/chapter2.js';
 
 const REG = new Map();
 
@@ -44,3 +48,4 @@ registerPangolinKingScripts(registerScript);
 registerCorruptSourceScripts(registerScript);
 registerEnemyActScript(registerScript);
 registerChapter1EnemyFx(); // 章1 小怪逐敌演出（act 起手/命中主题/死亡覆写注册）
+registerChapter2EnemyFx(); // 章2 小怪逐敌演出（南孚宫）

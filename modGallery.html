@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>卡牌 modifier 审核页</title>
+    <script>
+      window.__errs = [];
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+    </style>
+  </head>
+  <body>
+    <!-- 卡牌 modifier 审核页：注册表逐项挂到代表性卡样上隔离审核（真卡面烘焙链 +
+         真卡特效层 + 页脚词条热区 tooltip）。用法见 src/debug/modGallery.js 头注。 -->
+    <script type="module" src="/src/debug/modGallery.js"></script>
+  </body>
+</html>

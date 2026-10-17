@@ -12,7 +12,8 @@ import {
 } from '../../spells/enemyHitFx.js';
 import { registerEnemyDeathBeat, registerEnemySpawnGarnish } from '../../enemyLifeFx.js';
 import { fireBurst, impactBurst, groundRing, lampPulse } from '../../spells/blocks.js';
-import { zapArc, wailRing, mossCreep, mossGrip, playEdgeSurge, chargeOrb, dustLanding, gooCrown, unitH } from './fxPieces.js';
+import { runScript } from '../../script.js';
+import { zapArc, wailRing, mossCreep, mossGrip, playEdgeSurge, throatPuff, dustLanding, gooCrown, mossBurst, unitH } from './fxPieces.js';
 import {
   strikeWindup, spitGlob, hunkerFx, dazeSway, wailFx, trembleWarn,
   rageSwell, gatherFocus, bristleFx, hardenFx, burrowRest,
@@ -123,16 +124,18 @@ function slimeGooImpact() {
   };
 }
 
-// 蟾蜍鼓气（pufferToad 首拍）：深吸气 → 急剧膨胀（撑到变形 + 喉部气压光球
-// shader 主体 + 借池灯）→ 憋住微颤（峰压一圈声波环）→ 泄气回中。
+// 蟾蜍鼓气（pufferToad 首拍）：深吸气 → 急剧膨胀（撑到变形 + 喉囊逐层充气
+// shader 主体：同心泡膜胀大/末圈绷紧/破圈前兆 + 吸气尘 + 借池灯）→ 憋住微颤
+// （峰压一圈声波环）→ 泄气回中。
 // 与后续 ladder 攻击的 blob 起手构成「越鼓越大」的长线叙事。
-async function pufferInflate({ ctx, deps, unit }) {
+async function pufferInflate({ ctx, deps, unit, player }) {
   const s = sOf(unit);
   const throat = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.42, z: unit.position.z ?? 0 };
-  // 深吸气：先收再涨（蓄气的呼吸节拍）+ 喉部光球起聚（涨随呼吸）
-  const orb = chargeOrb(ctx, deps, {
-    at: throat, color: [0.72, 0.95, 0.45], hot: [1.15, 1.35, 0.75],
-    size: 4.2 * Math.max(0.7, s), ms: 900, lampIntensity: 620,
+  const dir = Math.sign((player?.position.x ?? unit.position.x - 1) - unit.position.x) || 1;
+  // 深吸气：先收再涨（蓄气的呼吸节拍）+ 喉囊起胀（泡膜逐层鼓起随呼吸）
+  const puff = throatPuff(ctx, deps, {
+    at: throat, h: unitH(unit), dir, color: [0.72, 0.95, 0.45],
+    ms: 900, lampIntensity: 300,
   });
   await ctx.custom(unit.uniqueID, {
     durationMs: 260, ease: 'power2.inOut',
@@ -171,57 +174,66 @@ async function pufferInflate({ ctx, deps, unit }) {
     durationMs: 260, ease: 'power2.out',
     onUpdate: (t) => unit.setPose({ squash: 0.76 + 0.24 * t, widen: 1.3 - 0.3 * t }),
   });
-  await orb;
+  await puff;
 }
 
-// 静电链（staticPuff 电击拍）：毛球到每个友军一道错峰电弧（zapArc shader 形体：
-// 折点跳变热核 + 电晕 + 行进脉冲波 + 端点亮斑）+ 靶端双层火花 + 借池灯 punch
-// + 全员蓄势的起手姿态。攻击拍本体演出（noLunge——身体语言全在电上）。
-async function zapChainFx({ ctx, deps, unit }) {
-  const { scene, particles, cast } = deps;
+// 静电链（staticPuff 电击拍）：毛球到玩家一道电弧（zapArc shader 形体：折点跳变
+// 热核 + 电晕 + 行进脉冲波 + 端点亮斑）——主弧 + 错峰伴弧成束（主弧抵达后伴弧
+// 才起弧 = 读「连闪两记」）+ 借池灯 punch + 蓄势起手。
+// 攻击拍本体演出（noLunge——身体语言全在电上）。**高频基础攻击预算**（ENEMY_FX.md
+// 迭代#19）：到命中 ≈235ms、弧全程 ≈605ms、同时在场元素 ≤3——靶端迸溅统一归
+// 受击主题（enemyHitFx garnish），本拍不再补第二份。
+async function zapChainFx({ ctx, deps, unit, player }) {
+  const { scene, particles } = deps;
   if (typeof document === 'undefined' || !scene) return;
   const from = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.52, z: unit.position.z ?? 0 };
-  const targets = [];
-  for (const { handle: t } of cast?.query?.('unit:') ?? []) {
-    if (t && t !== unit && t.side === 'enemy' && !t._dead) targets.push(t);
-  }
+  // 靶锚 0.62H = 骑士立牌视觉胸口（4.5v 复核两帧实锤 0.55 落腰腹——立牌头身比
+  // 与毛球不同，胸口占比更高）
+  const to = player && !player._dead
+    ? { x: player.position.x, y: player.position.y + unitH(player) * 0.62, z: player.position.z ?? 0 }
+    : null;
   // 起手：毛球蓄电（压实 + 源端电火花迸射）
   await ctx.custom(unit.uniqueID, {
-    durationMs: 200, ease: 'power2.out',
+    durationMs: 130, ease: 'power2.out',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * t, widen: 1 + 0.08 * t }),
   });
   particles?.spawn?.(from.x, from.y, { color: 0xd8ecff, count: 9, speed: 11, size: 0.7, ttl: 0.35, gravity: 0, z: from.z });
   particles?.spawn?.(from.x, from.y, { color: 0x8fb0e0, count: 6, speed: 4, size: 1.0, ttl: 0.9, gravity: -2, z: from.z });
-  // 每靶一道电弧（错峰起弧）+ 跳变循环（每 110ms 重掷折点相位 = 「电在跳」）
+  // 主弧 + 错峰伴弧（连闪）+ 跳变循环（每 85ms 重掷折点相位 = 「电在跳」）
+  const MAIN_REACH_MS = 105;
   const arcs = [];
-  for (const [i, tgt] of targets.entries()) {
-    const to = { x: tgt.position.x, y: tgt.position.y + unitH(tgt) * 0.52, z: tgt.position.z ?? 0 };
-    const arc = zapArc(ctx, deps, {
-      from, to, color: [0.55, 0.72, 1.30], width: 7.0, lifeMs: 620 + i * 90, reachMs: 170,
-    });
-    arcs.push({ ...arc, i, to });
-    // 靶端双层火花（弧抵达时迸）
-    ctx.spawn(async (c) => {
-      await c.wait(170 + i * 110);
-      particles?.spawn?.(to.x, to.y, { color: 0xeaf4ff, count: 8, speed: 14, size: 0.6, ttl: 0.4, gravity: -6, z: to.z });
-      particles?.spawn?.(to.x, to.y, { color: 0x9ab8e8, count: 5, speed: 5, size: 0.9, ttl: 1.0, gravity: -3, z: to.z });
-    });
+  let companion = null;
+  if (to) {
+    arcs.push(zapArc(ctx, deps, {
+      from, to, color: [0.55, 0.72, 1.30], width: 7.0, lifeMs: 350, reachMs: MAIN_REACH_MS,
+    }));
+    // 伴弧：主弧抵达后 ~70ms 才起弧（错峰连闪可读），更快抵达、更快熄灭
+    companion = ctx.spawn(async (c) => {
+      await c.wait(MAIN_REACH_MS + 70);
+      const a = zapArc(ctx, deps, {
+        from, to, color: [0.45, 0.60, 1.10], width: 4.2, lifeMs: 300, reachMs: 135,
+      });
+      arcs.push(a);
+      await c.wait(85);
+      a.jolt();
+      await a.promise;
+    }).promise;
   }
-  // 灯 punch（冷蓝，借池）+ 跳变节拍（弧活跃期每 110ms jolt 一次）
+  // 灯 punch（冷蓝，借池）+ 跳变节拍（主弧活跃期 3×85ms）
   ctx.spawn((c) => lampPulse(c, deps, {
     name: 'light:fx0', at: { x: from.x, y: from.y, z: (from.z ?? 0) + 2 }, color: [0.55, 0.72, 1.30],
-    peak: 760, attackMs: 90, decayMs: 560,
+    peak: 760, attackMs: 90, decayMs: 380,
   }));
   const jitter = ctx.spawn(async (c) => {
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < 3; k++) {
       for (const a of arcs) a.jolt();
-      await c.wait(110);
+      await c.wait(85);
     }
   });
-  await Promise.all([...arcs.map((a) => a.promise), jitter.promise]);
+  await Promise.all([...arcs.map((a) => a.promise), jitter.promise, companion].filter(Boolean));
   // 收势回中
   await ctx.custom(unit.uniqueID, {
-    durationMs: 200, ease: 'power2.out',
+    durationMs: 130, ease: 'power2.out',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.1 * (1 - t), widen: 1 + 0.08 * (1 - t) }),
   });
 }
@@ -315,10 +327,12 @@ async function spreadGrip({ ctx, deps, unit, player }) {
 
 // 穿山甲卷甲蓄力（rockPangolin 蓄力拍）：蜷成球状 + 甲片蓄能边光（edgeSurge
 // shader 形体：剪影边缘金线双波上行 + 体表透光）+ 贴地岩尘环（groundRing 土色）
-// + 落地双层尘 + 暖灯 punch。冲锋拍本身走通用突进（lunge 即「滚进」）。
-async function pangolinCurl({ ctx, deps, unit }) {
+// + 落地双层尘（全域错峰，随身体占地铺开）+ 暖灯 punch。冲锋拍本身走通用突进
+// （lunge 即「滚进」）。
+async function pangolinCurl({ ctx, deps, unit, player }) {
   const s = sOf(unit);
   const feet = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.05, z: unit.position.z ?? 0 };
+  const dir = Math.sign((player?.position.x ?? unit.position.x - 1) - unit.position.x) || 1;
   const curl = ctx.custom(unit.uniqueID, {
     durationMs: 360, ease: 'power3.inOut',
     onUpdate: (t) => unit.setPose({ squash: 1 - 0.3 * t, widen: 1 + 0.34 * t }),
@@ -326,12 +340,12 @@ async function pangolinCurl({ ctx, deps, unit }) {
   // 甲片蓄能边光（蜷甲过程金线爬满全身——能量就位的读感）
   playEdgeSurge(unit, 0xd8a860, { durMs: 620 });
   await curl;
-  // 落定：贴地岩尘环 + 双层尘 + 暖灯
+  // 落定：贴地岩尘环 + 全域双层尘 + 暖灯
   const ring = groundRing(ctx, deps, {
     at: feet, size: 15 * Math.max(0.7, s), ms: 520,
     color: [0.72, 0.60, 0.42], hot: [1.05, 0.88, 0.62], lampIntensity: 0,
   });
-  dustLanding(ctx, deps, { at: feet, color: 0xb0a088, count: 16, lampIntensity: 420 });
+  dustLanding(ctx, deps, { at: feet, unit, dir, color: 0xb0a088, count: 16, lampIntensity: 420 });
   await Promise.all([ring, ctx.wait(140)]);
 }
 
@@ -446,8 +460,9 @@ async function runBlastBurst(ctx, stage, at, s) {
 // ====== 逐敌注册 ======
 
 export function registerChapter1EnemyFx() {
-  // -- 史莱姆族（胶质：弹性打击全套，ENEMY_FX.md 迭代#1）--
-  for (const id of ['slime', 'slimeB', 'slimeletA', 'slimeletB']) {
+  // -- 史莱姆族（胶质：弹性打击全套，ENEMY_FX.md 迭代#1；bigSlime 为章2 接线，
+  //    同一物种同一语言）--
+  for (const id of ['slime', 'slimeB', 'slimeletA', 'slimeletB', 'bigSlime']) {
     registerEnemyAct(id, async (a) => {
       const { kinds } = a;
       if (isAtk(kinds)) return gelCompress(a);
@@ -461,7 +476,7 @@ export function registerChapter1EnemyFx() {
     });
     registerEnemyLunge(id, slimePounce());
     registerEnemyHitBeat(id, slimeGooImpact());
-    if (id === 'slime' || id === 'slimeB') registerEnemyDeathBeat(id, slimeMeltDeath);
+    if (id === 'slime' || id === 'slimeB' || id === 'bigSlime') registerEnemyDeathBeat(id, slimeMeltDeath);
   }
   // -- 怨灵（远程：洗虚无/虚弱）--
   for (const id of ['wraithA', 'wraithB']) {
@@ -505,15 +520,40 @@ export function registerChapter1EnemyFx() {
       return 'generic';
     });
     registerEnemyNoLunge(id); // 苔球贴地蠕动，不扑人
+    // 命中主题「湿苔迸裂」（ENEMY_FX.md 迭代#17）：湿重植物团被打碎——形体件
+    // mossBurst（湿苔块重坠 + 断须 + 底部溅幕 + 深绿湿核）＋ 定向双层粒子。
+    // 色系与 mossCreep v2 同源：深湿绿派生 + 湿亮边窄用，pal 同步压暗。
     registerEnemyHitTheme(id, {
-      pal: { color: [0.5, 0.75, 0.4], hot: [0.85, 1.05, 0.6], sparkColor: 0x8aba60 },
+      // rim 一并压成湿绿（底盘缺省 rim 是暖橙——留橙会在绿冲击上叠一条脏边）
+      pal: { color: [0.20, 0.32, 0.15], hot: [0.45, 0.62, 0.30], rim: [0.35, 0.50, 0.28], sparkColor: 0x5a7a42 },
       garnish: (c, d, { at, heavy }) => {
-        d.particles?.spawn?.(at.x, at.y, {
-          color: 0x6a8a4a, count: heavy ? 12 : 8, speed: 6, size: 1.1, ttl: 0.8, gravity: -8, z: at.z,
+        // 形体件独立短协程：命中 beat 收尾（punchImpact 240ms）会触发父 ctx 的
+        // onKill，挂父 ctx 会把仍在坠的苔块提前摘除。本件 ≤430ms 自收尾，
+        // 不占节拍时序、失败不进冲击主体。
+        runScript((cc) => mossBurst(cc, d, {
+          at: { x: at.x, y: at.y + (heavy ? 0.4 : 0), z: at.z },
+          size: heavy ? 18.0 : 16.0, ms: heavy ? 430 : 380,
+        }));
+        // 快层湿苔碎屑（甩脱）：左右两撮定向外抛、重力大、短命——不是中心 radial
+        d.particles?.spawn?.(at.x - 0.9, at.y + 0.5, {
+          color: 0x3e5228, count: 3, speed: 2.8, size: 0.9, ttl: 0.4,
+          gravity: -26, z: at.z, vx: -10.5, vy: 3.5,
         });
-        d.particles?.spawn?.(at.x, at.y, {
-          color: 0x6a8a4a, count: Math.round((heavy ? 12 : 8) * 0.5), speed: (6) * 0.4, size: (1.1) * 1.4, ttl: (0.8) * 2.2, gravity: (-8) * 0.3, z: at.z,
+        d.particles?.spawn?.(at.x + 0.9, at.y + 0.4, {
+          color: 0x465a2e, count: heavy ? 3 : 2, speed: 2.8, size: 0.9, ttl: 0.4,
+          gravity: -26, z: at.z, vx: 10.5, vy: 3.0,
         });
+        // 慢层孢尘（扬尘）：初速上行 + 轻重力回落（先微扬后缓落），长命漂浮
+        d.particles?.spawn?.(at.x, at.y + 0.2, {
+          color: 0x6a7a4a, count: 3, speed: 1.8, size: 1.35, ttl: 1.2,
+          gravity: -2.4, z: at.z, vy: 3.2,
+        });
+        if (heavy) {
+          d.particles?.spawn?.(at.x + 0.6, at.y - 0.2, {
+            color: 0x5c6c40, count: 1, speed: 1.4, size: 1.2, ttl: 1.15,
+            gravity: -2.2, z: at.z, vy: 2.6,
+          });
+        }
       },
     });
   }
@@ -660,12 +700,33 @@ export function registerChapter1EnemyFx() {
     registerEnemyNoLunge(id); // 远程电击不突进
     registerEnemyHitTheme(id, {
       pal: { color: [0.55, 0.75, 1.30], hot: [1.0, 1.15, 1.5], rim: [0.5, 0.7, 1.2], sparkColor: 0xbfe0ff },
-      garnish: (c, d, { at, heavy }) => {
-        d.particles?.spawn?.(at.x, at.y, {
-          color: 0xd8ecff, count: heavy ? 12 : 7, speed: 20, size: 0.6, ttl: 0.3, gravity: 0, z: at.z,
+      // 受击拍（迭代#19）：贴身残弧（主形体，「电流还挂在身上」）+ 迸闪双层火花
+      // （快层迸射 / 慢层滞留），旧版双层同色重复收敛。
+      garnish: (c, d, { at, unit }) => {
+        // 残弧独立短协程：命中 beat 收尾会触发父 ctx 的 onKill，挂父 ctx 会被提前
+        // 摘除（同 mossBurst 接法）。两小段竖向电弧错开 40ms 快闪即灭。
+        const H = unitH(unit ?? {});
+        const half = H * 0.35 * 0.5;
+        runScript(async (cc) => {
+          const mk = (dx, dy) => zapArc(cc, d, {
+            from: { x: at.x + dx, y: at.y - half + dy, z: at.z + 0.6 },
+            to: { x: at.x + dx + 0.32, y: at.y + half + dy, z: at.z + 0.6 },
+            color: [0.55, 0.75, 1.30], width: 4, lifeMs: 220, reachMs: 45,
+          });
+          const a1 = mk(-0.55, 0);
+          a1.jolt();
+          await cc.wait(40);
+          const a2 = mk(0.42, -0.05 * H);
+          a2.jolt();
+          await Promise.all([a1.promise, a2.promise]);
         });
+        // 快层：命中瞬间迸射（短命、高速、细）
         d.particles?.spawn?.(at.x, at.y, {
-          color: 0xd8ecff, count: Math.round((heavy ? 12 : 7) * 0.5), speed: (20) * 0.4, size: (0.6) * 1.4, ttl: (0.3) * 2.2, gravity: (0) * 0.3, z: at.z,
+          color: 0xd8ecff, count: 9, speed: 24, size: 0.55, ttl: 0.22, gravity: 0, z: at.z,
+        });
+        // 慢层：滞留电点（缓、大、长命——与快层分工不叠色）
+        d.particles?.spawn?.(at.x, at.y, {
+          color: 0x9ab8e8, count: 4, speed: 8, size: 0.8, ttl: 0.6, gravity: 0, z: at.z,
         });
       },
     });

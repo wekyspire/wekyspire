@@ -221,7 +221,10 @@ registerCardModifier({
   name: '锁定',
   icon: '🔒',
   color: '#c9a86a',
-  describe: () => '回合结束时仍在手牌中，此卡将被焚毁（打出或弃置即免除）',
+  // 词条进卡面页脚（挂上/摘除经 keywords 变化触发手牌卡面重烘），
+  // 页脚热区 hover 弹本 describe——玩家观察得到具体效果
+  patch: { keywords: { add: ['locked'] } },
+  describe: () => '本回合结束时若仍在手牌中，此卡焚毁',
   agent: () => '规则：此卡带锁定标记期间，回合结束时若仍在手牌区则被焚毁；打出、弃置或任何离手路径均免除并移除标记。锁定不阻止打出。',
 });
 

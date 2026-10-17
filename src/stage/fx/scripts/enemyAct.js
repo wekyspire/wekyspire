@@ -32,7 +32,7 @@ async function empowerCast(ctx, deps, { unit, light = false, heal = false }) {
 }
 
 export function registerEnemyActScript(registerScript) {
-  registerScript('enemyAct', async ({ ctx, args, cast, particles, shake, unitById, scene, uiScene }) => {
+  registerScript('enemyAct', async ({ ctx, args, cast, particles, shake, unitById, scene, uiScene, releaseBeat }) => {
     const unit = unitById(args?.unit);
     if (!unit || unit._dead) return;
     const kinds = args?.kinds ?? [];
@@ -40,7 +40,9 @@ export function registerEnemyActScript(registerScript) {
     // Boss 专属起手优先（内容归属：fx/scripts/bosses/ 注册）——attack 拍通常也由
     // Boss beat 自己静默吞掉（起手 = 突进 + 命中主题 beat）
     const custom = ENEMY_ACT_BEATS.get(unit._defId);
-    if (custom && await custom({ ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds }) !== 'generic') return;
+    if (custom && await custom({
+      ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds, releaseBeat,
+    }) !== 'generic') return;
     // 攻击族（attack/heavy/execute/fixedAttack，含攻击+buff/debuff 混合拍）：
     // 起手 = 突进，不叠加施法演出
     if (kinds.some(isAttackKind)) return;

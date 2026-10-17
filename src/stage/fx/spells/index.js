@@ -31,7 +31,7 @@ import { runScript } from '../script.js';
 import { uniform, uv } from 'three/tsl';
 import { spellQuad, linearColor, warmSpellQuad as warmVariant, compileWarmSpellQuads } from './blocks.js';
 import { moonWarmQuad } from './moonArc.js';
-import { punchShade, slashShade, projectileShade, crystalShade, ringFlashShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
+import { punchShade, slashShade, projectileShade, tracerShade, crystalShade, ringFlashShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade } from './shaders.js';
 import { emberBurst } from './emberBurst.js';
 import { castFlare } from './castFlare.js';
 import { fireballCast } from './fireballCast.js';
@@ -483,6 +483,22 @@ export function warmSpellFx(deckDefIds, deps) {
     } catch (_) {}
   }
   compileWarmSpellQuads(deps?.renderer, deps?.camera);
+}
+
+/**
+ * 敌方实弹（机炮曳光弹）常色变体登记：颜色字面量与 mefm1 剧本的参数一致，
+ * 异色 = 异程序，必须逐色预热。只登记不编译——由调用方随后调 warmSpellFx
+ * （compile 在其尾部统一做）。
+ */
+export function warmEnemyProjectiles() {
+  warmVariant('enemy:tracer:p1', () => spellQuad({
+    shade: tracerShade(uv(), uniform(5.0), linearColor([1.05, 0.75, 0.26]), linearColor([1.65, 1.3, 0.6])),
+    width: 2.4, height: 2.4, name: 'warm:tracer',
+  }));
+  warmVariant('enemy:tracer:p2', () => spellQuad({
+    shade: tracerShade(uv(), uniform(5.0), linearColor([1.12, 0.82, 0.32]), linearColor([1.8, 1.45, 0.7])),
+    width: 2.4, height: 2.4, name: 'warm:tracer',
+  }));
 }
 
 // 变体构造器表：params → [{ key, mk } | ...]。key 含色字面量（同 shade 异色 =

@@ -10,7 +10,7 @@
 //     geometry transform 只做辅助（冲击 punch / 朝向拉伸 / 斜置）；
 //   · 自建对象（mesh/材质/几何）一律 ctx.onKill 兜底回收，正常路径也自收；
 //   · 借用资产只推参数不持有：粒子走 deps.particles.spawn（爆散）、灯**只借
-//     光池 light:fx0/fx1**（演出中途 new 灯 = 全场景着色器重编译 1.2s 冻帧，铁律）；
+//     光池 light:fx0/fx1/fx2**（演出中途 new 灯 = 全场景着色器重编译 1.2s 冻帧，铁律）；
 //   · 块不决定节拍时序——notify 时机（早通告/全落定才通告）归模板编排；
 //   · 世界向发光面片一律 additiveLight（rgb 直出、alpha 不占地）+ depthTest:false
 //     + renderOrder 50（UnitObject 层级基值：盖立绘(0)、让位状态层(60+)/粒子(70+)）；
@@ -20,7 +20,7 @@ import { uniform, uv, vec3, vec4, float } from 'three/tsl';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { additiveLight } from '../../post/passes.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y } from '../../StageManager.js';
-import { slashShade, darkSlashShade, projectileShade, crystalShade, globShade, hexSigilShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
+import { slashShade, darkSlashShade, projectileShade, tracerShade, crystalShade, globShade, hexSigilShade, ringFlashShade, punchShade, fireBurstShade, beamShade, veilShade, fireOrbShade, qiGatherShade, groundRingShade, SLASH_QUAD_SPAN, PUNCH_QUAD_SPAN } from './shaders.js';
 
 const FX_RENDER_ORDER = 50;   // 施术面片层级（见文件头纪律）
 // 色参 → 常量 vec3 节点（烘进 Fn，不走 Color uniform——管线缓存坑，见 shaders.js 头注）
@@ -75,9 +75,10 @@ export async function cardFlare(ctx, deps, {
 }
 
 /** 施术面片（shader 主笔件的公共装配）：Node 材质 + colorNode + 层级纪律一把装好。
- *  导出供模板层拼自定义件（火环/蓄力核等非块级造型）——装配纪律只有这一份。 */
-export function spellQuad({ shade, width, height, name }) {
-  const geo = new THREE.PlaneGeometry(width, height);
+ *  导出供模板层拼自定义件（火环/蓄力核等非块级造型）——装配纪律只有这一份。
+ *  segX/segY = 网格分段（缺省 1×1）：逐帧改写顶点自定义几何的件按需加段。 */
+export function spellQuad({ shade, width, height, name, segX = 1, segY = 1 }) {
+  const geo = new THREE.PlaneGeometry(width, height, segX, segY);
   const mat = additiveLight(new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false }));
   const dbg = SPELL_DEBUG;
   mat.colorNode = shade;
@@ -141,8 +142,9 @@ export async function arcProjectile(ctx, deps, {
                   // 高频摆会走样成抖直线——<1 换成少而大的甩（窜天猴的慢摆S弯）
   fire = false,   // 火系投射物：换 fireOrbShade（fbm 火面+头尾不对称+破边）——
                   // 平滑高斯「发光团」不够审美线
-  shape = 'orb',  // 能量形状：'orb' = projectileShade 光珠（缺省）；'crystal' =
-                  // crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）；
+  shape = 'orb',  // 投射物形状：'orb' = projectileShade 光珠（缺省）；'tracer' =
+                  // tracerShade 曳光弹（细长白热核 + 琥珀拖尾，实弹武器用）；
+                  // 'crystal' = crystalShade 晶片（回蓝语汇——魏启的蓝色异形资源粒）；
                   // 'glob' = globShade 液弹彗星（吐弹族）；'sigil' = hexSigilShade 咒印双环
   fadeInMs = 0,   // >0：发射段生长（0.15→1 的 smoothstep）——弹体从口部「成形-长大-飞出」，
                   // 不再全尺寸于身体中线凭空蹦出（ENEMY_FX.md 迭代#4）
@@ -156,6 +158,13 @@ export async function arcProjectile(ctx, deps, {
     arcH = arcH * (1 - arcJitter / 2 + Math.random() * arcJitter);
     ms = Math.round(ms * (0.88 + Math.random() * 0.24));
   }
+  // 曳光弹是直线实弹：不摆尾（圆形弹体时代残留的 darting 会让条形弹体看着在扭）
+  if (shape === 'tracer') darting = 0;
+  // 曳光弹朝向按**发射弦**锁死一次（不逐帧追弧线切线——老的 per-frame 旋转
+  // 在圆形光珠上看不见，换成长条形就成了肉眼可见的「子弹在转」）
+  const lockedRotation = shape === 'tracer'
+    ? Math.atan2(to.y - from.y, to.x - from.x)
+    : null;
   // 摆尾参数（块级随机——多发不齐步）：幅度/双频/相位
   const dx0 = to.x - from.x, dy0 = to.y - from.y;
   const len0 = Math.hypot(dx0, dy0) || 1;
@@ -172,7 +181,9 @@ export async function arcProjectile(ctx, deps, {
   const { quad, release } = spellQuad({
     shade: fire
       ? fireOrbShade(uv(), uPhase, uColor, uHot, uSeed)
-      : shape === 'crystal'
+      : shape === 'tracer'
+        ? tracerShade(uv(), uPhase, uColor, uHot)
+        : shape === 'crystal'
         ? crystalShade(uv(), uPhase, uColor, uHot)
         : shape === 'glob'
           ? globShade(uv(), uPhase, uColor, uHot)
@@ -182,6 +193,7 @@ export async function arcProjectile(ctx, deps, {
     width: size, height: size, name: 'spellFx:projectile',
   });
   quad.position.set(from.x, from.y, from.z ?? 0);
+  if (lockedRotation != null) quad.rotation.z = lockedRotation;
   deps.scene.add(quad);
   const lamp = deps.cast?.get?.(lampName) ?? null;
   if (lamp) { lamp.color.setRGB(color[0], color[1], color[2]); lamp.intensity = 0; }
@@ -212,7 +224,7 @@ export async function arcProjectile(ctx, deps, {
       0.5 * (from.y + to.y) + Math.sin(Math.PI * t) * arcH,
       0.5 * ((from.z ?? 0) + (to.z ?? 0)),
     );
-    quad.rotation.z = Math.atan2(to.y - from.y, to.x - from.x);
+    quad.rotation.z = lockedRotation ?? Math.atan2(to.y - from.y, to.x - from.x);
     quad.scale.set(stretch, 1.0, 1);
     uPhase.value = 10;
     await ctx.wait(3000);
@@ -232,12 +244,14 @@ export async function arcProjectile(ctx, deps, {
         u * from.y + t * to.y + Math.sin(Math.PI * t) * arcH + ny * s,
         u * (from.z ?? 0) + t * (to.z ?? 0),
       );
-      // 朝速度方向自旋（弧线切线 + 摆尾速度）+ 前向拉伸
-      const vx = to.x - from.x;
-      const vy = (to.y - from.y) + arcH * Math.PI * Math.cos(Math.PI * t);
-      const sx = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
-      const sy = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
-      quad.rotation.z = Math.atan2(vy + ny * sy, vx + nx * sx);
+      // 朝速度方向自旋（弧线切线 + 摆尾速度）+ 前向拉伸；曳光弹锁死发射弦朝向
+      if (lockedRotation == null) {
+        const vx = to.x - from.x;
+        const vy = (to.y - from.y) + arcH * Math.PI * Math.cos(Math.PI * t);
+        const sx = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
+        const sy = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;
+        quad.rotation.z = Math.atan2(vy + ny * sy, vx + nx * sx);
+      }
       // 发射段生长（fadeInMs）：从 0.15 长到 1（smoothstep 加速）——口部成形的读感
       const g = fadeInMs > 0 ? Math.min(1, (t * ms) / fadeInMs) : 1;
       const gs = g < 1 ? 0.15 + 0.85 * (g * g * (3 - 2 * g)) : 1;

@@ -76,6 +76,7 @@ export const KEYWORD_LABELS = Object.freeze({
   anchored: '封咏', // 咏唱不可主动解除；旧名「锁定」让位给无人战体的锁牌机制
   blood: '卖血',
   mini: '迷你', // 计为 0 张手牌（不占手牌计数，；只管计数，与弃牌无关）
+  locked: '锁定', // 焚毁烙印 modifier（词条经 patch 进视图——挂上即随卡面重烘见页脚）
 });
 
 export function projectCardFull(battle, rt) {

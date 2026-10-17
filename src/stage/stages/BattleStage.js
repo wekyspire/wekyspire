@@ -335,13 +335,14 @@ export class BattleStage {
       }
     }
 
-    // Boss 演出光池（light:fx0 / light:fx1）：**入场即挂在场景里、强度 0**。
+    // Boss 演出光池（light:fx0 / light:fx1 / light:fx2）：**入场即挂在场景里、强度 0**。
     // 为什么必须是池：演出中途 new PointLight + add = 前向渲染器重编译全部受光材质
     // （PCG 房实测 1.2s 主线程长任务，画面冻住、收尾弹栈的机位硬切全部被吞进冻结里
     // ——09-24「卡达斯转段相机跃变」的根因）。剧本一律 `cast.get('light:fxN')` 借灯，
     // 只推强度/换色/挪位（重挂到单位不改变场景灯数，不触发重编译）。
+    // fx0 = 常驻 Boss 灯；fx1 = 瞬态 punch/枪口频闪；fx2 = 飞行投射物携灯。
     this._fxLightPool = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 40, 1.8);
       l.name = `fxPool${i}`;
       this.scene.add(l);
@@ -985,18 +986,27 @@ export class BattleStage {
   }
 
   // 通用剧本节拍（fx 架构 ANIM_SCRIPT 闸口）：core 只报「剧本 id + 标量参数」，
-  // 内容全在 fx/scripts/ 注册表。阻塞节拍——剧本跑完才 finish；未知 id 静默回落收拍
-  // （观战端/旧档遇到新剧本 id 不炸队列，铁律同 hitFx 注册表）。
+  // 内容全在 fx/scripts/ 注册表。默认阻塞节拍——剧本跑完才 finish；剧本可提前调
+  // releaseBeat() 放行（起手演出半途 → 后续命中拍先入队并行播，剧本余段继续，
+  // 扫射/飞行类演出用）。未知 id 静默回落收拍（观战端/旧档遇到新剧本 id 不炸队列，
+  // 铁律同 hitFx 注册表）。
   _scriptBeat(payload, finish) {
     const fn = getScript(payload?.script);
     if (!fn) {
       console.warn(`[fx/scripts] 未知剧本（静默收拍）：${payload?.script}`);
       return finish();
     }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      finish();
+    };
     const h = runScript(async (ctx) => {
       await fn({
         ctx,
         args: payload ?? {},
+        releaseBeat: release,
         ...this.fxServices(),
         scene: this.scene, uiScene: this.uiScene, // blocks.js 基础块组 deps 袋用
       });
@@ -1004,7 +1014,7 @@ export class BattleStage {
     this._fxScripts.add(h);
     h.promise.then(() => {
       this._fxScripts.delete(h);
-      finish();
+      release();
     });
   }
 

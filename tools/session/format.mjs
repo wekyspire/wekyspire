@@ -4,6 +4,7 @@ import { canUseSkill, makeSkillCtx } from '../../src/core/skills/helpers.js';
 import { getSkillDefinition } from '../../src/core/skills/registry.js';
 import { getEffectDefinition } from '../../src/core/effects/registry.js';
 import { getRelicDefinition } from '../../src/core/relics/registry.js';
+import { modsOf, getCardModifier, hasCardModifierDef } from '../../src/core/skills/cardModifiers.js';
 
 // 富文本 → 纯文本：/effect{x}|/named{x} 保留内文；/card{id} 解析为卡名（渲染层同款语义）
 export const plain = (s) => String(s ?? '')
@@ -52,6 +53,11 @@ export function cardLine(idx, rt, battleCtx) {
   const kw = kwText(def); if (kw) bits.push(kw);
   if (rt.isActivated) bits.push('★已激活咏唱');
   else if (rt.remainingUses <= 0) bits.push(`冷却中(剩${rt.currentCooldown}拍)`);
+  // 卡牌 modifier（锁定等瞬时状态）：agent 观察通道（与玩家侧卡面词条/tooltip 同源）
+  for (const m of modsOf(rt)) {
+    const md = hasCardModifierDef(m.modId) ? getCardModifier(m.modId) : null;
+    if (md) bits.push(`${md.icon ?? ''}${md.name}（${md.describe?.() ?? ''}）`);
+  }
   if (rt.power) bits.push(`威力${rt.power > 0 ? '+' : ''}${rt.power}`);
   let desc;
   try {

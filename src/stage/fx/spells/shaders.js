@@ -120,6 +120,43 @@ export const projectileShade = Fn(([vUv, uProgress, uColor, uHot]) => {
 });
 
 /**
+ * 曳光弹（tracer——机炮实弹投射物）：不是能量光团，而是**细长白热核 + 琥珀拖尾**。
+ * quad 已按速度方向自旋 + 前向拉伸；shader 只按 uv 画轴向条带（+x = 飞行头）。
+ *  · 头端热核：椭圆（轴向 ~0.17uv、横向很薄）推过 bloom 阈；
+ *  · 拖尾：只朝尾侧指数渐隐 + 高频燃烧抖动（曳光剂的火焰不稳）；
+ *  · 边缘熄灭：四边一律软收（发光面片不许在 quad 直边切出亮线）。
+ * @param vUv       quad uv（x = 飞行方向，1 = 头）
+ * @param uPhase    单调时间量（头位微漂 + 拖尾燃烧抖动）
+ * @param uColor    vec3 尾焰色（线性）
+ * @param uHot      vec3 热核色（HDR）
+ */
+export const tracerShade = Fn(([vUv, uPhase, uColor, uHot]) => {
+  // 中间量纪律：py/head 会进多个项式，按叶子拓扑逐项展开（共享节点有全黑实测坑）
+  const edge = smoothstep(float(0.0), float(0.08), vUv.x)
+    .mul(oneMinus(smoothstep(float(0.90), float(1.0), vUv.x)))
+    .mul(oneMinus(smoothstep(float(0.36), float(0.5), abs(vUv.y.sub(float(0.5))))));
+  const rc = length(vec2(
+    vUv.x.sub(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010))).mul(1.4),
+    vUv.y.sub(float(0.5)).mul(4.0),
+  ));
+  const core = exp(rc.mul(rc).mul(-60.0));
+  const rh = length(vec2(
+    vUv.x.sub(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010))).mul(1.1),
+    vUv.y.sub(float(0.5)).mul(2.0),
+  ));
+  const halo = exp(rh.mul(rh).mul(-9.0));
+  const tail = exp(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010)).sub(vUv.x).mul(-3.6))
+    .mul(smoothstep(float(0.0), float(0.05),
+      float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010)).sub(vUv.x)))
+    .mul(exp(abs(vUv.y.sub(float(0.5))).mul(-40.0)));
+  const flick = sin(vUv.x.mul(70.0).sub(uPhase.mul(44.0))).mul(0.16).add(0.84);
+  const rgb = uColor.mul(halo.mul(0.55))
+    .add(uColor.mul(tail.mul(1.1)).mul(flick))
+    .add(uHot.mul(core.mul(3.6)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/**
  * 晶片（回蓝语汇的资源形状——与 projectileShade 光珠同族异形）：
  *  · 形状 = 长菱晶粒（x 长轴四向收锐），中线亮脊（内棱面全反射）+ 随 uProgress
  *    掠过长轴的棱面火彩（飞行中的晶体反光扫动）；
