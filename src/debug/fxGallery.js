@@ -88,6 +88,14 @@ scene.add(particles.sprites);
 uiScene.add(particles.spritesUI);
 const shake = new ScreenShake({ director });
 const cast = new Cast();
+// fx 灯池（BattleStage 同款两口）：剧本借 light:fx0/1 只推参数——画廊缺这层时
+// 一切灯 punch（lampPulse）静默降级不可验收
+for (let i = 0; i < 2; i++) {
+  const l = new THREE.PointLight(0xffffff, 0, 40, 1.8);
+  l.name = `fxPool${i}`;
+  scene.add(l);
+  cast.register(`light:fx${i}`, l);
+}
 const animator = new StageAnimator({ tween: gsapTween });
 const runFx = (fn) => runScript(fn, { animator });
 

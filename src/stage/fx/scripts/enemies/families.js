@@ -86,6 +86,30 @@ export function strikeWindup(style, opts = {}) {
         durationMs: 170, ease: 'power2.out',
         onUpdate: (t) => unit.setPose({ squash: 1 - 0.18 * k * t, widen: 1 + 0.08 * k * t, lean: lean * t }),
       });
+      if (heavy) {
+        // 落定拍（迭代 #8，与伏低收尾同帧）：体重把尘从身下两侧挤出（#5 同语言——
+        // 中心 radial 会从裆下爆出读「拉裤子」）+ 短促暖灯给重量（色随消费者尘色）
+        const y0 = unit.position.y;
+        const R = (unit._groundRadius ?? 5) * 0.75;
+        const z = unit.position.z ?? 0;
+        for (const side of [-1, 1]) {
+          deps.particles?.spawn?.(unit.position.x + side * R, y0 + 0.6, {
+            color, count: 6, speed: 11, size: 0.95, ttl: 0.3, gravity: -9, z,
+          });
+        }
+        deps.particles?.spawn?.(unit.position.x, y0 + 0.4, {
+          color, count: 4, speed: 4.5, size: 1.1, ttl: 0.55, gravity: -5, z,
+        });
+        deps.particles?.spawn?.(unit.position.x, y0 + 0.8, {
+          color, count: 2, speed: 2, size: 1.4, ttl: 1.0, gravity: -1.5, z,
+        });
+        const lr = ((color >> 16) & 255) / 255, lg = ((color >> 8) & 255) / 255, lb = (color & 255) / 255;
+        ctx.spawn((c) => lampPulse(c, deps, {
+          at: { x: unit.position.x, y: y0 + 0.6, z },
+          color: [Math.min(1.25, lr * 1.1 + 0.2), Math.min(1.1, lg + 0.12), Math.min(1.0, lb * 0.9 + 0.06)],
+          peak: 220, attackMs: 60, decayMs: 260,
+        }));
+      }
       // 蓄力颤（小振幅高频——肌肉绷紧读感）
       await ctx.custom(unit.uniqueID, {
         durationMs: heavy ? 190 : 110, ease: 'none',
@@ -94,10 +118,6 @@ export function strikeWindup(style, opts = {}) {
           lean: lean + 0.012 * Math.sin(t * Math.PI * 6),
         }),
       });
-      if (heavy) {
-        // 重击蓄力：落地双层尘 + 暖灯（大动作的地面存在感）
-        dustLanding(ctx, deps, { at: feetOf(unit), color, count: 14, lampIntensity: 380 });
-      }
       await settlePose(ctx, unit, 150);
       return;
     }
