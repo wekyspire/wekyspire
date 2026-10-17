@@ -8,7 +8,7 @@
 import { arcProjectile, lampPulse } from '../../spells/blocks.js';
 import { glowTexture } from '../../orbs.js';
 import {
-  wailRing, fuseRing, dustLanding, unitH,
+  wailRing, fuseRing, unitH,
   pulseEdgeSurge, drainVeins, pressureBurst, playEdgeSurge,
 } from './fxPieces.js';
 
@@ -341,18 +341,58 @@ export function hardenFx(opts = {}) {
 }
 
 /**
- * 掘洞休整族（鼹鼠掘洞恢复）：下沉蓄 + 挖地扬尘 + 回中。恢复的绿意交给
- * 结算拍 gainSweep（已有）。
+ * 掘洞休整族（鼹鼠掘洞恢复，ENEMY_FX.md 迭代#10）：身体把土顶开钻进去——掘土
+ * 沿身体占地**全域错峰翻起**（头侧先入土、尘的分布宽 = 身体宽；单点冒烟与体量
+ * 无关 = 假尘）；半身入洞静养（洞沿碎土偶塌），冒头再带出一路碎土。恢复的绿意
+ * 交给结算拍 gainSweep（已有）。
  */
 export function burrowRest(opts = {}) {
   const { color = 0xa89070 } = opts;
-  return async ({ ctx, deps, unit }) => {
+  return async ({ ctx, deps, unit, player }) => {
+    const y0 = unit.position.y;
+    const R = unit._groundRadius ?? 5;
+    const z = unit.position.z ?? 0;
+    const dir = Math.sign((player?.position.x ?? unit.position.x + 1) - unit.position.x) || 1; // 头朝玩家侧
+    ctx.onKill(() => { unit.position.y = y0; unit.resetPose(); });
+    const dirt = (x, n, sp, sz, ttl) =>
+      deps.particles?.spawn?.(x, y0 + 0.5, { color, count: n, speed: sp, size: sz, ttl, gravity: -8, z });
+    // ① 蓄势刨地（朝玩家侧前倾下压）
+    const noseDown = leanToward(unit, player, 0.06);
     await ctx.custom(unit.uniqueID, {
-      durationMs: 180, ease: 'power2.in',
-      onUpdate: (t) => unit.setPose({ squash: 1 - 0.12 * t, widen: 1 + 0.08 * t }),
+      durationMs: 140, ease: 'power2.in',
+      onUpdate: (t) => unit.setPose({ squash: 1 - 0.10 * t, widen: 1 + 0.06 * t, lean: noseDown * t }),
     });
-    dustLanding(ctx, deps, { at: feetOf(unit), color, count: 12 });
-    await ctx.wait(220);
+    // ② 钻地：半身入洞；掘土从头侧到尾侧沿占地错峰翻起（身体过了一线土才翻）
+    const dig = ctx.custom(unit.uniqueID, {
+      durationMs: 280, ease: 'power2.in',
+      onUpdate: (t) => {
+        unit.position.y = y0 - 3.2 * t;
+        unit.setPose({ squash: 1 - 0.10 - 0.08 * t, widen: 1 + 0.06 + 0.05 * t });
+      },
+    });
+    for (const off of [1, 0.5, 0, -0.5, -1]) {
+      dirt(unit.position.x + off * R * dir, off === 1 ? 6 : 4, off === 1 ? 6.5 : 5, 1.5, 0.7);
+      await ctx.wait(48);
+    }
+    await dig;
+    // ③ 洞中静养：洞沿碎土塌落两阵（轻）
+    for (let i = 0; i < 2; i++) {
+      await ctx.wait(260);
+      dirt(unit.position.x + (Math.random() - 0.5) * R, 2, 2.5, 1.3, 0.6);
+    }
+    // ④ 冒头：回升过冲 + 足迹全域碎土再翻（比钻入轻）
+    const rise = ctx.custom(unit.uniqueID, {
+      durationMs: 240, ease: 'power2.out',
+      onUpdate: (t) => {
+        unit.position.y = y0 - 3.2 * (1 - t);
+        unit.setPose({ squash: 0.90 + 0.10 * t, widen: 1.11 - 0.05 * t });
+      },
+    });
+    for (const off of [1, 0.5, 0, -0.5, -1]) {
+      dirt(unit.position.x + off * R * dir, 3, 4.5, 1.3, 0.55);
+      await ctx.wait(36);
+    }
+    await rise;
     await settlePose(ctx, unit, 200);
   };
 }
