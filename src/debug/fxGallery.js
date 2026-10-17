@@ -112,6 +112,7 @@ const mkUnit = (uniqueID, side, standeeHeight = 22) => {
 const playerView = mkUnit('p', 'player', 24);
 const logicPlayer = null;
 scene.add(playerView);
+animator.register('p', playerView); // 体态拍走 ctx.custom(id)——未注册 id 秒完成、onUpdate 永不触发
 cast.register('role:player', playerView);
 
 const ENEMY_SLOTS = 3;
@@ -180,6 +181,7 @@ for (let i = 0; i < ENEMY_SLOTS; i++) {
   const v = mkUnit(`e${i}`, 'enemy', 22);
   enemyViews.push(v);
   scene.add(v);
+  animator.register(v.uniqueID, v); // 同上：无注册 = 一切体态拍在画廊里静默失效
 }
 setEnemySlot(0, 'slime');
 setEnemySlot(1, 'mossBallA');
