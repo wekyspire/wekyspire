@@ -71,6 +71,7 @@ export const KEYWORD_ACCENTS = Object.freeze({
   '不朽': '#d3dae8',
   '短暂': '#a8cdf2',
   '迷你': '#c7b3f7',
+  '锁定': '#e8a23c', // 焚毁烙印 modifier（瞬时状态——只着色页脚词条，不进顶部彩条）
 });
 // 顶部彩条堆叠序（多词条卡从上往下全数显示）：消耗（一次性经济）
 // > 固有（起手位）> 不朽 > 短暂 > 迷你——排序只为堆叠稳定，不再取舍。
@@ -571,6 +572,10 @@ function drawFooter(ctx, card) {
     ctx.fillText(label, x, y);
     if (getNamedTerm(label)) {
       regions.push({ type: 'named', payload: { name: label }, rect: { x, y: y - 8, w, h: 16 } });
+    } else {
+      // 卡牌 modifier 词条（锁定等瞬时状态）：热区弹 modifier 描述（观察通道）
+      const mod = card.mods?.find((m) => m.name === label);
+      if (mod) regions.push({ type: 'mod', payload: { modId: mod.id }, rect: { x, y: y - 8, w, h: 16 } });
     }
     x += w;
   }

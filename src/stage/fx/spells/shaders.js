@@ -120,6 +120,43 @@ export const projectileShade = Fn(([vUv, uProgress, uColor, uHot]) => {
 });
 
 /**
+ * 曳光弹（tracer——机炮实弹投射物）：不是能量光团，而是**细长白热核 + 琥珀拖尾**。
+ * quad 已按速度方向自旋 + 前向拉伸；shader 只按 uv 画轴向条带（+x = 飞行头）。
+ *  · 头端热核：椭圆（轴向 ~0.17uv、横向很薄）推过 bloom 阈；
+ *  · 拖尾：只朝尾侧指数渐隐 + 高频燃烧抖动（曳光剂的火焰不稳）；
+ *  · 边缘熄灭：四边一律软收（发光面片不许在 quad 直边切出亮线）。
+ * @param vUv       quad uv（x = 飞行方向，1 = 头）
+ * @param uPhase    单调时间量（头位微漂 + 拖尾燃烧抖动）
+ * @param uColor    vec3 尾焰色（线性）
+ * @param uHot      vec3 热核色（HDR）
+ */
+export const tracerShade = Fn(([vUv, uPhase, uColor, uHot]) => {
+  // 中间量纪律：py/head 会进多个项式，按叶子拓扑逐项展开（共享节点有全黑实测坑）
+  const edge = smoothstep(float(0.0), float(0.08), vUv.x)
+    .mul(oneMinus(smoothstep(float(0.90), float(1.0), vUv.x)))
+    .mul(oneMinus(smoothstep(float(0.36), float(0.5), abs(vUv.y.sub(float(0.5))))));
+  const rc = length(vec2(
+    vUv.x.sub(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010))).mul(1.4),
+    vUv.y.sub(float(0.5)).mul(4.0),
+  ));
+  const core = exp(rc.mul(rc).mul(-60.0));
+  const rh = length(vec2(
+    vUv.x.sub(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010))).mul(1.1),
+    vUv.y.sub(float(0.5)).mul(2.0),
+  ));
+  const halo = exp(rh.mul(rh).mul(-9.0));
+  const tail = exp(float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010)).sub(vUv.x).mul(-3.6))
+    .mul(smoothstep(float(0.0), float(0.05),
+      float(0.70).add(sin(uPhase.mul(53.0)).mul(0.010)).sub(vUv.x)))
+    .mul(exp(abs(vUv.y.sub(float(0.5))).mul(-40.0)));
+  const flick = sin(vUv.x.mul(70.0).sub(uPhase.mul(44.0))).mul(0.16).add(0.84);
+  const rgb = uColor.mul(halo.mul(0.55))
+    .add(uColor.mul(tail.mul(1.1)).mul(flick))
+    .add(uHot.mul(core.mul(3.6)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/**
  * 晶片（回蓝语汇的资源形状——与 projectileShade 光珠同族异形）：
  *  · 形状 = 长菱晶粒（x 长轴四向收锐），中线亮脊（内棱面全反射）+ 随 uProgress
  *    掠过长轴的棱面火彩（飞行中的晶体反光扫动）；
@@ -142,6 +179,70 @@ export const crystalShade = Fn(([vUv, uProgress, uColor, uHot]) => {
     .add(uColor.mul(glint).mul(0.8))
     .add(uHot.mul(hotSum).mul(2.2));
   return vec4(rgb, float(1.0));
+});
+
+/**
+ * 液弹彗星（吐弹族形状，ENEMY_FX.md 迭代#4）：+x = 前向（quad 按速度方向拉伸）。
+ *  · 主体 = 前圆后收的液滴（椭圆距离场；角向六瓣慢转 = 液面蠕动边界）；
+ *  · 表面张力亮膜环（贴边一圈亮）+ 内部双频漩涡（液体流动感）+ 前核热斑（过阈）；
+ *  · 尾部拖尖（后向窄条渐熄）——飞行方向语言；边缘熄灭 mask。
+ *  · 4 参纪律同 projectileShade（vUv / uProgress / uColor / uHot）。
+ */
+export const globShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  // 主体椭圆（头略前移）：横向压 2.05 倍读「比宽长」
+  const rr = length(vec2(p.x.sub(float(0.06)).mul(1.30), p.y.mul(2.05)));
+  const ang = atan(p.y, p.x.sub(float(0.06)));
+  const wob = sin(ang.mul(6.0).add(uProgress.mul(22.0))).mul(0.5).add(0.5);
+  const bodyR = float(0.64).add(wob.mul(0.07));
+  const body = oneMinus(smoothstep(bodyR.sub(float(0.16)), bodyR, rr));
+  // 表面张力亮膜：贴边一窄环（由内向外渐亮、被 body 截断）
+  const film = smoothstep(bodyR.sub(float(0.36)), bodyR.sub(float(0.12)), rr).mul(body);
+  // 内部双频漩涡（液体内脏流动）
+  const sw1 = sin(p.x.mul(10.0).add(p.y.mul(5.0)).sub(uProgress.mul(30.0))).mul(0.5).add(0.5);
+  const sw2 = sin(p.x.mul(6.0).sub(p.y.mul(9.0)).add(uProgress.mul(24.0))).mul(0.5).add(0.5);
+  const swirl = sw1.mul(sw2).mul(body);
+  // 尾部拖尖：后向窄条（横向收窄 + 后半权重 + 尖端熄灭）
+  const tailY = oneMinus(smoothstep(float(0.03), float(0.15), abs(p.y)));
+  const tailBack = oneMinus(smoothstep(float(-0.46), float(-0.10), p.x));
+  const tailTip = smoothstep(float(-0.50), float(-0.34), p.x);
+  const tail = tailY.mul(tailBack).mul(tailTip);
+  // 前核热斑
+  const cx = p.x.sub(float(0.10));
+  const core = exp(cx.mul(cx).mul(-26.0).add(p.y.mul(p.y).mul(-50.0)));
+  const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(p)));
+  const rgb = uColor.mul(body.mul(0.30).add(film.mul(1.80)))
+    .add(uColor.mul(tail.mul(1.90)))
+    .add(uHot.mul(swirl.mul(0.75)))
+    .add(uHot.mul(core.mul(2.30)));
+  return vec4(rgb.mul(edge), float(1.0));
+});
+
+/**
+ * 咒印双环（咒弹形状，ENEMY_FX.md 迭代#4）：外环三瓣折线正转（六角咒印轮廓）、
+ * 内环五瓣反转（双环扭）；环脊白热过 bloom、环间暗域 + 核心热斑；整体色走 uColor。
+ * 4 参纪律同 projectileShade。
+ */
+export const hexSigilShade = Fn(([vUv, uProgress, uColor, uHot]) => {
+  const p = vUv.sub(vec2(0.5));
+  const r = length(p).mul(2.0);
+  const a = atan(p.y, p.x);
+  const w1 = sin(a.mul(3.0).add(uProgress.mul(7.0))).mul(0.5).add(0.5);
+  const R1 = float(0.74).add(w1.mul(0.09));
+  const d1 = r.sub(R1);
+  const ring1 = exp(d1.mul(d1).mul(-420.0));
+  const w2 = sin(a.mul(-5.0).sub(uProgress.mul(11.0))).mul(0.5).add(0.5);
+  const R2 = float(0.46).add(w2.mul(0.06));
+  const d2 = r.sub(R2);
+  const ring2 = exp(d2.mul(d2).mul(-560.0));
+  const inner = oneMinus(smoothstep(float(0.32), float(0.42), r));   // 环内暗域
+  const hot = exp(r.mul(r).mul(-30.0));
+  const edge = oneMinus(smoothstep(float(0.47), float(0.50), length(p)));
+  const rgb = uColor.mul(ring1.mul(1.60).add(ring2.mul(1.15)))
+    .add(uHot.mul(ring1.mul(ring1).mul(2.0)))
+    .add(uColor.mul(inner.mul(0.22)))
+    .add(uHot.mul(hot.mul(1.6)));
+  return vec4(rgb.mul(edge), float(1.0));
 });
 
 /**

@@ -4,9 +4,9 @@
 // 纯施法类给施法者一拍「进架」语言——命中侧反馈（受方姿态/粒子/护盾罩）由
 // ANIM_EFFECT/ANIM_SHIELD 等既有节拍承接，本剧本只补施法者的动作侧。
 // 攻击类的命中特效在 enemyHitFx.js（伤害拍）。
-import { arcProjectile } from '../spells/blocks.js';
 import { isAttackKind, isBuffKind, isDebuffKind } from '../../../core/intentKinds.js';
-import { playCastConverge } from '../gainFx.js';
+import { gatherFocus, curseBolt } from './enemies/families.js';
+import { playEdgeSurge } from './enemies/fxPieces.js';
 
 // 逐敌专属起手（Boss 主题化）：defId → async ({ctx, deps, args, unit, player, kinds})。
 // 返回 'generic' = 落回通配模板，其余（含 undefined）= 已消费（攻击拍静默、或
@@ -15,37 +15,24 @@ import { playCastConverge } from '../gainFx.js';
 const ENEMY_ACT_BEATS = new Map();
 export function registerEnemyAct(defId, fn) { ENEMY_ACT_BEATS.set(defId, fn); }
 
-// 咒击式（赋予削弱）：暗紫咒弹从施法者胸口划弧飞向玩家，抵达小爆——
-// 削弱系（虚弱/中毒/塞牌）的「被下咒」读感主体，后续玩家佝偻姿态接续
-async function curseShot(ctx, deps, { unit, player }) {
-  const from = { x: unit.position.x, y: unit.position.y + 3.4 * (unit._baseScale ?? 1), z: unit.position.z };
-  const to = player
-    ? { x: player.position.x, y: player.position.y + 3.4 * (player._baseScale ?? 1), z: player.position.z }
-    : null;
-  await arcProjectile(ctx, deps, {
-    from, to,
-    color: [0.62, 0.38, 0.95], hot: [0.95, 0.80, 1.30],
-    size: 1.6, ms: 420, arcH: 4.5, stretch: 1.2,
-    lampIntensity: 420,
-    trail: { color: 0x9a5ae0, speed: 3, size: 0.55, ttl: 0.3 },
-  });
-  if (to) {
-    deps.particles?.spawn?.(to.x, to.y, {
-      color: 0xb26ee8, count: 12, speed: 8, size: 0.7, ttl: 0.6, gravity: -4, z: to.z,
-    });
+// 施法增益式（增强自身或友军）：聚能缩配（汇流纹小号向胸口收束，buff/治疗
+// 的内汇语义）；防御/召唤走低亮剪影边光一拍——结果侧已有护盾罩/召唤立起，
+// 起手不抢戏。增益落点（受方 buff 扫描光带）由后续节拍承接
+async function empowerCast(ctx, deps, { unit, light = false, heal = false }) {
+  if (light) {
+    playEdgeSurge(unit, 0x9ecbff, { durMs: 400 });
+    await ctx.wait(180);
+    return;
   }
-}
-
-// 施法增益式（增强自身或友军）：光点环收束进施法者胸口（聚能起手，fx/gainFx）
-// ——payoff 语言放在起手位读不通（脚下光柱读「被捅」）。增益落点
-// （受方 buff 扫描光带/粒子）由后续节拍承接
-async function empowerCast(ctx, deps, { unit, light = false }) {
-  playCastConverge(unit, deps.particles, light ? 0x9ecbff : 0xffe0a0);
-  await ctx.wait(200);   // 起手拍短停（收束可读即可，不占戏）
+  await gatherFocus({
+    vein: heal ? [0.48, 0.78, 0.48] : [0.62, 0.55, 0.40],
+    moteColor: heal ? 0x7ac87a : 0xd8c8a0,
+    size: 9.5, motes: 4,
+  })({ ctx, deps, unit });
 }
 
 export function registerEnemyActScript(registerScript) {
-  registerScript('enemyAct', async ({ ctx, args, cast, particles, shake, unitById, scene, uiScene }) => {
+  registerScript('enemyAct', async ({ ctx, args, cast, particles, shake, unitById, scene, uiScene, releaseBeat }) => {
     const unit = unitById(args?.unit);
     if (!unit || unit._dead) return;
     const kinds = args?.kinds ?? [];
@@ -53,16 +40,18 @@ export function registerEnemyActScript(registerScript) {
     // Boss 专属起手优先（内容归属：fx/scripts/bosses/ 注册）——attack 拍通常也由
     // Boss beat 自己静默吞掉（起手 = 突进 + 命中主题 beat）
     const custom = ENEMY_ACT_BEATS.get(unit._defId);
-    if (custom && await custom({ ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds }) !== 'generic') return;
+    if (custom && await custom({
+      ctx, deps, args, unit, player: cast.get('role:player') ?? null, kinds, releaseBeat,
+    }) !== 'generic') return;
     // 攻击族（attack/heavy/execute/fixedAttack，含攻击+buff/debuff 混合拍）：
     // 起手 = 突进，不叠加施法演出
     if (kinds.some(isAttackKind)) return;
     if (kinds.some(isDebuffKind)) {
-      await curseShot(ctx, deps, { unit, player: cast.get('role:player') ?? null });
+      await curseBolt(ctx, deps, { unit, player: cast.get('role:player') ?? null });
       return;
     }
     if (kinds.some(isBuffKind) || kinds.includes('heal')) {
-      await empowerCast(ctx, deps, { unit });
+      await empowerCast(ctx, deps, { unit, heal: !kinds.some(isBuffKind) });
       return;
     }
     // 防御/召唤：轻量版（结果侧已有护盾罩/蜷缩姿态/召唤立起，起手只给一闪）

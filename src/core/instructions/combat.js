@@ -185,7 +185,8 @@ export class ApplyDamageInstruction extends BattleInstruction {
       heavy: isHeavyDamage(dmg, target),
     });
     if (target.isDead()) {
-      ctx.presenter?.unitDeath?.({ unit: target, heavy: isHeavyDamage(dmg, target) });
+      // tags 随行（标量串）：舞台死亡节拍按死因分流（爆囊 blast = 自爆死亡语言）
+      ctx.presenter?.unitDeath?.({ unit: target, heavy: isHeavyDamage(dmg, target), tags: [...this.tags] });
       // 亡语（敌人定义的 onDeath 钩子）：与 def.act 同上下文（actx = {...ctx, unit, def}）；
       // submitInstruction 的默认父节点 = 当前指令，故亡语作为「致死那一下」的子节点立即结算
       // ——不额外占节拍、不改回合序，也不需要新增一种「死亡指令」。

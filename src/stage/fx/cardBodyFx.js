@@ -9,7 +9,10 @@
 // 效果语义与 GLSL 版逐式一致（视觉零回归）：
 //   uBurn      0..1  焚毁吞蚀（离场演出）：自底向上噪声火线 + 炭化预热 + 逐格 discard；
 //                    uBurn=0 时前沿线在牌面下方界外，天然无效果
-//   uSeed            焚毁噪声种子（每张卡咬边形状不同，点燃时写入）
+//   uSeed            焚毁/啃食噪声种子（每张卡咬边形状不同，点燃/开啃时写入）
+//   uDevour   0..1  啃食吞蚀（甲虫啃牌）：侧向大扇贝咬边 + 撕裂纤维亮线 + 前缘
+//                   压折暗带 + 逐格 discard；由咬合猛合帧跳段驱动（一口一块）
+//   uDevourSide 0|1 啃食侧（0=左缘先被吃 / 1=右缘先被吃，按甲虫方位写入）
 //   uDim       0..1  禁用态：去饱和 + 压暗 + 微冷
 //   uHighlight 0..1  高亮态：提亮 + 微暖 + 极轻呼吸（uTime 驱动）
 //   uCostGlow  0..1  费用徽章辉光（出牌消耗反馈）：徽章 mask 内
@@ -171,13 +174,15 @@ const cbfReact = Fn(([c, fxUv, rec]) => {
 
 /**
  * 给牌面材质挂 C0 特效（幂等：已挂过直接取原记录）。
- * @returns {{ uBurn, uSeed, uDim, uHighlight, uTime, uCostGlow, uReact, uReactKind, uReactTime, uReactSeed, costBadges, rebind: () => void }}
+ * @returns {{ uBurn, uSeed, uDevour, uDevourSide, uDim, uHighlight, uTime, uCostGlow, uReact, uReactKind, uReactTime, uReactSeed, costBadges, rebind: () => void }}
  */
 export function attachCardBodyFx(material) {
   if (material.userData[PATCH_KEY]) return material.userData[PATCH_KEY];
   const rec = {
     uBurn: uniform(0),
     uSeed: uniform(0),
+    uDevour: uniform(0),
+    uDevourSide: uniform(0),
     uDim: uniform(0),
     uHighlight: uniform(0),
     uTime: uniform(0),
@@ -234,6 +239,27 @@ export function attachCardBodyFx(material) {
             // 前沿上方炭化预热（焦黑泛红）
             const c1 = oneMinus(d.sub(0.02).div(0.14));
             c.assign(mix(c, c.mul(vec3(0.4, 0.26, 0.2)).add(vec3(0.09, 0.015, 0.0)), c1.mul(0.85)));
+          });
+        });
+        // 啃食吞蚀（C0 上段，甲虫啃牌）：uDevour 侧向推进（uDevourSide 0=左/1=右
+        // 先被吃），大扇贝咬边 + 撕裂纤维亮线 + 前缘压折暗带——被咬掉的区域 Discard，
+        // 由咬合的猛合帧跳段驱动（每口真实吃掉一块）
+        If(rec.uDevour.greaterThan(0.001), () => {
+          const xd = mix(fxUv.x, oneMinus(fxUv.x), rec.uDevourSide);
+          const n = cbfNoise(fxUv.mul(vec2(3.0, 6.0)).add(vec2(rec.uSeed.mul(1.3), rec.uSeed))).mul(0.7)
+            .add(cbfNoise(fxUv.mul(vec2(9.0, 13.0)).add(rec.uSeed.mul(2.1))).mul(0.3));
+          const line = rec.uDevour.mul(1.5).sub(0.22);
+          const d = xd.sub(line).add(n.sub(0.5).mul(0.55));
+          If(d.lessThan(-0.03), () => {
+            Discard();                                            // 已被咬掉的区域
+          }).ElseIf(d.lessThan(0.03), () => {
+            // 撕裂纤维亮边（新咬开的纸口，米白微 HDR）
+            const g = oneMinus(d.add(0.03).div(0.06));
+            c.assign(mix(c, vec3(1.25, 1.08, 0.72).mul(g.mul(0.8).add(0.6)), g.mul(0.9)));
+          }).ElseIf(d.lessThan(0.2), () => {
+            // 前缘压折暗带（被咬前的挤压褶皱）
+            const c1 = oneMinus(d.sub(0.03).div(0.17));
+            c.assign(mix(c, c.mul(vec3(0.5, 0.45, 0.4)).add(vec3(0.04, 0.03, 0.02)), c1.mul(0.8)));
           });
         });
         return vec4(c, base.a);

@@ -524,7 +524,8 @@ function carrionBeetleDef(id, cautious = false) {
       if (phase === 0) {
         const top = bs.zones.deck[0];
         if (top) {
-          actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: top.uniqueID }));
+          // source = 啃食者：舞台把牌库顶卡飞向甲虫口部咬碎（gnawDeck 演出链）
+          actx.kernel.submitInstruction(new BurnCardInstruction({ uniqueID: top.uniqueID, source: unit }));
         }
         return;
       }

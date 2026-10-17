@@ -9,6 +9,8 @@ import { CardObject } from '../../objects/CardObject.js';
 import { CARD_WIDTH, CARD_HEIGHT } from '../../objects/cardMetrics.js';
 import { playCardTransform } from '../../fx/cardTransform.js';
 import { runSpellFx, resolveSpellFx } from '../../fx/spells/index.js';
+import { lampPulse } from '../../fx/spells/blocks.js';
+import { shredBurst, unitH } from '../../fx/scripts/enemies/fxPieces.js';
 import { nextCardSpot } from '../../cardSpot.js';
 
 /** 牌堆图标摆位（deck 锚；宿主 layout/pile 建档也用）。 */
@@ -38,9 +40,13 @@ export const cardBeats = {
     }
     this.picker.removePickable(id);
     if (type === EventNames.ANIM_CARD_BURNT) {
-      // 牌库来源的焚毁（腐食甲虫啃牌库顶）：视图停在牌库堆上且隐形、从未烘面——
+      // 敌方吞噬（腐食甲虫啃牌）：卡不原地烧——飞向啃食者口部被咬碎咽下
+      const src = payload?.source?.uniqueID != null
+        ? (this._units.get(payload.source.uniqueID) ?? null) : null;
+      if (src && !src._dead) return this._gnawOut(id, view, src, payload, finish);
+      // 牌库来源的焚毁（无来源单位的中立焚牌）：视图停在牌库堆上且隐形、从未烘面——
       // 先烘面显形、飞到中央展示位（宾语展示同机位），落定再原地燃尽；
-      // 否则焚毁整场演给一张隐形空白卡（"吃卡没感觉"的病根）。手牌卡维持原地烧。
+      // 否则焚毁整场演给一张隐形空白卡。手牌卡维持原地烧。
       if (!view.visible && payload?.cardView) {
         view.setCard(payload.cardView);
         view.visible = true;
@@ -64,6 +70,100 @@ export const cardBeats = {
     this.model.setZone(id, 'deck'); // 状态在节拍时点推进（模型权威）
     this._flyOut(id, view, { ...PILE_POSITIONS.deck, z: 40, scale: 0.5 }, finish);
   },
+  // 啃食焚毁（腐食甲虫 gnawDeck，ENEMY_FX.md 迭代#2 强化）：被焚的卡从牌库顶被叼走
+  // ——弧线飞递到甲虫口部 → 两口真啃咬（开颚→猛合，猛合帧卡面被咬掉一块：uDevour
+  // 侧向啃蚀跳段 + 纸屑迸裂 + 碎屑）→ 咽下（残余拖进口内啃蚀收满）。
+  // 节拍阻塞至咽下收尾（同焚毁链）。gsapTween 口径：卡面补间一律 view 根 + 语义键。
+  _gnawOut(id, view, src, payload, finish) {
+    if (!view.visible && payload?.cardView) {
+      view.setCard(payload.cardView); // 牌库卡从未烘面（同中立焚毁的显形理由）
+      view.visible = true;
+    }
+    const s = src._baseScale ?? 1;
+    const mouth = { x: src.position.x, y: src.position.y + unitH(src) * 0.38, z: src.position.z ?? 0 };
+    const ui = this._sm?.worldToUI?.(mouth.x, mouth.y, mouth.z, 50) ?? { x: 0, y: 4 };
+    const deps = this._spellDeps();
+    // 啃蚀 uniforms（C0 补丁）：种子随卡、先吃甲虫那一侧的缘
+    const body = view.fx.body;
+    body.uDevour.value = 0;
+    body.uSeed.value = Math.random() * 100;
+    body.uDevourSide.value = ui.x > 0 ? 1 : 0;
+    // 咬合 = 开颚 → 猛合 → 咬住微颤（姿态通道）；猛合命中点（~100ms）回调 onSnap
+    const chomp = (onSnap) => {
+      const st = { p: 0 };
+      gsap.to(st, {
+        p: 1, duration: 0.185, ease: 'none',
+        onUpdate: () => {
+          const p = st.p;
+          if (p < 0.38) {                       // 开颚（候餐末态 widen 1.10 顺承）
+            const k = p / 0.38;
+            src.setPose({ squash: 1 + 0.05 * k, widen: 1.10 + 0.06 * k, lean: 0.05 * k });
+          } else if (p < 0.68) {                // 猛合（颚扣死）
+            const k = (p - 0.38) / 0.30;
+            src.setPose({ squash: 1.05 - 0.20 * k, widen: 1.16 - 0.26 * k, lean: 0.05 + 0.07 * k });
+          } else {                              // 咬住微颤（嚼劲）
+            const k = (p - 0.68) / 0.32;
+            const j = Math.sin(k * Math.PI * 3) * 0.02;
+            src.setPose({ squash: 0.85 + j, widen: 0.90 + j, lean: 0.12 * (1 - k) });
+          }
+        },
+        onComplete: () => src.resetPose(),
+      });
+      gsap.delayedCall(0.10, onSnap);
+    };
+    // 猛合命中：啃蚀跳段吃掉一块 + 卡面压折 + 纸屑迸裂 + 碎屑（大口档再加硬光微震）
+    const snap = (big, to) => {
+      gsap.to(body.uDevour, { value: to, duration: big ? 0.15 : 0.13, ease: 'power3.out' });
+      const sc = view.scale.x;
+      gsap.to(view.scale, big
+        ? { x: sc * 0.8, y: sc * 0.92, duration: 0.13, ease: 'power2.in' }
+        : { x: sc * 0.9, y: sc * 0.9, duration: 0.11, ease: 'power3.out' });
+      gsap.to(view.rotation, { z: view.rotation.z + (Math.random() - 0.5) * 0.3, duration: 0.11 });
+      this._fxRunScript((c) => shredBurst(c, deps, { at: mouth, size: big ? 10 : 6.4, ms: big ? 380 : 300 }));
+      this.particles.spawn(mouth.x, mouth.y, {
+        count: big ? 10 : 6, color: 0xd8c8a8, speed: 11, ttl: 0.5, gravity: -26, size: 0.7, z: mouth.z,
+      });
+      this.particles.spawn(mouth.x, mouth.y - 0.6, {
+        count: big ? 5 : 3, color: 0xb8a880, speed: 3.5, ttl: 1.1, gravity: -10, size: 1.1, z: mouth.z,
+      });
+      if (big) {
+        this.shake.impulse(0.5);
+        this._fxRunScript((c) => lampPulse(c, deps, {
+          name: 'light:fx1', at: { x: mouth.x, y: mouth.y, z: mouth.z + 1.2 }, color: [1.0, 0.82, 0.5],
+          peak: 600, attackMs: 60, decayMs: 260,
+        }));
+      }
+    };
+    this._cardFlight(id, { x: ui.x, y: ui.y, z: 50, scale: 0.85 }, {
+      arc: 15, tilt: 0.18, ease: 'power1.in', durationMs: 380,
+      onDone: () => {
+        chomp(() => snap(false, 0.42));
+        gsap.delayedCall(0.22, () => chomp(() => snap(true, 0.78)));
+        gsap.delayedCall(0.45, () => {
+          // 咽下：残余拖进口内 + 啃蚀收满（整卡被吃没）+ 末滴碎屑 → 收殓
+          const dx = body.uDevourSide.value ? 0.8 : -0.8;
+          this._tweenFactory(view, { x: ui.x + dx, y: ui.y - 1.0, rotation: view.rotation.z + 0.3 }, {
+            durationMs: 260, ease: 'power2.in',
+          });
+          this.particles.spawn(mouth.x, mouth.y - 1, {
+            count: 5, color: 0xb8a880, speed: 2.5, ttl: 0.9, gravity: -14, size: 0.9, z: mouth.z,
+          });
+          gsap.to(body.uDevour, {
+            value: 1, duration: 0.26, ease: 'power1.in',
+            onComplete: () => {
+              this.model.removeCard(id);
+              this._views.delete(id);
+              this.animator.unregister(id);
+              this.uiScene.remove(view);
+              view.dispose();
+              finish();
+            },
+          });
+        });
+      },
+    });
+  },
+
   // 焚毁离场：原地燃烧殆尽（着色器自底向上吞蚀 + 前沿余烬 + 火起颤动），
   // 燃尽后牌面已全 discard（不可见）——瞬移落位牌库图标处即销毁收尾，无飞行动画。
   // 焚毁 = 对象终结（唯一销毁路径）：模型出册 + 视图销毁（burnt 不回流，id 不会
@@ -313,7 +413,7 @@ export const cardBeats = {
         let cx = 0, cy = 0, cz = 0;
         for (const v of list) {
           const s = v._baseScale ?? 1;
-          cx += v.position.x; cy += v.position.y + 3.4 * s; cz += v.position.z;
+          cx += v.position.x; cy += v.position.y + unitH(v) * 0.50; cz += v.position.z;
         }
         cx /= list.length; cy /= list.length; cz /= list.length;
         let spread = 0;
@@ -355,8 +455,7 @@ export const cardBeats = {
         const id = this._snapshot?.player?.uniqueID;
         const v = id != null ? (this._units.get(id) ?? null) : null;
         if (!v) return null;
-        const s = v._baseScale ?? 1;
-        return { x: v.position.x, y: v.position.y + 4.6 * s, z: v.position.z };
+        return { x: v.position.x, y: v.position.y + unitH(v) * 0.62, z: v.position.z }; // 抬手高度
       },
     };
   },
@@ -373,16 +472,10 @@ export const cardBeats = {
           : this._targetPool('enemy').map(u => u.uniqueID);   // 缺省全体存活敌（显示态口径）
         return ids.map(id2 => this._units.get(id2)).filter(Boolean);
       },
-      // 单位锚 = 立绘中心（血条同款高度基准 3.4×scale，z 随单位真实深度）
-      unitAnchor: (unit) => {
-        const s = unit._baseScale ?? 1;
-        return { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
-      },
+      // 单位锚 = 立绘中心（高度感知 0.5H，z 随单位真实深度）
+      unitAnchor: (unit) => ({ x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z }),
       // 单位脚锚 = 落地爆心（火向上烧的爆发/光柱底部坐这里）
-      unitFeet: (unit) => {
-        const s = unit._baseScale ?? 1;
-        return { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
-      },
+      unitFeet: (unit) => ({ x: unit.position.x, y: unit.position.y + unitH(unit) * 0.05, z: unit.position.z }),
       // 卡面（uiScene）→ 世界点：ui 投影回屏再反投世界相机（战线附近深度），
       // 火弹/投射物从这里起飞
       cardTipWorld: () => {

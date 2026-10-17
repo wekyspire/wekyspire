@@ -14,12 +14,14 @@
 //            （应用前口径 describe，params 经 ctx.params 透传插值）
 //   cards    多卡并列预览（升级分叉 hover）：模型带 cardPreviews [{ skillId, params }]
 //   named    术语文档（namedTerms，键即术语名，含参数如「咏唱2」）
+//   mod      卡牌 modifier 词条（卡面页脚热区——锁定等瞬时挂载状态的效果说明）
 //   intention 意图投影数据直译短句（与 UnitObject 意图条图标一一对应）
 //   shift    Shift 详情方标（文案由热区携带）
 
 import { allEffects, getEffectDefinition } from '../core/effects/registry.js';
 import { isAttackKind, ATTACK_KIND_NAMES } from '../core/intentKinds.js';
 import { getSkillDefinition, hasSkill } from '../core/skills/registry.js';
+import { getCardModifier, hasCardModifierDef } from '../core/skills/cardModifiers.js';
 import { getNamedTerm } from '../core/skills/namedTerms.js';
 import { getRelicDefinition, hasRelic } from '../core/relics/registry.js';
 import { hasMarkup } from '../stage/richtext/inline.js';
@@ -35,6 +37,7 @@ export function tooltipModel(kind, payload = {}) {
     case 'relic': return relicModel(payload);
     case 'item': return { title: payload.title ?? '', body: payload.body ?? '', tint: payload.tint, markup: hasMarkup(payload.body) };
     case 'named': return namedModel(payload);
+    case 'mod': return modModel(payload);
     case 'intention': return intentionModel(payload);
     case 'shift': return { title: payload.name ?? '', body: '' };
     default: return { title: `[${kind}] ${payload.name ?? ''}`, body: '' };
@@ -100,6 +103,14 @@ function namedModel({ name }) {
   return term
     ? { title: `${term.name}${term.param ?? ''}`, body: term.text, markup: hasMarkup(term.text) }
     : { title: name ?? '', body: '' };
+}
+
+// 卡牌 modifier 词条（卡面页脚热区）：锁定等瞬时挂载状态的效果说明
+function modModel({ modId }) {
+  const def = (modId != null && hasCardModifierDef(modId)) ? getCardModifier(modId) : null;
+  if (!def) return { title: `[mod] ${modId}`, body: '' };
+  const body = def.describe?.() ?? '';
+  return { title: `${def.icon ?? ''}${def.name}`, body, markup: hasMarkup(body) };
 }
 
 function intentionModel({ intention, unitName }) {

@@ -5,8 +5,9 @@
 //   C0 牌面 shader —— face 材质补丁（fx/cardBodyFx.js，构造即挂常驻）：uBurn 焚毁
 //        吞蚀（离场演出）/ uDim 禁用压暗 / uHighlight 高亮提暖；记录 = this.body
 //   C1 压暗层 z 0.35~0.36 —— veil 冷却膜（shader 霜冻/腐蚀）+ doom 暗化盖纱（0.36，
-//        TSL 面片法线混合）：压暗牌面（「这张牌暂时不可用/要离开」的沉下去感）
-//   C2 标记层 z 0.40~0.50 —— chip 冷却拍数水印（0.40，不发光）、lock 锁定四角括号
+//        TSL 面片法线混合）+ lock 卡缘焦蚀（0.36，TSL 面片法线混合写 alpha）：
+//        压暗牌面（「这张牌暂时不可用/要离开/正在被烧」的沉下去感）
+//   C2 标记层 z 0.40~0.50 —— chip 冷却拍数水印（0.40，不发光）、lock 焚毁烙印
 //        （0.44，TSL 面片加色）、doom 将弃描框（0.50，TSL 面片加色）：表意件
 //   C3 发光层 z 0.40~3.0 —— pulse 一次性加色脉冲（0.45，TSL shader 三模式能量面片）、
 //        edge 咏唱流光（0.40，
@@ -34,9 +35,17 @@ const CHIP_LAYOUT = { w: 12, h: 12, y: 1.2, z: 0.4, opacity: 0.26 };
 // 将弃描边：警示红 + 急促呼吸（1.2s 周期——逼近的截止感）；暗化盖纱让牌面"沉"下去
 // （颜色烘常量 vec3 进 shader——彩层 uniform 跨会话非确定失显铁律；0xd84848≈(0.847,0.282,0.282)）
 const DOOM_MARGIN = 2;   // 描框面片外扩边距（环带外缘 1.15 留软边余量）
-// 锁定括号：警戒琥珀 + 慢呼吸（2.4s 周期——「已被瞄准」的持续状态感，与将弃的急促截止区分；
-// 0xe8a23c≈(0.910,0.635,0.235)）
-const LOCK_MARGIN = 2;   // 括号面片外扩边距（臂端外缘 1.45 留软边余量）
+// 锁定 = 焚毁烙印（回合结束时仍在手牌中则焚毁）：中央烙刑印（环 + 45° 斜十字封条，
+// 烙铁毛边 + 环外微焦晕）+ 卡缘焦蚀。常驻余烬呼吸 2.4s（与将弃的红 1.2s 急促分家），
+// enter 一次白热烙下拍；色一律烘常量 vec3（彩层 uniform 跨会话非确定失显铁律）。
+const LOCK_BRAND_D = 0.42;      // 中央烙印直径 / 卡宽（落在卡图区）
+const LOCK_BRAND_PLANE = 0.62;  // 烙印面片边长 / 卡宽（含环外微晕）
+const LOCK_BRAND_DY = 0.055;    // 烙印中心下移 / 卡高（避开卡名带与页脚词条行）
+const LOCK_BRAND_Z = 0.44;      // 烙印 z（C2 加色层；低于手牌邻卡 z 间隔 0.5）
+const LOCK_EDGE_Z = 0.36;       // 卡缘焦蚀 z（C1 法线混合层，压 veil 之上）
+const LOCK_BREATH_S = 2.4;      // 余烬呼吸周期（s）
+const LOCK_BREATH_W = (Math.PI * 2) / LOCK_BREATH_S;
+const LOCK_BORN_S = 0.7;        // enter 烙下拍时长（s）
 // 咏唱流光面片：牌面外扩边距（给 rim 外溢与光晕留空间）、点亮淡入速率
 const EDGE_MARGIN = 5;
 const EDGE_FADE_IN = 3.5;
@@ -232,18 +241,89 @@ const doomVeilShade = Fn(([vUv, uTime, uCard]) => {
   return vec4(vec3(0.102, 0.031, 0.031), corner.mul(float(0.34).sub(k.mul(0.12))));
 });
 
-// 锁定括号：四角 L 形瞄准框（外扩 1.0、条粗 0.9、臂长 5；abs 镜像折叠
-// 到第一象限后取横竖两臂盒 SDF 之并），加色发光件
-const lockShade = Fn(([vUv, uTime, uCard]) => {
-  const p = vUv.sub(0.5).mul(uCard.add(LOCK_MARGIN * 2));
-  const q = abs(p);
-  const w = uCard.x.mul(0.5).add(1.0), h = uCard.y.mul(0.5).add(1.0);
-  // 横臂盒（心 (w-2.5, h)、半 (2.5, 0.45)）∪ 竖臂盒（心 (w, h-2.5)、半 (0.45, 2.5)）
-  const dH = max(abs(q.x.sub(w.sub(2.5))).sub(2.5), abs(q.y.sub(h)).sub(0.45));
-  const dV = max(abs(q.x.sub(w)).sub(0.45), abs(q.y.sub(h.sub(2.5))).sub(2.5));
-  const mask = oneMinus(smoothstep(-0.25, 0.25, min(dH, dV)));
-  const k = float(0.5).add(sin(uTime.mul(2.618)).mul(0.5));
-  return vec4(vec3(0.910, 0.635, 0.235).mul(mask).mul(float(0.45).add(k.mul(0.5))), 1.0);
+// 焚毁烙印（C2 加色面片）：外烙环 + 环内 45° 斜十字封条（两道粗划），SDF 阈值被
+// cell hash 咬出烙铁毛边；环外一道窄 exp 微焦晕。enter 由 uBorn 驱动白热闪峰
+// 指数衰减到余温（JS 侧推进）；常驻余烬呼吸 2.4s（sin⁴：谷长峰短，基线 0.35 / 峰 1.5，
+// 白热芯峰短暂过 bloom 阈一档）。色全部烘常量 vec3——禁 uniform 传彩层。
+const lockBrandShade = Fn(([vUv, uTime, uBorn, uCard]) => {
+  const R = uCard.x.mul(LOCK_BRAND_D * 0.5);   // 烙印半径（世界单位，随卡宽缩放）
+  const plane = uCard.x.mul(LOCK_BRAND_PLANE);
+  const p = vUv.sub(0.5).mul(plane);
+  const r = length(p);
+
+  // 烙铁毛边：低频毛边 + 高频焦噪扰进 SDF 阈值（环与十字同口径，边界不规整）
+  const wob = vNoise(p.div(R).mul(4.5)).sub(0.5).mul(R.mul(0.075));
+  const grain = vHash(floor(p.div(R).mul(15.0))).sub(0.5).mul(R.mul(0.028));
+  const bite = wob.add(grain);
+
+  // 外烙环（带粗 ~9% 烙印半径的 SDF 环带；噪声让环缘呈烙铁咬边）
+  const rr = r.add(bite);
+  const ringDist = abs(rr.sub(R.mul(0.925)));
+  const ringD = ringDist.sub(R.mul(0.045));
+  const ring = oneMinus(smoothstep(R.mul(-0.018), R.mul(0.030), ringD));
+
+  // 环内 45° 斜十字封条（min(对角距离) 即两线之并；以软盘域裁到环内缘）
+  const u = dot(p, vec2(0.7071, 0.7071));
+  const v = dot(p, vec2(-0.7071, 0.7071));
+  const barDist = min(abs(u), abs(v));
+  const crossD = barDist.sub(R.mul(0.098)).add(bite.mul(0.6));
+  const disc = oneMinus(smoothstep(R.mul(0.80), R.mul(0.94), r));
+  const cross = oneMinus(smoothstep(R.mul(-0.018), R.mul(0.030), crossD)).mul(disc);
+
+  const body = max(ring, cross);
+  // 白热芯：笔画中脊比边缘热（环与十字各取近骨线距离）
+  const coreRing = oneMinus(smoothstep(0.0, R.mul(0.028), ringDist));
+  const coreBar = oneMinus(smoothstep(0.0, R.mul(0.036), barDist)).mul(disc);
+  const core = max(coreRing, coreBar).mul(body);
+
+  // 余烬呼吸：2.4s 慢周期，sin⁴ 谷长峰短；enter 白热闪峰 ~2.4 指数衰减
+  const wave = clamp(sin(uTime.mul(LOCK_BREATH_W)).mul(0.5).add(0.5), 0.0, 1.0);
+  const breath = pow(wave, 4.0);
+  const ember = float(0.35).add(breath.mul(1.15));
+  const flash = exp(uBorn.mul(-5.5));
+  const hotMix = clamp(core.mul(flash.add(breath.mul(breath).mul(0.5))), 0.0, 1.0);
+
+  // 环外微焦晕（窄 exp 衰减，只出现在环外；随呼吸明灭）
+  const halo = exp(max(r.sub(R), 0.0).mul(-1.0).div(R.mul(0.085)))
+    .mul(smoothstep(R.mul(0.97), R.mul(1.03), r))
+    .mul(float(0.35).add(breath.mul(0.65)));
+
+  const col = mix(vec3(0.91, 0.55, 0.22), vec3(1.50, 1.05, 0.60), hotMix)
+    .mul(body.mul(ember.add(flash.mul(1.25))))
+    .add(vec3(0.91, 0.55, 0.22).mul(halo.mul(0.20)));
+  // 面片边缘窗（防硬截断色彩断层，同 edgeShade 纪律）
+  const halfPlane = plane.mul(0.5);
+  const edgeFade = oneMinus(smoothstep(halfPlane.mul(0.86), halfPlane, r));
+  return vec4(col.mul(edgeFade), 1.0);
+});
+
+// 锁定卡缘焦蚀（C1 法线混合写 alpha）：卡缘向内约 10% 卡高的焦褐压暗（深度随噪声起伏，
+// 峰 α≈0.21；卡中心区归零——正文/卡图保持可读，锁定卡还能打）+ 沿边余烬点
+// （周长 cell hash 慢闪，与烙印呼吸同周期错相 2.2rad；4.5v 复核两帧报 subtle 后提档）。
+// 不整卡压暗。
+const lockEdgeShade = Fn(([vUv, uTime, uCard]) => {
+  const p = vUv.sub(0.5).mul(uCard);
+  const half = uCard.mul(0.5);
+  const d = sdRoundBox(p, half, 1.5);
+  const inner = max(d.negate(), 0.0);              // 距牌缘向内的距离（卡内为正）
+  const n = vNoise(vUv.mul(vec2(7.0, 9.0)).add(vec2(3.1, 8.7)));
+  const depth = uCard.y.mul(0.105).mul(n.mul(0.9).add(0.55)); // 5.8%~15.2% 卡高
+  const band = oneMinus(smoothstep(0.0, depth, inner));
+
+  // 沿边长条上撒余烬点：周长参数 cell hash 定位 + 向内随机偏移
+  const s = edgeParam(p, half);
+  const si = s.mul(46.0);
+  const h = vHash(vec2(floor(si), 17.0));
+  const ds = fract(si).sub(0.5);
+  const dd = inner.sub(h.mul(2.2).add(0.6));
+  const spot = exp(ds.mul(ds).mul(-26.0)).mul(exp(dd.mul(dd).mul(-0.8)));
+  const tw = sin(uTime.mul(LOCK_BREATH_W).add(h.mul(39.0)).add(2.2)).mul(0.5).add(0.5);
+  const ember = step(0.34, h).mul(spot).mul(tw.mul(tw).mul(tw)).mul(0.95);
+
+  const col = mix(vec3(0.20, 0.085, 0.032), vec3(1.10, 0.46, 0.12),
+    clamp(ember.mul(1.8), 0.0, 1.0));
+  const alpha = max(band.mul(n.mul(0.08).add(0.13)), ember.mul(0.70));
+  return vec4(col, min(alpha, 0.62));
 });
 
 // ---- 一次性加色脉冲 shader ----
@@ -345,8 +425,10 @@ export class CardFxLayer extends THREE.Group {
     this._chipN = null;      // 水印当前数字（重烘判据）
     this._doom = null;       // 将弃特效组（盖纱 + 描框两张 TSL 面片，惰性创建）
     this._doomUniforms = null; // { uTime, uCard }——盖纱/描框共相位（呼吸全在 shader 内）
-    this._lock = null;       // 锁定括号面片（TSL shader 单件，惰性创建）
-    this._lockUniforms = null;
+    this._lock = null;       // 焚毁烙印组（中央烙印 + 卡缘焦蚀，惰性创建）
+    this._lockUniforms = null; // { uTime, uBorn, uCard }——两件共相位/尺寸
+    this._lockBrand = null;  // 中央烙印面片（enter 咬入缩放用）
+    this._lockBorn = 1;      // enter 烙下进度 0→1（setLocked(true) 归零）
     this._pulse = null;      // 脉冲面片（TSL shader，惰性创建）
     this._pulseTl = null;    // { elapsed, duration } | null
     this._pulseUniforms = null; // uVecA[prog,mode,intensity,seed] / uColor / uVecB[cardW,cardH,reach,-]
@@ -607,9 +689,9 @@ export class CardFxLayer extends THREE.Group {
 
   get hasDoomMark() { return !!this._doom; }
 
-  /** 「锁定」标记（无人战体「解除威胁」）：警戒琥珀色四角括号 + 慢呼吸——
-   *  区别于将弃的红色整框（锁定是「被瞄准」，将弃是「要离开」）。
-   *  单张 TSL 面片（加色发光；四角 SDF 与呼吸全在 shader 内）。幂等。 */
+  /** 「锁定」标记 = 焚毁烙印（回合末仍在手则焚毁）：中央烙刑印（外烙环 + 45° 斜十字
+   *  封条 + 烙铁毛边 + 微焦晕，白热 enter 拍后转余烬呼吸）+ 卡缘焦蚀（向内约 8% 卡高）。
+   *  与将弃（红 1.2s 急促）在色与节拍上分家；不是「被瞄准」，不用括号/准星语言。幂等。 */
   setLocked(on) {
     if (on === !!this._lock) return;
     if (!on) {
@@ -617,22 +699,40 @@ export class CardFxLayer extends THREE.Group {
       this._lock.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
       this._lock = null;
       this._lockUniforms = null;
+      this._lockBrand = null;
+      this._lockBorn = 1;
       return;
     }
     this._lockUniforms = {
       uTime: uniform(this._t),
+      uBorn: uniform(0),
       uCard: uniform(new THREE.Vector2(this._w, this._h)),
     };
-    const mat = additiveLight(new MeshBasicNodeMaterial({
+    const u = this._lockUniforms;
+    const g = new THREE.Group();
+    g.name = 'lock';
+    // C1 卡缘焦蚀（法线混合写 alpha——焦褐压暗 + 沿边余烬点，卡中心归零）
+    const edgeMat = new MeshBasicNodeMaterial({
+      transparent: true, blending: THREE.NormalBlending, depthWrite: false,
+    });
+    edgeMat.colorNode = lockEdgeShade(uv(), u.uTime, u.uCard);
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(this._w, this._h), edgeMat);
+    edge.position.z = LOCK_EDGE_Z;
+    g.add(edge);
+    // C2 中央烙印（加色发光件；面片比烙印直径大，环外微晕留在面片内）
+    const brandMat = additiveLight(new MeshBasicNodeMaterial({
       transparent: true, depthWrite: false,
     }));
-    mat.colorNode = lockShade(uv(), this._lockUniforms.uTime, this._lockUniforms.uCard);
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(this._w + LOCK_MARGIN * 2, this._h + LOCK_MARGIN * 2), mat);
-    mesh.position.z = 0.44;
-    mesh.name = 'lock';
-    this._lock = mesh;
-    this.add(mesh);
+    brandMat.colorNode = lockBrandShade(uv(), u.uTime, u.uBorn, u.uCard);
+    const plane = this._w * LOCK_BRAND_PLANE;
+    const brand = new THREE.Mesh(new THREE.PlaneGeometry(plane, plane), brandMat);
+    brand.position.set(0, -this._h * LOCK_BRAND_DY, LOCK_BRAND_Z);
+    brand.scale.setScalar(1.06); // enter 从 1.06 咬进 1.00（uBorn 推进）
+    g.add(brand);
+    this._lock = g;
+    this._lockBrand = brand;
+    this._lockBorn = 0;
+    this.add(g);
   }
 
   get hasLockMark() { return !!this._lock; }
@@ -702,9 +802,17 @@ export class CardFxLayer extends THREE.Group {
         this._veilUniforms.uTime.value = this._t; // 呼吸/闪烁/纹理漂移全在 shader 内
       }
     }
-    // 将弃/锁定：呼吸全在 shader 内，只推统一时钟
+    // 将弃/锁定：呼吸全在 shader 内，只推统一时钟；烙印 enter 由 JS 推进
+    // （uBorn 0→1 ≈700ms 驱动白热闪峰包络 + 咬入缩放 1.06→1.00）
     if (this._doomUniforms) this._doomUniforms.uTime.value = this._t;
-    if (this._lockUniforms) this._lockUniforms.uTime.value = this._t;
+    if (this._lockUniforms) {
+      this._lockUniforms.uTime.value = this._t;
+      if (this._lockBrand && this._lockBorn < 1) {
+        this._lockBorn = Math.min(1, this._lockBorn + dt / LOCK_BORN_S);
+        this._lockUniforms.uBorn.value = this._lockBorn;
+        this._lockBrand.scale.setScalar(1.06 - 0.06 * this._lockBorn);
+      }
+    }
     for (const u of [this._edgeUniforms, this._condUniforms]) {
       if (!u) continue;
       u.uTime.value = this._t;

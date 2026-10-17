@@ -10,9 +10,10 @@ import { slotTransform } from '../../scenes/index.js';
 import { resolveUnitAuras } from '../../fx/recipes.js';
 import { AuraHost } from '../../fx/aura.js';
 import { syncBossStateFx } from '../../fx/bossStateFx.js';
-import { warmSpellFx } from '../../fx/spells/index.js';
+import { warmSpellFx, warmEnemyProjectiles } from '../../fx/spells/index.js';
 import { warmDrainOrbs } from '../../fx/gpu/resourceDrainFx.js';
 import { attachOrbs } from '../../fx/orbs.js';
+import { attachUnitParts } from '../../fx/unitParts.js';
 import { getEnemyDefinition } from '../../../core/enemies/registry.js';
 import { unitHeightFactor, STANDEE_BASE_HEIGHT } from '../../art/unitArt.js';
 
@@ -108,8 +109,9 @@ export const syncBeats = {
         this._applyUnitArtTo(obj);
         // 多部件挂接（fx Phase 5）：敌人 def 声明 orbs → 环绕火球部件（'orbs'，剧本可寻址）
         if (side === 'enemy') {
-          const orbsDef = getEnemyDefinition(unitProj.defId)?.orbs;
-          if (orbsDef) attachOrbs(obj, orbsDef); // headless 无画布返回 null，跳过即安
+          const def = getEnemyDefinition(unitProj.defId);
+          if (def?.orbs) attachOrbs(obj, def.orbs); // headless 无画布返回 null，跳过即安
+          if (def?.unitParts) attachUnitParts(obj, def.unitParts);
         }
       }
       // cast 命名寻址登记（幂等；同句柄重登不告警）
@@ -165,6 +167,7 @@ export const syncBeats = {
       // WebGPU 首用管线异步编译 0.3~1.5s，不预热 = 首施法面片黑一拍
       try {
         warmDrainOrbs();   // 扣费光珠常色两变体（须在 warmSpellFx 之前——compile 在其尾部）
+        warmEnemyProjectiles();   // 敌方曳光弹常色变体（同上，compile 在 warmSpellFx 尾部）
         warmSpellFx((proj.zones?.deck ?? []).map(c => c.defId).filter(Boolean),
           { renderer: r, camera: this._sm.camera, worldPool: this.particles2World ?? null });
       } catch (err) {
@@ -299,7 +302,7 @@ export const syncBeats = {
       const view = this._views.get(id);
       view.visible = true;
       this.picker.addPickable(id, view, { kind: 'card', cardObject: view, space: 'ui' });
-      const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost]);
+      const sig = JSON.stringify([card.defId, card.name, card.power, card.text, card.textAlt, card.isActivated, card.cost, card.keywords]);
       if (entry.faceSig !== sig) {
         entry.faceSig = sig;
         // defId 变化 = 转化/进阶（如斩→裂石斩）：走变换演出（手牌内的转化路径，

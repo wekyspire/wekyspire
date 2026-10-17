@@ -7,10 +7,12 @@ import { damageSeverity } from '../../objects/screenImpactFX.js';
 import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
-import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed } from '../../fx/spells/enemyHitFx.js';
+import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed, enemyLungeOverrideOf } from '../../fx/spells/enemyHitFx.js';
 import { bossHurtFxOf } from '../../fx/bossStateFx.js';
+import { enemyDeathBeatOf, enemySpawnGarnishOf } from '../../fx/enemyLifeFx.js';
 import { trackedGate, ownedGate } from '../../fx/spells/projectileTrack.js';
 import { runScript } from '../../fx/script.js';
+import { unitH } from '../../fx/scripts/enemies/fxPieces.js';
 
 export const unitBeats = {
   // 本函数只剩编排，参数一律读表不写魔法数）：按伤害落点分流——
@@ -60,6 +62,8 @@ export const unitBeats = {
     // 瑞米冲撞参数：全距离贴身（留 4.2 身位间隙防穿模）；前倾角加大（小身板大动作才读得出）
     const chargeTravel = Math.max(dist - 4.2, dist * 0.55);
     const chargeLean = -Math.sign(ddx || 1) * 0.30;
+    // 逐敌签名飞行（史莱姆跳扑等，ENEMY_FX.md）：覆写通用「后拉→突进→回位」三段
+    const lungeChoreo = lunging && !remiCharge ? enemyLungeOverrideOf(src._defId) : null;
 
     const h = runScript(async (ctx) => {
       // 命中演出（伤害节拍驱动）：伤害量/攻击来向在这里才有真值——
@@ -138,6 +142,9 @@ export const unitBeats = {
         });
         // ③ 撞击瞬间：挤进身位 + 撞扁（起手帧，命中段与④并行接上）
         src.setPose({ squash: 0.82, widen: 1.14, lean: chargeLean });
+      } else if (lunging && lungeChoreo) {
+        // 签名飞行：末帧 = 锋尖抵近，受击演出自此起（契约同通用②）
+        await lungeChoreo.approach(ctx, this._spellDeps(), { src, sx, sy, sz, ux, uz, reach, dist, unit });
       } else if (lunging) {
         // 突进被打断（收拍/拆台）不许把攻击方晾在半路上：归位 + 姿态清零（正常结束也过这，幂等）
         ctx.onKill(() => { src.position.x = sx; src.position.z = sz; src.resetPose(); });
@@ -189,7 +196,9 @@ export const unitBeats = {
               },
             });
           })()
-        : ctx.custom(srcId, {
+        : lungeChoreo
+          ? lungeChoreo.recover(ctx, this._spellDeps(), { src, sx, sy, sz, ux, uz, reach })
+          : ctx.custom(srcId, {
           durationMs: 220, ease: 'power2.out',
           onUpdate: (t) => {
             src.position.x = sx + ux * reach * (1 - t);
@@ -220,10 +229,10 @@ export const unitBeats = {
 
       if (absorbed > 0) {
         // 点粒子是真 3D：z 必须取单位实际深度（缺省 z=70 是旧 2D 特效层，斜相机下投影错位）
-        this.particles.spawn(unit.position.x, unit.position.y + 2, {
+        this.particles.spawn(unit.position.x, unit.position.y + unitH(unit) * 0.50, {
           count: 20, color: 0x9ccfff, speed: 18, ttl: 0.6, size: 1.5, z: unit.position.z,
         });
-        const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, 3);
+        const p = this._unitToUI(unit, 2.5 + (Math.random() - 0.5) * 2, unitH(unit) * 0.55);
         this.particles.spawnText(p.x, p.y, `-${absorbed}`, {
           fontSize: Math.min(26 + absorbed * 1.6, 48), color: '#8fb3d9',
           vx: (Math.random() - 0.5) * 8, vy: 16 + Math.random() * 6,
@@ -245,7 +254,7 @@ export const unitBeats = {
         const flashed = r.flash != null;
         if (flashed) unit.flash(r.flash);
         for (const s of r.sparks) {
-          this.particles.spawn(unit.position.x, unit.position.y + 2, { ...s, z: unit.position.z });
+          this.particles.spawn(unit.position.x, unit.position.y + unitH(unit) * 0.50, { ...s, z: unit.position.z });
         }
         // DoT tick 专属演出（燃烧/中毒，配方表 r.tick 声明）：fire-and-forget 不占节拍
         if (r.tick) {
@@ -254,7 +263,7 @@ export const unitBeats = {
           }));
         }
         // 伤害数字：UI 前景层读数（恒定屏幕尺寸、不被场景遮挡），从受伤源向上迸射、受重力下坠
-        const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, 4 + Math.random() * 1.5);
+        const p = this._unitToUI(unit, (Math.random() - 0.5) * 3, unitH(unit) * (0.50 + Math.random() * 0.08));
         this.particles.spawnText(p.x, p.y, `-${dealt}`, {
           fontSize: Math.min(r.number.base + dealt * r.number.per, r.number.max) * r.numberScale,
           color: r.number.color,
@@ -447,6 +456,9 @@ export const unitBeats = {
           },
           onComplete: () => {
             billboard.rotation.x = 0;
+            // 逐敌入场 garnish（enemyLifeFx：春风绿芽/腐根缠绕等复苏主题点缀）——
+            // fire-and-forget 不占节拍
+            enemySpawnGarnishOf(unit._defId)?.(this, unit);
             finish();
           },
         });
@@ -472,6 +484,10 @@ export const unitBeats = {
     }
     // 天斩击杀分支（heavenCleave 施术拍挂的断裂标记）：立牌沿斩缝裂成两半
     if (this._cleaveSplit?.delete(id)) return this._unitCleaveSplitBeat(unit, finish);
+    // 逐敌死亡覆写（enemyLifeFx：爆囊自爆/史莱姆融化等种族死亡语言）——
+    // 返回 false = 覆写方声明不适用本死因（如爆囊被拆弹），回落既有分支
+    const customDeath = enemyDeathBeatOf(unit._defId);
+    if (customDeath && customDeath(this, unit, payload, finish) !== false) return;
     // 重击致死分支（heavy 标记）：击退后仰 → 撑不住 → 倒尽（加强版倾倒）
     if (payload?.heavy) return this._unitHeavyDeathBeat(unit, finish);
     const billboard = unit.billboard;

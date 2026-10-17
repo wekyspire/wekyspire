@@ -76,9 +76,12 @@ export class DrawCardsInstruction extends BattleInstruction {
 // 焚毁 veto（斩）与焚毁订阅（业火）因此对所有来源同口径可见。
 // 手牌中的激活咏唱先熄灭（离手不变量，含焚毁）。
 export class BurnCardInstruction extends BattleInstruction {
-  constructor({ uniqueID }, opts = {}) {
+  constructor({ uniqueID, source = null }, opts = {}) {
     super(opts);
     this.uniqueID = uniqueID;
+    // 焚毁来源单位（敌方吞噬类——腐食甲虫啃牌）：舞台把被焚卡飞向其口部演出「被吃掉」，
+    // 缺省 null = 中立焚毁（原地燃尽）
+    this.source = source;
   }
 
   execute(ctx) {
@@ -89,7 +92,7 @@ export class BurnCardInstruction extends BattleInstruction {
     this.result = { card };
     ctx.battleState.history.turn.burnt += 1;
     ctx.battleState.history.battle.burnt += 1;
-    ctx.presenter?.cardBurnt?.({ card });
+    ctx.presenter?.cardBurnt?.({ card, source: this.source });
     return true;
   }
 }

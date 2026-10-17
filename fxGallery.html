@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>战斗特效预览台</title>
+    <script>
+      window.__errs = [];
+      window.__ready = false;
+      window.addEventListener('error', (e) => {
+        window.__errs.push(e.message + ' @ ' + e.filename + ':' + e.lineno);
+        document.title = 'ERR#' + window.__errs.length;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        window.__errs.push('PROMISE:' + ((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #07090f; }
+      #fx-canvas { display: block; }
+      #fx-side {
+        position: fixed; top: 0; left: 0; bottom: 0; width: 268px; overflow-y: auto;
+        background: rgba(8, 11, 18, 0.88); border-right: 1px solid #2a3448;
+        font: 12px/1.6 monospace; color: #cfd8e3; padding: 10px 12px; box-sizing: border-box;
+      }
+      #fx-side h1 { margin: 0 0 6px; font: 600 14px/1.4 monospace; color: #e8eef8; }
+      #fx-side h2 { margin: 14px 0 4px; font: 600 12px/1.4 monospace; color: #8fb3d9;
+        border-bottom: 1px solid #2a3448; padding-bottom: 2px; }
+      #fx-side button {
+        display: block; width: 100%; text-align: left; margin: 2px 0; padding: 3px 8px;
+        background: #10141f; color: #cfd8e3; border: 1px solid #3a465c; cursor: pointer;
+        font: 12px monospace;
+      }
+      #fx-side button:hover { background: #1a2233; color: #fff; }
+      #fx-side select, #fx-side input {
+        background: #10141f; color: #cfd8e3; border: 1px solid #3a465c;
+        border-radius: 3px; padding: 2px 4px; font: 12px monospace; max-width: 130px;
+      }
+      #fx-side .btnrow button { display: inline-block; width: auto; margin-right: 4px; padding: 2px 8px; }
+      #fx-side .fx-item { display: flex; gap: 3px; margin: 2px 0; }
+      #fx-side .fx-item > button.fx-play {
+        flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      #fx-side .fx-item > button.fx-v, #fx-side .fx-item > button.fx-copy {
+        flex: 0 0 22px; width: 22px; padding: 3px 0; text-align: center;
+      }
+      #fx-side .fx-item.is-fail > .fx-play { border-color: #7a3040; background: #1d1016; color: #e8a0ac; }
+      #fx-side .fx-item.is-pass > .fx-play { border-color: #2f5c46; background: #0f1a14; color: #9ed0b2; }
+      #fx-side .fx-item.playing > .fx-play { outline: 1px solid #8fa8d0; color: #fff; }
+      #fx-side .fx-item.kbd-active > .fx-play { outline: 1px dashed #6a7a9c; }
+      #fx-side .fx-item.is-fail > .fx-v.fail { background: #3a1822; color: #ff9caf; border-color: #7a3040; }
+      #fx-side .fx-item.is-pass > .fx-v.pass { background: #14261c; color: #8fd8a8; border-color: #2f5c46; }
+      #fx-vstats { color: #9ab5cc; }
+      #fx-side .row { margin: 3px 0; }
+      #fx-side .hint { color: #78879c; font-size: 11px; margin: 2px 0 6px; }
+      #fx-side .enemy-picks input { max-width: 40px; }
+      #fx-status {
+        position: fixed; top: 8px; right: 12px; font: 12px/1.6 monospace; color: #9ab5cc;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; text-align: right;
+      }
+      #fx-toast {
+        position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+        font: 13px monospace; color: #ffe9c8; background: rgba(10,14,22,0.85);
+        border: 1px solid #3a465c; padding: 5px 14px; border-radius: 3px;
+        opacity: 0; transition: opacity 0.25s; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="fx-side">
+      <h1>战斗特效预览台 · fxGallery</h1>
+      <div class="row">目标敌：
+        <select id="fx-enemy"></select>
+        <button id="fx-reset" style="display:inline-block;width:auto">重置单位</button>
+      </div>
+      <div class="row"><span id="fx-vstats"></span>
+        <label style="margin-left:8px"><input type="checkbox" id="fx-only-fail">只看不通过</label>
+      </div>
+      <div class="row btnrow">
+        <button id="fx-copy-fails">复制不通过清单</button>
+        <button id="fx-copy-report">复制验收报告</button>
+      </div>
+      <div class="row btnrow">
+        <button id="fx-loop">循环重播：关</button>
+        <button id="fx-clear-verdicts">清除标记</button>
+      </div>
+      <div class="hint">↑↓ 选 · Enter 播放 · X 不通过 · V 通过 · C 复制名 · Esc 停循环</div>
+      <div id="fx-groups"></div>
+      <h2>主题战生成器</h2>
+      <div class="hint">多选编成 → 生成调试存档 → 跳真实战斗（saveForge 链路）</div>
+      <div id="fx-forge-picks" class="enemy-picks"></div>
+      <div class="row">层数 <input id="fx-forge-floor" type="number" value="3" min="1" max="43" style="width:48px">
+        HP <input id="fx-forge-hp" type="number" value="65" min="1" style="width:52px"></div>
+      <button id="fx-forge-go">生成并开战</button>
+    </div>
+    <div id="fx-status"></div>
+    <div id="fx-toast"></div>
+    <script type="module" src="/src/debug/fxGallery.js"></script>
+  </body>
+</html>

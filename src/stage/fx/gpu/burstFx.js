@@ -34,7 +34,13 @@ export function createBurstFacade(worldPool, getCamera = null) {
     const gravity = o.gravity ?? -30;
     const size = o.size ?? 1.2;
     const colorHex = o.color ?? 0xff5533;
-    const key = `${colorHex}|${speed}|${ttl}|${gravity}|${size}`;
+    // vx/vy：可选方向偏移初速（世界单位/秒；缺省 0 = 纯径向爆散，旧组合缓存键不变）。
+    // 量化到 0.25：方向来自逐敌位置（连续值），不量化会让模块级类型缓存无限增生、
+    // 打满池类型行后爆发静默丢失；0.25 的粒度对视觉无感。
+    const vx = Math.round((o.vx ?? 0) * 4) / 4;
+    const vy = Math.round((o.vy ?? 0) * 4) / 4;
+    const bias = (vx || vy) ? `|${vx},${vy}` : '';
+    const key = `${colorHex}|${speed}|${ttl}|${gravity}|${size}${bias}`;
     let typeId = BURST_TYPE_CACHE.get(key);
     // 缓存兼容墓碑：闲置泵可能已回收该组合（在用组合每 2s 被摸活行保活，回收的
     // 只会是淡出组合）——命中死 id 就重登记，缓存照常复用
@@ -45,7 +51,7 @@ export function createBurstFacade(worldPool, getCamera = null) {
         space: 'world',
         cap: 128,
         recyclable: true,   // 闲置泵可回收：一次性爆发，淡出组合不占常驻额度
-        spawn: { rate: 0, ttl, ttlJit: 0.3, vel: [0, 0, 0], radial: speed * 0.9, gravity },
+        spawn: { rate: 0, ttl, ttlJit: 0.3, vel: [vx, vy, 0], radial: speed * 0.9, gravity },
         render: { size, sizeEndK: 0.4, color: [c.r, c.g, c.b], ageHeat: 0.35 },
       });
       // 模块级共享（夜测 1002 [r2路8] 根因）：缓存原是每战斗实例一份，同组合每局重复

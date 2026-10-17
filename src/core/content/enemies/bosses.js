@@ -235,6 +235,9 @@ registerEnemy({
   difficulty: { base: 8, floorMin: 11, floorMax: 11 },
   id: 'mefm1', name: 'MEFM-1',
   createUnit: () => new Enemy({ defId: 'mefm1', name: 'MEFM-1', maxHp: 265 }),
+  // 多部件挂接（展示数据，舞台侧工厂注册在 fx/parts/mefmCannons.js）：
+  // 双机炮臂 + 弹壳场，剧本经 unit.parts.get('mefmCannons') 寻址
+  unitParts: [{ kind: 'mefmCannons' }],
   onBattleStart(ctx, unit) {
     // 铁壳（防御效果轨，P2 故障时失去——防御已效果化，不再直改字段）
     ctx.kernel.submitInstruction(new AddEffectInstruction({

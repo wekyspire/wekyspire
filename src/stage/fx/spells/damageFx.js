@@ -8,6 +8,7 @@
 import { getSkillDefinition } from '../../../core/skills/registry.js';
 import { slashSweep, punchImpact, fireBurst, screenFlash, arcProjectile, lampPulse } from './blocks.js';
 import { cartoonNova } from './cartoonNova.js';
+import { unitH } from '../scripts/enemies/fxPieces.js';
 
 // 爆裂术大爆炸的去重表（defId → 上次爆心演出的 performance.now()）
 const _novaRecent = new Map();
@@ -161,7 +162,7 @@ export async function runDotTickBeat(ctx, deps, { unit, tag, dealt }) {
   if (!unit) return;
   const s = unit._baseScale ?? 1;
   const k = Math.min(1.6, Math.max(0.7, Math.sqrt((dealt || 1) / 12)));
-  const chest = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
+  const chest = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z };
   const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
   if (tag === 'burn') {
     deps.particles?.spawn?.(chest.x, chest.y, {
@@ -208,7 +209,7 @@ export async function runDotTickBeat(ctx, deps, { unit, tag, dealt }) {
 export async function runDamageBeat(ctx, deps, { fx, unit, dealt, fromX = null, projSync = null }) {
   if (!fx || !unit) return;
   const s = unit._baseScale ?? 1;
-  const chest = { x: unit.position.x, y: unit.position.y + 3.4 * s, z: unit.position.z };
+  const chest = { x: unit.position.x, y: unit.position.y + unitH(unit) * 0.50, z: unit.position.z };
   const feet = { x: unit.position.x, y: unit.position.y + 0.6 * s, z: unit.position.z };
   switch (fx.kind) {
     case 'slash':
