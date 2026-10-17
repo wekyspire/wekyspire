@@ -120,11 +120,14 @@ export function makeWailRingShade([cr, cg, cb], seed, mode = 'plain') {
     const p = vUv.sub(vec2(0.5));
     const r = length(p).mul(2.0);
     const a = atan(p.y, p.x);
-    // 三道环展开（相位错开 1/3；JS 循环静态展开——TSL 无控制流纪律不破）
-    const ph0 = fract(uProg);
-    const ph1 = fract(uProg.add(float(1.0 / 3.0)));
-    const ph2 = fract(uProg.add(float(2.0 / 3.0)));
-    const ringOf = (ph) => {
+    // 错峰相位（迭代 #12 淡入淡出）：各环带出生延迟 + 生命期钳制——首帧只有环 0
+    // 从零淡入，收尾所有环包络归零后才 release（旧版 fract 相位环绕 = 首帧两环
+    // 已满亮凭空出现、末帧回绕中心硬切消失）。驱动 uProg 0→1.22（= 末环走完）。
+    const ringOf = (delay) => {
+      const life = uProg.sub(float(delay));              // <0 = 未出生
+      const ph = clamp(life.mul(float(1 / 0.68)), 0.0, 1.0);
+      const born = smoothstep(0.0, 0.03, life);          // 出生前完全不可见
+      const fadeIn = smoothstep(0.0, 0.35, ph);          // 出生淡入（约前1/3生命）
       const rr = ph.mul(0.92);
       const dr = r.sub(rr);
       const ring = exp(dr.mul(dr).mul(-340.0));
@@ -147,14 +150,17 @@ export function makeWailRingShade([cr, cg, cb], seed, mode = 'plain') {
         : mode === 'wraith'
           ? sin(dr.mul(50.0).sub(ph.mul(14.0))).mul(0.5).add(0.5).mul(0.25).add(0.8)
           : sin(dr.mul(90.0).sub(ph.mul(24.0))).mul(0.5).add(0.5).mul(0.35).add(0.75);
-      const fade = oneMinus(pow(ph, float(0.8)));
-      return col.mul(skirt.mul(mode === 'wraith' ? 1.9 : 1.5).mul(lobed).mul(fade))
-        .add(hot.mul(ring.mul(mode === 'wraith' ? 2.1 : 3.2).mul(lobed).mul(ripple).mul(fade)));
+      const fadeOut = oneMinus(pow(ph, float(0.8)));
+      const env = born.mul(fadeIn).mul(fadeOut);
+      return col.mul(skirt.mul(mode === 'wraith' ? 1.9 : 1.5).mul(lobed))
+        .add(hot.mul(ring.mul(mode === 'wraith' ? 2.1 : 3.2).mul(lobed).mul(ripple)))
+        .mul(env);
     };
-    const acc = ringOf(ph0).add(ringOf(ph1)).add(ringOf(ph2));
-    // 阴波内芯扣暗：环心一团墨色（怨灵啸的「吸走」读感）
+    const acc = ringOf(0).add(ringOf(0.27)).add(ringOf(0.54));
+    // 阴波内芯扣暗：环心一团墨色（怨灵啸的「吸走」读感）——同样淡入淡出包络
     const dark = mode === 'wraith'
-      ? oneMinus(smoothstep(float(0.06), float(0.20), r)).mul(vec3(0.05, 0.03, 0.10)).mul(oneMinus(uProg.mul(0.6)))
+      ? oneMinus(smoothstep(float(0.06), float(0.20), r)).mul(vec3(0.05, 0.03, 0.10))
+        .mul(smoothstep(0.0, 0.20, uProg)).mul(oneMinus(uProg.mul(0.8)))
       : vec3(0.0, 0.0, 0.0);
     const edge = oneMinus(smoothstep(float(0.44), float(0.50), length(p)));
     return vec4(acc.add(dark).mul(edge), float(1.0));
@@ -174,8 +180,8 @@ export async function wailRing(ctx, deps, { at, color = [0.65, 0.78, 1.10], size
   deps.scene.add(quad);
   ctx.onKill(() => { release(); });
   const st = { t: 0 };
-  await ctx.tweenRaw(st, { t: 1 }, {
-    durationMs: ms, ease: 'linear',   // 环速恒定（声波匀速），衰减包络在 fade 里
+  await ctx.tweenRaw(st, { t: 1.22 }, {   // 末环（延迟 0.54 + 生命 0.68）走完包络归零
+    durationMs: ms, ease: 'linear',   // 环速恒定（声波匀速），衰减包络在 env 里
     onUpdate: () => { uProg.value = st.t; },
     onComplete: () => { release(); },
   });

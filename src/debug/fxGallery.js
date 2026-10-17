@@ -258,9 +258,10 @@ group('起手族 · 施法/防御/发呆', [
 
 // ---- 形体件（fxPieces 单件）----
 const fxp = await import('../stage/fx/scripts/enemies/fxPieces.js');
-const chest = (v) => ({ x: v.position.x, y: v.position.y + 3.4 * (v._baseScale ?? 1), z: v.position.z });
-const feet = (v) => ({ x: v.position.x, y: v.position.y + 0.6 * (v._baseScale ?? 1), z: v.position.z });
-const head = (v) => ({ x: v.position.x, y: v.position.y + 4.9 * (v._baseScale ?? 1), z: v.position.z });
+// 锚点走 unitH 口径（与 fxPieces/families 同源——固定 4.9/3.4 对高立牌全错位）
+const chest = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.52, z: v.position.z });
+const feet = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.05, z: v.position.z });
+const head = (v) => ({ x: v.position.x, y: v.position.y + fxp.unitH(v) * 0.92, z: v.position.z });
 group('形体件（fxPieces 单件）', [
   { label: 'zapArc 电弧（毛球→玩家）', enemy: 'staticPuff', run: () => runWith(async (ctx) => {
     const a = fxp.zapArc(ctx, stageStub._spellDeps(), { from: chest(focusView()), to: chest(playerView) });
