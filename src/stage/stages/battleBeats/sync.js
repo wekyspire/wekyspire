@@ -148,8 +148,9 @@ export const syncBeats = {
         }
       }
       // Boss 常驻状态导演（bossStateFx）：机制状态件（装甲/电弧/热缝……）按 defId
-      // 驱动，读同一拍投影推目标值（件内 tick 缓动收敛）；非 Boss 未注册直返
-      syncBossStateFx(obj, unitProj);
+      // 驱动，读同一拍投影推目标值（件内 tick 缓动收敛）；非 Boss 未注册直返。
+      // ctx 给粒子门面——常驻件（卡达斯雷暴）按需撒电火花
+      syncBossStateFx(obj, unitProj, { particles: this.particles });
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));

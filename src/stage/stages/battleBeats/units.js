@@ -101,6 +101,7 @@ export const unitBeats = {
           // 盾吞/闪避时 dealt=0：量级按出手重量（gross）——攻击方特效不因防住缩水
           swing: dealt > 0 ? dealt : Math.max(payload?.gross ?? 0, 0),
           fromX: src?.position.x ?? null,
+          source: src ?? null,   // 攻击方视图（Boss 命中拍按阶段分档用）
         }));
       }
       // Boss 受击补充（目标侧，bossStateFx）：boss 被打的主题反馈——装甲涟漪/电弧

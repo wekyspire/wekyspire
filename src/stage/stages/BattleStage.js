@@ -1029,6 +1029,7 @@ export class BattleStage {
       shake: this.shake,
       vignette: this._vignette,
       camera: this._sm.cameraDirector,
+      renderCamera: this._sm?.camera ?? null,   // 真渲染相机（世界空间雷电面片朝向）
       notify: this.notify,
       onStageDispose: (fn) => this.onFxDispose(fn),
       runScript: (body) => this._fxRunScript(body),

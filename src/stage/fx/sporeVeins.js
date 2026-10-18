@@ -35,10 +35,10 @@ function buildVeinColor(t, u) {
     const breathe = sin(u.uTime.mul(2.4).add(ubfHash(cellId.add(7.0)).mul(6.28))).mul(0.35).add(0.65);
     const cyst = smoothstep(0.06, 0.01, cystD).mul(has).mul(breathe).toVar();
 
-    // —— 合成 ——（立绘自带亮绿纹理：只加亮线读不出。脉间微压暗造对比，
-    //    脉络行波峰推 HDR——「网」是明暗差，不是更绿）
-    const VEIN = vec3(0.36, 0.75, 0.30);
-    const HOT = vec3(0.75, 1.35, 0.55);
+    // —— 合成 ——（立绘自带苔痕纹理：只加亮线读不出。脉间微压暗造对比，
+    //    脉络行波峰推 HDR——「网」是明暗差；色相压暗褐黄，去掉亮绿）
+    const VEIN = vec3(0.26, 0.27, 0.16);
+    const HOT = vec3(0.50, 0.52, 0.31);
     const DARK = vec3(0.05, 0.09, 0.05);
     const dim = oneMinus(vein).mul(0.14).toVar(); // 脉间压暗量
     const c = VEIN.mul(lit.mul(1.15))

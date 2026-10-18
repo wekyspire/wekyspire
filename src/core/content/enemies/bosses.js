@@ -466,22 +466,24 @@ registerEnemy({
       }
     }
   },
+  // fx = 演出分支标记（随 aiAct 的 playScript 下发）：力量与回血同为 strongBuff，
+  // kinds 分不开；按文案解析脆，内容自己报出招语义。
   getIntention: (unit, bs) => {
-    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '酝酿' };
+    if (unit.actionIndex === 0) return { kinds: ['unknown'], note: '酝酿', fx: 'idle' };
     const allies = bs ? bs.enemies.filter(e => !e.isDead() && e !== unit).length : 0;
     const beat = (unit.actionIndex - 1) % 4;
     if (beat === 0) {
       return allies >= 3
-        ? { kinds: ['strongBuff'], note: '全员力量3' }
-        : { kinds: ['summon'], note: '召唤（腐败根须/刺刺草）' };
+        ? { kinds: ['strongBuff'], note: '全员力量3', fx: 'strength' }
+        : { kinds: ['summon'], note: '召唤（腐败根须/刺刺草）', fx: 'summon' };
     }
-    if (beat === 1) return { kinds: ['strongDebuff'], note: '虚弱1，脆弱1' };
+    if (beat === 1) return { kinds: ['strongDebuff'], note: '虚弱1，脆弱1', fx: 'debuff' };
     if (beat === 2) {
       return allies > 0
-        ? { kinds: ['strongBuff'], note: '全员恢复15血' }
-        : { kinds: ['summon'], note: '召唤1个' };
+        ? { kinds: ['strongBuff'], note: '全员恢复15血', fx: 'heal' }
+        : { kinds: ['summon'], note: '召唤1个', fx: 'summon' };
     }
-    return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack') };
+    return { kinds: ['attack'], hits: 3, damage: 3 + unit.getStat('attack'), fx: 'attack' };
   },
 });
 

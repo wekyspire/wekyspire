@@ -18,6 +18,12 @@ import { spellQuad, lampPulse } from '../../spells/blocks.js';
 // _baseScale。一切「身体高度」锚（胸/头/受击中弹位/口部）按 H 比例取——旧固定
 // 3.4/4.9×s 只对平均体型成立，大个子会锚到胫骨。
 export const unitH = (u) => (u._standeeHeight ?? 22) * (u._baseScale ?? 1);
+// 立牌可见宽（世界单位）：_groundRadius 随立绘纵横比（setArt 落），再乘舞台槽位缩放；
+// 未量到图时按平均体型 0.8H 估。横向铺开的特效（爪痕/横扫）按它定尺寸，
+// 才不会在窄体型的骑士身上甩出两倍体宽的电鞭。
+export const unitW = (u) => (
+  u?._groundRadius ? u._groundRadius * 2 * (u._baseScale ?? 1) : unitH(u) * 0.8
+);
 
 // ============ 电弧束（静电毛球 zapChain 主体）============
 // **世界 Y 截面 ribbon 沿 3D 航线**（四顶点直写世界坐标，quad 变换恒等）——
@@ -278,182 +284,372 @@ export async function fuseRing(ctx, deps, { at, color = [1.0, 0.30, 0.10], size 
   });
 }
 
-// ============ 蔓延爬苔（苔球 spreadGrip 主体，ENEMY_FX.md 迭代#6 v2）============
-// 贴地平躺 quad（背缘贴苔球、铺向玩家）。v2 材料重审（用户终审：v1 亮绿 + 匀称
-// 波形 = 读「毒雾」不读「苔」）：
-//   ① 前缘 = 6 根**独立指瓣**（cell hash 定中心/宽/长/推进相位；max 融合），指间
-//      保留真缝（基线在指根之后）；指端湿孢小亮斑——非周期侵占，不是 sin 波。
-//   ② 苔毯 = cell hash 双尺度值噪声（大斑 3×3 + 小斑 9×9，双线性插值 → 阈值化有机
-//      斑块；覆盖率不均），锋后新苔略亮（生长差）、越过沉为暗毯。
-//   ③ 色压湿墨绿：主色 [0.16,0.24,0.11]，亮度层次全给斑块明暗差；湿唇窄亮一线 +
-//      孢尖小亮斑。**输出最大通道压 ≤0.5**（HDR 直出值，进 tone map 前；体 + 亮斑
-//      叠加后统一保色缩放收口）——不推 bloom 阈、无荧光感。
-//   ④ 推进律与 arriveU 口径不动（adv=uProg×1.389、head=adv×0.92+0.06）。
-// 亮度口径（自评判据）：body 峰值 = uColor×1.15（G 0.276）；湿唇/孢尖叠加后由
-// 保色缩放压到最大通道 0.5。
-export const mossCreepShade = Fn(([vUv, uProg, uColor, uSeed]) => {
-  const p = vUv.sub(vec2(0.5));
-  const x = p.x.add(float(0.5));                     // 0(苔球)→1(玩家向)
-  const lat = p.y.add(float(0.5));                   // 横向 0..1
-  // 推进段 0→72% 走完全程（爬得快→慢压迫），其后锋面驻留远端——留出「缠上」的读秒
-  const adv = clamp(uProg.mul(1.389), 0.0, 1.0);
-  const baseHead = adv.mul(0.92).add(0.06);
-  // ---- cell hash 场（非周期：值噪声双线性插值，边界有机）----
-  const hash1 = (t) => fract(sin(t.mul(127.1).add(uSeed.mul(3.17))).mul(43758.585));
-  const hash2 = (ix, iy) => fract(sin(ix.mul(12.9898).add(iy.mul(78.233)).add(uSeed.mul(0.731))).mul(43758.585));
-  const vn1 = (t) => {
-    const i = floor(t);
-    const f = fract(t);
-    const w = f.mul(f).mul(float(3.0).sub(f.mul(2.0)));
-    const a = hash1(i);
-    return a.add(hash1(i.add(1)).sub(a).mul(w));
-  };
-  const vn2 = (qx, qy) => {
-    const ix = floor(qx), iy = floor(qy);
-    const fx = fract(qx), fy = fract(qy);
-    const wx = fx.mul(fx).mul(float(3.0).sub(fx.mul(2.0)));
-    const wy = fy.mul(fy).mul(float(3.0).sub(fy.mul(2.0)));
-    const a = hash2(ix, iy);
-    const b = hash2(ix.add(1), iy);
-    const c = hash2(ix, iy.add(1));
-    const d = hash2(ix.add(1), iy.add(1));
-    const top = a.add(b.sub(a).mul(wx));
-    const bot = c.add(d.sub(c).mul(wx));
-    return top.add(bot.sub(top).mul(wy));
-  };
-  // ---- 前缘指瓣（6 根独立指，cell hash 定宽/长/错峰相位；max 融合 + 指间真缝）----
-  const LN = float(6.0);
-  const lq = lat.mul(LN);
-  const li = floor(lq);
-  const hW = hash1(li.add(float(0.37)));
-  const hL = hash1(li.add(float(7.13)));
-  const hP = hash1(li.add(float(13.7)));
-  const hC = hash1(li.add(float(23.3)));
-  const uc = li.add(float(0.5)).div(LN).add(hC.sub(float(0.5)).mul(float(0.03)));
-  const wid = float(0.025).add(hW.mul(float(0.025)));        // 半宽 0.025..0.05（全宽 0.05..0.10v）
-  const dLat = lat.sub(uc).div(wid);
-  const bandI = oneMinus(smoothstep(float(0.55), float(1.0), dLat.mul(dLat)));
-  const grow = smoothstep(0.0, 0.30, clamp(adv.add(hP.sub(float(0.5)).mul(float(0.20))), 0.0, 1.0));
-  const flen = float(0.025).add(hL.mul(float(0.085)));       // 指长 0.025..0.11（x 归一）
-  // 基线粗糙（1D 值噪声 ≈4 段，非周期）+ 指瓣融合；指端用抛物线收圆（平台状带缘
-  // 会读成锯齿梳，苔的指瓣是圆头的）；端头钳在 quad 内
-  const rough = vn1(lat.mul(float(4.0))).sub(float(0.5)).mul(float(0.03));
-  const fingerK = oneMinus(dLat.mul(dLat)).clamp(0.0, 1.0);
-  const head = min(baseHead.add(rough).add(fingerK.mul(grow).mul(flen)), float(0.985));
-  const rel = head.sub(x);
-  // 苔毯：越过即留（不再衰减成雾）；纵向中线厚两侧薄
-  const mat = smoothstep(float(-0.015), float(0.012), rel);
-  const ay = p.y.mul(2.0);
-  const band = exp(ay.mul(ay).mul(-0.9));
-  // 斑块场：双尺度值噪声叠加 → 阈值化（大斑 + 小斑、覆盖率不均）；细颗粒再破一层
-  // 平滑感（苔的颗粒质地，不是雾的渐变）
-  const nL = vn2(x.mul(3.0), lat.mul(3.0));
-  const nS = vn2(x.mul(9.0).add(float(11.7)), lat.mul(9.0).add(float(5.3)));
-  const nF = vn2(x.mul(26.0).add(float(3.1)), lat.mul(20.0).add(float(7.7)));
-  const patch = smoothstep(float(0.26), float(0.50), nL.mul(0.62).add(nS.mul(0.38)));
-  const patchB = float(0.30).add(patch.mul(float(0.70)));    // 暗苔斑 0.30..1.0× 主色（覆盖率不均）
-  const grain = float(0.78).add(nF.mul(float(0.22)));
-  // 生长差：锋后新苔略亮（近锋 1.0），越过沉为暗毯（0.65）
-  const age = oneMinus(smoothstep(0.0, 0.18, rel));
-  const growth = float(0.65).add(age.mul(0.35));
-  // 整件末段退场（苔干枯消散）
-  const fade = oneMinus(smoothstep(float(0.82), float(1.0), uProg));
-  // 湿唇：窄亮一线（只贴当前锋线）；孢尖：指端小亮斑
-  const lip = exp(rel.mul(rel).mul(-700.0)).mul(band).mul(fade);
-  const tipX = min(baseHead.add(rough).add(flen.mul(grow)), float(0.985));
-  const dTip = x.sub(tipX);
-  const tip = exp(dTip.mul(dTip).mul(-1400.0))
-    .mul(exp(dLat.mul(dLat).mul(-5.0)))
-    .mul(grow).mul(bandI).mul(fade);
-  const hot = max(lip.mul(float(0.60)), tip);
-  const edge = oneMinus(smoothstep(float(0.42), float(0.50), abs(p.x)))
-    .mul(oneMinus(smoothstep(float(0.40), float(0.50), abs(p.y))));
-  const body = mat.mul(band).mul(fade).mul(growth).mul(patchB).mul(grain);
-  // 峰值纪律（用户裁定「整体输出峰值 ≤0.5」）：体 + 湿唇/孢尖是加色叠加，体峰值
-  // 0.276 与亮斑叠加会越 0.5——**保色缩放**（按最大通道等比压到 0.5）收口，
-  // 不逐通道钳（三通道同超会洗成灰白，scaleDust 五审教训）。
-  const raw = uColor.mul(body.mul(1.15))
-    .add(vec3(0.45, 0.62, 0.30).mul(hot.mul(float(0.78))));
-  const pk = max(max(raw.x, raw.y), raw.z).add(1e-4);
-  const rgb = raw.mul(min(float(1.0), float(0.5).div(pk)));
-  return vec4(rgb.mul(edge), float(1.0));
-});
+// ============ 蔓延根系（苔球 spreadGrip 主体）============
+// 地面 quad 沿「苔球脚底 → 玩家脚底」的真实地面向量落位（含 z 纵深）：主根终点
+// 精确落在玩家脚底，其余三根分叉到 ±6~9 单位；长短/起跑/爬速各异——任一时刻
+// 画面里有多条不同进度的根，不是一条推进线。
+//   ① 根体 = 中心线（基座位移 + 端点位移 + 双频 S 弯，两端锚定）上的分段粗细
+//      （基部粗、梢部细 + 节瘤）+ 单侧湿高光；根后撒稀疏苔斑（值噪声阈值化），
+//      不做连续毯。
+//   ② 叶片 = 节点两侧椭圆叶（根锋越过节点后才展开）；根尖带湿亮芽点。全程无粒子。
+//   ③ 色压湿墨绿、峰值保色缩放 ≤0.5（不进 bloom）。
+// 到达时刻 = 主根 growth 推到 1 的 uProg（arriveU），mossGrip 按此起播。
+const MOSS_SPREAD_TENDRILS = [
+  // baseY/endY = 世界横向位移（相对苔球→玩家轴）；endFrac = 终点占实际间距比例。
+  // 主根 delay+dur 决定 arriveU（下方 arriveU 常量必须与此同步）。
+  { baseY: -0.8, endY: 0.0, endFrac: 1.00, w0: 1.35, amp: 5.0, freq: 1.6, ph: 0.35, delay: 0.03, dur: 0.55, leafAng: 0.72, leafFracs: [0.28, 0.54, 0.78] },
+  { baseY: 1.5, endY: 5.6, endFrac: 0.90, w0: 1.15, amp: 5.0, freq: 2.2, ph: 1.85, delay: 0.08, dur: 0.63, leafAng: -0.78, leafFracs: [0.26, 0.52, 0.76] },
+  { baseY: -2.1, endY: -5.5, endFrac: 0.82, w0: 1.25, amp: 5.0, freq: 1.35, ph: 3.10, delay: 0.05, dur: 0.73, leafAng: 0.88, leafFracs: [0.24, 0.48, 0.72] },
+  { baseY: 0.5, endY: 7.6, endFrac: 0.60, w0: 0.95, amp: 3.0, freq: 2.7, ph: 5.05, delay: 0.14, dur: 0.50, leafAng: -0.62, leafFracs: [0.42, 0.74] },
+];
+
+export function makeMossCreepShade([cr, cg, cb]) {
+  const col = vec3(cr, cg, cb);
+  const leafCol = vec3(cr * 1.7 + 0.08, cg * 1.55 + 0.13, cb * 1.30 + 0.02);
+  const wet = vec3(0.45, 0.62, 0.30);
+  // 世界尺度参数走 uniform（uCfg = [quadLen, quadWidth, 目标距离, seed]）：
+  // 长度/宽度/间距每场不同，烘常量会让每场编一条新管线（首用 stall 吞掉短命件）
+  const TEND = MOSS_SPREAD_TENDRILS.map((T, i) => ({ ...T, k: i }));
+  return Fn(([vUv, uProg, uCfg]) => {
+    const uSeed = uCfg.w;
+    // 世界等比坐标：X 沿主根方向（0 = 苔球脚底），Y 横向（0 = 苔球→玩家轴）
+    const X = vUv.x.mul(uCfg.x);
+    const Y = vUv.y.sub(float(0.5)).mul(uCfg.y);
+    const hash2 = (ix, iy) => fract(sin(ix.mul(107.13).add(iy.mul(83.71)).add(uSeed.mul(0.731))).mul(43758.585));
+    const vn2 = (qx, qy) => {
+      const ix = floor(qx), iy = floor(qy);
+      const fx = fract(qx), fy = fract(qy);
+      const wx = fx.mul(fx).mul(float(3.0).sub(fx.mul(2.0)));
+      const wy = fy.mul(fy).mul(float(3.0).sub(fy.mul(2.0)));
+      const a = hash2(ix, iy);
+      const b = hash2(ix.add(1), iy);
+      const c = hash2(ix, iy.add(1));
+      const d = hash2(ix.add(1), iy.add(1));
+      const top = a.add(b.sub(a).mul(wx));
+      const bot = c.add(d.sub(c).mul(wx));
+      return top.add(bot.sub(top).mul(wy));
+    };
+    // 中心线：端点精确锚定（env = sin(πs) 两端归零），中段双频 S 弯 + seed 相位
+    const latOf = (T, atX) => {
+      const s = clamp(atX.div(uCfg.z.mul(float(T.endFrac))), 0.0, 1.0);
+      const env = sin(s.mul(float(Math.PI))).mul(s);
+      return float(T.baseY)
+        .add(float(T.endY - T.baseY).mul(s))
+        .add(sin(s.mul(float(T.freq * Math.PI)).add(float(T.ph)).add(uSeed.mul(float(1.3 + T.k))))
+          .mul(float(T.amp)).mul(env))
+        .add(sin(s.mul(float(T.freq * 2.3 * Math.PI)).add(float(T.ph * 1.7 + 1.1)).add(uSeed.mul(float(2.1 + T.k))))
+          .mul(float(T.amp * 0.32)).mul(env));
+    };
+    // 粗细：基部粗、梢部细 + 节瘤
+    const widthOf = (T, atX) => {
+      const s = clamp(atX.div(uCfg.z.mul(float(T.endFrac))), 0.0, 1.0);
+      return float(T.w0)
+        .mul(float(1.0).sub(s.mul(0.55)))
+        .mul(float(1.0).add(sin(atX.mul(1.9).add(float(T.ph * 2.3)).add(uSeed)).mul(0.16)));
+    };
+    // 根锋（世界 X）：smoothstep 起缓收缓，终点精确落在 endX
+    const headOf = (T) => smoothstep(float(T.delay), float(T.delay + T.dur), uProg)
+      .mul(uCfg.z.mul(float(T.endFrac)));
+    const stemOf = (T) => {
+      const coreN = Y.sub(latOf(T, X)).div(widthOf(T, X));
+      const core = exp(coreN.mul(coreN).mul(-1.6))
+        .mul(oneMinus(smoothstep(headOf(T).sub(float(0.4)), headOf(T).add(float(0.4)), X)))
+        .mul(float(0.86).add(sin(X.mul(2.6).add(float(T.ph * 3.1)).add(uSeed)).mul(0.14)));
+      const haloN = Y.sub(latOf(T, X)).div(widthOf(T, X));
+      const halo = exp(haloN.mul(haloN).mul(-0.30))
+        .mul(oneMinus(smoothstep(headOf(T).sub(float(0.4)), headOf(T).add(float(0.4)), X)));
+      const sheenN = Y.sub(latOf(T, X)).div(widthOf(T, X)).sub(float(0.42));
+      const sheen = exp(sheenN.mul(sheenN).mul(-6.0))
+        .mul(oneMinus(smoothstep(headOf(T).sub(float(0.4)), headOf(T).add(float(0.4)), X)));
+      return col.mul(core.mul(1.45)).add(col.mul(halo.mul(0.22))).add(wet.mul(sheen.mul(0.28)));
+    };
+    // 根后苔斑：宽而暗的噪声斑块，只出现在锋后 1.4~3.6 单位（无锋线）
+    const trailOf = (T) => {
+      const bandN = Y.sub(latOf(T, X)).div(widthOf(T, X));
+      const band = exp(bandN.mul(bandN).mul(-0.10));
+      const behind = smoothstep(float(1.4), float(3.6), headOf(T).sub(X));
+      const patch = smoothstep(float(0.54), float(0.74),
+        vn2(X.mul(0.36).add(float(T.k * 7.3)), Y.mul(0.36).add(float(T.k * 3.1))));
+      return band.mul(behind).mul(patch).mul(0.20);
+    };
+    // 根尖湿亮芽点（跟着根锋走；抵达后停在玩家脚底）
+    const tipOf = (T) => {
+      const h = headOf(T);
+      const dX = X.sub(h).div(float(1.45));
+      const dY = Y.sub(latOf(T, h)).div(float(1.25));
+      return exp(dX.mul(dX).add(dY.mul(dY)).mul(-1.0)).mul(float(0.9));
+    };
+    // 节点叶片：根锋越过节点 2.2~4.0 单位后展开（叶尖始终在根锋之后，不悬空前探）
+    const leafOf = (T, frac, side) => {
+      const ang = side * (T.leafAng + 0.2 * Math.sin(T.ph * 2.1 + frac * 4.0));
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const lLen = 2.05, lWid = 0.72;
+      // 同一叶片的几何量逐项重写（TSL 叶子拓扑纪律：不在两个子表达式间复用节点对象）
+      const qx = X.sub(uCfg.z.mul(float(frac)).add(float(ca * lLen)))
+        .mul(float(ca))
+        .add(Y.sub(latOf(T, uCfg.z.mul(float(frac))).add(float(sa * lLen))).mul(float(sa)))
+        .div(float(lLen));
+      const qy = Y.sub(latOf(T, uCfg.z.mul(float(frac))).add(float(sa * lLen)))
+        .mul(float(ca))
+        .sub(X.sub(uCfg.z.mul(float(frac)).add(float(ca * lLen))).mul(float(sa)))
+        .div(float(lWid));
+      const lobe = oneMinus(smoothstep(float(0.66), float(1.0), qx.mul(qx).add(qy.mul(qy))));
+      const grow = smoothstep(
+        uCfg.z.mul(float(frac)).add(float(2.2)),
+        uCfg.z.mul(float(frac)).add(float(4.0)),
+        headOf(T),
+      );
+      return leafCol.mul(lobe.mul(grow.mul(0.9)));
+    };
+    let acc = vec3(0.0);
+    for (const T of TEND) {
+      acc = acc.add(stemOf(T));
+      acc = acc.add(col.mul(trailOf(T)));
+      acc = acc.add(wet.mul(tipOf(T)));
+      for (const frac of T.leafFracs) {
+        acc = acc.add(leafOf(T, frac, -1)).add(leafOf(T, frac, 1));
+      }
+    }
+    const born = smoothstep(0.0, 0.05, uProg);
+    const tail = oneMinus(smoothstep(0.88, 1.0, uProg));   // 缠上后根系干枯退场
+    const raw = acc.mul(born).mul(tail);
+    const pk = max(max(raw.x, raw.y), raw.z).add(1e-4);
+    const rgb = raw.mul(min(float(1.0), float(0.5).div(pk)));
+    const edge = oneMinus(smoothstep(float(0.47), float(0.50), abs(vUv.x.sub(float(0.5)))))
+      .mul(oneMinus(smoothstep(float(0.46), float(0.50), abs(vUv.y.sub(float(0.5))))));
+    return vec4(rgb.mul(edge), float(1.0));
+  });
+}
 
 /**
- * 贴地蔓延爬苔（dir = ±1 漫向）。quad 背缘贴 at（苔球），width = 波程（调用方按
- * 实际间距取——size 不足会让锋面半途消失）。返回 { promise, arriveU }——
- * arriveU = 锋面爬过 dist 对应的 uProg（0..1），抵达拍按此定时刻。
+ * 贴地蔓延根系（from = 苔球脚底，to = 玩家脚底）。quad 沿**真实地面向量**（含 z）
+ * 落位：主根终点精确落在 to 的 xz，其余根系分叉到两侧；quad 长度 = 间距 + 6
+ * （越过玩家的余量只做画布，不参与根锋）。返回 { promise, arriveU }——
+ * arriveU = 主根爬到玩家脚底的 uProg，抵达拍按此定时刻（与 shader 主根
+ * delay+dur 同步，改一处必须同步另一处）。
  */
 export function mossCreep(ctx, deps, {
-  at, dir = 1, color = [0.16, 0.24, 0.11], size = 20.0, ms = 900, dist = null,
-}) {
-  const arriveU = dist != null && size > 0
-    ? Math.min(0.97, Math.max(0.15, (dist / size - 0.06) / 0.92 / 1.389))
-    : 0.65;
-  if (!at) return { promise: Promise.resolve(), arriveU };
+  from, to, color = [0.16, 0.24, 0.11], ms = 1050,
+} = {}) {
+  const arriveU = 0.58;   // 主根 delay 0.03 + dur 0.55
+  if (!from) return { promise: Promise.resolve(), arriveU };
+  const dx = (to?.x ?? from.x - 20) - from.x;
+  const dz = (to?.z ?? from.z ?? 0) - (from.z ?? 0);
+  const dist = Math.hypot(dx, dz);
+  const ux = dist > 0.001 ? dx / dist : -1;
+  const uz = dist > 0.001 ? dz / dist : 0;
+  const target = Math.max(4, dist);
+  const len = target + 6;
+  const width = Math.min(40, Math.max(30, target * 0.40));
   const uProg = uniform(0.0);
-  const uSeed = uniform(Math.random() * 6.28 + 0.01);
+  // [quadLen, quadWidth, 目标距离, seed] 全走 uniform——同一管线跨场复用
+  const uCfg = uniform(new THREE.Vector4(len, width, target, Math.random() * 6.28 + 0.01));
   const { quad, release } = spellQuad({
-    shade: mossCreepShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
-    width: size, height: size * 0.7, name: 'spellFx:mossCreep',
+    shade: makeMossCreepShade(color)(uvOf(), uProg, uCfg),
+    width: len, height: width, name: 'spellFx:mossCreep',
   });
-  quad.position.set(at.x + dir * size * 0.5, at.y + 0.2, (at.z ?? 0) + 0.5);
+  quad.position.set(
+    from.x + ux * len * 0.5,
+    (from.y ?? 0) + 0.25,
+    (from.z ?? 0) + uz * len * 0.5,
+  );
   quad.rotation.x = -Math.PI / 2;
-  quad.rotation.z = dir < 0 ? Math.PI : 0;
+  // 平躺后 local +x → (cosφ, 0, -sinφ)：φ = atan2(-dz, dx) 让 u 轴对准玩家
+  quad.rotation.z = Math.atan2(-uz, ux);
   deps.scene.add(quad);
   ctx.onKill(() => { release(); });
   const st = { t: 0 };
   const promise = ctx.tweenRaw(st, { t: 1 }, {
-    durationMs: ms, ease: 'power1.in',   // 越爬越快（压迫感）
+    durationMs: ms, ease: 'linear',   // 单根速度曲线在 shader 的 smoothstep 里
     onUpdate: () => { uProg.value = st.t; },
     onComplete: () => { release(); },
   });
   return { promise, arriveU };
 }
 
-// ============ 缠踝爬须（苔球抵达拍 mossGrip，ENEMY_FX.md 迭代#6）============
-// 竖直 billboard（脚底对齐）：4 根 S 形爬须向上缠升（窄 x 高斯条 + sin 弯 + 向上
-// 渐熄 + 底基湿晕）；生长包络前 35% 起、60% 后淡出；单次演出无驻留。
-export const mossGripShade = Fn(([vUv, uProg, uColor, uSeed]) => {
-  const p = vUv.sub(vec2(0.5, 0.0));                  // p.y: 0(脚底)→1(须顶)
-  const grow = smoothstep(float(0.0), float(0.35), uProg);
-  const fade = oneMinus(smoothstep(float(0.6), float(1.0), uProg));
-  const tend = (i) => {
-    const x0 = float((i - 1.5) * 0.22).add(sin(uSeed.add(float(i * 2.1))).mul(0.07));
-    const bend = sin(p.y.mul(5.5).add(float(i * 1.9)).add(uSeed)).mul(0.11);
-    const dx = p.x.sub(x0).sub(bend);
-    const w = float(700.0 - i * 70.0);
-    const core = exp(dx.mul(dx).mul(w.mul(-1.0)));
-    const top = oneMinus(smoothstep(float(0.50 + i * 0.06), float(0.78 + i * 0.05), p.y));
-    return core.mul(top).mul(float(0.95 - i * 0.09));
-  };
-  const acc = tend(0).add(tend(1)).add(tend(2)).add(tend(3));
-  const base = exp(p.y.mul(p.y).mul(-34.0));
-  const edge = oneMinus(smoothstep(float(0.42), float(0.50), abs(p.x)))
-    .mul(oneMinus(smoothstep(float(0.44), float(0.50), p.y)));   // 顶部熄灭（底缘即地面不切）
-  const rgb = uColor.mul(acc.mul(1.9).add(base.mul(0.8))).mul(grow).mul(fade);
-  return vec4(rgb.mul(edge), float(1.0));
-});
+// ============ 缠踝藤束（苔球抵达拍 mossGrip）============
+// 玩家脚下一竖一平两件：竖 billboard = 3 根粗壮异向藤蔓从地面爬起、在踝高处交叉
+// 收紧（梢端叶片 + 节点叶片 + 两道斜向缠绳 + 基部苔团）；平铺圆环 = 落地苔环。
+// 画布刻意放大（内容限制在 p.x ±0.40 / p.y ≤0.82），边缘熄灭只贴真画布边
+// （±0.46~0.50 / 顶 0.94~1.0），不在内容区做横向截断——旧版在 p.x 0.42 / p.y 0.44
+// 就压暗，细须被切成直边。
+const MOSS_GRIP_VINES = [
+  { x0: -0.26, x1: 0.08, h: 0.64, amp: 0.070, freq: 1.35, ph: 0.40, w: 0.048, delay: 0.00, dur: 0.42, ang: 0.62, nodes: [0.40, 0.82] },
+  { x0: 0.04, x1: -0.20, h: 0.70, amp: 0.075, freq: 1.85, ph: 1.90, w: 0.044, delay: 0.04, dur: 0.46, ang: -0.66, nodes: [0.80] },
+  { x0: 0.25, x1: -0.02, h: 0.55, amp: 0.060, freq: 1.15, ph: 3.40, w: 0.046, delay: 0.07, dur: 0.40, ang: 0.70, nodes: [0.78] },
+];
 
-/** 缠踝爬须（竖直 billboard，at = 玩家脚下）。 */
+/** 竖件：缠踝藤束（uProg 0 起长，0.45~0.70 收紧一记，0.82 后退场）。 */
+export function makeMossGripShade([cr, cg, cb]) {
+  const col = vec3(cr, cg, cb);
+  const leafCol = vec3(cr * 1.7 + 0.08, cg * 1.55 + 0.13, cb * 1.30 + 0.02);
+  const wet = vec3(0.45, 0.62, 0.30);
+  const VINES = MOSS_GRIP_VINES.map((V, i) => ({ ...V, k: i }));
+  return Fn(([vUv, uProg, uSeed]) => {
+    const p = vUv.sub(vec2(0.5, 0.0));                 // p.y: 0(地面)→1(画布顶)
+    const hash2 = (ix, iy) => fract(sin(ix.mul(107.13).add(iy.mul(83.71)).add(uSeed.mul(0.731))).mul(43758.585));
+    const vn2 = (qx, qy) => {
+      const ix = floor(qx), iy = floor(qy);
+      const fx = fract(qx), fy = fract(qy);
+      const wx = fx.mul(fx).mul(float(3.0).sub(fx.mul(2.0)));
+      const wy = fy.mul(fy).mul(float(3.0).sub(fy.mul(2.0)));
+      const a = hash2(ix, iy);
+      const b = hash2(ix.add(1), iy);
+      const c = hash2(ix, iy.add(1));
+      const d = hash2(ix.add(1), iy.add(1));
+      const top = a.add(b.sub(a).mul(wx));
+      const bot = c.add(d.sub(c).mul(wx));
+      return top.add(bot.sub(top).mul(wy));
+    };
+    // 藤蔓中心线（p.x）：基座→梢端 + 双频 S 弯（两端锚定）+ 收紧脉冲
+    const latOf = (V, t) => {
+      const env = sin(t.mul(float(Math.PI))).mul(sin(t.mul(float(Math.PI))));
+      return float(V.x0)
+        .add(float(V.x1 - V.x0).mul(t))
+        .add(sin(t.mul(float(V.freq * Math.PI)).add(float(V.ph)).add(uSeed.mul(float(0.9 + V.k))))
+          .mul(float(V.amp)).mul(env))
+        .add(sin(t.mul(float(V.freq * 2.2 * Math.PI)).add(float(V.ph * 1.4 + 0.7)).add(uSeed.mul(float(1.7 + V.k))))
+          .mul(float(V.amp * 0.35)).mul(env))
+        .mul(float(1.0).sub(sin(clamp(uProg.sub(0.45).div(0.25), 0.0, 1.0).mul(float(Math.PI))).mul(0.035)));
+    };
+    const frontOf = (V) => smoothstep(float(V.delay), float(V.delay + V.dur), uProg).mul(float(V.h));
+    const visOf = (V) => oneMinus(smoothstep(frontOf(V).sub(float(0.025)), frontOf(V).add(float(0.025)), p.y));
+    const vineOf = (V) => {
+      const tCore = clamp(p.y.div(float(V.h)), 0.0, 1.0);
+      const coreD = p.x.sub(latOf(V, tCore)).div(float(V.w).mul(float(1.0).sub(tCore.mul(0.45))));
+      const core = exp(coreD.mul(coreD).mul(-1.5)).mul(visOf(V))
+        .mul(float(0.86).add(sin(p.y.mul(26.0).add(float(V.ph * 3.1)).add(uSeed)).mul(0.14)));
+      const tHalo = clamp(p.y.div(float(V.h)), 0.0, 1.0);
+      const haloD = p.x.sub(latOf(V, tHalo)).div(float(V.w).mul(float(1.0).sub(tHalo.mul(0.45))));
+      const halo = exp(haloD.mul(haloD).mul(-0.30)).mul(visOf(V));
+      const tSheen = clamp(p.y.div(float(V.h)), 0.0, 1.0);
+      const sheenD = p.x.sub(latOf(V, tSheen)).div(float(V.w).mul(float(1.0).sub(tSheen.mul(0.45)))).sub(float(0.42));
+      const sheen = exp(sheenD.mul(sheenD).mul(-6.0)).mul(visOf(V));
+      return col.mul(core.mul(1.35)).add(col.mul(halo.mul(0.22))).add(wet.mul(sheen.mul(0.36)));
+    };
+    // 节点叶片：藤尖越过节点后展开；叶轴在 p 空间里向两侧前方
+    const leafOf = (V, nodeT, side) => {
+      const nodeY = V.h * nodeT;
+      const ang = side * (V.ang + 0.16 * Math.sin(V.ph * 2.1 + nodeT * 5.0));
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const lLen = 0.100, lWid = 0.036;
+      const cx = latOf(V, float(nodeT)).add(float(sa * lLen * 0.70));
+      const cy = float(nodeY + ca * lLen * 0.70);
+      const qx = p.x.sub(cx).mul(float(sa)).add(p.y.sub(cy).mul(float(ca))).div(float(lLen));
+      const qy = p.x.sub(cx).mul(float(ca)).sub(p.y.sub(cy).mul(float(sa))).div(float(lWid));
+      const lobe = oneMinus(smoothstep(float(0.66), float(1.0), qx.mul(qx).add(qy.mul(qy))));
+      const grow = smoothstep(float(nodeY + 0.03), float(nodeY + 0.09), frontOf(V));
+      return leafCol.mul(lobe.mul(grow.mul(0.90)));
+    };
+    // 横向缠绳：两道错相位、斜向交叉（读「绕踝」而不是一排横杠），uProg 0.24 后出现；
+    // 收紧脉冲时增亮
+    const bindOf = (yb, ph, slope) => {
+      const sag = sin(p.x.mul(float(Math.PI * 2.0)).add(float(ph)).add(uSeed)).mul(0.018);
+      const dy = p.y.sub(float(yb)).sub(p.x.mul(float(slope))).sub(sag);
+      const line = exp(dy.mul(dy).div(float(0.0028)).mul(-1.0));
+      const ends = oneMinus(smoothstep(float(0.27), float(0.34), abs(p.x)));
+      const grow = smoothstep(float(0.24), float(0.44), uProg);
+      const pulse = sin(clamp(uProg.sub(0.45).div(0.25), 0.0, 1.0).mul(float(Math.PI)));
+      return line.mul(ends).mul(grow).mul(float(1.0).add(pulse.mul(0.55)));
+    };
+    // 基部苔团：脚底一圈不规则噪声块（不是一条平带）
+    const baseOf = () => {
+      const band = oneMinus(smoothstep(float(0.05), float(0.17), p.y));
+      const ends = oneMinus(smoothstep(float(0.32), float(0.40), abs(p.x)));
+      const patch = smoothstep(float(0.44), float(0.64),
+        vn2(p.x.mul(9.0).add(float(3.7)), p.y.mul(16.0).add(float(1.3))));
+      return band.mul(ends).mul(patch);
+    };
+    let acc = vec3(0.0);
+    for (const V of VINES) {
+      acc = acc.add(vineOf(V));
+      for (const nodeT of V.nodes) {
+        acc = acc.add(leafOf(V, nodeT, -1)).add(leafOf(V, nodeT, 1));
+      }
+    }
+    acc = acc.add(col.mul(bindOf(0.30, 0.8, 0.14)).mul(1.8));
+    acc = acc.add(col.mul(bindOf(0.56, 3.9, -0.15)).mul(1.6));
+    acc = acc.add(col.mul(baseOf()).mul(1.1));
+    const born = smoothstep(0.0, 0.04, uProg);
+    const tail = oneMinus(smoothstep(0.86, 1.0, uProg));
+    const raw = acc.mul(born).mul(tail);
+    const pk = max(max(raw.x, raw.y), raw.z).add(1e-4);
+    const rgb = raw.mul(min(float(1.0), float(0.5).div(pk)));
+    // 边缘熄灭只贴真画布边：x ±0.46~0.50 / 顶 0.94~1.0（内容 ≤0.40 / ≤0.82）
+    const edge = oneMinus(smoothstep(float(0.46), float(0.50), abs(p.x)))
+      .mul(oneMinus(smoothstep(float(0.94), float(1.0), p.y)));
+    return vec4(rgb.mul(edge), float(1.0));
+  });
+}
+
+/** 平件：脚底落地苔环（0 起由脚底向外铺开，与竖件同 uProg 退场）。 */
+export function makeMossGripCollarShade([cr, cg, cb]) {
+  const col = vec3(cr, cg, cb);
+  const wet = vec3(0.45, 0.62, 0.30);
+  return Fn(([vUv, uProg, uSeed]) => {
+    const p = vUv.sub(vec2(0.5));
+    const hash2 = (ix, iy) => fract(sin(ix.mul(107.13).add(iy.mul(83.71)).add(uSeed.mul(0.913))).mul(43758.585));
+    const vn2 = (qx, qy) => {
+      const ix = floor(qx), iy = floor(qy);
+      const fx = fract(qx), fy = fract(qy);
+      const wx = fx.mul(fx).mul(float(3.0).sub(fx.mul(2.0)));
+      const wy = fy.mul(fy).mul(float(3.0).sub(fy.mul(2.0)));
+      const a = hash2(ix, iy);
+      const b = hash2(ix.add(1), iy);
+      const c = hash2(ix, iy.add(1));
+      const d = hash2(ix.add(1), iy.add(1));
+      const top = a.add(b.sub(a).mul(wx));
+      const bot = c.add(d.sub(c).mul(wx));
+      return top.add(bot.sub(top).mul(wy));
+    };
+    const grow = smoothstep(0.0, 0.32, uProg);
+    // 环半径由脚底向外铺开（grow=1 时 r 就是真半径）
+    const r = length(p).div(float(0.18).add(grow.mul(0.82)));
+    const band = smoothstep(float(0.16), float(0.22), r)
+      .mul(oneMinus(smoothstep(float(0.34), float(0.46), r)));
+    const patch = smoothstep(float(0.44), float(0.66),
+      vn2(p.x.mul(7.0).add(float(5.1)), p.y.mul(7.0).add(float(2.7))));
+    const rim = smoothstep(float(0.27), float(0.33), r)
+      .mul(oneMinus(smoothstep(float(0.35), float(0.43), r)));
+    const fade = oneMinus(smoothstep(0.80, 1.0, uProg));
+    const raw = col.mul(band.mul(patch).mul(1.35))
+      .add(wet.mul(rim.mul(patch).mul(0.35)));
+    const pk = max(max(raw.x, raw.y), raw.z).add(1e-4);
+    const rgb = raw.mul(min(float(1.0), float(0.5).div(pk)));
+    const edge = oneMinus(smoothstep(float(0.46), float(0.50), length(p)));
+    return vec4(rgb.mul(fade).mul(edge), float(1.0));
+  });
+}
+
+/** 缠踝藤束（at = 玩家脚下；竖件 + 落地苔环共享 uProg/seed）。 */
 export async function mossGrip(ctx, deps, {
-  at, color = [0.17, 0.26, 0.12], size = 8.0, ms = 380,
+  at, color = [0.17, 0.26, 0.12], size = 8.0, ms = 650,
 }) {
   if (!at) return;
+  const k = Math.max(0.7, size / 8);
+  const w = 21 * k;
+  const h = 11.5 * k;
   const uProg = uniform(0.0);
   const uSeed = uniform(Math.random() * 6.28 + 0.01);
-  const { quad, release } = spellQuad({
-    shade: mossGripShade(uvOf(), uProg, vec3(color[0], color[1], color[2]), uSeed),
-    width: size, height: size * 1.2, name: 'spellFx:mossGrip',
+  const vertical = spellQuad({
+    shade: makeMossGripShade(color)(uvOf(), uProg, uSeed),
+    width: w, height: h, name: 'spellFx:mossGrip',
   });
-  quad.position.set(at.x, at.y + size * 0.6, (at.z ?? 0) + 1.2);
-  deps.scene.add(quad);
-  ctx.onKill(() => { release(); });
+  vertical.quad.position.set(at.x, at.y + h * 0.5, (at.z ?? 0) + 1.2);
+  const collar = spellQuad({
+    shade: makeMossGripCollarShade(color)(uvOf(), uProg, uSeed),
+    width: w * 0.72, height: w * 0.72, name: 'spellFx:mossGripCollar',
+  });
+  collar.quad.rotation.x = -Math.PI / 2;
+  collar.quad.position.set(at.x, (at.y ?? 0) + 0.22, (at.z ?? 0) + 0.35);
+  deps.scene.add(vertical.quad);
+  deps.scene.add(collar.quad);
+  ctx.onKill(() => { vertical.release(); collar.release(); });
   const st = { t: 0 };
   await ctx.tweenRaw(st, { t: 1 }, {
     durationMs: ms, ease: 'power1.out',
     onUpdate: () => { uProg.value = st.t; },
-    onComplete: () => { release(); },
+    onComplete: () => { vertical.release(); collar.release(); },
   });
 }
 
