@@ -28,6 +28,9 @@ export default class AIActInstruction extends BattleInstruction {
           unit: this.unit.uniqueID,
           kinds: [...(it.kinds ?? [])],
           hits: it.hits ?? 0,
+          // 内容侧演出分支标记：kinds 相同但演出不同的拍由内容自报语义
+          // （如腐败之源的力量/回血同为 strongBuff），剧本不解析预告文案。
+          fx: it.fx ?? null,
         });
       }
       const def = this.resolveDef(this.unit.defId);

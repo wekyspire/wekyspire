@@ -73,13 +73,20 @@ export function createAmbientEmitterBridge(pool, getCamera = null) {
           size: o.size / projFactor(), sizeEndK: 1.0,
           // 淡入 20% + 线性淡出：发射器类粒子不许满尺寸弹入（「凭空出现」病灶）
           alphaMode: 'in',
-          color: [c.r, c.g, c.b], alpha: 0.85, heat: 0.5, ageHeat: 0.6, softness: 1,
+          color: [c.r, c.g, c.b],
+          alpha: options.alpha ?? 0.85,
+          heat: 0.5, ageHeat: 0.6,
+          // softness > 1 = 中心亮缘更虚的软团（尘烟/腐云用；缺省 1 = 旧点粒子口径）
+          softness: options.softness ?? 1,
         },
       });
       const handle = {
         x, y, rate: options.rate ?? 12, stopped: false, _typeId: typeId, _z: z,
         stop() { handle.stopped = true; },   // 幂等：update 泵到即摘
-        setPosition(nx, ny) { handle.x = nx; handle.y = ny; },
+        setPosition(nx, ny, nz) {
+          handle.x = nx; handle.y = ny;
+          if (nz !== undefined) handle._z = nz;
+        },
       };
       emitters.push(handle);
       pool.setTypeSpawnPos(typeId, x, y, z);

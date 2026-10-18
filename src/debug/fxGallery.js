@@ -24,6 +24,7 @@ import { AuraHost } from '../stage/fx/aura.js';
 import { getScript } from '../stage/fx/scripts/index.js';
 import { runEnemyHitBeat, resolveEnemyHitFx } from '../stage/fx/spells/enemyHitFx.js';
 import { enemySpawnGarnishOf, enemyDeathBeatOf } from '../stage/fx/enemyLifeFx.js';
+import { makePlasmaStorm, plasmaSlash, plasmaBurst, skyBolt, lightningRing } from '../stage/fx/plasmaStorm.js';
 import { unitBeats } from '../stage/stages/battleBeats/units.js';
 import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y, UI_CAMERA_Z } from '../stage/StageManager.js';
 // core 侧（敌人注册表 + 逻辑偶——逐拍枚举读 getIntention）
@@ -127,7 +128,7 @@ const stageStub = {
       y: u[1]*sx + u[5]*sy - u[9] + u[13] + uiCamera.position.y,
     };
   },
-  _spellDeps: () => ({ scene, uiScene, particles, cast, shake, notify: null, worldPool: particles2World }),
+  _spellDeps: () => ({ scene, uiScene, particles, cast, shake, notify: null, worldPool: particles2World, camera, renderCamera: camera }),
   ...unitBeats,
 };
 
@@ -178,6 +179,7 @@ function setEnemySlot(i, defId) {
   if (!def) return;
   const v = enemyViews[i];
   v._defId = defId;
+  v._bossPhase = 0;   // 换敌清阶段标记（卡达斯 P2 点播会置位）
   v.visible = true;
   v._dead = false;
   v.restoreBody();
@@ -297,8 +299,8 @@ group('形体件（fxPieces 单件）', [
   { label: 'wailRing 阴波环（怨灵）', enemy: 'wraithA', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.62, 0.48, 0.90], mode: 'wraith' })) },
   { label: 'wailRing 气压环（素）', run: () => runWith((ctx) => fxp.wailRing(ctx, stageStub._spellDeps(), { at: head(focusView()), color: [0.65, 0.78, 1.10], mode: 'plain' })) },
   { label: 'fuseRing 引线收束圈', enemy: 'blastPod', run: () => runWith((ctx) => fxp.fuseRing(ctx, stageStub._spellDeps(), { at: feet(focusView()), ms: 900 })) },
-  { label: 'mossCreep 蔓延爬苔（向玩家）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossCreep(ctx, stageStub._spellDeps(), { at: feet(focusView()), dir: -1, size: 26, dist: 20 }).promise) },
-  { label: 'mossGrip 缠踝爬须（玩家脚下）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossGrip(ctx, stageStub._spellDeps(), { at: feet(playerView) })) },
+  { label: 'mossCreep 蔓延根系（苔球→玩家脚底）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossCreep(ctx, stageStub._spellDeps(), { from: feet(focusView()), to: feet(playerView) }).promise) },
+  { label: 'mossGrip 缠踝藤束（玩家脚下）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossGrip(ctx, stageStub._spellDeps(), { at: feet(playerView) })) },
   { label: 'mossBurst 湿苔迸裂（玩家命中点）', enemy: 'mossBallA', run: () => runWith((ctx) => fxp.mossBurst(ctx, stageStub._spellDeps(), { at: chest(playerView), size: 16, seed: 1.7 })) },
   { label: 'throatPuff 喉囊充气（绿）', enemy: 'pufferToadA', run: () => runWith((ctx) => fxp.throatPuff(ctx, stageStub._spellDeps(), { at: throat(focusView()), h: fxp.unitH(focusView()), dir: Math.sign(playerView.position.x - focusView().position.x) || -1 })) },
   { label: 'weightSwirl 坠尘旋进（金）', enemy: 'rockPangolin', run: () => runWith((ctx) => fxp.weightSwirl(ctx, stageStub._spellDeps(), { at: feet(focusView()), h: fxp.unitH(focusView()) })) },
@@ -306,6 +308,152 @@ group('形体件（fxPieces 单件）', [
   { label: 'dustLanding 全域落地尘', enemy: 'diggerMole', run: () => runWith((ctx) => fxp.dustLanding(ctx, stageStub._spellDeps(), { at: feet(focusView()), unit: focusView(), dir: Math.sign(playerView.position.x - focusView().position.x) || -1, count: 18, lampIntensity: 420 })) },
   { label: 'scaleDust 鳞粉锋（妖蝶→玩家）', enemy: 'nymph', run: () => runWith((ctx) => fxp.scaleDust(ctx, stageStub._spellDeps(), { from: chest(focusView()), to: chest(playerView) }).promise) },
   { label: 'arriveDust 抵达粉晕（玩家胸口）', enemy: 'nymph', run: () => runWith((ctx) => fxp.arriveDust(ctx, stageStub._spellDeps(), { at: chest(playerView) })) },
+]);
+
+// ---- 腐败之源签名件（地根/根刺/根苞/腐息/菌丝/鞭痕）----
+const csfx = await import('../stage/fx/scripts/bosses/corruptSource.js');
+// 真剧本分发：boss + 其余两槽当友军（回血/力量拍需要友军）
+const bossActRow = (label, kinds, fx) => ({
+  label, enemy: 'corruptSource',
+  run: () => runWith(async (ctx) => {
+    stageStub._snapshot = {
+      enemies: [{ uniqueID: focusView().uniqueID, intention: { kinds, hits: 1, damage: 8 } }],
+      player: { uniqueID: 'p' },
+    };
+    await enemyActScript({
+      ctx,
+      args: { unit: focusView().uniqueID, kinds, hits: 1, fx },
+      cast, particles, shake, camera: stageStub._spellDeps().camera,
+      unitById: (x) => enemyViews.find((v) => v.uniqueID === x) ?? null,
+      scene, uiScene,
+    });
+  }),
+});
+group('腐败之源（Boss 剧本 · 真分发）', [
+  { label: '酝酿 corruptBrew（真剧本）', enemy: 'corruptSource', run: () => runWith(async (ctx) => {
+    const brew = getScript('bosses/corruptBrew');
+    if (!brew) { toast('未注册 bosses/corruptBrew'); return; }
+    await brew({
+      ctx,
+      args: { unit: focusView().uniqueID },
+      cast, particles, shake,
+      scene, uiScene,
+      unitById: (x) => enemyViews.find((v) => v.uniqueID === x) ?? null,
+    });
+  }) },
+  bossActRow('召唤（藤蔓推送 → 土丘根爪破土）', ['summon'], 'summon'),
+  bossActRow('腐息（虚弱+脆弱）', ['strongDebuff'], 'debuff'),
+  bossActRow('回血（菌丝输养）', ['strongBuff'], 'heal'),
+  bossActRow('力量（友军根刺注入）', ['strongBuff'], 'strength'),
+  bossActRow('攻击（三路藤蔓）', ['attack'], 'attack'),
+]);
+group('腐败之源（形体件）', [
+  { label: '地根网（铺开）', enemy: 'corruptSource', run: () => runWith(async (ctx) => {
+    const field = csfx.createRootField(focusView(), stageStub._spellDeps(), {
+      size: fxp.unitH(focusView()) * 2.2, onDispose: (fn) => ctx.onKill(fn),
+    });
+    field.setTarget(1);
+    field.pulse(0.6);
+    await ctx.wait(2200);
+    field.dispose();
+  }) },
+  { label: '根刺破土（玩家脚下）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptRootSpike(ctx, stageStub._spellDeps(), {
+    at: feet(playerView), h: fxp.unitH(playerView) * 0.85, w: fxp.unitH(playerView) * 0.32, ms: 620, lean: -0.1,
+  })) },
+  { label: '根苞破土（3D 土丘+根爪）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptRootEmergence(ctx, stageStub._spellDeps(), {
+    at: feet(focusView()), h: fxp.unitH(focusView()) * 0.52, w: fxp.unitH(focusView()) * 0.42, ms: 640,
+  }).promise) },
+  { label: '藤蔓疾走（3D · Boss→玩家）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptVineRun(ctx, stageStub._spellDeps(), {
+    from: feet(focusView()), to: feet(playerView), ms: 420,
+  }).promise) },
+  { label: '腐息雾浪（Boss→玩家）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptMiasma(ctx, stageStub._spellDeps(), {
+    from: feet(focusView()), to: feet(playerView), ms: 900,
+  }).promise) },
+  { label: '缠身腐气（玩家胸口）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptCling(ctx, stageStub._spellDeps(), {
+    at: chest(playerView), size: 14, ms: 620,
+  })) },
+  { label: '菌丝连（Boss→邻位友军）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptSapLink(ctx, stageStub._spellDeps(), {
+    from: feet(focusView()), to: feet(enemyViews[(focusIdx + 1) % ENEMY_SLOTS]), ms: 560,
+  }).promise) },
+  { label: '藤鞭抽痕（玩家胸口）', enemy: 'corruptSource', run: () => runWith((ctx) => csfx.corruptLashScar(ctx, stageStub._spellDeps(), {
+    at: chest(playerView), dir: 1, scale: 1, ms: 520,
+  })) },
+]);
+
+// ---- 卡达斯（Boss 剧本 · 世界空间雷电）----
+const kardasActRow = (label, kinds, hits, { p2 = false } = {}) => ({
+  label, enemy: 'kardas',
+  run: () => runWith(async (ctx) => {
+    const v = focusView();
+    v._bossPhase = p2 ? 2 : 1;
+    v._fxLayer?.overlay('bossPlasma', 2, (l) => makePlasmaStorm(l, { particles }));
+    v._fxLayer?.setLevel('bossPlasma', p2 ? 0.8 : 0.55);
+    stageStub._snapshot = {
+      enemies: [{ uniqueID: v.uniqueID, intention: { kinds, hits } }],
+      player: { uniqueID: 'p' },
+    };
+    await enemyActScript({
+      ctx,
+      args: { unit: v.uniqueID, kinds, hits, fx: null },
+      cast, particles, shake, camera: stageStub._spellDeps().camera,
+      unitById: (x) => enemyViews.find((e) => e.uniqueID === x) ?? null,
+      scene, uiScene,
+    });
+  }),
+});
+group('卡达斯（Boss 剧本 · 真分发）', [
+  kardasActRow('普攻（2 段掠击 + 接地弧）', ['attack'], 2),
+  kardasActRow('重击（撕碎：蓄电 + 双爪雷爆）', ['heavy', 'buff'], 1),
+  kardasActRow('防御（植爪接地 + 电衣）', ['defend'], 0),
+  kardasActRow('P2 普攻（爪间横雷）', ['attack'], 2, { p2: true }),
+  kardasActRow('P2 重击（天雷灌体蓄力）', ['heavy'], 1, { p2: true }),
+  { label: '阶段复位（清 P2 标记）', enemy: 'kardas', run: () => { focusView()._bossPhase = 0; toast('P2 标记已清'); } },
+]);
+group('卡达斯（形体件 · 世界空间雷电）', [
+  { label: '常驻雷暴 P1（均值 ~4s 一场）', enemy: 'kardas', run: () => runWith(async (ctx) => {
+    const v = focusView();
+    v._bossPhase = 1;
+    const h = v._fxLayer?.overlay('demoStorm', 2, (l) => makePlasmaStorm(l, { particles }));
+    h?.setLevel(0.35);
+    h?.burst(2, 420);
+    await ctx.wait(2600);
+    v._fxLayer?.clear('demoStorm');
+    v._bossPhase = 0;
+  }) },
+  { label: '常驻雷暴 P2（均值 ~2s 一场）', enemy: 'kardas', run: () => runWith(async (ctx) => {
+    const v = focusView();
+    v._bossPhase = 2;
+    const h = v._fxLayer?.overlay('demoStorm', 2, (l) => makePlasmaStorm(l, { particles }));
+    h?.setLevel(1);
+    h?.burst(6, 900);
+    await ctx.wait(2800);
+    v._fxLayer?.clear('demoStorm');
+    v._bossPhase = 0;
+  }) },
+  { label: '雷电爪痕（三重斜线）', enemy: 'kardas', run: () => runWith((ctx) => plasmaSlash(ctx, stageStub._spellDeps(), {
+    at: chest(playerView), size: fxp.unitW(playerView), dir: 1, strokes: 3, heavy: true,
+  })) },
+  { label: '命中迸裂（八向短雷）', enemy: 'kardas', run: () => runWith((ctx) => plasmaBurst(ctx, stageStub._spellDeps(), {
+    at: chest(playerView), size: fxp.unitW(playerView) * 0.7, count: 8, ms: 240,
+  })) },
+  { label: '天雷（画面上方劈落）', enemy: 'kardas', run: () => runWith((ctx) => skyBolt(ctx, stageStub._spellDeps(), {
+    at: chest(playerView), height: fxp.unitH(playerView) * 5.5, ms: 280,
+  })) },
+  { label: '地面雷环（转段嘶吼）', enemy: 'kardas', run: () => runWith((ctx) => lightningRing(ctx, stageStub._spellDeps(), {
+    at: feet(focusView()), radius: fxp.unitH(focusView()) * 3.1, ms: 640,
+  })) },
+  { label: '命中·P2 撕碎（天雷 + 交叉爪痕）', enemy: 'kardas', run: () => runWith(async (ctx) => {
+    const v = focusView();
+    v._bossPhase = 2;
+    stageStub._snapshot = { enemies: [{ uniqueID: v.uniqueID, intention: { kinds: ['heavy'], hits: 1, damage: 27 } }] };
+    const fx = resolveEnemyHitFx(stageStub, {
+      source: { side: 'enemy', defId: 'kardas', uniqueID: v.uniqueID }, type: 'major',
+    }, 27, { damage: 27, hits: 1 });
+    await runEnemyHitBeat(ctx, stageStub._spellDeps(), {
+      fx, unit: playerView, dealt: 27, swing: 27, fromX: v.position.x, source: v,
+    });
+    v._bossPhase = 0;
+  }) },
 ]);
 
 // ---- 逐敌逐拍（真分发：enemyAct 注册表 + 真实意图枚举）----
@@ -352,7 +500,7 @@ function beatsOf(defId) {
     const key = kinds.join('+') + '|' + (it.note ?? '');
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ i, kinds, note: it.note ?? '' });
+    out.push({ i, kinds, note: it.note ?? '', fx: it.fx ?? null });
   }
   return out;
 }
@@ -390,9 +538,9 @@ function rebuildBeats() {
         return runWith(async (ctx) => {
           await enemyActScript({
             ctx,
-            args: { unit: focusView().uniqueID, kinds: b.kinds, hits: 1 },
+            args: { unit: focusView().uniqueID, kinds: b.kinds, hits: 1, fx: b.fx },
             cast, particles, shake,
-            unitById: (x) => (x === focusView().uniqueID ? focusView() : null),
+            unitById: (x) => enemyViews.find((v) => v.uniqueID === x) ?? null,
             scene, uiScene,
           });
           // isAttackKind 是单 kind 谓词（intentKinds.js），数组判定要 some

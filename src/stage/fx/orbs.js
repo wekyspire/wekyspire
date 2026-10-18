@@ -9,6 +9,8 @@
 // 轨道参数挂在 group.userData.orbit——**公开可写、tick 逐帧读**（与 emitter.rate
 // 同惯例）：剧本 tweenRaw 直推半径/转速/尺寸就是「狂暴化」演出；新增的 heat
 // （0→1）驱动亮度/抖幅/尾迹/灯光的整体升温，Boss 转段剧本只推这一个标量。
+// group.userData.consumeOrb()：消耗一颗（返回爆散点世界坐标；缩没→空轨→再生
+// 0.55s 后自己在轨道上长回来）——P2 重击「把火握回手里再甩出去」的落点。
 import * as THREE from 'three';
 
 const _texCache = new Map(); // `${kind}:${color}` → THREE.CanvasTexture
@@ -123,6 +125,22 @@ export function attachOrbs(unit, def = {}) {
   // 每颗自己的高度偏置（±1.2u 错层）：三颗同高会叠成一条线、且恰好被 Boss
   // billboard 全身挡死；错层后总有火球露在头顶/腰侧，绕体感才出得来
   for (let i = 0; i < orbs.length; i++) orbs[i].hOff = Math.sin(i * 2.1 + 0.7) * 2.2;
+  // 消耗/再生状态（P2 重击「把火握回手里再甩出去」）：剧本只调 consumeOrb() 拿爆散点，
+  // 缩没 → 空轨 → 轨道上重新长出来，全由本件自己推进
+  for (const ob of orbs) { ob.life = 1; ob.mode = 'live'; ob.timer = 0; ob.pos = new THREE.Vector3(); }
+  let consumeIx = 0;
+  group.userData.consumeOrb = () => {
+    for (let k = 0; k < orbs.length; k++) {
+      const i = (consumeIx + k) % orbs.length;
+      const ob = orbs[i];
+      if (ob.mode !== 'live' || ob.life < 0.6) continue;
+      consumeIx = (i + 1) % orbs.length;
+      ob.mode = 'dying';
+      group.updateWorldMatrix(true, false);
+      return group.localToWorld(ob.pos.clone());   // 世界坐标：剧本在该点放爆散
+    }
+    return null;
+  };
   const untick = unit.addTick((dt) => {
     const o = group.userData.orbit;
     t += dt * o.speed * (1 + o.heat * 0.35);
@@ -130,6 +148,18 @@ export function attachOrbs(unit, def = {}) {
     const heat = o.heat ?? 0;
     for (let i = 0; i < orbs.length; i++) {
       const ob = orbs[i];
+      // 生命周期：dying（爆散缩没）→ gone（空轨等待）→ regrow（轨道上重新长出来）
+      if (ob.mode === 'dying') {
+        ob.life = Math.max(0, ob.life - dt * 9);
+        if (ob.life <= 0) { ob.mode = 'gone'; ob.timer = 0.55; }
+      } else if (ob.mode === 'gone') {
+        ob.timer -= dt;
+        if (ob.timer <= 0) ob.mode = 'regrow';
+      } else if (ob.mode === 'regrow') {
+        ob.life = Math.min(1, ob.life + dt * 1.15);
+        if (ob.life >= 1) ob.mode = 'live';
+      }
+      const lf = ob.life;
       const a = t + (i * Math.PI * 2) / orbs.length;
       // 双正弦叠加 ≈ 伪噪声抖焰（heat 抬幅度：狂暴态火苗乱窜）
       const fl = 1 + (0.09 + 0.1 * heat) * Math.sin(t * 17.3 + ob.ph * 9.1)
@@ -139,19 +169,20 @@ export function attachOrbs(unit, def = {}) {
       const x = Math.cos(a) * o.radius;
       const y = o.height + ob.hOff + wob;
       const z = Math.sin(a) * o.radius * 0.55; // 椭圆轨道（压扁纵深，绕体感）
+      ob.pos.set(x, y + sc * 0.1, z);          // 消耗时的爆散锚点（局部坐标）
       ob.glow.position.set(x, y + sc * 0.1, z);
       // 光晕收成"热空气"而不是主角（09-23 实拍：2.7 倍 + 0.4 不透明度下整颗读成
       // 红色气球，焰身的火苗轮廓全被洗掉）——焰身必须比光晕亮、比光晕高
-      ob.glow.scale.set(sc * 2.0, sc * 2.0, 1);
-      ob.glow.material.opacity = 0.26 + 0.16 * heat + 0.05 * fl;
+      ob.glow.scale.set(sc * 2.0 * lf, sc * 2.0 * lf, 1);
+      ob.glow.material.opacity = (0.26 + 0.16 * heat + 0.05 * fl) * lf;
       // 焰身锚点：sprite 中心对齐"焰心偏下"→ 位置略抬，视觉重心落在轨道点上
       ob.flame.position.set(x, y + sc * 0.32, z);
-      ob.flame.scale.set(sc * 0.98, sc * 1.9, 1);
-      ob.flame.material.opacity = 1;
+      ob.flame.scale.set(sc * 0.98 * lf, sc * 1.9 * lf, 1);
+      ob.flame.material.opacity = lf;
       ob.flame.material.rotation = 0.1 * Math.sin(t * 12 + ob.ph * 7); // 火苗摆尾
       ob.core.position.set(x, y + sc * 0.1, z);
-      ob.core.scale.set(sc * 0.46, sc * 0.46, 1);
-      ob.core.material.opacity = 0.5 + 0.4 * heat;
+      ob.core.scale.set(sc * 0.46 * lf, sc * 0.46 * lf, 1);
+      ob.core.material.opacity = (0.5 + 0.4 * heat) * lf;
       // 彗尾：滞后相位淡影（heat 拉开拖尾角距 = 转得越热尾越长）
       const lag = 0.16 + 0.14 * heat;
       for (let k = 0; k < ob.trail.length; k++) {
@@ -163,7 +194,8 @@ export function attachOrbs(unit, def = {}) {
           Math.sin(ta) * o.radius * 0.55,
         );
         const tk = sc * (0.5 - k * 0.13);
-        tr.scale.set(tk * 0.95, tk * 1.7, 1);
+        tr.scale.set(tk * 0.95 * lf, tk * 1.7 * lf, 1);
+        tr.material.opacity = [0.34, 0.2, 0.11][k] * lf;
         tr.material.rotation = 0.12 * Math.sin(t * 10 + k * 2.2);
       }
     }

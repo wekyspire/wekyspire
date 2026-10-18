@@ -443,6 +443,7 @@ export const cardBeats = {
         return u?.effects?.find(e => e.effectId === effectId)?.stacks ?? 0;
       },
       camera: this._sm.cameraDirector,   // 场景参数演出（天斩 fov 压迫/复原）
+      renderCamera: this._sm?.camera ?? null, // 真渲染相机（世界空间面片朝向用）
       markCleaveSplit: (units) => {   // 天斩断裂标记（死亡节拍消费）
         for (const u of units ?? []) this._cleaveSplit?.add(u.uniqueID);
       },

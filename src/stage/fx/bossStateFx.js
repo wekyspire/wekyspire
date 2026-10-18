@@ -12,15 +12,16 @@ import {
   texture, uniform, uv, vec2, smoothstep, clamp, max, min,
 } from 'three/tsl';
 
-// —— 常驻导演：defId → (obj, unitProj) => void（每 sync 拍调用；必须幂等、廉价） ——
+// —— 常驻导演：defId → (obj, unitProj, ctx) => void（每 sync 拍调用；必须幂等、廉价）
+// ctx = { particles }：舞台粒子门面（常驻件要撒电火花/余烬时用；可空）——
 const STATE_DIRECTORS = new Map();
 export function registerBossStateFx(defId, fn) { STATE_DIRECTORS.set(defId, fn); }
 
 /** sync.js place() 的 aura 对账后调用。非 Boss（未注册）零成本直返。 */
-export function syncBossStateFx(obj, unitProj) {
+export function syncBossStateFx(obj, unitProj, ctx = null) {
   const fn = STATE_DIRECTORS.get(unitProj?.defId);
   if (!fn) return;
-  try { fn(obj, unitProj); } catch (err) { console.warn('[bossFx] state director 异常：', err); }
+  try { fn(obj, unitProj, ctx); } catch (err) { console.warn('[bossFx] state director 异常：', err); }
 }
 
 // —— 受击补充：defId → async (ctx, deps, {unit, dealt, absorbed, fromX}) ——

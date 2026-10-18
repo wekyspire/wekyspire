@@ -161,8 +161,24 @@ export async function arcProjectile(ctx, deps, {
   // 曳光弹是直线实弹：不摆尾（圆形弹体时代残留的 darting 会让条形弹体看着在扭）
   if (shape === 'tracer') darting = 0;
   // 曳光弹朝向按**发射弦**锁死一次（不逐帧追弧线切线——老的 per-frame 旋转
-  // 在圆形光珠上看不见，换成长条形就成了肉眼可见的「子弹在转」）
-  const lockedRotation = shape === 'tracer'
+  // 在圆形光珠上看不见，换成长条形就成了肉眼可见的「子弹在转」）。
+  // 朝向必须用**屏幕投影方向**：机炮从 Boss 纵深（z≈-55）打向玩家（z≈15），
+  // 相机带俯仰/偏航时 3D 弦的 z 分量会投到屏幕 y 上——只按 atan2(dy, dx) 世界
+  // XY 角会让长条和实际飞行线错开。有真相机时把条带 billboard 到相机平面，
+  // 局部 x 取相机空间弦向（横向比例在两侧同倍缩放，投影后方向一致）。
+  const cam = deps.renderCamera ?? deps.camera;
+  const camQ = (shape === 'tracer' && cam && typeof cam.getWorldQuaternion === 'function')
+    ? cam.getWorldQuaternion(new THREE.Quaternion())
+    : null;
+  let screenAngle = null;
+  if (camQ) {
+    const inv = camQ.clone().invert();
+    const dc = new THREE.Vector3(
+      to.x - from.x, to.y - from.y, (to.z ?? 0) - (from.z ?? 0),
+    ).applyQuaternion(inv);
+    screenAngle = Math.atan2(dc.y, dc.x);
+  }
+  const lockedRotation = shape === 'tracer' && !camQ
     ? Math.atan2(to.y - from.y, to.x - from.x)
     : null;
   // 摆尾参数（块级随机——多发不齐步）：幅度/双频/相位
@@ -193,7 +209,12 @@ export async function arcProjectile(ctx, deps, {
     width: size, height: size, name: 'spellFx:projectile',
   });
   quad.position.set(from.x, from.y, from.z ?? 0);
-  if (lockedRotation != null) quad.rotation.z = lockedRotation;
+  if (camQ) {
+    quad.quaternion.copy(camQ);
+    quad.rotateZ(screenAngle);
+  } else if (lockedRotation != null) {
+    quad.rotation.z = lockedRotation;
+  }
   deps.scene.add(quad);
   const lamp = deps.cast?.get?.(lampName) ?? null;
   if (lamp) { lamp.color.setRGB(color[0], color[1], color[2]); lamp.intensity = 0; }
@@ -224,7 +245,7 @@ export async function arcProjectile(ctx, deps, {
       0.5 * (from.y + to.y) + Math.sin(Math.PI * t) * arcH,
       0.5 * ((from.z ?? 0) + (to.z ?? 0)),
     );
-    quad.rotation.z = lockedRotation ?? Math.atan2(to.y - from.y, to.x - from.x);
+    if (!camQ) quad.rotation.z = lockedRotation ?? Math.atan2(to.y - from.y, to.x - from.x);
     quad.scale.set(stretch, 1.0, 1);
     uPhase.value = 10;
     await ctx.wait(3000);
@@ -245,7 +266,7 @@ export async function arcProjectile(ctx, deps, {
         u * (from.z ?? 0) + t * (to.z ?? 0),
       );
       // 朝速度方向自旋（弧线切线 + 摆尾速度）+ 前向拉伸；曳光弹锁死发射弦朝向
-      if (lockedRotation == null) {
+      if (lockedRotation == null && !camQ) {
         const vx = to.x - from.x;
         const vy = (to.y - from.y) + arcH * Math.PI * Math.cos(Math.PI * t);
         const sx = darting > 0 ? (swayOf(Math.min(1, t + 0.02)) - s) / (0.02 * (ms / 1000)) : 0;

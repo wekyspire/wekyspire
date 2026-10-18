@@ -417,16 +417,16 @@ export function burrowRest(opts = {}) {
 
 /**
  * 蜷缩防御族（ENEMY_FX.md 迭代#5）：蹲 = 重心砸进地面，尘从被挤压的地面横向挤出。
- * ① 下沉蓄力（压扁 + position.y 同步下沉——纯压扁读不出「蹲」）→ ② 触底拍：两侧
- * 快尘 + 身下小股 + 慢浮尘（与触底同帧，读「体重砸地、尘被挤开」）→ ③ 果冻微回弹
- * → ④ 憋劲静持 → 起身回中 + 过冲收敛。护盾地环由结算节拍自播，本族不抢。
+ * ① 下沉蓄力（压扁 + position.y 同步下沉——纯压扁读不出「蹲」）→ ② 触底拍：
+ * 身下小股 + 慢浮尘（与触底同帧，读「体重砸地」）→ ③ 果冻微回弹 → ④ 憋劲静持 →
+ * 起身回中 + 过冲收敛。护盾地环由结算节拍自播，本族不抢。
+ * 挤压尘只从身下中心股冒出，不向两侧分叉——体侧各一团悬空尘会读成异常粒子。
  */
 export function hunkerFx(opts = {}) {
   const { dustColor = 0xb0a088, depth = 1 } = opts;
   return async ({ ctx, deps, unit }) => {
     const y0 = unit.position.y;
     const sink = 1.4 * depth;
-    const R = (unit._groundRadius ?? 5) * 0.75;
     const z = unit.position.z ?? 0;
     ctx.onKill(() => { unit.position.y = y0; unit.resetPose(); });
     // ① 下沉蓄力（重心掉下去）
@@ -437,12 +437,7 @@ export function hunkerFx(opts = {}) {
         unit.setPose({ squash: 1 - 0.24 * depth * t, widen: 1 + 0.10 * depth * t });
       },
     });
-    // ② 触底（与下沉收尾同帧）：尘从身体两侧被挤开（快层）+ 身下小股 + 慢浮尘
-    for (const side of [-1, 1]) {
-      deps.particles?.spawn?.(unit.position.x + side * R, y0 + 0.6, {
-        color: dustColor, count: 7, speed: 13, size: 1.0, ttl: 0.32, gravity: -9, z,
-      });
-    }
+    // ② 触底（与下沉收尾同帧）：身下小股 + 慢浮尘
     deps.particles?.spawn?.(unit.position.x, y0 + 0.4, {
       color: dustColor, count: 5, speed: 5, size: 1.2, ttl: 0.6, gravity: -5, z,
     });
