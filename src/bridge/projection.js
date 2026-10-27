@@ -39,6 +39,7 @@ export function projectUnit(u) {
     defId: u.defId ?? null,
     name: u.name,
     side: u.side,
+    slot: u.slot ?? null, // 敌排固定槽位号（舞台按槽位表换算位置，数量增减不重排）
     hp: u.hp,
     maxHp: u.maxHp,
     shield: u.shield,

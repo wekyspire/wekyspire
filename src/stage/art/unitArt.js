@@ -108,7 +108,7 @@ const UNIT_ART_FILES = Object.freeze({
   motherNymph: 'unit_motherNymph.png',
   demolitions: 'unit_demolitions.png',
   hunter: 'unit_hunter.png',
-  // 22 层南孚宫 Boss 池（BOSSES 设计 ENEMY_ART_LIST.md P1 立绘要点）
+  // 22 层南孚宫 Boss 池（BOSSES 设计 P1 立绘要点）
   knightCommander: 'unit_knightCommander.png',
   courtSquire: 'unit_courtSquire.png',
   candleWarden: 'unit_candleWarden.png',

@@ -59,6 +59,8 @@ export const syncBeats = {
    *  被单调守卫丢弃；同刻/更新的快照重放幂等无副作用。 */,
   applyProjection(snapshot) {
     this._applySnapshot(snapshot);
+    // 直接应用 = 跳到"现在"：新入场单位没有立起拍可等，落站立稳态
+    this.settleSpawns();
   },
   reconcile() {
     const proj = this._snapshot;
@@ -89,7 +91,8 @@ export const syncBeats = {
   },
   _syncUnits(proj) {
     const seen = new Set();
-    // count = 整排数量（含已阵亡者）：槽位按数量均分，倒下不挪位（见 scenes/index.js）
+    // 敌排 = 固定槽位：index 传投影 slot（core 分配），位置由槽位表定死——
+    // 召唤/阵亡不重排既存单位；slot 缺席（异常投影）回落数组下标兜底渲染
     const place = (unitProj, side, index, count = 1) => {
       seen.add(unitProj.uniqueID);
       let obj = this._units.get(unitProj.uniqueID);
@@ -112,6 +115,11 @@ export const syncBeats = {
           const def = getEnemyDefinition(unitProj.defId);
           if (def?.orbs) attachOrbs(obj, def.orbs); // headless 无画布返回 null，跳过即安
           if (def?.unitParts) attachUnitParts(obj, def.unitParts);
+          // 新入场敌人**平躺建视图**：紧随其后的 ANIM_UNIT_SPAWN 从躺姿立起——
+          // 躺姿即演出首帧，消灭「sync 先以站立姿闪现一拍再翻平」的跳出感。
+          // 无后续立起拍的路径（幕间预载/观战接入）由 settleSpawns 落到站立稳态。
+          obj.billboard.rotation.x = -THREE.MathUtils.degToRad(78);
+          this._spawnPending.add(unitProj.uniqueID);
         }
       }
       // cast 命名寻址登记（幂等；同句柄重登不告警）
@@ -122,6 +130,7 @@ export const syncBeats = {
       const tr = slotTransform(this._sceneDef, side, index, count);
       obj.position.set(tr.x, tr.y, tr.z);
       obj._baseScale = tr.scale;
+      if (side === 'enemy') obj._slot = index; // 敌排剧本（召唤位预测等）按槽号寻址
       if (!unitProj.isDead) obj.scale.set(tr.scale, tr.scale, 1);
       // 失明（银行机恶魔词条）：敌人意图不可见 → 清空意图条（玩家只能靠猜）
       obj.setUnit(proj.blind && side === 'enemy' ? { ...unitProj, intention: null } : unitProj);
@@ -154,7 +163,7 @@ export const syncBeats = {
     };
     place(proj.player, 'player', 0, 1);
     proj.allies.forEach((a, i) => place(a, 'ally', i, proj.allies.length));
-    proj.enemies.forEach((e, i) => place(e, 'enemy', i, proj.enemies.length));
+    proj.enemies.forEach((e, i) => place(e, 'enemy', e.slot ?? i, proj.enemies.length));
     this._syncPlayerSwordArt(proj);
     // L0 本体补丁程序入场预热：首个同步批就把变体编好（compileAsync 走
     // KHR_parallel_shader_compile 不冻主线程；单位本体是
@@ -200,6 +209,7 @@ export const syncBeats = {
   settleCorpses() {
     const snap = this._snapshot;
     if (!snap) return 0;
+    this.settleSpawns(); // 同一稳态口径：观战接入端的新单位也没有立起拍
     let n = 0;
     const all = [...(snap.enemies ?? []), ...(snap.allies ?? [])];
     for (const u of all) {
@@ -216,6 +226,22 @@ export const syncBeats = {
       view.visible = false; // 稳态 = 焚毁演出终态（整体退场；reconcile 不重置 visible）
       n++;
     }
+    return n;
+  },
+  /**
+   * 入场稳态兜底：把「平躺等待立起拍」的新单位直接落到站立稳态。与 settleCorpses
+   * 同一用途——**中途接入/跳段的播放端**（幕间黑幕预载、观战重连）没有立起节拍，
+   * 不补的话新召单位会一直躺在地上。正常路径（立起拍随后就到）幂等无事发生。
+   * @returns 本次落稳态的单位数
+   */
+  settleSpawns() {
+    if (!this._spawnPending?.size) return 0;
+    let n = 0;
+    for (const id of this._spawnPending) {
+      const view = this._units.get(id);
+      if (view) { view.billboard.rotation.x = 0; n += 1; }
+    }
+    this._spawnPending.clear();
     return n;
   },
   // 全 zone 对账（持久模型）：新卡建条目+建视图（各一次），zone 按快照刷新。

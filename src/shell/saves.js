@@ -124,3 +124,63 @@ export function readSave(mode = 'infinite') {
 export function clearSave(mode = 'infinite') {
   removeRaw(keyOf(mode));
 }
+
+// ---------- 玩家存档库（调试工作流）：命名快照，与三个槽位互不相干 ----------
+// 用途：玩到关键楼层（如章 2 入口）把当前局面存成命名档，与 build 编织器产出的
+// tmp/saves 文件档一起构成 build 库。保存是纯快照（不改 run、不触发调试局转换）；
+// 任何阶段可存——战斗中存的档恢复时按既有语义回到本层战前（saveRestore 归一）。
+const LIB_PREFIX = 'wekyspire:save:lib:';
+
+function libKeys() {
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(LIB_PREFIX)) keys.push(k);
+    }
+  } catch { for (const k of memory.keys()) if (k.startsWith(LIB_PREFIX)) keys.push(k); }
+  return keys;
+}
+
+/** 局面 → 命名存档（同名覆盖）。返回 null = 成功，字符串 = 失败原因。 */
+export function saveToLib(run, name) {
+  const n = String(name ?? '').trim().slice(0, 40);
+  if (!n) return '存档名不能为空';
+  const overwrite = readRaw(LIB_PREFIX + n) != null;
+  writeRaw(LIB_PREFIX + n, JSON.stringify(snapshotRun(run)));
+  return overwrite ? `已覆盖同名存档「${n}」` : null;
+}
+
+/** 库清单（按保存时间新→旧）：名字 + 摘要（不返回完整档体）。 */
+export function listSaveLib() {
+  const out = [];
+  for (const k of libKeys()) {
+    try {
+      const s = JSON.parse(readRaw(k) ?? '');
+      out.push({
+        name: k.slice(LIB_PREFIX.length),
+        savedAt: s.savedAt ?? 0,
+        floor: s.floor ?? 0,
+        gameStage: s.gameStage ?? '',
+        currentRoom: s.currentRoom ?? null,
+        deck: s.player?.deck?.length ?? 0,
+        relics: s.player?.relics?.length ?? 0,
+        mode: s.debugMode ? 'debug' : (s.storyMode ? 'story' : 'infinite'),
+      });
+    } catch { /* 坏档跳过（不挡整个列表） */ }
+  }
+  return out.sort((a, b) => b.savedAt - a.savedAt);
+}
+
+export function readFromLib(name) {
+  const raw = readRaw(LIB_PREFIX + String(name ?? '').trim());
+  if (!raw) return null;
+  try {
+    const save = JSON.parse(raw);
+    return save.version === VERSION ? save : null;
+  } catch { return null; }
+}
+
+export function deleteFromLib(name) {
+  removeRaw(LIB_PREFIX + String(name ?? '').trim());
+}

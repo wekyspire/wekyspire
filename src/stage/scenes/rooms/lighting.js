@@ -1,4 +1,4 @@
-// 房型配方层 布光预设（SCENE_TASKS T3.3）：torch / moon / boss-rim 三预设。
+// 房型配方层 布光预设（handoffs/SCENE_TASKS T3.3）：torch / moon / boss-rim 三预设。
 // 铁律（CATALOG §6）：光源资产只声明"有火"，光参数全部集中在此——资产禁私设 PointLight。
 // 基础结构移植 dungeon3D 已调好的光参（半球保底 + 唯一投影主光 + 战线主补光 + 假反弹），
 // 预设差异 = 主光来源/强度配比/染色口径。火点光由 composeRoom 收集的 fireAnchors 生成。

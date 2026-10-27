@@ -10,14 +10,16 @@
 //
 // 面板 z 压过幕间内容层与切幕黑幕：幕间卡住/黑屏时还能点「跳过幕间」「重载局面」——
 // 这正是这个工具存在的意义（不然调试卡幕间只能刷新页面）。
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { allSkills, getSkillDefinition } from '../../core/skills/registry.js';
 import { allRelics, getRelicDefinition } from '../../core/relics/registry.js';
 import { allEffects, getEffectDefinition } from '../../core/effects/registry.js';
 import { LEINO_DIMENSIONS } from '../../core/run/ascension.js';
 import { gatedPromotionTargets } from '../../core/run/promotion.js';
 import { DIM_META } from '../../stage/panels/shared.js';
-import { snapshotRun, modeOf } from '../saves.js';
+import {
+  snapshotRun, modeOf, saveToLib, listSaveLib, readFromLib, deleteFromLib,
+} from '../saves.js';
 
 const props = defineProps({ ctrl: { type: Object, required: true } });
 const emit = defineEmits(['close', 'restart']);
@@ -159,6 +161,64 @@ function importRestart() {
 function reloadCurrent() {
   emit('restart', { loadSave: snapshotRun(run.value) });
 }
+
+// ---- 存档库：命名快照（localStorage）——玩到关键楼层存一档，build 检查点 ----
+// 保存是纯快照不转调试局（真实局存库不落脏）；加载走与「导入 JSON」同一条 restart 链。
+const libName = ref('');
+const libEntries = ref([]);
+const MODE_CN = { infinite: '肉鸽', story: '故事', debug: '调试' };
+function refreshLib() { libEntries.value = listSaveLib(); }
+function saveLib() {
+  const err = saveToLib(run.value, libName.value);
+  if (err) { dbg.note(err); return; }
+  dbg.note(`已存「${String(libName.value).trim()}」：F${run.value.floor}，${p.value.deck.length} 张卡`);
+  refreshLib();
+}
+function loadLib(name) {
+  const save = readFromLib(name);
+  if (!save) { dbg.note(`读「${name}」失败：档案不存在或版本不符`); return; }
+  emit('restart', { loadSave: save });
+}
+function deleteLib(name) {
+  deleteFromLib(name);
+  dbg.note(`已删除「${name}」`);
+  refreshLib();
+}
+function relTime(ts) {
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  return `${Math.floor(s / 86400)} 天前`;
+}
+
+// ---- 文件档：tmp/saves/（saveForge 与编织器产出），dev server 目录端点供列表 ----
+// 生产/无端点环境 fetch 失败 → null 占位（区块留提示不硬报错）
+// origin 分组：manual = 人工命名造档（正文区）；auto = 工具自动产出（fxGallery 主题战
+// 的 fxwork-* 等，默认折叠——它们是一次性验收档，攒得快，不折叠就淹没手动档）
+const fileSaves = ref(null);   // null = 不可用（非 dev）；数组 = 清单
+const showAutoSaves = ref(false);
+const manualFileSaves = computed(() => (fileSaves.value ?? []).filter(f => f.origin !== 'auto'));
+const autoFileSaves = computed(() => (fileSaves.value ?? []).filter(f => f.origin === 'auto'));
+async function refreshFileSaves() {
+  try {
+    const r = await fetch('./debug-saves/?list=1', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    fileSaves.value = await r.json();
+  } catch { fileSaves.value = null; }
+}
+async function loadFileSave(name) {
+  try {
+    const r = await fetch(`./debug-saves/${name}.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const save = await r.json();
+    if (!save?.player?.deck) throw new Error('缺 player.deck');
+    emit('restart', { loadSave: { ...save, debugMode: true } });
+  } catch (e) { dbg.note(`读文件档「${name}」失败：${e?.message ?? e}`); }
+}
+watch(tab, (t) => {
+  if (t === 'save') { refreshLib(); refreshFileSaves(); }
+}, { immediate: true });
 </script>
 
 <template>
@@ -387,6 +447,44 @@ function reloadCurrent() {
       <div v-else class="pane">
         <div class="row"><span class="k">槽位</span><span class="v">{{ modeOf(run) }} ｜ seed {{ run.seed }} ｜ debugMode {{ String(!!run.debugMode) }}</span></div>
         <div class="row">
+          <span class="k">存档库</span>
+          <input v-model="libName" class="lib-name" placeholder="存档名（如 F12-火叠炎）" @keydown.enter="saveLib()">
+          <button class="pri" @click="saveLib()">保存当前局面</button>
+        </div>
+        <div class="list lib-list">
+          <div v-if="!libEntries.length" class="lib-empty dim">（空。玩到关键楼层起个名存进来，就是这局的 build 检查点）</div>
+          <div v-for="e in libEntries" :key="e.name" class="item">
+            <span class="nm">{{ e.name }}</span>
+            <span class="sub">F{{ e.floor }} · {{ MODE_CN[e.mode] ?? e.mode }} · {{ e.deck }} 张卡 · {{ e.relics }} 遗物 · {{ relTime(e.savedAt) }}</span>
+            <button @click="loadLib(e.name)">加载</button>
+            <button class="del" @click="deleteLib(e.name)">删除</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="k">文件档</span>
+          <button @click="refreshFileSaves()">刷新</button>
+          <span class="dim">tmp/saves/（手动命名造档，dev 专属）</span>
+        </div>
+        <div class="list lib-list">
+          <div v-if="!fileSaves" class="lib-empty dim">（仅 dev 服务器可列出：npm run dev）</div>
+          <div v-else-if="!fileSaves.length" class="lib-empty dim">（tmp/saves/ 暂无存档）</div>
+          <div v-for="f in manualFileSaves" :key="f.name" class="item">
+            <span class="nm">{{ f.name }}</span>
+            <span class="sub">F{{ f.floor }} · {{ f.deck }} 张卡 · {{ f.relics }} 遗物 · {{ relTime(f.savedAt) }}</span>
+            <button @click="loadFileSave(f.name)">加载</button>
+          </div>
+          <button v-if="autoFileSaves.length" class="lib-fold" @click="showAutoSaves = !showAutoSaves">
+            {{ showAutoSaves ? '收起' : '展开' }}自动生成 {{ autoFileSaves.length }} 份（fxGallery 主题战等）
+          </button>
+          <template v-if="showAutoSaves">
+            <div v-for="f in autoFileSaves" :key="f.name" class="item">
+              <span class="nm">{{ f.name }}</span>
+              <span class="sub">F{{ f.floor }} · {{ f.deck }} 张卡 · {{ relTime(f.savedAt) }}</span>
+              <button @click="loadFileSave(f.name)">加载</button>
+            </div>
+          </template>
+        </div>
+        <div class="row">
           <button @click="doExport()">导出当前存档 JSON</button>
           <button @click="copyExport()">复制</button>
           <button class="pri" @click="reloadCurrent()">重载当前局面（重建舞台）</button>
@@ -465,6 +563,11 @@ select { max-width: 190px; }
 .hint { color: #8a93b2; font-size: 11px; line-height: 1.5; }
 .hint code { color: #c3cee0; }
 .card-search { flex: 1; min-width: 150px; }
+.lib-name { flex: 1; min-width: 120px; }
+.lib-empty { padding: 6px 8px; }
+.lib-fold { display: block; width: 100%; text-align: left; border: none; border-top: 1px solid #26324a; color: #8a93b2; }
+.lib-fold:hover { background: rgba(52, 84, 126, .6); }
+.lib-list .item .sub { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cand-list { max-height: 190px; overflow: auto; border: 1px solid #26324a; }
 .cand { display: flex; align-items: center; gap: 6px; padding: 2px 6px; cursor: pointer; border-bottom: 1px solid #1b2436; }
 .cand:hover { background: rgba(52, 84, 126, .6); }

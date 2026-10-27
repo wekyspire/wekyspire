@@ -10,7 +10,7 @@ import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { PlayerTurnStartInstruction, PlayerTurnEndInstruction, TurnStartInstruction } from '../../instructions/turn.js';
 import { GainManaInstruction } from '../../instructions/resources.js';
-import { aliveEnemies, aliveAllies, allAliveUnits, zoneOf } from '../../state/battleState.js';
+import { aliveEnemies, aliveAllies, allAliveUnits, zoneOf, DEFAULT_MAX_ENEMIES } from '../../state/battleState.js';
 import { lockedCardsSettleReact } from '../../skills/cardModifiers.js';
 import { ESSENCE_STEAL_BLACKLIST } from './chapter1.js';
 
@@ -427,7 +427,7 @@ registerEnemy({
       return;
     }
     const allies = () => aliveEnemies(bs).filter(e => e !== unit);
-    const cap = bs.config?.maxEnemies ?? 4;
+    const cap = bs.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES;
     const summon = () => actx.kernel.submitInstruction(new UnitSpawnInstruction({
       unit: getEnemyDefinition(bs.rng.pick(['rottenRootT', 'thornWeedT'])).createUnit(),
       source: unit,
@@ -537,7 +537,7 @@ registerEnemy({
     }
     // 隔回合重新召集 1 名侍从（侍从 <2 才补，凑回护驾形态）
     unit._recall = !unit._recall;
-    const twoSlots = aliveEnemies(bs).length <= (bs.config?.maxEnemies ?? 4) - 2;
+    const twoSlots = aliveEnemies(bs).length <= (bs.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES) - 2;
     if (unit._recall && squires < 2 && twoSlots) {
       actx.kernel.submitInstruction(new UnitSpawnInstruction({
         unit: getEnemyDefinition('courtSquire').createUnit(), source: unit }));
@@ -712,7 +712,7 @@ registerEnemy({
     const { unit, battleState: bs } = actx;
     const phase = unit.actionIndex % 4;
     if (phase === 0) {
-      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
       if (hasSlot) {
         actx.kernel.submitInstruction(new UnitSpawnInstruction({
           unit: getEnemyDefinition('footmanImp').createUnit(), source: unit }));
@@ -747,7 +747,7 @@ registerEnemy({
   getIntention: (unit, battleState) => {
     const phase = unit.actionIndex % 4;
     if (phase === 0) {
-      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
       return hasSlot
         ? { kinds: ['summon'], note: '召唤庄园仆从' }
         : { kinds: ['attack'], hits: 1, damage: 10 + unit.getStat('attack') };

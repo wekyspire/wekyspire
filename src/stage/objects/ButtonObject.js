@@ -4,7 +4,7 @@
 // 但抽成独立对象：战斗侧那颗按钮的接线锁在 BattleStage 内部，休息阶段面板需要可复用形态。
 //
 // 交互模型：本对象只负责**视觉与拾取注册**，点击语义由宿主面板按 pickableId 路由
-// （Stage 不持有游戏逻辑——见 quest_prompts/THREE_UI_MIGRATION.md §4.2-2）。
+// （Stage 不持有游戏逻辑——见 handoffs/THREE_UI_MIGRATION.md §4.2-2）。
 
 import * as THREE from 'three';
 import { bakeButtonFace } from '../richtext/buttonFace.js';

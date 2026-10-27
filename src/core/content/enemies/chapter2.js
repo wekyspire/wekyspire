@@ -12,7 +12,7 @@ import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { AddCardInstruction, BurnCardInstruction, LockCardsInstruction } from '../../instructions/cards.js';
 import { PlayerTurnEndInstruction } from '../../instructions/turn.js';
-import { aliveEnemies, zoneOf } from '../../state/battleState.js';
+import { aliveEnemies, zoneOf, DEFAULT_MAX_ENEMIES } from '../../state/battleState.js';
 import { lockedCardsSettleReact, hasCardModifier } from '../../skills/cardModifiers.js';
 
 // ---- 手牌锁定（间谍/狙击手；无人战体同款口径：锁定不影响打出，玩家回合结束仍在手则焚毁，
@@ -54,7 +54,7 @@ function strayFire(actx, times) {
 // 两拍循环：攻 16 → 攻 5 + 洗 2 粘液。
 function bigSlimeCanSummon(unit, battleState, atTurn = battleState.turn.count) {
   const noSlimelet = !aliveEnemies(battleState).some(e => e.defId === 'slimeletA' || e.defId === 'slimeletB');
-  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
   const notSummonedLastTurn = unit.lastSummonTurn !== atTurn - 1;
   return noSlimelet && hasSlot && notSummonedLastTurn;
 }
@@ -642,7 +642,7 @@ registerEnemy({
 // 任何时候（场上无南孚妖蝶族 + 上回合未召唤 + 有空位）随机召唤一只妖蝶变体。----
 function motherNymphCanSummon(unit, battleState, atTurn = battleState.turn.count) {
   const noNymph = !aliveEnemies(battleState).some(e => NYMPH_FAMILY.has(e.defId));
-  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+  const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
   const notSummonedLastTurn = unit.lastSummonTurn !== atTurn - 1;
   return noNymph && hasSlot && notSummonedLastTurn;
 }

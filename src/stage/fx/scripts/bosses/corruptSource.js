@@ -30,6 +30,7 @@ import {
   length, max,
 } from 'three/tsl';
 import { duelPose } from '../../camera.js';
+import { slotTransform } from '../../../scenes/index.js';
 import { screenFlash, lampPulse } from '../../spells/blocks.js';
 import { registerEnemyHitBeat, registerEnemyNoLunge } from '../../spells/enemyHitFx.js';
 import { registerEnemyAct } from '../enemyAct.js';
@@ -38,6 +39,7 @@ import { makeSporeVeins } from '../../sporeVeins.js';
 import { registerEnemyDeathBeat } from '../../enemyLifeFx.js';
 import { unitH, drainVeins } from '../enemies/fxPieces.js';
 import { isAttackKind, isBuffKind, isDebuffKind } from '../../../../core/intentKinds.js';
+import { DEFAULT_MAX_ENEMIES } from '../../../../core/state/battleState.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -1399,38 +1401,28 @@ function enemyViews(deps) {
     .filter((v) => v && v.side === 'enemy');
 }
 
-// 召唤数按 core 同口径推算：补到 3 友军，且活体不越过 maxEnemies(4)。
+// 召唤数按 core 同口径推算：补到 3 友军，且活体不越过 maxEnemies（DEFAULT_MAX_ENEMIES）。
 // 尸体仍占投影槽位（不参与上限），故 ally/总数都按活体算，槽位预测另用全量 views。
 function summonCount(deps, unit) {
   const views = enemyViews(deps);
   const aliveAllies = views.filter((v) => v !== unit && !v._dead).length;
   const aliveTotal = views.filter((v) => !v._dead).length;
-  return Math.max(1, Math.min(3 - aliveAllies, 4 - aliveTotal));
+  return Math.max(1, Math.min(3 - aliveAllies, DEFAULT_MAX_ENEMIES - aliveTotal));
 }
 
-// 敌排槽位预测：slotTransform 把 count 个单位均分在固定跨度上，新单位追加在**高 index 端**。
-// 已知 ≥2 个单位时直接量跨度；只有 Boss 时敌排跨度 ≈ 立牌自身宽度量级（其根裙恰铺满一排）。
+// 敌排槽位预测（固定槽位制）：活体占用之外的最低空槽取前 n 个——与 core
+// UnitSpawnInstruction 的分配（lowestFreeEnemySlot）同口径，根须爬向的新芽位
+// 就是新单位随后立起的位置。occ 用视图 _slot（place 落位时记录）。
 function predictSummonSlots(deps, unit, n) {
-  const views = enemyViews(deps);
-  const H = unitH(unit);
-  let mid, half;
-  if (views.length >= 2) {
-    const xs = views.map((v) => v.position.x);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    mid = (minX + maxX) / 2;
-    half = Math.max(6, (maxX - minX) / 2);
-  } else {
-    mid = unit.position.x;
-    half = H * 0.70;
-  }
-  const count = Math.max(views.length, 1);
-  const newCount = count + n;
-  if (newCount <= 1) return [];
+  const def = deps.sceneDef;
+  if (!def?.slots?.enemies?.length) return [];
+  const occ = new Set(
+    enemyViews(deps).filter((v) => !v._dead).map((v) => v._slot).filter((s) => s != null));
   const out = [];
-  for (let j = newCount - n; j <= newCount - 1; j++) {
-    if (j < 0) continue;
-    const k = j / (newCount - 1);
-    out.push({ x: mid + (k - 0.5) * 2 * half, y: unit.position.y + 0.04, z: unit.position.z });
+  for (let s = 0; s < def.slots.enemies.length && out.length < n; s++) {
+    if (occ.has(s)) continue;
+    const tr = slotTransform(def, 'enemy', s);
+    out.push({ x: tr.x, y: unit.position.y + 0.04, z: tr.z });
   }
   return out;
 }

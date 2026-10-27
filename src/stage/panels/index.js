@@ -1,7 +1,7 @@
 // 各休息阶段面板的构建器：「快照 → widget 列表」纯映射。
 // 一个面板一个 builder；PanelObject 只认 widget 描述，不认识任何面板语义。
 // action 字段即上报给宿主：`local: true` 的由舞台自己消化（面板本地交互态，如勾选），
-// 其余转给 runController.dispatchPanelIntent（见 THREE_UI_MIGRATION §2.1）。
+// 其余转给 runController.dispatchPanelIntent（见 handoffs/THREE_UI_MIGRATION §2.1）。
 //
 // 本文件只做装配与转发——各域实现在同目录：
 //   shared.js     共享小件（标签映射 / DIM_META / ROOM_META / 通用按钮 / 产出文案）

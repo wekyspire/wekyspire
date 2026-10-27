@@ -1,4 +1,4 @@
-// stageDirector —— 舞台路由一处派生（RUN_FLOW_REFACTOR_RESEARCH §4.4）。
+// stageDirector —— 舞台路由一处派生（handoffs/RUN_FLOW_REFACTOR_RESEARCH §4.4）。
 //
 // runController 持有全部舞台实例（battle/room/end 闭包变量 + map 注入）的生命周期，
 // 本模块只收「引用 getter 集 + gameStage」回答四个路由问题；不建/不拆舞台（那是

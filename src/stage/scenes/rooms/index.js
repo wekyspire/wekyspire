@@ -28,14 +28,14 @@ export function getRoomScene(recipeId, seed = 'dev', roomOverride = null) {
 /**
  * 楼层 → 场景 id（P4 接线口）：每章第 10 层为 Boss 层（11/22/33/44）→ pcg:boss；
  * 阶段流：1-10 杂乱要塞 → pcg:fortress，12-21 宫殿 → pcg:palace，
- * 23-32 衰败庄园 → pcg:manor，34-43 大图书馆 → pcg:library。
+ * 23-32 过往遗迹 → pcg:ruins，34-43 大图书馆 → pcg:library。
  * 隔层（boss4 与研究层之间，不计层数）不进本映射——SDK 直接 getRoomScene('mezzanine', seed)。
  * @param floor 1..44
  */
 export function sceneIdForFloor(floor) {
   if (floor % 11 === 0) return 'pcg:boss';
   const stage = Math.ceil(floor / 11); // 1..4
-  return ['pcg:fortress', 'pcg:palace', 'pcg:manor', 'pcg:library'][stage - 1];
+  return ['pcg:fortress', 'pcg:palace', 'pcg:ruins', 'pcg:library'][stage - 1];
 }
 
 export { RECIPES };

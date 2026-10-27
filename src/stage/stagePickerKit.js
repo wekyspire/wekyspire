@@ -10,7 +10,7 @@
 // 抽 kit 后：界面骨架归 objects/（已有），**来源表/意图表/文案归这里**，舞台只保留
 // 「薄转发 + 各自舞台特定的指针尾部逻辑」。
 //
-// 数据边界不变（THREE_UI_MIGRATION 铁律）：kit 不读 run 状态——候选一律来自宿主给的快照段
+// 数据边界不变（handoffs/THREE_UI_MIGRATION 铁律）：kit 不读 run 状态——候选一律来自宿主给的快照段
 // （`openUpgradePicker(source, snap)`），确认只上行一个意图（`onIntent`），
 // 开关界面本身是舞台本地交互态。
 //

@@ -223,6 +223,7 @@ export class BattleStage {
     this.model.on('card-zone', this._onCardZone);
     this._views = new Map();  // uniqueID -> CardObject（模型卡条目的 three 视图）
     this._units = new Map();   // uniqueID -> UnitObject
+    this._spawnPending = new Set(); // 平躺等待立起拍的新敌（见 sync 域 settleSpawns）
     this._swordArtRank = -1;   // 大剑立绘 latch（PLAYER_SWORD_TIERS 下标）：场内只升不降——
                                // 斩转化在 pending 区的瞬间读数暂缺，不闪图；跨战斗随舞台实例重置
     this._snapshot = null;     // 显示状态快照：只在 ANIM_STATE_SYNC 节拍推进（两套状态设计——
@@ -1025,6 +1026,7 @@ export class BattleStage {
   fxServices() {
     return {
       cast: this._cast,
+      sceneDef: this._sceneDef,      // 场景定义（敌排槽位表等；召唤位预测用）
       particles: this.particles,
       shake: this.shake,
       vignette: this._vignette,

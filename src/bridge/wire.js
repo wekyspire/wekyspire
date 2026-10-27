@@ -1,7 +1,7 @@
 // wire：bridge 事件流 ↔ 直播传输格式的转换层（tools/broadcast.mjs 服务端推流、
 // src/bridge/remoteBridge.js 浏览器端重放共用同一份实现，两端不会漂移）。
 //
-// ⚠ 本地词汇纪律（重构设计 RUN_FLOW_REFACTOR_RESEARCH §4.2）：指令的 owner /
+// ⚠ 本地词汇纪律（重构设计 handoffs/RUN_FLOW_REFACTOR_RESEARCH §4.2）：指令的 owner /
 // finish-result / apply-point（onEnd 载荷）/ tagAll 四个词**不过线**（tagAll=false 的
 // 指令若带 wire，重放端会被补回 'all'——把不阻塞指令重建成阻塞指令）——wire 是入队
 // 时刻的单向 tap，完成事件在线上不存在（broadcast.mjs 用本地定时器补回执）。战斗侧

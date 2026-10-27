@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
-import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 
@@ -14,7 +14,37 @@ function debugSavesPlugin(root) {
     name: 'wekyspire-debug-saves',
     configureServer(server) {
       server.middlewares.use('/debug-saves', (req, res, next) => {
-        const m = /^\/([A-Za-z0-9_-]+)\.json$/.exec((req.url ?? '').split('?')[0]);
+        const urlPath = (req.url ?? '').split('?')[0];
+        // 目录清单（调试面板「文件档」区块消费）：只列加载白名单内的名字，
+        // 摘要字段随档体解析（坏档跳过），savedAt 缺失时退回文件 mtime，新档在前
+        if (urlPath === '/' || urlPath === '') {
+          const dir = path.join(root, 'tmp', 'saves');
+          if (!existsSync(dir)) { res.statusCode = 404; res.end(); return; }
+          const items = [];
+          for (const f of readdirSync(dir)) {
+            if (!/^[A-Za-z0-9_-]+\.json$/.test(f)) continue;
+            try {
+              const full = path.join(dir, f);
+              const s = JSON.parse(readFileSync(full, 'utf-8'));
+              items.push({
+                name: f.slice(0, -5),
+                savedAt: s.savedAt ?? statSync(full).mtimeMs,
+                floor: s.floor ?? 0,
+                deck: s.player?.deck?.length ?? 0,
+                relics: s.player?.relics?.length ?? 0,
+                // 人类造档 vs 工具自动产出（面板分组用）：档体 origin 优先，存量档按
+                // fxwork- 前缀回退（fxGallery 生成器的机器起名约定）
+                origin: s.origin ?? (/^fxwork-/.test(f) ? 'auto' : 'manual'),
+              });
+            } catch { /* 坏档跳过 */ }
+          }
+          items.sort((a, b) => b.savedAt - a.savedAt);
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(items.slice(0, 60)));
+          return;
+        }
+        const m = /^\/([A-Za-z0-9_-]+)\.json$/.exec(urlPath);
         if (!m) { next(); return; }
         const file = path.join(root, 'tmp', 'saves', `${m[1]}.json`);
         if (!existsSync(file) || !statSync(file).isFile()) { next(); return; }
@@ -45,6 +75,7 @@ function debugSavesPlugin(root) {
               '--seed', String(Math.floor(Math.random() * 1e6)),
             ];
             for (const id of enemies) args.push('--enemy', id);
+            args.push('--origin', 'auto'); // fxGallery 生成器产出 = 工具档（面板文件档分组标记）
             const child = spawn('node', args, { cwd: root, shell: process.platform === 'win32' });
             let err = '';
             child.stderr.on('data', (c) => { err += c; });
@@ -69,7 +100,7 @@ function debugSavesPlugin(root) {
 }
 
 
-// 美术资源打包（quest_prompts/ASSET_PACK.md 设计实现）：产物里的全部位图资产
+// 美术资源打包（handoffs/ASSET_PACK.md 设计实现）：产物里的全部位图资产
 // 裸拼接成单个 artpack-<md5前8>.bin（webp 已压缩不再 deflate），配一份 ESM
 // manifest（dist 根 artpack-manifest.js：包 URL + 总字节 + {文件名: [offset,len,mime]}）。
 // 运行期 src/stage/art/artpack.js 动态 import manifest → 流式拉包 → slice→blob →

@@ -2,7 +2,7 @@
 
 > 范围：单次爬塔（run）的核心玩法循环 + 养成经济。战斗内机制见 SKILL_DESIGN_PRINCIPLES.md，
 > 舞台/前端见 STAGE_DESIGN.md。本文档是 run 层 core 基建的依据。
-> 历次修订的决策记录见 `REBALANCE_2026_09.md`。
+> 历次修订的决策记录见 `handoffs/REBALANCE_2026_09.md`。
 
 ## 1. 核心循环
 

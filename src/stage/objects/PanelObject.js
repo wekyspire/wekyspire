@@ -4,7 +4,7 @@
 //   · dock     —— **底部停靠**：只给内容一块半透明底（无全屏背板），整组贴屏幕下沿居中——
 //                 场景式休息房（3D 房间 + 机器）用**它**：房间要一直看得见，面板只是操作条。
 //
-// 职责边界（quest_prompts/THREE_UI_MIGRATION.md §4.2-2）：只做「把一组 widget 画出来 +
+// 职责边界（handoffs/THREE_UI_MIGRATION.md §4.2-2）：只做「把一组 widget 画出来 +
 // 把点击路由成 action」，**不判断能不能点**（enabled 由快照下发），也不认识任何 run 状态。
 // widget.action 原样交给宿主注入的 onIntent。
 //

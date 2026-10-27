@@ -10,7 +10,7 @@ const SCENES = Object.freeze({
 });
 
 /**
- * @param id 场景 id：'dungeon' | 'pcg:fortress' | 'pcg:palace' | 'pcg:manor' | 'pcg:library' | 'pcg:boss' | 'pcg:mezzanine'
+ * @param id 场景 id：'dungeon' | 'pcg:fortress' | 'pcg:palace' | 'pcg:ruins' | 'pcg:library' | 'pcg:boss' | 'pcg:mezzanine'
  * @param seed PCG 房间种子（run 种子 + 层号派生；同种子恒定同布局）——仅 pcg:* 使用
  * @param roomOverride Boss 房间覆写（敌人 def roomOverride，深合并进配方）——仅 pcg:* 使用
  */
@@ -21,9 +21,9 @@ export function getScene(id = 'dungeon', seed = 'dev', roomOverride = null) {
 
 /**
  * 槽位 → 世界变换：position = lerp(near, far, t) + lane·laneGap。
- * @param count 同排**实际**单位数（含已阵亡者，保证倒下不挪位）：lane/t 在槽位带内
- *   按数量均分，单只取带中点。槽位表因此只声明「带的两端 + 错落 t」，不再隐含
- *   「最多几只、第几只用第几槽」——否则 3 敌会依次吃掉偏右的带的前三个槽，最右一只出画。
+ * 敌排 = **固定槽位表**：index 是槽位号（core 分配、投影随行），位置由表定死，
+ *   count 不参与——召唤/阵亡不重排既存单位（2026-10-26 定；越界槽号钳到表两端）。
+ * 友军/玩家 = 按数量均分（友军现内容只有瑞米一只，均分即单取带中点）。
  */
 export function slotTransform(scene, side, index = 0, count = 1) {
   const { battleLine: bl, slots } = scene;
@@ -33,6 +33,10 @@ export function slotTransform(scene, side, index = 0, count = 1) {
   if (!list || !list.length) {
     t = slots.player?.t ?? 0.5;
     lane = slots.player?.lane ?? 0;
+  } else if (side === 'enemy') {
+    const s = list[Math.max(0, Math.min(index ?? 0, list.length - 1))];
+    t = s.t ?? 0;
+    lane = s.lane ?? 0;
   } else {
     const ts = list.map(s => s.t ?? 0);
     const ls = list.map(s => s.lane ?? 0);
