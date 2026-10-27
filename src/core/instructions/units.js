@@ -1,4 +1,5 @@
 import BattleInstruction from '../kernel/BattleInstruction.js';
+import { aliveEnemies, enemySlotCap, lowestFreeEnemySlot } from '../state/battleState.js';
 
 // 单位生命周期指令族：战斗中向场面加入新单位（当前唯一动词 = 生成；离场由
 // 死亡结算与终局清理承担，不在此）。与 combat/effects 等指令族同构：
@@ -9,8 +10,11 @@ import BattleInstruction from '../kernel/BattleInstruction.js';
 // 同一语义，缺省 'enemy'——敌方召唤是主场景；召唤盟友传 'player'）。
 // 敌方尾插 enemies：行动顺序排在现存敌人之后——本回合行动循环快照在召唤前
 // 已取（aliveEnemies 返回过滤副本），生成单位下回合起参战。
-// presenter.unitSpawned 为入场类节拍（sync 先 anim 后）：显示层先建视图再播
-// 「立起」演出。可被 PRE 订阅否决（payload 无白名单字段）。
+// 敌排固定槽位：敌方生成取最低空槽（活体/假死占位，真死槽可复用——口径见
+// battleState.js）；活体已满 maxEnemies 或槽位全占 → 不生成（result.skipped 记因，
+// 内容侧意图判定同口径，这里是权威兜底）。presenter.unitSpawned 为入场类节拍
+// （sync 先 anim 后）：显示层先建视图（平躺姿态）再播「立起」演出。可被 PRE
+// 订阅否决（payload 无白名单字段）。
 export class UnitSpawnInstruction extends BattleInstruction {
   constructor({ unit, side = null, source = null }, opts = {}) {
     super(opts);
@@ -21,6 +25,18 @@ export class UnitSpawnInstruction extends BattleInstruction {
 
   execute(ctx) {
     const bs = ctx.battleState;
+    if (this.side === 'enemy') {
+      if (aliveEnemies(bs).length >= enemySlotCap(bs)) {
+        this.result = { skipped: 'enemy-cap', unit: this.unit, source: this.source };
+        return true;
+      }
+      const slot = lowestFreeEnemySlot(bs);
+      if (slot == null) {
+        this.result = { skipped: 'enemy-slots-full', unit: this.unit, source: this.source };
+        return true;
+      }
+      this.unit.slot = slot;
+    }
     this.unit.side = this.side;
     (this.side === 'player' ? bs.allies : bs.enemies).push(this.unit);
     this.result = { unit: this.unit, source: this.source };

@@ -5,7 +5,7 @@
 > 已落地：赌厅 `casino`（老虎机 + 银行机）、营地&训练场 `camp`、商店房 `shop`（瑞米售货机）。
 > 剩余休息房（古尔帕斯之店）仍是塔楼层上的 UI 占位面板（同方法换配方即可接）。
 > 相关契约：`SCENE_PROP_WORKFLOW.md`（道具生产管线）、`SCENE_PCG_CATALOG.md`（红线摆放法）、
-> `SLOT_MACHINE.md`（老虎机/银行机玩法）、`THREE_UI_MIGRATION.md`（面板 Three 化）。
+> `SLOT_MACHINE.md`（老虎机/银行机玩法）、`handoffs/THREE_UI_MIGRATION.md`（面板 Three 化，已归档）。
 
 ## 1. 目标
 
@@ -19,7 +19,7 @@
 
 ## 2. 休息房配方与战斗房配方的差异（方法层）
 
-| 维度 | 战斗房（fortress/palace/manor/library/boss） | 休息房（casino/…） |
+| 维度 | 战斗房（fortress/palace/ruins/library/boss） | 休息房（casino/…） |
 | --- | --- | --- |
 | 构图约束 | **中景留空**：战线走廊（`battleLine`/`slots` keepout）不许摆件，保证单位站位与瞄准可读 | 无战线约束；改为**视觉焦点带**（中景偏上放核心设施）+ **UI 安全区**（画面下方留给面板，密度压到最低） |
 | 核心物件 | 无（房型是背景） | **交互设施**（老虎机/银行机/柜台）——固定落位、朝向相机、体量放大（`guaranteed` + `scale`） |

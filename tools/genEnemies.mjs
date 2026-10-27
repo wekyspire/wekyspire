@@ -37,7 +37,7 @@ const ENEMIES = [
   { id: 'carrionBeetle', prompt: 'a round dark brown beetle, oily sheen, small black eyes' },
   { id: 'diggerMole', prompt: 'a dark brown mole with big gray front claws, pointed snout, small black eyes' },
   { id: 'staticPuff', prompt: 'a pale yellow fluffy ball, blue sparks, small black eyes' },
-  // ==== 第一章补缺：根须家族 + 11 层 Boss 池（ENEMY_ART_LIST.md P0/P1 立绘要点）====
+  // ==== 第一章补缺：根须家族 + 11 层 Boss 池（立绘要点 P0/P1）====
   { id: 'rottenRoot', prompt: 'a clump of dark brown tangled roots twisted upright into a rough bush shape, a plant not an animal, no creature anatomy, no legs, no fur, pale green sprout tips on a few ends, one small dull eye' },
   { id: 'rottenTreeHeart', prompt: 'a stout rotten tree stump creature, dark brown-black bark, pale flat cut cross-section on top showing growth rings, one dim warm glow in a crack, one small dull eye' },
   { id: 'youngRakshasa', prompt: 'a young demon imp standing on two legs, round chubby dark purple-red body, two tiny horns, small claws, angry red eyes, short stubby tail' },
@@ -70,7 +70,7 @@ const ENEMIES = [
   // 章2 精英
   { id: 'demolitions', prompt: 'a bulky demolition expert in a dark leather apron, bandolier of round black bombs, one lit fuse' },
   { id: 'hunter', prompt: 'a lean hunter mystic in a charcoal long coat, holding a slender long-barreled rifle with a small scope, pale blue dot eyes' },
-  // ==== 第二章补缺：22 层南孚宫 Boss 池（ENEMY_ART_LIST.md P1 立绘要点）====
+  // ==== 第二章补缺：22 层南孚宫 Boss 池（立绘要点 P1）====
   { id: 'knightCommander', prompt: 'a tall palace commander in full plate armor, pale white armor with dull gold trim painted in flat matte slabs, blunt clumsy shapes, round helmet with one tall red feather plume, the pointing gauntlet gripping the long sword with its blade fully extended horizontally forward, the whole blade visible from guard to tip, the other hand empty resting on the waist, upright commanding stance, standing on nothing, feet ending on clean pure white background, absolutely no ground shadow, no reflection, no dagger, no short blade' },
   { id: 'courtSquire', prompt: 'a small court attendant standing at attention, light white armor with blue trim, short sword at the side, a plain blue tabard on the chest, small round helmet' },
   { id: 'candleWarden', prompt: 'a warden in a hooded wax-yellow robe with long drips down the front, face fully hidden in hood shadow, holding a small brass candelabra with three lit candles, a tall grandfather clock standing right beside the figure with its round pendulum clearly visible, warm dim candle glow, standing on nothing, feet ending on clean pure white background, absolutely no ground shadow' },

@@ -54,7 +54,7 @@ const NUM_ALIASES = {
 const STRUCT_FLAGS = new Set(['seed', 'floor', 'stage', 'room']);
 
 function parseArgs(argv) {
-  const out = { spec: null, from: null, out: null, flags: {}, deck: [], relics: [], abilities: [], encounter: [] };
+  const out = { spec: null, from: null, out: null, origin: null, flags: {}, deck: [], relics: [], abilities: [], encounter: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -74,6 +74,7 @@ function parseArgs(argv) {
       if (k === 'body') out.flags.body = Number(v);   // 体修不是灵脉维度（走 bodyLevel，见 ops.setLeinoLevel）
       else (out.flags.leino ??= {})[k] = Number(v);
     } else if (a === '--no-equip') out.flags.relicsEquip = false;
+    else if (a === '--origin') out.origin = next();
     else if (a.startsWith('--')) {
       const key = a.slice(2).toLowerCase().replace(/-/g, '');
       if (STRUCT_FLAGS.has(key)) out.flags[key] = next();
@@ -253,7 +254,9 @@ try {
   }
   const spec = args.from ? null : mergeSpec(args);
   const { run } = args.from ? buildFromSession(args.from) : buildFromSpec(spec);
-  const save = snapshotRun(run);
+  // origin：档体分类标记（面板文件档分组用）。人工跑命令行 = manual；
+  // fxGallery 生成器等服务端 spawn 时传 --origin auto
+  const save = { ...snapshotRun(run), origin: args.origin === 'auto' ? 'auto' : 'manual' };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const name = (args.out ?? spec?.name ?? `from-${args.from}`).replace(/[^A-Za-z0-9_-]/g, '_');

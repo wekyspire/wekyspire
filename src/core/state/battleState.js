@@ -129,3 +129,50 @@ export function unitsOfSide(battleState, player, side, { includePlayer = true } 
 export function allAliveUnits(battleState, player) {
   return [...unitsOfSide(battleState, player, 'player'), ...aliveEnemies(battleState)];
 }
+
+// ---- 敌排固定槽位（2026-10-26 定：槽位位置定死，数量增减不重排）----
+// slot = 敌人在敌排的固定站位号（0 起，标量随单位可序列化），位置换算在舞台槽位表
+// （stage/scenes：slotTransform 敌排分支）。分配规则：
+//   · 初始编成按「对称集合」占槽——1 只居中（Boss 单挑位）、3 只满幅，与旧均分视觉衔接；
+//   · 战斗中召唤取最低空槽，先 inner 后两翼自然外扩；
+//   · 占用口径 = 活体或假死（将复苏的尸体还躺着，别让新怪叠上去）；真死单位的槽位可被
+//     复用（尸体隐藏，同槽无视觉冲突），召唤型 Boss 杀完仆从还能再召。
+// 上限 = DEFAULT_MAX_ENEMIES（唯一全局常量，禁止各处写死）：召唤守卫的缺省值，
+// 同时是舞台槽位表长度（ENEMY_SLOT_COUNT 派生自它）——初始编成与召唤同一口径。
+export const DEFAULT_MAX_ENEMIES = 5;
+export const ENEMY_SLOT_COUNT = DEFAULT_MAX_ENEMIES; // 舞台槽位表长度（dungeon.js 表条数须与之一致）
+
+// 初始编成对称占槽表（下标 = 初始敌数 - 1；表长随 DEFAULT_MAX_ENEMIES 走，
+// 加槽时在此补对应行，超出防御性回落到顺序占槽）
+export const ENEMY_INITIAL_SLOTS = Object.freeze([
+  [2],             // 1 只：正中（与旧均分中点一致——Boss 单挑位不动）
+  [1, 3],          // 2 只：对称两翼
+  [0, 2, 4],       // 3 只：满幅三连（与旧均分三点一致）
+  [0, 1, 3, 4],    // 4 只：对称四连（中留一门给召唤）
+  [0, 1, 2, 3, 4], // 5 只：满员
+]);
+
+export function enemySlotCap(battleState) {
+  return battleState.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES;
+}
+
+// 初始编成占槽（createBattle 装配后调用一次）
+export function assignInitialEnemySlots(battleState) {
+  const n = battleState.enemies.length;
+  const fill = n >= 1 && n <= ENEMY_SLOT_COUNT ? ENEMY_INITIAL_SLOTS[n - 1] : null;
+  battleState.enemies.forEach((e, i) => {
+    e.slot = fill?.[i] ?? Math.min(i, ENEMY_SLOT_COUNT - 1);
+  });
+}
+
+// 最低空槽（召唤用）；满员返回 null
+export function lowestFreeEnemySlot(battleState) {
+  const occupied = new Set();
+  for (const e of battleState.enemies) {
+    if (!e.isDead() || (e._reviveCountdown ?? 0) > 0) occupied.add(e.slot);
+  }
+  for (let s = 0; s < ENEMY_SLOT_COUNT; s++) {
+    if (!occupied.has(s)) return s;
+  }
+  return null;
+}

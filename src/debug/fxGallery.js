@@ -31,6 +31,7 @@ import { WORLD_HEIGHT, UI_CAMERA_LOOK_AT_Y, UI_CAMERA_Z } from '../stage/StageMa
 import '../core/content/index.js';
 import { allEnemies, getEnemyDefinition } from '../core/enemies/registry.js';
 import { isAttackKind } from '../core/intentKinds.js';
+import { DEFAULT_MAX_ENEMIES } from '../core/state/battleState.js';
 import { attachUnitParts } from '../stage/fx/unitParts.js';
 
 // ============ 渲染底座（roomGallery 同骨架） ============
@@ -145,6 +146,7 @@ animator.register('p', playerView); // 体态拍走 ctx.custom(id)——未注�
 cast.register('role:player', playerView);
 
 const ENEMY_SLOTS = 3;
+const ENEMY_PREVIEW_SLOTS = [0, 2, 4]; // 初始编成 3 只的对称占槽（core ENEMY_INITIAL_SLOTS 同款）
 const enemyViews = [];
 const logicEnemies = [];
 let focusIdx = 0; // 当前点播目标敌下标
@@ -160,9 +162,13 @@ function placeUnits() {
   playerView._baseScale = tr0.scale;
   playerView.scale.set(tr0.scale, tr0.scale, 1);
   applyArt(playerView, null, 'player');
+  // 敌排固定槽位制：3 只预览敌按初始编成的对称集合占槽（0/2/4 满幅三连，
+  // 与真实战斗一致）；_slot 随手记录（召唤位预测类剧本读它）
   for (let i = 0; i < ENEMY_SLOTS; i++) {
-    const tr = slotTransform(sceneDef, 'enemy', i, ENEMY_SLOTS);
+    const slot = ENEMY_PREVIEW_SLOTS[i];
+    const tr = slotTransform(sceneDef, 'enemy', slot);
     const v = enemyViews[i];
+    v._slot = slot;
     v.position.set(tr.x, tr.y, tr.z);
     v._baseScale = tr.scale;
     v.scale.set(tr.scale, tr.scale, 1);
@@ -253,7 +259,7 @@ const group = (title, items) => { const g = { title, items }; PREVIEWS.push(g); 
 
 // ---- 起手族（families）----
 const fam = await import('../stage/fx/scripts/enemies/families.js');
-const A = (view) => ({ ctx: null, deps: { scene, uiScene, particles, cast, shake }, unit: view, player: playerView, kinds: [] });
+const A = (view) => ({ ctx: null, deps: { scene, uiScene, particles, cast, shake, sceneDef }, unit: view, player: playerView, kinds: [] });
 // families 的拍函数收 {ctx, deps, unit, player}——ctx 要 runScript 的真 ctx，经 runWith 注入
 function famPlay(maker, view = focusView()) {
   return runWith(async (ctx) => { await maker()({ ...A(view), ctx }); });
@@ -323,7 +329,7 @@ const bossActRow = (label, kinds, fx) => ({
     await enemyActScript({
       ctx,
       args: { unit: focusView().uniqueID, kinds, hits: 1, fx },
-      cast, particles, shake, camera: stageStub._spellDeps().camera,
+      cast, particles, shake, camera: stageStub._spellDeps().camera, sceneDef,
       unitById: (x) => enemyViews.find((v) => v.uniqueID === x) ?? null,
       scene, uiScene,
     });
@@ -395,7 +401,7 @@ const kardasActRow = (label, kinds, hits, { p2 = false } = {}) => ({
     await enemyActScript({
       ctx,
       args: { unit: v.uniqueID, kinds, hits, fx: null },
-      cast, particles, shake, camera: stageStub._spellDeps().camera,
+      cast, particles, shake, camera: stageStub._spellDeps().camera, sceneDef,
       unitById: (x) => enemyViews.find((e) => e.uniqueID === x) ?? null,
       scene, uiScene,
     });
@@ -482,7 +488,7 @@ enemySelect.addEventListener('change', () => {
 /** 逐拍枚举：logic 偶走 actionIndex 0..7 读 getIntention 的 kinds（去重）。
  *  battleState 给最小桩——召唤判定类 getIntention（bigSlime/motherNymph）硬读
  *  turn.count/enemies，传 null 会 TypeError 中断重建、目录残留上一敌的旧按钮。 */
-const BEAT_BS = { turn: { count: 1 }, enemies: [], allies: [], config: { maxEnemies: 4 } };
+const BEAT_BS = { turn: { count: 1 }, enemies: [], allies: [], config: { maxEnemies: DEFAULT_MAX_ENEMIES } };
 function beatsOf(defId) {
   const def = getEnemyDefinition(defId);
   if (!def?.getIntention) return [];
@@ -539,7 +545,7 @@ function rebuildBeats() {
           await enemyActScript({
             ctx,
             args: { unit: focusView().uniqueID, kinds: b.kinds, hits: 1, fx: b.fx },
-            cast, particles, shake,
+            cast, particles, shake, sceneDef,
             unitById: (x) => enemyViews.find((v) => v.uniqueID === x) ?? null,
             scene, uiScene,
           });

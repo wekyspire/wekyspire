@@ -9,7 +9,7 @@
 // 右下角常驻**「继续前进」大箭头**（新增美术）——场景式休息房没有自动离开，玩家点它
 // 才离开休息室回塔楼层（宿主据此走 `leaveRoom` 意图 → completeRoom → 幕间黑幕回塔楼）。
 //
-// 数据边界（THREE_UI_MIGRATION 铁律）：本舞台**不读 run 状态**——面板走 `setPanel(snap)`
+// 数据边界（handoffs/THREE_UI_MIGRATION 铁律）：本舞台**不读 run 状态**——面板走 `setPanel(snap)`
 // 下行快照、点击走 `setPanelIntentHandler` 上行意图、状态栏走 `setStatus`。机器 rig 的输入
 // 只有"后端已定的结果"（拉杆落面/档位），rig 自己完成动画，播完回执 playSlotSpin 的完成回调。
 //

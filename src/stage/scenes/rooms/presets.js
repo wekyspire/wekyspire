@@ -3,8 +3,9 @@
 //     倾斜柱/大块坍塌岩（breaker）多。
 //   阶段2（12-21 层）palace：空间缩小 15%（room.scale 0.85），左墙多扇高长窗，
 //     墙上精致立柱与横梁（wallStructure 高概率）+ 大量画作旗帜（chapel/cloth 权重），宫殿大厅。
-//   阶段3（23-32 层）manor：窗户减少、渐暗，仍宫殿但维护变差（maintenance↑：歪挂墙饰/
-//     蛛网/碎屑），道具转向居室/书房（quarters/furniture/library）。
+//   阶段3（23-32 层）ruins 过往遗迹：塔主还没装修到这儿——楼层保持着被发掘的古代遗迹
+//     原貌（塌方断柱/古浮雕/爬藤苔藓），拿「不需要装修」的废墟主题糊弄；时间消磨的层段，
+//     与自律机械/无人战体（古军事遗留）同调。窗只残存一扇，维护度全场最差。
 //   阶段4（34-43 层）library：窗户全消，空间再缩 15%（0.7225），大图书馆主题——
 //     通顶书柜排架（bookcaseTall）+ 满地书籍碎石，地面再次起伏（维护差），拥挤。
 //   隔层 mezzanine（boss4 与研究层之间，不计层数）：左墙一整排中世纪高窄窗透月光释压，
@@ -129,31 +130,32 @@ const PALACE = {
   fog: { color: 0x121419, near: 235, far: 600 },
 };
 
-// ---- 阶段 3 · 衰败庄园居室（23-32 层）：窗减/渐暗，维护变差，转向书房居室 ----
-const MANOR = {
-  id: 'manor',
+// ---- 阶段 3 · 过往遗迹（23-32 层）：未装修的楼层——遗迹废墟原貌，塌方断柱 + 古浮雕 + 爬藤苔藓 ----
+const RUINS = {
+  id: 'ruins',
   theme: 'dungeon',
   lighting: 'moon',
   room: { scale: 0.85 },
   wall: {
-    windows: [{ z0: -6, z1: 6, sill: 16, top: 70 }], // 窗户量开始减少
+    windows: [{ z0: -6, z1: 6, sill: 16, top: 70 }], // 宫殿的窗只剩残存一扇
     slits: [{ x: -30, y: 56 }, { x: 66, y: 52 }],
-    brickChance: 0.4,
+    brickChance: 0.5,
   },
   wallSkin: {
-    spalls: 3,
-    holes: 1, holeChance: 0.6, backHoleChance: 0.2,
-    bites: 1, biteChance: 0.45, backBiteChance: 0.15,
+    spalls: 4,
+    holes: 2, holeChance: 0.7, backHoleChance: 0.3,
+    bites: 2, biteChance: 0.55, backBiteChance: 0.25,
   },
-  floor: { slabCount: 13, mossChance: 0.3, patches: 6, terrain: { amp: 10, basins: 1, platforms: 1, fissures: 1, slopes: 1 } },
+  // 遗迹出土感：地面起伏大、苔藓厚
+  floor: { slabCount: 12, mossChance: 0.42, patches: 8, terrain: { amp: 13, basins: 2, platforms: 1, fissures: 1, slopes: 1 } },
   facade: {
-    structureProb: 0.55,
-    structureOverlapProb: 0.42,
-    decorProb: { high: 0.2, mid: 0.55, low: 0.42 },
-    tags: { quarters: 2.6, furniture: 2.2, library: 1.4, generic: 1.2, chapel: 0.8 },
+    structureProb: 0.5,
+    structureOverlapProb: 0.35,
+    decorProb: { high: 0.08, mid: 0.3, low: 0.28 }, // 没人挂装饰
+    tags: { stone: 2.4, relief: 2.4, ruin: 2.2, crypt: 1, arcane: 0.6 },
   },
   scatter: {
-    tags: { quarters: 2.6, furniture: 2.2, library: 1.4, container: 1, lightSource: 0.9, generic: 1, rubble: 0.8 },
+    tags: { rubble: 3, stone: 2.6, crypt: 1.4, nature: 1.2, lightSource: 0.9, arcane: 0.6, container: 0.6, generic: 0.5 },
     scale: 2.1,
     bands: {
       back: { cell: 15, density: 0.76 },
@@ -166,20 +168,20 @@ const MANOR = {
       front: { cell: 22, density: 0.16 },
     },
   },
-  decals: { count: 12, tags: { decal: 3, rubble: 0.8, crypt: 0.4 } },
-  ceiling: { chandeliers: 1 },
-  bigSilhouettes: ['bedFourPoster', 'wardrobeTall', 'tableWriting', 'screenFolding'],
+  decals: { count: 13, tags: { decal: 2, rubble: 1.6, crypt: 0.6 } },
+  ceiling: { chandeliers: 0 }, // 没装修：不挂灯
+  bigSilhouettes: ['columnBasalt', 'rubblePile', 'statuePedestal', 'stalagmite'],
   clusters: 3,
-  breakers: 4,
-  maintenance: 0.6, // 维护差：歪挂墙饰 + 蛛网 + 碎屑
+  breakers: 6,
+  maintenance: 0.8, // 全场最差：歪挂/蛛网/碎屑拉满
   fires: [
     { id: 'torchStanding', x: -58, z: 20 },
     { id: 'brazierFire', x: 28, z: 28 },
     { id: 'candelabraFloor', x: 18, z: 2 },
   ],
   compositionDecal: null,
-  // 渐暗：雾收近、色沉（"房间逐渐变暗"）
-  fog: { color: 0x0f1115, near: 205, far: 540 },
+  // 渐暗延续：雾收近、色沉
+  fog: { color: 0x0e1013, near: 200, far: 530 },
 };
 
 // ---- 阶段 4 · 大图书馆（34-43 层）：无窗，再缩 15%，书柜排架 + 书堆碎石，地面崎岖拥挤 ----
@@ -683,7 +685,7 @@ const SHOP = {
 };
 
 export const RECIPES = Object.freeze({
-  fortress: FORTRESS, palace: PALACE, manor: MANOR, library: LIBRARY,
+  fortress: FORTRESS, palace: PALACE, ruins: RUINS, library: LIBRARY,
   boss: BOSS, mezzanine: MEZZANINE,
   casino: CASINO,   // 休息房（老虎机 / 银行机）
   camp: CAMP,       // 休息房（营地 & 训练场）

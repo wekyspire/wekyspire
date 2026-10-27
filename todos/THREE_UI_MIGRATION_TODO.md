@@ -1,6 +1,6 @@
 # 待办 · 休息阶段 UI Three 化（P3 及顺延项）
 
-> 上位文档：`quest_prompts/THREE_UI_MIGRATION.md`（本文件只记**还没做**的部分，进度见其 §7）。
+> 上位文档：`handoffs/THREE_UI_MIGRATION.md`（已归档）（本文件只记**还没做**的部分，进度见其 §7）。
 > 现状：P0 管道 / P1 原语 / P2 四个面板（prep·reward·ascension·room）**已完成**并删除对应 Vue 组件。
 > 本文件其余条目全部**未开始**。
 
@@ -43,7 +43,7 @@
 |---|---|
 | **可访问性（焦点/键盘/语义）** | **显式放弃**：Three 面板没有 DOM `<button>` 的焦点与语义。单人游戏、无键盘导航需求；若日后需要，须在 Stage 侧重造焦点模型（迁移文档 §5.3） |
 | 跨层通用件（`GameMenu` 的 checkbox、`MenuDialog` 的输入框、`CutsceneOverlay`） | **保持 Vue**：表单/输入在 Three 里是纯亏；权威计划也把「菜单/弹窗/对话」划给 Vue |
-| `EndPanel`（幕间）、`BattleHud`（战斗日志）、`TooltipOverlay` + `CardFacePreview` | **保持 Vue**：正是 `THREE_REFACTOR_PLAN` §0 划给 Vue 的部分 |
+| `EndPanel`（幕间）、`BattleHud`（战斗日志）、`TooltipOverlay` + `CardFacePreview` | **保持 Vue**：正是 `handoffs/THREE_REFACTOR_PLAN.md` §0 划给 Vue 的部分 |
 
 ---
 

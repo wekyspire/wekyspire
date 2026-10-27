@@ -1,4 +1,4 @@
-// run 层显示标量通道（RUN_FLOW_REFACTOR_RESEARCH §4.6）——「core 值即时结算，
+// run 层显示标量通道（handoffs/RUN_FLOW_REFACTOR_RESEARCH §4.6）——「core 值即时结算，
 // 显示值在队列节拍推进」（与战斗「卡牌飞进坟堆计数才 +1」同一条规则）。
 //
 // 形态：display = core + delta。方向约定——core 在结算拍就变（+N），演出起拍先

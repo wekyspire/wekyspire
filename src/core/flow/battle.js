@@ -1,5 +1,7 @@
 import BattleKernel from '../kernel/BattleKernel.js';
-import { createBattleState, aliveEnemies, swapCostOf } from '../state/battleState.js';
+import {
+  createBattleState, aliveEnemies, swapCostOf, DEFAULT_MAX_ENEMIES, assignInitialEnemySlots,
+} from '../state/battleState.js';
 import { createNullPresenter } from '../presenter.js';
 import { canUseSkill } from '../skills/helpers.js';
 import { UseSkillInstruction } from '../instructions/skill.js';
@@ -21,7 +23,8 @@ export function createBattle({
   const battleState = createBattleState({ enemies, allies, seed });
   // drawPerTurn = 每回合抽牌数**上限**（两级手牌制：回合开始抽到容量为止，
   // 但不超过此值——99 ≈ 必抽满新制，调小退化为"固定抽 N"旧制，A/B 试玩同路径）
-  battleState.config = { initialDraw: 4, drawPerTurn: 99, swapBaseCost: 0, maxEnemies: 4, ...config };
+  battleState.config = { initialDraw: 4, drawPerTurn: 99, swapBaseCost: 0, maxEnemies: DEFAULT_MAX_ENEMIES, ...config };
+  assignInitialEnemySlots(battleState); // 敌排固定槽位：初始编成对称占槽（分配规则见 battleState.js）
   battleState.result = null;
 
   const kernel = new BattleKernel({

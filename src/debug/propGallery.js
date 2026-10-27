@@ -1,4 +1,4 @@
-// 道具陈列页（SCENE_TASKS T1.4 / WORKFLOW §7 门 2）：全部已登记道具网格陈列 + id 标签
+// 道具陈列页（handoffs/SCENE_TASKS T1.4 / WORKFLOW §7 门 2）：全部已登记道具网格陈列 + id 标签
 // + palette 主题切换，浏览器过目即视觉验收。纯 dev 工具，不进构建产物、不写测试。
 // 打开：npm run dev 后访问 /propGallery.html。
 

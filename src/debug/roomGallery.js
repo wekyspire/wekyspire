@@ -1,4 +1,4 @@
-// 房型陈列页（SCENE_TASKS P3 出口标准的视觉门）：三配方 × 任意种子房间陈列，
+// 房型陈列页（handoffs/SCENE_TASKS P3 出口标准的视觉门）：三配方 × 任意种子房间陈列，
 // 相机默认取战斗机位（fov24 / azimuth +34° / elevation 20° / lookAt(0,-15,0)），
 // 肉眼验收三型差异 + keepout + 密度。纯 dev 工具，不进构建、不写测试。
 // 打开：npm run dev 后访问 /roomGallery.html?recipe=ch1&seed=demo。

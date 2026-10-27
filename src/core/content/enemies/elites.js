@@ -8,7 +8,7 @@ import { DealDamageInstruction, GainShieldInstruction } from '../../instructions
 import { AddEffectInstruction } from '../../instructions/effects.js';
 import { UnitSpawnInstruction } from '../../instructions/units.js';
 import { PlayerTurnEndInstruction } from '../../instructions/turn.js';
-import { aliveEnemies, zoneOf } from '../../state/battleState.js';
+import { aliveEnemies, zoneOf, DEFAULT_MAX_ENEMIES } from '../../state/battleState.js';
 
 // ==== 精英怪：机制更强 / 基准数值更高 / 战力≈两个普通敌人 ====
 // 精英只经「精英怪房」模板出场（difficulty.elite: true 同时把它挡在普通通配池外）。
@@ -207,7 +207,7 @@ registerEnemy({
     const phase = unit.actionIndex % 4;
     if (phase === 1) {
       const noServant = !aliveEnemies(bs).some(e => e.defId === 'footmanImp');
-      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(bs).length < (bs.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
       if (noServant && hasSlot) {
         actx.kernel.submitInstruction(new UnitSpawnInstruction({
           unit: getEnemyDefinition('footmanImp').createUnit(),
@@ -230,7 +230,7 @@ registerEnemy({
     const phase = unit.actionIndex % 4;
     if (phase === 1) {
       const noServant = !aliveEnemies(battleState).some(e => e.defId === 'footmanImp');
-      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? 4);
+      const hasSlot = aliveEnemies(battleState).length < (battleState.config?.maxEnemies ?? DEFAULT_MAX_ENEMIES);
       if (noServant && hasSlot) return { kinds: ['summon'], note: '召唤仆人' };
       return { kinds: ['attack'], hits: 1, damage: 9 + unit.getStat('attack') };
     }

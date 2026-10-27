@@ -4,7 +4,6 @@
 
 import * as THREE from 'three';
 import { damageSeverity } from '../../objects/screenImpactFX.js';
-import { slotTransform } from '../../scenes/index.js';
 import { resolveDamageRecipe } from '../../fx/recipes.js';
 import { resolveDamageFx, runDamageBeat, runDotTickBeat } from '../../fx/spells/index.js';
 import { resolveEnemyHitFx, runEnemyHitBeat, enemyLungeSuppressed, enemyLungeOverrideOf } from '../../fx/spells/enemyHitFx.js';
@@ -418,6 +417,7 @@ export const unitBeats = {
   // 前置 sync 已把视图建到槽位（入场类次序：sync 先 anim 后），此处只动
   // billboard 局部姿态——place() 的 position/scale 不受干扰，演出后无残留。
   _unitSpawnBeat(unit, finish) {
+    this._spawnPending?.delete(unit.uniqueID); // 立起拍接管：不再吃稳态兜底
     const billboard = unit.billboard;
     const px = unit.position.x;
     const py = unit.position.y;

@@ -1,4 +1,4 @@
-// 问句协议（RUN_FLOW_REFACTOR_RESEARCH §4.3，P2：shop → slot 已接）。
+// 问句协议（handoffs/RUN_FLOW_REFACTOR_RESEARCH §4.3，P2：shop → slot 已接）。
 //
 // 问句 = run 上挂起的「等玩家一个大决策」的状态。状态本体仍是各房间的既有 pending
 // 字段（shopPending/slotPending 等——它们本就是半成品问句）；本模块把它们统一成一个

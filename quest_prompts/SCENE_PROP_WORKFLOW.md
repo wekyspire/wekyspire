@@ -1,7 +1,7 @@
 # SCENE_PROP_WORKFLOW — 场景素材生产管线与交互模板扩展设计
 
 > 状态：定稿 v1（2026-08-28）。本文档是场景素材（lowpoly 道具/房型）生产管线的单一事实源，
-> 配套任务分解见 `SCENE_TASKS.md`。目标执行者：AI 代理（GLM flash 批量产出道具，
+> 配套任务分解见 `handoffs/SCENE_TASKS.md`（已归档）。目标执行者：AI 代理（GLM flash 批量产出道具，
 > 主会话/人工维护 kit 与契约）。
 
 ## 0. 目标与边界
